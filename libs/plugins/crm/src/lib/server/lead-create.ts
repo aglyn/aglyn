@@ -53,6 +53,7 @@ import {
   type ContactFieldDefinition,
   CRM_COLLECTIONS,
   type CrmCustomValue,
+  crmLeadComposedName,
   type CrmLeadProfilePatch,
   CRM_LEAD_STATUS_PICKLIST,
   type CrmLeadStatus,
@@ -80,6 +81,7 @@ import { readOrgContainers } from '@aglyn/tenant-data-admin/server/org-container
 import { FieldValue } from 'firebase-admin/firestore'
 import type { CampaignFilingRef } from '../model/campaign-filing-activity'
 import { fileCampaignFilingActivities } from './campaign-filing-activity'
+import { judgeLeadPicklistPatch, readLeadPicklists } from './lead-picklists'
 import { readLeadSourcePicklist, resolveLeadSourceWrite } from './lead-source-picklist'
 import { holdsDataManage } from './org-caller'
 import { readCrmPicklist } from './read-picklist'
@@ -115,6 +117,23 @@ export interface LeadCreateRequest {
   notes?: string
   /** The org's campaigns to file the lead under (AGL-3254), by container id. */
   campaignIds?: string[]
+  /*
+   * Salesforce's standard lead fields (AGL-3513): `salutation`,
+   * `firstName`, `lastName`, `mobilePhone`, `fax`, `doNotCall`, `industry`,
+   * `rating`, `annualRevenueCents`, `currency`, `numberOfEmployees` — read
+   * by `normalizeCrmLeadProfile` with the rest of the profile.
+   */
+  salutation?: string
+  firstName?: string
+  lastName?: string
+  mobilePhone?: string
+  fax?: string
+  doNotCall?: boolean
+  industry?: string
+  rating?: string
+  annualRevenueCents?: number
+  currency?: string
+  numberOfEmployees?: number
   /**
    * The org's custom LEAD fields (AGL-3272), keyed by each definition's
    * `key`. Judged against the definitions whose `object` is `lead`, so a
@@ -318,6 +337,24 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
     if (leadSource.write === undefined) delete patch.leadSource
     else patch.leadSource = leadSource.write
     /*
+     * SALUTATION, INDUSTRY AND RATING (AGL-3513), the contact's and the
+     * company's own lists, judged the same way: a value outside the list
+     * is refused under its field, the lead's current value is kept, and a
+     * new lead starts from each list's default.
+     */
+    const picklistRefusals = judgeLeadPicklistPatch(
+      await readLeadPicklists(firestore, resolved.orgId),
+      patch,
+      { current: before?.data() ?? null, created },
+    )
+    const [picklistRefusal] = Object.entries(picklistRefusals)
+    if (picklistRefusal) {
+      res.status(400).json({ error: picklistRefusal[1], field: picklistRefusal[0] })
+      return
+    }
+    // While a first or last name is set, the name is theirs (AGL-3513).
+    const composedName = crmLeadComposedName(before?.data() ?? null, patch)
+    /*
      * THE ORG'S LEAD STATUSES (AGL-3512): a label or a meaning, of New or
      * Working only, stored as the meaning and the org's label together.
      */
@@ -357,7 +394,7 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
       hostId,
       lead: {
         email,
-        ...(name ? { name } : {}),
+        ...(composedName || name ? { name: composedName || name } : {}),
         source: LEAD_MANUAL_SOURCE,
       },
     })
@@ -367,6 +404,7 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
     }
     const working: Record<string, unknown> = {
       ...leadProfileWrite(patch),
+      ...(composedName ? { name: composedName } : {}),
       ...(status?.ok ? { status: status.status, statusLabel: status.statusLabel } : {}),
       ...(ownerUid ? { ownerUid } : {}),
       ...(notes ? { notes } : {}),
@@ -419,7 +457,7 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
       hostId,
       { uid: decoded.uid, email: decoded.email ?? null },
       created ? 'Added lead' : 'Updated lead',
-      { type: 'lead', id: leadId, name: name || email },
+      { type: 'lead', id: leadId, name: composedName || name || email },
     )
     const answer: LeadCreateResponse = { leadId, created }
     res.status(created ? 201 : 200).json(answer)

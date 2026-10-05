@@ -26,6 +26,7 @@ import {
   type CrmLeadStatus,
   type CrmPicklist,
   crmLeadSourceKey,
+  crmPicklistKey,
 } from '@aglyn/aglyn'
 import type { CrmViewFilterClause } from '@aglyn/aglyn'
 import { SCOPED_SEARCH_JOIN } from '@aglyn/aglyn/app-utils/name-search'
@@ -124,6 +125,8 @@ export const LEAD_SOURCE_FILTER_NONE = '\u0000none'
  *   leadSource   `equals <label>`, or `isEmpty` for the leads holding none
  *   leadSourceDirection   `equals inbound|outbound` (AGL-3511): every lead
  *                whose lead source is a value of that group
+ *   industry, rating   `equals <key>` (AGL-3513): a value of the org's
+ *                Industry or Rating list, by the key the query compares
  *
  * Every one is asked of the Leads query (AGL-3321) through the field a
  * writer stores for it — see {@link leadQueryClause}.
@@ -142,7 +145,20 @@ export const LEAD_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     operators: ['equals', 'isAnyOf'],
   },
   { column: 'campaignIds', kind: 'exact', path: 'campaignIds', operators: ['equals'] },
+  // Salesforce's Industry and Rating (AGL-3513), the lists companies keep.
+  { column: 'industry', kind: 'exact', path: 'industry', operators: ['equals', 'isAnyOf'] },
+  { column: 'rating', kind: 'exact', path: 'rating', operators: ['equals', 'isAnyOf'] },
 ]
+
+/**
+ * The lead picklist columns the list filters by (AGL-3513), each with the
+ * list its choices come from: a choice's value is the KEY the query
+ * compares, its caption the label.
+ */
+export const LEAD_PICKLIST_FILTERS = [
+  { column: 'industry', picklistId: 'industry', header: 'Industry' },
+  { column: 'rating', picklistId: 'rating', header: 'Rating' },
+] as const
 
 /** What each filter field reads as on a chip. */
 export const LEAD_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
@@ -152,6 +168,8 @@ export const LEAD_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   leadSource: 'Lead source',
   leadSourceDirection: 'Lead source direction',
   campaignIds: 'Campaign',
+  industry: 'Industry',
+  rating: 'Rating',
 }
 
 /** The choices for Status: Open (new, nurturing or working) and each status on its own. */
@@ -284,6 +302,8 @@ export const LEAD_FILTER_CODECS: Readonly<Record<string, ListGridFilterCodec>> =
  *                `in` holds thirty keys, and a group holding more is
  *                refused by name rather than half asked
  *   ownerUid     as stored
+ *   industry, rating   `industryKey`, `ratingKey` (AGL-3513), each label
+ *                as the picklist compares it
  *   campaignIds  `array-contains` on the lead's own campaigns; under a site,
  *                `scopedCampaignIds` — the campaign behind each of the
  *                site's scope tokens — which stands in the scope clause's
@@ -319,6 +339,9 @@ export const LEAD_QUERY_FIELDS: readonly ListFilterField[] = [
     tokensPath: 'campaignIds',
     operators: ['contains'],
   },
+  // Industry and Rating (AGL-3513), by the key each writer stores.
+  crmSelectField('industryKey'),
+  crmSelectField('ratingKey'),
   {
     // A campaign under a site: the lead's campaigns behind its scope.
     column: CRM_LEAD_SCOPED_CAMPAIGNS_FIELD,
@@ -435,6 +458,12 @@ export function leadQueryClause(
     }
     case 'ownerUid':
       return crmAnyOf('ownerUid', values)
+    case 'industry':
+    case 'rating': {
+      // A choice is the key; a label typed into a stored view keys the same way.
+      const keys = values.map((value) => crmPicklistKey(value)).filter((key): key is string => Boolean(key))
+      return crmAnyOf(clause.field === 'industry' ? 'industryKey' : 'ratingKey', keys)
+    }
     case 'campaignIds': {
       if (values.length !== 1) return { refused: 'pick one campaign' }
       if (!reader.scopeTokens) return { field: 'campaignIds', op: 'contains', value: values[0] }

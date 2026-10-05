@@ -71,11 +71,14 @@ describe('the company picklists', () => {
     expect(crmPicklistDefinition('accountType')?.targets).toEqual([
       { object: 'company', field: 'type', keyField: 'typeKey' },
     ])
+    // Shared with leads (AGL-3513), so a lead converts into the same value.
     expect(crmPicklistDefinition('industry')?.targets).toEqual([
       { object: 'company', field: 'industry', keyField: 'industryKey' },
+      { object: 'lead', field: 'industry', keyField: 'industryKey' },
     ])
     expect(crmPicklistDefinition('rating')?.targets).toEqual([
       { object: 'company', field: 'rating', keyField: 'ratingKey' },
+      { object: 'lead', field: 'rating', keyField: 'ratingKey' },
     ])
     expect(crmPicklistDefinition('ownership')?.targets).toEqual([
       { object: 'company', field: 'ownership' },

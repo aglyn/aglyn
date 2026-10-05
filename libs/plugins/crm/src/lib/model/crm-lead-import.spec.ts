@@ -85,22 +85,34 @@ describe('guessLeadImportMapping', () => {
     expect(guessLeadImportMapping(leadCsvHeader())).toEqual({
       0: 'email',
       1: 'name',
-      2: 'company',
-      3: 'jobTitle',
-      4: 'phone',
-      5: 'website',
-      6: 'status',
-      7: 'ownerEmail',
-      8: 'leadSource',
-      13: 'addressLine1',
-      14: 'addressLine2',
-      15: 'addressCity',
-      16: 'addressState',
-      17: 'addressPostalCode',
-      18: 'addressCountry',
-      19: 'tags',
-      20: 'unqualifiedReason',
-      22: 'notes',
+      // Salesforce's standard lead fields (AGL-3513) read back too.
+      2: 'salutation',
+      3: 'firstName',
+      4: 'lastName',
+      5: 'company',
+      6: 'jobTitle',
+      7: 'phone',
+      8: 'mobilePhone',
+      9: 'fax',
+      10: 'doNotCall',
+      11: 'website',
+      12: 'industry',
+      13: 'rating',
+      14: 'numberOfEmployees',
+      15: 'annualRevenue',
+      16: 'currency',
+      17: 'status',
+      18: 'ownerEmail',
+      19: 'leadSource',
+      24: 'addressLine1',
+      25: 'addressLine2',
+      26: 'addressCity',
+      27: 'addressState',
+      28: 'addressPostalCode',
+      29: 'addressCountry',
+      30: 'tags',
+      31: 'unqualifiedReason',
+      33: 'notes',
     })
   })
 
@@ -110,10 +122,9 @@ describe('guessLeadImportMapping', () => {
    * authorized for, so a cell must never be able to redirect a row.
    */
   it('leaves the organization file’s Site column unmapped', () => {
-    const mapping = guessLeadImportMapping(
-      leadCsvHeader({ siteName: (id: string) => id }),
-    )
-    expect(mapping[8]).toBeUndefined()
+    const header = leadCsvHeader({ siteName: (id: string) => id })
+    const mapping = guessLeadImportMapping(header)
+    expect(mapping[header.indexOf('Site')]).toBeUndefined()
     expect(Object.values(mapping)).not.toContain('hostId')
   })
 
@@ -142,7 +153,8 @@ describe('guessLeadImportMapping', () => {
       5: 'notes',
       6: 'company',
       7: 'jobTitle',
-      8: 'phone',
+      // A Mobile column is the mobile phone, as on a contact (AGL-3513).
+      8: 'mobilePhone',
       9: 'website',
       10: 'leadSource',
       11: 'tags',
@@ -347,5 +359,67 @@ describe('leadImportSkippedCsv', () => {
         'bad,Dana,No usable email address\n' +
         'a@b.com,Ada,The same address appears earlier in this file',
     )
+  })
+})
+
+describe("Salesforce's standard lead fields (AGL-3513)", () => {
+  it('reads the name parts, the phones, the flag and the account fields', () => {
+    const verdict = normalizeLeadImportRow({
+      email: 'maya@example.com',
+      name: 'Ignored Whole Name',
+      salutation: ' Dr. ',
+      firstName: ' Maya ',
+      lastName: 'Quinn',
+      mobilePhone: '+1 512 555 0108',
+      fax: '+1 512 555 0109',
+      doNotCall: 'yes',
+      industry: 'Food   & Beverage',
+      rating: 'Hot',
+      numberOfEmployees: '1,200',
+      annualRevenue: '$1,250,000.50',
+      currency: 'EUR',
+    })
+    expect(verdict.ok).toBe(true)
+    if (!verdict.ok) return
+    // While a part is filled the name is their composition.
+    expect(verdict.row.name).toBe('Maya Quinn')
+    expect(verdict.row.profile).toEqual({
+      firstName: 'Maya',
+      lastName: 'Quinn',
+      mobilePhone: '+15125550108',
+      fax: '+15125550109',
+      doNotCall: true,
+      salutation: 'Dr.',
+      industry: 'Food & Beverage',
+      rating: 'Hot',
+      numberOfEmployees: 1200,
+      annualRevenueCents: 125000050,
+      currency: 'eur',
+    })
+    expect(verdict.row.dropped).toEqual([])
+  })
+
+  it('drops, and names, what it cannot read', () => {
+    const verdict = normalizeLeadImportRow({
+      email: 'maya@example.com',
+      mobilePhone: 'call me',
+      doNotCall: 'maybe',
+      numberOfEmployees: 'lots',
+      annualRevenue: 'n/a',
+      currency: 'euro',
+    })
+    expect(verdict.ok && verdict.row.dropped.map((entry) => entry.field)).toEqual([
+      'mobilePhone',
+      'doNotCall',
+      'numberOfEmployees',
+      'annualRevenue',
+      'currency',
+    ])
+  })
+
+  it('keeps the Name column when no part is filled, and a "no" flag stores nothing', () => {
+    const verdict = normalizeLeadImportRow({ email: 'maya@example.com', name: 'Maya Q', doNotCall: 'no' })
+    expect(verdict.ok && verdict.row.name).toBe('Maya Q')
+    expect(verdict.ok && verdict.row.profile).toEqual({})
   })
 })

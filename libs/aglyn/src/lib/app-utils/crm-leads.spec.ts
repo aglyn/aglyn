@@ -21,8 +21,13 @@ import {
   CRM_LEAD_STATUS_LABELS,
   CRM_LEAD_STATUSES,
   CRM_LEAD_TAGS_MAX,
+  crmLeadComposedName,
   crmLeadDisplayName,
+  crmLeadListFields,
   crmLeadStatus,
+  CRM_LIST_FIELD_INPUTS,
+  effectiveCrmPicklist,
+  judgeCrmLeadPicklists,
   isCrmLeadOpen,
   isCrmLeadStatus,
   normalizeCrmLeadProfile,
@@ -96,13 +101,24 @@ describe('normalizeCrmLeadProfile', () => {
 
   it('lists every profile key once, in the card’s order', () => {
     expect([...CRM_LEAD_PROFILE_KEYS]).toEqual([
+      'salutation',
+      'firstName',
+      'lastName',
       'company',
       'jobTitle',
       'phone',
+      'mobilePhone',
+      'fax',
+      'doNotCall',
       'website',
       'address',
       'tags',
       'leadSource',
+      'industry',
+      'rating',
+      'annualRevenueCents',
+      'currency',
+      'numberOfEmployees',
     ])
   })
 
@@ -150,5 +166,128 @@ describe('lead statuses', () => {
     expect(isCrmLeadOpen({ status: 'working' })).toBe(true)
     expect(isCrmLeadOpen({ status: 'qualified' })).toBe(false)
     expect(isCrmLeadOpen({ status: 'unqualified' })).toBe(false)
+  })
+})
+
+/*
+ * SALESFORCE'S STANDARD LEAD FIELDS (AGL-3513): the name's parts, the
+ * phones, Do not call, Salutation/Industry/Rating, size and revenue.
+ */
+describe("the lead's standard fields", () => {
+  it('normalizes each as the contact and the company keep it', () => {
+    expect(
+      normalizeCrmLeadProfile({
+        salutation: ' Dr. ',
+        firstName: '  Maya  Ann ',
+        lastName: 'Quinn',
+        mobilePhone: '(512) 555-0108',
+        fax: '+1 512 555 0109',
+        doNotCall: true,
+        industry: ' Food   & Beverage ',
+        rating: 'Hot',
+        annualRevenueCents: 125000050,
+        currency: 'EUR',
+        numberOfEmployees: '1,200',
+      }),
+    ).toEqual({
+      patch: {
+        salutation: 'Dr.',
+        firstName: 'Maya Ann',
+        lastName: 'Quinn',
+        mobilePhone: '+15125550108',
+        fax: '+15125550109',
+        doNotCall: true,
+        industry: 'Food & Beverage',
+        rating: 'Hot',
+        annualRevenueCents: 125000050,
+        currency: 'eur',
+        numberOfEmployees: 1200,
+      },
+      errors: {},
+    })
+  })
+
+  it('clears with a blank, stores Do not call only as true, and refuses what it cannot hold', () => {
+    expect(
+      normalizeCrmLeadProfile({
+        salutation: '',
+        firstName: ' ',
+        doNotCall: false,
+        annualRevenueCents: null,
+        numberOfEmployees: '',
+      }).patch,
+    ).toEqual({
+      salutation: null,
+      firstName: null,
+      doNotCall: null,
+      annualRevenueCents: null,
+      numberOfEmployees: null,
+    })
+    const refused = normalizeCrmLeadProfile({
+      mobilePhone: 'call me',
+      fax: '12',
+      annualRevenueCents: -5,
+      currency: 'euro',
+      numberOfEmployees: 'lots',
+    })
+    expect(Object.keys(refused.errors).sort()).toEqual([
+      'annualRevenueCents',
+      'currency',
+      'fax',
+      'mobilePhone',
+      'numberOfEmployees',
+    ])
+    expect(refused.patch).toEqual({})
+  })
+
+  it('composes the name from the parts, and never splits a name-only lead', () => {
+    expect(crmLeadComposedName({ name: 'Maya Q' }, { firstName: 'Maya', lastName: 'Quinn' })).toBe(
+      'Maya Quinn',
+    )
+    // The part the write leaves alone is read from the lead.
+    expect(crmLeadComposedName({ firstName: 'Maya', lastName: 'Quinn' }, { lastName: 'Ng' })).toBe(
+      'Maya Ng',
+    )
+    expect(crmLeadComposedName({ firstName: 'Maya', lastName: 'Quinn' }, { firstName: null })).toBe(
+      'Quinn',
+    )
+    // A write naming neither part, or clearing both, leaves the name as it stands.
+    expect(crmLeadComposedName({ name: 'Maya Q' }, {})).toBeUndefined()
+    expect(crmLeadComposedName({ firstName: 'Maya' }, { firstName: null })).toBeUndefined()
+  })
+
+  it("judges Salutation, Industry and Rating against the org's lists, keeping the current value", () => {
+    const lists = {
+      salutation: effectiveCrmPicklist('salutation', null),
+      industry: effectiveCrmPicklist('industry', {
+        values: [{ id: 'tech', label: 'Technology', active: false }],
+      }),
+      rating: effectiveCrmPicklist('rating', {
+        values: [{ id: 'warm', label: 'Warm' }],
+        defaultValueId: 'warm',
+      }),
+    }
+    expect(
+      judgeCrmLeadPicklists(lists, { salutation: 'dr.', industry: 'banking', rating: 'Freezing' }),
+    ).toEqual({
+      values: { salutation: 'Dr.', industry: 'Banking' },
+      errors: { rating: expect.stringContaining('Rating') },
+    })
+    // A deactivated value the lead already holds is kept.
+    expect(
+      judgeCrmLeadPicklists(lists, { industry: 'Technology' }, { current: { industry: 'Technology' } })
+        .values,
+    ).toEqual({ industry: 'Technology' })
+    // A create starts each field it does not name from its list's default.
+    expect(judgeCrmLeadPicklists(lists, {}, { created: true }).values).toEqual({ rating: 'Warm' })
+    expect(judgeCrmLeadPicklists(lists, { rating: '' }).values).toEqual({ rating: null })
+  })
+
+  it('keys Industry and Rating for the Leads list, and restamps on either', () => {
+    const fields = crmLeadListFields({ industry: ' Food  & Beverage', rating: 'Hot' })
+    expect(fields.industryKey).toBe('food & beverage')
+    expect(fields.ratingKey).toBe('hot')
+    expect(crmLeadListFields({}).industryKey).toBeNull()
+    expect(CRM_LIST_FIELD_INPUTS.leads).toEqual(expect.arrayContaining(['industry', 'rating']))
   })
 })

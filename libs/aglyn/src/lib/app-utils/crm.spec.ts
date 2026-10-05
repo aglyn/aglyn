@@ -1976,6 +1976,8 @@ describe('the salutation picklist', () => {
     )
     expect(crmPicklistDefinition('salutation')?.targets).toEqual([
       { object: 'contact', field: 'salutation', facet: true },
+      // A lead's own salutation, on the lead (AGL-3513).
+      { object: 'lead', field: 'salutation' },
     ])
     expect(effectiveCrmPicklist('salutation', null).values.map((value) => value.label)).toEqual([
       'Mr.',

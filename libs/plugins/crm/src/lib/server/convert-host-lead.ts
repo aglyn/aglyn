@@ -81,6 +81,18 @@
  * `leadSource` — a label of the same picklist, already judged when the lead
  * was written — and its Type as the door judged it, or the org's default
  * Type when the converter named none. Its forecast category is its stage's.
+ *
+ * ## Every standard field lands where Salesforce's conversion puts it (AGL-3513)
+ *
+ * The contact's facet takes the salutation, the name's parts, the mobile,
+ * the fax and Do not call. The company takes the account fields — industry,
+ * rating, revenue and its currency, head count, website, phone, fax, the
+ * address as its billing address, and the lead source as its Account
+ * Source — whole when the conversion creates it, and only into its BLANK
+ * fields when it links one the org already holds: a lead is one person's
+ * account of the business, and the account record may know better. The
+ * deal's Primary Campaign Source is the lead's most recent campaign — see
+ * {@link leadLatestCampaignId}.
  */
 
 import {
@@ -93,7 +105,12 @@ import {
   type CrmDealStatus,
   type CrmLeadFields,
   type CrmPipeline,
+  CRM_COMPANY_PICKLIST_FIELDS,
+  type CrmPicklist,
+  type CrmPicklistId,
   crmPicklistDefaultLabel,
+  judgeCrmCompanyPicklists,
+  readCrmCompanyAccountFields,
   crmScopeTokens,
   dealStageForecastCategory,
   DEFAULT_DEAL_STAGES,
@@ -121,6 +138,7 @@ import { assignOwnerForCapture, notifyRecordAssigned } from './assign-contact-ow
 import { captureHostContact } from './capture-host-contact'
 import { readCrmPicklist } from './read-picklist'
 import { handOffLeadRecords } from '@aglyn/tenant-runtime/hand-off-lead'
+import { readContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
 
 /** Who is converting, as far as the writes need to know. */
 export interface LeadConvertActor {
@@ -251,6 +269,97 @@ export function stageForNewDeal(
   return requested ?? stages.find((stage) => stage.kind === 'open') ?? stages[0]
 }
 
+/**
+ * The lead's MOST RECENT campaign, which becomes the deal's Primary
+ * Campaign Source as Salesforce's conversion makes it. A lead keeps its
+ * campaigns as one `campaignIds` array that every writer extends with
+ * `arrayUnion`, which appends — so the last id is the campaign the lead was
+ * filed under last. `undefined` for a lead filed under none.
+ */
+export function leadLatestCampaignId(lead: Readonly<Record<string, unknown>>): string | undefined {
+  const ids = readContainerIds(lead as Record<string, unknown>, 'campaign')
+  return ids.length ? ids[ids.length - 1] : undefined
+}
+
+/** Whether a stored field holds nothing a fill would overwrite. */
+const blankField = (value: unknown): boolean =>
+  value === undefined ||
+  value === null ||
+  (typeof value === 'string' && !value.trim()) ||
+  (typeof value === 'object' && !Array.isArray(value) && !Object.keys(value as object).length)
+
+/**
+ * The account fields a lead hands its company (AGL-3513), normalized and
+ * judged as every company door judges them: the lead's industry and rating
+ * against the org's lists, its lead source as the Account Source, and its
+ * revenue, currency, head count, fax, website, phone and address (as the
+ * billing address). With `current` — a company the org already holds —
+ * only the fields it leaves blank are answered, and the picklists it does
+ * not name keep no default; without it, the company is being created and
+ * each picklist the lead leaves empty starts from its list's default. A
+ * value a list no longer holds is left behind rather than refusing the
+ * conversion.
+ */
+export function leadCompanyFields(
+  lead: Readonly<Record<string, unknown>>,
+  lists: Readonly<Partial<Record<CrmPicklistId, CrmPicklist>>>,
+  current: Readonly<Record<string, unknown>> | null,
+): Record<string, unknown> {
+  const fill = (field: string) => !current || blankField(current[field])
+  const offered = (value: unknown) => (blankField(value) ? undefined : value)
+  const fields: Record<string, unknown> = {}
+  const requested: Record<string, unknown> = {}
+  const picklistSource: Record<string, unknown> = {
+    industry: lead['industry'],
+    rating: lead['rating'],
+    accountSource: lead['leadSource'],
+  }
+  for (const { field } of CRM_COMPANY_PICKLIST_FIELDS) {
+    const value = offered(picklistSource[field])
+    if (value !== undefined && fill(field)) requested[field] = value
+  }
+  const picklists = judgeCrmCompanyPicklists(lists, requested, {
+    current: current ?? {},
+    created: !current,
+  })
+  for (const [field, value] of Object.entries(picklists.values)) {
+    if (value && !picklists.errors[field]) fields[field] = value
+  }
+  const account: Record<string, unknown> = {}
+  for (const field of ['annualRevenueCents', 'numberOfEmployees', 'fax'] as const) {
+    const value = offered(lead[field])
+    if (value !== undefined && fill(field)) account[field] = value
+  }
+  // The revenue's currency travels with the revenue it describes.
+  if (account['annualRevenueCents'] !== undefined && offered(lead['currency']) !== undefined) {
+    account['currency'] = lead['currency']
+  }
+  const read = readCrmCompanyAccountFields(account)
+  for (const [field, value] of Object.entries(read.values)) {
+    if (value !== null && value !== undefined && !read.errors[field]) fields[field] = value
+  }
+  // Already in the company's shapes: the lead normalized them as a company does.
+  for (const [field, from] of [
+    ['website', 'website'],
+    ['phone', 'phone'],
+    ['address', 'address'],
+  ] as const) {
+    const value = offered(lead[from])
+    if (value !== undefined && fill(field)) fields[field] = value
+  }
+  return fields
+}
+
+/** The org's lists behind every company picklist field, for {@link leadCompanyFields}. */
+async function readCompanyPicklists(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+): Promise<Partial<Record<CrmPicklistId, CrmPicklist>>> {
+  const ids = [...new Set(CRM_COMPANY_PICKLIST_FIELDS.map((entry) => entry.picklistId))]
+  const lists = await Promise.all(ids.map((id) => readCrmPicklist(firestore, orgId, id)))
+  return Object.fromEntries(ids.map((id, at) => [id, lists[at]]))
+}
+
 /** A stage's kind as the deal's denormalized status. */
 function dealStatusForStage(stage: CrmDealStage): CrmDealStatus {
   return stage.kind === 'won' ? 'won' : stage.kind === 'lost' ? 'lost' : 'open'
@@ -373,6 +482,14 @@ export async function convertHostLead(
       ...(typeof lead.company === 'string' && lead.company
         ? { companyName: lead.company }
         : {}),
+      // Salesforce's standard lead fields (AGL-3513), as the contact keeps them.
+      ...Object.fromEntries(
+        (['salutation', 'firstName', 'lastName', 'mobilePhone', 'fax'] as const)
+          .filter((key) => typeof lead[key] === 'string' && lead[key])
+          .map((key) => [key, lead[key]]),
+      ),
+      // Only ever `true`: a lead that never said is not a person who asked to be called.
+      ...(lead.doNotCall === true ? { doNotCall: true } : {}),
     },
   })
   /*
@@ -459,6 +576,8 @@ export async function convertHostLead(
    * 2. THE COMPANY — linked, found by domain, or created.
    *=========================================*/
   let companyId: string | undefined
+  /** The company the conversion found rather than made — its blanks are filled below. */
+  let existingCompany: FirebaseFirestore.DocumentSnapshot | undefined
   if (requestedCompanyId) {
     const companySnapshot = await orgRef
       .collection(CRM_COLLECTIONS.companies)
@@ -466,6 +585,7 @@ export async function convertHostLead(
       .get()
     if (!companySnapshot.exists) return { ok: false, reason: 'unknown-company' }
     companyId = requestedCompanyId
+    existingCompany = companySnapshot
   } else if (createCompany) {
     /*
      * FIND BEFORE CREATE. The NAME first (AGL-3233): a lead names its
@@ -478,31 +598,34 @@ export async function convertHostLead(
      */
     const visibleAmong = (
       snapshots: readonly FirebaseFirestore.QueryDocumentSnapshot[],
-    ): string | undefined =>
+    ): FirebaseFirestore.QueryDocumentSnapshot | undefined =>
       snapshots.find((snapshot) => {
         const tokens = snapshot.get('visibleTo')
         return (
           Array.isArray(tokens) &&
           tokens.some((token) => readableTokens.has(String(token)))
         )
-      })?.id
+      })
     const byName = await orgRef
       .collection(CRM_COLLECTIONS.companies)
       .where('nameLower', '==', createCompany.name.toLowerCase())
       .limit(5)
       .get()
-    companyId = visibleAmong(byName.docs)
-    if (!companyId && createCompany.domain) {
+    existingCompany = visibleAmong(byName.docs)
+    if (!existingCompany && createCompany.domain) {
       const byDomain = await orgRef
         .collection(CRM_COLLECTIONS.companies)
         .where('domain', '==', createCompany.domain)
         .limit(5)
         .get()
-      companyId = visibleAmong(byDomain.docs)
+      existingCompany = visibleAmong(byDomain.docs)
     }
+    companyId = existingCompany?.id
     if (!companyId) {
       if (await bandFull()) return { ok: false, reason: 'band-full' }
       const company: Record<string, unknown> = {
+        // The lead's account fields, whole (AGL-3513).
+        ...leadCompanyFields(lead, await readCompanyPicklists(firestore, orgId), null),
         ...nameSearchFields(createCompany.name),
         ...(createCompany.domain ? { domain: createCompany.domain } : {}),
         ...(ownerUid ? { ownerUid } : {}),
@@ -518,6 +641,22 @@ export async function convertHostLead(
         ...crmNewRecordListFields('companies', company),
       })
       companyId = created.id
+    }
+  }
+  if (companyId && existingCompany) {
+    /*
+     * A company the org already held takes the lead's account fields only
+     * where it has none (AGL-3513) — and is restamped, because its
+     * industry, rating and account source are what its list filters by.
+     */
+    const filled = leadCompanyFields(
+      lead,
+      await readCompanyPicklists(firestore, orgId),
+      (existingCompany.data() ?? {}) as Record<string, unknown>,
+    )
+    if (Object.keys(filled).length) {
+      await existingCompany.ref.update({ ...filled, updatedAt: FieldValue.serverTimestamp() })
+      await restampCrmListFieldsAt(existingCompany.ref, 'companies')
     }
   }
   if (companyId) {
@@ -596,6 +735,8 @@ export async function convertHostLead(
       crmPicklistDefaultLabel(await readCrmPicklist(firestore, orgId, 'opportunityType')) ??
       undefined
     const leadSource = typeof lead.leadSource === 'string' ? lead.leadSource.trim() : ''
+    // The Primary Campaign Source: the lead's most recent campaign (AGL-3513).
+    const campaignId = leadLatestCampaignId(lead)
     const dealRecord: Record<string, unknown> = {
       title: deal.title,
       titleLower: deal.title.toLowerCase(),
@@ -608,6 +749,7 @@ export async function convertHostLead(
       forecastCategory: dealStageForecastCategory(stage),
       ...(type ? { type } : {}),
       ...(leadSource ? { leadSource } : {}),
+      ...(campaignId ? { campaignId } : {}),
       ...(ownerUid ? { ownerUid } : {}),
       contactId,
       ...(companyId ? { companyId } : {}),

@@ -73,6 +73,7 @@ import {
   checkVisitorRecordCeiling,
   CRM_LEAD_STATUSES,
   type CrmLeadFields,
+  crmLeadComposedName,
   type CrmLeadProfilePatch,
   type CrmLeadStatus,
   CRM_COLLECTIONS,
@@ -113,6 +114,7 @@ import {
   convertHostLead,
 } from '../convert-host-lead'
 import { readCrmPicklist } from '../read-picklist'
+import { judgeLeadPicklistPatch, namesLeadPicklist, readLeadPicklists } from '../lead-picklists'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import {
   type ApiV1Context,
@@ -188,6 +190,19 @@ function leadView(
     address: data.address ?? null,
     tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
     leadSource: data.leadSource ?? null,
+    // Salesforce's standard lead fields (AGL-3513).
+    salutation: data.salutation ?? null,
+    firstName: data.firstName ?? null,
+    lastName: data.lastName ?? null,
+    mobilePhone: data.mobilePhone ?? null,
+    fax: data.fax ?? null,
+    doNotCall: data.doNotCall === true,
+    industry: data.industry ?? null,
+    rating: data.rating ?? null,
+    annualRevenueCents:
+      typeof data.annualRevenueCents === 'number' ? data.annualRevenueCents : null,
+    currency: typeof data.currency === 'string' && data.currency ? data.currency : 'usd',
+    numberOfEmployees: typeof data.numberOfEmployees === 'number' ? data.numberOfEmployees : null,
     sources: Array.isArray(data['sources']) ? data['sources'].map(String) : [],
     submissionCount:
       typeof data['submissionCount'] === 'number' ? data['submissionCount'] : 0,
@@ -296,7 +311,7 @@ async function readOwner(
 
 // ── PATCH ───────────────────────────────────────────────────────────────────
 
-/** The lead's own fields, writable on a create and a PATCH alike (AGL-3231). */
+/** The lead's own fields, writable on a create and a PATCH alike (AGL-3231, AGL-3513). */
 const LEAD_PROFILE_KEYS = [
   'company',
   'jobTitle',
@@ -305,6 +320,17 @@ const LEAD_PROFILE_KEYS = [
   'address',
   'tags',
   'leadSource',
+  'salutation',
+  'firstName',
+  'lastName',
+  'mobilePhone',
+  'fax',
+  'doNotCall',
+  'industry',
+  'rating',
+  'annualRevenueCents',
+  'currency',
+  'numberOfEmployees',
 ] as const
 
 const LEAD_WRITABLE = new Set([
@@ -355,6 +381,10 @@ function readLeadInput(
   const profile = normalizeCrmLeadProfile(profileBody)
   Object.assign(errors, profile.errors)
   values.profile = profile.patch
+  // A flag, sent as one: a string would otherwise read as a clear.
+  if (body.doNotCall !== undefined && body.doNotCall !== null && typeof body.doNotCall !== 'boolean') {
+    errors.doNotCall = 'Must be true or false'
+  }
 
   if (body.status !== undefined) {
     if (typeof body.status === 'string' && body.status.trim()) values.status = body.status
@@ -454,7 +484,18 @@ async function updateLead(
     if (judged.ok === false) errors.leadSource = judged.error
     else profile.leadSource = judged.value
   }
+  // Salutation, Industry and Rating (AGL-3513), the lead keeping its current value.
+  if (namesLeadPicklist(profile)) {
+    Object.assign(
+      errors,
+      judgeLeadPicklistPatch(await readLeadPicklists(ctx.firestore, ctx.orgId), profile, {
+        current: stored,
+      }),
+    )
+  }
   if (Object.keys(errors).length) return crmValidationFailed(ctx, 'lead', errors)
+  // While a first or last name is set, the name is theirs (AGL-3513).
+  const composedName = crmLeadComposedName(stored, profile)
   // The org's own lead fields (AGL-3272), judged against the definitions
   // whose object is `lead` — a contact field of the same key is a
   // different field with a possibly different type.
@@ -464,6 +505,7 @@ async function updateLead(
   const update: Record<string, unknown> = {
     ...updatePayload({ ...rest, ownerUid }),
     ...profileUpdate(profile),
+    ...(composedName && composedName !== stored['name'] ? { name: composedName } : {}),
     // One dotted path per key, so the map is merged rather than replaced.
     ...(custom && 'values' in custom ? crmCustomUpdate(custom.values) : {}),
   }
@@ -539,6 +581,9 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
   }
   const profile = normalizeCrmLeadProfile(profileBody)
   Object.assign(errors, profile.errors)
+  if (body.doNotCall !== undefined && body.doNotCall !== null && typeof body.doNotCall !== 'boolean') {
+    errors.doNotCall = 'Must be true or false'
+  }
   const site = readLeadSite(ctx, url, body)
   if ('response' in site) {
     if (Object.keys(errors).length) {
@@ -596,6 +641,18 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
       const fallback = crmPicklistDefaultLabel(leadSources)
       if (fallback) profile.patch.leadSource = fallback
     }
+    // Salutation, Industry and Rating (AGL-3513): a new lead starts from each list's default.
+    const picklistErrors = judgeLeadPicklistPatch(
+      await readLeadPicklists(ctx.firestore, ctx.orgId),
+      profile.patch,
+      { current: existing.data() ?? null, created },
+    )
+    if (Object.keys(picklistErrors).length) {
+      await claim.release()
+      return crmValidationFailed(ctx, 'lead', picklistErrors)
+    }
+    // While a first or last name is set, the name is theirs (AGL-3513).
+    const composedName = crmLeadComposedName(existing.data() ?? null, profile.patch)
     if (created) {
       // What the SITE may see (AGL-3275), matching `addHostLead`'s own count:
       // an unscoped count would charge one site for a sibling's leads.
@@ -616,7 +673,7 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
       hostId: site.siteId,
       lead: {
         email: email as string,
-        ...(name ? { name } : {}),
+        ...(composedName || name ? { name: composedName || name } : {}),
         source: LEAD_API_SOURCE,
       },
     })
@@ -630,6 +687,7 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
     }
     const working: Record<string, unknown> = {
       ...profileUpdate(profile.patch),
+      ...(composedName ? { name: composedName } : {}),
       ...(status ? { status: status.status, statusLabel: status.statusLabel } : {}),
       ...(ownerUid ? { ownerUid } : {}),
       ...(notes ? { notes } : {}),

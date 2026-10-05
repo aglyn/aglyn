@@ -173,7 +173,10 @@ The **Companies** tab keeps **Type**, **Industry**, **Rating** and **Ownership**
 with Salesforce's standard values — see [the lists behind a company's
 choices](./companies.md#the-lists-behind-the-choices). A company's **Account source** is
 a lead source value, so renaming or deleting a lead source moves the companies holding it
-too.
+too. **Industry** and **Rating** are leads' too: a lead's page, the **New lead** drawer,
+the leads import and [`/v1/leads`](/api/resources/leads) offer and enforce the same values,
+the Leads list filters by them, a rename or delete moves the leads holding the value with
+the companies, and converting a lead hands its value to the company.
 
 **Meanings** tie a picklist's values to what the platform does with them. Lead status
 has one per standard value — New, Nurturing, Working, Qualified, Unqualified — and the
@@ -224,7 +227,9 @@ beside any your organization adds. Every contact's page and the **New contact** 
 offer it as a select, and it is enforced the way lead source is: a salutation sent over
 [`/v1/contacts`](/api/resources/contacts) that the list does not hold is refused, naming
 the values allowed, and one in a [contacts CSV import](./import.md) is dropped from its row
-and reported. A rename renames it on every contact that holds it.
+and reported. A rename renames it on every contact that holds it. Leads use the same
+list: a lead's salutation is offered, enforced and renamed the same way, and travels to the
+contact when the lead converts.
 
 ### The Tasks tab {#task-picklists}
 

@@ -449,6 +449,55 @@ describe('the lead source', () => {
   })
 })
 
+describe("Salesforce's standard lead fields (AGL-3513)", () => {
+  it('stores them, judging Salutation, Industry and Rating, and composes the name', async () => {
+    const out = await call({
+      hostId: HOST,
+      email: 'maya@example.com',
+      name: 'Ignored',
+      salutation: 'dr.',
+      firstName: 'Maya',
+      lastName: 'Quinn',
+      mobilePhone: '(512) 555-0108',
+      fax: '+1 512 555 0109',
+      doNotCall: true,
+      industry: 'food & beverage',
+      rating: 'hot',
+      annualRevenueCents: 125_000_050,
+      currency: 'EUR',
+      numberOfEmployees: 42,
+    })
+    expect(out.status).toBe(201)
+    expect(leadAt('maya@example.com')).toMatchObject({
+      name: 'Maya Quinn',
+      salutation: 'Dr.',
+      firstName: 'Maya',
+      lastName: 'Quinn',
+      mobilePhone: '+15125550108',
+      fax: '+15125550109',
+      doNotCall: true,
+      industry: 'Food & Beverage',
+      rating: 'Hot',
+      annualRevenueCents: 125_000_050,
+      currency: 'eur',
+      numberOfEmployees: 42,
+    })
+  })
+
+  it('refuses a Rating outside the list under the field, before any write', async () => {
+    const out = await call({ hostId: HOST, email: 'maya@example.com', rating: 'Freezing' })
+    expect(out.status).toBe(400)
+    expect(out.body).toEqual({ error: 'Rating must be one of: Hot, Warm, Cold.', field: 'rating' })
+    expect(leadPaths()).toEqual([])
+  })
+
+  it('refuses a mobile number it cannot read, under the field', async () => {
+    const out = await call({ hostId: HOST, email: 'maya@example.com', mobilePhone: 'call me' })
+    expect(out.status).toBe(400)
+    expect(out.body.field).toBe('mobilePhone')
+  })
+})
+
 describe('what is written', () => {
   it('files the lead through the door, keyed by address, with the profile and the working state', async () => {
     const out = await call({

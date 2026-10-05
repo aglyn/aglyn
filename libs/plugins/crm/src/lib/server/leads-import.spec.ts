@@ -546,6 +546,46 @@ describe('what a row becomes', () => {
     expect(leadAt('sam@example.com')).toBeUndefined()
   })
 
+  it("judges Salutation, Industry and Rating, dropping what the list lacks, and composes the name (AGL-3513)", async () => {
+    docs.set(`orgs/${ORG_ID}/leads/${personKey('held@example.com')}`, {
+      email: 'held@example.com',
+      sources: ['signup'],
+      submissionCount: 1,
+      firstName: 'Held',
+      lastName: 'Person',
+      name: 'Held Person',
+    })
+    const out = await importRows([
+      {
+        email: 'maya@example.com',
+        name: 'Ignored',
+        salutation: 'DR.',
+        firstName: 'Maya',
+        lastName: 'Quinn',
+        industry: 'banking',
+        rating: 'Freezing',
+        mobilePhone: '+1 512 555 0108',
+        doNotCall: 'yes',
+        numberOfEmployees: '42',
+      },
+      // A lead the site holds: the part the file names moves the name with it.
+      { email: 'held@example.com', lastName: 'Renamed' },
+    ])
+    expect(out.body).toMatchObject({ created: 1, merged: 1, dropped: { rating: 1 } })
+    expect(leadAt('maya@example.com')).toMatchObject({
+      name: 'Maya Quinn',
+      salutation: 'Dr.',
+      firstName: 'Maya',
+      lastName: 'Quinn',
+      industry: 'Banking',
+      mobilePhone: '+15125550108',
+      doNotCall: true,
+      numberOfEmployees: 42,
+    })
+    expect(leadAt('maya@example.com')).not.toHaveProperty('rating')
+    expect(leadAt('held@example.com')).toMatchObject({ name: 'Held Renamed', lastName: 'Renamed' })
+  })
+
   /*
    * The campaigns column (AGL-3254): names resolved against the org's own
    * live containers, added to what the lead carries, and a row naming a

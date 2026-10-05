@@ -58,6 +58,17 @@ There is no organization-wide list of leads. To read every site's leads, walk yo
   "address": { "city": "Austin", "state": "TX", "country": "US" },
   "tags": ["icp2", "a-list"],
   "leadSource": "Trade show",
+  "salutation": "Ms.",
+  "firstName": "Ann",
+  "lastName": "Lee",
+  "mobilePhone": "+15125550108",
+  "fax": null,
+  "doNotCall": false,
+  "industry": "Technology",
+  "rating": "Warm",
+  "annualRevenueCents": 125000000,
+  "currency": "usd",
+  "numberOfEmployees": 42,
   "sources": ["form:contact-us", "api"],
   "submissionCount": 2,
   "firstSeen": "2026-08-30T15:02:11.000Z",
@@ -80,7 +91,7 @@ There is no organization-wide list of leads. To read every site's leads, walk yo
 | `object` | string | Always `"lead"`. |
 | `siteId` | string | The site that captured the lead. **Read-only.** |
 | `email` | string \| null | The address — the lead's identity within its site. Set on [create](#create-a-lead); **read-only** after. |
-| `name` | string \| null | The person's name. Set on create or by a capture; **read-only** on a `PATCH`. |
+| `name` | string \| null | The person's name. Set on create or by a capture; **read-only** on a `PATCH`. While `firstName` or `lastName` is set, it is the two together (`"Ann Lee"`) and follows them on every write; a lead with only a name keeps it as captured. |
 | `status` | string | What the lead's status MEANS: `new`, `nurturing`, `working`, `qualified` or `unqualified` — see [Status](#status). What `?status=` and every automation read. Writable, with rules — by one of your organization's [lead status values](/content-and-data/crm/custom-fields#picklist-values) or by a meaning. |
 | `statusLabel` | string | Your organization's label for the lead status value the lead holds — one of `status`'s meaning, such as `Contacted` for `working`. A lead given only a meaning shows the meaning's default value. **Read-only** — set it through `status`. |
 | `ownerUid` | string \| null | The team member working the lead. Must be a member of your organization. Writable — by uid, or as `ownerEmail` (see [Update a lead](#update-a-lead)). |
@@ -93,6 +104,14 @@ There is no organization-wide list of leads. To read every site's leads, walk yo
 | `address` | object \| null | `line1`, `line2`, `city`, `state`, `postalCode`, `country` (two-letter code). Writable; a blank address clears. |
 | `tags` | string[] | Lower-cased, deduplicated, at most 20. Writable — as an array, or a comma-separated string. |
 | `leadSource` | string \| null | Where the lead came from — what Salesforce calls Lead Source: one of the organization's [lead source values](/content-and-data/crm/custom-fields#picklist-values). Writable, and restricted to the list's **active** values, matched without regard to case and stored as the list spells it; any other value is refused with `400 validation_failed`, the allowed values named under `fields.leadSource`. The value a lead already holds is kept even after it is deactivated. A create that names none starts from the list's default, when it has one. The list holds Salesforce's standard values — Web, Phone inquiry, Email inquiry, Partner referral, Employee referral, External referral, Advertisement, Trade show, Webinar, Word of mouth, Purchased list and Other — Aglyn's own (Website form, Booking, Newsletter sign-up, Site member sign-up, Online purchase, Account sign-up, Sequence, Email campaign; a lead the site captures through one of its doors is given that door's value when it has none) and the organization's own, each grouped **Inbound** or **Outbound** or in neither; the group is not part of the lead. Distinct from `sources`, which the site records. |
+| `salutation` | string \| null | One of the organization's [Salutation values](/content-and-data/crm/custom-fields#picklist-values) (Mr., Ms., Mrs., Dr., Prof. and its own) — the list contacts use. Writable, restricted to the list's active values like `leadSource`; the value a lead already holds is kept. |
+| `firstName` / `lastName` | string \| null | The name's parts, at most 59 characters each. Writable; see `name`. |
+| `mobilePhone` / `fax` | string \| null | E.164, read as `phone` is. Writable. |
+| `doNotCall` | boolean | The person asked not to be phoned — a warning on every call control, never a block. Writable as `true` or `false`; `false` clears it. |
+| `industry` / `rating` | string \| null | One of the organization's Industry or Rating values — the lists [companies](companies.md) use, so a conversion carries the value. Writable, restricted to the lists' active values like `leadSource`. |
+| `annualRevenueCents` | integer \| null | Annual revenue in the minor unit of `currency`, 0 or more. Writable. |
+| `currency` | string | Lowercase ISO 4217 code of the revenue; `usd` when unset. Writable. |
+| `numberOfEmployees` | integer \| null | 0 to 99,999,999. Writable. |
 | `sources` | string[] | Every surface that produced a capture: `signup`, `booking`, `form:{formId}`, `import`, `manual` (the console's New lead), `api` (this resource). **Read-only.** |
 | `submissionCount` | number | How many captures this lead represents. **Read-only.** |
 | `firstSeen` / `lastSeen` | string \| null | ISO 8601 — the first and the latest capture. **Read-only.** |
@@ -151,7 +170,7 @@ come from [converting](#convert-a-lead) it, from what the lead holds by then.
 | --- | --- |
 | `email` | **Required.** The lead's identity within its site — one address is one lead per site. |
 | `name` | The person's name. |
-| `company`, `jobTitle`, `phone`, `website`, `address`, `tags`, `leadSource` | The lead's own profile, as [above](#the-lead-object). |
+| `company`, `jobTitle`, `phone`, `website`, `address`, `tags`, `leadSource`, `salutation`, `firstName`, `lastName`, `mobilePhone`, `fax`, `doNotCall`, `industry`, `rating`, `annualRevenueCents`, `currency`, `numberOfEmployees` | The lead's own profile, as [above](#the-lead-object). A new lead that names no `salutation`, `industry` or `rating` starts from each list's default, when it has one. |
 | `status` | One of your organization's active lead status values of New or Working, by its label in any case, or the meaning `new` (the default) or `working`. Stored as the meaning and the label together. |
 | `ownerUid` / `ownerEmail` | Who works the lead. |
 | `notes` | Free text. |
@@ -212,10 +231,15 @@ notes and owner stay writable.
 
 This is the same conversion the console's **Convert** dialog performs, through the same
 code: the lead becomes a [contact](contacts.md) at the **Sales qualified** lifecycle
-stage, carrying the lead's phone, job title, address, tags, notes, company name and
-marketing consent — but not its `custom` map, whose fields are the lead's own — joining the existing contact if the address is already one, so the
+stage, carrying the lead's salutation, first and last name, phone, mobile phone, fax,
+`doNotCall`, job title, address, tags, notes, company name and marketing consent — but not its `custom` map, whose fields are the lead's own — joining the existing contact if the address is already one, so the
 address book stays one row per person — then, optionally, a company is linked or created
-and a deal opened in your default pipeline; the lead is stamped `qualified` once
+and a deal opened in your default pipeline. A company the conversion creates takes the
+lead's `industry`, `rating`, `annualRevenueCents` and `currency`, `numberOfEmployees`,
+`website`, `phone`, `fax`, its `address` as the billing address, and its `leadSource` as
+`accountSource`; a company it links or reuses takes them only into fields it leaves empty.
+The deal takes the lead's `leadSource` and, as `campaignId`, the campaign the lead was
+most recently filed under. The lead is stamped `qualified` once
 everything it names exists; and what was filed on the lead follows it: its
 [activities](activities.md) and [tasks](tasks.md) gain the contact, and a sequence
 enrollment naming the lead re-points itself to the contact. A lead already converted
@@ -275,7 +299,7 @@ attributed to the person who made it.
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing or foreign `siteId`; on a create, a missing or unreadable `email`, a `status` other than `new` or `working`, or an `unqualifiedReason`; a `phone` or `website` that cannot be read; a `status` outside its list, or `qualified`; a missing `unqualifiedReason` on an unqualify, or one sent with another status; an `ownerUid` who is not a member, an `ownerEmail` no member has, or both at once; a `custom` entry that is not a lead field, is retired, or does not fit its type (named as `custom.<key>`); on a conversion, a `company` that is not exactly one of `link`/`create`, a `company.link` that does not exist, a `company.create.domain` that is not a domain, a `deal` with no `title`, a fractional `deal.amountCents` or a malformed `deal.currency`. On the list, a `?status=` outside the four. `fields` names each key — nested ones as `deal.title`. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing or foreign `siteId`; on a create, a missing or unreadable `email`, a `status` other than `new` or `working`, or an `unqualifiedReason`; a `phone`, `mobilePhone`, `fax` or `website` that cannot be read; a `salutation`, `industry` or `rating` outside its list; a `doNotCall` that is not a boolean; an `annualRevenueCents`, `currency` or `numberOfEmployees` out of shape; a `status` outside its list, or `qualified`; a missing `unqualifiedReason` on an unqualify, or one sent with another status; an `ownerUid` who is not a member, an `ownerEmail` no member has, or both at once; a `custom` entry that is not a lead field, is retired, or does not fit its type (named as `custom.<key>`); on a conversion, a `company` that is not exactly one of `link`/`create`, a `company.link` that does not exist, a `company.create.domain` that is not a domain, a `deal` with no `title`, a fractional `deal.amountCents` or a malformed `deal.currency`. On the list, a `?status=` outside the four. `fields` names each key — nested ones as `deal.title`. |
 | `403` | `plan_required` | `code: "crm"` — the plan doesn't include the CRM suite. `code: "crm_records_quota"` — a conversion would create a record past the band on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such lead"`. |

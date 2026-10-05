@@ -68,8 +68,9 @@
  */
 
 import { CONTAINER_MEMBERSHIP_CAP } from '@aglyn/aglyn/app-utils/container-membership'
-import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
+import { composeContactName, normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import {
+  CRM_COMPANY_EMPLOYEES_MAX,
   CRM_LEAD_STATUSES,
   CRM_LEAD_TEXT_MAX,
   type CrmLeadProfile,
@@ -100,7 +101,9 @@ import {
   importTextValue,
   mapImportRow,
   mergeImportResults,
+  parseImportFlag,
 } from '@aglyn/aglyn/app-utils/csv-import'
+import { parseImportRevenueCents } from './crm-company-import'
 
 /** The shared ceilings, under this collection's names. */
 export const LEAD_IMPORT_MAX_ROWS = CSV_IMPORT_MAX_ROWS
@@ -133,15 +136,28 @@ export const LEAD_IMPORT_STATUSES: readonly CrmLeadStatus[] =
  * lead source, the address parts and tags — is what a list from another
  * tool actually carries, and the reason a lead can be worked without a
  * contact beside it. They read under the same labels the contacts import
- * uses, so one spreadsheet maps the same way into either.
+ * uses, so one spreadsheet maps the same way into either. Salesforce's
+ * standard lead fields (AGL-3513) read under the contacts import's labels
+ * for the person and the companies import's for the account.
  */
 export const LEAD_IMPORT_FIELDS = [
   'email',
+  'salutation',
+  'firstName',
+  'lastName',
   'name',
   'company',
   'jobTitle',
   'phone',
+  'mobilePhone',
+  'fax',
+  'doNotCall',
   'website',
+  'industry',
+  'rating',
+  'numberOfEmployees',
+  'annualRevenue',
+  'currency',
   'leadSource',
   'status',
   'ownerEmail',
@@ -162,11 +178,22 @@ export type LeadImportField = (typeof LEAD_IMPORT_FIELDS)[number]
 /** How each field reads in the mapping menu. Typed so a field cannot ship unlabeled. */
 export const LEAD_IMPORT_FIELD_LABELS: Record<LeadImportField, string> = {
   email: 'Email (required)',
+  salutation: 'Salutation',
+  firstName: 'First name',
+  lastName: 'Last name',
   name: 'Name',
   company: 'Company name',
   jobTitle: 'Job title',
   phone: 'Phone',
+  mobilePhone: 'Mobile phone',
+  fax: 'Fax',
+  doNotCall: 'Do not call (yes/no)',
   website: 'Website',
+  industry: 'Industry',
+  rating: 'Rating',
+  numberOfEmployees: 'Employees',
+  annualRevenue: 'Annual revenue (major units, 1250000.00)',
+  currency: 'Currency (three-letter code)',
   leadSource: 'Lead source',
   status: 'Status (a lead status value, or new, nurturing, working, unqualified)',
   ownerEmail: 'Owner (team member email)',
@@ -192,6 +219,10 @@ export const LEAD_IMPORT_FIELD_LABELS: Record<LeadImportField, string> = {
  */
 const FIELD_ALIASES: Record<LeadImportField, readonly string[]> = {
   email: ['email', 'email address', 'e mail', 'mail', 'contact email', 'work email'],
+  // The contacts import's words for the person (AGL-3513).
+  salutation: ['salutation', 'title prefix', 'prefix', 'honorific'],
+  firstName: ['first name', 'firstname', 'given name', 'forename'],
+  lastName: ['last name', 'lastname', 'surname', 'family name'],
   name: ['name', 'full name', 'lead', 'lead name', 'contact', 'contact name', 'person'],
   company: [
     'company',
@@ -203,8 +234,17 @@ const FIELD_ALIASES: Record<LeadImportField, readonly string[]> = {
     'employer',
   ],
   jobTitle: ['job title', 'title', 'position', 'role', 'headline'],
-  phone: ['phone', 'phone number', 'mobile', 'mobile phone', 'telephone', 'tel', 'cell'],
+  phone: ['phone', 'phone number', 'telephone', 'tel', 'work phone', 'business phone'],
+  mobilePhone: ['mobile', 'mobile phone', 'mobile phone number', 'cell', 'cell phone'],
+  fax: ['fax', 'fax number', 'business fax'],
+  doNotCall: ['do not call', 'dnc', 'no calls'],
   website: ['website', 'web site', 'url', 'company website', 'company domain', 'domain'],
+  // The companies import's words for the account (AGL-3513).
+  industry: ['industry', 'sector', 'vertical'],
+  rating: ['rating', 'lead rating'],
+  numberOfEmployees: ['employees', 'number of employees', 'no of employees', 'employee count', 'headcount'],
+  annualRevenue: ['annual revenue', 'revenue'],
+  currency: ['currency', 'currency code'],
   leadSource: ['lead source', 'source', 'origin', 'channel', 'campaign'],
   status: ['status', 'lead status', 'stage', 'lead stage'],
   ownerEmail: ['owner', 'owner email', 'assigned to', 'assignee', 'rep', 'sales rep'],
@@ -357,7 +397,19 @@ export function normalizeLeadImportRow(
   }
   const row: LeadImportRow = { email, profile: {}, dropped }
 
-  const name = importTextValue(raw.name, NAME_MAX)?.replace(/\s+/g, ' ')
+  /*
+   * The name's parts (AGL-3513), kept as the contact keeps them; while
+   * either is filled the name is their composition, whatever the Name
+   * column says — the server composes it again over a lead the site
+   * already holds, whose other part may be stored.
+   */
+  const firstName = composeContactName(importTextValue(raw.firstName, NAME_MAX), '')
+  if (firstName) row.profile.firstName = firstName
+  const lastName = composeContactName('', importTextValue(raw.lastName, NAME_MAX))
+  if (lastName) row.profile.lastName = lastName
+  const name =
+    composeContactName(firstName, lastName) ||
+    importTextValue(raw.name, NAME_MAX)?.replace(/\s+/g, ' ')
   if (name) row.name = name
 
   /*
@@ -377,11 +429,46 @@ export function normalizeLeadImportRow(
     ' ',
   )
   if (leadSource) row.profile.leadSource = leadSource
-  const phoneText = importTextValue(raw.phone, 64)
-  if (phoneText) {
-    const phone = normalizePhone(phoneText)
-    if (phone) row.profile.phone = phone
-    else drop('phone', phoneText)
+  for (const key of ['phone', 'mobilePhone', 'fax'] as const) {
+    const text = importTextValue(raw[key], 64)
+    if (!text) continue
+    const phone = normalizePhone(text)
+    if (phone) row.profile[key] = phone
+    else drop(key, text)
+  }
+  const doNotCallText = importTextValue(raw.doNotCall, 16)
+  if (doNotCallText) {
+    const flag = parseImportFlag(doNotCallText)
+    if (flag === null) drop('doNotCall', doNotCallText)
+    else if (flag) row.profile.doNotCall = true
+  }
+  /*
+   * Salutation, Industry and Rating as the file spelled them; the server
+   * judges each against the org's list and drops, and counts, a value the
+   * list does not hold.
+   */
+  for (const key of ['salutation', 'industry', 'rating'] as const) {
+    const label = importTextValue(raw[key], CRM_LEAD_TEXT_MAX)?.replace(/\s+/g, ' ')
+    if (label) row.profile[key] = label
+  }
+  const employeesText = importTextValue(raw.numberOfEmployees, 32)
+  if (employeesText) {
+    const cleaned = employeesText.replace(/[\s,]/g, '')
+    const employees = /^\d+$/.test(cleaned) ? Number(cleaned) : NaN
+    if (employees <= CRM_COMPANY_EMPLOYEES_MAX) row.profile.numberOfEmployees = employees
+    else drop('numberOfEmployees', employeesText)
+  }
+  const revenueText = importTextValue(raw.annualRevenue, 64)
+  if (revenueText) {
+    const cents = parseImportRevenueCents(revenueText)
+    if (cents !== null) row.profile.annualRevenueCents = cents
+    else drop('annualRevenue', revenueText)
+  }
+  const currencyText = importTextValue(raw.currency, 16)
+  if (currencyText) {
+    const code = currencyText.toLowerCase()
+    if (/^[a-z]{3}$/.test(code)) row.profile.currency = code
+    else drop('currency', currencyText)
   }
   const websiteText = importTextValue(raw.website, 320)
   if (websiteText) {

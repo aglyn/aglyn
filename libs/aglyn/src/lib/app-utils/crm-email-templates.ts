@@ -379,11 +379,20 @@ function resolveCrmMergeField(key: string, context: CrmMergeContext): string {
     case 'lead': {
       const lead = context.lead
       if (!lead) return ''
+      /*
+       * The lead's own first and last names when it keeps them (AGL-3513),
+       * as the contact's are read; the name split at its first space when
+       * it keeps neither.
+       */
+      const parts =
+        text(lead['firstName']) || text(lead['lastName'])
+          ? { firstName: text(lead['firstName']), lastName: text(lead['lastName']) }
+          : splitPersonName(lead['name'])
       switch (field) {
         case 'firstName':
-          return splitPersonName(lead['name']).firstName
+          return parts.firstName
         case 'lastName':
-          return splitPersonName(lead['name']).lastName
+          return parts.lastName
         case 'name':
           return text(lead['name'])
         case 'email':

@@ -20,7 +20,9 @@
         "campaignIds": [
           "spring-push",
           "founder-icp1"
-        ]
+        ],
+        "industry": " Food   &  Beverage",
+        "rating": "Hot"
       },
       "expected": {
         "searchTokens": [
@@ -182,7 +184,9 @@
         ],
         "status": "new",
         "leadSourceKey": "trade show",
-        "emailStatus": "none"
+        "emailStatus": "none",
+        "industryKey": "food & beverage",
+        "ratingKey": "hot"
       }
     },
     {
@@ -261,7 +265,9 @@
         "scopedCampaignIds": [],
         "status": "working",
         "leadSourceKey": null,
-        "emailStatus": "bounced"
+        "emailStatus": "bounced",
+        "industryKey": null,
+        "ratingKey": null
       }
     },
     {
@@ -311,7 +317,9 @@
         "scopedCampaignIds": [],
         "status": "new",
         "leadSourceKey": null,
-        "emailStatus": "none"
+        "emailStatus": "none",
+        "industryKey": null,
+        "ratingKey": null
       }
     },
     {
@@ -936,7 +944,9 @@
         "campaignIds": [
           "spring-push",
           "founder-icp1"
-        ]
+        ],
+        "industry": " Food   &  Beverage",
+        "rating": "Hot"
       },
       "expected": {
         "searchTokens": [
@@ -1098,7 +1108,9 @@
         ],
         "status": "new",
         "leadSourceKey": "trade show",
-        "emailStatus": "none"
+        "emailStatus": "none",
+        "industryKey": "food & beverage",
+        "ratingKey": "hot"
       }
     },
     {
@@ -1177,7 +1189,9 @@
         "scopedCampaignIds": [],
         "status": "working",
         "leadSourceKey": null,
-        "emailStatus": "bounced"
+        "emailStatus": "bounced",
+        "industryKey": null,
+        "ratingKey": null
       }
     },
     {
@@ -1227,7 +1241,9 @@
         "scopedCampaignIds": [],
         "status": "new",
         "leadSourceKey": null,
-        "emailStatus": "none"
+        "emailStatus": "none",
+        "industryKey": null,
+        "ratingKey": null
       }
     },
     {

@@ -79,6 +79,7 @@
 import {
   checkVisitorRecordCeiling,
   type ContactSource,
+  crmLeadComposedName,
   CRM_LEAD_STATUS_PICKLIST,
   LEADS_MAX_PER_HOST,
   personKey,
@@ -118,6 +119,7 @@ import {
   readImportRows,
   resolveImportContext,
 } from './import-context'
+import { judgeLeadPicklistPatch, readLeadPicklists } from './lead-picklists'
 import { readLeadSourcePicklist, resolveLeadSourceWrite } from './lead-source-picklist'
 import { readCrmPicklist } from './read-picklist'
 
@@ -177,8 +179,11 @@ function workingState(
   row: LeadImportRow,
   ownerUid: string | undefined,
   campaignIds: readonly string[],
+  composedName: string | undefined,
 ): Record<string, unknown> | null {
   const fields: Record<string, unknown> = {
+    // While a first or last name is set, the name is theirs (AGL-3513).
+    ...(composedName ? { name: composedName } : {}),
     // The meaning and the org's label for it, together (AGL-3512).
     ...(row.status ? { status: row.status } : {}),
     ...(row.status && row.statusLabel ? { statusLabel: row.statusLabel } : {}),
@@ -265,7 +270,7 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
     const leadsRef = await orgLeadsForHost(context.hostId)
     const refs = normalized.map((entry) => leadsRef.doc(entry.key))
     const namesCampaigns = normalized.some((entry) => entry.row.campaigns?.length)
-    const [owners, before, campaigns, leadSources] = await Promise.all([
+    const [owners, before, campaigns, leadSources, leadPicklists] = await Promise.all([
       ownerDirectory(
         context.orgId,
         normalized.map((entry) => entry.row),
@@ -277,6 +282,8 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
       // The org's lead source list (AGL-3298): one read per chunk, for the
       // values rows name and the default a new lead starts from.
       readLeadSourcePicklist(firestore, context.orgId),
+      // Salutation, Industry and Rating (AGL-3513), once per chunk.
+      readLeadPicklists(firestore, context.orgId),
     ])
     const beforeById = new Map(before.map((snapshot) => [snapshot.id, snapshot]))
     const held = new Set(
@@ -315,6 +322,22 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
       }
       if (leadSource.write) row.profile.leadSource = leadSource.write
       /*
+       * SALUTATION, INDUSTRY AND RATING (AGL-3513): a value the org's list
+       * does not hold is dropped and counted, as the companies import drops
+       * one — the row is still the person — and a new lead starts from each
+       * list's default.
+       */
+      const storedLead = beforeById.get(key)?.data() ?? null
+      const refusals = judgeLeadPicklistPatch(leadPicklists, row.profile, {
+        current: storedLead,
+        created: isNew,
+      })
+      for (const field of Object.keys(refusals) as (keyof typeof refusals)[]) {
+        delete row.profile[field]
+        dropped[field] = (dropped[field] ?? 0) + 1
+      }
+      const composedName = crmLeadComposedName(storedLead, row.profile)
+      /*
        * The platform lead ceiling, judged the way the deals import judges
        * the records band: one count at the first create, re-judged locally
        * as the request creates more. The door re-judges it authoritatively
@@ -344,7 +367,7 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
         hostId: context.hostId,
         lead: {
           email: row.email,
-          ...(row.name ? { name: row.name } : {}),
+          ...(composedName || row.name ? { name: composedName || row.name } : {}),
           source: LEAD_IMPORT_SOURCE,
         },
       })
@@ -352,7 +375,7 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
         skipped.push({ index, email: row.email, reason: 'write-failed' })
         continue
       }
-      const working = workingState(row, ownerUid, [...new Set(campaignIds)])
+      const working = workingState(row, ownerUid, [...new Set(campaignIds)], composedName)
       if (working) {
         await leadsRef
           .doc(key)

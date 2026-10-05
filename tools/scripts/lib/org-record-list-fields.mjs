@@ -199,6 +199,9 @@ export function crmListFields(collection, record) {
         status: CRM_LEAD_STATUSES.includes(doc.status) ? doc.status : 'new',
         leadSourceKey: crmLeadSourceKey(doc.leadSource),
         emailStatus: crmEmailStatusKey(doc),
+        // The Industry and Rating the Leads list filters by (AGL-3513).
+        industryKey: crmLeadSourceKey(doc.industry),
+        ratingKey: crmLeadSourceKey(doc.rating),
       }
     case 'contacts':
       return {

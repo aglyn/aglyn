@@ -42,6 +42,17 @@ describe('the leads CSV', () => {
       leadSource: 'Sales Navigator',
       address: { city: 'Austin', state: 'TX', country: 'US' },
       tags: ['icp2', 'a-list'],
+      // Salesforce's standard lead fields (AGL-3513).
+      salutation: 'Dr.',
+      firstName: 'Maya',
+      lastName: 'Q.',
+      mobilePhone: '+15125550108',
+      doNotCall: true,
+      industry: 'Food & Beverage',
+      rating: 'Hot',
+      numberOfEmployees: 120,
+      annualRevenueCents: 125000050,
+      currency: 'eur',
     },
     {
       email: 'june@example.com',
@@ -59,11 +70,12 @@ describe('the leads CSV', () => {
     })
     expect(csv.split('\n')).toEqual([
       LEAD_CSV_COLUMNS.join(','),
-      'maya@example.com,"Maya, Q.",Acme,CMO,+15125550107,https://acme.com/,New,' +
+      'maya@example.com,"Maya, Q.",Dr.,Maya,Q.,Acme,CMO,+15125550107,+15125550108,,yes,' +
+        'https://acme.com/,Food & Beverage,Hot,120,1250000.50,EUR,New,' +
         'owner@example.com,Sales Navigator,Sign-up|Form contact,' +
         '2026-08-01T00:00:00.000Z,2026-09-01T09:00:00.000Z,3,,,Austin,TX,,US,' +
         'icp2|a-list,,,Called back',
-      'june@example.com,,,,,,Unqualified,,,Booking,,2026-09-01T09:00:00.000Z,,' +
+      'june@example.com,,,,,,,,,,,,,,,,,Unqualified,,,Booking,,2026-09-01T09:00:00.000Z,,' +
         ',,,,,,,Not a fit,,',
     ])
   })
@@ -77,6 +89,6 @@ describe('the leads CSV', () => {
     const [, first, second] = csv.split('\n')
     expect(first).toContain(',New,uid-1,Shop,Sales Navigator,Sign-up|Form contact,')
     // A site the mount cannot name is written by its id, never blank.
-    expect(second.split(',')[8]).toBe('site-2')
+    expect(second.split(',')[header.indexOf('Site')]).toBe('site-2')
   })
 })

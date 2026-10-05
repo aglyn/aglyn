@@ -682,6 +682,18 @@ export type LeadCsvRow = Record<string, unknown> &
     | 'address'
     | 'tags'
     | 'leadSource'
+    // Salesforce's standard lead fields (AGL-3513).
+    | 'salutation'
+    | 'firstName'
+    | 'lastName'
+    | 'mobilePhone'
+    | 'fax'
+    | 'doNotCall'
+    | 'industry'
+    | 'rating'
+    | 'annualRevenueCents'
+    | 'currency'
+    | 'numberOfEmployees'
   > & {
     /** The site the lead lives under — what the `Site` column names. */
     hostId?: string
@@ -705,15 +717,28 @@ export interface LeadCsvOptions {
  * The lead's own profile (AGL-3231) — company, title, phone, website, the
  * address parts, tags and the lead source — sits where the contacts file
  * keeps the same facts, under the same headers, so one spreadsheet of
- * people reads into either import with the same mapping.
+ * people reads into either import with the same mapping. Salesforce's
+ * standard lead fields (AGL-3513) take the contacts file's headers for the
+ * person and the companies file's for the account.
  */
 export const LEAD_CSV_COLUMNS = [
   'Email',
   'Name',
+  'Salutation',
+  'First name',
+  'Last name',
   'Company',
   'Job title',
   'Phone',
+  'Mobile phone',
+  'Fax',
+  'Do not call',
   'Website',
+  'Industry',
+  'Rating',
+  'Employees',
+  'Annual revenue',
+  'Currency',
   'Status',
   'Owner',
   'Lead source',
@@ -751,10 +776,24 @@ export function leadCsvCells(
   return [
     String(lead['email'] ?? ''),
     String(lead['name'] ?? ''),
+    lead.salutation ?? '',
+    lead.firstName ?? '',
+    lead.lastName ?? '',
     lead.company ?? '',
     lead.jobTitle ?? '',
     lead.phone ?? '',
+    lead.mobilePhone ?? '',
+    lead.fax ?? '',
+    lead.doNotCall ? 'yes' : '',
     lead.website ?? '',
+    lead.industry ?? '',
+    lead.rating ?? '',
+    typeof lead.numberOfEmployees === 'number' ? lead.numberOfEmployees : '',
+    // Major units, as a company's revenue is written — the import reads it back.
+    csvAmount(lead.annualRevenueCents),
+    typeof lead.annualRevenueCents === 'number'
+      ? String(lead.currency || CSV_DEFAULT_DEAL_CURRENCY).toUpperCase()
+      : '',
     crmLeadStatusLabel(lead, options.leadStatuses),
     lead.ownerUid ? (ownerEmail?.(lead.ownerUid) ?? lead.ownerUid) : '',
     ...(siteName ? [siteName(hostId) ?? hostId] : []),

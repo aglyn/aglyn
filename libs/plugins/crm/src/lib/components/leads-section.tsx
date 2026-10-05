@@ -80,6 +80,7 @@ import {
   LEAD_LIST_DECLARATION,
   LEAD_LIST_FILTER_FIELDS,
   LEAD_LIST_FILTER_HEADERS,
+  LEAD_PICKLIST_FILTERS,
   LEAD_SOURCE_DIRECTION_FILTER_OPTIONS,
   LEAD_SOURCE_FILTER_NONE,
   leadClausesForGrid,
@@ -98,6 +99,7 @@ import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filt
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
 import { useLeadStatusPicklist } from '../hooks/use-lead-status-picklist'
+import { useLeadPicklists } from '../hooks/use-lead-picklists'
 import { type LeadCsvOptions, leadsCsv } from '../model/leads-csv'
 import { LeadConvertDialog } from './lead-convert-dialog'
 import {
@@ -134,6 +136,12 @@ import OrgLeadSurfacesNote from './org-lead-surfaces-note'
  */
 type LeadRow = Record<string, unknown> &
   CrmLeadFields & { $id: string; leadId: string }
+
+/** Salesforce's Industry and Rating columns (AGL-3513), off until a reader turns one on. */
+const LEAD_HIDDEN_COLUMNS: Readonly<Record<string, boolean>> = {
+  industry: false,
+  rating: false,
+}
 
 /**
  * `/crm/leads` — the people a site has met but not yet qualified (AGL-2608).
@@ -172,6 +180,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   // The org's lead status values (AGL-3512): the chips' words, the inline
   // select's choices and the Status filter's names.
   const leadStatusList = useLeadStatusPicklist(orgId)
+  // The org's Industry and Rating lists (AGL-3513): their filters' choices.
+  const leadPicklists = useLeadPicklists(orgId)
   const routes = crmRoutes(basePath ?? '')
 
   /*
@@ -214,7 +224,13 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const gridFilter = useListGridFilter({
     clauses,
     onChange: setClauses,
-    selectFields: ['status', 'emailState', 'ownerUid', 'leadSourceDirection'],
+    selectFields: [
+      'status',
+      'emailState',
+      'ownerUid',
+      'leadSourceDirection',
+      ...LEAD_PICKLIST_FILTERS.map((entry) => entry.column),
+    ],
     codecs: LEAD_FILTER_CODECS,
   })
   const campaigns = useCrmCampaigns({ hostId, orgId }, { enabled: true })
@@ -248,7 +264,24 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       })),
       { value: LEAD_SOURCE_FILTER_NONE, label: 'No lead source' },
     ]
+    /*
+     * Industry and Rating (AGL-3513): every value the org keeps, valued by
+     * the key the query compares and captioned by the label, inactive ones
+     * marked — the Companies list's choices.
+     */
+    const picklistOptions = Object.fromEntries(
+      LEAD_PICKLIST_FILTERS.map((entry) => {
+        const known = (leadPicklists.lists[entry.picklistId]?.values ?? []).flatMap((value) => {
+          const key = Aglyn.crmPicklistKey(value.label)
+          return key
+            ? [{ value: key, label: value.active ? value.label : `${value.label} (inactive)` }]
+            : []
+        })
+        return [entry.column, [...known, ...stale(entry.column, known)]]
+      }),
+    )
     return {
+      ...picklistOptions,
       status: leadStatusFilterOptions(leadStatusList.picklist),
       emailState: LEAD_EMAIL_FILTER_OPTIONS,
       ownerUid: roster.options.map((option) => ({
@@ -260,7 +293,14 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       // The picklist's groups (AGL-3511): Inbound and Outbound.
       leadSourceDirection: LEAD_SOURCE_DIRECTION_FILTER_OPTIONS,
     }
-  }, [clauses, campaigns.options, leadSourceList.picklist, leadStatusList.picklist, roster.options])
+  }, [
+    clauses,
+    campaigns.options,
+    leadSourceList.picklist,
+    leadStatusList.picklist,
+    leadPicklists.lists,
+    roster.options,
+  ])
   /*
    * Every clause and the search word on ONE query (AGL-3321): each stored
    * clause asked through the field its writer keeps (`leadQueryClause`),
@@ -381,6 +421,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           // filled — the route reads the definitions to judge the map, and
           // a body without it pays for no read.
           ...(values.custom ? { custom: values.custom } : {}),
+          // Salesforce's standard lead fields (AGL-3513), the filled ones.
+          ...values.standard,
           status: values.status,
         })
         if (!response.ok) {
@@ -606,6 +648,21 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         minWidth: 140,
         valueGetter: (_value, row: LeadRow) => (row.tags ?? []).join(', '),
       },
+      /*
+       * Salesforce's Industry and Rating (AGL-3513), optional: valued by
+       * the key their filters compare, drawn as the label the lead holds.
+       */
+      ...LEAD_PICKLIST_FILTERS.map(
+        (entry): GridColDef => ({
+          field: entry.column,
+          headerName: entry.header,
+          flex: 0.8,
+          minWidth: 130,
+          sortable: false,
+          valueGetter: (_value, row: LeadRow) => Aglyn.crmPicklistKey(row[entry.column]) ?? '',
+          renderCell: ({ row }: { row: LeadRow }) => String(row[entry.column] ?? '') || '—',
+        }),
+      ),
       // The campaigns the lead is filed under (AGL-3254), by name — the
       // ids are the storage.
       {
@@ -736,7 +793,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       listFilterGridColumns(columns, LEAD_LIST_FILTER_FIELDS, filterOptions, LEAD_LIST_FILTER_HEADERS),
     [columns, filterOptions],
   )
-  const grid = useCrmViewGrid(views, filterColumns)
+  const grid = useCrmViewGrid(views, filterColumns, LEAD_HIDDEN_COLUMNS)
 
   return (
     <>

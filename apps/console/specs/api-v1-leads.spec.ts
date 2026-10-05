@@ -485,6 +485,18 @@ describe('GET /v1/leads', () => {
       address: null,
       tags: [],
       leadSource: null,
+      // Salesforce's standard lead fields (AGL-3513).
+      salutation: null,
+      firstName: null,
+      lastName: null,
+      mobilePhone: null,
+      fax: null,
+      doNotCall: false,
+      industry: null,
+      rating: null,
+      annualRevenueCents: null,
+      currency: 'usd',
+      numberOfEmployees: null,
       sources: ['signup'],
       submissionCount: 1,
       firstSeen: new Date(2_000).toISOString(),
@@ -824,6 +836,21 @@ describe('POST /v1/leads', () => {
     expect(lead.submissionCount).toBe(2)
   })
 
+  it("keeps the name a held lead's first and last names make, whatever a create calls it (AGL-3513)", async () => {
+    const { personKey } = jest.requireActual('../../../libs/aglyn/src/lib/app-utils/person-key')
+    const id = personKey('ann@acme.com')
+    mockDocs.set(
+      `${LEADS}/${id}`,
+      captured('ann@acme.com', 3_000, { name: 'Ann Lee', firstName: 'Ann', lastName: 'Lee' }),
+    )
+    const response = await call('POST', `leads?siteId=${HOST}`, {
+      email: 'ann@acme.com',
+      name: 'Annie',
+    })
+    expect(response.status).toBe(200)
+    expect((await json(response)).name).toBe('Ann Lee')
+  })
+
   it('refuses a malformed body by the field, before any write', async () => {
     const response = await call('POST', `leads?siteId=${HOST}`, {
       email: 'nope',
@@ -885,6 +912,66 @@ describe('PATCH /v1/leads/{id} — the profile', () => {
     })
     expect(response.status).toBe(400)
     expect(Object.keys((await json(response)).error.fields).sort()).toEqual(['phone', 'website'])
+  })
+
+  /*
+   * SALESFORCE'S STANDARD LEAD FIELDS (AGL-3513): Salutation, Industry and
+   * Rating held to the org's lists, the name composed from its parts, and
+   * the rest normalized as the contact and the company store them.
+   */
+  it("writes the standard fields, judging the picklists and composing the name (AGL-3513)", async () => {
+    mockDocs.set(`${LEADS}/lead-a`, captured('ann@acme.com', 3_000, { name: 'Ann Lee' }))
+    const response = await call('PATCH', `leads/lead-a?siteId=${HOST}`, {
+      salutation: 'ms.',
+      firstName: 'Ann',
+      lastName: 'Leigh',
+      mobilePhone: '5125550108',
+      doNotCall: true,
+      industry: 'banking',
+      rating: 'warm',
+      annualRevenueCents: 50_000_00,
+      currency: 'GBP',
+      numberOfEmployees: 12,
+    })
+    expect(response.status).toBe(200)
+    expect(await json(response)).toMatchObject({
+      name: 'Ann Leigh',
+      salutation: 'Ms.',
+      firstName: 'Ann',
+      lastName: 'Leigh',
+      mobilePhone: '+15125550108',
+      doNotCall: true,
+      industry: 'Banking',
+      rating: 'Warm',
+      annualRevenueCents: 50_000_00,
+      currency: 'gbp',
+      numberOfEmployees: 12,
+    })
+    // Clearing a part recomposes; `false` clears Do not call.
+    const cleared = await json(
+      await call('PATCH', `leads/lead-a?siteId=${HOST}`, { firstName: null, doNotCall: false }),
+    )
+    expect(cleared).toMatchObject({ name: 'Leigh', firstName: null, doNotCall: false })
+    expect(mockDocs.get(`${LEADS}/lead-a`)).not.toHaveProperty('doNotCall')
+  })
+
+  it('refuses a picklist value the org lacks and a flag that is not one, by the field', async () => {
+    mockDocs.set(`${LEADS}/lead-a`, captured('ann@acme.com', 3_000))
+    const response = await call('PATCH', `leads/lead-a?siteId=${HOST}`, {
+      rating: 'Freezing',
+      doNotCall: 'yes',
+      numberOfEmployees: -1,
+    })
+    expect(response.status).toBe(400)
+    expect(Object.keys((await json(response)).error.fields).sort()).toEqual([
+      'doNotCall',
+      'numberOfEmployees',
+    ])
+    const picklist = await call('PATCH', `leads/lead-a?siteId=${HOST}`, { rating: 'Freezing' })
+    expect(picklist.status).toBe(400)
+    expect((await json(picklist)).error.fields).toEqual({
+      rating: 'Rating must be one of: Hot, Warm, Cold.',
+    })
   })
 })
 

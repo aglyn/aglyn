@@ -376,8 +376,12 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
     description: 'Unqualified interest, before it becomes a contact. A lead is a record of its own: the person and their company as text, until converting makes the contact and the company.',
     schemaName: 'Lead',
     required: ['id', 'object', 'siteId'],
-    writable: ['siteId', 'email', 'name', 'status', 'ownerUid', 'ownerEmail', 'notes', 'unqualifiedReason', 'company', 'jobTitle', 'phone', 'website', 'address', 'tags', 'leadSource'],
-    writeNote: '`email` and `name` are taken on a create only; a `PATCH` cannot change the address, which is the lead’s identity within its site.',
+    writable: [
+      'siteId', 'email', 'name', 'status', 'ownerUid', 'ownerEmail', 'notes', 'unqualifiedReason', 'company', 'jobTitle', 'phone', 'website', 'address', 'tags', 'leadSource',
+      // Salesforce's standard lead fields (AGL-3513).
+      'salutation', 'firstName', 'lastName', 'mobilePhone', 'fax', 'doNotCall', 'industry', 'rating', 'annualRevenueCents', 'currency', 'numberOfEmployees',
+    ],
+    writeNote: '`email` and `name` are taken on a create only; a `PATCH` cannot change the address, which is the lead’s identity within its site. While `firstName` or `lastName` is set, `name` is their composition, "First Last", and follows them.',
     writeRequired: ['email'],
     writeOnly: {
       siteId: stringField('The site the lead belongs to, instead of the `siteId` query parameter.'),
@@ -409,6 +413,18 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
             "after it is deactivated. A create that names none starts from the list's default.",
         ),
       ),
+      // Salesforce's standard lead fields (AGL-3513).
+      salutation: nullableField(stringField('Salutation: one of the organization’s active Salutation values (CRM › Fields › Contacts), matched without regard to case. Any other value is a `400` naming the values allowed; the value a lead already holds is kept.')),
+      firstName: nullableField(stringField('First name, at most 59 characters. While it or `lastName` is set, `name` is "First Last".')),
+      lastName: nullableField(stringField('Last name, at most 59 characters.')),
+      mobilePhone: nullableField(stringField('E.164 mobile phone number.')),
+      fax: nullableField(stringField('E.164 fax number.')),
+      doNotCall: booleanField('The person asked not to be phoned. A hint on every call control, never a block. `false` clears it.'),
+      industry: nullableField(stringField('Industry: one of the organization’s active Industry values (CRM › Fields › Companies) — the list companies keep, so converting carries it. Any other value is a `400` naming the values allowed; the value a lead already holds is kept.')),
+      rating: nullableField(stringField('Rating: one of the organization’s active Rating values (CRM › Fields › Companies). Any other value is a `400` naming the values allowed.')),
+      annualRevenueCents: nullableField(integerField('Annual revenue in the minor unit of `currency`, 0 or more.')),
+      currency: stringField('Lowercase ISO 4217 code of the annual revenue. `usd` when unset.'),
+      numberOfEmployees: nullableField(integerField('Number of employees, 0 to 99,999,999.')),
       sources: stringListField('The surfaces that captured the lead: `signup`, `booking`, `form:{formId}`, `import`, `manual`, `api`.'),
       submissionCount: integerField('How many form submissions this lead has made.'),
       firstSeen: isoField('First interaction.'),

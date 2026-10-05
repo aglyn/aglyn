@@ -7,8 +7,9 @@ import {
   crmLeadStatusLabelFor,
   crmLeadStatusOptions,
   containerMembershipValue,
+  crmLeadComposedName,
+  type CrmLeadProfilePatch,
   crmPicklistDefaultLabel,
-  normalizeCrmLeadTags,
   normalizeContactEmail,
   normalizeCrmLeadProfile,
   type AglynPostalAddress,
@@ -32,10 +33,12 @@ import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import {
-  ContactAddressFields,
-  EMPTY_ADDRESS,
-  type AddressDraft,
-} from './contact-address-fields'
+  EMPTY_LEAD_PROFILE_DRAFT,
+  leadDraftComposedName,
+  LeadProfileFields,
+  type LeadProfileDraft,
+  leadProfileDraftBody,
+} from './lead-profile-fields'
 import { CrmSitePicker } from './crm-site-picker'
 import { CrmCustomFieldControl } from './crm-custom-field-control'
 import {
@@ -44,8 +47,8 @@ import {
   crmCustomDraftMissingRequired,
 } from '../model/crm-custom-draft'
 import { LeadOwnerSelect } from './lead-owner-select'
-import { LeadSourceSelect } from './lead-source-select'
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
+import { useLeadPicklists } from '../hooks/use-lead-picklists'
 import { useLeadStatusPicklist } from '../hooks/use-lead-status-picklist'
 
 /** The meanings a lead is entered in by hand: New or Working (AGL-3231). */
@@ -74,6 +77,25 @@ export interface NewLeadValues {
    * route stores a `custom` map only when there is one.
    */
   custom?: Record<string, CrmCustomValue>
+  /**
+   * Salesforce's standard lead fields (AGL-3513) — salutation, the name's
+   * parts, mobile, fax, do not call, industry, rating, size and revenue —
+   * normalized as the route stores them, only the ones that were filled.
+   */
+  standard: Pick<
+    CrmLeadProfilePatch,
+    | 'salutation'
+    | 'firstName'
+    | 'lastName'
+    | 'mobilePhone'
+    | 'fax'
+    | 'doNotCall'
+    | 'industry'
+    | 'rating'
+    | 'annualRevenueCents'
+    | 'currency'
+    | 'numberOfEmployees'
+  >
 }
 
 export interface NewLeadDrawerProps {
@@ -131,11 +153,16 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
 
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
-  const [company, setCompany] = useState('')
-  const [jobTitle, setJobTitle] = useState('')
-  const [phone, setPhone] = useState('')
-  const [website, setWebsite] = useState('')
-  const [leadSource, setLeadSource] = useState('')
+  /*
+   * THE PROFILE (AGL-3231, AGL-3513), one draft the fields edit — the
+   * lead's page edits the same draft with the same fields.
+   */
+  const [profile, setProfile] = useState<LeadProfileDraft>(EMPTY_LEAD_PROFILE_DRAFT)
+  const [profileErrors, setProfileErrors] = useState<Record<string, string>>({})
+  const editProfile = <K extends keyof LeadProfileDraft>(key: K, value: LeadProfileDraft[K]) =>
+    setProfile((current) => ({ ...current, [key]: value }))
+  // The org's Salutation, Industry and Rating lists (AGL-3513).
+  const leadPicklists = useLeadPicklists(open ? (orgId ?? null) : null)
   /*
    * THE ORG'S LEAD SOURCES (AGL-3298), and its default for a new record.
    * The default is filled in once the list has answered and only until the
@@ -146,7 +173,9 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
   const [leadSourceTouched, setLeadSourceTouched] = useState(false)
   const defaultLeadSource = crmPicklistDefaultLabel(leadSources.picklist) ?? ''
   useEffect(() => {
-    if (open && !leadSourceTouched) setLeadSource(defaultLeadSource)
+    if (open && !leadSourceTouched) {
+      setProfile((current) => ({ ...current, leadSource: defaultLeadSource }))
+    }
   }, [open, leadSourceTouched, defaultLeadSource])
   // The org's New and Working values (AGL-3512); a new lead starts as New's.
   const leadStatuses = useLeadStatusPicklist(orgId ?? null)
@@ -156,9 +185,7 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
     ? status
     : crmLeadStatusLabelFor(leadStatuses.picklist, 'new')
   const [ownerUid, setOwnerUid] = useState('')
-  const [tags, setTags] = useState('')
   const [campaignIds, setCampaignIds] = useState<string[]>([])
-  const [address, setAddress] = useState<AddressDraft>(EMPTY_ADDRESS)
   const [notes, setNotes] = useState('')
   /*
    * The org's own lead fields (AGL-3272). A CREATE holds only a draft —
@@ -169,8 +196,6 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
   const [custom, setCustom] = useState<CrmCustomDraft>({})
   const [customError, setCustomError] = useState('')
   const [emailError, setEmailError] = useState('')
-  const [phoneError, setPhoneError] = useState('')
-  const [websiteError, setWebsiteError] = useState('')
   /*
    * The campaigns, for the picker (AGL-3254): read while the drawer is
    * open. Under a site, the ones placed on it; at the organization level,
@@ -185,51 +210,59 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
     if (!open) return
     setEmail('')
     setName('')
-    setCompany('')
-    setJobTitle('')
-    setPhone('')
-    setWebsite('')
-    setLeadSource('')
+    setProfile(EMPTY_LEAD_PROFILE_DRAFT)
+    setProfileErrors({})
     setLeadSourceTouched(false)
     setStatus('')
     setOwnerUid('')
-    setTags('')
     setCampaignIds([])
-    setAddress(EMPTY_ADDRESS)
     setNotes('')
     setCustom({})
     setCustomError('')
     setEmailError('')
-    setPhoneError('')
-    setWebsiteError('')
   }, [open])
 
   const handleSubmit = () => {
     const normalizedEmail = normalizeContactEmail(email)
-    const { patch, errors } = normalizeCrmLeadProfile({
-      company,
-      jobTitle,
-      phone,
-      website,
-      leadSource,
-      address,
-      tags: normalizeCrmLeadTags(tags),
-    })
+    const { body, revenueError } = leadProfileDraftBody(profile)
+    const { patch, errors } = normalizeCrmLeadProfile(body)
+    const shown: Record<string, string> = { ...errors }
+    if (revenueError) shown['annualRevenueCents'] = revenueError
     // Every required lead field counts on a create: the record is being
     // made whole, and nothing has been written to come back and fill.
     const missing = crmCustomDraftMissingRequired(fields.active, {}, custom, 'create')
     setEmailError(normalizedEmail ? '' : 'Enter a valid email address.')
-    setPhoneError(errors.phone ?? '')
-    setWebsiteError(errors.website ?? '')
+    setProfileErrors(shown)
     setCustomError(
       missing.length
         ? `${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required.`
         : '',
     )
-    if (!normalizedEmail || errors.phone || errors.website || missing.length) return
+    if (!normalizedEmail || Object.keys(shown).length || missing.length) return
+    // Only what was filled: a create has nothing to clear.
+    const standard: NewLeadValues['standard'] = {}
+    for (const key of [
+      'salutation',
+      'firstName',
+      'lastName',
+      'mobilePhone',
+      'fax',
+      'doNotCall',
+      'industry',
+      'rating',
+      'annualRevenueCents',
+      'currency',
+      'numberOfEmployees',
+    ] as const) {
+      const value = patch[key]
+      if (value !== null && value !== undefined) Object.assign(standard, { [key]: value })
+    }
     onSubmit({
       email: normalizedEmail,
-      name: name.trim().replace(/\s+/g, ' ').slice(0, CRM_LEAD_TEXT_MAX),
+      // While a first or last name is typed, the name is theirs (AGL-3513).
+      name:
+        crmLeadComposedName(null, patch) ??
+        name.trim().replace(/\s+/g, ' ').slice(0, CRM_LEAD_TEXT_MAX),
       company: patch.company ?? '',
       jobTitle: patch.jobTitle ?? '',
       phone: patch.phone ?? '',
@@ -242,8 +275,11 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
       address: patch.address ?? null,
       notes: notes.trim().slice(0, NOTES_MAX),
       custom: crmCustomDraftDocument(custom),
+      standard,
     })
   }
+
+  const composedName = leadDraftComposedName(profile)
 
   return (
     <NavigationDrawerComponent
@@ -302,57 +338,32 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
           <TextField
             size="small"
             label="Name"
-            value={name}
+            value={composedName || name}
             onChange={(event) => setName(event.target.value)}
-            slotProps={{ htmlInput: { maxLength: CRM_LEAD_TEXT_MAX } }}
-            fullWidth
-          />
-          <TextField
-            size="small"
-            label="Company"
-            value={company}
-            onChange={(event) => setCompany(event.target.value)}
-            helperText="As text — converting the lead is what makes it a company record."
-            slotProps={{ htmlInput: { maxLength: CRM_LEAD_TEXT_MAX } }}
-            fullWidth
-          />
-          <TextField
-            size="small"
-            label="Job title"
-            value={jobTitle}
-            onChange={(event) => setJobTitle(event.target.value)}
-            slotProps={{ htmlInput: { maxLength: CRM_LEAD_TEXT_MAX } }}
-            fullWidth
-          />
-          <TextField
-            size="small"
-            label="Phone"
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-            error={Boolean(phoneError)}
+            slotProps={{
+              htmlInput: { maxLength: CRM_LEAD_TEXT_MAX },
+              input: { readOnly: Boolean(composedName) },
+            }}
             helperText={
-              phoneError || 'With the country code, like +1 512 555 0107'
+              composedName ? 'Made of the first and last name.' : 'Or the whole name in one field.'
             }
             fullWidth
           />
-          <TextField
-            size="small"
-            label="Website"
-            value={website}
-            onChange={(event) => setWebsite(event.target.value)}
-            error={Boolean(websiteError)}
-            helperText={websiteError || 'Like acme.com'}
-            fullWidth
-          />
-          <LeadSourceSelect
-            picklist={leadSources.picklist}
-            value={leadSource}
-            onChange={(label) => {
-              setLeadSource(label)
-              setLeadSourceTouched(true)
+          <LeadProfileFields
+            draft={profile}
+            onChange={(key, value) => {
+              if (key === 'leadSource') setLeadSourceTouched(true)
+              editProfile(key, value)
             }}
+            errors={profileErrors}
             disabled={Boolean(busy)}
-            helperText="Where this lead came from. The choices are kept under CRM › Fields › Leads."
+            leadSources={leadSources.picklist}
+            lists={leadPicklists.lists}
+            helperTexts={{
+              company: 'As text — converting the lead is what makes it a company record.',
+              leadSource:
+                'Where this lead came from. The choices are kept under CRM › Fields › Leads.',
+            }}
           />
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField
@@ -375,15 +386,6 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
               roster={roster}
             />
           </Stack>
-          <TextField
-            size="small"
-            label="Tags"
-            placeholder="icp2, a-list"
-            helperText="Comma-separated"
-            value={tags}
-            onChange={(event) => setTags(event.target.value)}
-            fullWidth
-          />
           {/*
             The campaigns to file the lead under (AGL-3254), picked the way a
             form's page picks them. Grouping, not consent: it decides which
@@ -403,8 +405,6 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
                 : 'There are no campaigns yet. Create one from Marketing to file leads under it.'
             }
           />
-          <Typography variant="subtitle2">{'Address'}</Typography>
-          <ContactAddressFields value={address} onChange={setAddress} />
           {/* The org's own lead fields (AGL-3272), the same controls the
               lead's page edits them with. */}
           {fields.active.length ? (

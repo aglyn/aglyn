@@ -67,6 +67,7 @@ import {
   type ContactInteraction,
   type ContactSegment,
   type ContactSource,
+  composeContactName,
   normalizeContactEmail,
   readContactFacet,
 } from './contacts'
@@ -3050,17 +3051,63 @@ export interface CrmLeadProfile {
    * of the org's lead source values (see {@link CrmPicklist}).
    */
   leadSource?: string
+  /*
+   * SALESFORCE'S STANDARD LEAD FIELDS (AGL-3513), in the shapes the contact
+   * and the company keep them, so a conversion copies values rather than
+   * translating them.
+   */
+  /** One of the org's salutation values, by label (`Mr.`, `Dr.` …) — the contact's list. */
+  salutation?: string
+  /**
+   * The person's given and family names. While either is set, the lead's
+   * `name` is their composition ({@link crmLeadComposedName}), so the name
+   * the list shows and searches is the person the structured fields name. A
+   * lead holding only `name` keeps it as captured: nothing splits a stored
+   * name into parts after the fact.
+   */
+  firstName?: string
+  lastName?: string
+  /** E.164, like {@link phone}. */
+  mobilePhone?: string
+  /** E.164. */
+  fax?: string
+  /** A label of the `industry` picklist — the list companies keep (AGL-3514). */
+  industry?: string
+  /** A label of the `rating` picklist — the list companies keep. */
+  rating?: string
+  /** Annual revenue in the minor unit of {@link currency}, the company's convention. */
+  annualRevenueCents?: number
+  /** Lowercase ISO 4217 of the revenue; `'usd'` when absent. */
+  currency?: string
+  numberOfEmployees?: number
+  /**
+   * The person asked not to be phoned. Stored only as `true`; absent is
+   * "may be called". A hint beside every number and on the Call button,
+   * never a block — the contact's rule.
+   */
+  doNotCall?: boolean
 }
 
 /** The profile's keys, in the order a card lists them. */
 export const CRM_LEAD_PROFILE_KEYS = [
+  'salutation',
+  'firstName',
+  'lastName',
   'company',
   'jobTitle',
   'phone',
+  'mobilePhone',
+  'fax',
+  'doNotCall',
   'website',
   'address',
   'tags',
   'leadSource',
+  'industry',
+  'rating',
+  'annualRevenueCents',
+  'currency',
+  'numberOfEmployees',
 ] as const satisfies readonly (keyof CrmLeadProfile)[]
 
 export type CrmLeadProfileKey = (typeof CRM_LEAD_PROFILE_KEYS)[number]
@@ -3127,7 +3174,9 @@ export function normalizeCrmLeadProfile(
   const body = input ?? {}
   const patch: CrmLeadProfilePatch = {}
   const errors: CrmLeadProfileErrors = {}
-  const text = (key: 'company' | 'jobTitle' | 'leadSource') => {
+  const text = (
+    key: 'company' | 'jobTitle' | 'leadSource' | 'salutation' | 'industry' | 'rating',
+  ) => {
     if (!(key in body)) return
     const value = String(body[key] ?? '')
       .trim()
@@ -3138,13 +3187,49 @@ export function normalizeCrmLeadProfile(
   text('company')
   text('jobTitle')
   text('leadSource')
-  if ('phone' in body) {
-    const raw = String(body['phone'] ?? '').trim()
-    if (!raw) patch.phone = null
+  text('salutation')
+  text('industry')
+  text('rating')
+  // A name part as the contact's facet keeps one — see `composeContactName`.
+  for (const key of ['firstName', 'lastName'] as const) {
+    if (!(key in body)) continue
+    const value = composeContactName(body[key], '')
+    patch[key] = value || null
+  }
+  for (const key of ['phone', 'mobilePhone', 'fax'] as const) {
+    if (!(key in body)) continue
+    const raw = String(body[key] ?? '').trim()
+    if (!raw) patch[key] = null
     else {
       const phone = normalizePhone(raw)
-      if (phone) patch.phone = phone
-      else errors.phone = CRM_LEAD_PHONE_REFUSAL
+      if (phone) patch[key] = phone
+      else errors[key] = CRM_LEAD_PHONE_REFUSAL
+    }
+  }
+  if ('doNotCall' in body) {
+    // Stored only as `true`: anything else is "may be called", a clear.
+    patch.doNotCall = body['doNotCall'] === true ? true : null
+  }
+  /*
+   * The revenue, its currency and the head count, read by the company's
+   * own reader so a value one record refuses the other refuses in the same
+   * words. A head count typed as digits is read as the number it spells.
+   */
+  const account: Record<string, unknown> = {}
+  if ('annualRevenueCents' in body) account['annualRevenueCents'] = body['annualRevenueCents'] ?? null
+  if ('currency' in body) account['currency'] = body['currency'] ?? null
+  if ('numberOfEmployees' in body) {
+    const raw = body['numberOfEmployees']
+    const digits = typeof raw === 'string' ? raw.replace(/[\s,]/g, '') : null
+    account['numberOfEmployees'] =
+      digits === null ? (raw ?? null) : digits === '' ? null : /^\d+$/.test(digits) ? Number(digits) : raw
+  }
+  if (Object.keys(account).length) {
+    const read = readCrmCompanyAccountFields(account)
+    const into = patch as Record<string, unknown>
+    for (const key of ['annualRevenueCents', 'currency', 'numberOfEmployees'] as const) {
+      if (read.errors[key]) errors[key] = read.errors[key]
+      else if (key in read.values) into[key] = read.values[key] ?? null
     }
   }
   if ('website' in body) {
@@ -3168,6 +3253,79 @@ export function normalizeCrmLeadProfile(
     patch.tags = tags.length ? tags : null
   }
   return { patch, errors }
+}
+
+/**
+ * The `name` a write must store beside a lead's first and last names
+ * (AGL-3513), the contact's rule: while either part is set the name is
+ * their composition, written whenever either moves. `undefined` when the
+ * write names neither part, or when it leaves both blank — a name-only
+ * lead keeps its name, and clearing both parts leaves the name as it
+ * stands.
+ */
+export function crmLeadComposedName(
+  stored: Readonly<Record<string, unknown>> | null | undefined,
+  patch: Readonly<Pick<CrmLeadProfilePatch, 'firstName' | 'lastName'>>,
+): string | undefined {
+  if (patch.firstName === undefined && patch.lastName === undefined) return undefined
+  const part = (key: 'firstName' | 'lastName') =>
+    patch[key] === undefined ? stored?.[key] : (patch[key] ?? '')
+  return composeContactName(part('firstName'), part('lastName')) || undefined
+}
+
+/**
+ * Each lead picklist field beside the lead source (AGL-3513): the list it
+ * holds a value of, and the key the Leads list filters by. The lists are
+ * the contact's and the company's own — one Salutation, one Industry, one
+ * Rating per org — so a lead converts into the same values.
+ */
+export const CRM_LEAD_PICKLIST_FIELDS = [
+  { field: 'salutation', picklistId: 'salutation' },
+  { field: 'industry', picklistId: 'industry', keyField: 'industryKey' },
+  { field: 'rating', picklistId: 'rating', keyField: 'ratingKey' },
+] as const
+
+export type CrmLeadPicklistField = (typeof CRM_LEAD_PICKLIST_FIELDS)[number]['field']
+
+/**
+ * The lead picklist fields a write names, judged against the org's lists
+ * — the company's {@link judgeCrmCompanyPicklists} over the lead's fields:
+ * `lists` holds each list the caller read (a list it did not read is
+ * judged as the standard values alone), the lead's `current` value is kept
+ * even when the list no longer offers it, and on a create a field not
+ * named starts from its list's default.
+ */
+export function judgeCrmLeadPicklists(
+  lists: Readonly<Partial<Record<CrmPicklistId, CrmPicklist>>>,
+  requested: Readonly<Partial<Record<string, unknown>>>,
+  options: { current?: Readonly<Partial<Record<string, unknown>>> | null; created?: boolean } = {},
+): {
+  values: Partial<Record<CrmLeadPicklistField, string | null>>
+  errors: Partial<Record<CrmLeadPicklistField, string>>
+} {
+  const values: Partial<Record<CrmLeadPicklistField, string | null>> = {}
+  const errors: Partial<Record<CrmLeadPicklistField, string>> = {}
+  for (const { field, picklistId } of CRM_LEAD_PICKLIST_FIELDS) {
+    const list = lists[picklistId] ?? effectiveCrmPicklist(picklistId, undefined)
+    const raw = requested[field]
+    if (raw === undefined) {
+      const fallback = options.created ? picklistDefaultLabel(list) : null
+      if (fallback) values[field] = fallback
+      continue
+    }
+    if (raw === null || (typeof raw === 'string' && !raw.trim())) {
+      values[field] = null
+      continue
+    }
+    if (typeof raw !== 'string') {
+      errors[field] = 'Must be text'
+      continue
+    }
+    const judged = judgeCrmPicklistValue(picklistId, list, raw, options.current?.[field])
+    if (judged.ok === false) errors[field] = judged.error
+    else values[field] = judged.value
+  }
+  return { values, errors }
 }
 
 /*==========================================
@@ -3436,7 +3594,11 @@ const INDUSTRY_DEFINITION = {
     { id: 'utilities', label: 'Utilities' },
     { id: 'other', label: 'Other' },
   ],
-  targets: [{ object: 'company', field: 'industry', keyField: 'industryKey' }],
+  targets: [
+    { object: 'company', field: 'industry', keyField: 'industryKey' },
+    // Leads (AGL-3513): the same list, so a lead converts into its value.
+    { object: 'lead', field: 'industry', keyField: 'industryKey' },
+  ],
 } as const satisfies CrmPicklistDefinition
 
 /** Salesforce's Rating. */
@@ -3451,7 +3613,11 @@ const RATING_DEFINITION = {
     { id: 'warm', label: 'Warm' },
     { id: 'cold', label: 'Cold' },
   ],
-  targets: [{ object: 'company', field: 'rating', keyField: 'ratingKey' }],
+  targets: [
+    { object: 'company', field: 'rating', keyField: 'ratingKey' },
+    // Leads (AGL-3513).
+    { object: 'lead', field: 'rating', keyField: 'ratingKey' },
+  ],
 } as const satisfies CrmPicklistDefinition
 
 /** Salesforce's Ownership. */
@@ -3492,7 +3658,11 @@ const SALUTATION_DEFINITION = {
     { id: 'dr', label: 'Dr.' },
     { id: 'prof', label: 'Prof.' },
   ],
-  targets: [{ object: 'contact', field: 'salutation', facet: true }],
+  targets: [
+    { object: 'contact', field: 'salutation', facet: true },
+    // Leads (AGL-3513): on the lead itself, carried to the facet on convert.
+    { object: 'lead', field: 'salutation' },
+  ],
 } as const satisfies CrmPicklistDefinition
 
 /*------------------------------------------
@@ -4745,6 +4915,8 @@ export function crmLeadListFields(record: object): {
   status: CrmLeadStatus
   leadSourceKey: string | null
   emailStatus: string
+  industryKey: string | null
+  ratingKey: string | null
 } {
   const lead = record as Record<string, unknown>
   return {
@@ -4756,6 +4928,9 @@ export function crmLeadListFields(record: object): {
     status: crmLeadStatus(lead as Pick<CrmLeadFields, 'status'>),
     leadSourceKey: crmLeadSourceKey(lead['leadSource']),
     emailStatus: crmEmailStatusKey(lead),
+    // The Industry and Rating the Leads list filters by (AGL-3513).
+    industryKey: crmPicklistKey(lead['industry']),
+    ratingKey: crmPicklistKey(lead['rating']),
   }
 }
 
@@ -4979,7 +5154,17 @@ export function crmContactListFields(record: object): {
  * {@link crmListFields} over the document it wrote.
  */
 export const CRM_LIST_FIELD_INPUTS: Readonly<Record<CrmListCollection, readonly string[]>> = {
-  leads: ['visibleTo', ...CRM_LEAD_SEARCH_SOURCES, 'status', 'leadSource', 'emailState', 'campaignIds'],
+  leads: [
+    'visibleTo',
+    ...CRM_LEAD_SEARCH_SOURCES,
+    'status',
+    'leadSource',
+    'emailState',
+    'campaignIds',
+    // AGL-3513.
+    'industry',
+    'rating',
+  ],
   contacts: ['visibleTo', ...CRM_CONTACT_SEARCH_SOURCES, 'phone', CONTACT_FACETS_FIELD, 'emailState'],
   companies: ['visibleTo', ...CRM_COMPANY_SEARCH_SOURCES, 'type', 'industry', 'rating', 'accountSource'],
   deals: ['visibleTo', 'title', 'type', 'leadSource'],

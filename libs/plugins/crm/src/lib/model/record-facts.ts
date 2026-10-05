@@ -266,6 +266,21 @@ export interface CrmDealFacts {
 export interface CrmLeadFacts {
   record: 'lead'
   name: string
+  /*
+   * The lead's own profile and Salesforce's standard lead fields
+   * (AGL-3231, AGL-3513), read-only: who the person is and what the
+   * account is, not how to reach them.
+   */
+  salutation: string
+  company: string
+  jobTitle: string
+  leadSource: string
+  industry: string
+  rating: string
+  employees: number | null
+  annualRevenue: string | null
+  /** They asked not to be phoned — a fact an assistant drafting a next step must respect. */
+  doNotCall: boolean
   status: string
   /** Where the lead was captured: Form, Booking, Sign-up, Import. */
   sources: string[]
@@ -630,6 +645,18 @@ export function leadFacts(input: LeadFactsInput): CrmLeadFacts {
   return {
     record: 'lead',
     name: crmFactProse(lead['name'], CRM_FACTS_LABEL_MAX),
+    salutation: crmFactProse(lead['salutation'], CRM_FACTS_LABEL_MAX),
+    company: crmFactProse(lead['company'], CRM_FACTS_LABEL_MAX),
+    jobTitle: crmFactProse(lead['jobTitle'], CRM_FACTS_LABEL_MAX),
+    leadSource: crmFactText(lead['leadSource'], CRM_FACTS_LABEL_MAX),
+    industry: crmFactText(lead['industry'], CRM_FACTS_LABEL_MAX),
+    rating: crmFactText(lead['rating'], CRM_FACTS_LABEL_MAX),
+    employees:
+      typeof lead['numberOfEmployees'] === 'number' && lead['numberOfEmployees'] >= 0
+        ? Math.floor(lead['numberOfEmployees'])
+        : null,
+    annualRevenue: crmFactMoney(lead['annualRevenueCents'], lead['currency']),
+    doNotCall: lead['doNotCall'] === true,
     status: crmLeadStatusLabel(lead as { status?: never; statusLabel?: string }, leadStatuses),
     sources: [...new Set(rawSources.map((source) => leadSourceFact(String(source))))].sort(),
     captures: Number.isFinite(captures) && captures > 0 ? Math.floor(captures) : 0,
@@ -691,7 +718,17 @@ const STANDARD_IMPORT_FIELDS: Record<
     keys: LEAD_IMPORT_FIELDS,
     labels: LEAD_IMPORT_FIELD_LABELS,
     required: 'email',
-    types: { email: 'email', ownerEmail: 'email' },
+    types: {
+      email: 'email',
+      ownerEmail: 'email',
+      phone: 'phone',
+      mobilePhone: 'phone',
+      fax: 'phone',
+      doNotCall: 'yes-no',
+      website: 'url',
+      numberOfEmployees: 'number',
+      annualRevenue: 'number',
+    },
   },
 }
 

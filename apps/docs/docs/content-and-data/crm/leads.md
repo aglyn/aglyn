@@ -101,9 +101,13 @@ their company **as text** until it converts:
 | Field | Notes |
 | --- | --- |
 | **Email** | The identity: a site holds one lead per address. |
-| **Name** | The person's name. |
+| **Salutation**, **First name**, **Last name** | How to address the person, and their name in parts. The salutation is one of your organization's [Salutation values](./custom-fields.md#picklist-values) — the list contacts use. While a first or last name is set, **Name** is the two together ("Ann Lee") and follows them; a lead that only has a name keeps it as it was captured, and is never split. |
+| **Name** | The person's name — what the list shows and searches. |
 | **Company** | The company's name, typed. Not a link — a thousand imported leads must not create a thousand companies. [Converting](#converting-a-lead) is what links or creates the company record, by this name or by the address's domain. |
-| **Job title**, **Phone**, **Website** | As on a business card. The phone is stored with its country code; the website as a full address. |
+| **Job title**, **Phone**, **Mobile phone**, **Fax**, **Website** | As on a business card. Phone numbers are stored with their country code; the website as a full address. |
+| **Do not call** | The person asked not to be phoned. It shows as a warning on every number and on **Call**, and never blocks the call — the same as on a contact. |
+| **Industry**, **Rating** | Picked from your organization's Industry (Salesforce's standard industries) and Rating (Hot, Warm, Cold) values — the same lists [companies](./companies.md) use, kept under **CRM › Fields › Companies** — so a lead converts into the same value. |
+| **Employees**, **Annual revenue** | The company's size, as the lead tells it. Revenue is typed in a currency's major units, like `1250000.00`, and kept with its currency. |
 | **Lead source** | Where the lead came from, picked from your organization's own [lead source values](./custom-fields.md#picklist-values) — Salesforce's standard set, Aglyn's own doors and outreach, and any you add — listed under **Inbound**, **Outbound** and values in no group. A new lead starts from the list's default when it has one, and a lead your site captures is given its door's value — see [Lead source, filled in for you](#lead-source-filled-in). Distinct from **Sources** below, which the site records. |
 | **Tags** | Comma-separated, lower-cased. |
 | **Campaigns** | The site's [campaigns](../../marketing-and-automation/email-campaigns/overview.md#what-belongs-to-a-campaign) the lead is filed under, picked by name. Grouping, not consent: it decides which campaign pages list the lead, never whether anything mails them. Enrolling the lead in a sequence that is in a campaign files it there too. |
@@ -175,6 +179,7 @@ carries:
 | **Owner** | The team member working the lead, or *Unassigned*. A lead inherits its [contact's owner](#who-owns-a-lead) when one is assigned on capture. |
 | **Source** | Every surface that captured this person: Booking, the form they submitted, an import, New lead, or the API — and Sign-up on leads filed before sign-ups stopped making leads. |
 | **Lead source** | The lead's [lead source](./custom-fields.md#picklist-values). |
+| **Industry**, **Rating** | Off until you turn them on from the column menu. |
 | **Tags** | The lead's tags. |
 | **Campaign** | The campaigns the lead is filed under, by name. Under a site only — a campaign belongs to one site. |
 | **Last seen** | When the person last did something on your site. |
@@ -224,8 +229,8 @@ The table's own toolbar filters the list: **Filters** opens the filter
 panel, and **Search** finds a lead by a word of its name, its email address —
 and each part of the address, so the domain alone finds it — its company,
 its title or its tags.
-**Status**, **Email**, **Owner**, **Lead source**, **Lead source direction**
-and **Campaign** are picked from a list in the panel, and from each column's menu. **Status**
+**Status**, **Email**, **Owner**, **Lead source**, **Lead source direction**,
+**Industry**, **Rating** and **Campaign** are picked from a list in the panel, and from each column's menu. **Status**
 starts on **Open (new, nurturing or working)**, every lead that still needs working;
 pick one status instead, or remove the filter to see every lead. A lead
 nobody has touched yet has no status of its own and reads as **New**, so the
@@ -237,7 +242,8 @@ ones included, marked — or to **No lead source**. **Lead source direction**
 keeps the leads whose lead source is in the **Inbound** or the **Outbound**
 group, as the [lead source values](./custom-fields.md#picklist-values) group
 them when you filter: move a value to another group and its leads move with
-it. **Owner** keeps one teammate's leads. **Status**, **Email**, **Owner**,
+it. **Industry** and **Rating** keep the leads holding one of your values — inactive
+ones included, marked. **Owner** keeps one teammate's leads. **Status**, **Email**, **Owner**,
 **Lead source** and **Lead source direction** each take one choice (**is**) or
 several (**is any of**); **Campaign** takes one.
 
@@ -296,8 +302,9 @@ the filters or the search change.
 
 **Export CSV** at the top of the card downloads the page on screen as
 `leads.csv`; the bulk bar's **Export all…** writes every lead. The file holds
-email, name, company, job title, phone, website, status, the owner by email
-address, the lead source, the sources by name, first and last seen, the
+email, name, salutation, first and last name, company, job title, phone,
+mobile phone, fax, do not call, website, industry, rating, employees, annual
+revenue and its currency, status, the owner by email address, the lead source, the sources by name, first and last seen, the
 number of captures, the address in six columns, tags, the unqualified reason,
 when the lead converted, and notes. At the organization level the file also
 names each lead's **Site**.
@@ -323,7 +330,11 @@ over no rows.
 | --- | --- |
 | **Email** | Required, and the identity. A row whose address cannot be read is skipped as *No usable email address*; two rows with the same address skip the second as a duplicate. |
 | **Name** | The person's name, as the list and campaign merge tags read it. |
-| **Company name**, **Job title**, **Phone**, **Website** | The lead's own profile, as text. A phone is read with its country code (a bare ten-digit number as North American); a website as `acme.com` or a full address. A phone or website that cannot be read is dropped and reported, and the rest of the row is kept. |
+| **Salutation**, **First name**, **Last name** | The contacts import's columns. While a row fills a first or last name, the lead's name is the two together, whatever the **Name** column says. A salutation your organization's list does not hold is dropped and reported. |
+| **Company name**, **Job title**, **Phone**, **Mobile phone**, **Fax**, **Website** | The lead's own profile, as text. A phone is read with its country code (a bare ten-digit number as North American); a website as `acme.com` or a full address. A number or website that cannot be read is dropped and reported, and the rest of the row is kept. A column headed `Mobile` or `Cell` is the mobile phone. |
+| **Do not call** | `yes` or `no`. |
+| **Industry**, **Rating** | One of your organization's Industry or Rating values, in any capitalization. Any other value is dropped and reported, and the rest of the row is kept. |
+| **Employees**, **Annual revenue (major units)**, **Currency** | As the companies import reads them: a whole number of employees, revenue like `1250000.00`, and a three-letter currency code. |
 | **Lead source** | One of your organization's active [lead source values](./custom-fields.md#picklist-values), in any capitalization. A row naming any other value is skipped whole as *Names a lead source that isn't one of this organization's active values*, and the drawer lists those values before you import. A lead the site already holds keeps a value the list has since deactivated. A new lead with the cell blank starts from the list's default. |
 | **Address line 1** … **Country (two-letter code)** | The address, six columns as the contacts import takes them. A country typed as a name rather than a code is dropped and reported. |
 | **Tags** | Comma or `\|` separated, lower-cased. |
@@ -373,8 +384,11 @@ header carries **Convert**, **Call** and **Log a call** beside **Send email** �
 **Open contact**, **Open company** and **Open deal** in place of **Convert**.
 Beside the status, the header names every campaign the lead is filed under.
 
-**Details** is the lead's **profile** — company, job title, phone, website,
-lead source, tags and address — with any [custom lead fields](./custom-fields.md)
+**Details** is the lead's **profile**, laid out as Salesforce lays out a lead:
+the salutation and the name's parts, then **Lead information** — company, job
+title, industry, rating, lead source, tags, employees and annual revenue —
+then **Contact information** — phone, mobile phone, fax, website and **Do
+not call** — then the address, with any [custom lead fields](./custom-fields.md)
 under **More fields**, and free-text **notes**, all saved together by the one
 **Save** in the card's header. Once the lead converts, the profile is read-only
 here, because the contact is the record then; the notes can still be written.
@@ -434,7 +448,8 @@ When a lead is real, click **Convert** on the lead's page, or choose
 from the list in one click. The dialog asks three things:
 
 1. **Contact.** The lead becomes a contact at the **Sales qualified**
-   lifecycle stage, carrying the lead's phone, job title, address, tags,
+   lifecycle stage, carrying the lead's salutation, first and last name,
+   phone, mobile phone, fax, **Do not call**, job title, address, tags,
    campaigns, notes and company name, owned by whoever you pick — the lead's owner by default.
    Pick nobody and the workspace's [assignment rules](./settings.md#assignment-rules)
    and the site's [default owner](./settings.md#default-owner) decide, and
@@ -452,12 +467,17 @@ from the list in one click. The dialog asks three things:
    whatever its domain; otherwise one at the address's domain; otherwise a
    new company named as the lead names it, with the domain filled in when
    the address has one. A lead with no company text at a public mailbox
-   such as Gmail proposes nothing.
+   such as Gmail proposes nothing. A company the conversion **creates** takes
+   the lead's industry, rating, employees, annual revenue and currency,
+   website, phone, fax, its address as the billing address, and its lead
+   source as the [Account source](./companies.md); a company it **links**
+   takes them only into the fields it leaves empty, never over what it holds.
 3. **Deal.** Tick **Open a deal** to open one in your default pipeline with a
    title, an amount, a currency, a starting stage and a
    [type](./deals.md#type-and-lead-source) — your list's default until you
    pick another. The deal carries the lead's **lead source**, as Salesforce's
-   conversion does, and takes its stage's forecast category. A workspace with
+   conversion does, and its **campaign** — the campaign the lead was most
+   recently filed under — and takes its stage's forecast category. A workspace with
    no pipeline yet gets a **Sales** pipeline with the
    [default stages](./deals.md#pipelines) created along with the deal.
 

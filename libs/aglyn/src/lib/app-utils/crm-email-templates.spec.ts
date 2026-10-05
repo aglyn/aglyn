@@ -118,6 +118,19 @@ describe('renderCrmMergeFields', () => {
     ).toBe('Mary|Ann van der Berg')
   })
 
+  it("prefers a lead's own first and last names to a split of its name (AGL-3513)", () => {
+    expect(
+      renderCrmMergeFields('{{lead.firstName}}|{{lead.lastName}}', {
+        lead: { name: 'Mary Ann van der Berg', firstName: 'Mary Ann', lastName: 'van der Berg' },
+      }),
+    ).toBe('Mary Ann|van der Berg')
+    expect(
+      renderCrmMergeFields('{{lead.firstName}}|{{lead.lastName}}', {
+        lead: { name: 'Mary Ann van der Berg' },
+      }),
+    ).toBe('Mary|Ann van der Berg')
+  })
+
   it('renders a missing record, an unknown field and a malformed context as nothing, without throwing', () => {
     expect(renderCrmMergeFields('Hi {{contact.firstName}},', {})).toBe('Hi ,')
     expect(renderCrmMergeFields('{{deal.amount}}|{{lead.name}}', { deal: null, lead: undefined })).toBe('|')

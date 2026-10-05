@@ -351,17 +351,29 @@ describe('the file', () => {
     const [header, line] = downloads[0].body.split('\n')
     // The profile columns (AGL-3231) come before the working state, and
     // the site sits beside the owner; a lead with no profile leaves them blank.
-    expect(header.split(',').slice(0, 9)).toEqual([
+    expect(header.split(',').slice(0, 20)).toEqual([
       'Email',
       'Name',
+      // Salesforce's standard lead fields (AGL-3513).
+      'Salutation',
+      'First name',
+      'Last name',
       'Company',
       'Job title',
       'Phone',
+      'Mobile phone',
+      'Fax',
+      'Do not call',
       'Website',
+      'Industry',
+      'Rating',
+      'Employees',
+      'Annual revenue',
+      'Currency',
       'Status',
       'Owner',
       'Site',
     ])
-    expect(line.startsWith('maya@example.com,maya,,,,,New,,Shop,')).toBe(true)
+    expect(line.startsWith('maya@example.com,maya,,,,,,,,,,,,,,,,New,,Shop,')).toBe(true)
   })
 })
