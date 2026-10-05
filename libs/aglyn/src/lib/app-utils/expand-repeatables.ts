@@ -334,7 +334,8 @@ export function repeatedRecords(
 }
 
 /**
- * Does this tree contain anything {@link expandRepeatables} would expand?
+ * Does this tree contain anything {@link expandRepeatables} would expand —
+ * or, with no rows, empty?
  *
  * The rows read is the largest on the render path — up to two pages of
  * {@link REPEAT_MAX_RECORDS} records for every key a page repeats over — and a
@@ -344,7 +345,8 @@ export function repeatedRecords(
  * which is why this and {@link repeatKeys} share the one predicate
  * `expandRepeatables` looks keys up with, {@link repeatKey}. A gate that is
  * even slightly stricter than the expansion is not a saving: it is a published
- * page that quietly renders one template row where the author put a list.
+ * page whose repeat never reaches the expansion at all, and so goes out as
+ * its raw template — `{{item.*}}` tokens and all — where the author put a list.
  */
 export function hasRepeatableNodes(
   nodes: Record<NodeId, unknown> | null | undefined,
@@ -398,17 +400,28 @@ export function repeatKeys(
  *   node this expands, and every copy it makes, comes out without them.
  * - Repeats do not nest. A repeat inside another repeat's template is copied
  *   with its directives consumed, so it renders once in each copy.
- * - An unknown dataset, no matching records, an empty template, or a
- *   self-scoped node its parent does not list (the document root, say) leave
- *   the node rendering once, as written (fail-open: a deleted dataset must
- *   never take a published screen down).
+ * - No rows renders ZERO copies (AGL-3496): a `children` repeat keeps its
+ *   element with an empty child list, a `self` repeat leaves its parent's
+ *   list. That covers a filter matching nothing, an empty dataset, and a key
+ *   the rows answer nothing under — a deleted or unshared dataset, or no rows
+ *   map at all — because the template drawn without a record is its literal
+ *   `{{item.*}}` tokens, printed to every visitor. Never a throw: a dataset
+ *   going away empties a list, it does not take the page down.
+ * - An empty template, or a self-scoped node its parent does not list (the
+ *   document root, say), has nothing to copy or nowhere to put copies, and is
+ *   left as written.
  * - Inputs are never mutated; templates stay in the map unreferenced.
+ *
+ * This is the PUBLISHED page's composition. The besigner's canvas keeps the
+ * template on screen whatever the rows say — it is what an author edits — and
+ * flags a repeat with no rows on its badge instead ({@link repeatedRecords}
+ * is the count both read).
  */
 export function expandRepeatables<N extends AglynNodeSchema = AglynNodeSchema>(
   nodes: Record<NodeId, N>,
   datasetsByKey: Record<string, RepeatableDataset | undefined> | undefined,
 ): Record<NodeId, N> {
-  if (!datasetsByKey) return nodes
+  const rowsByKey = datasetsByKey ?? {}
   const repeatIds = Object.entries(nodes).filter(
     ([, node]) => repeatKey(node) !== '',
   )
@@ -416,7 +429,7 @@ export function expandRepeatables<N extends AglynNodeSchema = AglynNodeSchema>(
 
   const next: Record<NodeId, N> = { ...nodes }
   for (const [repeatId, repeated] of repeatIds) {
-    const dataset = datasetsByKey[repeatKey(repeated)]
+    const dataset = rowsByKey[repeatKey(repeated)]
     const records = repeatedRecords(repeated, dataset)
     const self = repeatScope(repeated) === 'self'
     // The copies' parent: the node itself, or — for a self-scoped node — the
@@ -433,7 +446,19 @@ export function expandRepeatables<N extends AglynNodeSchema = AglynNodeSchema>(
         ? (repeated.nodes as NodeId[])
         : []
     next[repeatId] = withoutRepeatDirective(next[repeatId])
-    if (!records.length || !templateIds.length || (self && slot < 0)) continue
+    if (!templateIds.length || (self && slot < 0)) continue
+    if (!records.length) {
+      // Zero copies (AGL-3496). The template is a design, not content: drawn
+      // without a record it prints `{{item.name}}` to every visitor.
+      if (self) {
+        const listed = [...(next[parentId].nodes as NodeId[])]
+        listed.splice(slot, 1)
+        next[parentId] = { ...next[parentId], nodes: listed }
+      } else {
+        next[repeatId] = { ...next[repeatId], nodes: [] }
+      }
+      continue
+    }
 
     const copyIds: NodeId[] = []
     records.forEach((record, index) => {
@@ -452,7 +477,7 @@ export function expandRepeatables<N extends AglynNodeSchema = AglynNodeSchema>(
           props: substituteValue(node.props ?? {}, {
             record,
             model: dataset?.model,
-            datasetsByKey,
+            datasetsByKey: rowsByKey,
           }) as any,
           ...(clonedChildren && {
             nodes: clonedChildren.map((childId) => prefixId(childId)),

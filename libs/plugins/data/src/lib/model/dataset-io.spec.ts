@@ -94,3 +94,24 @@ describe('mapImportColumns', () => {
     expect(unmatched).toEqual(['mystery'])
   })
 })
+
+/**
+ * AGL-3496: a JSON import carries a list cell as a JSON array, which
+ * `parseImportRows` hands over as its JSON text. The import's coercion reads it
+ * back as the array — the EDR Services `categories` were stored as
+ * `["[\"Residential\"", "\"Commercial\"]"]` by splitting that text on commas.
+ */
+describe('a JSON import of a list field', () => {
+  it('stores the array the file holds, and a CSV cell the same list', () => {
+    const json = parseImportRows(
+      JSON.stringify([{ title: 'Roofing', tags: ['Residential', 'Commercial'] }]),
+    )
+    const csv = parseImportRows('title,tags\nRoofing,"Residential, Commercial"')
+    for (const rows of [json, csv]) {
+      const { mapping } = mapImportColumns(model, Object.keys(rows![0]))
+      const input: Record<string, string> = {}
+      for (const [column, fieldId] of Object.entries(mapping)) input[fieldId] = rows![0][column]
+      expect(coerceDocumentValues(model, input)['tags']).toEqual(['Residential', 'Commercial'])
+    }
+  })
+})

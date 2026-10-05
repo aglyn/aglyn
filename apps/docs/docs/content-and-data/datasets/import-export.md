@@ -55,6 +55,11 @@ Import CSV or JSON back into a dataset. Imports are **validated** against the
 [model](model-builder.md) on the way in, so malformed rows are caught rather than silently
 corrupting your data.
 
+A list or multi-reference field accepts either shape: a comma-separated cell
+(`Residential, Commercial`) or a JSON array (`["Residential", "Commercial"]`,
+which is how a JSON file carries a list). Both store the same two values. The
+API and form submissions read list values the same way.
+
 ### Upsert on a key field
 
 Pick a **"Match on field"** in the import dialog to de-duplicate: rows whose key value

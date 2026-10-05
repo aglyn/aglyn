@@ -40,8 +40,8 @@ import { runPluginDeclarationsRepair } from './plugin-declarations-repair'
  * entry, which every app runs at boot, so every process that composes a page
  * has it before the first request. But a registry is only safe where an empty
  * one cannot be mistaken for an answer, and here it can: a page whose repeat
- * found no reader would render the template once where the author put a list,
- * and nothing anywhere would be red. That is the AGL-3025 shape on the most
+ * found no reader would render no copies where the author put a list, and
+ * nothing anywhere would be red. That is the AGL-3025 shape on the most
  * public surface the product has.
  *
  * So the plugin that answers also DECLARES that it does, in
@@ -50,8 +50,7 @@ import { runPluginDeclarationsRepair } from './plugin-declarations-repair'
  * that is a broken boot:
  *
  * - nothing declared — this deployment ships no plugin that keeps rows, and a
- *   repeat renders its element once, as written, exactly as a key naming
- *   nothing does;
+ *   repeat renders no copies, exactly as a key naming nothing does (AGL-3496);
  * - declared and registered — the reader answers;
  * - declared and NOT registered — the boot failed. The app's declarations
  *   step is run again ({@link runPluginDeclarationsRepair}); if the reader is
@@ -60,8 +59,8 @@ import { runPluginDeclarationsRepair } from './plugin-declarations-repair'
  *   the right way round for a page that would otherwise go out wrong.
  *
  * Per-key failures are the reader's to absorb, as they always were: a deleted
- * or unreadable entry leaves its element rendering once and costs the page
- * nothing else.
+ * or unreadable entry renders no copies of its element (AGL-3496) — never its
+ * raw `{{item.*}}` template — and costs the page nothing else.
  *
  * Reached by path, never through a barrel: only the server composition asks.
  */

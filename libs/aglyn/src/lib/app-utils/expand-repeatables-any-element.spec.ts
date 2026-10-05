@@ -155,12 +155,9 @@ describe('a stored Stack repeat renders unchanged (AGL-3111)', () => {
     expect(result['sample-element-3'].nodes).not.toContain('sample-element-14')
   })
 
-  it('renders once, as written, when the dataset it names is gone', () => {
+  it('renders no copies when the dataset it names is gone (AGL-3496)', () => {
     const result = expandRepeatables(storedStackRepeat(), {})
-    expect(result['sample-element-3'].nodes).toEqual([
-      'sample-element-14',
-      'HHaXO-eO_7',
-    ])
+    expect(result['sample-element-3'].nodes).toEqual([])
   })
 })
 
@@ -289,6 +286,40 @@ describe('a leaf repeats itself (AGL-3111)', () => {
       'rep__b__1__b',
       'rep__b__2__b',
     ])
+  })
+
+  /**
+   * AGL-3496: the EDR services grid. A card repeating itself over a filter
+   * that matched nothing was published as one card reading `{{item.name}}`.
+   */
+  it('leaves its parent with no copy when no record matches', () => {
+    const nodes = {
+      root: { $id: 'root', componentId: 'div', nodes: ['before', 'card', 'after'] },
+      before: { $id: 'before', parentId: 'root', componentId: 'muiTypography', props: { children: 'Residential' } },
+      card: {
+        $id: 'card',
+        parentId: 'root',
+        componentId: 'muiCard',
+        props: { repeatDataset: 'Team', repeatFilter: 'role == Pilot', [REPEAT_SELF_PROP]: true },
+        nodes: ['title'],
+      },
+      title: { $id: 'title', parentId: 'card', componentId: 'muiTypography', props: { children: '{{item.name}}' } },
+      after: { $id: 'after', parentId: 'root', componentId: 'muiTypography', props: { children: 'Commercial' } },
+    } as any
+    const before = JSON.stringify(nodes)
+    const result = expandRepeatables(nodes, { Team: team })
+    expect(result['root'].nodes).toEqual(['before', 'after'])
+    expect(Object.keys(result).some((id) => id.startsWith('rep__'))).toBe(false)
+    expect(JSON.stringify(nodes)).toBe(before)
+  })
+
+  it('leaves its parent with no copy when the dataset is gone, and two such siblings both go', () => {
+    const nodes = leafNodes()
+    nodes['root'].nodes = ['before', 'leaf', 'twin']
+    nodes['twin'] = { ...nodes['leaf'], $id: 'twin' }
+    expect(() => expandRepeatables(nodes, {})).not.toThrow()
+    expect(expandRepeatables(nodes, {})['root'].nodes).toEqual(['before'])
+    expect(expandRepeatables(nodes, undefined)['root'].nodes).toEqual(['before'])
   })
 
   it('renders once, as written, when its parent does not list it', () => {

@@ -66,7 +66,8 @@ export interface DatasetRepeatRowsRequest {
  *   cannot see does not fall through to the name — that would answer "which
  *   dataset is called X" for a key that already named a specific one.
  * - A dataset shared with other sites but not this one, or deleted, answers
- *   `missing`: the page renders the element once, as written.
+ *   `missing`: the page renders no copies of the element (AGL-3496), and
+ *   the canvas badge says so.
  * - The rows are the two bounded reads and the one ordering rule the page
  *   uses, {@link repeatRecordsFromPages}, so a canvas copy is a row the page
  *   renders.
