@@ -22,6 +22,7 @@
 // page, and this one is on the critical path for a site-wide route.
 import AppLink from '@aglyn/shared-ui-jsx/components/app-link'
 import { Container } from '@aglyn/shared-ui-jsx/components/container'
+import { useSoftGetSubmit } from '@aglyn/shared-ui-jsx/hooks/use-soft-get-submit'
 import { Box, Chip, Stack, Typography } from '@mui/material'
 import type { SearchFacet, SearchResult } from '../../../../utils/search-facets'
 import { SEARCH_FACET_ALL } from '../../../../utils/search-facets'
@@ -51,6 +52,7 @@ export function SearchResults({
   facets,
   activeFacet,
 }: SearchResultsProps) {
+  const onSubmit = useSoftGetSubmit()
   const facetHref = (key: string) =>
     key === SEARCH_FACET_ALL
       ? `/search?q=${encodeURIComponent(query)}`
@@ -82,10 +84,14 @@ export function SearchResults({
           role="search"
           action="/search"
           method="get"
+          onSubmit={onSubmit}
           sx={{ display: 'flex', gap: 1, maxWidth: 560 }}
         >
           <Box
             component="input"
+            // Remounted per query: a submit is a client navigation, and an
+            // uncontrolled field would otherwise keep the previous query.
+            key={query}
             type="search"
             name="q"
             defaultValue={query}
