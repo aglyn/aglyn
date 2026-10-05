@@ -987,7 +987,7 @@
               "figmaNodeId": "2253:2354",
               "name": null,
               "cells": [
-                "Video, audio and file downloads count 1.6× toward bandwidth, because serving them costs more than serving pages."
+                "Video, audio, file downloads and other media served from our servers count 1.6× toward bandwidth, because serving them costs more than serving pages."
               ]
             },
             {

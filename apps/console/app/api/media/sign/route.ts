@@ -164,7 +164,9 @@ async function handler(request: Request): Promise<Response> {
     if (snapshot.get('private') !== true) return refuse()
 
     const scope = `org:${orgId}`
-    const signature = mintMediaSignature(scope, mediaId)
+    // The workspace previewing its own library: signed as the team's, so the
+    // CDN does not count it toward the bandwidth band (AGL-3474).
+    const signature = mintMediaSignature(scope, mediaId, Date.now(), undefined, 'team')
     return Response.json(
       {
         url:

@@ -67,7 +67,8 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  useConfirmationContext: () => ({ confirm: () => Promise.resolve(true) }),
+  // The real contract: OK resolves with no value (AGL-3509).
+  useConfirmationContext: () => ({ confirm: () => Promise.resolve(undefined) }),
 }))
 jest.mock('../hooks/use-org-member-directory', () => ({
   useOrgMemberDirectory: () => ({

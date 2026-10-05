@@ -144,6 +144,7 @@ export function mediaCdnForwardedQuery(query: NextApiRequest['query']): string {
     SITE_ICON_VERSION_PARAM,
     'exp',
     'sig',
+    'aud',
   ] as const) {
     const raw = query[key]
     const value = Array.isArray(raw) ? raw[0] : raw
@@ -1365,6 +1366,7 @@ export async function serveMediaCdn(
       const signed = verifyMediaAccess(scopeSegment, mediaId, {
         exp: Number(req.query['exp'] ?? 0),
         sig: String(req.query['sig'] ?? ''),
+        aud: req.query['aud'] === 'team' ? 'team' : undefined,
       })
       setCacheControl('private, no-store')
       if (!signed) {
@@ -1372,6 +1374,21 @@ export async function serveMediaCdn(
         return
       }
     }
+    /*
+     * WHAT COUNTS TOWARD THE BANDWIDTH BAND (AGL-3474).
+     *
+     * Every type the edge never holds, because each such response leaves from
+     * origin. A public image is the exception: it is inside the page weight
+     * the band already measures, and the edge serves most of it. A PRIVATE
+     * image is not — it cannot be placed on a page, and `no-store` sends every
+     * request to origin — so it counts like a file. The one serve that never
+     * counts is the workspace previewing its own private library in the
+     * console: its signature names the team (`aud=team`, inside the HMAC, so
+     * a visitor's link cannot claim it).
+     */
+    const teamPreview = isPrivate && req.query['aud'] === 'team'
+    const countsTowardBand = (type: unknown) =>
+      !teamPreview && (isPrivate || !mediaCdnEdgeCacheable(type))
     /**
      * A stale hash on the immutable form REDIRECTS to the stable URL
      * (AGL-2685). It used to 404.
@@ -1663,9 +1680,10 @@ export async function serveMediaCdn(
      * scope documents the lockdown verdict above already holds. No read is
      * added.
      *
-     * Images keep serving. They are not counted here, a paused site serves
-     * no page that asks for one, and the ones the edge holds would keep
-     * serving from it whatever this said.
+     * Public images keep serving. They are not counted here, a paused site
+     * serves no page that asks for one, and the ones the edge holds would
+     * keep serving from it whatever this said. A private image counts, so it
+     * stops with the band like a file; the console's own preview does not.
      *
      * Before the provider redirect, which would otherwise hand a paused org's
      * film to the provider, and before the 304, which would renew a browser's
@@ -1675,7 +1693,7 @@ export async function serveMediaCdn(
      * either.
      */
     if (
-      !mediaCdnEdgeCacheable(docServedType) &&
+      countsTowardBand(docServedType) &&
       (await mediaCdnScopeVerdict(scope)).bandwidthPaused
     ) {
       res.setHeader('Cache-Control', 'no-store')
@@ -1745,7 +1763,7 @@ export async function serveMediaCdn(
         let evaluation: Promise<void> | null = null
         let recorded: Promise<unknown> | null = null
         if (req.method === 'GET') {
-          const bandwidthBytes = delivery.sizeBytes
+          const bandwidthBytes = teamPreview ? 0 : delivery.sizeBytes
           recorded = recordMediaServe({
             firestore,
             collection: isOrg ? 'orgs' : 'hosts',
@@ -2032,11 +2050,10 @@ export async function serveMediaCdn(
     // the origin to send. A client that abandons the stream receives less;
     // the figure is the ceiling on what left, not a count of what arrived.
     //
-    // The same bytes count against the org's bandwidth band when the type is
-    // one the edge never holds (AGL-3474): every such response is served from
-    // origin. In this write, so counting costs no write of its own. Images are
-    // left out — they are inside the page weight the band already measures.
-    const countedBytes = mediaCdnEdgeCacheable(servedType) ? 0 : servedBytes
+    // The same bytes count against the org's bandwidth band when
+    // `countsTowardBand` says so (above). In this write, so counting costs no
+    // write of its own.
+    const countedBytes = countsTowardBand(servedType) ? servedBytes : 0
     const day = new Date().toISOString().slice(0, 10)
     const recorded = firestore
       .collection(isOrg ? 'orgs' : 'hosts')

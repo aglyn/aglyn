@@ -288,7 +288,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   HelpTip: () => null,
   MdiIcon: () => null,
   useConfirmationContext: () => ({
-    confirm: jest.fn().mockResolvedValue(true),
+    confirm: jest.fn().mockResolvedValue(undefined),
   }),
 }))
 
