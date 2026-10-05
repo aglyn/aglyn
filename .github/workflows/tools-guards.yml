@@ -386,6 +386,17 @@ jobs:
       # only the proxy measurement pointed at it. Pure node.
       - run: npm run test:front-door
 
+      # test:prod-canary  When does the post-deploy canary roll production
+      # back (AGL-3567)? beta.222 hung every uncached tenant page for 18
+      # minutes behind green health checks. prod-canary.yml reads production
+      # the moment a deploy is READY and can roll it back, so its decisions
+      # are guarded here on every push, not only on the rare deploy event that
+      # runs it: a 504 or a hang is red, a bot challenge never is, one
+      # customer site cannot roll the platform back, only three red rounds in
+      # a row act, and the rollback never targets the bad deployment, a
+      # redeploy of its commit, or a commit already recorded red. Pure node.
+      - run: npm run test:prod-canary
+
       # test:emulator-config  Does a private-port emulator config name its
       # rules files (AGL-2858)? firebase-tools resolves every rules and indexes
       # path in a config against the directory of that config, and refuses a

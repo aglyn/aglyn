@@ -1,0 +1,132 @@
+name: Production canary
+
+# Reads production the moment a deploy lands, and rolls it back on a real
+# failure (AGL-3567).
+#
+# On 2026-10-05 beta.222 deployed aglyn-tenant and every UNCACHED client-site
+# page hung to Vercel's 60 s limit. Cached pages and every `/api/*` route kept
+# answering 200, so the health checks were green; a human noticed eighteen
+# minutes later and the rollback took ten more. The tenant project builds no
+# Vercel previews, so a production deploy is the first time new tenant code
+# runs on Vercel — and nothing read it afterwards. This is the reader.
+#
+# ---------------------------------------------------------------------------
+# THE TRIGGER
+# ---------------------------------------------------------------------------
+# `deployment_status`, written by the Vercel GitHub integration when a
+# deployment is READY. Verified in this repo's deployment history: every
+# production deploy of every project has a GitHub deployment in environment
+# `Production – aglyn-<project>` (EN DASH) with one `success` status, created
+# by vercel[bot] the minute the build is READY. Events from a GitHub App DO
+# start workflows (only GITHUB_TOKEN-made events do not), so the canary's own
+# commit statuses cannot re-trigger it.
+#
+# ⚠️ GitHub runs a `deployment_status` workflow from the file AT THE DEPLOYED
+# SHA. This file therefore does nothing until the promotion that carries it
+# merges into `production`; `workflow_dispatch` works from `main` at once.
+#
+# Previews, docs and plugins deploy too. The job filter drops non-production
+# environments and the script exits 0 on a project it does not canary.
+#
+# ---------------------------------------------------------------------------
+# WHAT IT DOES — see tools/scripts/prod-canary.mjs and docs/RELEASING.md
+# ---------------------------------------------------------------------------
+# Waits until the production alias serves the new deployment, renders a
+# never-requested path on every host (a guaranteed ISR MISS through the full
+# layout) plus the real pages and the health routes, 15 s budget each, and
+# only after three red rounds in a row — each failing on at least two hosts
+# with a SERVER failure, never a bot challenge or a canary-side network error
+# — rolls the project back to the previous good production deployment through
+# the Vercel REST API, re-runs the canary against it, posts to Slack `#ci` and
+# fails.
+#
+# After any rollback Vercel turns production auto-assign OFF, so the next
+# good deployment must be promoted by hand (docs/RELEASING.md step 0).
+#
+# Optional repository variables:
+#   CANARY_TENANT_HOSTS — extra published hosts, `host` or `host/path`,
+#     comma or space separated (default: demo.aglyn.app aglyn.com)
+#   CANARY_CONSOLE_HOST — default app.aglyn.com
+
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: 'Which production project to canary'
+        type: choice
+        options:
+          - tenant
+          - console
+        default: tenant
+      dry_run:
+        description: 'Run the canary and print the rollback it WOULD make; change nothing'
+        type: boolean
+        default: true
+
+concurrency:
+  # One canary per project at a time, never cancelled: a run cancelled between
+  # the rollback request and its verification leaves nobody reading the result.
+  # Keyed by the environment string so a dispatch and an event for the same
+  # project share a group, and a docs deploy's pending run (GitHub keeps one
+  # pending run per group) can never displace a tenant canary's.
+  group: prod-canary-${{ github.event.deployment.environment || format('Production – aglyn-{0}', inputs.project) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # The canary records its verdict as a `prod-canary/<project>` commit status
+  # on the deployed sha; the rollback picker reads those records back.
+  statuses: write
+
+jobs:
+  canary:
+    name: production serves pages after the deploy
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+       startsWith(github.event.deployment.environment, 'Production'))
+    runs-on: ubuntu-latest
+    # Serve wait (5 min) + up to five rounds + a rollback and a second canary.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The canary that runs is the one on `main`, whatever sha deployed:
+          # a fix to the canary must not wait for a promotion to take effect.
+          ref: main
+          # Cone mode: root files (.nvmrc) come along with the directory.
+          sparse-checkout: tools/scripts
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # No install, as in uptime-probe.yml: built-in fetch only, so a registry
+      # outage cannot stop the one check that reads production after a deploy.
+      # Guard the guard: the verdict logic is tested before it is trusted.
+      - run: node --test tools/scripts/lib/prod-canary.test.mjs
+
+      - name: Canary
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_TOKEN: ${{ github.token }}
+          CANARY_TENANT_HOSTS: ${{ vars.CANARY_TENANT_HOSTS }}
+          CANARY_CONSOLE_HOST: ${{ vars.CANARY_CONSOLE_HOST }}
+          EVENT_ENVIRONMENT: ${{ github.event.deployment.environment }}
+          EVENT_DEPLOYMENT_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+          INPUT_PROJECT: ${{ inputs.project }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          argv=(--record "--run-url=$RUN_URL")
+          if [ "$GITHUB_EVENT_NAME" = "deployment_status" ]; then
+            argv+=("--environment=$EVENT_ENVIRONMENT" "--deployment-url=$EVENT_DEPLOYMENT_URL")
+          else
+            argv+=("--project=$INPUT_PROJECT")
+            if [ "$INPUT_DRY_RUN" = "true" ]; then argv+=(--dry-run); fi
+          fi
+          node tools/scripts/prod-canary.mjs "${argv[@]}"
