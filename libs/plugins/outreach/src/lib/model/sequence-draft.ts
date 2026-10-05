@@ -340,7 +340,7 @@ const MAILBOX_ACTIVATION_ISSUES: Record<
   reconnect_required: {
     code: 'mailbox_not_sending',
     message:
-      "Google stopped accepting this sequence's mailbox. Reconnect it in Mailboxes, then activate the sequence.",
+      "The provider stopped accepting this sequence's mailbox. Reconnect it in Mailboxes, then activate the sequence.",
   },
 }
 

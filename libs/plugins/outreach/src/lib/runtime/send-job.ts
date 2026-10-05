@@ -991,7 +991,7 @@ async function runEmailStep(
       await releaseClaim(deps, firestore, run, enrollment, true, {
         type: 'send_failed',
         atMs: deps.now(),
-        detail: `Gmail refused the email: ${error.message}`,
+        detail: `${client.provider === 'microsoft' ? 'Microsoft' : 'Gmail'} refused the email: ${error.message}`,
       })
       report.failed += 1
       return
@@ -1106,9 +1106,7 @@ async function recoverClaim(
   }
   const client = await openClient(deps, run)
   if (!client) return false
-  const bare = claim.messageId.replace(/^<|>$/g, '')
-  const found = await client.listMessages({ q: `rfc822msgid:${bare}`, maxResults: 1, includeSpamTrash: true })
-  const hit = found.messages[0]
+  const hit = await client.findMessageByMessageId(claim.messageId)
   if (!hit) {
     await releaseClaim(deps, firestore, run, enrollment, true)
     return true

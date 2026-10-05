@@ -22,6 +22,12 @@ import {
   revokeGoogleToken,
 } from './google-oauth'
 import { fetchWithBackoff, retryAfterMs, type TransportDeps } from './http'
+import {
+  bareMessageId,
+  gmailSearchQuery,
+  type OutreachMailClient,
+  type OutreachMailMetadata,
+} from './mail-client'
 
 /**
  * THE GMAIL REST TRANSPORT (AGL-2978): one connected mailbox, as the calls
@@ -79,14 +85,7 @@ export interface GmailMessageHeader {
 }
 
 /** A message in `format=metadata`: ids, labels, snippet and the headers asked for. */
-export interface GmailMessageMetadata {
-  id: string
-  threadId: string
-  labelIds: string[]
-  snippet: string
-  internalDateMs: number | null
-  headers: GmailMessageHeader[]
-}
+export type GmailMessageMetadata = OutreachMailMetadata
 
 export interface GmailThread {
   id: string
@@ -117,9 +116,8 @@ export interface GmailSentMessage {
   labelIds: string[]
 }
 
-export interface GmailClient {
-  /** A live access token, minted or reused. */
-  getAccessToken(): Promise<string>
+export interface GmailClient extends OutreachMailClient {
+  readonly provider: 'google'
   getProfile(): Promise<GmailProfile>
   listSendAs(): Promise<GmailSendAs[]>
   /**
@@ -272,7 +270,25 @@ export function createGmailClient(options: GmailClientOptions): GmailClient {
     }
   }
 
+  const listMessages: GmailClient['listMessages'] = async (listOptions) => {
+    const query = new URLSearchParams({ q: listOptions.q })
+    if (listOptions.maxResults) query.set('maxResults', String(listOptions.maxResults))
+    if (listOptions.pageToken) query.set('pageToken', listOptions.pageToken)
+    if (listOptions.includeSpamTrash) query.set('includeSpamTrash', 'true')
+    const body = await call<Record<string, unknown>>(`/messages?${query.toString()}`)
+    const messages = Array.isArray(body['messages']) ? body['messages'] : []
+    return {
+      messages: messages.map((entry) => {
+        const record = (entry ?? {}) as Record<string, unknown>
+        return { id: text(record['id']), threadId: text(record['threadId']) }
+      }),
+      nextPageToken: text(body['nextPageToken']) || null,
+      resultSizeEstimate: Number(body['resultSizeEstimate']) || 0,
+    }
+  }
+
   return {
+    provider: 'google',
     getAccessToken,
 
     async getProfile() {
@@ -341,21 +357,25 @@ export function createGmailClient(options: GmailClientOptions): GmailClient {
       return readFullMessage(await call<unknown>(`/messages/${encodeURIComponent(messageId)}?format=full`))
     },
 
-    async listMessages(listOptions) {
-      const query = new URLSearchParams({ q: listOptions.q })
-      if (listOptions.maxResults) query.set('maxResults', String(listOptions.maxResults))
-      if (listOptions.pageToken) query.set('pageToken', listOptions.pageToken)
-      if (listOptions.includeSpamTrash) query.set('includeSpamTrash', 'true')
-      const body = await call<Record<string, unknown>>(`/messages?${query.toString()}`)
-      const messages = Array.isArray(body['messages']) ? body['messages'] : []
-      return {
-        messages: messages.map((entry) => {
-          const record = (entry ?? {}) as Record<string, unknown>
-          return { id: text(record['id']), threadId: text(record['threadId']) }
-        }),
-        nextPageToken: text(body['nextPageToken']) || null,
-        resultSizeEstimate: Number(body['resultSizeEstimate']) || 0,
-      }
+    listMessages,
+
+    async searchMessages(search, page) {
+      const list = await listMessages({
+        q: gmailSearchQuery(search),
+        maxResults: page?.maxResults ?? 100,
+        pageToken: page?.pageToken ?? null,
+        includeSpamTrash: true,
+      })
+      return { messages: list.messages.filter((message) => message.id), nextPageToken: list.nextPageToken }
+    },
+
+    async findMessageByMessageId(messageId) {
+      const found = await listMessages({
+        q: `rfc822msgid:${bareMessageId(messageId)}`,
+        maxResults: 1,
+        includeSpamTrash: true,
+      })
+      return found.messages.find((message) => message.id) ?? null
     },
 
     revoke() {

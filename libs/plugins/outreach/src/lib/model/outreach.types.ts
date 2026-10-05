@@ -130,8 +130,12 @@ export interface OutreachTimestamps {
   updatedAtMs: number
 }
 
-/** The mail providers a mailbox can be connected through. */
-export const OUTREACH_MAILBOX_PROVIDERS = ['google'] as const
+/**
+ * The mail providers a mailbox can be connected through: a Google Workspace
+ * account (Gmail), or a Microsoft 365 account through Microsoft Graph
+ * (AGL-3489).
+ */
+export const OUTREACH_MAILBOX_PROVIDERS = ['google', 'microsoft'] as const
 export type OutreachMailboxProvider =
   (typeof OUTREACH_MAILBOX_PROVIDERS)[number]
 

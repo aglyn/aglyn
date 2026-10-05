@@ -186,7 +186,7 @@ describe('outreachMailboxActivationIssue (AGL-2980)', () => {
       message: "This sequence's mailbox is paused. Resume it in Mailboxes, then activate the sequence.",
     })
     expect(outreachMailboxActivationIssue('mbx-1', { status: 'reconnect_required' })?.message).toMatch(
-      /^Google stopped accepting this sequence's mailbox\. Reconnect it in Mailboxes/,
+      /^The provider stopped accepting this sequence's mailbox\. Reconnect it in Mailboxes/,
     )
   })
 })

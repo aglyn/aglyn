@@ -27,7 +27,7 @@ are for, sent from your site's sending identity to a segment of your contacts.
 ## Sent from your own mailbox
 
 A sequence sends from the **rep's own mailbox**, connected to the workspace
-through the rep's Google account. The email leaves from that address, sits in
+through the rep's Google account or Microsoft 365 account. The email leaves from that address, sits in
 that rep's sent mail like any other, and a reply comes back to the same inbox
 — which is what makes it a conversation between two people rather than a
 broadcast.
@@ -45,13 +45,17 @@ organization.
 
 ## Self-hosted installs {#self-hosted}
 
-A self-hosted install runs Sequences with a Google OAuth client of its own:
+A self-hosted install runs Sequences with a Google OAuth client of its own,
+a Microsoft Entra app registration of its own, or both:
 
 1. Create the OAuth client in Google Cloud and set `GOOGLE_OUTREACH_CLIENT_ID`,
    `GOOGLE_OUTREACH_CLIENT_SECRET` and `OUTREACH_TOKEN_KEY` on the console.
    [Environment variables](../../developers/self-hosting-environment.md#sequences)
    gives each value, the redirect URI to register and the scopes the grant asks
-   for.
+   for. For Microsoft 365 mailboxes, register the app in Microsoft Entra and
+   set `MICROSOFT_OUTREACH_CLIENT_ID` and `MICROSOFT_OUTREACH_CLIENT_SECRET`;
+   [its section](../../developers/self-hosting-environment.md#sequences-microsoft)
+   lists the permissions and the redirect URI.
 2. Make the consent screen **Internal**, on a Google Cloud project owned by
    your own Google Workspace organization. An Internal screen lets that
    organization's users connect their mailboxes without Google's app
@@ -66,20 +70,29 @@ A self-hosted install runs Sequences with a Google OAuth client of its own:
 
 ## Connect a mailbox {#connect-a-mailbox}
 
-Each rep connects their **own** Google mailbox in **Sequences → Mailboxes**:
+Each rep connects their **own** Google or Microsoft 365 mailbox in
+**Sequences → Mailboxes**:
 
-1. Select **Connect with Google** and choose your Google account.
-2. Google asks you to let Aglyn **send email on your behalf** and **read
-   your email**. Allow both. Sending is how a sequence's messages go out as
+1. Select **Connect with Google** or **Connect with Microsoft** and choose
+   your account.
+2. Google or Microsoft asks you to let Aglyn **send email on your behalf**
+   and **read your email**. Allow both. Sending is how a sequence's messages go out as
    you; reading is how a reply or a bounce is noticed, so a sequence stops
    when somebody answers. If either is left unticked, the connection is
    refused and nothing is saved.
 3. You come back to Mailboxes with the mailbox listed as **Active**.
 
-The access Google grants is stored encrypted and is never shown to anyone,
-administrators included. Connecting the same Google account again updates the
+The access granted is stored encrypted and is never shown to anyone,
+administrators included. Connecting the same account again updates the
 mailbox you already have and keeps its settings. Each member can connect up to
-five mailboxes.
+ten mailboxes.
+
+A Microsoft 365 mailbox sends through Microsoft Graph. Each email is written
+the same way a Google mailbox writes it — the same footer, the same
+unsubscribe link, the same tracked links — and a follow-up answers the
+earlier email, so it lands in the same conversation for the person you wrote
+to. A Microsoft account's administrator may need to approve the app for the
+organization before its members can connect.
 
 If Mailboxes says the Google account does not have Gmail turned on, the
 account exists but Gmail is not running for it yet. A Google Workspace user
@@ -87,14 +100,15 @@ created that day can take up to a day before Gmail is ready; otherwise the
 Workspace administrator turns Gmail on for the account. Then connect again.
 Nothing was saved by the attempt that was refused.
 
-If Mailboxes says connecting a Google mailbox isn't configured, your deployment
-has no Google OAuth client set up. On a self-hosted install, see
+If Mailboxes says connecting a Google or Microsoft 365 mailbox isn't
+configured, your deployment has no OAuth client set up for that provider. On a self-hosted install, see
 [Environment variables](../../developers/self-hosting-environment.md#sequences).
 
 ### Send-as address and display name {#send-as}
 
-A mailbox sends **as** one address: the account's own, or an alias Gmail has
-already verified for it — one added under **Settings → Accounts → Send mail
+A Microsoft 365 mailbox sends as its own address. A Google mailbox sends
+**as** one address: the account's own, or an alias Gmail has already verified
+for it — one added under **Settings → Accounts → Send mail
 as** in Gmail and confirmed there. Only addresses Gmail lists as verified are
 offered. To use a new alias, add it in Gmail first, then connect the mailbox
 again so the new alias is seen.
@@ -131,7 +145,7 @@ below that.
 | --- | --- |
 | **Active** | The mailbox can send. |
 | **Paused** | Somebody paused it, or it paused itself — see below. Nothing sends from it until it is resumed. |
-| **Reconnect required** | Google stopped accepting the connection — the password changed, access was removed from the Google account, or an administrator revoked it. Nothing sends until you connect the mailbox again. The member who connected it, and the organization's owners and admins, are emailed the moment this happens, with a link to this page. |
+| **Reconnect required** | Google or Microsoft stopped accepting the connection — the password changed, access was removed from the account, or an administrator revoked it. Nothing sends until you connect the mailbox again. The member who connected it, and the organization's owners and admins, are emailed the moment this happens, with a link to this page. |
 | **Disconnected** | The mailbox was disconnected. Nothing sends from it until it is connected again. |
 
 **Health** shows the last seven days: messages sent, bounces and replies. A
@@ -173,7 +187,7 @@ again.
 - **Send a test to myself** sends a short plain-text message from the mailbox
   to its own address, so you can check it arrives. Type another address in
   **Test address** to send it there instead: a test to your own address never
-  leaves Google, so it carries no authentication result — a test to an
+  leaves Google or Microsoft, so it carries no authentication result — a test to an
   outside mailbox you can read is the one whose original source shows
   whether the send-as domain's DKIM, SPF and DMARC pass. Only the member who
   connected the mailbox can send one, and at most five an hour.
@@ -182,7 +196,11 @@ again.
   Google to revoke that access. If another connected mailbox still uses the
   same Google account — a shared inbox two members connected — the access is
   left in place for that mailbox. You can always remove access yourself from
-  your Google Account's third-party connections.
+  your Google Account's third-party connections. Microsoft offers no way for
+  an app to revoke its own access, so disconnecting a Microsoft 365 mailbox
+  deletes the stored access, and you remove the app at
+  [myapps.microsoft.com](https://myapps.microsoft.com) to end it at Microsoft
+  too.
 
 Organization owners and admins can change the settings of, pause and
 disconnect any member's mailbox — a departing rep's mailbox has to be

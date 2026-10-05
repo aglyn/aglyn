@@ -698,7 +698,7 @@ describe('outreach/sequences/status (AGL-2980)', () => {
 
     setMailboxStatus('reconnect_required')
     expect((await activate()).body.error).toBe(
-      "Google stopped accepting this sequence's mailbox. Reconnect it in Mailboxes, then activate the sequence.",
+      "The provider stopped accepting this sequence's mailbox. Reconnect it in Mailboxes, then activate the sequence.",
     )
 
     setMailboxStatus('disconnected')

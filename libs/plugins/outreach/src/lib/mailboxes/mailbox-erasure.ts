@@ -29,7 +29,7 @@ import {
   mailboxCredentialsRef,
   mailboxRef,
   readMailboxCredentials,
-  type OutreachGoogleMailboxCredentials,
+  type OutreachStoredMailboxCredentials,
 } from './mailbox-credentials'
 import {
   revokeMailboxGrant,
@@ -83,15 +83,18 @@ interface RevocationTally {
   revoked: number
   alreadyInvalid: number
   kept: number
+  /** Microsoft grants, which no app can revoke: deleting them ends them here. */
+  unsupported: number
   failed: number
 }
 
-const emptyTally = (): RevocationTally => ({ revoked: 0, alreadyInvalid: 0, kept: 0, failed: 0 })
+const emptyTally = (): RevocationTally => ({ revoked: 0, alreadyInvalid: 0, kept: 0, unsupported: 0, failed: 0 })
 
 function count(tally: RevocationTally, outcome: OutreachGrantRevocation): void {
   if (outcome === 'revoked') tally.revoked += 1
   else if (outcome === 'already-invalid') tally.alreadyInvalid += 1
   else if (outcome === 'kept-for-other-mailbox') tally.kept += 1
+  else if (outcome === 'unsupported') tally.unsupported += 1
   else tally.failed += 1
 }
 
@@ -125,7 +128,7 @@ export function createOutreachOrgEraser(deps: OutreachErasureDeps): PluginOrgEra
       .where('orgId', '==', orgId)
       .get()
     if (dryRun) {
-      return { grants: rows.size, revoked: null, alreadyInvalid: null, kept: null, failed: null }
+      return { grants: rows.size, revoked: null, alreadyInvalid: null, kept: null, unsupported: null, failed: null }
     }
     const tally = emptyTally()
     for (const doc of rows.docs) {
@@ -162,7 +165,7 @@ export function createOutreachUserEraser(deps: OutreachErasureDeps): PluginUserE
       .where('connectedByUid', '==', uid)
       .get()
     const mailboxes = new Map<string, { orgId: string; mailboxId: string }>()
-    const stored: OutreachGoogleMailboxCredentials[] = []
+    const stored: OutreachStoredMailboxCredentials[] = []
     for (const doc of credentials.docs) {
       const credential = readMailboxCredentials(doc.data())
       const orgId = credential?.orgId ?? String(doc.get('orgId') ?? '')

@@ -24,7 +24,9 @@ import {
 import { createHash } from 'node:crypto'
 import {
   OUTREACH_COLLECTIONS,
+  OUTREACH_MAILBOX_PROVIDERS,
   type OutreachMailboxCredentials,
+  type OutreachMailboxProvider,
 } from '../model/outreach.types'
 
 /**
@@ -42,16 +44,19 @@ import {
  * value's shape alone.
  */
 
-/** A connected Google mailbox's stored credential. */
-export interface OutreachGoogleMailboxCredentials extends OutreachMailboxCredentials {
-  provider: 'google'
+/** A connected mailbox's stored credential, Google's or Microsoft's. */
+export interface OutreachStoredMailboxCredentials extends OutreachMailboxCredentials {
+  provider: OutreachMailboxProvider
   /** The member who connected the mailbox. */
   connectedByUid: string
-  /** Google's stable account id (`sub`), so one account's grants can be found. */
+  /**
+   * The provider's stable account id, so one account's grants can be found:
+   * Google's `sub`, or Microsoft's `<tid>:<oid>`.
+   */
   providerAccountId: string
-  /** The account's address, as Google verified it. */
+  /** The account's address, as the provider verified it. */
   email: string
-  /** The scopes Google granted, as it listed them. */
+  /** The scopes the provider granted, as it listed them. */
   scopes: string[]
   /** The refresh token, sealed — see the module comment. */
   sealedRefreshToken: string
@@ -83,7 +88,7 @@ export function sealMailboxRefreshToken(
  * cannot be opened — a missing or rotated-away key, or a tampered value.
  */
 export function openMailboxRefreshToken(
-  credential: Pick<OutreachGoogleMailboxCredentials, 'mailboxId' | 'sealedRefreshToken'>,
+  credential: Pick<OutreachStoredMailboxCredentials, 'mailboxId' | 'sealedRefreshToken'>,
   keyring: SecretBoxKeyring,
 ): { refreshToken: string; needsReseal: boolean } {
   const opened = openSecret(credential.sealedRefreshToken, keyring, {
@@ -92,8 +97,11 @@ export function openMailboxRefreshToken(
   return { refreshToken: opened.plaintext, needsReseal: needsReseal(opened, keyring) }
 }
 
+/** The prefix a mailbox id carries for its provider. */
+const MAILBOX_ID_PREFIX: Record<OutreachMailboxProvider, string> = { google: 'gm', microsoft: 'ms' }
+
 /**
- * The id a member's mailbox for one Google account has in one organization.
+ * The id a member's mailbox for one provider account has in one organization.
  *
  * Derived rather than random, so connecting the same account again updates
  * the same mailbox instead of adding a second one, and two members — or two
@@ -101,9 +109,14 @@ export function openMailboxRefreshToken(
  * collection is top-level, keyed by this id, so it must be unique across
  * every organization, which is why the org is part of it.
  */
-export function outreachMailboxId(orgId: string, uid: string, providerAccountId: string): string {
-  const hash = createHash('sha256').update(`${orgId}\n${uid}\ngoogle\n${providerAccountId}`).digest('base64url')
-  return `gm_${hash.slice(0, 24)}`
+export function outreachMailboxId(
+  orgId: string,
+  uid: string,
+  providerAccountId: string,
+  provider: OutreachMailboxProvider = 'google',
+): string {
+  const hash = createHash('sha256').update(`${orgId}\n${uid}\n${provider}\n${providerAccountId}`).digest('base64url')
+  return `${MAILBOX_ID_PREFIX[provider]}_${hash.slice(0, 24)}`
 }
 
 export function mailboxCredentialsRef(firestore: FirebaseFirestore.Firestore, mailboxId: string) {
@@ -119,11 +132,11 @@ export function mailboxRef(firestore: FirebaseFirestore.Firestore, orgId: string
 }
 
 /** A stored credential read defensively, or `null` when it is not one. */
-export function readMailboxCredentials(data: unknown): OutreachGoogleMailboxCredentials | null {
-  const record = (data ?? null) as Partial<OutreachGoogleMailboxCredentials> | null
+export function readMailboxCredentials(data: unknown): OutreachStoredMailboxCredentials | null {
+  const record = (data ?? null) as Partial<OutreachStoredMailboxCredentials> | null
   if (
     !record ||
-    record.provider !== 'google' ||
+    !(OUTREACH_MAILBOX_PROVIDERS as readonly unknown[]).includes(record.provider) ||
     typeof record.mailboxId !== 'string' ||
     typeof record.orgId !== 'string' ||
     typeof record.sealedRefreshToken !== 'string' ||
@@ -135,7 +148,7 @@ export function readMailboxCredentials(data: unknown): OutreachGoogleMailboxCred
     id: String(record.id ?? record.mailboxId),
     orgId: record.orgId,
     mailboxId: record.mailboxId,
-    provider: 'google',
+    provider: record.provider as OutreachMailboxProvider,
     connectedByUid: String(record.connectedByUid ?? ''),
     providerAccountId: String(record.providerAccountId ?? ''),
     email: String(record.email ?? ''),
@@ -148,7 +161,7 @@ export function readMailboxCredentials(data: unknown): OutreachGoogleMailboxCred
 }
 
 /**
- * How many OTHER stored credentials hold a grant for the same Google account.
+ * How many OTHER stored credentials hold a grant for the same provider account.
  *
  * Google's revocation ends the whole grant this client holds for an account,
  * not one token, so revoking while another mailbox still uses the account —

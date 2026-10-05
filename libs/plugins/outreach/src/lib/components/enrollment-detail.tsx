@@ -160,6 +160,14 @@ export function outreachCrmRecordHref(
   return pluginRecordHref(kind, { orgSlug: orgMount.orgSlug, host }, id)
 }
 
+/**
+ * Whether a mailbox's threads open in Gmail. A Microsoft 365 mailbox's
+ * conversation has no address of its own in Outlook (AGL-3489), so its
+ * thread is shown without a link.
+ */
+export const outreachThreadOpensInGmail = (mailbox: { provider?: string } | null | undefined): boolean =>
+  mailbox?.provider !== 'microsoft'
+
 /** A Gmail thread, opened in the mailbox's own account. */
 export function outreachGmailThreadUrl(threadId: string, mailboxEmail: string | null | undefined): string {
   const account = mailboxEmail ? `?authuser=${encodeURIComponent(mailboxEmail)}` : ''
@@ -215,6 +223,8 @@ function TimelineRow(props: {
   entry: OutreachTimelineEntry
   timeZone: string | null
   mailboxEmail: string | null
+  /** False for a mailbox whose threads do not open in Gmail. */
+  threadsOpenInGmail?: boolean
   divider: boolean
 }) {
   const { entry } = props
@@ -247,10 +257,10 @@ function TimelineRow(props: {
                 {entry.detail}
               </Typography>
             ) : null}
-            {entry.facts.length || entry.gmailThreadId ? (
+            {entry.facts.length || (entry.gmailThreadId && props.threadsOpenInGmail !== false) ? (
               <Typography variant="caption" color="text.secondary" component="div">
                 {entry.facts.join(' · ')}
-                {entry.gmailThreadId ? (
+                {entry.gmailThreadId && props.threadsOpenInGmail !== false ? (
                   <>
                     {entry.facts.length ? ' · ' : null}
                     <Link
@@ -497,19 +507,25 @@ function EnrollmentDetails(props: {
           '—'
         )}
       </Fact>
-      <Fact label="Gmail threads">
+      <Fact label={outreachThreadOpensInGmail(props.mailbox) ? 'Gmail threads' : 'Threads'}>
         {threads.length ? (
           <Stack spacing={0.25}>
             {threads.map((thread) => (
               <span key={thread}>
-                <Link
-                  href={outreachGmailThreadUrl(thread, props.mailbox?.email)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  underline="hover"
-                >
-                  {thread}
-                </Link>
+                {outreachThreadOpensInGmail(props.mailbox) ? (
+                  <Link
+                    href={outreachGmailThreadUrl(thread, props.mailbox?.email)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    underline="hover"
+                  >
+                    {thread}
+                  </Link>
+                ) : (
+                  <Box component="span" sx={{ wordBreak: 'break-all' }}>
+                    {thread}
+                  </Box>
+                )}
                 {thread === enrollment.gmailThreadId ? ' (current)' : null}
               </span>
             ))}
@@ -801,7 +817,7 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
         contentGutterX
         contentGutterY
         HeaderProps={
-          thread
+          thread && outreachThreadOpensInGmail(mailbox)
             ? {
                 action: (
                   <Button
@@ -839,6 +855,7 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
                 entry={entry}
                 timeZone={timeZone}
                 mailboxEmail={mailbox?.email ?? null}
+                threadsOpenInGmail={outreachThreadOpensInGmail(mailbox)}
                 divider={index < timeline.length - 1}
               />
             ))}

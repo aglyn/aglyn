@@ -66,6 +66,8 @@ const SPEC = /\.spec\.[cm]?[jt]sx?$|\/specs\//
 const CREDENTIALS = [
   ['GOOGLE', 'OUTREACH', 'CLIENT', 'ID'],
   ['GOOGLE', 'OUTREACH', 'CLIENT', 'SECRET'],
+  ['MICROSOFT', 'OUTREACH', 'CLIENT', 'ID'],
+  ['MICROSOFT', 'OUTREACH', 'CLIENT', 'SECRET'],
   ['OUTREACH', 'TOKEN', 'KEY'],
 ].map((parts) => parts.join('_'))
 

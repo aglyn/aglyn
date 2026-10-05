@@ -19,6 +19,7 @@ import {
   assessSenderReadiness,
   dmarcDomainsAlign,
   googleMailboxSenderExpectation,
+  microsoftMailboxSenderExpectation,
   parseDmarcRecord,
   parseSpf,
   resendSenderExpectation,
@@ -112,6 +113,21 @@ describe('the expectations', () => {
     expect(WORKSPACE).toMatchObject({ fromDomain: 'acme.com', spfInclude: '_spf.google.com', dkimSelector: 'google' })
     expect(googleMailboxSenderExpectation('someone@gmail.com')).toBeNull()
     expect(googleMailboxSenderExpectation('not an address')).toBeNull()
+  })
+
+  it('a Microsoft 365 mailbox reads selector1 and Exchange Online’s SPF; Microsoft’s own domains have nothing to publish (AGL-3489)', () => {
+    const expectation = microsoftMailboxSenderExpectation('Rep@GetAcme.com') as SenderReadinessExpectation
+    expect(expectation).toMatchObject({
+      provider: 'Microsoft 365',
+      fromDomain: 'getacme.com',
+      envelopeDomain: 'getacme.com',
+      spfInclude: 'spf.protection.outlook.com',
+      dkimSelector: 'selector1',
+    })
+    expect(senderReadinessHosts(expectation).dkim).toBe('selector1._domainkey.getacme.com')
+    expect(microsoftMailboxSenderExpectation('someone@outlook.com')).toBeNull()
+    expect(microsoftMailboxSenderExpectation('rep@acmecold.onmicrosoft.com')).toBeNull()
+    expect(microsoftMailboxSenderExpectation('not an address')).toBeNull()
   })
 
   it('asks the organizational domain’s DMARC for a subdomain From', () => {

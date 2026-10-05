@@ -18,7 +18,11 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type { OutreachMailbox } from '../model/outreach.types'
-import { CONNECT_WITH_GOOGLE_LABEL, OutreachMailboxesSection } from './mailboxes-section'
+import {
+  CONNECT_WITH_GOOGLE_LABEL,
+  CONNECT_WITH_MICROSOFT_LABEL,
+  OutreachMailboxesSection,
+} from './mailboxes-section'
 
 /**
  * The Mailboxes section (AGL-2978), in every state it can be in: loading,
@@ -48,8 +52,8 @@ jest.mock('./use-outreach-mailboxes', () => ({
   useOutreachMailboxes: () => mockListed,
 }))
 jest.mock('./mailbox-card', () => ({
-  MailboxCard: (props: { mailbox: OutreachMailbox; isMine: boolean; canManage: boolean }) => (
-    <article aria-label={`Mailbox ${props.mailbox.email}`}>
+  MailboxCard: (props: { mailbox: OutreachMailbox; isMine: boolean; canManage: boolean; onReconnect(): void }) => (
+    <article aria-label={`Mailbox ${props.mailbox.email}`} onClick={props.onReconnect}>
       {`mine:${props.isMine} manage:${props.canManage}`}
     </article>
   ),
@@ -96,7 +100,11 @@ beforeEach(() => {
   jest.clearAllMocks()
   setHash('')
   mockListed = { status: 'ready', mailboxes: [] }
-  mockApi.availability.mockResolvedValue({ configured: true, canManageAll: false })
+  mockApi.availability.mockResolvedValue({
+    configured: true,
+    providers: { google: true, microsoft: true },
+    canManageAll: false,
+  })
 })
 
 describe('OutreachMailboxesSection — what it shows (AGL-2978)', () => {
@@ -112,14 +120,33 @@ describe('OutreachMailboxesSection — what it shows (AGL-2978)', () => {
     expect(screen.getByText('No mailboxes connected')).toBeTruthy()
     const button = await screen.findByRole('button', { name: CONNECT_WITH_GOOGLE_LABEL })
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
-    expect(screen.getByText('Connect your Google mailbox to send sequences from your own address.')).toBeTruthy()
+    expect(
+      screen.getByText('Connect your Google or Microsoft 365 mailbox to send sequences from your own address.'),
+    ).toBeTruthy()
+    const microsoft = screen.getByRole('button', { name: CONNECT_WITH_MICROSOFT_LABEL }) as HTMLButtonElement
+    expect(microsoft.disabled).toBe(false)
   })
 
   it('says the deployment is not configured, and offers no connect', async () => {
     mockApi.availability.mockResolvedValue({ configured: false, canManageAll: false })
     render(<OutreachMailboxesSection orgId="org-1" />)
-    expect(await screen.findByText('Connecting a Google mailbox is not configured on this deployment.')).toBeTruthy()
+    expect(await screen.findByText('Connecting a mailbox is not configured on this deployment.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: CONNECT_WITH_GOOGLE_LABEL })).toBeNull()
+  })
+
+  it('offers Google alone, and says so, on a deployment with no Microsoft app registration (AGL-3489)', async () => {
+    mockApi.availability.mockResolvedValue({
+      configured: true,
+      providers: { google: true, microsoft: false },
+      canManageAll: false,
+    })
+    render(<OutreachMailboxesSection orgId="org-1" />)
+    expect(
+      await screen.findByText('Connecting a Microsoft 365 mailbox is not configured on this deployment.'),
+    ).toBeTruthy()
+    const google = screen.getByRole('button', { name: CONNECT_WITH_GOOGLE_LABEL }) as HTMLButtonElement
+    await waitFor(() => expect(google.disabled).toBe(false))
+    expect((screen.getByRole('button', { name: CONNECT_WITH_MICROSOFT_LABEL }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('prints the route’s refusal when availability is refused', async () => {
@@ -167,6 +194,33 @@ describe('OutreachMailboxesSection — connecting (AGL-2978)', () => {
     fireEvent.click(button)
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('https://accounts.google.com/o/oauth2/v2/auth?state=s'))
     expect((button as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('sends the browser to Microsoft’s consent address for a Microsoft connect (AGL-3489)', async () => {
+    const navigate = jest.fn()
+    mockApi.connect.mockResolvedValue('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?state=s')
+    render(<OutreachMailboxesSection orgId="org-1" navigate={navigate} />)
+    const button = await screen.findByRole('button', { name: CONNECT_WITH_MICROSOFT_LABEL })
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(button)
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?state=s'),
+    )
+    expect(mockApi.connect).toHaveBeenCalledWith({ provider: 'microsoft' })
+  })
+
+  it('reconnects a Microsoft mailbox through Microsoft, suggesting its own account (AGL-3489)', async () => {
+    mockListed = {
+      status: 'ready',
+      mailboxes: [{ ...mailbox('ms_1', 'avery@getacme.example', 'uid-rep'), provider: 'microsoft' } as OutreachMailbox],
+    }
+    mockApi.connect.mockResolvedValue('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?state=s')
+    render(<OutreachMailboxesSection orgId="org-1" navigate={jest.fn()} />)
+    await waitFor(() => expect(mockApi.availability).toHaveBeenCalled())
+    fireEvent.click(screen.getByLabelText('Mailbox avery@getacme.example'))
+    await waitFor(() =>
+      expect(mockApi.connect).toHaveBeenCalledWith({ provider: 'microsoft', loginHint: 'avery@getacme.example' }),
+    )
   })
 
   it('stays put and says why when the connect is refused', async () => {
@@ -232,9 +286,14 @@ describe('OutreachMailboxesSection — coming back from Google (AGL-2978)', () =
     unmount()
 
     setHash('#outreachConnect=error&reason=expired')
-    render(<OutreachMailboxesSection orgId="org-1" />)
+    const second = render(<OutreachMailboxesSection orgId="org-1" />)
     expect(await screen.findByText('The connection took too long. Connect the mailbox again.')).toBeTruthy()
     expect(mockApi.complete).not.toHaveBeenCalled()
+    second.unmount()
+
+    setHash('#outreachConnect=error&reason=access_denied&provider=microsoft')
+    render(<OutreachMailboxesSection orgId="org-1" />)
+    expect(await screen.findByText('Microsoft access was not granted, so no mailbox was connected.')).toBeTruthy()
   })
 
   it('leaves an unrelated fragment alone', async () => {

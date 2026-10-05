@@ -31,6 +31,7 @@ import type {
   OutreachMailboxSettingsRequest,
   OutreachMailboxTestResponse,
 } from '../mailboxes/mailbox-api'
+import type { OutreachMailboxProvider } from '../model/outreach.types'
 
 /** A mailbox route's refusal, carrying the sentence and the stable reason. */
 export class OutreachApiError extends Error {
@@ -48,8 +49,12 @@ export class OutreachApiError extends Error {
 /** The mailbox routes, as the Mailboxes panel calls them. */
 export interface OutreachMailboxApi {
   availability(): Promise<OutreachMailboxAvailability>
-  /** Google's consent address for a new connect, or a reconnect. */
-  connect(): Promise<string>
+  /**
+   * The provider's consent address for a new connect, or a reconnect —
+   * Google's unless Microsoft is named (AGL-3489). `loginHint` suggests the
+   * account, such as the mailbox being reconnected.
+   */
+  connect(options?: { provider?: OutreachMailboxProvider; loginHint?: string }): Promise<string>
   complete(input: { code: string; state: string; timezone?: string }): Promise<OutreachConnectCompleteResponse>
   saveSettings(
     input: Omit<OutreachMailboxSettingsRequest, 'orgId'>,
@@ -109,8 +114,16 @@ export function useOutreachMailboxApi(orgId: string | null): OutreachMailboxApi 
     () => ({
       availability: () =>
         call<OutreachMailboxAvailability>(OUTREACH_API_ROUTES.mailboxesAvailability, { method: 'GET' }),
-      connect: async () =>
-        (await call<OutreachConnectResponse>(OUTREACH_API_ROUTES.mailboxesConnect, { method: 'POST' })).url,
+      connect: async (options) =>
+        (
+          await call<OutreachConnectResponse>(OUTREACH_API_ROUTES.mailboxesConnect, {
+            method: 'POST',
+            body: {
+              ...(options?.provider && options.provider !== 'google' ? { provider: options.provider } : {}),
+              ...(options?.loginHint ? { loginHint: options.loginHint } : {}),
+            },
+          })
+        ).url,
       complete: (input) =>
         call<OutreachConnectCompleteResponse>(OUTREACH_API_ROUTES.mailboxesConnectComplete, {
           method: 'POST',

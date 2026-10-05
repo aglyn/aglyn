@@ -22,6 +22,8 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-subprocessors'
 import { GMAIL_API_BASE } from './transport/gmail-client'
 import { GOOGLE_OAUTH_ENDPOINTS } from './transport/google-oauth'
+import { GRAPH_API_BASE } from './transport/graph-client'
+import { MICROSOFT_LOGIN_ORIGIN } from './transport/microsoft-oauth'
 
 /**
  * The hosts this plugin's code names (AGL-2978), declared here rather than in
@@ -38,6 +40,10 @@ import { GOOGLE_OAUTH_ENDPOINTS } from './transport/google-oauth'
  * embeds. ⚑ A classification for legal to confirm when Sequences leaves staff
  * preview; the consent screen is Internal to the aglyn.com Workspace until
  * then.
+ *
+ * A rep's Microsoft 365 mailbox (AGL-3489) stands on the same footing:
+ * Microsoft Graph is the customer's own mail provider, and Microsoft's
+ * identity platform is where the rep grants the access.
  *
  * Google's token endpoint is already declared by the inventory, for the
  * platform's own service-account exchange, so this plugin adds its use of it
@@ -76,11 +82,34 @@ export const OUTREACH_GOOGLE_TOKEN_USE: PluginEgressUseDeclaration = {
     "For Sequences: the deployment's OAuth client credentials and, for the rep's own grant, the authorization code, PKCE verifier, refresh token and access token Google itself issued — credentials, never message content. ⚑ Legal to confirm the Annex III cell needs no change for the Sequences use.",
 }
 
-/** The plugin's `subprocessors` entry: no recipient of its own, two hosts and one use. */
+/** Microsoft Graph: the rep's own Microsoft 365 mailbox (AGL-3489). */
+export const OUTREACH_GRAPH_HOST: PluginEgressHostDeclaration = {
+  host: new URL(GRAPH_API_BASE).host,
+  disposition: 'not-a-subprocessor',
+  reason:
+    "Customer-chosen destination. Microsoft Graph for the rep's own Microsoft 365 (Exchange Online) mailbox, which the rep connects in Sequences → Mailboxes (`libs/plugins/outreach/src/lib/transport/graph-client.ts`): the account's id, address and display name at connect, a plain-text test the rep sends, the sequence messages the sending runtime sends — each created as a draft in the rep's mailbox and sent from there — and the reads of that same mailbox that find what came back: replies, out-of-office answers, bounces and unsubscribe requests. The provider is the one the customer runs its mail on; nothing is sent to a mailbox the rep did not connect.",
+  dataReceived:
+    "The rep's own OAuth access token, and the mail the rep sends from their own mailbox — each recipient's address, the subject and the body. The runtime's reads carry a received-time window, conversation ids and the Message-IDs of mail it sent. What the runtime reads back is the rep's own mail: the ids, senders, recipients and received times of the window's messages, and whole messages — headers and bodies, delivery reports included — of the rep's sequence conversations and of the replies, bounces and unsubscribe requests among them. No other customer record, and nothing about a site visitor.",
+}
+
+/**
+ * Microsoft's identity platform: the consent address the rep's browser opens,
+ * and the token endpoint the console calls for that same grant.
+ */
+export const OUTREACH_MICROSOFT_LOGIN_HOST: PluginEgressHostDeclaration = {
+  host: new URL(MICROSOFT_LOGIN_ORIGIN).host,
+  disposition: 'not-a-subprocessor',
+  reason:
+    "Customer-chosen destination. Microsoft's identity platform for the rep's own Microsoft 365 account (`libs/plugins/outreach/src/lib/transport/microsoft-oauth.ts`): the consent address `buildMicrosoftAuthorizationUrl` hands the rep's browser, and the token endpoint the console calls for the code exchange at connect and the access-token refresh before each Graph call — the rep's own account at the rep's own provider, the same footing as `graph.microsoft.com`.",
+  dataReceived:
+    "From the rep's browser, the app registration's client id, the requested permissions, a signed state, a PKCE challenge and a login hint. From our servers, the deployment's client credentials and, for the rep's own grant, the authorization code, PKCE verifier and the refresh token Microsoft itself issued — credentials, never message content.",
+}
+
+/** The plugin's `subprocessors` entry: no recipient of its own, four hosts and one use. */
 export function outreachSubprocessors(): PluginSubprocessorsAnswer {
   return {
     subprocessors: [],
-    hosts: [OUTREACH_GMAIL_HOST, OUTREACH_GOOGLE_CONSENT_HOST],
+    hosts: [OUTREACH_GMAIL_HOST, OUTREACH_GOOGLE_CONSENT_HOST, OUTREACH_GRAPH_HOST, OUTREACH_MICROSOFT_LOGIN_HOST],
     uses: [OUTREACH_GOOGLE_TOKEN_USE],
   }
 }

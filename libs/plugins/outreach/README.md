@@ -48,21 +48,27 @@ Every `outreach*` collection is written by the server alone.
 ## Mailboxes
 
 `src/lib/mailboxes` and `src/lib/transport` connect a rep's own
-Google mailbox and talk to it:
+Google or Microsoft 365 mailbox and talk to it:
 
 | module | does |
 | -- | -- |
 | `mailboxes/mailbox-routes` | connect (signed single-use state, PKCE, OpenID nonce), settings, pause, test and disconnect |
 | `mailboxes/oauth-state` | the signed `state` and its pending record under `orgs/{orgId}/outreachOAuthStates` |
 | `mailboxes/mailbox-credentials` | the refresh token sealed with the shared secret box, in `outreachMailboxCredentials` |
-| `mailboxes/mailbox-transport` | opens a mailbox's Gmail client for the runtime, and marks one reconnect-required |
+| `mailboxes/mailbox-transport` | opens a mailbox's client for its provider, and marks one reconnect-required |
 | `mailboxes/mailbox-erasure` | what a workspace or account erasure revokes and deletes |
+| `transport/mail-client` | the provider seam the runtime reaches a mailbox through, and the structured search |
 | `transport/gmail-client` | the fetch-based Gmail API client: send, full and metadata thread reads, search, send-as |
+| `transport/graph-client` | the Microsoft Graph client: a step sent as a draft from its own MIME, conversation and message reads, the windowed search |
+| `transport/microsoft-oauth` | Microsoft's identity platform: consent address, code exchange, refresh, ID token |
+| `transport/mime-message` | a raw MIME message read into the Gmail API shape the classifier takes |
 | `transport/send-message` | the one door a send goes through, including the engine's composed email |
 | `transport/rfc5322` | the plain-text RFC 5322 writer |
 
-`OUTREACH_TOKEN_KEY`, `GOOGLE_OUTREACH_CLIENT_ID` and
-`GOOGLE_OUTREACH_CLIENT_SECRET` are read by `mailboxes/outreach-config` alone,
+`OUTREACH_TOKEN_KEY`, `GOOGLE_OUTREACH_CLIENT_ID`,
+`GOOGLE_OUTREACH_CLIENT_SECRET`, `MICROSOFT_OUTREACH_CLIENT_ID`,
+`MICROSOFT_OUTREACH_CLIENT_SECRET` and `MICROSOFT_OUTREACH_TENANT` are read by
+`mailboxes/outreach-config` alone,
 and `outreach-credential-isolation.spec.ts` holds that no tenant file reaches it.
 
 ## The engine

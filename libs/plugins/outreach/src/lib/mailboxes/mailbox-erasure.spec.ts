@@ -150,6 +150,7 @@ describe('the workspace eraser (AGL-2978)', () => {
       revoked: 2,
       alreadyInvalid: 0,
       kept: 0,
+      unsupported: 0,
       failed: 0,
     })
     expect(revoked).toEqual(['refresh-a', 'refresh-b'])
@@ -161,6 +162,7 @@ describe('the workspace eraser (AGL-2978)', () => {
     await expect(createOutreachOrgEraser(deps())({ orgId: 'org-erased', dryRun: false })).resolves.toMatchObject({
       revoked: 2,
       kept: 0,
+      unsupported: 0,
     })
     storeCredential('gm_c', 'org-still-here', 'shared-account', 'refresh-c')
     revoked = []
@@ -169,6 +171,7 @@ describe('the workspace eraser (AGL-2978)', () => {
       revoked: 0,
       alreadyInvalid: 0,
       kept: 2,
+      unsupported: 0,
       failed: 0,
     })
     expect(revoked).toEqual([])
@@ -192,6 +195,7 @@ describe('the workspace eraser (AGL-2978)', () => {
       revoked: 0,
       alreadyInvalid: 0,
       kept: 0,
+      unsupported: 0,
       failed: 1,
     })
   })
@@ -222,6 +226,7 @@ describe('the workspace eraser (AGL-2978)', () => {
       revoked: null,
       alreadyInvalid: null,
       kept: null,
+      unsupported: null,
       failed: null,
     })
     expect(fetchGoogle).not.toHaveBeenCalled()
@@ -252,6 +257,7 @@ describe('the account eraser (AGL-3106)', () => {
       revoked: 2,
       alreadyInvalid: 0,
       kept: 0,
+      unsupported: 0,
       failed: 0,
     })
     expect(revoked.sort()).toEqual(['refresh-a', 'refresh-b'])
@@ -276,6 +282,7 @@ describe('the account eraser (AGL-3106)', () => {
     await expect(createOutreachUserEraser(deps())({ uid: 'uid-rep', orgIds: ['org-1'] })).resolves.toMatchObject({
       grants: 1,
       kept: 1,
+      unsupported: 0,
       revoked: 0,
     })
     expect(revoked).toEqual([])
@@ -290,6 +297,7 @@ describe('the account eraser (AGL-3106)', () => {
       grants: 2,
       revoked: 2,
       kept: 0,
+      unsupported: 0,
     })
   })
 
@@ -315,6 +323,7 @@ describe('the account eraser (AGL-3106)', () => {
       revoked: 0,
       alreadyInvalid: 0,
       kept: 0,
+      unsupported: 0,
       failed: 0,
     })
     expect(docs.has(credentialPath('gm_t'))).toBe(true)

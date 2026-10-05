@@ -16,7 +16,7 @@
  */
 
 import type { ComposedOutreachEmail } from '../engine/compose'
-import type { GmailClient } from './gmail-client'
+import type { OutreachMailClient } from './mail-client'
 import { listUnsubscribeHeaders } from '@aglyn/shared-util-email/list-unsubscribe'
 import {
   buildRfc5322Message,
@@ -27,11 +27,18 @@ import {
 
 /** What one sent message is known by afterwards. */
 export interface OutreachSentMessage {
-  /** Gmail's id for the message in the sender's mailbox. */
+  /** The provider's id for the message in the sender's mailbox. */
   gmailMessageId: string
-  /** Gmail's thread id — what the next step of the sequence replies into. */
+  /**
+   * The provider's thread — Gmail's thread id, Graph's conversation id —
+   * which the next step of the sequence replies into.
+   */
   threadId: string
-  /** The RFC 5322 `Message-ID` it carried, for `In-Reply-To`/`References`. */
+  /**
+   * The RFC 5322 `Message-ID` it went out under, for `In-Reply-To` and
+   * `References`: the one it was written with, unless the provider says it
+   * sent it under another.
+   */
   messageId: string
   /**
    * The subject as sent — the thread's own subject when this message started
@@ -41,7 +48,7 @@ export interface OutreachSentMessage {
 }
 
 export interface SendOutreachMessageOptions {
-  /** The Gmail thread to send into; a new thread when absent. */
+  /** The provider thread to send into; a new thread when absent. */
   threadId?: string | null
   /** The `Date` header. Now when omitted. */
   date?: Date
@@ -60,7 +67,7 @@ export interface SendOutreachMessageOptions {
  * built by the same RFC 5322 writer and none can bypass its header checks.
  */
 export async function sendOutreachMessage(
-  client: Pick<GmailClient, 'sendMessage'>,
+  client: Pick<OutreachMailClient, 'sendMessage'>,
   message: OutreachComposedMessage,
   options: SendOutreachMessageOptions = {},
 ): Promise<OutreachSentMessage> {
@@ -73,10 +80,11 @@ export async function sendOutreachMessage(
     raw: encodeGmailRawMessage(built.raw),
     threadId: options.threadId ?? null,
   })
+  const reported = String(sent.internetMessageId ?? '').trim()
   return {
     gmailMessageId: sent.id,
     threadId: sent.threadId,
-    messageId: built.messageId,
+    messageId: reported || built.messageId,
     subject: built.subject,
   }
 }
@@ -94,11 +102,11 @@ export async function sendOutreachMessage(
  * - the unsubscribe URL and mailto become one `List-Unsubscribe`, and the
  *   URL adds `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058).
  *
- * Answers the Gmail thread id, the `Message-ID` and the subject as sent,
+ * Answers the provider's thread id, the `Message-ID` and the subject as sent,
  * which the runtime records on the enrollment for the next step to answer.
  */
 export function sendComposedOutreachEmail(
-  client: Pick<GmailClient, 'sendMessage'>,
+  client: Pick<OutreachMailClient, 'sendMessage'>,
   email: ComposedOutreachEmail,
   sender: OutreachMailAddress,
   options: Omit<SendOutreachMessageOptions, 'threadId'> = {},
