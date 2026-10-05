@@ -89,8 +89,11 @@ is a page, not a database export: one that tried to render ten thousand
 rows would be slower than any visitor would wait for. Records with an explicit
 order come first, in that order; the rest follow by creation.
 
-For a bigger collection, give it a page per record instead of a hundred rows
-on one.
+For a bigger collection, give each record a page of its own instead of a
+hundred rows on one: see [Service and location pages from a
+dataset](../../guides/service-and-location-pages-from-a-dataset.md). When the
+dataset has a record template on the site, each repeated row carries its
+record's page as `{{item.url}}`, so a card links to it with that token.
 
 ## What you can't do
 

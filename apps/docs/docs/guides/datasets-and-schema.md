@@ -77,6 +77,7 @@ The types you can author:
 | **Coordinates** | Latitude / longitude pairs |
 | **List** | Ordered arrays |
 | **Reference** | A link to a record in another dataset — see [relations](../content-and-data/datasets/relations.md) |
+| **Page address** | A record's own segment of its page's address, filled in from a text field — see [page address fields](../content-and-data/datasets/model-builder.md#page-address-fields) |
 
 Plugins can register **custom field types**, which appear in the type picker
 suffixed with the plugin id. The console, imports, site restores and the REST

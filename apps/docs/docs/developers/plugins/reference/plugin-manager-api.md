@@ -594,6 +594,119 @@ is told the site holds, and a section missing from a process that had not
 loaded the plugin would read to a crawler as pages that no longer exist.
 `listPluginSitemapSections()` / `pluginSitemapSection(section)` read them.
 
+## Sitemap readers — `plugin-sitemap-readers`
+
+A section above is the documents of one site collection at one fixed path. Some
+pages are neither: a dataset's record pages live in the ORGANIZATION's data, at
+a base each site picks, and a site may have several record templates, each its
+own set of pages. A plugin like that answers in code. It declares a section
+FAMILY in a `sitemapReaders` block of `plugins.config.json`:
+
+```json
+"sitemapReaders": [{ "section": "records" }]
+```
+
+and registers the family's reader from its `serverDeclarations` entry, with the
+reads behind `import()`:
+
+```ts
+registerPluginSitemapReader(
+  'records',
+  {
+    children: async ({ hostId }) => [{ key: 'services', urls: 42 }],
+    urls: async ({ hostId, key, page, perPage }) => [
+      { path: '/services/roofing', lastmod: updatedAtMs },
+    ],
+    listings: async ({ hostId }) => [{ name: 'Services', base: 'services', count: 42 }],
+  },
+  { pluginId: 'data' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `children({ hostId })` | The family's children on this site, in the order the index lists them. Each `{ key, urls }` is one child sitemap, `/sitemaps/{section}-{key}/{page}.xml`, sized by `urls` (at most that many). A key is lowercase letters and digits joined by hyphens, at most 120 characters; a run of two hyphens spells a path separator (`services--residential`). A key that breaks the rule is skipped. |
+| `urls({ hostId, key, page, perPage })` | One page of one child: `{ path, lastmod? }` rows, `path` site-absolute (`/services/roofing`), `lastmod` anything the sitemap's date reader takes. The route makes each path absolute, drops one that does not start with `/`, and keeps at most `perPage`. |
+| `listings({ hostId })` | Optional. The page groups `/llms.txt` names: `{ name, base, count }`. A group links to the page published at its base when there is one, and to the sitemap otherwise; a group with no pages is left out. |
+| `registerPluginSitemapReader(section, reader, { pluginId? })` | The owner is the plugin whose register fn is running, or `pluginId`; with neither, or with a plugin other than the one that declared the family, it throws. Re-registering replaces the owner's reader. Returns the unregister. |
+| `listPluginSitemapReaders()` | The compiled declarations, `{ section, pluginId }`, in config order. |
+| `pluginSitemapReader(declaration)` | The registered reader. A declared family with no reader runs the app's declarations step once, then throws `PluginSitemapReaderUnavailableError`. |
+| `pluginSitemapChildSection(section, key)` / `parsePluginSitemapChildSection(name)` / `isPluginSitemapChildKey(key)` | Build a child's section name, read one back (the longest declared family wins), and check a key. |
+
+**An absent reader is not "no pages".** A crawler reads a section missing from
+the index as pages that no longer exist, so the sitemap route treats a throw —
+from the lookup or from the reader — as a degraded answer and keeps its cached
+copy rather than shipping a smaller index. `/llms.txt` drops a failing family's
+groups and keeps the rest of the file. The generator holds a declaration to one
+owner per family, a lowercase word with no hyphens that is none of the
+platform's sections, no `content`, no prefix of a collection section, and a
+plugin with a `serverDeclarations` entry. Reach it by its own subpath,
+`@aglyn/aglyn/plugin-manager/plugin-sitemap-readers`, never the barrel. The data
+plugin's `records` family is the first: one child per record template,
+`records-{base}`.
+
+## Pages a publish refreshes — `plugin-live-paths` (`/server`)
+
+A publish drops the cached pages it changed, and finds them through the site's
+routing map: screen id to address. A page a plugin serves through a site page
+resolver is not in that map — a record template draws every record page, yet its
+own entry is an address that serves nothing. So the plugin says which addresses
+it serves from a site's screens:
+
+```ts
+registerPluginLivePaths(
+  async (request) =>
+    (await import('./server/live-paths')).livePaths(request),
+  { pluginId: 'data' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginLivePaths(reader, { pluginId? })` | One reader per plugin, registered from `serverDeclarations`. The owner is the running register fn's plugin, or `pluginId`; with neither it throws. Re-registering replaces the owner's reader. Returns the unregister. |
+| `PluginLivePathsReader` | `({ hostId, screenIds? }) => Promise<string[]>`. With `screenIds`, the addresses the plugin serves FROM those screens; without, every address it serves on the site. Answer site-absolute paths (`/services/roofing`). |
+| `pluginLivePaths(request)` | Every registered reader's answer, deduplicated, a path that does not start with `/` dropped, at most `PLUGIN_LIVE_PATHS_MAX` (200) from each plugin. An empty `screenIds` asks nothing. Never throws: a failing reader is logged and skipped. |
+
+The console asks on a page, layout or component publish (with the screens it
+affected), on a whole-site publish through the REST API, and when a site is
+locked down (without screens, so a locked site stops serving those pages too).
+Best effort by design: the publish has already succeeded, the tenant caps the
+paths it accepts, and the site's data tag, which every publish busts, still
+refreshes anything missed on its next visit. Reach it by its own subpath,
+`@aglyn/aglyn/plugin-manager/plugin-live-paths`. The data plugin's reader answers
+a record template's pages.
+
+## The record a page is drawn for — `page-record-sources` (console)
+
+A record template renders once per record on the published site, with its
+`{{item.*}}` tokens filled from the routed record. The Besigner's canvas has no
+routed record, so a plugin that serves pages per record tells the editor which
+record to draw the page in the editor for:
+
+```ts
+registerPageRecordSource({
+  id: 'datasetRecordPages',
+  usePageRecord: ({ hostId, screenId }) => {
+    // a React hook, called every render for the page in the editor
+    return { status: 'none' }
+  },
+})
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPageRecordSource(source)` | `{ id, usePageRecord }`, replacing any source under the same id. Call it from a register fn the loader calls, never a module's top level. Returns the unregister, which removes the source only while it is still the one registered. |
+| `usePageRecord({ hostId, screenId })` | A hook, called once per source for the page in the editor. Answers `{ status: 'none' }` for a page it does not serve, `{ status: 'loading' }`, or `status: 'ready'` with the page's record scope (`record`, the record's values; `model?` and `datasetsByKey?`, what a reference hop reads), a `label` ("Services"), the drawn record's `selectedId`, the `choices` a picker offers (`{ id, label }`, the drawn one included) and `select(id)` to draw another. |
+| `listPageRecordSources()` / `subscribePageRecordSources(listener)` | The registered sources — the same array until the set changes — and a change listener, for the console's provider. |
+
+The canvas lays the ready record over every element's render copy the way a
+repeat lays its first record over its template; the nodes keep their tokens and
+a save writes the template, and a repeat inside the page still draws its own
+rows. It is the editor's side only, the counterpart of `registerRepeatSource`
+for a repeat's rows. Import from `@aglyn/aglyn/app-utils/page-record-sources`.
+The data plugin's source draws a record template, and its **Preview with**
+picker in Page Properties calls `select`.
+
 ## Documents authored in the besigner — `besigner-documents`
 
 Pages, layouts and components are the platform's own Besigner documents. A

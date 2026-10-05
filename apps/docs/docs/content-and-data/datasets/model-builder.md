@@ -18,7 +18,7 @@ import in the console, or write through the REST API, are validated against it.
 ## Define the model
 
 1. In **Data**, create a dataset and open the **schema dialog**.
-2. Add **typed fields** — text, number, date, reference, and more.
+2. Add **typed fields** — text, number, date, reference, page address, and more.
 3. Save. The model is stored on the dataset. Every write validates records against
    it — the console, the REST API, a bound form and an automation step — and stores
    each value as its field's type. A record with a value that doesn't fit is not
@@ -39,6 +39,26 @@ own — handy when you want a short, code-friendly key that differs from the lab
 field is created the ID is **fixed**: records, bindings, and forms all point at it, so it
 can't change without orphaning that data. Pick it deliberately, then rename the display
 name freely afterward.
+
+### Page address fields {#page-address-fields}
+
+A **Page address** field holds a record's own segment of its address when the dataset
+has a [record template](overview.md#record-pages): `kitchen-remodeling`, `roof-repair`.
+Pick **Page address** in the field's type list. Its values are lowercase letters and
+numbers joined by hyphens, up to 64 characters.
+
+- **Fill in from** names a text field, such as **Name**, that an empty address is made
+  from. It fills in once, when a record is first saved without one, and a record
+  **keeps its address when it's renamed**, so a live page never moves.
+- Whatever writes the record — the console, an import, the REST API, a form or an
+  automation — the address is filled in the same way and tidied into that form, so
+  `Kitchen Remodeling` is stored as `kitchen-remodeling`.
+- A dataset with records already in it can get the field in one step: **Make
+  addresses**, in a record template's settings, adds it and gives every record an
+  address, made unique where two names collide (`roofing`, `roofing-2`).
+
+See [Service and location pages from a dataset](../../guides/service-and-location-pages-from-a-dataset.md)
+for how the pages are built.
 
 ## Edit records
 

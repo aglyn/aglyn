@@ -45,6 +45,8 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `besignerInspector` | A section at the bottom of the besigner's Attributes panel, under the selected element's fields, on every editor the designer opens | `hostId` (`null` on an editor that names no site), `node` (the selected element) |
 | `besignerToolbar` | The besigner's secondary toolbar, after undo and redo, on every editor the designer opens | `hostId` (`null` on an editor that names no site) |
 | `besignerInteractions` | The besigner's Interactions section, on every editor that offers one. Your widget draws nothing: it reads the section experiments your plugin runs on the site and calls `reportSectionExperiments` from an effect, and the section badges an element that has one and offers to start one from your `create`. Report `null` to withdraw | `hostId`, `screenId` (`null` on a layout or a component, which is no page to run one on: report no `create` there), `reportSectionExperiments(reporterId, { experiments, create? } \| null)` |
+| `besignerPageProperties` | A section at the foot of the Besigner's **Page Properties** drawer, under the page's publishing, layout, SEO and password sections: what your plugin makes of the page itself, such as serving it once per record. Your widget saves through its own routes, never the drawer's buttons | `hostId`, `orgId` (`undefined` while it resolves), `screenId` (the page in the editor), `screenKind?` (the page's stored `kind`: `'template'` for a template, absent for a page) — `ConsoleBesignerPagePropertiesZoneProps` |
+| `hostScreenRow` | Inside each row of a site's **Pages** list, beside the page's name: a chip about that page, such as that it is a record template and how many pages it serves. Drawn once per row, so read what you need once for the site and answer each row from that; draw nothing for a page you have nothing to say about | `hostId`, `orgId` (`undefined` while it resolves), `screenId` (the row's page), `screenKind?` — `ConsoleHostScreenRowZoneProps` |
 | `hostScreens` | A site's **Pages** list, beside Templates and Create New Page: another way to start a page | `hostId`, `orgId` (`undefined` while the page resolves it) |
 | `hostTemplates` | A site's Templates page, beside Create Template: another way to start a template | `hostId`, `orgId` |
 | `hostLayouts` | A site's Layouts page, beside Templates and Create New Layout: another way to start a layout | `hostId`, `orgId` |
@@ -115,6 +117,8 @@ page spaces it there:
   editor, and on a failed run.
 - `siteMember`: a section of a site user's drawer.
 - `besignerInspector` and `seoFields`: a section among a panel's own fields.
+- `besignerPageProperties`: a section of the Page Properties drawer's column.
+- `hostScreenRow`: a chip in a Pages list row, beside the page's own chips.
 - `productEditor`, `productsHub` and `productImport`: a section the commerce
   plugin places among its product editor's fields, above its catalog table,
   and in its CSV import dialog.

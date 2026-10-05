@@ -138,6 +138,29 @@ records however high the limit is set.
 
 See [Repeat over data](../../building-sites/besigner/repeat.md) for the full walkthrough.
 
+## Record pages {#record-pages}
+
+A dataset can also give **every record a page of its own** — a page per service, per
+location or per team member, each at its own address such as
+`/services/kitchen-remodeling`. You design one page and make it the dataset's **record
+template** in the Besigner's **Page Properties**, under **Record pages**: pick the
+dataset, the address the pages live under (one segment like `services`, or nested like
+`services/residential`), and the field that holds each record's own segment.
+
+- Each record's segment lives in a **Page address** field (see
+  [Build a data model](model-builder.md#page-address-fields)). It can fill in from a
+  name field, and it stays put when the record is renamed.
+- Inside the template, `{{item.field}}` fills in from the record, exactly as in a
+  repeat, reference hop included. A listing that repeats over the dataset links to each
+  page with `{{item.url}}`.
+- The template stops answering at its own address. Every record page is in the
+  sitemap with its own canonical address, and `/llms.txt` names the group.
+- Record pages and their template don't count toward your plan's pages; your dataset
+  limits bound them instead.
+
+See [Service and location pages from a dataset](../../guides/service-and-location-pages-from-a-dataset.md)
+for the full walkthrough.
+
 ## Who a dataset is shared with
 
 Datasets belong to the **workspace**, not to a single site, so one dataset can drive pages
