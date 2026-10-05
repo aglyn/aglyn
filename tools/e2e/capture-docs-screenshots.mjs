@@ -126,6 +126,34 @@ const shots = [
     path: `/${HOST_BASE}/data`,
     waitFor: 'Avery Quinn',
   },
+  // The import wizard on the seeded Team dataset (AGL-3547), at Columns:
+  // rows are pasted rather than a file chosen, so the shot needs no fixture
+  // on disk, and nothing is written — the wizard stops before the dry run.
+  // `text-is` picks the card's own Import and Export: the records grid's
+  // toolbar carries an icon button named Export too.
+  {
+    out: 'datasets/import-wizard-columns.png',
+    path: `/${HOST_BASE}/data`,
+    waitFor: 'Avery Quinn',
+    actions: [
+      { click: 'button:text-is("Import")', waitFor: 'Or paste rows' },
+      {
+        fill: [
+          'role=textbox[name="Or paste rows"]',
+          'Name,Role,Photo\nAvery Quinn,Head Baker and Owner,https://picsum.photos/seed/avery/240\nRiley Chen,Barista,https://picsum.photos/seed/riley/240',
+        ],
+      },
+      { click: 'role=button[name="Read pasted rows"]', waitFor: 'Upload and continue' },
+      { click: 'role=button[name="Upload and continue"]', waitFor: 'Why', settleMs: 2000 },
+    ],
+  },
+  // The export dialog's field picker on the same dataset (AGL-3547).
+  {
+    out: 'datasets/export-dialog.png',
+    path: `/${HOST_BASE}/data`,
+    waitFor: 'Avery Quinn',
+    actions: [{ click: 'button:text-is("Export")', waitFor: 'Search fields', settleMs: 2000 }],
+  },
   {
     out: 'media/media-page.png',
     path: `/${HOST_BASE}/media`,
