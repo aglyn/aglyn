@@ -200,6 +200,7 @@ jest.mock('../hooks/use-google-redirect-result', () => ({
 jest.mock('../utils/legal-consent', () => ({
   ...jest.requireActual('../utils/legal-consent'),
   consumeLegalConsent: jest.fn(() => true),
+  hasPendingLegalConsent: jest.fn(() => false),
   postLegalAcceptance: jest.fn(async () => true),
   sendToConsentGate: () => mockSendToGate(),
 }))
