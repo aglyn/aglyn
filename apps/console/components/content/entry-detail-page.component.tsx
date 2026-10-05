@@ -781,6 +781,9 @@ export function EntryDetailPage() {
           'This entry has edits that have not been saved yet. Leaving now ' +
           'discards them.',
       })
+        // `confirm` resolves with no value and REJECTS on cancel (AGL-3509).
+        .then(() => true)
+        .catch(() => false)
       if (!ok) return
     }
     pristineRef.current = null

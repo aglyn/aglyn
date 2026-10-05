@@ -1043,6 +1043,9 @@ export function CollectionEntriesPage() {
           'text, but lose the link, portrait and profile links in their ' +
           'structured data. This cannot be undone.',
       })
+        // `confirm` resolves with no value and REJECTS on cancel (AGL-3509).
+        .then(() => true)
+        .catch(() => false)
       if (!ok) return
       await deleteDoc(doc(firestore, 'hosts', hostId, 'authors', String(author.$id)))
       enqueueSnackbar('Author deleted', { variant: 'success', persist: false })

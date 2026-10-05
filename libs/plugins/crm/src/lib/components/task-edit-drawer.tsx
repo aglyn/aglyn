@@ -257,6 +257,9 @@ function TaskForm(props: TaskEditDrawerProps) {
       confirmationText: 'Delete',
       confirmationButtonProps: { color: 'error' },
     })
+      // `confirm` resolves with no value and REJECTS on cancel (AGL-3509).
+      .then(() => true)
+      .catch(() => false)
     if (!confirmed) return
     setBusy(true)
     try {
