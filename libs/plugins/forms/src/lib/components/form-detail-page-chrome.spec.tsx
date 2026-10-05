@@ -105,6 +105,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
     </div>
   ),
   MdiIcon: () => null,
+  useConfirmationContext: () => ({ confirm: async () => undefined }),
   useLoading: () => ({ queueLoading: () => () => undefined }),
 }))
 
