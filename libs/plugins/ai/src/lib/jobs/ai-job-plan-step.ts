@@ -491,8 +491,12 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // — this job's plan is proposed to this member, whatever the last one did
     // with theirs.
     const resolved = model ?? aiModelForStep('job.plan')
-    // A brief that asks for a video is offered the plan's list of players (AGL-3433).
-    const tool = aiBuildPlanToolFor(job.brief)
+    // A brief that asks for a video is offered the plan's list of players
+    // (AGL-3433), and a job that may bind a dataset a record template on
+    // each screen (AGL-3475).
+    const tool = aiBuildPlanToolFor(job.brief, {
+      records: Boolean(inventory?.datasets.length) || capabilities?.create.dataset.allowed === true,
+    })
     const key = aiJobPlanKey({
       job,
       prompt,

@@ -175,6 +175,7 @@ function screen(patch: Partial<AiBuildPlanScreen> = {}): AiBuildPlanScreen {
     slug: '/services/roof-repair',
     layout: 'lay-site',
     template: null,
+    record: null,
     duplicateOf: null,
     nav: true,
     seoTitle: 'Roof repair in Springfield',
@@ -533,6 +534,13 @@ describe('rule 3 — forms are built on the Forms page, then placed', () => {
 })
 
 describe('rule 4 — similar pages share one template', () => {
+  const creation = (kind: AiBuildPlan['create'][number]['kind'], name: string) => ({
+    kind,
+    name,
+    why: 'The site has none.',
+    duplicateOf: null,
+    fields: [],
+  })
   const shaped = (template: string | null) =>
     planOf({
       screens: ['roofs', 'gutters', 'siding'].map((slug) =>
@@ -556,6 +564,46 @@ describe('rule 4 — similar pages share one template', () => {
 
   it('passes the same three applying one template', () => {
     expect(detectUntemplatedSimilarPages(shaped('tpl-service'))).toEqual([])
+  })
+
+  it('passes one page bound to a dataset by record, which stands for its pages rather than copying them (AGL-3475)', () => {
+    const bound = planOf({
+      screens: [
+        ...shaped(null).screens.slice(0, 2),
+        screen({ ...shaped(null).screens[2], record: { dataset: 'ds-team', base: 'team' } }),
+      ],
+    })
+    // Two copies are no longer three; the record-bound page joins no group.
+    expect(detectUntemplatedSimilarPages(bound, INVENTORY)).toEqual([])
+    expect(detectUntemplatedSimilarPages(shaped(null))[0].message).toContain('bound to it by "record"')
+  })
+
+  it('refuses a record page naming no dataset the site has or the plan creates', () => {
+    const unknown = planOf({ screens: [screen({ record: { dataset: 'ds-missing', base: 'team' } })] })
+    expect(codes(detectUntemplatedSimilarPages(unknown, INVENTORY))).toEqual(['plan-record-dataset'])
+    const notADataset = planOf({ screens: [screen({ record: { dataset: 'frm-contact', base: 'team' } })] })
+    expect(detectUntemplatedSimilarPages(notADataset, INVENTORY)[0].paths).toEqual(['screens[0].record.dataset'])
+    const created = planOf({
+      create: [creation('dataset', 'Services')],
+      screens: [screen({ record: { dataset: 'new:Services', base: 'services' } })],
+    })
+    expect(detectUntemplatedSimilarPages(created, INVENTORY)).toEqual([])
+  })
+
+  it('refuses two record pages sharing a dataset or a base, which the save route would refuse', () => {
+    const twice = (a: { dataset: string; base: string }, b: { dataset: string; base: string }) =>
+      planOf({
+        create: [creation('dataset', 'Services')],
+        screens: [screen({ slug: '/a', record: a }), screen({ slug: '/b', record: b })],
+      })
+    const sameBase = twice({ dataset: 'ds-team', base: 'team' }, { dataset: 'new:Services', base: 'team' })
+    expect(detectUntemplatedSimilarPages(sameBase, INVENTORY)).toMatchObject([
+      { rule: 4, code: 'plan-record-shared', paths: ['screens[0].record', 'screens[1].record'] },
+    ])
+    const sameDataset = twice({ dataset: 'ds-team', base: 'team' }, { dataset: 'ds-team', base: 'staff' })
+    expect(codes(detectUntemplatedSimilarPages(sameDataset, INVENTORY))).toEqual(['plan-record-shared'])
+    const nested = twice({ dataset: 'ds-team', base: 'services' }, { dataset: 'new:Services', base: 'services/residential' })
+    expect(detectUntemplatedSimilarPages(nested, INVENTORY)).toEqual([])
   })
 })
 

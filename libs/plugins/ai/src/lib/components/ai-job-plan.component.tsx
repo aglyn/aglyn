@@ -141,7 +141,9 @@ export function AiJobPlan({
           ))}
           {plan.screens.map((screen, index) => (
             <Typography key={`screen-${index}`} variant="body2" role="listitem">
-              Builds the page {screen.title} at {screen.slug}
+              {screen.record
+                ? `Builds the record template ${screen.title}, a page per record of ${named(screen.record.dataset)} at /${screen.record.base}/…`
+                : `Builds the page ${screen.title} at ${screen.slug}`}
               {screen.duplicateOf
                 ? `, from a copy of ${named(screen.duplicateOf)}`
                 : ''}

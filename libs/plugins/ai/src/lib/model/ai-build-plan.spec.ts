@@ -21,13 +21,16 @@
  */
 
 import {
+  AI_BUILD_PLAN_EMBEDS_RECORDS_TOOL,
   AI_BUILD_PLAN_EMBEDS_TOOL,
   AI_BUILD_PLAN_LIMITS,
+  AI_BUILD_PLAN_RECORDS_TOOL,
   AI_BUILD_PLAN_TOOL,
   aiBuildPlanToolFor,
   aiEmbedVideoKey,
   aiPlanCreateFor,
   aiPlanEmbedsFor,
+  aiPlanRecordBase,
   aiPlanUndeclaredRefs,
   isAiPlanNewRef,
   parseAiBuildPlan,
@@ -59,6 +62,7 @@ function plan(patch: Partial<AiBuildPlan> = {}): AiBuildPlan {
         slug: '/services/roof-repair',
         layout: 'lay-site',
         template: null,
+        record: null,
         duplicateOf: null,
         nav: true,
         seoTitle: 'Roof repair',
@@ -190,6 +194,66 @@ describe('new: references', () => {
       { name: 'Quote request', path: 'screens[1].sections[0].uses[0]', screenIndex: 1, field: 'uses', sectionIndex: 0 },
     ])
     expect(aiPlanUndeclaredRefs(plan())).toEqual([])
+  })
+})
+
+describe('a record template (AGL-3475)', () => {
+  const recordScreen = (record: unknown) => plan({ screens: [{ ...plan().screens[0], record: record as never }] })
+
+  it('reads a screen that names no record, as a plan kept before record templates does, as one page', () => {
+    const { record: _record, ...kept } = plan().screens[0]
+    const parsed = parseAiBuildPlan(plan({ screens: [kept as never] }))
+    expect(parsed.ok && parsed.plan.screens[0].record).toBeNull()
+  })
+
+  it('reads a record and stores its base as the save route does', () => {
+    const parsed = parseAiBuildPlan(recordScreen({ dataset: 'ds-services', base: '/Services/Residential/' }))
+    expect(parsed.ok && parsed.plan.screens[0].record).toEqual({
+      dataset: 'ds-services',
+      base: 'services/residential',
+    })
+  })
+
+  it.each<[string, unknown, string]>([
+    ['an empty dataset', { dataset: ' ', base: 'services' }, 'screens[0].record.dataset is empty'],
+    ['a base that is no path', { dataset: 'ds-services', base: 'our services!' }, 'screens[0].record.base is not a path'],
+    ['an empty base', { dataset: 'ds-services', base: '/' }, 'screens[0].record.base is not a path'],
+  ])('refuses %s', (_label, record, error) => {
+    expect(parseAiBuildPlan(recordScreen(record))).toMatchObject({
+      ok: false,
+      error: expect.stringContaining(error),
+    })
+  })
+
+  it('holds a base to one to four lowercase segments of letters, digits and hyphens', () => {
+    expect(aiPlanRecordBase('services')).toBe('services')
+    expect(aiPlanRecordBase('a/b/c/d')).toBe('a/b/c/d')
+    expect(aiPlanRecordBase('a/b/c/d/e')).toBeNull()
+    expect(aiPlanRecordBase('roof_repair')).toBeNull()
+    expect(aiPlanRecordBase(`${'x'.repeat(61)}`)).toBeNull()
+  })
+
+  it('asks every screen for its record only on a job that may bind a dataset, leaving every other plan’s bytes alone', () => {
+    const screensOf = (tool: typeof AI_BUILD_PLAN_TOOL) =>
+      (tool.inputSchema['properties'] as Record<string, { items: Record<string, unknown> }>)['screens'].items
+    for (const tool of [AI_BUILD_PLAN_RECORDS_TOOL, AI_BUILD_PLAN_EMBEDS_RECORDS_TOOL]) {
+      expect(screensOf(tool)['required']).toContain('record')
+      const record = (screensOf(tool)['properties'] as Record<string, { anyOf: Array<Record<string, unknown>> }>)['record']
+      expect(record.anyOf.map((branch) => branch['type'])).toEqual(['object', 'null'])
+      const branch = record.anyOf[0]
+      expect([branch['additionalProperties'], [...(branch['required'] as string[])].sort()]).toEqual([
+        false,
+        Object.keys(branch['properties'] as object).sort(),
+      ])
+      expect(tool.strict).toBe(true)
+    }
+    expect(screensOf(AI_BUILD_PLAN_TOOL)['required']).not.toContain('record')
+    expect(JSON.stringify(AI_BUILD_PLAN_EMBEDS_TOOL)).not.toContain('record')
+    expect(aiBuildPlanToolFor('A site for a roofer')).toBe(AI_BUILD_PLAN_TOOL)
+    expect(aiBuildPlanToolFor('A site for a roofer', { records: true })).toBe(AI_BUILD_PLAN_RECORDS_TOOL)
+    expect(aiBuildPlanToolFor('A roofer with a video', { records: true })).toBe(AI_BUILD_PLAN_EMBEDS_RECORDS_TOOL)
+    // Its reader is the plain one: a plan answered without the field reads as one page a screen.
+    expect(JSON.stringify(AI_BUILD_PLAN_EMBEDS_RECORDS_TOOL.inputSchema)).not.toMatch(/"(?:minLength|maxLength|pattern|format)"/)
   })
 })
 
