@@ -32,6 +32,19 @@
  * a refund issued before staff look can be the wrong half of a dispute. The
  * row is the prompt; staff decide.
  *
+ * ONE ROW PER CHARGE (AGL-3490). The three signals are separate Stripe
+ * objects about the same payment, and one fraudulent charge routinely draws
+ * two of them — a warning and then a dispute, in either order: the issuer's
+ * fraud report reached Stripe a day AFTER the 9/26 charge's chargeback had
+ * been accepted. Keyed by signal, each one opened its own urgent row and told
+ * the owners and staff again. So the row is keyed by the charge, and a later
+ * signal joins it: added to `paymentSignals`, never a second row or a second
+ * notice. A row staff have closed stays closed — the later signal is written
+ * onto it, beside what they decided — with one exception: a DISPUTE on a row
+ * staff DISMISSED reopens it and tells them, because the bank now says the
+ * cardholder did not make the payment staff judged genuine, and the evidence
+ * deadline is running.
+ *
  * Dependencies are passed in rather than imported — the Firestore handle the
  * webhook observes its writes through, and its staff notifier — so the
  * webhook's "did this delivery do anything" ledger sees the write, and a spec
@@ -77,7 +90,7 @@ export interface PaymentFraudCardChecks {
 
 export interface PaymentFraudSignal {
   kind: PaymentFraudSignalKind
-  /** The EFW, review or dispute id: one row per signal, whatever redelivers. */
+  /** The EFW, review or dispute id: one entry per signal, whatever redelivers. */
   stripeObjectId: string
   chargeId: string | null
   paymentIntentId: string | null
@@ -92,16 +105,47 @@ export interface PaymentFraudSignal {
   livemode: boolean
 }
 
-/** The row id: hex, so the admin route's id pattern addresses it. */
+/**
+ * The row id: one per CHARGE (AGL-3490), so every signal about one payment
+ * lands on the same row. The payment intent stands in for a signal that
+ * names no charge, and the signal itself for one that names neither. Hex,
+ * so the admin route's id pattern addresses it.
+ */
 export function paymentFraudSignalReviewId(
-  kind: PaymentFraudSignalKind,
-  stripeObjectId: string,
+  signal: Pick<
+    PaymentFraudSignal,
+    'kind' | 'stripeObjectId' | 'chargeId' | 'paymentIntentId'
+  >,
 ): string {
+  const payment = signal.chargeId || signal.paymentIntentId
   return createHash('sha256')
-    .update(`stripe-fraud:${kind}:${stripeObjectId}`)
+    .update(
+      payment
+        ? `stripe-fraud:payment:${payment}`
+        : `stripe-fraud:${signal.kind}:${signal.stripeObjectId}`,
+    )
     .digest('hex')
     .slice(0, 40)
 }
+
+/** One signal as the row's history keeps it (AGL-3490). */
+export interface PaymentFraudSignalEntry {
+  kind: PaymentFraudSignalKind
+  stripeObjectId: string
+  detail: string
+  atMs: number
+  /**
+   * The row's status when this signal arrived, if staff had already closed
+   * it — `actioned` or `dismissed` — else null.
+   */
+  arrivedAfter: string | null
+}
+
+/** The row's history is a short list; a charge draws at most a few signals. */
+const SIGNAL_HISTORY_MAX = 10
+
+/** The statuses that mean staff have decided the row. */
+const CLOSED_STATUSES: ReadonlySet<string> = new Set(['actioned', 'dismissed'])
 
 /** The staff-facing reference, beside the intake's `AR-` and the screen's `HS-`. */
 export function paymentFraudSignalReference(reviewId: string): string {
@@ -207,8 +251,23 @@ function accountRef(value: unknown): string | null {
   return id.startsWith('acct_') ? id : null
 }
 
-/** The row's prose: what arrived, about which workspace, and what to do. */
-export function describePaymentFraudSignal(signal: PaymentFraudSignal): string {
+/**
+ * The row's prose: what arrived, about which workspace, and what to do.
+ *
+ * `history` is every signal on the charge, this one last; `closed` is what
+ * staff had decided before it arrived, if anything. The closing line says
+ * what THIS ALERT did — nothing to the money or the subscription — and
+ * never claims nothing was done at all: by the time a late warning lands,
+ * staff may have canceled, locked and accepted the chargeback (AGL-3490).
+ */
+export function describePaymentFraudSignal(
+  signal: PaymentFraudSignal,
+  context: {
+    history?: readonly PaymentFraudSignalEntry[]
+    closed?: { status: string; resolution: string | null } | null
+    reopened?: boolean
+  } = {},
+): string {
   const lines = [
     `${KIND_LABEL[signal.kind]} from Stripe (${signal.stripeObjectId})` +
       (signal.livemode ? '' : ' — TEST MODE') +
@@ -225,23 +284,98 @@ export function describePaymentFraudSignal(signal: PaymentFraudSignal): string {
         `Radar risk ${checks.riskLevel ?? 'unknown'}.`,
     )
   }
-  lines.push(
-    signal.kind === 'radar-review'
-      ? 'The payment waits in Stripe until the review is closed there.'
-      : signal.kind === 'dispute'
-        ? 'Answer the dispute in Stripe before its evidence deadline.'
-        : 'An early fraud warning is not yet a chargeback; refunding now can avoid one.',
-    'Nothing has been refunded or canceled. Decide on the org’s Subscription card, lock the workspace if it is fraud, and close this row with what you did.',
-  )
+  const history = context.history ?? []
+  if (history.length > 1) {
+    lines.push(
+      `Every signal on this charge, oldest first: ${history
+        .map(
+          (entry) =>
+            `${KIND_LABEL[entry.kind]} (${entry.stripeObjectId}` +
+            (entry.arrivedAfter ? `, after the row was ${entry.arrivedAfter}` : '') +
+            ')',
+        )
+        .join('; ')}.`,
+    )
+  }
+  const resolution = context.closed?.resolution
+    ? `: “${context.closed.resolution}”`
+    : '.'
+  if (context.reopened && context.closed) {
+    lines.push(
+      `REOPENED. Staff had dismissed this row${resolution} The cardholder’s bank has now disputed the payment. Answer or accept the dispute in Stripe before its evidence deadline, then close this row again with what you did.`,
+    )
+  } else if (context.closed) {
+    lines.push(
+      `This signal arrived after the row was closed as ${context.closed.status}${resolution} The row stays closed and nobody was notified again. Reopen it only if that decision no longer holds.`,
+    )
+  } else {
+    lines.push(
+      signal.kind === 'radar-review'
+        ? 'The payment waits in Stripe until the review is closed there.'
+        : signal.kind === 'dispute'
+          ? 'Answer the dispute in Stripe before its evidence deadline.'
+          : 'An early fraud warning is not yet a chargeback; refunding now can avoid one.',
+      'This alert refunded and canceled nothing. Decide on the org’s Subscription card, lock the workspace if it is fraud, and close this row with what you did.',
+    )
+  }
   return lines.join('\n').slice(0, 5000)
 }
 
+/** The history a stored row carries, oldest first. */
+function signalHistoryOf(
+  row: Record<string, unknown> | null,
+  fallbackAtMs: number,
+): PaymentFraudSignalEntry[] {
+  if (!row) return []
+  const kinds = Object.keys(KIND_LABEL)
+  const stored = Array.isArray(row['paymentSignals']) ? row['paymentSignals'] : []
+  const entries = stored.flatMap((value): PaymentFraudSignalEntry[] => {
+    const entry = (value ?? {}) as Record<string, unknown>
+    const kind = String(entry['kind'] ?? '')
+    const stripeObjectId = String(entry['stripeObjectId'] ?? '')
+    if (!kinds.includes(kind) || !stripeObjectId) return []
+    return [
+      {
+        kind: kind as PaymentFraudSignalKind,
+        stripeObjectId,
+        detail: String(entry['detail'] ?? ''),
+        atMs: Number(entry['atMs']) || 0,
+        arrivedAfter:
+          typeof entry['arrivedAfter'] === 'string' ? entry['arrivedAfter'] : null,
+      },
+    ]
+  })
+  if (entries.length) return entries
+  // A row filed before the history existed carries its one signal as
+  // `paymentSignal`, which is where a redelivery of it is recognised.
+  const only = (row['paymentSignal'] ?? null) as Record<string, unknown> | null
+  const kind = String(only?.['kind'] ?? '')
+  const stripeObjectId = String(only?.['stripeObjectId'] ?? '')
+  return kinds.includes(kind) && stripeObjectId
+    ? [
+        {
+          kind: kind as PaymentFraudSignalKind,
+          stripeObjectId,
+          detail: String(only?.['detail'] ?? ''),
+          atMs: fallbackAtMs,
+          arrivedAfter: null,
+        },
+      ]
+    : []
+}
+
 /**
- * File one signal and tell staff, once per signal.
+ * File one signal on its charge's row, and tell the owners and staff once
+ * per charge (AGL-3490).
  *
- * Idempotent on the Stripe object id: a redelivery bumps `reportCount` and
- * leaves the row's status — which staff own from the moment they touch it —
- * where it was. Throws only if the row write throws, which is the webhook's
+ * The first signal on a charge opens the row. A later one — a different
+ * Stripe object about the same payment — is added to `paymentSignals`, and
+ * `paymentSignal` becomes it, so the row's Stripe link follows a dispute.
+ * The status is staff's from the moment they touch it and is left alone,
+ * except that a dispute on a DISMISSED row reopens it and notifies again. A
+ * redelivery of a signal already on the row adds nothing. Read and written
+ * in one transaction, so a warning and a dispute arriving together still
+ * make one row. Throws only if the row write throws, which is the webhook's
  * to answer; the notification never throws.
  */
 export async function recordPaymentFraudSignal(
@@ -249,51 +383,127 @@ export async function recordPaymentFraudSignal(
   deps: {
     firestore: FirebaseFirestore.Firestore
     notifyRisk: RiskNotifier
+    nowMs?: number
   },
-): Promise<{ reviewId: string; reference: string; first: boolean }> {
-  const reviewId = paymentFraudSignalReviewId(signal.kind, signal.stripeObjectId)
+): Promise<{
+  reviewId: string
+  reference: string
+  first: boolean
+  reopened: boolean
+}> {
+  const reviewId = paymentFraudSignalReviewId(signal)
   const reference = paymentFraudSignalReference(reviewId)
   const ref = deps.firestore.collection(ABUSE_REPORT_COLLECTION).doc(reviewId)
-  const first = !(await ref.get()).exists
-  const subscriptionCard = signal.orgId
-    ? staffSubscriptionCardPath(signal.orgId)
-    : null
-  await ref.set(
-    {
-      reference,
-      // "Phishing or fraud" — the queue's urgent fraud category.
-      category: 'phishing',
-      severity: 'urgent',
-      source: 'stripe-fraud-signal',
-      url: null,
-      reportedHostname: null,
-      hostId: null,
-      orgId: signal.orgId,
-      details: describePaymentFraudSignal(signal),
-      reporterEmail: null,
-      reporterName: null,
-      dmca: null,
-      reportCount: FieldValue.increment(1),
-      paymentSignal: {
-        kind: signal.kind,
-        stripeObjectId: signal.stripeObjectId,
-        chargeId: signal.chargeId,
-        paymentIntentId: signal.paymentIntentId,
-        amountCents: signal.amountCents,
-        currency: signal.currency,
-        detail: signal.detail,
-        checks: signal.checks,
-        livemode: signal.livemode,
-        subscriptionCard,
-      },
-      updatedAt: FieldValue.serverTimestamp(),
-      ...(first
-        ? { status: 'open', createdAt: FieldValue.serverTimestamp() }
-        : {}),
+  const atMs = deps.nowMs ?? Date.now()
+  const { first, reopened } = await deps.firestore.runTransaction(
+    async (transaction) => {
+      const snapshot = await transaction.get(ref)
+      const existing = snapshot.exists
+        ? ((snapshot.data() ?? {}) as Record<string, unknown>)
+        : null
+      const history = signalHistoryOf(existing, atMs)
+      if (
+        existing &&
+        history.some((entry) => entry.stripeObjectId === signal.stripeObjectId)
+      ) {
+        transaction.set(
+          ref,
+          { updatedAt: FieldValue.serverTimestamp() },
+          { merge: true },
+        )
+        return { first: false, reopened: false }
+      }
+      const status = existing ? String(existing['status'] ?? 'open') : 'open'
+      const wasClosed = CLOSED_STATUSES.has(status)
+      const reopen = status === 'dismissed' && signal.kind === 'dispute'
+      const resolution =
+        typeof existing?.['resolution'] === 'string' &&
+        existing['resolution'].trim()
+          ? existing['resolution'].trim()
+          : null
+      const nextHistory = [
+        ...history,
+        {
+          kind: signal.kind,
+          stripeObjectId: signal.stripeObjectId,
+          detail: signal.detail,
+          atMs,
+          arrivedAfter: wasClosed ? status : null,
+        },
+      ].slice(-SIGNAL_HISTORY_MAX)
+      // A later signal whose charge read failed keeps what the first one
+      // learned rather than erasing it.
+      const previous = (existing?.['paymentSignal'] ?? null) as Record<
+        string,
+        unknown
+      > | null
+      const orgId =
+        signal.orgId ??
+        (typeof existing?.['orgId'] === 'string' ? existing['orgId'] : null)
+      const merged: PaymentFraudSignal = {
+        ...signal,
+        orgId,
+        amountCents:
+          signal.amountCents ??
+          (typeof previous?.['amountCents'] === 'number'
+            ? previous['amountCents']
+            : null),
+        checks:
+          signal.checks ??
+          ((previous?.['checks'] ?? null) as PaymentFraudCardChecks | null),
+      }
+      transaction.set(
+        ref,
+        {
+          reference,
+          // "Phishing or fraud" — the queue's urgent fraud category.
+          category: 'phishing',
+          severity: 'urgent',
+          source: 'stripe-fraud-signal',
+          url: null,
+          reportedHostname: null,
+          hostId: null,
+          orgId,
+          details: describePaymentFraudSignal(merged, {
+            history: nextHistory,
+            closed: wasClosed ? { status, resolution } : null,
+            reopened: reopen,
+          }),
+          reporterEmail: null,
+          reporterName: null,
+          dmca: null,
+          reportCount: nextHistory.length,
+          paymentSignals: nextHistory,
+          paymentSignal: {
+            kind: merged.kind,
+            stripeObjectId: merged.stripeObjectId,
+            chargeId: merged.chargeId,
+            paymentIntentId: merged.paymentIntentId,
+            amountCents: merged.amountCents,
+            currency: merged.currency,
+            detail: merged.detail,
+            checks: merged.checks,
+            livemode: merged.livemode,
+            subscriptionCard: orgId ? staffSubscriptionCardPath(orgId) : null,
+          },
+          updatedAt: FieldValue.serverTimestamp(),
+          ...(existing
+            ? {}
+            : { status: 'open', createdAt: FieldValue.serverTimestamp() }),
+          ...(reopen
+            ? {
+                status: 'open',
+                reopenedAt: FieldValue.serverTimestamp(),
+                resolvedAt: null,
+              }
+            : {}),
+        },
+        { merge: true },
+      )
+      return { first: !existing, reopened: reopen }
     },
-    { merge: true },
   )
-  if (first) {
+  if (first || reopened) {
     // The workspace's owners are told their subscription payment was
     // flagged and how to confirm it; staff get the row with the evidence.
     await deps
@@ -313,11 +523,12 @@ export async function recordPaymentFraudSignal(
           `${signal.chargeId ?? signal.paymentIntentId ?? 'not named'}` +
           (signal.detail ? `; Stripe says: ${signal.detail}` : '') +
           (signal.livemode ? '' : ' — TEST MODE') +
+          (reopened ? '; reopened a row staff had dismissed' : '') +
           '.',
       })
       .catch(() => undefined)
   }
-  return { reviewId, reference, first }
+  return { reviewId, reference, first, reopened }
 }
 
 /*==========================================

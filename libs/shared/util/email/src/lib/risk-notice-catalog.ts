@@ -837,7 +837,7 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
     staff: {
       title: 'Platform billing fraud signal',
       summary:
-        '{{staff.evidence}} Workspace {{workspace.name}}, {{amount}}, on {{occurredAt}}. Nothing has been refunded or canceled. Reference {{reference}}.',
+        '{{staff.evidence}} Workspace {{workspace.name}}, {{amount}}, on {{occurredAt}}. This alert refunded and canceled nothing. Reference {{reference}}.',
       actions: [
         'staff-open-row',
         'staff-open-stripe',
