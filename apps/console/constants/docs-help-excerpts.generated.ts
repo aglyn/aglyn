@@ -118,6 +118,7 @@ export const DOCS_HELP_EXCERPTS = {
   googleAnalytics: 'Every event your site sends to your own GA4 property, with the exact parameters each one carries — so you can build a report against it before you have any data.',
   howAglynAiBuilds: 'Every AI build reuses what your site already has, takes its colors and spacing from your theme, and arrives as a draft. Every plan is checked against those rules before you see it, asked again, then stopped.',
   import: 'Bring a spreadsheet of people into the CRM — map its columns, preview the result, and import in batches with a report of what was added, updated and skipped.',
+  importAndExport: 'Render the field-picking export dialog and the eight-step import wizard for your plugin\'s records, with your own steps and locked rules.',
   importExport: 'Round-trip dataset records through CSV and JSON with validation on import.',
   injectionZones: 'Every named console zone a plugin widget can render into, and what each receives.',
   insights: 'Ask Aglyn AI a question about your site\'s figures in plain words, and get answers where every number is traced to the figure it comes from — plus weekly insights by email.',

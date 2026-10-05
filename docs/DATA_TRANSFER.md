@@ -235,13 +235,7 @@ under its plugin enablement and release flags.
 
 **AGL-3524, the job engine.** See [The job engine](#the-job-engine) below.
 
-**AGL-3526, the UI kit.** The wizard steps render the core's outputs: the
-mapping step `HeaderMatchProposal` (confidence, reason, source,
-alternatives) and `MappingProblems`; the values step `Derivation` samples
-and `PicklistMatchResult`; the matching step `summarizeMatches`; the
-conflicts step `TransferPolicy` with locked rows; the dry-run step
-`TransferPlan` (summary, diff table, warnings with acknowledgement); the
-export dialog `TransferFieldCatalog` and the presets.
+**AGL-3526, the UI kit.** Built; see [The UI kit](#the-ui-kit) below.
 
 ## The job engine
 
@@ -311,3 +305,79 @@ for its budget plus 30 seconds and releases it when it answers.
 requests, or a request that died and whose lease has lapsed — through the
 same engine. A GET lists them and resumes nothing.
 
+## The UI kit
+
+`libs/aglyn-transfer-ui` (`@aglyn/aglyn-transfer-ui`, `scope:core`
+`type:ui`) renders the core's outputs and never fetches: a surface hands it
+a `TransferClient`. It imports the core only from
+`@aglyn/aglyn/data-transfer`.
+
+### The client every server implements
+
+`transfer-client.ts` is the contract AGL-3524 implements over
+`api/transfer/*`, and `createMemoryTransferClient` implements in memory
+(the specs and stories run on it):
+
+| method | takes | returns |
+| -- | -- | -- |
+| `fields` | `{ resource }` | `TransferResourceInfo`: the descriptor, every field in catalog order, the groups, the match keys (and default keys), preset hints, locked rules, alias dictionaries, the person's `TransferPrefs`, whether a custom field may be created |
+| `upload` | `TransferUploadRequest`: resource, file name, decoded text, bytes, the confirmed `TransferFileSettings` (format, encoding, delimiter, header row) | the new `draft` `TransferJob` |
+| `analyze` | `{ jobId }`, optionally the `TransferReadChoices` (mapping, date orders, picklist and lookup choices, match keys) | `TransferAnalysis`: headers, sample rows, `HeaderMatchResult`; with a mapping, per-field `TransferDerivationSummary`, `TransferPicklistReview`s, `TransferLookupReview`s; with keys, a `TransferMatchReview` and record labels |
+| `plan` | the read choices, the `TransferPolicy`, plugin step `extras` | `TransferPlanResponse`: the `TransferPlan`, the `TransferConflict`s (matched rows whose non-blank file values differ from non-blank record values, with the after under the policy), the `TransferAmbiguity`s, record labels |
+| `apply` | `{ jobId, acknowledged }` | one chunk: `TransferApplyStep` (`results`, `rowsDone`, `rowCount`, `done`); refuses while `canApplyTransferPlan` does not hold |
+| `status` | `{ jobId }` | the `TransferJob` |
+| `results` | `{ jobId }` | every `TransferRowResult` and the summary |
+| `undo` | `{ jobId, mode: 'preview' \| 'apply', resolutions? }` | counts to restore, delete or leave, and each `TransferUndoConflict` (a record edited since, with its current values); `apply` refuses until every conflict has `keep` or `restore` |
+| `export` | `TransferExportRequest`: field ids in order, scope (`selection` ids, `filter` value, `all`), format, byte-order mark | `{ fileName, rowCount, body: Blob }` |
+| `savePrefs` | `{ resource, prefs }` (last export choice, saved presets) | the stored `TransferPrefs` |
+| `createCustomField?` | `{ resource, label, type }` | the new `TransferField` (`custom:<key>`) |
+
+### What it renders
+
+- `TransferExportDialog`: presets (Re-importable by default, Everything,
+  Minimal, saved, "save these fields as"), the grouped and searchable
+  `TransferFieldPicker` with select all or none and up/down reordering,
+  scope, format and byte-order mark; the choice is saved through
+  `savePrefs`.
+- `TransferImportWizard`, eight steps on a stepper of buttons (a passed
+  step reopens until writing starts); every step lists what blocks Next
+  beside it:
+  1. Upload: file or paste, read in the browser (`transfer-file.ts` guesses
+     format, encoding, separator and header row; each is changeable), a
+     preview, and the byte and row limits enforced before upload.
+  2. Columns: header, sample values, proposed field with confidence and
+     reason (and the dictionary's source), remap or ignore, create a custom
+     field; `mappingProblems` blocks. The `importMapping` zone renders below
+     through `useConsoleWidgetSlot()` when the host passes
+     `importMappingZone`, with each column's shape from `inferCellType`.
+  3. Values: picklist values the list lacks (map, add with group and
+     meaning, leave blank, refuse rows; proposals pre-filled by
+     `proposePicklistChoice`), per-field derivation counts with samples and
+     flagged guesses, the date order for dates that read either way, and
+     unresolved lookups (create, use a similar record, leave blank, refuse).
+  4. Matching: ordered match keys and the new / matched / ambiguous /
+     repeated counts with the rows of each.
+  5. Conflicts: record defaults, the per-field mode and blank policy with
+     locked rules disabled and their reasons, the conflict list with a
+     per-row action and per-field override, and a record chosen for each
+     ambiguous row. Every change re-plans.
+  6. Review: summary counts, `TransferDiffTable` filtered by verdict, and
+     `TransferAcknowledgementList` — one "I understand" per class, Import
+     enabled only by `canApplyTransferPlan`. A class whose count changes on
+     a re-plan is asked again.
+  7. Import: the browser drives `apply` chunk by chunk; pause stops after
+     the chunk in flight, resume continues from the job's cursor; failed
+     rows stream in.
+  8. Results: counts, a per-row result CSV, Undo while
+     `transferUndoAvailable`, with the edited-since prompt per record.
+- The draft of every choice (`TransferWizardDraft`) is saved per job through
+  a `TransferWizardStorage` (local storage by default), so a reload with
+  the job id resumes on the same step.
+- Plugin steps: `registerTransferWizardStep(resource, step)` or the
+  `extraSteps` prop place a step after any step before Review; its answer
+  rides in `extras`.
+- Shared pieces for the package wizard (AGL-3534): `TransferDiffTable`,
+  `TransferAcknowledgementList`, `TransferChoiceSelect`, `TransferWizardNav`.
+
+The plugin guide is
+[`apps/docs/docs/developers/plugins/guides/import-and-export.md`](../apps/docs/docs/developers/plugins/guides/import-and-export.md).

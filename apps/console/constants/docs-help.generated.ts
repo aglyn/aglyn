@@ -365,6 +365,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/content-and-data/crm/import',
     title: 'Import contacts from CSV',
   },
+  importAndExport: {
+    path: '/developers/plugins/guides/import-and-export',
+    title: 'Guide: import and export screens',
+  },
   importExport: {
     path: '/content-and-data/datasets/import-export',
     title: 'Import & export',
@@ -810,6 +814,7 @@ export const DOCS_HELP_ANCHORS = {
   googleAnalytics: ['#setup', '#consent', '#automatic', '#engagement', '#commerce', '#web-vitals', '#authored-events', '#never-sent', '#related'],
   howAglynAiBuilds: ['#where-to-describe-a-build', '#the-plan-comes-first', '#the-building-rules', '#when-an-answer-breaks-a-rule', '#who-can-use-it', '#related'],
   import: ['#three-steps', '#what-each-column-can-hold', '#what-is-skipped-and-why', '#related'],
+  importAndExport: ['#what-a-person-sees', '#render-it', '#add-a-step-of-your-own', '#lock-a-rule', '#try-it-without-a-server'],
   importExport: ['#export', '#export-contents', '#large-exports', '#import', '#upsert-on-a-key-field', '#tips', '#related'],
   injectionZones: ['#zones-a-plugin-hosts', '#how-a-zone-spaces-your-widget', '#staff-zones', '#column-zones', '#widgetid-is-a-persisted-identifier'],
   insights: ['#asking-a-question', '#how-an-answer-is-made', '#asking-about-datasets', '#weekly-insights', '#privacy'],
