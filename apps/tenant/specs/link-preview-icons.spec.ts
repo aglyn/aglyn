@@ -53,6 +53,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getSiteLockdown: (...args: unknown[]) => mockGetSiteLockdown(...args),
 }))
 
+const mockIconFacts = jest.fn()
+jest.mock('@aglyn/tenant-runtime/get-site-icon-facts', () => ({
+  __esModule: true,
+  getSiteIconFacts: (...args: unknown[]) => mockIconFacts(...args),
+}))
+
 import { NextRequest } from 'next/server'
 import { GET } from '../app/api/site-icon/route'
 import { config, middleware } from '../middleware'
@@ -84,6 +90,14 @@ const NEITHER = { $id: HOST_ID, subdomain: 'plain', seo: {} }
 
 const APP_ICON_SRC = `/api/media/cdn/org:Ok7uFGMCC-:${HOST_ID}/mKeulwfbL0`
 const FAVICON_SRC = `/api/media/cdn/org:Ok7uFGMCC-:${HOST_ID}/o0-uaWHCNA`
+/**
+ * Where the two origin paths lead for a CDN-served source (AGL-3484): a
+ * multi-size ICO drawn from the favicon, and the 180px touch icon flattened
+ * onto the site's background — white for a site with no theme.
+ */
+const FAVICON_ICO = `${FAVICON_SRC}?icon=ico`
+const APP_TOUCH_ICON = `${APP_ICON_SRC}?icon=flat-180&bg=ffffff`
+const FAVICON_TOUCH_ICON = `${FAVICON_SRC}?icon=flat-180&bg=ffffff`
 
 /** Anything that would be our mark on a customer's host. */
 const PLATFORM_ICON = /_static|brand|aglyn/i
@@ -122,23 +136,57 @@ describe('/favicon.ico and /apple-touch-icon.png, decided', () => {
   it('a site with an app icon: both paths lead to the site', () => {
     expect(answer('apple-touch-icon', WITH_APP_ICON)).toEqual({
       kind: 'redirect',
-      location: APP_ICON_SRC,
+      location: APP_TOUCH_ICON,
     })
     expect(answer('favicon', WITH_APP_ICON)).toEqual({
       kind: 'redirect',
-      location: FAVICON_SRC,
+      location: FAVICON_ICO,
     })
   })
 
   it('a site with only a favicon: both paths lead to the favicon', () => {
     expect(answer('apple-touch-icon', FAVICON_ONLY)).toEqual({
       kind: 'redirect',
-      location: FAVICON_SRC,
+      location: FAVICON_TOUCH_ICON,
     })
     expect(answer('favicon', FAVICON_ONLY)).toEqual({
       kind: 'redirect',
-      location: FAVICON_SRC,
+      location: FAVICON_ICO,
     })
+  })
+
+  it('versions both by the source’s content hash, on the site’s background (AGL-3484)', () => {
+    const facts = new Map([
+      [FAVICON_SRC, { contentType: 'image/png', contentHash: 'fav1' }],
+      [APP_ICON_SRC, { contentType: 'image/png', contentHash: 'app1' }],
+    ])
+    const versioned = (kind: 'favicon' | 'apple-touch-icon') =>
+      siteIconAnswer({
+        kind,
+        platformBrand: false,
+        host: WITH_APP_ICON,
+        facts,
+        background: '0a0b0c',
+      })
+    expect(versioned('favicon')).toEqual({
+      kind: 'redirect',
+      location: `${FAVICON_SRC}?icon=ico&v=fav1`,
+    })
+    expect(versioned('apple-touch-icon')).toEqual({
+      kind: 'redirect',
+      location: `${APP_ICON_SRC}?icon=flat-180&bg=0a0b0c&v=app1`,
+    })
+  })
+
+  it('leads to an uploaded .ico as it is — nothing can draw from it', () => {
+    expect(
+      siteIconAnswer({
+        kind: 'favicon',
+        platformBrand: false,
+        host: FAVICON_ONLY,
+        facts: new Map([[FAVICON_SRC, { contentType: 'image/x-icon' }]]),
+      }),
+    ).toEqual({ kind: 'redirect', location: FAVICON_SRC })
   })
 
   it('a site with neither and no attribution gets a blank favicon and no touch icon', () => {
@@ -163,7 +211,7 @@ describe('/favicon.ico and /apple-touch-icon.png, decided', () => {
   it('a site’s own icon wins over attribution', () => {
     expect(answer('favicon', FAVICON_ONLY, false, undefined, true)).toEqual({
       kind: 'redirect',
-      location: FAVICON_SRC,
+      location: FAVICON_ICO,
     })
   })
 
@@ -201,6 +249,7 @@ describe('the /api/site-icon route', () => {
     jest.clearAllMocks()
     mockGetSiteLockdown.mockResolvedValue(null)
     mockOrg.mockResolvedValue({ org: { $id: 'org-1', plan: 'free' } })
+    mockIconFacts.mockResolvedValue(new Map())
   })
 
   const call = (host: string, icon: 'favicon' | 'apple-touch-icon') =>
@@ -214,16 +263,29 @@ describe('the /api/site-icon route', () => {
     mockGetHost.mockResolvedValue({ host: WITH_APP_ICON })
     const response = await call('ready-to-roll', 'apple-touch-icon')
     expect(response.status).toBe(302)
-    expect(response.headers.get('Location')).toBe(APP_ICON_SRC)
+    expect(response.headers.get('Location')).toBe(APP_TOUCH_ICON)
   })
 
   it('redirects /favicon.ico to a favicon-only site’s favicon', async () => {
     mockGetHost.mockResolvedValue({ host: FAVICON_ONLY })
     const favicon = await call('ready-to-roll', 'favicon')
     expect(favicon.status).toBe(302)
-    expect(favicon.headers.get('Location')).toBe(FAVICON_SRC)
+    expect(favicon.headers.get('Location')).toBe(FAVICON_ICO)
     const touch = await call('ready-to-roll', 'apple-touch-icon')
-    expect(touch.headers.get('Location')).toBe(FAVICON_SRC)
+    expect(touch.headers.get('Location')).toBe(FAVICON_TOUCH_ICON)
+  })
+
+  it('reads the facts of the one source it is about to name (AGL-3484)', async () => {
+    mockGetHost.mockResolvedValue({ host: WITH_APP_ICON })
+    mockIconFacts.mockResolvedValue(
+      new Map([[FAVICON_SRC, { contentType: 'image/png', contentHash: 'fav1' }]]),
+    )
+    const favicon = await call('ready-to-roll', 'favicon')
+    expect(mockIconFacts).toHaveBeenCalledWith({
+      hostId: HOST_ID,
+      srcs: [FAVICON_SRC],
+    })
+    expect(favicon.headers.get('Location')).toBe(`${FAVICON_SRC}?icon=ico&v=fav1`)
   })
 
   it('keeps our favicon, and 404s the touch icon, for a free site with neither (AGL-2183)', async () => {

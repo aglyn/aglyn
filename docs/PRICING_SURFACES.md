@@ -266,12 +266,13 @@ Comparison pages that quoted the seat ladder are why the seat row is a pricing
 surface: a band quoted in prose is as live as a cell here. Prefer not to quote
 one.
 
-### 2026-10-02 — video, audio and file downloads count 1.6× (AGL-3474) — REPUBLISH OWED
+### 2026-10-02 — video, audio and file downloads count 1.6× (AGL-3474)
 
 Origin-served media counts against bandwidth at `ORIGIN_MEDIA_BANDWIDTH_WEIGHT`
 (1.6, derived), so it bills past the band at 1.6× the page-view rate. That is a
-price rise for anyone serving video, so the page goes first: the promotion that
-carries it must not go out before `/pricing` states the sentence.
+price rise for anyone serving video, so the page went first: `/pricing` states
+the sentence on aglyn.com (read from the live page's text on 2026-10-04, before
+the promotion that bills it), and no page in the sitemap says media is exempt.
 
 - `/pricing`, in the metered section beside the page-view row: the sentence in
   `tables.json` → `metered.mediaNote` (`ORIGIN_MEDIA_BANDWIDTH_SENTENCE`).
@@ -286,6 +287,21 @@ carries it must not go out before `/pricing` states the sentence.
 - The docs (`bandwidth.md`, `billing-and-plans/overview.md`,
   `media/overview.md`) already state it; `media-bandwidth-weight-copy.spec.ts`
   holds them to the code's sentence.
+
+### 2026-10-05 — "and other media served from our servers" (AGL-3518)
+
+Private images now count toward bandwidth like files, so the media sentence was
+broadened, general on purpose, before the code that counts them landed:
+"Video, audio, file downloads and other media served from our servers count
+1.6× toward bandwidth, because serving them costs more than serving pages."
+
+- `/pricing`: node `N-m49_NSMG` on screen `v0clP6xQl-`, version `1rNY19KoQ7`.
+- Figma: the four frames' sentence nodes `2253:2351` (desktop), `2253:2352`
+  (widescreen), `2253:2353` (tablet) and `2253:2354` (mobile), edited in place,
+  and the one string patched in each `copy-*.json` (the frames were otherwise
+  current, so nothing was re-extracted).
+- The weight still reads as `count 1.6× toward bandwidth`, the shape
+  `check:pricing-tables` parses.
 
 ## Enterprise has no price here, but it has bands
 

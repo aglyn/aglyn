@@ -19,7 +19,8 @@ how many a request used.
 
 On a page's detail view, the **SEO** card has a **Write with AI** section:
 
-1. Optionally add **target keywords**, separated by commas.
+1. Optionally add up to five **target keywords**, separated by commas. The proposal names
+   any past the fifth that it did not use.
 2. Press **Write SEO**.
 3. Review the proposal. Each value shows its length against the field's limit.
 4. Press **Put in the fields**, check the fields, and press **Save SEO**.
@@ -60,8 +61,8 @@ description — and never lists keywords or repeats a word to rank.
 | --- | --- |
 | **Search title** or **description** missing, too long, or shared | A new title or description, written from the page. |
 | **Main heading** missing or saying little | One clear main heading. |
-| **More than one main heading** | The extra headings become subheadings. |
-| **Images** without a description | A description for up to three images a page, from the text around each; the rest on the next run. |
+| **More than one main heading** | The extra headings become subheadings. The first one stays, and a heading a reusable component shows is changed in the component, not by a fix to the page. |
+| **Images** without a description | A description for up to three images a page, from the text around each; the rest on the next run. An image a reusable component shows is described in the component, not by a fix to the page. |
 | **Target keyword** not covered | A title or description that uses it, where the page is about it. |
 | **No page links here** | Advice instead of a fix, because only you can choose where the link belongs. |
 

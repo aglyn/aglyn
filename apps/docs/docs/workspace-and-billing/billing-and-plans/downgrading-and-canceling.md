@@ -93,7 +93,7 @@ What changes:
 :::tip Export before you downgrade
 You keep your data on a downgrade, but if you're tidying up it's a good moment to
 export. Each dataset exports to CSV or JSON from the **Data** tab, and each site
-exports a backup from **Admin → Backup & template**.
+exports a backup from **Admin → Backup & template** ([site backup and packages](../../building-sites/site-backup-and-packages.md)).
 :::
 
 ## Canceling your subscription

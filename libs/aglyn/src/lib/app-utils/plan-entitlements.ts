@@ -5326,8 +5326,9 @@ export const ORIGIN_MEDIA_BANDWIDTH_WEIGHT = ((): number => {
  * bill anyone.
  */
 export const ORIGIN_MEDIA_BANDWIDTH_SENTENCE =
-  `Video, audio and file downloads count ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× ` +
-  'toward bandwidth, because serving them costs more than serving pages.'
+  'Video, audio, file downloads and other media served from our servers count ' +
+  `${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× toward bandwidth, because serving them ` +
+  'costs more than serving pages.'
 
 /**
  * How far past a plan's own included bandwidth the abuse ceiling sits

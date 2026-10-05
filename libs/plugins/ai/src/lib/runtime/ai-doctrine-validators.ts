@@ -46,6 +46,7 @@ import {
   type AiBuildPlan,
   type AiBuildPlanCreateKind,
   type AiBuildPlanEmbed,
+  type AiBuildPlanRecord,
   type AiBuildPlanSection,
   type AiPlanUndeclaredRef,
 } from '../model/ai-build-plan'
@@ -3054,14 +3055,23 @@ export const AI_SIMILAR_PAGES_MIN = 3
  * Rule 4 (plan): three or more screens with the same sections share one
  * template, and a template is what a screen applies, never what one of its
  * sections places (AGL-3040).
+ *
+ * A record-bound screen (AGL-3475) is the other answer: one page that the
+ * data plugin serves once per record of a dataset. It stands for its pages
+ * rather than copying them, so it joins no group, and it is held to naming a
+ * dataset the site has or the plan creates, and a base no other record page
+ * of the plan takes — the save route refuses a second template of one
+ * dataset or one base, so a plan that promises either promises a binding the
+ * member cannot save.
  */
 export function detectUntemplatedSimilarPages(
   plan: AiBuildPlan,
   inventory: AiSiteInventory | null = null,
 ): AiDoctrineViolation[] {
+  const kinds = inventoryKinds(inventory)
   const groups = new Map<string, number[]>()
   plan.screens.forEach((screen, index) => {
-    if (screen.sections.length < 2) return
+    if (screen.record || screen.sections.length < 2) return
     const signature = screen.sections
       .map((section) => nameTokens(section.name).join(' '))
       .join('|')
@@ -3075,11 +3085,40 @@ export function detectUntemplatedSimilarPages(
     violations.push({
       rule: 4,
       code: 'plan-similar-pages',
-      message: `${indexes.length} pages share one shape. Plan one template and apply it ${indexes.length} times with each page's copy, or bind it to a collection.`,
+      message: `${indexes.length} pages share one shape. Plan one template and apply it ${indexes.length} times with each page's copy, or bind it to a collection; when the pages are records of a dataset, plan one page bound to it by "record" instead.`,
       paths: indexes.map((index) => `screens[${index}].template`),
     })
   }
-  const placed = placementsOf(plan, inventoryKinds(inventory), 'template')
+  const bound = plan.screens
+    .map((screen, index) => ({ record: screen.record, index }))
+    .filter((entry): entry is { record: AiBuildPlanRecord; index: number } => Boolean(entry.record))
+  const unknown = bound.filter(({ record }) => refKind(record.dataset, plan, kinds) !== 'dataset')
+  if (unknown.length) {
+    violations.push({
+      rule: 4,
+      code: 'plan-record-dataset',
+      message:
+        'A record page names no dataset the site has or the plan creates. Name one from the site inventory, or plan the dataset and name it as new:<name>.',
+      paths: unknown.map(({ index }) => `screens[${index}].record.dataset`),
+    })
+  }
+  const shared = bound.filter(({ record, index }) =>
+    bound.some(
+      (other) =>
+        other.index !== index &&
+        (other.record.base === record.base || other.record.dataset === record.dataset),
+    ),
+  )
+  if (shared.length) {
+    violations.push({
+      rule: 4,
+      code: 'plan-record-shared',
+      message:
+        'Two record pages share a dataset or a base. A dataset has one record template on a site, and each base serves one: keep one page, or give each its own dataset and base.',
+      paths: shared.map(({ index }) => `screens[${index}].record`),
+    })
+  }
+  const placed = placementsOf(plan, kinds, 'template')
   if (placed.length) {
     violations.push({
       rule: 4,

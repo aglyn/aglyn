@@ -38,7 +38,6 @@ import { announceDatasetRecords } from '../server/announce-dataset-records'
 import { readRecordPageBindingsUncached, recordPagePathsOf } from './record-page-live-paths.server'
 import { readSiteDataset } from './record-page-read.server'
 import {
-  DATASET_RECORD_PAGES_COLLECTION,
   type DatasetRecordPageBinding,
   RECORD_PAGES_MAX_PER_SITE,
   isRecordAddressField,
@@ -149,7 +148,9 @@ export const recordPagesHandler: PluginWebApiHandler = async (request) => {
       return Response.json({ error: 'Not available' }, { status: 404 })
     }
 
-    const bindingsRef = hostRef.collection(DATASET_RECORD_PAGES_COLLECTION)
+    // Spelled out, not DATASET_RECORD_PAGES_COLLECTION: the media-corpus guard
+    // (host-content-media-coverage.spec) finds host collections by literal.
+    const bindingsRef = hostRef.collection('recordPages')
     const bindings = await readRecordPageBindingsUncached(hostId)
     const current = bindings.find((binding) => binding.screenId === screenId) ?? null
 

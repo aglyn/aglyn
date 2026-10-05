@@ -16,17 +16,19 @@
  */
 'use client'
 
-import { dealStageById, pluginDocsHelp } from '@aglyn/aglyn'
+import { dealContactRolesOf, dealStageById, pluginDocsHelp } from '@aglyn/aglyn'
 import { mdiPlus } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { Button, Chip, Stack, Typography } from '@mui/material'
 import { useMemo, useState } from 'react'
 import { type CrmOrgDoc, useCrmScope } from '../hooks/use-crm-scope'
-import { useLinkedDeals } from '../hooks/use-deals'
+import { useCrmFoldsScope } from '../hooks/use-crm-list-query'
+import { useContactRoleDeals, useLinkedDeals } from '../hooks/use-deals'
 import { usePipeline } from '../hooks/use-pipeline'
 import { crmRoutes } from '../model/crm-routes'
 import {
+  type DealDoc,
   DEAL_STATUS_LABELS,
   formatMoney,
 } from '../model/deal-board-model'
@@ -53,6 +55,10 @@ export interface LinkedDealsCardProps {
  * contact card and the company card are this component with the link
  * named; the two exports below exist so the pages that host them import
  * one name each.
+ *
+ * On a contact's page the card also lists the deals the person is on in
+ * any other role (AGL-3521) — a second listener, `useContactRoleDeals`,
+ * merged by id — and names the part they play on each.
  */
 export function LinkedDealsCard(props: LinkedDealsCardProps) {
   const { hostId, org, basePath, link } = props
@@ -62,11 +68,20 @@ export function LinkedDealsCard(props: LinkedDealsCardProps) {
     hostId,
     org: (org ?? null) as Record<string, unknown> | null,
   })
-  const { data: deals, status } = useLinkedDeals(
+  const { data: linked, status } = useLinkedDeals(
     scope.orgId,
     scope.visibleTo,
     'contactId' in link ? { contactId: link.contactId } : { companyId: link.companyId },
   )
+  const contactId = 'contactId' in link ? link.contactId : null
+  const foldsScope = useCrmFoldsScope(scope.orgId, scope.visibleTo)
+  const { data: roleDeals } = useContactRoleDeals(scope.orgId, scope.visibleTo, foldsScope, contactId)
+  // The two answers as one list, newest first; a deal in both is listed once.
+  const deals = useMemo(() => {
+    const byId = new Map<string, DealDoc>()
+    for (const deal of [...(linked ?? []), ...(roleDeals ?? [])]) byId.set(deal.$id, deal)
+    return [...byId.values()].sort((a, b) => updatedMs(b) - updatedMs(a))
+  }, [linked, roleDeals])
   const [creating, setCreating] = useState(false)
   const defaults = useMemo<Partial<DealFormValues>>(
     () =>
@@ -130,6 +145,7 @@ export function LinkedDealsCard(props: LinkedDealsCardProps) {
                   <Typography variant="body2" sx={{ flex: 1, minWidth: 160 }} noWrap>
                     <AppLink href={routes.deal(deal.$id)}>{deal.title || 'Untitled deal'}</AppLink>
                   </Typography>
+                  {contactId ? <ContactRoleChip deal={deal} contactId={contactId} /> : null}
                   <Chip
                     size="small"
                     variant="outlined"
@@ -164,5 +180,21 @@ export function LinkedDealsCard(props: LinkedDealsCardProps) {
   )
 }
 LinkedDealsCard.displayName = 'LinkedDealsCard'
+
+/** When a deal was last written, for the merged list's order. */
+function updatedMs(deal: DealDoc): number {
+  const value = (deal as { updatedAt?: unknown }).updatedAt
+  if (value instanceof Date) return value.getTime()
+  const stamp = value as { toMillis?: () => number } | null | undefined
+  return typeof stamp?.toMillis === 'function' ? stamp.toMillis() : 0
+}
+
+/** The part this contact plays on a deal — its role, and Primary when they are. */
+function ContactRoleChip(props: { deal: DealDoc; contactId: string }) {
+  const row = dealContactRolesOf(props.deal).find((entry) => entry.contactId === props.contactId)
+  if (!row) return null
+  const label = [row.role, row.primary ? 'Primary' : null].filter(Boolean).join(' · ')
+  return label ? <Chip size="small" label={label} /> : null
+}
 
 export default LinkedDealsCard

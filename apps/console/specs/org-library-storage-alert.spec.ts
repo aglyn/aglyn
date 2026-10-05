@@ -40,7 +40,7 @@ import {
   PLAN_ENTITLEMENTS,
   planMetersInfraOverage,
   resolveOrgEntitlements,
-} from '../../../libs/aglyn/src/lib/app-utils/plan-entitlements'
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { formatStorageMb } from '../utils/usage-alert-notice'
 
 const CRON_SECRET = 'test-cron-secret'

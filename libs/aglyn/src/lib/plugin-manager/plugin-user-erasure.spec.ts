@@ -103,3 +103,25 @@ describe('plugin user erasers', () => {
     expect(await runPluginUserErasers(REQUEST)).toEqual({})
   })
 })
+
+describe('one user eraser list per process (AGL-3464)', () => {
+  it('an eraser registered in one copy of the module runs from another', async () => {
+    // The shape of Next's boot file and the route that runs the erasure: two
+    // evaluations of this module in one process. What boot registers, the
+    // route must run.
+    type Erasers = typeof import('./plugin-user-erasure')
+    let boot!: Erasers
+    let route!: Erasers
+    jest.isolateModules(() => {
+      boot = jest.requireActual('./plugin-user-erasure')
+    })
+    jest.isolateModules(() => {
+      route = jest.requireActual('./plugin-user-erasure')
+    })
+    expect(route).not.toBe(boot)
+    boot.registerPluginUserEraser(async () => ({ removed: 1 }), { pluginId: 'boot-plugin' })
+    expect(await route.runPluginUserErasers(REQUEST)).toEqual({ 'boot-plugin': { removed: 1 } })
+    route.resetPluginUserErasersForTests()
+    expect(boot.listPluginUserErasers()).toEqual([])
+  })
+})

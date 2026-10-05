@@ -47,6 +47,7 @@ import { currentOriginPersistenceClass } from '../../constants/workspace-domain'
 import { ConsoleWidgetSlotContext } from '@aglyn/aglyn'
 import { OrgPermissionsProvider } from '../../hooks/use-org-permissions'
 import PluginWidgetSlot from '../plugin-widget-slot.component'
+import TransferLauncherProvider from '../transfer-launcher-provider.component'
 import { OrgScopeProvider } from '../../hooks/use-org-scope'
 import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
 import { useOrgPlans } from '../../hooks/use-org-plans'
@@ -693,7 +694,12 @@ function FirebaseAppLayout(props: FirebaseAppLayoutProps) {
                   (AGL-2910): the same gated slot the pages mount, handed down
                   so a plugin's dialog never lists widgets past the gates. */}
               <ConsoleWidgetSlotContext.Provider value={PluginWidgetSlot}>
-                <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
+                {/* The import wizard and export dialog, for a plugin to open
+                    on its own resource (AGL-3539): inside the org scope, so
+                    they bind to the workspace the URL names. */}
+                <TransferLauncherProvider>
+                  <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
+                </TransferLauncherProvider>
               </ConsoleWidgetSlotContext.Provider>
             </ReleaseFlagsProvider>
           </OrgPermissionsProvider>

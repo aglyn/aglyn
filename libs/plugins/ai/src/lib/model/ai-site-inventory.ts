@@ -122,6 +122,11 @@ export interface AiInventoryDataset {
   id: string
   name: string
   fields: string[]
+  /**
+   * The same fields' ids, in the same order: what a record template binds as
+   * `{{item.<id>}}` (AGL-3475). Absent where the reader did not see them.
+   */
+  fieldIds?: string[]
 }
 
 export interface AiInventoryCollection {

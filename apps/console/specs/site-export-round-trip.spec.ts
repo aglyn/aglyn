@@ -270,7 +270,11 @@ import { listDeclaredSiteBundleSections } from '@aglyn/aglyn/plugin-manager/plug
 import {
   EXPORT_COLLECTION_LIMITS,
   IMPORTABLE_FIELDS,
+  SITE_EXPORT_FORMAT,
+  SITE_SETTINGS_FIELDS,
+  SITE_THEME_FIELDS,
 } from '../app/api/_lib/site-export'
+import { listSitePackageKinds } from '@aglyn/aglyn/data-transfer/site-package'
 // Through the mocked specifier, which re-exports the REAL implementation above.
 import {
   compress,
@@ -661,6 +665,156 @@ const SEEDS: Array<{
     },
   },
   {
+    // A form's definition and published design (AGL-3533) — never its
+    // submissions. Every key a live form carries, from the create's stamps
+    // to the counters the submit path increments.
+    collection: 'forms',
+    path: 'hosts/host-1/forms',
+    id: 'form-1',
+    doc: {
+      displayName: 'Contact us',
+      slug: 'contact-us',
+      fields: [{ name: 'email', type: 'email', required: true, contactFieldKey: 'email' }],
+      consentFieldName: 'newsletter',
+      routing: { lead: true, datasetId: 'dataset-1' },
+      legacyMatch: { formName: 'Contact', paths: ['/contact'] },
+      rootId: 'root',
+      nodes: {
+        root: { $id: 'root', componentId: 'form', nodes: [], props: { formId: 'form-1' } },
+      },
+      archivedAt: PUBLISHED_AT,
+      retired: true,
+      campaignIds: ['campaign-1'],
+      inCampaign: true,
+      stats: { submissions: 4, leads: 2, lastSubmissionAtMs: 1767323045000 },
+      nameLower: 'contact us',
+      nameTokens: ['contact', 'us'],
+      nameReversed: 'su tcatnoc',
+      searchTokens: ['contact', 'us'],
+      // Version documents do not travel, so the pointer does not either: the
+      // editor mints version 1 for a form with none (the component rule).
+      versionId: 'form-version-1',
+    },
+    dropped: ['versionId'],
+  },
+  {
+    collection: 'redirects',
+    path: 'hosts/host-1/redirects',
+    id: 'redirect-1',
+    doc: {
+      source: '/old-pricing',
+      destination: '/pricing',
+      statusCode: 301,
+      kind: 'exact',
+      priority: 10,
+      enabled: true,
+      // When it last fired HERE: not something another site's file says.
+      lastHitAt: PUBLISH_AT,
+    },
+    dropped: ['lastHitAt'],
+  },
+  {
+    collection: 'events',
+    path: 'hosts/host-1/events',
+    id: 'event-1',
+    doc: {
+      title: 'Open house',
+      startsAtMs: 1767323045000,
+      endsAtMs: 1767326645000,
+      location: 'Main Street',
+      organizer: 'Acme',
+      description: 'Come see the shop.',
+      coverImage: 'media:host-1/media-1',
+      coverImageAlt: 'The shop front',
+      status: 'published',
+    },
+  },
+  {
+    collection: 'experiments',
+    path: 'hosts/host-1/experiments',
+    id: 'experiment-1',
+    doc: {
+      name: 'Pricing headline',
+      nameLower: 'pricing headline',
+      nameTokens: ['pricing', 'headline'],
+      nameReversed: 'enildaeh gnicirp',
+      status: 'done',
+      target: 'screen',
+      screenId: 'screen-1',
+      nodeId: 'heading',
+      variants: [
+        { id: 'a', name: 'Control', weight: 50, versionId: 'screen-version-1' },
+        { id: 'b', name: 'Bold', weight: 50, versionId: 'screen-version-1' },
+      ],
+      goal: { event: 'formSubmission', filter: null },
+      winnerVariantId: 'b',
+      endAtMs: 1767326645000,
+      autoWinner: { minExposures: 100, confidence: 0.95 },
+      autoCompleted: true,
+      completedAt: PUBLISHED_AT,
+    },
+  },
+  {
+    collection: 'overlays',
+    path: 'hosts/host-1/overlays',
+    id: 'overlay-1',
+    doc: {
+      kind: 'bar',
+      name: 'Launch bar',
+      enabled: true,
+      startAtMs: 1767323045000,
+      endAtMs: 1767326645000,
+      pathPatterns: ['/*'],
+      excludePathPatterns: ['/checkout'],
+      order: 1,
+      bar: { text: 'Write to {{var:variable-1}}', href: '/pricing', dismissible: true },
+      popup: null,
+      stats: { impressions: 12, clicks: 3, dismissals: 1 },
+    },
+  },
+  {
+    // The site's own emails (AGL-3533), keyed by a catalog key.
+    collection: 'emailTemplates',
+    path: 'hosts/host-1/emailTemplates',
+    id: 'booking-confirmed',
+    doc: {
+      subject: 'You are booked',
+      preheader: 'See you soon',
+      versionId: 'email-version-1',
+      installedFrom: { listingId: 'listing-1', installedAt: INSTALLED_AT },
+      // Whoever saved it last — a member of the workspace the file came from.
+      updatedByEmail: 'editor@example.com',
+    },
+    dropped: ['updatedByEmail'],
+  },
+  {
+    collection: 'emailTemplateVersions',
+    path: 'hosts/host-1/emailTemplates/booking-confirmed/versions',
+    id: 'email-version-1',
+    doc: {
+      templateKey: 'booking-confirmed',
+      nodes: { root: { $id: 'root', componentId: 'div', nodes: [] } },
+      rootId: 'root',
+      subject: 'You are booked',
+      preheader: 'See you soon',
+      source: 'designed',
+      installedFrom: { listingId: 'listing-1' },
+    },
+  },
+  {
+    // The theme library (AGL-3533): a saved custom theme and its stash.
+    collection: 'themes',
+    path: 'hosts/host-1/themes',
+    id: 'theme-custom-1',
+    doc: {
+      kind: 'custom',
+      name: 'Night',
+      theme: { primary: '#000000' },
+      override: { primary: '#111111' },
+      installedFrom: null,
+    },
+  },
+  {
     collection: 'services',
     path: 'hosts/host-1/services',
     id: 'service-1',
@@ -677,6 +831,13 @@ const SEEDS: Array<{
       // them would flip both.
       crmFollowUpTask: true,
       crmMeetingActivity: false,
+      // What the widget asks the booker for (AGL-3493), seeded away from the
+      // absent `off` for the same reason.
+      askPhone: 'required',
+      askAddress: 'optional',
+      // How the price is stated (AGL-3475), seeded away from the absent
+      // `fixed`: a restore that dropped it would start charging the price.
+      priceDisplay: 'estimate',
     },
   },
   {
@@ -947,7 +1108,10 @@ const HOST_DOC = {
   displayName: 'Acme',
   seo: { title: 'Acme' },
   theme: { primary: '#123456' },
-  screens: { '/': 'screen-1' },
+  themeOverride: { primary: '#654321' },
+  themeSelection: { kind: 'custom', id: 'theme-custom-1', name: 'Night' },
+  themeInstalledFrom: null,
+  screens: { 'screen-1': '/pricing' },
   layouts: { chrome: 'layout-1' },
   notFoundScreenId: 'screen-404',
   errorScreens: { 500: 'screen-500' },
@@ -961,6 +1125,78 @@ const resetStore = () => {
   for (const entry of SEEDS) seed(entry.path, entry.id, entry.doc)
 }
 
+/**
+ * The exported package, viewed the way a v1 backup laid it out (AGL-3533):
+ * each kind's contents under its old array, each with its id as a hidden
+ * `$id`, and the settings and theme items' fields under `host`. The view is
+ * what the tests below read and edit; `runImport` builds the file it sends
+ * from it — a v2 package by default, or the v1 `aglyn-site-export` backup a
+ * customer downloaded before packages existed.
+ */
+const PACKAGE_KINDS = listSitePackageKinds()
+
+const withHiddenId = <T extends object>(content: T, id: string): T =>
+  Object.defineProperty(content, '$id', {
+    value: id,
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  })
+
+const toView = (pkg: any) => {
+  const view: any = { manifest: pkg.manifest, host: {} }
+  for (const entry of pkg.manifest.items) {
+    const kind = PACKAGE_KINDS.find((one) => one.kind === entry.kind)
+    const content = pkg.items[`${entry.kind}/${entry.$id}`]
+    if (kind?.singletonId) {
+      Object.assign(view.host, content)
+      continue
+    }
+    const key = kind?.bundleKey ?? entry.kind
+    ;(view[key] ??= []).push(withHiddenId(content, entry.$id))
+  }
+  return view
+}
+
+/** The view as the v2 package an import receives. */
+const toPackage = (view: any) => {
+  const items: Record<string, unknown> = {}
+  const manifest: any[] = []
+  const add = (kind: string, id: string, content: any) => {
+    manifest.push({ kind, $id: id, contentHash: 'sha256:edited', deps: [] })
+    // A `$id` a test put INSIDE the content travels inside it, as a crafted
+    // file would carry one.
+    items[`${kind}/${id}`] =
+      content?.$injectedId !== undefined ? { ...content, $id: content.$injectedId } : content
+  }
+  const pick = (fields: readonly string[]) =>
+    Object.fromEntries(fields.filter((field) => view.host[field] !== undefined).map((field) => [field, view.host[field]]))
+  if (Object.keys(pick(SITE_SETTINGS_FIELDS)).length) add('settings', 'settings', pick(SITE_SETTINGS_FIELDS))
+  if (Object.keys(pick(SITE_THEME_FIELDS)).length) add('theme', 'theme', pick(SITE_THEME_FIELDS))
+  for (const kind of PACKAGE_KINDS) {
+    if (kind.singletonId) continue
+    for (const doc of view[kind.bundleKey] ?? []) {
+      if (kind.bundleKey === 'screens' && (doc.kind === 'email' ? 'email' : 'page') !== kind.kind) continue
+      add(kind.kind, doc.$id, doc)
+    }
+  }
+  return { manifest: { ...view.manifest, items: manifest }, items }
+}
+
+/** The view as a v1 backup: arrays of documents carrying `$id`, and a routing map. */
+const toLegacyBundle = (view: any) => {
+  const bundle: any = { format: SITE_EXPORT_FORMAT, version: 1, host: { ...view.host, screens: {} } }
+  for (const [key, value] of Object.entries(view)) {
+    if (!Array.isArray(value)) continue
+    bundle[key] = value.map((doc: any) => {
+      const { route, ...rest } = doc
+      if (key === 'screens' && route) bundle.host.screens[doc.$id] = route
+      return { $id: doc.$id, ...(key === 'screens' ? rest : doc) }
+    })
+  }
+  return bundle
+}
+
 const runExport = async () => {
   const response = await EXPORT_GET(
     new Request('https://app.aglyn.com/api/hosts/export?hostId=host-1', {
@@ -969,21 +1205,25 @@ const runExport = async () => {
   )
   expect(response.status).toBe(200)
   // Through JSON, exactly as the browser downloads it and hands it back.
-  return JSON.parse(await response.text())
+  return toView(JSON.parse(await response.text()))
 }
 
-const runImport = async (bundle: unknown) => {
+const runImport = async (view: any, options: { legacy?: boolean } = {}) => {
   writes.length = 0
+  const file = options.legacy ? toLegacyBundle(view) : toPackage(view)
   const response = await IMPORT_POST(
     new Request('https://app.aglyn.com/api/hosts/import', {
       method: 'POST',
       headers: { authorization: 'Bearer tok' },
-      body: JSON.stringify({ hostId: 'host-1', bundle }),
+      body: JSON.stringify(options.legacy ? { hostId: 'host-1', bundle: file } : { hostId: 'host-1', package: file }),
     }),
   )
   expect(response.status).toBe(200)
   return response
 }
+
+/** The import's own record and undo snapshot, which are not site documents. */
+const LEDGER_PATH = /^hosts\/host-1\/packageImports\//
 
 /** Applies a mutation to every document in the bundle, at every depth. */
 const mutateEveryDocument = (bundle: any, mutate: (doc: any) => void) => {
@@ -991,7 +1231,16 @@ const mutateEveryDocument = (bundle: any, mutate: (doc: any) => void) => {
     if (!Array.isArray(value)) continue
     for (const item of value as any[]) {
       if (!item || typeof item !== 'object') continue
+      // An item's id is the manifest's, not its content's: a `$id` the
+      // mutation writes lands in the content, where the import ignores it
+      // (asserted on its own below).
+      const id = item.$id
       mutate(item)
+      if (item.$id !== id) {
+        const injected = item.$id
+        withHiddenId(item, id)
+        Object.defineProperty(item, '$injectedId', { value: injected, enumerable: false, configurable: true })
+      }
       if (item.version) mutate(item.version)
       for (const child of [...(item.entries ?? []), ...(item.records ?? [])]) {
         mutate(child)
@@ -1020,7 +1269,8 @@ beforeEach(() => {
 describe('the export/import round trip is lossless (AGL-1382)', () => {
   it('exports every seeded collection', async () => {
     const bundle = await runExport()
-    expect(bundle.format).toBe('aglyn-site-export')
+    expect(bundle.manifest.format).toBe('aglyn-package')
+    expect(bundle.manifest.version).toBe(2)
     // The bundle really does carry the documents the assertions below rely on
     // — an empty export would make every round-trip test vacuously green.
     expect(bundle.screens).toHaveLength(2)
@@ -1191,7 +1441,8 @@ describe('a besigner-saved version survives the round trip (AGL-1391)', () => {
     // Precisely the shape an old bundle carries.
     expect(version.nodes.type).toBe('Buffer')
 
-    await runImport(bundle)
+    // As the v1 backup it was downloaded as (AGL-3533 reads v1 still).
+    await runImport(bundle, { legacy: true })
     const nodes = decodeStoredNodes(
       storedAt(VERSION_PATH)['nodes'],
     ) as Record<string, any>
@@ -1357,7 +1608,7 @@ describe('a restored publish schedule still fires (AGL-1392)', () => {
       _nanoseconds: 0,
     }
 
-    await runImport(bundle)
+    await runImport(bundle, { legacy: true })
     applyWritesToStore()
     expect((await runDueSweep()).docs.map((doc: any) => doc.id)).toEqual([
       'screen-1',
@@ -1695,7 +1946,7 @@ describe('an unexpected key in a bundle is not stored (AGL-1382)', () => {
     // Every subcollection write, not a sampled one: the deny-list stored all
     // of these verbatim, so a spot check would have passed against it too.
     const subcollectionWrites = writes.filter(
-      (entry) => entry.path !== 'hosts/host-1',
+      (entry) => entry.path !== 'hosts/host-1' && !LEDGER_PATH.test(entry.path),
     )
     expect(subcollectionWrites.length).toBe(SEEDS.length)
     for (const { path, data } of subcollectionWrites) {
@@ -1768,6 +2019,17 @@ describe('an unexpected key in a bundle is not stored (AGL-1382)', () => {
     // the bundle's time.
     expect(stored['deletedAt']).toBeNull()
     expect(stored['displayName']).toBe('Pricing')
+  })
+
+  it('never lets a `$id` inside an item choose where it is written (AGL-3533)', async () => {
+    // The manifest names each item; an id inside its content is a second say
+    // a crafted file must not get — it would write past what the plan showed.
+    const bundle = await runExport()
+    const screen = bundle.screens.find((s: any) => s.$id === 'screen-1')
+    Object.defineProperty(screen, '$injectedId', { value: 'screen-elsewhere', enumerable: false, configurable: true })
+    await runImport(bundle)
+    expect(storedAt('hosts/host-1/screens/screen-1')).toBeDefined()
+    expect(storedAt('hosts/host-1/screens/screen-elsewhere')).toBeUndefined()
   })
 
   it('rejects a collection with no declared allow-list rather than storing it', async () => {

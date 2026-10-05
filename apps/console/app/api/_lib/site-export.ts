@@ -17,7 +17,11 @@
 
 /**
  * Shared site-export bundle contract (AGL-163), used by both the export and
- * import routes. Lives in `_lib` (an App Router private folder) because
+ * import routes. Since AGL-3533 the file is a site package (core
+ * `data-transfer/site-package.ts` says what its items are and how they
+ * name each other); what stays here is the console's WRITE contract — the
+ * host fields, the caps and the allow-lists a restore writes through — and
+ * the v1 format's tag, which the import still reads. Lives in `_lib` (an App Router private folder) because
  * `route.ts` files may only export route handlers — the Pages Router version
  * exported these from the export route itself.
  *
@@ -38,17 +42,31 @@ import {
 export const SITE_EXPORT_FORMAT = 'aglyn-site-export'
 export const SITE_EXPORT_VERSION = 1
 
-/** Host-doc fields that travel in a bundle (never admins/tenant/domain). */
-export const EXPORTABLE_HOST_FIELDS = [
+/**
+ * The host fields a site package's `settings` item carries (AGL-3533). The
+ * routing map (`screens`) is not one of them: each page carries its own
+ * address, so a package of a few pages routes exactly those.
+ */
+export const SITE_SETTINGS_FIELDS = [
   'displayName',
   'seo',
-  'theme',
-  'screens',
   'layouts',
   'notFoundScreenId',
   'errorScreens',
   'analytics',
 ] as const
+
+/**
+ * The host fields a site package's `theme` item carries: the theme, the
+ * site's own override of it, which library entry it is, and where an
+ * installed one came from — the four the theme library writes together
+ * (`theme-library.ts`), so a restored site shows the theme it had as the one
+ * picked.
+ */
+export const SITE_THEME_FIELDS = ['theme', 'themeOverride', 'themeSelection', 'themeInstalledFrom'] as const
+
+/** Host-doc fields that travel in a bundle (never admins/tenant/domain). */
+export const EXPORTABLE_HOST_FIELDS = [...SITE_SETTINGS_FIELDS, ...SITE_THEME_FIELDS, 'screens'] as const
 
 /**
  * The host collections plugins declare for the bundle, in config order: each
@@ -111,6 +129,12 @@ export const EXPORT_COLLECTION_LIMITS: Record<string, number> = {
    */
   hostMedia: 500,
   hostMediaFolders: 200,
+  // The site's own emails (AGL-3533), one document per catalog key — so the
+  // catalog bounds it long before this does.
+  emailTemplates: 100,
+  // The theme library: the default's stash, a preset's or installed theme's
+  // entry each, and at most `THEME_LIBRARY_MAX_CUSTOM` (25) custom themes.
+  themes: 60,
   ...Object.fromEntries(
     PLUGIN_SITE_EXPORT_COLLECTIONS.map((declared) => [declared.collection, declared.limit]),
   ),
@@ -448,6 +472,29 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
    *   The same "a key nobody can point at a document for" test AGL-1384 applies.
    */
   mediaFolders: ['name', 'parentId'],
+  /**
+   * The site's own emails (AGL-3533): `hosts/{hostId}/emailTemplates/{key}`,
+   * keyed by the catalog key, holding the subject line and the pointer to the
+   * published design, which travels as `version` the way a page's does.
+   *
+   * `updatedByEmail` is left off: it is the address of whoever saved last,
+   * a member of the workspace the file came from — provenance a file cannot
+   * supply, like `createdBy`.
+   */
+  emailTemplates: ['subject', 'preheader', 'versionId', 'installedFrom'],
+  /**
+   * An email's design version. A separate list from `versions` because the
+   * documents are not the same shape: a site email's version carries its own
+   * subject and preheader, and the key of the email it designs.
+   */
+  emailTemplateVersions: ['templateKey', 'nodes', 'rootId', 'subject', 'preheader', 'source', 'installedFrom'],
+  /**
+   * The theme library (AGL-3533): each saved, preset or installed theme the
+   * site's picker lists, and the override stashed on it while another theme
+   * is picked. The library writes them on the Admin SDK only, so a restore
+   * writes what the library would have.
+   */
+  themes: ['kind', 'name', 'theme', 'override', 'installedFrom'],
   ...Object.fromEntries(
     PLUGIN_SITE_EXPORT_COLLECTIONS.map((declared) => [declared.collection, declared.fields]),
   ),

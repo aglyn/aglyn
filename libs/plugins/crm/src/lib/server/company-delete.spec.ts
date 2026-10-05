@@ -32,6 +32,8 @@
  *     company is untouched — and only then is the document deleted.
  *  3. PAST THE BOUND. A pass detaches a batch's worth, keeps the company and
  *     says more remain.
+ *  3a. THE COMPANIES UNDER IT (AGL-3514) lose their `parentCompanyId` in the
+ *     same pass, and nothing else.
  *  4. THE PLAN (AGL-2851). Companies are the CRM's, included from Starter: a
  *     plan without it is refused once the writer is known, staff included,
  *     and nothing is unlinked.
@@ -400,6 +402,22 @@ describe('the detach', () => {
     expect(status).toBe(200)
     expect(payload).toEqual({ ok: true, deleted: true, detached: 0, moreRemain: false })
     expect(committed).toEqual([])
+    expect(store[`${COMPANIES}/co-acme`]).toBeUndefined()
+  })
+
+  it('clears the parent of every company under it, which stands on its own (AGL-3514)', async () => {
+    store[`${COMPANIES}/co-acme-west`] = { name: 'Acme West', parentCompanyId: 'co-acme', visibleTo: ['org'] }
+    store[`${COMPANIES}/co-acme-east`] = { name: 'Acme East', parentCompanyId: 'co-acme', visibleTo: ['org'] }
+    store[`${COMPANIES}/co-globex-uk`] = { name: 'Globex UK', parentCompanyId: 'co-globex', visibleTo: ['org'] }
+    const { status, payload } = await post(DELETE_ACME)
+    expect(status).toBe(200)
+    expect(payload).toEqual({ ok: true, deleted: true, detached: 0, moreRemain: false })
+    expect(committed).toEqual([2])
+    expect(store[`${COMPANIES}/co-acme-west`]).not.toHaveProperty('parentCompanyId')
+    expect(store[`${COMPANIES}/co-acme-east`]).toMatchObject({ name: 'Acme East', updatedAt: 'server-time' })
+    expect(store[`${COMPANIES}/co-acme-east`]).not.toHaveProperty('parentCompanyId')
+    // Another company's children are not this delete's business.
+    expect(store[`${COMPANIES}/co-globex-uk`].parentCompanyId).toBe('co-globex')
     expect(store[`${COMPANIES}/co-acme`]).toBeUndefined()
   })
 

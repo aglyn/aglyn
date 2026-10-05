@@ -33,6 +33,7 @@ import {
   AI_SEO_ENTITY_TYPE_VALUES,
   AI_SEO_FIELDS_TOOL_NAME,
   aiSeoFieldsTool,
+  aiSeoFixImages,
   aiSeoFixesTool,
   aiSeoSiteTool,
   checkAiSeoFields,
@@ -188,6 +189,30 @@ describe('checkAiSeoFixes', () => {
     expect(result.value).toEqual({
       s1: { title: 'Brass desk lamps', description: null, h1: null, imageAlts: [{ nodeId: 'img', alt: 'A brass lamp' }] },
     })
+  })
+
+  it('takes no description for an image a component renders: the page holds no image to describe (AGL-3501)', () => {
+    const pageNodes = {
+      root: { componentId: 'div', nodes: ['main'] },
+      main: { componentId: 'section', props: { component: 'main' }, nodes: ['hero', 'img'] },
+      hero: { componentId: 'reusableInstance', props: { refId: 'banner' }, nodes: [] },
+      img: { componentId: 'image', props: { src: 'media:host-1/lamp' }, nodes: [] },
+    }
+    const composed = {
+      ...pageNodes,
+      hero: { componentId: 'muiBox', nodes: ['cmp__hero__photo'] },
+      cmp__hero__photo: { componentId: 'image', props: { src: 'media:host-1/banner' }, nodes: [] },
+    }
+    const withComponent = page(['image-alt-missing'], {
+      facts: seoPageFacts(composed, { rootId: 'root', pageNodes }),
+    })
+    expect(aiSeoFixImages(withComponent).map((image) => image.nodeId)).toEqual(['img'])
+    const result = checkAiSeoFixes(
+      { pages: [{ ...entry, imageAlts: [{ nodeId: 'hero', alt: 'A banner' }, { nodeId: 'img', alt: 'A brass lamp' }] }] },
+      [withComponent],
+      [],
+    )
+    expect(result.value?.['s1']?.imageAlts).toEqual([{ nodeId: 'img', alt: 'A brass lamp' }])
   })
 
   it('refuses a broken value with the page named, quoting only that page', () => {

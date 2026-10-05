@@ -362,6 +362,130 @@ export function normalizeRedirectDestination(input: string): string | null {
 }
 
 /**
+ * The key a rule's sampled hits are counted under in a day's analytics
+ * document (`hosts/{hostId}/analytics/{YYYY-MM-DD}` → `redirects.{key}`):
+ * the rule's id with the characters a field path cannot carry replaced.
+ */
+export function redirectHitKey(ruleId: string): string {
+  return ruleId.replace(/[.$#[\]/]/g, '_')
+}
+
+/**
+ * One rule as the whole-set checks below read it: the redirects page's row
+ * shape, with the document id as `$id`. A rule not saved yet has none.
+ */
+export interface RedirectRuleRow {
+  $id?: string | null
+  source?: string
+  destination?: string
+  kind?: string
+}
+
+/**
+ * The rule that already redirects `rule.source` in the same match mode, other
+ * than `rule` itself — the duplicate a save is refused for. Two rules may
+ * share a path when their modes differ (an exact `/blog` beside a prefix
+ * `/blog`), and a stored rule without a mode is an exact one.
+ *
+ * The redirects page and the importer both ask this, so a file can never
+ * create the collision the page refuses.
+ */
+export function findDuplicateRedirect<T extends RedirectRuleRow>(
+  rules: readonly T[],
+  rule: { $id?: string | null; source: string; kind?: string },
+): T | undefined {
+  const kind = rule.kind || 'exact'
+  return rules.find(
+    (other) =>
+      other.source === rule.source &&
+      (other.kind ?? 'exact') === kind &&
+      other.$id !== rule.$id,
+  )
+}
+
+/** How far a chain is followed before the walk gives up. */
+export const REDIRECT_CHAIN_MAX_HOPS = 10
+
+/** Where following a rule's destination through the other rules leads. */
+export interface RedirectChainWalk {
+  /**
+   * The walk came back to the rule's own source within
+   * {@link REDIRECT_CHAIN_MAX_HOPS} hops: the rule could never execute, and
+   * a save is refused.
+   */
+  loop: boolean
+  /**
+   * The destinations passed through after the rule's own, in order: empty
+   * when the destination is no other rule's source.
+   */
+  hops: string[]
+  /**
+   * The walk entered a circle that does not pass through this rule: the
+   * rule leads visitors into a loop other rules already make.
+   */
+  cycle: boolean
+}
+
+/**
+ * Follows a rule's internal destination through the other rules — each
+ * rule's source to its destination — the way a visitor would be sent on.
+ * Only internal destinations are followed, compared in lowercase like the
+ * normalized sources they meet; a rule whose own id is `rule.$id` is left
+ * out, so an edit is not compared with what it replaces.
+ *
+ * The redirects page refuses a save whose walk `loop`s, and the importer
+ * refuses the same row; the importer also reports `hops` (a chain) and
+ * `cycle`, which the page does not stop.
+ */
+export function walkRedirectChain(
+  rules: readonly RedirectRuleRow[],
+  rule: { $id?: string | null; source: string; destination: string },
+): RedirectChainWalk {
+  const walk: RedirectChainWalk = { loop: false, hops: [], cycle: false }
+  if (!rule.destination.startsWith('/')) return walk
+  const bySource = new Map<string | undefined, string | undefined>(
+    rules
+      .filter((other) => other.$id !== rule.$id)
+      .map((other) => [other.source, other.destination]),
+  )
+  const seen = new Set<string>()
+  let cursor: string | undefined = rule.destination.toLowerCase()
+  for (let hop = 0; hop < REDIRECT_CHAIN_MAX_HOPS && cursor; hop += 1) {
+    if (cursor === rule.source) {
+      walk.loop = true
+      return walk
+    }
+    // A path seen before repeats from here on without reaching the source,
+    // so the walk stops: it is a circle this rule only leads into.
+    if (seen.has(cursor)) {
+      walk.cycle = true
+      return walk
+    }
+    seen.add(cursor)
+    const next: string | undefined = bySource.get(cursor)
+    if (typeof next === 'string') walk.hops.push(next)
+    cursor = next && next.startsWith('/') ? next.toLowerCase() : undefined
+  }
+  return walk
+}
+
+/**
+ * Whether `source` is the address of a published page of the site, read from
+ * the host's routing map (`screens`: screen id → path without its leading
+ * slash, `/` for the home page). A redirect there takes precedence over the
+ * page: the page and the importer warn, and neither refuses, because
+ * replacing a moved page is what a redirect is for.
+ */
+export function redirectSourceIsLivePage(
+  screens: Readonly<Record<string, unknown>> | null | undefined,
+  source: string,
+): boolean {
+  return Object.values((screens ?? {}) as Record<string, string>)
+    .map((path) => (path === '/' ? '/' : `/${path}`))
+    .includes(source)
+}
+
+/**
  * True when the rule would redirect a path onto itself — the loop case
  * both the console and the tenant enforcement must refuse (they validate
  * independently and may disagree; this is the shared floor).

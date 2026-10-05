@@ -37,6 +37,12 @@ import { CRM_LIST_SEARCH } from '../model/crm-list-query'
  * choice from the roster, and "No next activity" asks `nextTaskAtMs ==
  * null`. Each equality rides one `(field, updatedAt DESC)` composite, and
  * one `(field, nameLower ASC)` beside it for the prefix.
+ *
+ * Type, Industry and Rating (AGL-3514) are choices from the org's lists,
+ * asked of the KEY each writer stores beside the label (`typeKey`,
+ * `industryKey`, `ratingKey` — see `crmCompanyListFields`): a choice's
+ * value is the key, its caption the label, so the query compares what
+ * the record keyed rather than how the label happens to be cased.
  */
 export const COMPANY_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   {
@@ -54,7 +60,17 @@ export const COMPANY_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     operators: ['equals', 'isAnyOf'],
   },
   CRM_NEXT_ACTIVITY_FILTER_FIELD,
+  { column: 'type', kind: 'exact', path: 'typeKey', operators: ['equals', 'isAnyOf'] },
+  { column: 'industry', kind: 'exact', path: 'industryKey', operators: ['equals', 'isAnyOf'] },
+  { column: 'rating', kind: 'exact', path: 'ratingKey', operators: ['equals', 'isAnyOf'] },
 ]
+
+/** The picklist columns the list filters by, each with the list its choices come from. */
+export const COMPANY_PICKLIST_FILTERS = [
+  { column: 'type', picklistId: 'accountType', header: 'Type' },
+  { column: 'industry', picklistId: 'industry', header: 'Industry' },
+  { column: 'rating', picklistId: 'rating', header: 'Rating' },
+] as const
 
 /**
  * A collaborator's search (see `prefixSearch` in `useCrmListQuery`): the

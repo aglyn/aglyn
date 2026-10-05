@@ -221,9 +221,13 @@ export const AI_SEO_FIX_ALT_MAX_CHARS = Math.min(150, MEDIA_ALT_MAX_LENGTH)
 /** Undescribed images one page of a batch gets descriptions for; the rest wait for the next audit. */
 export const AI_SEO_FIX_IMAGES_PER_PAGE = 3
 
-/** The undescribed images a batch asks about for a page, in page order. */
+/**
+ * The undescribed images a batch asks about for a page, in page order: only
+ * those the page itself holds. An image a component or a repeat renders is
+ * described in the component or the rows, never by a fix to the page.
+ */
 export function aiSeoFixImages(page: Pick<AiSeoBatchPage, 'facts'>): SeoPageFacts['imagesMissingAlt'] {
-  return page.facts.imagesMissingAlt.slice(0, AI_SEO_FIX_IMAGES_PER_PAGE)
+  return page.facts.imagesMissingAlt.filter((image) => image.editable).slice(0, AI_SEO_FIX_IMAGES_PER_PAGE)
 }
 
 /** The strict tool for one batch: a title, description, heading and image descriptions per page. */

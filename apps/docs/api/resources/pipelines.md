@@ -26,12 +26,16 @@ Scopes and the site rule are shared with every CRM resource — see
   "archived": false,
   "archivedAt": null,
   "stages": [
-    { "id": "qualified", "name": "Qualified", "order": 0, "probability": 10, "kind": "open" },
-    { "id": "contact-made", "name": "Contact made", "order": 1, "probability": 20, "kind": "open" },
-    { "id": "proposal-sent", "name": "Proposal sent", "order": 2, "probability": 40, "kind": "open" },
-    { "id": "negotiation", "name": "Negotiation", "order": 3, "probability": 60, "kind": "open" },
-    { "id": "won", "name": "Won", "order": 4, "probability": 100, "kind": "won" },
-    { "id": "lost", "name": "Lost", "order": 5, "probability": 0, "kind": "lost" }
+    { "id": "prospecting", "name": "Prospecting", "order": 0, "probability": 10, "kind": "open", "forecastCategory": "pipeline" },
+    { "id": "qualification", "name": "Qualification", "order": 1, "probability": 10, "kind": "open", "forecastCategory": "pipeline" },
+    { "id": "needs-analysis", "name": "Needs Analysis", "order": 2, "probability": 20, "kind": "open", "forecastCategory": "pipeline" },
+    { "id": "value-proposition", "name": "Value Proposition", "order": 3, "probability": 50, "kind": "open", "forecastCategory": "pipeline" },
+    { "id": "id-decision-makers", "name": "Id. Decision Makers", "order": 4, "probability": 60, "kind": "open", "forecastCategory": "pipeline" },
+    { "id": "perception-analysis", "name": "Perception Analysis", "order": 5, "probability": 70, "kind": "open", "forecastCategory": "pipeline" },
+    { "id": "proposal-price-quote", "name": "Proposal/Price Quote", "order": 6, "probability": 75, "kind": "open", "forecastCategory": "bestCase" },
+    { "id": "negotiation-review", "name": "Negotiation/Review", "order": 7, "probability": 90, "kind": "open", "forecastCategory": "commit" },
+    { "id": "won", "name": "Closed Won", "order": 8, "probability": 100, "kind": "won", "forecastCategory": "closed" },
+    { "id": "lost", "name": "Closed Lost", "order": 9, "probability": 0, "kind": "lost", "forecastCategory": "omitted" }
   ],
   "siteId": "site_a1b2c3",
   "created": "2026-09-05T18:23:23.941Z",
@@ -47,7 +51,7 @@ Scopes and the site rule are shared with every CRM resource — see
 | `isDefault` | boolean | The pipeline a new deal lands in when its create names none. Only an active pipeline is ever the default. |
 | `archived` | boolean | Whether the pipeline has been retired in the console — see [below](#archived). |
 | `archivedAt` | string \| null | ISO 8601, when it was; `null` while active. |
-| `stages` | array | In pipeline order. Each has `id` (pass it as a deal's `stageId`), `name`, `order`, `probability` (0–100, the odds of an **open** deal closing from here) and `kind` — `open`, `won` or `lost`. A pipeline has one `won` and one `lost` stage; `open` is everything between. |
+| `stages` | array | In pipeline order. Each has `id` (pass it as a deal's `stageId`), `name`, `order`, `probability` (0–100, the odds of an **open** deal closing from here), `kind` — `open`, `won` or `lost` — and `forecastCategory`, the [forecast category](deals.md#moving) a deal moved into the stage takes: `omitted`, `pipeline`, `bestCase`, `commit` or `closed`. A stage saved without one reads as its kind's — `closed` for `won`, `omitted` for `lost`, `pipeline` for `open`. A pipeline has one `won` and one `lost` stage; `open` is everything between. |
 | `siteId` | string | The site the pipeline was created from. |
 | `created` / `updated` | string \| null | ISO 8601. |
 
@@ -55,8 +59,10 @@ Scopes and the site rule are shared with every CRM resource — see
 
 An organization that has never opened the CRM has no pipeline, and a deal cannot exist
 without a stage. So the first [`POST /v1/deals`](deals.md#add-a-deal) that names no
-`pipelineId` creates one — named **Sales**, with the six stages above, marked as the
-default, and stored for the site the deal names. Every later deal from a site that can
+`pipelineId` creates one — named **Sales**, with Salesforce's standard Opportunity
+stages above, marked as the default, and stored for the site the deal names. A
+pipeline seeded before these stages became the default keeps its own; nothing
+migrates a stored pipeline. Every later deal from a site that can
 see it lands in it. You never have to create a pipeline before creating a deal, and
 `GET /v1/pipelines` on a fresh organization legitimately returns an empty list.
 

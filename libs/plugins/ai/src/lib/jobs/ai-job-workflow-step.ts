@@ -186,8 +186,8 @@ const STEP_USES: Readonly<Record<AiAutomationStepType, string>> = {
   setContactStage: 'sets the person’s lifecycle stage. Fields: stage',
   addContactTag: 'tags the person. Fields: text (the tag)',
   assignContactOwner: 'gives the person an owner. Fields: text (the owner)',
-  createCrmTask: 'creates a follow-up task. Fields: text (the task), taskKind, dueInDays',
-  logCrmActivity: 'logs what happened on the person’s record. Fields: activityKind, text (what happened)',
+  createCrmTask: 'creates a follow-up task. Fields: text (the task), taskKind, priority, dueInDays',
+  logCrmActivity: 'logs what happened on the person’s record. Fields: activityKind, direction (a call’s or an email’s), text (what happened)',
 }
 
 function triggerLine(event: HostEventType): string {

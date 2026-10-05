@@ -189,10 +189,11 @@ describe('POST /api/admin/org-discount — the full-use verdict (AGL-3473)', () 
     expect(payload.fullUse.firstYearCoverage).toBeGreaterThan(1)
   })
 
-  it('leaves the measured guardrail exactly as it was — a 75% coupon still needs the override', async () => {
-    // The guardrail reads the subscription off the org document, as it always
-    // has; an org that still carries it inline is the one it can rate.
-    mockOrgDoc = { ...mockOrgDoc, subscription: mockBilling.subscription }
+  it('holds a 75% coupon to the override when the subscription is on the billing doc', async () => {
+    // Where every org migrated since AGL-1028 keeps it. The org doc carries no
+    // subscription, so a guardrail reading it alone priced the org at $0 and
+    // waved the coupon through.
+    expect(mockOrgDoc['subscription']).toBeUndefined()
     coupon = { id: 'cpn_1', percent_off: 75, duration: 'once' }
     const refused = await apply()
     expect(refused.status).toBe(400)

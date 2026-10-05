@@ -16,10 +16,12 @@
  */
 'use client'
 
+import { TransferResumeImport } from '@aglyn/aglyn/app-utils/transfer-resume-import'
 import {
   createResourceUid,
   MEDIA_ALT_MAX_LENGTH,
   pluginDocsHelp,
+  useTransferLauncher,
 } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -56,6 +58,8 @@ import {
 import { useCallback, useMemo, useState } from 'react'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { eventWrite } from '../model/event-write'
+import { EVENTS_TRANSFER_RESOURCE } from '../transfer/events-transfer-key'
 
 /**
  * How many event documents this page reads.
@@ -135,11 +139,12 @@ function useHostEvents(hostId: string): {
              * ones whose ids sorted late, including the next one happening.
              *
              * `orderBy` DROPS documents missing the field, so it is only safe
-             * once every writer is known to set it. All three checks pass for
-             * `startsAtMs`: the only writer refuses a save without it (the
-             * guard a few lines below), the server feed already orders by it,
-             * and `events` is not in `IMPORTABLE_FIELDS`, so nothing else
-             * writes a row here.
+             * once every writer is known to set it, and every one does for
+             * `startsAtMs`. The editor refuses a save without it (the guard
+             * in `handleSave`); the events import writes through the same
+             * rule (`model/event-write.ts`), which refuses a row without one;
+             * a site package restore writes the stored events it carries,
+             * start included. The server feed already orders by it.
              */
             orderBy('startsAtMs', 'desc'),
             /*
@@ -224,6 +229,39 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
 
   const [draft, setDraft] = useState<EventDraft | null>(null)
 
+  /*
+   * Import and Export open the console's wizard and dialog on this site's
+   * events. Outside the console shell there is no launcher, and no buttons.
+   * The list needs no refresh after an import: it is a live listener.
+   */
+  const transfer = useTransferLauncher()
+  const transferTarget = { resource: EVENTS_TRANSFER_RESOURCE, scope: 'host' as const, hostId }
+  // Import for those who may write the records, Export for those who may read them.
+  const canImport = Boolean(transfer?.can('import', transferTarget))
+  const canExport = Boolean(transfer?.can('export', transferTarget))
+  const transferActions =
+    transfer && (canImport || canExport) ? (
+      <Stack direction="row" spacing={1}>
+        {/* An import left unfinished, reopened where it stopped (AGL-3549). */}
+        <TransferResumeImport target={transferTarget} />
+        {canImport && (
+          <Button size="small" onClick={() => transfer.openImport(transferTarget)}>
+            {'Import'}
+          </Button>
+        )}
+        {canExport && (
+          <Button
+            size="small"
+            onClick={() =>
+              transfer.openExport(transferTarget)
+            }
+          >
+            {'Export'}
+          </Button>
+        )}
+      </Stack>
+    ) : null
+
   const handleSave = useCallback(async () => {
     if (!draft || !draft.title.trim()) return
     const startsAtMs = draft.startsAt ? new Date(draft.startsAt).getTime() : 0
@@ -257,39 +295,29 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
           fromCache: Boolean(draft.id) && eventsFromCache,
         },
         async () => {
+          // The stored form is the shared rule's (`model/event-write.ts`),
+          // which the events import writes through too. This is a `merge`
+          // write, so whatever the rule removes has to be DELETED here —
+          // leaving the key out would keep it (AGL-2418: a cover
+          // description outliving its cover).
+          const write = eventWrite({
+            title: draft.title,
+            startsAtMs,
+            endsAtMs,
+            location: draft.location,
+            organizer: draft.organizer,
+            description: draft.description,
+            coverImage: draft.coverImage,
+            coverImageAlt: draft.coverImageAlt,
+            status: draft.status,
+          })
           await setDoc(
             doc(firestore, 'hosts', hostId, 'events', id),
             {
-              title: draft.title.trim().slice(0, 150),
-              startsAtMs,
-              ...(endsAtMs > startsAtMs
-                ? { endsAtMs }
-                : { endsAtMs: startsAtMs + 60 * 60 * 1000 }),
-              ...(draft.location.trim() && {
-                location: draft.location.trim().slice(0, 200),
-              }),
-              ...(draft.organizer.trim() && {
-                organizer: draft.organizer.trim().slice(0, 100),
-              }),
-              ...(draft.description.trim() && {
-                description: draft.description.trim().slice(0, 2000),
-              }),
-              ...(draft.coverImage.trim() && {
-                coverImage: draft.coverImage.trim(),
-              }),
-              // AGL-2418. This is a `merge` write, so clearing the box has
-              // to DELETE the key — leaving it out would silently keep the
-              // old sentence describing a picture that changed, which is
-              // worse than never having offered the field. Tied to the
-              // cover: a description with no image describes nothing.
-              ...(draft.coverImage.trim() && draft.coverImageAlt.trim()
-                ? {
-                    coverImageAlt: draft.coverImageAlt
-                      .trim()
-                      .slice(0, MEDIA_ALT_MAX_LENGTH),
-                  }
-                : { coverImageAlt: deleteField() }),
-              status: draft.status,
+              ...write.fields,
+              ...Object.fromEntries(
+                write.remove.map((key) => [key, deleteField()]),
+              ),
               updatedAt: Timestamp.now(),
               ...(draft.id ? {} : { createdAt: Timestamp.now() }),
             },
@@ -349,6 +377,7 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
     <CardDisplay
       header={'Events'}
       help={pluginDocsHelp('events', { anchor: '#manage-events' })}
+      HeaderProps={transferActions ? { action: transferActions } : undefined}
       contentGutterX
       contentGutterY
     >

@@ -140,6 +140,7 @@ import { withSitePlugins } from '../../../../../../../../../../components/consol
 import PageHoldBanner from '../../../../../../../../../../components/page-holds/page-hold-banner.component'
 import BesignerFunctionsButton from '../../../../../../../../../../components/besigner-functions-button.component'
 import PluginWidgetSlot from '../../../../../../../../../../components/plugin-widget-slot.component'
+import BesignerPageRecordProvider from '../../../../../../../../../../components/besigner-page-record-provider.component'
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
 import { useBindingTokenLookups } from '../../../../../../../../../../hooks/use-host-binding-docs'
 import InteractionsProvider from '../../../../../../../../../../components/interactions-provider.component'
@@ -1973,6 +1974,8 @@ function BesignerPage(props) {
                 disabled={screenKind === 'email'}
               >
                 <BesignerMediaPickerProvider hostId={hostId}>
+                {/* A record template draws for one of its records (AGL-3475). */}
+                <BesignerPageRecordProvider hostId={hostId} screenId={screenId}>
                 {/* The Attributes panel's plugin section (AGL-2940): the
                     designer draws whatever this context carries under the
                     selected element's fields, and this is the one place
@@ -2572,6 +2575,15 @@ function BesignerPage(props) {
                           {'Save'}
                         </Button>
                       </Stack>
+                      {/* What a plugin makes of the page itself (AGL-3475):
+                          a record template's dataset, base and fields. */}
+                      <PluginWidgetSlot
+                        slot="besignerPageProperties"
+                        hostId={hostId}
+                        orgId={orgId}
+                        screenId={screenId}
+                        screenKind={typeof screenKind === 'string' ? screenKind : undefined}
+                      />
                     </Stack>
                   </PropertiesDialogComponent>
                   {Boolean(canvas.rootNode && jsonOpen) && (
@@ -2583,6 +2595,7 @@ function BesignerPage(props) {
                     />
                   )}
                 </BesignerInspectorExtrasContext.Provider>
+                </BesignerPageRecordProvider>
                 </BesignerMediaPickerProvider>
               </InteractionsProvider>
             </BindingPickerProvider>

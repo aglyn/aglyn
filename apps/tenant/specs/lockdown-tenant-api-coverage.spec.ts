@@ -266,6 +266,8 @@ const TENANT_EXEMPT_AUDIT: Record<string, string> = {
   'apps/tenant/app/api/counter-notice/route.ts':
     'the §512(g) counter-notice; the filer is by definition locked out of both their site and the console',
   // No org data reachable at all.
+  'apps/tenant/app/api/fonts/[...path]/route.ts':
+    'versioned Google Fonts files passed through by path for any theme (AGL-3485); names no host, so there is no site whose lock it could honour, and it serves nothing the site owns',
   'apps/tenant/app/api/consent/region/route.ts':
     'pure request-header echo; reads no document and writes none',
   'apps/tenant/app/api/edit-hint/set/route.ts':

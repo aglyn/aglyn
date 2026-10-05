@@ -26,7 +26,7 @@
  * activity already logged is the activity's own.
  */
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { LogActivityDialog } from './log-activity-dialog'
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -95,5 +95,63 @@ describe('the kind a new activity opens on (AGL-2661)', () => {
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Kind' }))
     fireEvent.click(screen.getByRole('option', { name: 'Meeting' }))
     expect(kind()).toBe('Meeting')
+  })
+})
+
+/**
+ * WHICH WAY A CALL WENT (AGL-3517) — Salesforce's Call Type. A call takes
+ * inbound, outbound or internal and an email inbound or outbound, outbound
+ * to start; no other kind shows the field, and none writes one.
+ */
+describe('a call’s and an email’s direction (AGL-3517)', () => {
+  const { addDoc } = jest.requireMock('firebase/firestore') as { addDoc: jest.Mock }
+  const direction = () => screen.queryByRole('combobox', { name: 'Direction' })
+  const options = () => {
+    fireEvent.mouseDown(direction() as HTMLElement)
+    return screen.getAllByRole('option').map((option) => option.textContent)
+  }
+  beforeEach(() => addDoc.mockClear())
+
+  it('offers a call three directions and an email two, outbound to start, and a note none', () => {
+    const { unmount } = render(
+      <LogActivityDialog open onClose={() => undefined} scope={scope} link={{ contactId: 'c-1' }} />,
+    )
+    expect(direction()?.textContent).toBe('Outbound')
+    expect(options()).toEqual(['Not said', 'Outbound', 'Inbound', 'Internal'])
+    unmount()
+    const email = render(
+      <LogActivityDialog open onClose={() => undefined} scope={scope} link={{ contactId: 'c-1' }} kind="email" />,
+    )
+    expect(options()).toEqual(['Not said', 'Outbound', 'Inbound'])
+    email.unmount()
+    render(
+      <LogActivityDialog open onClose={() => undefined} scope={scope} link={{ contactId: 'c-1' }} kind="note" />,
+    )
+    expect(direction()).toBeNull()
+  })
+
+  it('writes the direction picked on a call, and none on a note', async () => {
+    const { unmount } = render(
+      <LogActivityDialog open onClose={() => undefined} scope={scope} link={{ contactId: 'c-1' }} />,
+    )
+    fireEvent.mouseDown(direction() as HTMLElement)
+    fireEvent.click(screen.getByRole('option', { name: 'Inbound' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'What happened' }), {
+      target: { value: 'They called about the quote' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Log' }))
+    await waitFor(() => expect(addDoc).toHaveBeenCalledTimes(1))
+    expect(addDoc.mock.calls[0][1]).toMatchObject({ kind: 'call', direction: 'inbound' })
+    unmount()
+
+    render(
+      <LogActivityDialog open onClose={() => undefined} scope={scope} link={{ contactId: 'c-1' }} kind="note" />,
+    )
+    fireEvent.change(screen.getByRole('textbox', { name: 'What happened' }), {
+      target: { value: 'Prefers mornings' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Log' }))
+    await waitFor(() => expect(addDoc).toHaveBeenCalledTimes(2))
+    expect('direction' in addDoc.mock.calls[1][1]).toBe(false)
   })
 })

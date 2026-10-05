@@ -62,6 +62,12 @@ published page will render, in the same order. A **repeat badge** in the
 corner of the element names what it repeats over and how many records it
 found.
 
+When no record matches — the dataset is empty, or the filter rules every
+record out — the badge turns amber and says the element is **hidden on the
+live site**. The canvas still shows your design so you can keep editing it,
+but the published page renders no copies at all rather than a card full of
+`{{item.name}}` placeholders.
+
 The first copy is the element you edit. Change a color, retype a heading,
 drag something in — every copy changes with it, because there is only ever one
 design. The copies beside it are pictures: they can't be selected, dragged or
@@ -89,8 +95,11 @@ is a page, not a database export: one that tried to render ten thousand
 rows would be slower than any visitor would wait for. Records with an explicit
 order come first, in that order; the rest follow by creation.
 
-For a bigger collection, give it a page per record instead of a hundred rows
-on one.
+For a bigger collection, give each record a page of its own instead of a
+hundred rows on one: see [Service and location pages from a
+dataset](../../guides/service-and-location-pages-from-a-dataset.md). When the
+dataset has a record template on the site, each repeated row carries its
+record's page as `{{item.url}}`, so a card links to it with that token.
 
 ## What you can't do
 
@@ -105,9 +114,10 @@ on one.
 A repeat stores the dataset's **id**, so renaming the dataset never breaks it.
 
 If the dataset is deleted, or stops being shared with this site, the element
-renders **once, as you designed it** — tokens and all. A published page never
-goes down because its data went away. See [who a dataset is shared
-with](../../content-and-data/datasets/overview.md#who-a-dataset-is-shared-with).
+renders **no copies** on the published page, and its badge on the canvas says
+the dataset was not found. A published page never goes down because its data
+went away, and it never shows visitors raw `{{item.*}}` placeholders either. See
+[who a dataset is shared with](../../content-and-data/datasets/overview.md#who-a-dataset-is-shared-with).
 
 ## Related
 

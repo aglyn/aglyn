@@ -196,10 +196,40 @@ const REPEAT_ACCENT = '#7C4DFF'
 /** The chip's own ink, for the same reason and read against that accent. */
 const REPEAT_INK = '#FFFFFF'
 
-const RepeatBadge = ({ label, count }: { label: string; count: number }) => (
+/**
+ * The badge's accent when the repeat renders nothing on the published page
+ * (AGL-3496), held literally for the same reason as {@link REPEAT_ACCENT}.
+ */
+const REPEAT_EMPTY_ACCENT = '#B45309'
+
+/** What the badge says: what is repeated, and how many copies the page gets. */
+function repeatBadgeText({
+  label,
+  count,
+  missing,
+}: {
+  label: string
+  count: number
+  missing?: boolean
+}): string {
+  if (missing) return `⟳ ${label} not found · hidden on the live site`
+  if (!count) return `⟳ ${label} · no matching records · hidden on the live site`
+  return `⟳ ${label} · ${count} ${count === 1 ? 'record' : 'records'}`
+}
+
+const RepeatBadge = ({
+  label,
+  count,
+  missing,
+}: {
+  label: string
+  count: number
+  missing?: boolean
+}) => (
   <Box
     aria-hidden
     data-aglyn-repeat-badge=""
+    data-aglyn-repeat-empty={count ? undefined : ''}
     sx={{
       // Out of the element's own layout: a badge that took part in a flex row
       // would move the design it is describing.
@@ -216,7 +246,7 @@ const RepeatBadge = ({ label, count }: { label: string; count: number }) => (
       textOverflow: 'ellipsis',
       whiteSpace: 'nowrap',
       borderBottomLeftRadius: 3,
-      backgroundColor: REPEAT_ACCENT,
+      backgroundColor: count ? REPEAT_ACCENT : REPEAT_EMPTY_ACCENT,
       color: REPEAT_INK,
       fontSize: 11,
       fontWeight: 700,
@@ -224,7 +254,7 @@ const RepeatBadge = ({ label, count }: { label: string; count: number }) => (
       letterSpacing: 0.2,
     }}
   >
-    {`⟳ ${label} · ${count} ${count === 1 ? 'record' : 'records'}`}
+    {repeatBadgeText({ label, count, missing })}
   </Box>
 )
 
@@ -473,7 +503,9 @@ export const NodeLeaf = observer(
     const repeatCopies = useRepeatCopies(node, repeatPreview)
     const firstRecord = useMemo(
       () =>
-        repeatPreview
+        // No record to draw (AGL-3496): the template shows as written, and
+        // the badge says the live site renders none of it.
+        repeatPreview?.records.length
           ? {
               record: repeatPreview.records[0],
               model: repeatPreview.dataset?.model,
@@ -617,6 +649,12 @@ export const NodeLeaf = observer(
             ...(node.sx !== undefined && {
               sx: JSON.parse(JSON.stringify(node.sx)),
             }),
+            // Joined with the design root's by the graft (AGL-3494), so the
+            // replacement's class list is the whole one the page draws.
+            ...(typeof (node as { className?: unknown }).className ===
+              'string' && {
+              className: (node as { className?: unknown }).className,
+            }),
             ...(node.styleOverrides && {
               styleOverrides: JSON.parse(JSON.stringify(node.styleOverrides)),
             }),
@@ -657,6 +695,7 @@ export const NodeLeaf = observer(
       node,
       JSON.stringify(node?.props ?? {}),
       JSON.stringify(node?.sx ?? {}),
+      (node as { className?: unknown } | undefined)?.className,
       JSON.stringify(node?.styleOverrides ?? {}),
       JSON.stringify(node?.attrOverrides ?? {}),
       definitions,
@@ -682,6 +721,15 @@ export const NodeLeaf = observer(
               ...(placedForm.replacement.sx === undefined
                 ? {}
                 : { sx: placedForm.replacement.sx }),
+              // The design root's classes joined with the placement's
+              // (AGL-3494), as the published page draws them.
+              ...((placedForm.replacement as { className?: unknown })
+                .className === undefined
+                ? {}
+                : {
+                    className: (placedForm.replacement as { className?: unknown })
+                      .className,
+                  }),
             } as typeof shownNode)
           : shownNode,
       [placedForm, shownNode],
@@ -754,6 +802,7 @@ export const NodeLeaf = observer(
             <RepeatBadge
               label={repeatPreview.label}
               count={repeatPreview.records.length}
+              missing={repeatPreview.missing}
             />
           ) : null}
           {placedForm ? (

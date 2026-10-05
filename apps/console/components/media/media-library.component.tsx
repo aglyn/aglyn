@@ -151,6 +151,7 @@ import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import useOrgHosts from '../../hooks/use-org-hosts'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import { mediaSrc, mediaThumbnailSrc } from '@aglyn/aglyn/app-utils/media-src'
+import { mediaOriginalSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { probeVideoFile } from '../../utils/video-probe'
 import { MediaFileInfo } from './media-file-info.component'
 import {
@@ -3529,6 +3530,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           href = mediaSrc(media)
         }
         if (!href) return
+        // The ORIGINAL, not the display copy the bare CDN url serves for an
+        // oversized or metadata-carrying image (AGL-3486).
+        href = mediaOriginalSrc(href)
         const bytes = await fetch(href)
         if (!bytes.ok) throw new Error(String(bytes.status))
         const blob = await bytes.blob()
@@ -5306,8 +5310,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       <ImageEditorDialog
         open={imageEditorOpen}
         // Load via the same-origin cdnPath (AGL-832) so the editor canvas
-        // stays untainted/exportable — the raw storage URL lacks CORS.
-        src={editor?.media?.cdnPath ?? editor?.media?.url ?? ''}
+        // stays untainted/exportable — the raw storage URL lacks CORS. The
+        // ORIGINAL form of it (AGL-3486): "Replace original" must not save
+        // the downscaled display copy back over the file.
+        src={mediaOriginalSrc(
+          editor?.media?.cdnPath ?? editor?.media?.url ?? '',
+        )}
         fileName={editor?.fileName || editor?.media?.fileName || 'image'}
         onClose={() => setImageEditorOpen(false)}
         onSave={async (result) => {

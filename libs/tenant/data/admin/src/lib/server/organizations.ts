@@ -1331,6 +1331,9 @@ export interface HostActivityTarget {
     // a contact added by hand, a lead converted — and read back by the
     // feed's presenter as links into the hub.
     | 'contact' | 'company' | 'deal' | 'lead'
+    // A plugin's own resource, `pluginId:noun` (AGL-2978), as the org feed
+    // takes it: a gift card the commerce plugin issued (AGL-3551).
+    | PluginActivityTargetType
   id?: string
   name?: string
   versionId?: string

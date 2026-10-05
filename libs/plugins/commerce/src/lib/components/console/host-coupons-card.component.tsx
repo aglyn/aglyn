@@ -36,6 +36,8 @@ import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { usePagedCollection } from '@aglyn/tenant-feature-instance'
 import { PLATFORM_BRAND_NAME, pluginDocsHelp } from '@aglyn/aglyn'
+import TransferHeaderActions from '../../transfer/transfer-header-actions.component'
+import { COMMERCE_COUPONS_TRANSFER } from '../../transfer/transfer-keys'
 
 export interface HostCouponsCardProps {
   hostId: string
@@ -147,6 +149,9 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
   return (
     <CardDisplay
       header={'Coupons'}
+      HeaderProps={{
+        action: <TransferHeaderActions resource={COMMERCE_COUPONS_TRANSFER} hostId={hostId} />,
+      }}
       help={pluginDocsHelp('commerceEndToEnd', {
         anchor: '#4-what-checkout-does',
         excerpt:

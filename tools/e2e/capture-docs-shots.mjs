@@ -1045,16 +1045,6 @@ await shot({
     { click: 'role=button[name="Edit"]', waitFor: 'Display name' },
   ],
 })
-await shot({
-  out: 'datasets-import-dialog.png',
-  base: CONSOLE_BASE,
-  path: `/${HOST_BASE}/data`,
-  waitFor: 'Add dataset',
-  actions: [
-    ...pickSurveyDataset,
-    { click: 'role=button[name="Import"]', waitFor: 'Match on field' },
-  ],
-})
 
 const surveyBesigner = `/${HOST_BASE}/screens/seed-guide-survey-screen/versions/seed-guide-survey-screen-v1/besigner`
 await shot({

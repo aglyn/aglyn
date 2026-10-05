@@ -17,7 +17,9 @@
 
 import {
   coerceDocumentValues,
+  coerceListValue,
   type DatasetModel,
+  datasetValueToInput,
   deriveModelFromFields,
   effectiveDatasetModel,
   validateDocument,
@@ -118,5 +120,104 @@ describe('coerceDocumentValues', () => {
     expect(values['price']).toBe('not-a-number')
     expect(validateDocument(model, values)['price']).toMatch(/number/)
     expect(validateDocument(model, values)['inStock']).toMatch(/true or false/)
+  })
+})
+
+/**
+ * List values (AGL-3496). The EDR Services dataset stored its `categories` as
+ * `["[\"Residential\"", "\"Commercial\"]"]`: a JSON array arrived as a
+ * string and was split on its commas, so no repeat filter ever matched it.
+ */
+describe('coerceListValue', () => {
+  it('takes a real array as the list — entries stringified and trimmed, empties dropped', () => {
+    expect(coerceListValue([' Residential ', 'Commercial', '', null, 3, true])).toEqual([
+      'Residential',
+      'Commercial',
+      '3',
+      'true',
+    ])
+    expect(coerceListValue([])).toEqual([])
+  })
+
+  it('takes a string that parses as a JSON array of scalars as that array', () => {
+    expect(coerceListValue('["Residential","Commercial"]')).toEqual(['Residential', 'Commercial'])
+    expect(coerceListValue('  [ "a, b" , 2 ]  ')).toEqual(['a, b', '2'])
+    expect(coerceListValue('[]')).toEqual([])
+  })
+
+  it('comma-splits any other string, as typed into the form', () => {
+    expect(coerceListValue('Residential, Commercial')).toEqual(['Residential', 'Commercial'])
+    expect(coerceListValue(' a ,, b ,')).toEqual(['a', 'b'])
+    // Bracketed but not JSON: still a comma list.
+    expect(coerceListValue('[draft], final')).toEqual(['[draft]', 'final'])
+    expect(coerceListValue('[a, b]')).toEqual(['[a', 'b]'])
+  })
+
+  it('leaves junk for validation to refuse', () => {
+    expect(coerceListValue(42)).toBe(42)
+    expect(coerceListValue({ a: 1 })).toEqual({ a: 1 })
+    expect(coerceListValue([{ a: 1 }, 'b'])).toEqual([{ a: 1 }, 'b'])
+    // A JSON array holding objects is not a list of values: comma-split as
+    // any other string would be, never flattened into `[object Object]`.
+    expect(coerceListValue('[{"a":1}]')).toEqual(['[{"a":1}]'])
+  })
+
+  it('repairs a record stored as fragments when the console form re-saves it', () => {
+    const listModel: DatasetModel = {
+      order: ['categories'],
+      fields: { categories: { name: 'Categories', type: 'sorted' } },
+    }
+    const field = listModel.fields['categories']
+    const corrupted = ['["Residential"', '"Commercial"]']
+    // What the record form shows for the stored value, then saves back.
+    const shown = datasetValueToInput(field, corrupted)
+    expect(coerceDocumentValues(listModel, { categories: shown })).toEqual({
+      categories: ['Residential', 'Commercial'],
+    })
+  })
+})
+
+describe('coerceDocumentValues on list fields (AGL-3496)', () => {
+  const listModel: DatasetModel = {
+    order: ['categories', 'related', 'author'],
+    fields: {
+      categories: { name: 'Categories', type: 'sorted', required: true },
+      related: { name: 'Related', type: 'reference', reference: { datasetId: 'd2', multiple: true } },
+      author: { name: 'Author', type: 'reference', reference: { datasetId: 'd3' } },
+    },
+  }
+
+  it('coerces a sorted and a multiple reference field through the one list coercion', () => {
+    const values = coerceDocumentValues(listModel, {
+      categories: '["Residential","Commercial"]',
+      related: '["r1","r2"]',
+      author: 'a1',
+    })
+    expect(values).toEqual({
+      categories: ['Residential', 'Commercial'],
+      related: ['r1', 'r2'],
+      author: 'a1',
+    })
+    expect(validateDocument(listModel, values)).toEqual({})
+  })
+
+  it('normalizes an array an API client sent, and refuses what is not a list', () => {
+    expect(coerceDocumentValues(listModel, { categories: [' a ', ''], related: ['r1', ''] })).toEqual({
+      categories: ['a'],
+      related: ['r1'],
+    })
+    expect(validateDocument(listModel, coerceDocumentValues(listModel, { categories: 7 }))['categories']).toMatch(
+      /must be a list/,
+    )
+    expect(
+      validateDocument(listModel, coerceDocumentValues(listModel, { categories: [{ a: 1 }] }))['categories'],
+    ).toMatch(/must be a list/)
+    expect(validateDocument(listModel, { categories: 'Residential' })['categories']).toMatch(/must be a list/)
+  })
+
+  it('treats an empty list as missing for a required field', () => {
+    const values = coerceDocumentValues(listModel, { categories: ' , ' })
+    expect(values['categories']).toEqual([])
+    expect(validateDocument(listModel, values)['categories']).toMatch(/required/)
   })
 })

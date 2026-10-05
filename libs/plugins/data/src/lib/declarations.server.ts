@@ -32,6 +32,7 @@ import {
   DATASET_STORAGE_METER_ID,
 } from './constants/bundle-common'
 import { RECORD_PAGE_ADDRESS_FIELD } from './record-pages/record-pages'
+import { datasetsSitePackage } from './site-bundle/datasets-package'
 
 /**
  * The data plugin's server declarations: the light registrations core reads
@@ -102,6 +103,7 @@ export function registerDataServerDeclarations(): void {
       export: async (request) => (await datasets()).exportSiteDatasets(request),
       refusal: async (request) => (await datasets()).siteDatasetsRefusal(request),
       import: async (request) => (await datasets()).importSiteDatasets(request),
+      package: datasetsSitePackage,
     },
     { pluginId: BUNDLE_ID },
   )

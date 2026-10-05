@@ -37,6 +37,7 @@ import {
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { MEDIA_CDN_ROUTE } from '@aglyn/aglyn/server'
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
+import { FieldValue } from 'firebase-admin/firestore'
 import { streamHandler } from './stream'
 
 const { GATED_VIDEO_SESSION_TTL_MS } = jest.requireActual(
@@ -44,6 +45,8 @@ const { GATED_VIDEO_SESSION_TTL_MS } = jest.requireActual(
 )
 
 const docs = new Map<string, Record<string, any>>()
+/** Every write the stream makes, by document path. */
+const writes: Array<{ path: string; data: Record<string, any> }> = []
 
 function makeDocRef(path: string) {
   return {
@@ -57,6 +60,9 @@ function makeDocRef(path: string) {
         data: () => data,
         get: (field: string) => data?.[field],
       }
+    },
+    async set(data: Record<string, any>) {
+      writes.push({ path, data })
     },
   }
 }
@@ -204,6 +210,7 @@ beforeEach(() => {
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
   resetPluginServicesForTests()
   docs.clear()
+  writes.length = 0
   minted = []
   mockFlagOn = true
   mockFlagAsked.length = 0
@@ -262,6 +269,18 @@ describe('AGL-2824 · flag on: the stream mints the delivery provider’s short-
     // The `Accept` chose the rendition, so this response varies on it.
     expect(played.headers['Vary']).toBe('Accept')
     expect(mockFlagAsked).toEqual([ORG])
+    // The provider serves the sitting, so this request is the only one we see:
+    // it counts the copy's full size toward the org library's bandwidth
+    // (AGL-3474), once.
+    const day = new Date().toISOString().slice(0, 10)
+    const counted = writes.filter((write) => write.path === `orgs/${ORG}/analytics/${day}`)
+    expect(counted).toHaveLength(1)
+    expect(
+      counted[0].data['mediaBandwidthBytes'].isEqual(FieldValue.increment(10)),
+    ).toBe(true)
+    expect(counted[0].data['media']['med-film']['redirects'].isEqual(FieldValue.increment(1))).toBe(
+      true,
+    )
   })
 
   it('hands a browser that names WebM the WebM copy', async () => {

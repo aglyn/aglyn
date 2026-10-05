@@ -57,6 +57,60 @@ export const FORM_FIELD_COMPONENT_ID = 'formField'
 export const FORM_ID_PROP = 'formId'
 
 /**
+ * The settings a saved form's own root carries for every page that places it
+ * (AGL-3494): its caption, where its answers go, its button, its message and
+ * what a successful submit does.
+ *
+ * A placement renders the form's values for each of these unless it sets its
+ * own (`placementPropsOverRoot`), so a value a page's form node merely STARTED
+ * with — a preset's "Send message", a caption typed before the form was picked
+ * — would silently pin that page to it. {@link formPropsOnBind} is what keeps
+ * those starting values from becoming overrides.
+ */
+export const FORM_ENTITY_OWNED_PROPS: readonly string[] = [
+  'formName',
+  'datasetId',
+  'datasetName',
+  'submitLabel',
+  'successMessage',
+  'afterSubmit',
+  'redirectScreenId',
+  'redirectUrl',
+  'revealNodeId',
+]
+
+/**
+ * A form node's props as they are saved when the author PICKS a saved form for
+ * it (AGL-3494): the form's own settings ({@link FORM_ENTITY_OWNED_PROPS}) are
+ * dropped from the page's copy, so the placement shows the saved form's.
+ *
+ * Picking a form is the moment the node stops being the page's own form and
+ * becomes a placement of that one: its fields are already replaced by the
+ * form's, and its label and message follow. Anything the page wrote before
+ * that moment was written for the node it used to be — the Contact Section
+ * preset seeds "Send message" and a thank-you line, the Contact Form preset a
+ * caption — and kept, each would read as a deliberate per-page override and
+ * mask the form's value forever. A label set AFTER the form is picked is
+ * written on the placement and wins, which is the per-page change the merge
+ * honors.
+ *
+ * Only a change of form clears anything. Re-saving a placement of the same
+ * form, editing any other attribute, or unpicking the form leaves the props
+ * exactly as given — an existing placement keeps every value it carries.
+ */
+export function formPropsOnBind(
+  previousProps: Record<string, unknown> | undefined | null,
+  nextProps: Record<string, unknown>,
+): Record<string, unknown> {
+  const nextFormId = nextProps[FORM_ID_PROP]
+  if (typeof nextFormId !== 'string' || !nextFormId.trim()) return nextProps
+  if (previousProps?.[FORM_ID_PROP] === nextFormId) return nextProps
+  const bound = { ...nextProps }
+  for (const key of FORM_ENTITY_OWNED_PROPS) delete bound[key]
+  return bound
+}
+
+/**
  * How many forms one query for a site's catalog reads.
  *
  * ⛔ **NOT the allowance.** How many forms a site may hold is

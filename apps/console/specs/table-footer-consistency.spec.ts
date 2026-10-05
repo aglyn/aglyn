@@ -963,6 +963,30 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
+    'apps/console/components/transfer-hub/org-package-import.component.tsx',
+    'The dry run of ONE package file (AGL-3535): a row per item the file ' +
+      'carries, each with the choice it needs, beside the references and ' +
+      'warnings that have to be answered before Import. Bounded by the file ' +
+      '(`TRANSFER_PACKAGE_MAX_ITEMS`), and a reader must see every item they ' +
+      'are deciding before they acknowledge the whole — a pager would hide ' +
+      'the choices Import waits on.',
+  ],
+  [
+    'apps/console/components/transfer-hub/org-package-undo.component.tsx',
+    'The items ONE package import wrote that were edited since (AGL-3535), ' +
+      'each with a keep-or-undo choice. Bounded by what that import wrote, ' +
+      'and every row is a decision Undo carries out together; a pager would ' +
+      'put some of them out of sight of the button.',
+  ],
+  [
+    'apps/console/components/settings/org-data-transfer-card.component.tsx',
+    'Launch points, not a list (AGL-3535): the resources the workspace’s ' +
+      'plugins declare — a closed set from `plugins.config.json` — and, for a ' +
+      'resource moved one instance at a time, the instances to open the ' +
+      'wizard on, read through the owner’s record list at a fixed window. ' +
+      'Like a picker’s options, a person opening one knows which they want.',
+  ],
+  [
     'apps/console/components/notification-scope-table.component.tsx',
     'The per-WORKSPACE and per-SITE notification settings (AGL-3267) — a row ' +
       'per `NotificationCategory` for the scope on screen, each opening onto ' +
@@ -1028,11 +1052,12 @@ const NOT_A_LIST: Array<[string, string]> = [
       'the map is over a parsed prop, not over documents.',
   ],
   [
-    'libs/plugins/crm/src/lib/components/lead-source-values-card.tsx',
-    'The organization’s LEAD SOURCE picklist values (AGL-3298) — a settings ' +
-      'table, one row per value the merchant declared, bounded by ' +
-      '`CRM_PICKLIST_VALUES_MAX` (200) where the picklist is read and ' +
-      'written: the values live in one `crmPicklists/leadSource` document, ' +
+    'libs/plugins/crm/src/lib/components/picklist-values-card.tsx',
+    'The organization’s values for one standard CRM picklist (AGL-3298, ' +
+      'AGL-3510) — a settings table, one row per value, standard or the ' +
+      'merchant’s own, bounded by `CRM_PICKLIST_VALUES_MAX` (200) where the ' +
+      'picklist is read and written: the values live in one ' +
+      '`crmPicklists/{picklistId}` document, ' +
       'in the order the arrows on each row move. The bound is what a ' +
       'dropdown can carry, not how long the account has existed, so there ' +
       'is no second page for a footer to turn to.',
@@ -1071,15 +1096,6 @@ const NOT_A_LIST: Array<[string, string]> = [
       'would page a slice while the collection continued past it — the exact ' +
       'shape this file exists to stop — and the rendered window is bounded ' +
       'by `ceilingedWindow`, which discloses when it bit.',
-  ],
-  [
-    'libs/plugins/email/src/lib/components/list-import-drawer.tsx',
-    'The import drawer’s two tables are BOUNDED READOUTS of one act, not ' +
-      'windows onto a collection. The first shows at most ten of the sampled ' +
-      'addresses the server checked, beside the sample size and the file ' +
-      'total, so its length is a constant; the second is one row per refusal ' +
-      'REASON, and there are six reasons. Neither grows with the size of the ' +
-      'file, and a pager on either would offer to page a fixed list.',
   ],
   [
     'libs/plugins/email/src/lib/components/sending-sender-drawer.tsx',
@@ -1352,16 +1368,6 @@ const NOT_A_LIST: Array<[string, string]> = [
       'page the choices a person has to scan anyway.',
   ],
   [
-    'libs/plugins/crm/src/lib/components/csv-import-drawer.tsx',
-    'The spreadsheet PREVIEW and the skipped-row report in the CSV ' +
-      'import (AGL-2602, shared by every section since AGL-2621): rows ' +
-      'parsed from a file the reader just chose, capped on the client and ' +
-      'shown ten at a time as a preview before the import runs. The ' +
-      'contacts and companies drawers are vocabularies over this one walk ' +
-      'and draw no table of their own. The source is a local array, not a ' +
-      'collection, and the full file is what the download offers.',
-  ],
-  [
     'libs/plugins/crm/src/lib/components/deal-products-card.tsx',
     'A deal’s LINE ITEMS (AGL-2620): rows stored on the deal document ' +
       'itself and bounded there by `DEAL_LINE_ITEMS_MAX` (50) — the card ' +
@@ -1441,6 +1447,14 @@ const NOT_A_LIST: Array<[string, string]> = [
       '`CONTACT_CEILING` that the card discloses. The rows are counts by ' +
       'source, not documents; the people are the Contacts section’s paged ' +
       'table.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/reports/lead-source-card.tsx',
+    'An AGGREGATE table in a report (AGL-3511): the period’s leads by ' +
+      'lead source and by direction, one row per value found in the Lead ' +
+      'funnel’s own read, capped at `LEAD_CEILING` that the card ' +
+      'discloses. The rows are counts by value, not documents; the leads ' +
+      'are the Leads section’s paged table.',
   ],
   [
     'libs/plugins/crm/src/lib/components/contact-duplicates-card.tsx',
@@ -1932,7 +1946,21 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // (AGL-3463): the detector no longer reads a list in the editor, whose
     // only mapped rows were picker options and node definitions, so its row
     // retires.
-    expect(NOT_A_LIST).toHaveLength(68)
+    //
+    // 69 since Reports counts leads by lead source (AGL-3511), and this one
+    // IS a new table: an aggregate by value over the Lead funnel's own
+    // capped window, like the other report cards above it.
+    //
+    // 68 since the email list import moved onto the transfer wizard
+    // (AGL-3529): its drawer, and the two bounded readouts it drew, are gone.
+    //
+    // 71 since the Import & export hub (AGL-3535), and these ARE new tables:
+    // one package file's dry run and the edited items of one import's undo,
+    // each bounded by that one file, and the hub's launch points.
+    //
+    // 70 since the CRM's imports moved onto the transfer wizard (AGL-3528):
+    // the shared CSV import drawer, and its preview table, are gone.
+    expect(NOT_A_LIST).toHaveLength(70)
   })
 })
 

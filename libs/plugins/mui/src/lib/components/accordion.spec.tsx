@@ -113,6 +113,21 @@ describe('Accordion element (AGL-1201)', () => {
       container.querySelector('.MuiAccordionSummary-expandIconWrapper svg'),
     ).toBeTruthy()
   })
+
+  it('sets the header in the page’s font, not the browser’s button face (AGL-3497)', () => {
+    render(
+      <div style={{ fontFamily: 'Site Face' }}>
+        <AccordionElement>
+          <AccordionSummaryElement sx={{ fontWeight: 700 }}>{'Header'}</AccordionSummaryElement>
+          <AccordionDetailsElement>{'Hidden details'}</AccordionDetailsElement>
+        </AccordionElement>
+      </div>,
+    )
+    const summary = screen.getByRole('button', { name: 'Header' })
+    expect(getComputedStyle(summary).fontFamily).toBe('inherit')
+    // The node's own styles still apply on top.
+    expect(getComputedStyle(summary).fontWeight).toBe('700')
+  })
 })
 
 describe('Accordion summary with a linked header (AGL-1232)', () => {

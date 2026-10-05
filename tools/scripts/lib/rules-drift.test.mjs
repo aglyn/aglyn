@@ -180,6 +180,26 @@ function headOf(file) {
   })
 }
 
+/**
+ * The Firestore rules that deploy at a ref: the comment-stripped artifact
+ * (AGL-3544), or the documented source at a ref cut before it existed. The
+ * same choice the checker makes, so live is planted as a deploy would leave it.
+ */
+function deployedFirestoreAt(ref) {
+  const show = (file) =>
+    execFileSync('git', ['show', `${ref}:${file}`], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+  try {
+    return show('cloud/firebase-firestore.deploy.rules')
+  } catch {
+    return show('cloud/firebase-firestore.rules')
+  }
+}
+
 /** Serve doctored "live" rules. Values are strings (200) or {status, body}. */
 async function withStub({ firestore, storage, database }, run) {
   const releases = {
@@ -274,7 +294,7 @@ function runCli({ port, args = [], cwd = repoRoot, env = null }) {
 }
 
 describe('check-rules-drift CLI (planted drift, stubbed live API)', () => {
-  const headFirestore = headOf('cloud/firebase-firestore.rules')
+  const headFirestore = deployedFirestoreAt('HEAD')
   const headStorage = headOf('cloud/firebase-storage.rules')
   const headDatabase = headOf('cloud/firebase-database.rules.json')
 
@@ -424,12 +444,14 @@ describe('check-rules-drift CLI (planted drift, stubbed live API)', () => {
       'Give the workflow `actions/checkout` with `fetch-depth: 0` (AGL-1920).',
   )
 
-  // The newest commit that touched the firestore rules, and its parent. The
-  // parent stands in for "the promoted SHA" — live is at the parent, HEAD
-  // carries one undeployed rules commit. Exactly the state that was failing.
+  // The newest commit that changed the DEPLOYED firestore rules, and its
+  // parent. The parent stands in for "the promoted SHA" — live is at the
+  // parent, HEAD carries one undeployed rules commit. Exactly the state that
+  // was failing. The deploy artifact, not the documented source (AGL-3544): a
+  // comment-only source edit can leave what deploys unchanged.
   const lastRulesCommit = execFileSync(
     'git',
-    ['log', '-1', '--format=%H', '--', 'cloud/firebase-firestore.rules'],
+    ['log', '-1', '--format=%H', '--', 'cloud/firebase-firestore.deploy.rules'],
     { cwd: repoRoot, encoding: 'utf8' },
   ).trim()
   const promotedRef = `${lastRulesCommit}^`
@@ -441,10 +463,7 @@ describe('check-rules-drift CLI (planted drift, stubbed live API)', () => {
     })
 
   it('live at the promoted baseline is GREEN even though HEAD is ahead, and the pending commit is itemised', async () => {
-    const promotedFirestore = showAt(
-      promotedRef,
-      'cloud/firebase-firestore.rules',
-    )
+    const promotedFirestore = deployedFirestoreAt(promotedRef)
     // Guard the premise: the chosen commit really does change this file, so
     // "green" below is not green-because-identical.
     assert.notEqual(

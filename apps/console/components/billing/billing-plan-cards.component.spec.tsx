@@ -44,6 +44,7 @@ import {
   PLATFORM_BRAND_NAME,
   PLATFORM_SUPPORT_URL,
 } from '@aglyn/aglyn/app-utils/platform-brand'
+import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
@@ -673,7 +674,9 @@ describe('the Enterprise card in the comparison grid', () => {
     }
     // The rows those lines duplicated are each still on the card, exactly
     // once — this must read as de-duplication, never as a card losing rows.
-    expect(enterprise.getAllByText(/^200 (hosts|team seats)$/)).toHaveLength(2)
+    const { hostLimit, managersPerOrg } = PLAN_ENTITLEMENTS.enterprise
+    expect(enterprise.getAllByText(`${hostLimit} hosts`)).toHaveLength(1)
+    expect(enterprise.getAllByText(`${managersPerOrg} team seats`)).toHaveLength(1)
     expect(enterprise.getAllByText('Full white-label')).toHaveLength(1)
   })
 

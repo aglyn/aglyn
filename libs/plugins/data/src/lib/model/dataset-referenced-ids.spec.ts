@@ -174,13 +174,16 @@ describe('every record write path carries the index', () => {
   // A site restore: the data plugin's section of the bundle (AGL-3080).
   const SITE_IMPORT =
     'libs/plugins/data/src/lib/site-bundle/datasets-site-bundle.server.ts'
+  // An import and its undo: the data plugin's transfer resource (AGL-3530).
+  const TRANSFER =
+    'libs/plugins/data/src/lib/transfer/dataset-transfer.server.ts'
 
   const callSites = (path: string) =>
     (read(path).match(/datasetIntegrity(Fields|Update)\(/g) ?? []).length
 
   it.each([
-    // The editor save, the importer's upsert branch, and the FKey strip.
-    [CARD, 3],
+    // The editor save and the FKey strip; imports moved to the server.
+    [CARD, 2],
     // create-record, one chunk of import-records, and add-address-field's
     // fill of every record's page address (AGL-3475).
     [CONSOLE_ROUTE, 3],
@@ -192,6 +195,9 @@ describe('every record write path carries the index', () => {
     [EVENT_ACTIONS, 3],
     // The restore re-keys records by their original id.
     [SITE_IMPORT, 1],
+    // An import's update and create, undo's restore, and undo's FKey strip
+    // when it deletes a record the import created.
+    [TRANSFER, 4],
   ])('%s derives it at every write', (path, expected) => {
     expect({ path, sites: callSites(path) }).toEqual({ path, sites: expected })
   })
@@ -218,7 +224,7 @@ describe('every record write path carries the index', () => {
     // `set(…, { merge: true })` folds a map into the stored one, so a value
     // cleared by the write would go on answering its old equality. The
     // merging writers name their fields in `mergeFields` instead.
-    for (const path of [CARD, EVENT_ACTIONS]) {
+    for (const path of [CARD, EVENT_ACTIONS, TRANSFER]) {
       const source = read(path)
       for (const at of [...source.matchAll(/datasetIntegrityUpdate\(/g)].map((m) => m.index ?? 0)) {
         const write = source.slice(at, at + 900)
@@ -237,6 +243,17 @@ describe('every record write path carries the index', () => {
     // until a reference is removed and the stale index keeps refusing.
     expect(read(CARD)).toContain('datasetIntegrityUpdate(model, coerced, deleteField())')
     expect(read(REST_API)).toContain('datasetIntegrityUpdate(model, merged, FieldValue.delete())')
+    expect(read(TRANSFER)).toContain('datasetIntegrityUpdate(model, coerced, FieldValue.delete())')
+  })
+
+  it('the import names every merged field once, in one list', () => {
+    // The transfer's merging writes share one `mergeFields` list, which must
+    // hold every field the helper returns beside `values` and `updatedAt`.
+    const source = read(TRANSFER)
+    expect(source).toContain(
+      "const RECORD_MERGE_FIELDS = ['values', 'referencedIds', 'filterKeys', 'filterValues', 'updatedAt']",
+    )
+    expect(source.match(/mergeFields: RECORD_MERGE_FIELDS/g)).toHaveLength(2)
   })
 
   it('the site import DERIVES it rather than trusting the bundle', () => {
@@ -257,6 +274,7 @@ describe('every record write path carries the index', () => {
       FORM_SUBMIT,
       EVENT_ACTIONS,
       SITE_IMPORT,
+      TRANSFER,
     ]) {
       expect({ path, length: read(path).length > 1000 }).toEqual({
         path,

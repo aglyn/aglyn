@@ -19,6 +19,7 @@ import {
   registerConsoleExtension,
   registerPluginPermissions,
 } from '@aglyn/aglyn'
+import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { mdiEmailFastOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { OUTREACH_CONSOLE_SECTIONS } from './components/outreach-console-sections'
@@ -27,6 +28,10 @@ import {
   OUTREACH_PLUGIN_ID,
   OUTREACH_USE_PERMISSION,
 } from './constants/bundle-common'
+import {
+  OUTREACH_DO_NOT_CONTACT_TRANSFER_KEY,
+  OUTREACH_DO_NOT_CONTACT_TRANSFER_LABEL,
+} from './constants/transfer-resources'
 
 /** Code-split: the hub only loads when opened. */
 const OutreachConsolePage = lazy(
@@ -64,6 +69,12 @@ const OutreachConsolePage = lazy(
  */
 export function registerOutreachConsole(): void {
   registerPluginPermissions(OUTREACH_PERMISSIONS)
+  // How the Import & export hub names sequences in a workspace package (AGL-3535).
+  registerPluginTransferResourceUi(
+    'outreach.sequences',
+    { label: 'Sequences', icon: { path: mdiEmailFastOutline.path } },
+    { pluginId: OUTREACH_PLUGIN_ID },
+  )
   registerConsoleExtension({
     pluginId: OUTREACH_PLUGIN_ID,
     displayName: 'Sequences',
@@ -92,4 +103,11 @@ export function registerOutreachConsole(): void {
       },
     ],
   })
+  // The do-not-contact list's Import and Export, opened from the
+  // Compliance section's do-not-contact card.
+  registerPluginTransferResourceUi(
+    OUTREACH_DO_NOT_CONTACT_TRANSFER_KEY,
+    { label: OUTREACH_DO_NOT_CONTACT_TRANSFER_LABEL },
+    { pluginId: OUTREACH_PLUGIN_ID },
+  )
 }

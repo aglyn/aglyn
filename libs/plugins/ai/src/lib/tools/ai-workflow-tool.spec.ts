@@ -98,8 +98,10 @@ const NULL_STEP = {
   tag: null,
   owner: null,
   taskKind: null,
+  priority: null,
   dueInDays: null,
   activityKind: null,
+  direction: null,
 }
 
 const readStep = (type: string, fields: Record<string, unknown> = {}) => ({ type, ...NULL_STEP, ...fields })
@@ -174,7 +176,14 @@ describe('the tools', () => {
   })
 
   it('gives each action only the fields its types take, none a union, which the reader reads back whole', () => {
-    const samples: Record<string, unknown> = { text: 'round robin', toField: 'workEmail' }
+    // A sample where an enum's first value would leave the field unset, or
+    // where a field is a string the reader holds to a list (AGL-3538).
+    const samples: Record<string, unknown> = {
+      text: 'round robin',
+      toField: 'workEmail',
+      event: 'lead',
+      direction: 'outbound',
+    }
     for (const variant of stepVariants()) {
       const fields = Object.keys(variant['properties']).filter((key) => key !== 'type')
       for (const type of variant['properties'].type.enum as string[]) {
@@ -184,7 +193,7 @@ describe('the tools', () => {
             expect([type, key, field.anyOf, typeof field.type]).toEqual([type, key, undefined, 'string'])
             return [
               key,
-              field.enum ? field.enum[0] : field.type === 'integer' ? 1 : (samples[key] ?? 'Welcome'),
+              samples[key] ?? (field.enum ? field.enum[0] : field.type === 'integer' ? 1 : 'Welcome'),
             ]
           }),
         )
@@ -206,6 +215,49 @@ describe('the tools', () => {
     const read = readAiAutomationAnswer(answer({ steps: [flat] }), ALL)
     expect(read.violations).toEqual([])
     expect(read.value?.steps[0]).toEqual(readStep('enrollList', { list: 'newsletter' }))
+  })
+})
+
+describe("a task's priority and a logged call's direction (AGL-3538)", () => {
+  it("reads them back, a missing priority as the runner's normal and a missing direction as none", () => {
+    const read = readAiAutomationAnswer(
+      answer({
+        steps: [
+          step('createCrmTask', { text: 'Call them', taskKind: 'call', priority: 'high', dueInDays: 1 }),
+          step('logCrmActivity', { activityKind: 'call', direction: 'internal', text: 'Synced with Sam' }),
+          step('logCrmActivity', { activityKind: 'email', direction: 'inbound', text: 'They wrote back' }),
+          step('logCrmActivity', { activityKind: 'note', direction: '', text: 'A note' }),
+          step('createCrmTask', { text: 'Follow up', taskKind: 'todo', dueInDays: 3 }),
+        ],
+      }),
+      ALL,
+    )
+    expect(read.violations).toEqual([])
+    expect(read.value?.steps.map((one) => [one.type, one.priority, one.direction])).toEqual([
+      ['createCrmTask', 'high', null],
+      ['logCrmActivity', null, 'internal'],
+      ['logCrmActivity', null, 'inbound'],
+      ['logCrmActivity', null, null],
+      ['createCrmTask', null, null],
+    ])
+  })
+
+  it('refuses a priority outside the three, and a direction the kind does not take, by the step', () => {
+    const read = readAiAutomationAnswer(
+      answer({
+        steps: [
+          step('createCrmTask', { text: 'Call them', taskKind: 'call', priority: 'urgent', dueInDays: 1 }),
+          step('logCrmActivity', { activityKind: 'email', direction: 'internal', text: 'x' }),
+          step('logCrmActivity', { activityKind: 'note', direction: 'inbound', text: 'x' }),
+        ],
+      }),
+      ALL,
+    )
+    expect(messages(read)).toEqual([
+      'Step 1 (Create a CRM task) needs priority: low, normal or high.',
+      'Step 2 (Log a CRM activity) needs direction: outbound, inbound, or empty.',
+      'Step 3 (Log a CRM activity) takes no direction: leave it empty for a note.',
+    ])
   })
 })
 
@@ -368,7 +420,7 @@ describe('reading an automation', () => {
       [step('enrollList'), 'Step 1 (Enroll in a list) needs reference.'],
       [step('wait', { minutes: 0 }), `Step 1 (Wait) needs minutes, a whole number from 1 to ${AI_AUTOMATION_WAIT_MINUTES.max}.`],
       [step('wait', { minutes: 1.5 }), `Step 1 (Wait) needs minutes, a whole number from 1 to ${AI_AUTOMATION_WAIT_MINUTES.max}.`],
-      [step('waitForEvent', { minutes: 60, event: 'somethingElse' }), 'Step 1 (Wait for something to happen) needs the event it waits for.'],
+      [step('waitForEvent', { minutes: 60, event: 'somethingElse' }), `Step 1 (Wait for something to happen) needs the event it waits for, one of: ${HOST_EVENT_TYPES.join(', ')}.`],
       [step('setContactStage', { stage: 'Lead' }), 'Step 1 (Set the contact’s lifecycle stage) needs the lifecycle stage to set.'],
       [
         step('createCrmTask', { title: 'Call', taskKind: 'call', dueInDays: CRM_TASK_MAX_DUE_DAYS + 1 }),

@@ -25,6 +25,8 @@ import {
   extractEmailFromFields,
   mergeContactInteraction,
   normalizeContactEmail,
+  composeContactName,
+  normalizeContactBirthdate,
 } from './contacts'
 
 describe('contacts (AGL-197)', () => {
@@ -405,5 +407,37 @@ describe('letting go keeps a person’s refusals', () => {
         A,
       ),
     ).toEqual({ action: 'delete', retained: null })
+  })
+})
+
+/** Salesforce's standard contact fields (AGL-3515): the name the parts make, and the birthdate's shape. */
+describe('composeContactName', () => {
+  it('joins the parts single-spaced, either alone, and is empty for neither', () => {
+    expect(composeContactName('  Ada ', ' Lovelace')).toBe('Ada Lovelace')
+    expect(composeContactName('Mary   Ann', '')).toBe('Mary Ann')
+    expect(composeContactName(undefined, 'Lovelace')).toBe('Lovelace')
+    expect(composeContactName('', null)).toBe('')
+  })
+})
+
+describe('normalizeContactBirthdate', () => {
+  const NOW = Date.UTC(2026, 9, 4, 12)
+  it('keeps a real past calendar date and clears on blank', () => {
+    expect(normalizeContactBirthdate('1984-07-21', NOW)).toBe('1984-07-21')
+    expect(normalizeContactBirthdate(' 2000-02-29 ', NOW)).toBe('2000-02-29')
+    expect(normalizeContactBirthdate('', NOW)).toBe('')
+    expect(normalizeContactBirthdate(null, NOW)).toBe('')
+  })
+
+  it('refuses another spelling, a date that does not exist, and the future', () => {
+    expect(normalizeContactBirthdate('07/21/1984', NOW)).toBeNull()
+    expect(normalizeContactBirthdate('1999-02-29', NOW)).toBeNull()
+    expect(normalizeContactBirthdate('1984-13-01', NOW)).toBeNull()
+    expect(normalizeContactBirthdate('2026-10-06', NOW)).toBeNull()
+  })
+
+  it("accepts today wherever on Earth it already is", () => {
+    // 12:00 UTC on the 4th is already the 5th in UTC+14.
+    expect(normalizeContactBirthdate('2026-10-05', NOW)).toBe('2026-10-05')
   })
 })

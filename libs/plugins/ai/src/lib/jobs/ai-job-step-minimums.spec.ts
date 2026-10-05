@@ -315,6 +315,7 @@ const screen = (index: number): AiJobPlan['screens'][number] => ({
   slug: `page-${index}`,
   layout: null,
   template: null,
+  record: null,
   duplicateOf: null,
   nav: index === 0,
   seoTitle: `Page ${index}`,

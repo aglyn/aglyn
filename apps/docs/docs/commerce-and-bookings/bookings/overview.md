@@ -43,9 +43,57 @@ card on the Products hub; see [Commerce](../commerce/overview.md).
 2. Configure **availability** — the windows when slots are offered.
 3. Add the **booking widget** to a page as a canvas element.
 
+### Price varies, free estimate, or contact for price {#price-labels}
+
+A service that is quoted at the job doesn't need a price. In the service's
+dialog, **Show the price as** picks how the widget states it:
+
+- **The price** (the default): the widget shows the price, and a priced
+  service is paid through Stripe when it's booked.
+- **Price varies**, **Free estimate** or **Contact for price**: the widget
+  shows that label instead, and the service **books with no charge**, like an
+  estimate appointment. Any price typed in the dialog is neither shown nor
+  charged, and you quote the visitor afterwards.
+
+A labeled service needs no connected Stripe account, because nothing is
+charged.
+
+### Asking for a phone number and an address {#phone-and-address}
+
+The booking widget always asks for a name and an email. A service can also ask
+for a **phone number** and an **address** — the place the job is, for a service
+done on site. Set each one in the service's dialog under **Booking form**:
+
+- **Don't ask** (the default) — the field does not appear.
+- **Optional** — the field appears and the visitor may leave it empty.
+- **Required** — the visitor cannot confirm the booking without it.
+
+The booking is checked again when it arrives, so a required field cannot be
+skipped. A phone number has to look like one: a US or Canadian number is
+stored in international form (`+15125550107`), and a number written another
+country's way is kept as typed.
+
+What the visitor gives shows:
+
+- on the booking in **Upcoming bookings**;
+- in the **New booking** notification the site's managers get, by email too if
+  they have email notifications on — for paid bookings as well, once the
+  payment clears;
+- on the **meeting** the booking files in the CRM, under the slot.
+
+The phone number is also added to the person in the CRM — the lead or the
+contact the booking lands on — **only when that person has no phone yet**, so
+it never replaces a number you already have. The address stays on the booking
+and the meeting, not on the person: it is where this job is, which is often not
+where they live.
+
 ## Taking bookings
 
 - Visitors pick a slot through the booking widget; the **booking API** records it.
+  The widget shows two weeks of open days at a time, with every open time of the
+  day the visitor picks, grouped into morning, afternoon and evening. **Later dates**
+  pages on through your whole booking horizon (60 days unless you change it in the
+  plugin's settings).
 - For paid services, Stripe collects payment and a **slot hold** prevents double-booking
   during checkout.
 - **Reminder emails** go out automatically ahead of the appointment — see below.
@@ -162,6 +210,33 @@ and tells you the amount before you confirm.
   dashboard instead — the console will say so, and will remind you to tick
   **Reverse transfer** so the amount comes back from your account rather than
   Aglyn's.
+
+### Export bookings {#export-bookings}
+
+**Export** in the header of the bookings card downloads the site's bookings as
+a file.
+
+- **Which bookings.** The list you're looking at — **Upcoming bookings**, or
+  one person's bookings when the page is narrowed to them — or every booking
+  the site has taken.
+- **Which columns.** Pick and order them yourself, or start from a preset.
+  The columns are grouped as **Booking** (the service, the start and end in
+  UTC and as a local time in the booking's time zone, the duration and the
+  status), **Customer** (name, email, phone, address and the CRM record the
+  booking link came from), **Payment** (the amount paid, tax, the platform
+  fee and any refund, in US dollars, with the Stripe payment IDs) and
+  **System** (when it was booked, confirmed and reminded). Your last choice
+  is remembered for next time.
+- **Formats.** CSV, JSON or NDJSON.
+
+Exporting needs the **Manage data** permission on the site, and every export
+is recorded in the workspace's audit log — who exported, when and how many
+bookings, never the bookings themselves. A customer whose details were
+erased exports with those columns blank.
+
+Bookings can't be imported. A booking is made on the booking page, which
+holds the slot, takes any payment and sends the confirmation and the
+reminder; a booking written from a file would skip all of that.
 
 ## Related
 

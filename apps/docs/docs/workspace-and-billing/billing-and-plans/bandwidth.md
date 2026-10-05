@@ -7,10 +7,11 @@ description: How much traffic each plan includes, what happens when a site goes 
 # Bandwidth
 
 **Bandwidth** is how much traffic your published sites serve in a calendar month: their
-pages, and the video, audio and files they serve from your media library. Video, audio
-and file downloads count 1.6× toward bandwidth, because serving them costs more than
-serving pages. Every plan includes an amount. What happens when you pass it is the part
-worth reading, because it is **not the same on Free as it is on a paid plan**.
+pages, and the video, audio and files they serve from your media library. Video, audio,
+file downloads and other media served from our servers count 1.6× toward bandwidth,
+because serving them costs more than serving pages. Every plan includes an amount. What
+happens when you pass it is the part worth reading, because it is **not the same on Free
+as it is on a paid plan**.
 
 :::info Plan availability
 Every plan has a bandwidth allowance. On a **paid** plan going past it is metered and
@@ -146,17 +147,20 @@ division gives every other band.
 Video, audio and files are measured: the media library counts the bytes each request
 sends, and converts them through the same 1,012.8 KB at **1.6×**, so a gigabyte of video
 takes 1.6 GB of the band, and past the band those 1.6 GB are billed at the page-view rate.
-Video, audio and file downloads count 1.6× toward bandwidth, because serving them costs
-more than serving pages: pages are mostly answered from the CDN's cache, while video and
-files are sent from our servers and from storage on every request, so each gigabyte pays
-for both. The weight is the smallest that keeps video at cost plus 30%, after card fees,
-the same as everything else metered — both inside your allowance and past it. Storing a
-file is billed separately, as storage, and is not counted again here. A video the platform
-serves from a delivery partner rather than from its own servers counts the same way, at
-the file's size each time a viewer starts it.
+Video, audio, file downloads and other media served from our servers count 1.6× toward
+bandwidth, because serving them costs more than serving pages: pages are mostly answered
+from the CDN's cache, while video and files are sent from our servers and from storage on
+every request, so each gigabyte pays for both. The weight is the smallest that keeps video
+at cost plus 30%, after card fees, the same as everything else metered — both inside your
+allowance and past it. Storing a file is billed separately, as storage, and is not counted
+again here. A video the platform serves from a delivery partner rather than from its own
+servers counts the same way, at the file's size each time a viewer starts it, and so does
+a members-only video or a paid download from your store, each time a buyer opens its link.
 
-Images are the exception — they are part of what a page weighs, which the 1,012.8 KB
-already includes, so counting them again would charge for them twice.
+Public images are the exception — they are part of what a page weighs, which the 1,012.8 KB
+already includes, so counting them again would charge for them twice. A private image, which
+only a signed link opens (a paid download, say), is not on any page, so it counts like a file.
+Your own team previewing a private file in the console never counts.
 
 ### Which views are counted
 

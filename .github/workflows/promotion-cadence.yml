@@ -39,7 +39,11 @@ jobs:
           HOTFIX: ${{ contains(github.event.pull_request.labels.*.name, 'hotfix') }}
         run: |
           set -euo pipefail
-          git fetch --quiet --shallow-since="3 days ago" origin production:refs/remotes/origin/production
+          # By depth, not by date: `--shallow-since` fails outright ("error
+          # processing shallow info") when production has no commit in the
+          # window. Fifty generations of production is weeks of promotions at
+          # three a day, far more than the two days the count reads.
+          git fetch --quiet --depth=50 origin production:refs/remotes/origin/production
           args=(--ref origin/production)
           if [ "$HOTFIX" = "true" ]; then args+=(--hotfix); fi
           # `|| code=$?` so a refusal still reaches the job summary below

@@ -145,7 +145,12 @@ function mockDocRef(path: string) {
               : {}
           cursor = cursor[segment] as Record<string, unknown>
         }
-        cursor[segments[segments.length - 1]] = value
+        // `FieldValue.delete()` at a path removes the leaf (AGL-3537).
+        if (value === MOCK_DELETE) delete cursor[segments[segments.length - 1]]
+        else cursor[segments[segments.length - 1]] = value
+      }
+      for (const [key, value] of Object.entries(next)) {
+        if (value === MOCK_DELETE) delete next[key]
       }
       mockDocs.set(path, next)
     },
@@ -165,15 +170,30 @@ function mockChildPaths(collectionPath: string): string[] {
 
 interface MockFilter {
   field: string
+  op: string
   value: unknown
+}
+
+/** `FieldValue.delete()`'s sentinel, which `update` turns into a removal. */
+const MOCK_DELETE = '__mock_delete__'
+
+/** A filter on a dotted field path (`facets.g.reportsToContactId`), or an `array-contains`. */
+function mockMatches(data: Record<string, unknown> | undefined, filter: MockFilter): boolean {
+  const stored = filter.field
+    .split('.')
+    .reduce<unknown>(
+      (value, key) => (value && typeof value === 'object' ? (value as Record<string, unknown>)[key] : undefined),
+      data,
+    )
+  return filter.op === 'array-contains'
+    ? Array.isArray(stored) && stored.includes(filter.value)
+    : stored === filter.value
 }
 
 function mockQuery(collectionPath: string, filters: MockFilter[], take: number) {
   const run = () => {
     const paths = mockChildPaths(collectionPath)
-      .filter((path) =>
-        filters.every((filter) => mockDocs.get(path)?.[filter.field] === filter.value),
-      )
+      .filter((path) => filters.every((filter) => mockMatches(mockDocs.get(path), filter)))
       .sort()
     const docs = (take > 0 ? paths.slice(0, take) : paths).map((path) => {
       const id = path.slice(path.lastIndexOf('/') + 1)
@@ -188,8 +208,8 @@ function mockQuery(collectionPath: string, filters: MockFilter[], take: number) 
     return { empty: docs.length === 0, docs, size: docs.length }
   }
   const self: Record<string, unknown> = {
-    where: (field: string, _op: string, value: unknown) =>
-      mockQuery(collectionPath, [...filters, { field, value }], take),
+    where: (field: string, op: string, value: unknown) =>
+      mockQuery(collectionPath, [...filters, { field, op, value }], take),
     orderBy: () => self,
     startAfter: () => self,
     limit: (n: number) => mockQuery(collectionPath, filters, n),
@@ -264,6 +284,17 @@ async function mockRunTransaction<T>(body: (transaction: unknown) => Promise<T>)
 const mockFirestore = {
   collection: (name: string) => mockCollectionRef(name),
   runTransaction: mockRunTransaction,
+  // The sweeps a contact delete runs after it (AGL-3521, AGL-3537).
+  batch: () => {
+    const queued: Array<() => Promise<void>> = []
+    return {
+      update: (ref: ReturnType<typeof mockDocRef>, data: Record<string, unknown>) =>
+        void queued.push(() => ref.update(data)),
+      commit: async () => {
+        for (const write of queued) await write()
+      },
+    }
+  },
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => {
@@ -379,7 +410,7 @@ jest.mock('firebase-admin/firestore', () => {
   return {
     __esModule: true,
     FieldPath: MockFieldPath,
-    FieldValue: { serverTimestamp: () => 'NOW' },
+    FieldValue: { serverTimestamp: () => 'NOW', delete: () => '__mock_delete__' },
     Timestamp: MockTimestamp,
   }
 })
@@ -726,6 +757,54 @@ describe('idempotency on POST /v1/contacts', () => {
     expect(body.data.map((row: { id: string }) => row.id)).toEqual(['con_survivor'])
     expect(body.data[0].alternateEmails).toEqual(['jane@gmail.com'])
     expect(body.has_more).toBe(false)
+  })
+
+  /*
+   * Nobody reports to a deleted person (AGL-3537), and they leave the deals
+   * they were on (AGL-3521): every holder's reports-to naming them is
+   * cleared, and every deal's contact role with its Primary.
+   */
+  it('the delete clears every reports-to naming the person, and their deal roles', async () => {
+    mockDocs.set(`${CONTACTS_PATH}/c-boss`, {
+      email: 'boss@example.com',
+      facets: { 'grp-a': { name: 'Boss' }, 'grp-b': { name: 'The boss' } },
+    })
+    mockDocs.set(`${CONTACTS_PATH}/c-ann`, {
+      email: 'ann@example.com',
+      facets: {
+        'grp-a': { reportsToContactId: 'c-boss', jobTitle: 'Buyer' },
+        'grp-b': { reportsToContactId: 'c-boss' },
+      },
+    })
+    mockDocs.set(`${CONTACTS_PATH}/c-bo`, {
+      email: 'bo@example.com',
+      facets: { 'grp-a': { reportsToContactId: 'c-ann' } },
+    })
+    mockDocs.set('orgs/org-1/deals/d-1', {
+      title: 'Committee',
+      contactId: 'c-boss',
+      contactRoles: [
+        { contactId: 'c-boss', role: 'Economic Buyer', primary: true },
+        { contactId: 'c-ann', role: 'Evaluator', primary: false },
+      ],
+      contactRoleContactIds: ['c-boss', 'c-ann'],
+    })
+    const response = await deleteContact('c-boss')
+    expect(response.status).toBe(200)
+    expect(mockDocs.has(`${CONTACTS_PATH}/c-boss`)).toBe(false)
+    expect(mockDocs.get(`${CONTACTS_PATH}/c-ann`)?.['facets']).toEqual({
+      'grp-a': { jobTitle: 'Buyer' },
+      'grp-b': {},
+    })
+    expect(mockDocs.get(`${CONTACTS_PATH}/c-bo`)?.['facets']).toEqual({
+      'grp-a': { reportsToContactId: 'c-ann' },
+    })
+    const deal = mockDocs.get('orgs/org-1/deals/d-1')
+    expect(deal).toMatchObject({
+      contactRoles: [{ contactId: 'c-ann', role: 'Evaluator', primary: false }],
+      contactRoleContactIds: ['c-ann'],
+    })
+    expect(deal).not.toHaveProperty('contactId')
   })
 
   it('the delete replays its receipt, and a wrong id still 404s', async () => {

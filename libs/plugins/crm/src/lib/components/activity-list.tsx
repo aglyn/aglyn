@@ -228,7 +228,13 @@ export function ActivityRow(props: ActivityRowProps) {
    * of a fact and offers no edit — a rewritten body would misstate what
    * left — though whoever may delete a row may still delete this one.
    */
-  const sent = activity.direction === 'outbound'
+  const captured = typeof activity.messageId === 'string' && activity.messageId !== ''
+  const deliveryState = Aglyn.isCrmEmailDeliveryState(activity.deliveryState)
+    ? activity.deliveryState
+    : null
+  // A hand-logged email or call carries a direction too (AGL-3517); only a
+  // message the platform carried or captured is "sent" or "received" here.
+  const sent = activity.direction === 'outbound' && (deliveryState !== null || captured)
   /*
    * A message CAPTURED from a mailbox (AGL-2657) carries the provider's
    * Message-ID and, when a correspondent wrote it, the `inbound` direction.
@@ -238,11 +244,19 @@ export function ActivityRow(props: ActivityRowProps) {
    * delivery chip, since the platform did not carry it. Neither takes the
    * caller's "Logged" chip: nobody logged them.
    */
-  const received = activity.direction === 'inbound'
-  const captured = typeof activity.messageId === 'string' && activity.messageId !== ''
-  const deliveryState = Aglyn.isCrmEmailDeliveryState(activity.deliveryState)
-    ? activity.deliveryState
-    : null
+  const received = activity.direction === 'inbound' && captured
+  /*
+   * A hand-logged call or email names its direction in the kind's own chip
+   * — "Inbound call", "Outbound email" (AGL-3517); a sent or captured
+   * message says it with the chips below instead.
+   */
+  const kindChip =
+    sent || received || captured
+      ? label
+      : Aglyn.crmActivityKindTitle(
+          Aglyn.isCrmActivityKind(activity.kind) ? activity.kind : 'other',
+          activity.direction,
+        )
   const when = new Date(activity.atMs)
   const detail = [
     activity.outcome ? activity.outcome : null,
@@ -268,7 +282,7 @@ export function ActivityRow(props: ActivityRowProps) {
       onToggle={onToggle}
       chips={
         <>
-          <Chip label={label} size="small" />
+          <Chip label={kindChip} size="small" />
           {received ? (
             <Chip
               label="Received"

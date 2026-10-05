@@ -16,7 +16,12 @@
  */
 'use client'
 
-import { pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  CRM_FORECAST_CATEGORY_LABELS,
+  dealForecastCategory,
+  dealProbability,
+  pluginDocsHelp,
+} from '@aglyn/aglyn'
 import { mdiThumbDownOutline, mdiTrophyOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -59,6 +64,10 @@ export interface DealStageCardProps {
  * verdict — Won or Lost, when, and why — and a way back: reopening is a
  * move into an open stage, which the route emits as `dealStageChanged` like
  * any other move.
+ *
+ * The line under the stepper reads the deal's own probability and forecast
+ * category (AGL-3516) — a move gives it the new stage's, which the route
+ * stamps, and the stepper says so on hover.
  */
 export function DealStageCard(props: DealStageCardProps) {
   const { deal, pipeline, api, nowMs } = props
@@ -90,6 +99,9 @@ export function DealStageCard(props: DealStageCardProps) {
 
   const closed = deal.status !== 'open'
   const days = daysInStage(deal, nowMs)
+  const current = activeIndex === -1 ? null : stages[activeIndex]
+  const probability = dealProbability(deal, current)
+  const forecast = CRM_FORECAST_CATEGORY_LABELS[dealForecastCategory(deal, current)]
 
   return (
     <CardDisplay
@@ -172,6 +184,7 @@ export function DealStageCard(props: DealStageCardProps) {
             {stages.map((stage, index) => (
               <Step key={stage.id} completed={index < activeIndex}>
                 <StepButton
+                  title={`Move here: ${stage.probability}% likely to close`}
                   disabled={busy || stage.id === deal.stageId}
                   onClick={() =>
                     void run(
@@ -186,10 +199,10 @@ export function DealStageCard(props: DealStageCardProps) {
             ))}
           </Stepper>
           <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
-            {activeIndex === -1
+            {!current
               ? 'This deal sits in a stage the pipeline no longer has. Pick one above.'
-              : `${days} ${days === 1 ? 'day' : 'days'} in ${stages[activeIndex].name} · ` +
-                `${stages[activeIndex].probability}% likely to close`}
+              : `${days} ${days === 1 ? 'day' : 'days'} in ${current.name} · ` +
+                `${probability ?? current.probability}% likely to close · ${forecast}`}
           </Typography>
         </Stack>
       )}

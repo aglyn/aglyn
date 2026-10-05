@@ -258,6 +258,32 @@ describe('one person submitting twice is one lead', () => {
   })
 })
 
+/**
+ * A PHONE LEARNED IN PASSING (AGL-3493) — the number a booking form asked
+ * for — lands on the lead only when the lead holds none.
+ */
+describe('the phone fill', () => {
+  const lead = () => leads[personKey('visitor@example.com') as string]
+
+  it('writes the phone on a new lead', async () => {
+    await capture({ source: 'booking', phoneFill: '+15125550107' })
+    expect(lead()?.['phone']).toBe('+15125550107')
+  })
+
+  it('fills a lead that holds none', async () => {
+    await capture({ source: 'signup' })
+    expect(lead()).not.toHaveProperty('phone')
+    await capture({ source: 'booking', phoneFill: '+15125550107' })
+    expect(lead()?.['phone']).toBe('+15125550107')
+  })
+
+  it('never replaces a phone the lead already has', async () => {
+    await capture({ source: 'booking', phoneFill: '+15125550111' })
+    await capture({ source: 'booking', phoneFill: '+15125550107' })
+    expect(lead()?.['phone']).toBe('+15125550111')
+  })
+})
+
 describe('consent is carried forward, never cleared, and names the site', () => {
   const storedLead = () => leads[personKey('visitor@example.com') as string]
   /**

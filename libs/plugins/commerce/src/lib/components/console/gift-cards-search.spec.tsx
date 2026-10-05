@@ -80,6 +80,8 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'uid-owner' } }),
+  useHostOrgId: () => 'org-1',
+  useFirestoreDoc: () => ({ data: { role: 'owner' }, status: 'success' }),
 }))
 jest.mock('./entitlement-gate.component', () => ({
   EntitlementGatedCard: ({ children }: { children: ReactNode }) => <>{children}</>,

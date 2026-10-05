@@ -16,9 +16,15 @@
  */
 'use client'
 
+import { TransferResumeImport } from '@aglyn/aglyn/app-utils/transfer-resume-import'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import { useTransferLauncher } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
-import { mdiEmailCheckOutline } from '@aglyn/shared-data-mdi'
+import {
+  mdiEmailCheckOutline,
+  mdiTrayArrowDown,
+  mdiTrayArrowUp,
+} from '@aglyn/shared-data-mdi'
 import {
   CardDisplay,
   Container,
@@ -79,6 +85,7 @@ import {
   type SuppressionTotals,
 } from './suppression-totals'
 import { orgSiteName, useEmailOrgMount } from './email-org-mount'
+import { SUPPRESSIONS_RESOURCE } from '../transfer/email-transfer-catalog'
 
 export interface SuppressionsCardProps {
   hostId: string
@@ -222,6 +229,19 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
   })
   const filtering =
     gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
+  /*
+   * IMPORT AND EXPORT (AGL-3529) open the console's transfer wizard and
+   * export dialog on this site's list. An import only ever adds: an address
+   * already here keeps its entry, and nothing removes one. The export's
+   * "current filter" is this table's own query.
+   */
+  const transfer = useTransferLauncher()
+  const exportFilter = filtering
+    ? {
+        label: 'Entries matching the table’s filters',
+        value: { filters: plan.filters },
+      }
+    : null
   const refusals = useMemo(
     () =>
       listQueryRefusals(plan.refused, {
@@ -535,13 +555,55 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
       contentBordered="all"
       HeaderProps={{
         action: (
-          <Button
-            size="small"
-            variant="contained"
-            onClick={() => setAdding(true)}
-          >
-            {'Add'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {/* Each only for whom the route takes it (AGL-3554). */}
+            {transfer?.can('export', { resource: SUPPRESSIONS_RESOURCE, scope: 'host', hostId }) ? (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<MdiIcon path={mdiTrayArrowDown.path} size={0.8} />}
+                onClick={() =>
+                  transfer.openExport({
+                    resource: SUPPRESSIONS_RESOURCE,
+                    scope: 'host',
+                    hostId,
+                    ...(exportFilter ? { filter: exportFilter } : {}),
+                  })
+                }
+              >
+                {'Export'}
+              </Button>
+            ) : null}
+            {/* An import left unfinished, reopened where it stopped (AGL-3549). */}
+            <TransferResumeImport
+              target={{ resource: SUPPRESSIONS_RESOURCE, scope: 'host', hostId }}
+              onFinished={() => setTotalsEpoch((epoch) => epoch + 1)}
+            />
+            {transfer?.can('import', { resource: SUPPRESSIONS_RESOURCE, scope: 'host', hostId }) ? (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<MdiIcon path={mdiTrayArrowUp.path} size={0.8} />}
+                onClick={() =>
+                  transfer.openImport({
+                    resource: SUPPRESSIONS_RESOURCE,
+                    scope: 'host',
+                    hostId,
+                    onFinished: () => setTotalsEpoch((epoch) => epoch + 1),
+                  })
+                }
+              >
+                {'Import'}
+              </Button>
+            ) : null}
+            <Button
+              size="small"
+              variant="contained"
+              onClick={() => setAdding(true)}
+            >
+              {'Add'}
+            </Button>
+          </Stack>
         ),
       }}
     >

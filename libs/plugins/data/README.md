@@ -36,7 +36,7 @@ On the server, `registerDataServerDeclarations()` also registers the two automat
 
 | import | contents |
 | -- | -- |
-| `@aglyn/plugins-data` | `BUNDLE_ID`, `registerDataConsole`, `HostDatasetsCard`, and the import/export model: `parseImportRows`, `mapImportColumns`, the dataset CSV/JSON writers (`datasetRecordsToCsv`, `datasetCsvHeader`, `datasetCsvRow`, `datasetRecordToJson`, `serializeDatasetValue`), and the platform's CSV helpers re-exported from the core (`parseCsv`, `countCsvDataRows`, `exportShortfall`) |
+| `@aglyn/plugins-data` | `BUNDLE_ID`, `registerDataConsole`, `HostDatasetsCard`, and the transfer resource a dataset's records move as: `DATASET_TRANSFER_RESOURCE` (`data.dataset`) and `datasetTransferResourceKey(datasetId)` |
 | `@aglyn/plugins-data/*` | any module under `src/lib/`, for example `@aglyn/plugins-data/model/dataset-record-view` (`datasetRecordFields`, `describeDatasetValue`) |
 
 ## Usage
@@ -48,14 +48,13 @@ import { registerDataConsole } from '@aglyn/plugins-data'
 registerDataConsole()
 ```
 
-The import helpers are pure functions:
+Import and export run on the platform's transfer framework (AGL-3530). The plugin declares `data.dataset` under `transferResources` with `instances`, so each dataset is its own resource, `data.dataset:<datasetId>`; it registers the server half from `registerDataConsoleServerDeclarations` (`transfer/dataset-transfer.server.ts`: the field catalog, match keys, the export's pages and count, the dry run held to the dataset's model, the writes and their undo) and the client half from `registerDataConsole`. The Data card opens the wizard and the export dialog through the console's launcher:
 
 ```ts
-import { parseImportRows } from '@aglyn/plugins-data'
+import { useTransferLauncher } from '@aglyn/aglyn'
+import { datasetTransferResourceKey } from '@aglyn/plugins-data'
 
-// A JSON array of objects, or CSV with a header row.
-// Returns string maps keyed by source column name, or null.
-const rows = parseImportRows('name,city\nAda,London')
+useTransferLauncher()?.openImport({ resource: datasetTransferResourceKey(datasetId), scope: 'org' })
 ```
 
 ## How it fits

@@ -39,6 +39,11 @@ describe('literalsOf', () => {
     assert.deepEqual(literalsOf("label: 'Licences',"), ['Licences'])
   })
 
+  it('pairs a short literal\'s own quotes, so code between strings is not copy', () => {
+    assert.deepEqual(literalsOf("{ id: 'won', name: 'Won', order: 4, probability: 100, kind: 'won' }"), [])
+    assert.deepEqual(literalsOf("{ id: 'won', name: 'Closed Won', order: 8 }"), ['Closed Won'])
+  })
+
   it('skips import paths, identifiers and templates', () => {
     assert.deepEqual(literalsOf("import x from '@aglyn/aglyn/server'"), [])
     assert.deepEqual(literalsOf("const key = 'consoleApi'"), [])

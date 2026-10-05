@@ -19,6 +19,7 @@ import type { Firestore } from 'firebase/firestore'
 import type * as Aglyn from '@aglyn/aglyn'
 import {
   canvas,
+  clearRecordedRenderedWidths,
   ConcurrentEditError,
   ensureCanvasRoot,
   formatBytes,
@@ -44,6 +45,7 @@ import {
   type CanvasBindingLookups,
   normalizeCanvasBindingTokens,
 } from '../utils/normalize-canvas-binding-tokens'
+import { recordCanvasRenderedWidths } from '../utils/record-canvas-rendered-widths'
 import {
   type BesignerDraftState,
   useBesignerDraft,
@@ -437,6 +439,10 @@ export function useBesignerDocument<TData = unknown>(
     return () => {
       canvas.reset()
       Besigner.focus.clearFocusStatus()
+      // The widths the canvas measured belong to this document (AGL-3485);
+      // the next one starts with none, so a node id two documents share
+      // cannot carry a measurement across.
+      clearRecordedRenderedWidths()
     }
   }, [documentKey])
 
@@ -689,6 +695,11 @@ export function useBesignerDocument<TData = unknown>(
     // reads clean afterwards. Before "Already saved", too: a document stored
     // with a name token is clean on load, and this click is what converts it.
     normalizeCanvasBindingTokens(canvas, bindingLookups)
+    // And the widths the canvas measured become part of the document
+    // (AGL-3485), the same way and for the same reason: written to the
+    // canvas, so the tree saved is the tree on screen. This is what lets a
+    // published image say how big it will be without anyone typing `sizes`.
+    recordCanvasRenderedWidths(canvas)
     const canvasNodes = canvas.toJSON().nodes as Record<string, unknown>
     const prepared = fromCanvasNodes
       ? fromCanvasNodes(canvasNodes)

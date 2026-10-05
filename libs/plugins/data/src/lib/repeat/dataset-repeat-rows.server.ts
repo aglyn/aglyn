@@ -66,7 +66,7 @@ const DATASETS_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
  * template once with nothing to say why.
  *
  * Fail-open, per key: a key that cannot be read is left out, and its
- * repeatable renders its template untouched, without costing the others.
+ * repeatable renders no copies (AGL-3496), without costing the others.
  *
  * Scoped to what THIS host may see (AGL-1039): a display name resolves inside
  * the host's scope, and an id outside it resolves to nothing. The Admin SDK

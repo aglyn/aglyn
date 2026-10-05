@@ -41,7 +41,14 @@ jest.mock('firebase/firestore', () => ({
     searchQueries.push(parts)
     return { docs: searchDocs }
   },
+  // A manager named by id, read for Reports to (AGL-3537).
+  doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
+  getDoc: async (ref: { path: string }) => {
+    const data = managers[ref.path.split('/').pop() as string]
+    return { exists: () => Boolean(data), data: () => data }
+  },
 }))
+let managers: Record<string, Record<string, unknown>> = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'uid-me', getIdToken: async () => 'token-abc' } }),
@@ -178,6 +185,30 @@ describe('the preview', () => {
       'jane@gmail.com',
       'jane@acme.com, jane@gmail.com',
     ])
+  })
+
+  it('shows Reports to by name, and a pointer at the other record as nobody (AGL-3537)', async () => {
+    managers = { 'c-boss': { email: 'dana@acme.com', name: 'Dana Boss' } }
+    const withManagers = {
+      ...other,
+      doc: {
+        ...other.doc,
+        facets: {
+          'host-1': { sources: {}, interactions: [], reportsToContactId: 'c-boss' },
+        },
+      },
+    }
+    const pointingAtOther: ContactPick = {
+      ...current,
+      doc: {
+        ...current.doc,
+        facets: { 'host-1': { sources: {}, interactions: [], reportsToContactId: 'c-gone' } },
+      },
+    }
+    mount({ other: withManagers, keep: 'current', current: pointingAtOther })
+    await waitFor(() => expect(cell('Reports to')[2]).toBe('Dana Boss'))
+    expect(cell('Reports to')[3]).toBe('Nobody — it named one of these two records')
+    expect(screen.getByText(/report to the kept one/)).toBeTruthy()
   })
 
   it('swaps the columns when the reader keeps the other record', () => {

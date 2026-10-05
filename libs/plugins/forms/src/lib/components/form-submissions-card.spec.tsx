@@ -13,15 +13,32 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-import { registerConsoleExtension, unregisterConsoleExtension } from '@aglyn/aglyn'
+import {
+  registerConsoleExtension,
+  TransferLauncherContext,
+  unregisterConsoleExtension,
+  type TransferExportLaunch,
+  type TransferLauncher,
+} from '@aglyn/aglyn'
 import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { FormSubmissionsCard } from './form-submissions-card.component'
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  CardDisplay: ({ header, children }: { header: string; children: ReactNode }) => (
-    <section aria-label={header}>{children}</section>
+  CardDisplay: ({
+    header,
+    HeaderProps,
+    children,
+  }: {
+    header: string
+    HeaderProps?: { action?: ReactNode }
+    children: ReactNode
+  }) => (
+    <section aria-label={header}>
+      {HeaderProps?.action ?? null}
+      {children}
+    </section>
   ),
 }))
 
@@ -79,5 +96,54 @@ describe('one form’s submissions, read through a zone', () => {
       hostId: 'host-1',
       formId: 'form-9',
     })
+  })
+})
+
+describe('exporting one form’s submissions', () => {
+  const exports: TransferExportLaunch[] = []
+  const launcher: TransferLauncher = {
+    openImport: () => {
+      throw new Error('submissions are never imported')
+    },
+    openExport: (launch) => exports.push(launch),
+    close: () => undefined,
+    can: () => true,
+  }
+
+  beforeEach(() => {
+    exports.length = 0
+  })
+
+  it('opens the export dialog on this form, from the card header, with no Import beside it', () => {
+    render(
+      <TransferLauncherContext.Provider value={launcher}>
+        <FormSubmissionsCard hostId="host-1" formId="form-9" formName="Contact us" />
+      </TransferLauncherContext.Provider>,
+    )
+    expect(screen.queryByRole('button', { name: 'Import' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }))
+    expect(exports).toEqual([
+      {
+        resource: 'forms.submissions',
+        scope: 'host',
+        hostId: 'host-1',
+        filter: { label: 'Form: Contact us', value: { formId: 'form-9' } },
+      },
+    ])
+  })
+
+  it('names the form by its id until its name is read', () => {
+    render(
+      <TransferLauncherContext.Provider value={launcher}>
+        <FormSubmissionsCard hostId="host-1" formId="form-9" />
+      </TransferLauncherContext.Provider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }))
+    expect(exports[0]?.filter?.label).toBe('Form: form-9')
+  })
+
+  it('offers no Export outside the console shell', () => {
+    renderCard()
+    expect(screen.queryByRole('button', { name: 'Export' })).toBeNull()
   })
 })

@@ -21,6 +21,7 @@ import IconButton from '@mui/material/IconButton'
 import InputAdornment from '@mui/material/InputAdornment'
 import TextField from '@mui/material/TextField'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { useSoftGetSubmit } from '@aglyn/shared-ui-jsx/hooks/use-soft-get-submit'
 import { forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -46,14 +47,28 @@ export interface SearchBoxProps {
  * Site search box (AGL-88): a plain GET form to the tenant's /search page,
  * so it works with zero JavaScript and is inert in the besigner (the
  * console has no /search route to submit to; navigation there is a no-op
- * form post the editor never triggers).
+ * form post the editor never triggers). Once hydrated the submit goes
+ * through the client router, so the site's chrome stays mounted rather than
+ * the whole document reloading for a results page.
  */
 const SearchBox = forwardRef<HTMLFormElement, SearchBoxProps>(
   (props, ref) => {
     const { placeholder, defaultValue, ...rest } = props
+    const onSubmit = useSoftGetSubmit()
     return (
-      <form ref={ref} action="/search" method="get" role="search" {...rest}>
+      <form
+        ref={ref}
+        action="/search"
+        method="get"
+        role="search"
+        onSubmit={onSubmit}
+        {...rest}
+      >
         <TextField
+          // Keyed by the starting text. A submit is a client navigation, so
+          // this uncontrolled field can outlive the query it was mounted
+          // with; a new key is what makes it re-read `defaultValue`.
+          key={defaultValue || ''}
           name="q"
           size="small"
           placeholder={placeholder || 'Search…'}

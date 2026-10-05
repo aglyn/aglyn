@@ -45,8 +45,9 @@ export interface AppIconCardProps {
  *   rectangle. The manifest fell back to it for want of anything else, and an
  *   installer that trusted a declared size painted a stretched tile.
  *
- * Unset, the manifest keeps using the logo, so nothing about an existing
- * site's install changes until somebody puts artwork here.
+ * Unset, the manifest falls back to the favicon and then the logo. Whichever
+ * it uses, every manifest size and the maskable tiles are generated from that
+ * one file (AGL-3484), so the author uploads once and never sizes anything.
  */
 export function AppIconCard(props: AppIconCardProps) {
   const { hostId, embedded } = props
@@ -81,7 +82,7 @@ export function AppIconCard(props: AppIconCardProps) {
         excerpt:
           'The icon shown when someone installs this site to their phone or ' +
           'desktop — a square mark, separate from the tab favicon and the ' +
-          'site logo.',
+          'site logo. Every install size is generated for you.',
       })}
     >
       <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
@@ -101,8 +102,8 @@ export function AppIconCard(props: AppIconCardProps) {
           />
         ) : (
           <Typography variant="body2" color="text.secondary">
-            {'No app icon — installing this site uses the site logo, which is ' +
-              'usually the wrong shape for a home screen.'}
+            {'No app icon — installing this site uses the favicon, or the ' +
+              'site logo, which is usually the wrong shape for a home screen.'}
           </Typography>
         )}
         <Button

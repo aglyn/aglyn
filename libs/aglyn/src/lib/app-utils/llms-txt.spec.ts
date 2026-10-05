@@ -184,7 +184,7 @@ describe('buildLlmsTxt — pages served one per record (AGL-3475)', () => {
       pageGroups: [{ name: 'Services', base: 'services', count: 12, hasListing: true }],
     })
     expect(out).toContain(
-      '- [Services](https://acme.test/services): 12 pages under `/services/`, one per services entry, linked from this page',
+      '- [Services](https://acme.test/services): 12 pages under `/services/`, one per entry, each linked from this page',
     )
   })
 

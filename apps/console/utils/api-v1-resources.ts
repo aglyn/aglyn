@@ -26,6 +26,7 @@
  * `handleSites`).
  */
 import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
+import { MEDIA_CDN_ROUTE } from '@aglyn/aglyn/app-utils/media-ref'
 import {
   checkApiRequestQuota,
   checkDataStorageQuota,
@@ -48,6 +49,7 @@ import {
   firebaseAdmin,
   generateMediaVariants,
   getMediaQuarantine,
+  mediaVariantDocFields,
   listResponse,
   parseLimit,
 } from '@aglyn/tenant-data-admin'
@@ -67,6 +69,7 @@ import { usageBand } from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import { createHash, randomUUID } from 'crypto'
 import { Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
+import { announceNewSite } from '../app/api/_lib/growth-announcements'
 import {
   claimWrite,
   orgOwnsHost,
@@ -301,6 +304,14 @@ async function createSite(request: Request, ctx: ApiV1Context): Promise<Response
       subdomain,
     } as never)
     await claim.record(200, view)
+    // Told to staff like a console-made site (AGL-3491); never throws.
+    await announceNewSite({
+      hostId: created.hostId,
+      displayName,
+      subdomain,
+      orgSlug: (ctx.org.slug as string | undefined) ?? null,
+      createdBy: ctx.keyName ? `API key ${ctx.keyName}` : 'An API key',
+    })
     return apiJson(view, { status: 201, headers: ctx.headers })
   } catch (error) {
     await claim.release()
@@ -558,15 +569,28 @@ function hostRef(ctx: ApiV1Context, hostId: string) {
  * rather than picking one and lying about the other.
  *
  * `url` is the durable download URL and is always present. `cdnUrl` is the
- * CDN path, which exists only when the plan includes `mediaCdn` AND the asset
- * is not private, so it is published as a separate nullable field rather than
- * folded into `url` — an integrator building a public `<img>` needs to know
- * which one it got. Private assets carry neither a CDN path nor a usable
- * public link and are marked `private: true`.
+ * CDN URL, which every asset that is not private has, so it is published as
+ * a separate nullable field rather than folded into `url` — an integrator
+ * building a public `<img>` needs to know which one it got. Private assets
+ * carry neither a CDN path nor a usable public link and are marked
+ * `private: true`.
+ *
+ * An asset uploaded before the CDN reached every plan (AGL-1152) has no
+ * stored `cdnPath`; its stable path is derived from the library it lives in
+ * and its id (AGL-3506). Publishing `null` for it pushed integrators onto
+ * `url`, whose bytes reach the visitor straight from Storage — uncounted by
+ * the bandwidth band and out of reach of a lockdown.
  */
-function mediaView(doc: FirebaseFirestore.DocumentSnapshot, origin: string) {
+function mediaView(
+  doc: FirebaseFirestore.DocumentSnapshot,
+  origin: string,
+  cdnScope: string,
+) {
   const data = doc.data() ?? {}
-  const cdnPath = data.cdnPath as string | undefined
+  const cdnPath = data.private
+    ? undefined
+    : ((data.cdnPath as string | undefined) ||
+      `${MEDIA_CDN_ROUTE}/${cdnScope}/${doc.id}`)
   return {
     id: doc.id,
     object: 'media',
@@ -867,8 +891,10 @@ async function createMedia(
           contentType,
           sourceWidth: (dimensions as { width?: number }).width,
           objectPath,
-          saveVariant: async (path: string, webp: Buffer) => {
-            await bucket.file(path).save(webp, { contentType: 'image/webp' })
+          // The display copy too (AGL-3486), as the console's routes make it.
+          display: true,
+          saveVariant: async (path, bytes, type) => {
+            await bucket.file(path).save(bytes, { contentType: type })
           },
         }).catch(() => null)
       : null
@@ -901,7 +927,7 @@ async function createMedia(
       }),
       contentHash,
       contentSha256,
-      variants: (variants as { variants?: number[] })?.variants ?? [],
+      ...(variants ? mediaVariantDocFields(variants) : { variants: [] }),
       ...(embeddedMetadata ? { embeddedMetadata } : {}),
       ...(svg?.removed?.length ? { svgSanitized: svg.removed } : {}),
       // The org library is shared across sites, so a file written there needs
@@ -951,7 +977,11 @@ async function createMedia(
       contentType,
     })
 
-    const view = mediaView(await scopeRef.collection('media').doc(mediaId).get(), origin)
+    const view = mediaView(
+      await scopeRef.collection('media').doc(mediaId).get(),
+      origin,
+      scope.cdnScope,
+    )
     // Stored as 200 so a replay is distinguishable from the fresh 201.
     await claim.record(200, view)
     return apiJson(view, { status: 201, headers: ctx.headers })
@@ -1005,7 +1035,9 @@ async function handleScopedMedia(
     if (!snap.exists || snap.get('deletedAt')) {
       return ApiErrors.notFound({ message: 'No such file', headers: ctx.headers })
     }
-    return apiJson(mediaView(snap, origin), { headers: ctx.headers })
+    return apiJson(mediaView(snap, origin, scope.cdnScope), {
+      headers: ctx.headers,
+    })
   }
 
   let query: FirebaseFirestore.Query = collection
@@ -1014,7 +1046,7 @@ async function handleScopedMedia(
   const { docs, nextCursor } = await paginate(query, url)
   const data = docs
     .filter((doc) => !doc.get('deletedAt'))
-    .map((doc) => mediaView(doc, origin))
+    .map((doc) => mediaView(doc, origin, scope.cdnScope))
   return listResponse(data, nextCursor, ctx.headers)
 }
 

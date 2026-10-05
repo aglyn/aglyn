@@ -317,11 +317,14 @@ are obligations rather than features, so they sit outside the
 
 ### Exporting contacts and leads
 
-**Export contacts** downloads a CSV file of every contact the workspace holds, and
-**Export leads** one of every lead its sites captured. Each file is complete — the same
-file the CRM's **Export all…** writes. If fewer rows arrive than the server promised,
-because a connection dropped, nothing is saved and you are told how many of how many
-arrived; try again.
+**Export contacts** exports every contact the workspace holds, and **Export leads**
+every lead its sites captured. Each opens the same export dialog as the CRM's
+[**Export…**](../content-and-data/crm/export.md): choose the fields (custom fields
+included) and the format — CSV, JSON or NDJSON — and the file covers every record,
+whether or not your plan includes the CRM. Exporting needs the **Manage data**
+permission, which owners and admins hold. If fewer rows arrive than the server
+promised, because a connection dropped, nothing is saved and you are told so; try
+again.
 
 ### Erasing a person
 
@@ -346,8 +349,9 @@ Filing the same address again does no harm: a request already waiting is answere
 filed twice.
 
 On **Starter and above**, the CRM offers the same exports and the same erasure where
-you work: **Export all…** on its lists, and **Erase this person** in the menu of a
-contact's or a lead's page — see
+you work: **Export…** in the header of its Contacts and Leads sections, which opens the
+same [export dialog](../content-and-data/crm/export.md), and **Erase this person** in
+the menu of a contact's or a lead's page — see
 [Deleting and erasing](../content-and-data/crm/contact-record.md#deleting-and-erasing).
 
 To take everything the workspace holds rather than only its people, use

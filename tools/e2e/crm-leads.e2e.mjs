@@ -49,15 +49,18 @@ import {
   HOST_ID,
   hostUrl,
   openConsole,
+  openRowActions,
   ORG_ID,
   OWNER_NAME,
   OWNER_UID,
   pickSelect,
   postAsUser,
   rowAction,
+  scrollDataGrids,
   shot,
   step,
   TEAMMATE_NAME,
+  TEAMMATE_OPTION,
   TEAMMATE_UID,
   TIMEOUT_MS,
   verdicts,
@@ -112,7 +115,7 @@ await step(tally, page, 'the status chip moves a lead to Working', async () => {
 await step(tally, page, 'the row menu assigns an owner', async () => {
   await rowAction(page, june.email, 'Assign owner')
   const dialog = page.getByRole('dialog', { name: `Assign ${june.name}` })
-  await pickSelect(page, 'Owner', TEAMMATE_NAME, dialog)
+  await pickSelect(page, 'Owner', TEAMMATE_OPTION, dialog)
   await dialog.getByRole('button', { name: 'Assign' }).click()
   await expectSnackbar(page, 'Owner assigned')
   const owner = await waitFor(async () => (await leadRef(june).get()).get('ownerUid'), (uid) => uid === TEAMMATE_UID)
@@ -219,16 +222,20 @@ await step(tally, page, 'Unqualify closes a lead with its reason', async () => {
   await page.goto(hostUrl('/crm/leads'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
   await rowOf(owen).waitFor({ state: 'visible', timeout: TIMEOUT_MS }).catch(() => undefined)
   const openStill = await rowOf(june).count()
-  await pickSelect(page, 'Show', 'Unqualified')
+  // The status is a filter on the list's query (AGL-3321): Filters → Value.
+  await page.getByRole('button', { name: 'Filters', exact: true }).click({ timeout: TIMEOUT_MS })
+  await pickSelect(page, 'Value', 'Unqualified', page.locator('.MuiDataGrid-panel').last())
+  await page.keyboard.press('Escape')
   await rowOf(june).waitFor({ state: 'visible', timeout: TIMEOUT_MS })
   tally.check('the open view drops it and the Unqualified view lists it', openStill === 0, `open rows for June: ${openStill}`)
   // The row menu refuses to convert her, and says why (AGL-2641).
-  await page.getByRole('button', { name: `More actions for ${june.email}`, exact: true }).click({ timeout: TIMEOUT_MS })
+  const scrolled = await openRowActions(page, june.email)
   const convert = page.locator('[role="menu"]').last().getByRole('menuitem', { name: 'Convert…' })
   await convert.waitFor({ timeout: TIMEOUT_MS })
   const disabled = (await convert.getAttribute('aria-disabled')) === 'true'
   const reason = await page.locator('[aria-label="This lead was unqualified"]').count()
   await page.keyboard.press('Escape')
+  if (scrolled) await scrollDataGrids(page, 'start')
   tally.check('an unqualified lead’s row menu disables Convert… with the reason', disabled && reason > 0, `disabled ${disabled} · reason ${reason}`)
 })
 

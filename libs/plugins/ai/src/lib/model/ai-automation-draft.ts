@@ -218,11 +218,19 @@ function stepOf(step: AiAutomationAnswerStep, records: AiAutomationRecords): AiA
         type: 'createCrmTask',
         title: step.title ?? '',
         kind: step.taskKind ?? 'todo',
+        // The runner stores the org's label for the meaning (AGL-3538).
+        ...(step.priority ? { priority: step.priority } : {}),
         dueInDays: step.dueInDays ?? 0,
         ...guard,
       }
     case 'logCrmActivity':
-      return { type: 'logCrmActivity', kind: step.activityKind ?? 'note', body: step.body ?? '', ...guard }
+      return {
+        type: 'logCrmActivity',
+        kind: step.activityKind ?? 'note',
+        body: step.body ?? '',
+        ...(step.direction ? { direction: step.direction } : {}),
+        ...guard,
+      }
   }
 }
 

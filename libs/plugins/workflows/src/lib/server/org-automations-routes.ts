@@ -74,6 +74,7 @@ import {
   orgAutomationPausedHostIds,
   prunePausedHostIds,
   readOrgAutomation,
+  type OrgAutomationFields,
 } from '../model/org-automations'
 
 export { ORG_AUTOMATION_API_ROUTES }
@@ -194,6 +195,103 @@ export async function orgAutomationsManageSubject(
   return isDocumentId(orgId) ? { orgId } : null
 }
 
+/** What writing an org automation came to: its id, or the refusal the route answers with. */
+export type OrgAutomationWrite = { ok: true; id: string } | { ok: false; status: number; error: string }
+
+/**
+ * Creates an org automation as `automations/manage` does: its sites must be
+ * the organization's, and the organization holds at most
+ * {@link ORG_AUTOMATIONS_MAX} live ones. The route and the package import
+ * (AGL-3535) both create through here.
+ */
+export async function createOrgAutomationRecord(
+  firestore: FirebaseFirestore.Firestore,
+  input: { orgId: string; id: string; fields: OrgAutomationFields; actorUid: string },
+): Promise<OrgAutomationWrite> {
+  if (!(await placementIsTheOrgs(firestore, input.orgId, input.fields.visibleTo))) {
+    return { ok: false, status: 400, error: 'A site you chose is not in this organization' }
+  }
+  const collection = automationsOf(firestore, input.orgId)
+  /*
+   * Counted before the write rather than inside a transaction. The
+   * cap bounds storage, not money, so the overshoot two simultaneous
+   * saves can buy is one document — the trade the site actions cap
+   * makes for the same reason.
+   */
+  const live = (await collection.where('deletedAt', '==', null).count().get()).data().count
+  if (live >= ORG_AUTOMATIONS_MAX) {
+    return {
+      ok: false,
+      status: 409,
+      error: `An organization holds at most ${ORG_AUTOMATIONS_MAX} org automations — delete one you no longer use first`,
+    }
+  }
+  await collection.doc(input.id).create({
+    ...input.fields,
+    pausedHostIds: [],
+    deletedAt: null,
+    createdAt: FieldValue.serverTimestamp(),
+    createdBy: input.actorUid,
+    updatedAt: FieldValue.serverTimestamp(),
+    updatedBy: input.actorUid,
+  })
+  return { ok: true, id: input.id }
+}
+
+/** Rewrites a live org automation as `automations/manage` does; a site it no longer runs on leaves its pause list. */
+export async function updateOrgAutomationRecord(
+  firestore: FirebaseFirestore.Firestore,
+  input: { orgId: string; id: string; fields: OrgAutomationFields; actorUid: string },
+): Promise<OrgAutomationWrite> {
+  if (!(await placementIsTheOrgs(firestore, input.orgId, input.fields.visibleTo))) {
+    return { ok: false, status: 400, error: 'A site you chose is not in this organization' }
+  }
+  const collection = automationsOf(firestore, input.orgId)
+  const outcome = await firestore.runTransaction(async (transaction) => {
+    const ref = collection.doc(input.id)
+    const current = await transaction.get(ref)
+    if (!current.exists || current.get('deletedAt')) return 'missing'
+    transaction.update(ref, {
+      ...input.fields,
+      // A site the automation no longer runs on has nothing left to
+      // pause: its entry goes, so a later placement starts unpaused.
+      pausedHostIds: prunePausedHostIds(orgAutomationPausedHostIds(current.data()), input.fields.visibleTo),
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: input.actorUid,
+    })
+    return 'updated'
+  })
+  return outcome === 'missing' ? { ok: false, status: 404, error: 'Unknown org automation' } : { ok: true, id: input.id }
+}
+
+/**
+ * Deletes an org automation as `automations/manage` does — softly, switched
+ * off (see the handler). `null` for one that does not exist; `again` for
+ * one already deleted.
+ */
+export async function deleteOrgAutomationRecord(
+  firestore: FirebaseFirestore.Firestore,
+  input: { orgId: string; id: string; actorUid: string },
+): Promise<{ name: string; again: boolean } | null> {
+  return firestore.runTransaction(async (transaction) => {
+    const ref = automationsOf(firestore, input.orgId).doc(input.id)
+    const current = await transaction.get(ref)
+    if (!current.exists) return null
+    // Deleting twice is the same request answered again.
+    if (current.get('deletedAt')) return { name: '', again: true }
+    transaction.update(ref, {
+      deletedAt: FieldValue.serverTimestamp(),
+      deletedBy: input.actorUid,
+      // Off as well, so the engine's query — which asks for switched-on
+      // automations only — never spends one of its places on it.
+      enabled: false,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: input.actorUid,
+    })
+    return { name: String(current.get('name') ?? ''), again: false }
+  })
+}
+
 /**
  * `automations/manage`: create, edit, switch on or off, and delete one of the
  * organization's automations.
@@ -276,64 +374,15 @@ export function createOrgAutomationsManageHandler(
         if (read.ok === false) {
           return res.status(400).json({ error: read.problem })
         }
-        const fields = read.value
-        if (!(await placementIsTheOrgs(firestore, orgId, fields.visibleTo))) {
-          return res
-            .status(400)
-            .json({ error: 'A site you chose is not in this organization' })
+        const written =
+          action === 'create'
+            ? await createOrgAutomationRecord(firestore, { orgId, id: deps.newId(), fields: read.value, actorUid: caller.uid })
+            : await updateOrgAutomationRecord(firestore, { orgId, id: automationId, fields: read.value, actorUid: caller.uid })
+        if (written.ok === false) {
+          return res.status(written.status).json({ error: written.error })
         }
-        if (action === 'create') {
-          /*
-           * Counted before the write rather than inside a transaction. The
-           * cap bounds storage, not money, so the overshoot two simultaneous
-           * saves can buy is one document — the trade the site actions cap
-           * makes for the same reason.
-           */
-          const live = (
-            await collection.where('deletedAt', '==', null).count().get()
-          ).data().count
-          if (live >= ORG_AUTOMATIONS_MAX) {
-            return res.status(409).json({
-              error:
-                `An organization holds at most ${ORG_AUTOMATIONS_MAX} org ` +
-                'automations — delete one you no longer use first',
-            })
-          }
-          const id = deps.newId()
-          await collection.doc(id).create({
-            ...fields,
-            pausedHostIds: [],
-            deletedAt: null,
-            createdAt: FieldValue.serverTimestamp(),
-            createdBy: caller.uid,
-            updatedAt: FieldValue.serverTimestamp(),
-            updatedBy: caller.uid,
-          })
-          await logged('Created an org automation', id, fields.name)
-          return res.status(200).json({ automationId: id })
-        }
-        const outcome = await firestore.runTransaction(async (transaction) => {
-          const ref = collection.doc(automationId)
-          const current = await transaction.get(ref)
-          if (!current.exists || current.get('deletedAt')) return 'missing'
-          transaction.update(ref, {
-            ...fields,
-            // A site the automation no longer runs on has nothing left to
-            // pause: its entry goes, so a later placement starts unpaused.
-            pausedHostIds: prunePausedHostIds(
-              orgAutomationPausedHostIds(current.data()),
-              fields.visibleTo,
-            ),
-            updatedAt: FieldValue.serverTimestamp(),
-            updatedBy: caller.uid,
-          })
-          return 'updated'
-        })
-        if (outcome === 'missing') {
-          return res.status(404).json({ error: 'Unknown org automation' })
-        }
-        await logged('Edited an org automation', automationId, fields.name)
-        return res.status(200).json({ automationId })
+        await logged(action === 'create' ? 'Created an org automation' : 'Edited an org automation', written.id, read.value.name)
+        return res.status(200).json({ automationId: written.id })
       }
 
       if (action === 'setEnabled') {
@@ -364,23 +413,7 @@ export function createOrgAutomationsManageHandler(
       }
 
       // delete
-      const deleted = await firestore.runTransaction(async (transaction) => {
-        const ref = collection.doc(automationId)
-        const current = await transaction.get(ref)
-        if (!current.exists) return null
-        // Deleting twice is the same request answered again.
-        if (current.get('deletedAt')) return { name: '', again: true }
-        transaction.update(ref, {
-          deletedAt: FieldValue.serverTimestamp(),
-          deletedBy: caller.uid,
-          // Off as well, so the engine's query — which asks for switched-on
-          // automations only — never spends one of its places on it.
-          enabled: false,
-          updatedAt: FieldValue.serverTimestamp(),
-          updatedBy: caller.uid,
-        })
-        return { name: String(current.get('name') ?? ''), again: false }
-      })
+      const deleted = await deleteOrgAutomationRecord(firestore, { orgId, id: automationId, actorUid: caller.uid })
       if (!deleted) {
         return res.status(404).json({ error: 'Unknown org automation' })
       }

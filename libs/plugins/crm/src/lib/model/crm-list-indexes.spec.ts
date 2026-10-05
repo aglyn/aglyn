@@ -26,9 +26,9 @@ import { COMPANY_LIST_DECLARATION } from '../constants/company-filters'
 import { contactIndexShapes } from '../constants/contact-filters'
 import {
   DEAL_LIST_DECLARATION,
-  DEAL_LIST_FILTER_FIELDS,
   DEAL_LIST_PIPELINE_BASE_INDEX,
   DEAL_PREFIX_SEARCH,
+  DEAL_QUERY_FIELDS,
 } from '../constants/deal-filters'
 import { CRM_FIELD_LIST_QUERY } from '../constants/field-list-query'
 import { CRM_LIST_BASE_INDEX } from './crm-list-query'
@@ -84,7 +84,7 @@ const LISTS: Array<{
   {
     list: 'Deals (collaborator search)',
     collection: 'deals',
-    declaration: { fields: [DEAL_PREFIX_SEARCH.field, ...DEAL_LIST_FILTER_FIELDS], sorts: [] },
+    declaration: { fields: [DEAL_PREFIX_SEARCH.field, ...DEAL_QUERY_FIELDS], sorts: [] },
     base: DEAL_BASE,
   },
   {

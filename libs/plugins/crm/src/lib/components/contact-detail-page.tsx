@@ -388,7 +388,9 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
                 hostId={siteHostId}
                 org={org}
                 link={{ contactId: id }}
-                phone={record.phone}
+                // The main number, or the mobile when that is all there is (AGL-3515).
+                phone={record.phone || record.mobilePhone}
+                doNotCall={record.doNotCall}
                 suiteLocked={!suiteIncluded}
               />
               <CrmSendEmailButton

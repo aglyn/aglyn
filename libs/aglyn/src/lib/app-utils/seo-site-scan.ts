@@ -25,12 +25,22 @@ import {
 } from './search-indexing'
 import {
   SEO_AUDIT_MAX_PAGES,
-  parseSeoKeywordLines,
+  readSeoKeywordLines,
   seoNormalizePath,
   type SeoAuditPage,
   type SeoAuditSite,
 } from './seo-audit'
+import { SEO_MAX_KEYWORDS, seoQuotedKeywords } from './seo-keywords'
 import { seoPageFacts } from './seo-page-facts'
+import type { AglynNodeSchema } from '../foundation'
+import { expandRepeatables, repeatKeys, type RepeatableDataset } from './expand-repeatables'
+import {
+  composeReferencedComponents,
+  hostComponentReader,
+  type ReadComponentDocument,
+  type SkippedComponent,
+  type StoredComponentDocument,
+} from './load-referenced-components'
 import type { PageMarkdownNodes } from './page-markdown'
 import { resolveSeoTitleVariables } from './seo-title-variables'
 import { decodeStoredNodes } from './stored-nodes'
@@ -49,9 +59,16 @@ import { decodeStoredNodes } from './stored-nodes'
  * template screen ids, which the tenant runtime resolves; so this module stays
  * pure enough to import from anywhere, and a spec hands it a fake.
  *
+ * Each page is checked as it publishes (AGL-3501): {@link composeSeoPages}
+ * grafts the reusable components it places, with each placement's values,
+ * and expands its repeats over their rows when the caller hands over the
+ * repeat-rows reader — the composition the tenant runs before it renders.
+ *
  * Reads: one projected query of the screens, one of the layouts, and one
  * version document per checked page and per layout — at most
- * {@link SEO_AUDIT_MAX_PAGES} + {@link SEO_SCAN_LAYOUT_LIMIT} + 2.
+ * {@link SEO_AUDIT_MAX_PAGES} + {@link SEO_SCAN_LAYOUT_LIMIT} + 2 — then one
+ * document per distinct component those place, and one repeat-rows request
+ * for every key they repeat over.
  */
 
 /** Shared layouts read for the links they carry. */
@@ -133,7 +150,7 @@ interface SeoScreenDocument {
 export interface SeoScannedPage extends SeoAuditPage {
   /** The listing as the screen document stores it: a title's variables unresolved. */
   storedSeo: NonNullable<SeoScreenDocument['seo']>
-  /** The page's node map as checked. */
+  /** The page's own node map, as its published version stores it — not composed. */
   nodes: Record<string, unknown> | null
 }
 
@@ -146,6 +163,89 @@ export interface SeoSiteScan {
 }
 
 const str = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
+
+/* ---- The page as it publishes --------------------------------------------- */
+
+/**
+ * The rows a site's repeats render, by key — the repeat-rows contract
+ * (`plugin-manager/repeat-rows`), which is server-only and so handed in
+ * rather than imported here.
+ */
+export type SeoRepeatRowsReader = (keys: readonly string[]) => Promise<Record<string, RepeatableDataset>>
+
+export interface SeoCompositionOptions {
+  /** Without it a repeat is read once, as written, its `{{item.*}}` tokens left out of the facts. */
+  readRepeatRows?: SeoRepeatRowsReader
+}
+
+export interface SeoComposedPages {
+  /** Each node map as it publishes, in the order given; `null` stays `null`. */
+  composed: (Record<string, unknown> | null)[]
+  /** The repeats' rows were asked for and could not be read, so each repeat was read once, as written. */
+  rowsUnread: boolean
+}
+
+/** A component reader that reads each document once however many pages place it. */
+function onceEach(read: ReadComponentDocument): ReadComponentDocument {
+  const reads = new Map<string, Promise<StoredComponentDocument | null | undefined>>()
+  return (componentId) => {
+    let pending = reads.get(componentId)
+    if (!pending) {
+      pending = read(componentId)
+      reads.set(componentId, pending)
+    }
+    return pending
+  }
+}
+
+/**
+ * Node maps of `hostId` as they publish (AGL-3501): each reusable component
+ * placed grafted from its published definition with the placement's values
+ * (`load-referenced-components.ts`, the graft the tenant runs), then each
+ * repeat expanded over its rows when `readRepeatRows` is given — one request
+ * for every key the maps repeat over.
+ *
+ * A component that does not load leaves its placement as authored, as on the
+ * page; rows that cannot be read leave each repeat once, as written, and say
+ * so through `rowsUnread` rather than failing the check.
+ */
+export async function composeSeoPages(
+  store: SeoScanStore,
+  hostId: string,
+  maps: readonly (Record<string, unknown> | null | undefined)[],
+  options: SeoCompositionOptions = {},
+): Promise<SeoComposedPages> {
+  const read = onceEach(hostComponentReader(store, hostId))
+  const skipped = new Map<string, SkippedComponent>()
+  const grafted = await Promise.all(
+    maps.map((nodes) =>
+      nodes
+        ? composeReferencedComponents(nodes, read, {
+            onSkipped: (list) => list.forEach((entry) => skipped.set(entry.id, entry)),
+          })
+        : null,
+    ),
+  )
+  if (skipped.size) {
+    console.warn(JSON.stringify({ tag: 'AGL-3501:seo-components-skipped', hostId, skipped: [...skipped.values()] }))
+  }
+
+  const keys = [...new Set(grafted.flatMap((nodes) => (nodes ? repeatKeys(nodes) : [])))].sort()
+  if (!keys.length || !options.readRepeatRows) return { composed: grafted, rowsUnread: false }
+  let rows: Record<string, RepeatableDataset>
+  try {
+    rows = await options.readRepeatRows(keys)
+  } catch (error) {
+    console.warn(JSON.stringify({ tag: 'AGL-3501:seo-repeat-rows-unread', hostId, error: String(error) }))
+    return { composed: grafted, rowsUnread: true }
+  }
+  return {
+    composed: grafted.map((nodes) =>
+      nodes ? expandRepeatables(nodes as Record<string, AglynNodeSchema>, rows) : null,
+    ),
+    rowsUnread: false,
+  }
+}
 
 /** The site as the check reads it, from its host document. */
 export function seoAuditSiteOf(host: SeoSiteHost): SeoAuditSite {
@@ -181,13 +281,15 @@ async function inChunks<T>(items: readonly T[], run: (item: T) => Promise<void>)
  *
  * `keywords` are the target keyword lines a person typed (`/path: a, b`);
  * `templateScreenIds` are the screens a collection, the store or the host
- * renders other URLs through, which are not pages of their own.
+ * renders other URLs through, which are not pages of their own;
+ * `readRepeatRows` reads the rows the pages repeat over
+ * ({@link composeSeoPages}).
  */
 export async function scanSeoSite(
   store: SeoScanStore,
   hostId: string,
   host: SeoSiteHost,
-  options: { keywords?: unknown; templateScreenIds?: Iterable<string> } = {},
+  options: { keywords?: unknown; templateScreenIds?: Iterable<string> } & SeoCompositionOptions = {},
 ): Promise<SeoSiteScan> {
   const hostRef = store.collection('hosts').doc(hostId)
   const routing = host.screens ?? {}
@@ -218,20 +320,43 @@ export async function scanSeoSite(
       await readVersionNodes(hostRef.collection('screens').doc(screenId), str(screens.get(screenId)?.versionId)),
     )
   })
-  const layoutNodes: Record<string, unknown>[] = []
+  const storedLayouts: Record<string, unknown>[] = []
   await inChunks(
     layoutDocs.docs.filter((doc) => str(doc.get('versionId'))),
     async (doc) => {
       const version = await readVersionNodes(doc.ref, str(doc.get('versionId')))
-      if (version) layoutNodes.push(version.nodes)
+      if (version) storedLayouts.push(version.nodes)
     },
   )
 
-  const keywordsByPath = parseSeoKeywordLines(options.keywords)
+  // Checked as they publish: a heading, an image or a link a component
+  // renders is the page's, and so is a row a repeat shows.
+  const { composed, rowsUnread } = await composeSeoPages(
+    store,
+    hostId,
+    [...checked.map(({ screenId }) => versions.get(screenId)?.nodes ?? null), ...storedLayouts],
+    options,
+  )
+  const composedPages = new Map(checked.map(({ screenId }, index) => [screenId, composed[index]]))
+  const layoutNodes = composed.slice(checked.length)
+
+  const keywordLines = readSeoKeywordLines(options.keywords)
+  const keywordsByPath = keywordLines.keywords
   const checkedPaths = new Set(checked.map((page) => seoNormalizePath(page.path)))
-  const notes = Object.keys(keywordsByPath)
-    .filter((path) => !checkedPaths.has(path))
-    .map((path) => `Keywords for ${path} were not used: no checked page is published at that address.`)
+  const notes = [
+    ...[...new Set([...Object.keys(keywordsByPath), ...Object.keys(keywordLines.unchecked)])]
+      .filter((path) => !checkedPaths.has(path))
+      .map((path) => `Keywords for ${path} were not used: no checked page is published at that address.`),
+    ...Object.entries(keywordLines.unchecked)
+      .filter(([path]) => checkedPaths.has(path))
+      .map(
+        ([path, unchecked]) =>
+          `Only the first ${SEO_MAX_KEYWORDS} keywords for ${path} were checked, so ${seoQuotedKeywords(unchecked)} ${unchecked.length === 1 ? 'was' : 'were'} not.`,
+      ),
+    ...(rowsUnread
+      ? ['Lists that repeat over your datasets were checked without their rows, which could not be read just now.']
+      : []),
+  ]
 
   const siteName = str(host.seo?.title) || str(host.displayName)
   const pages: SeoScannedPage[] = checked.map(({ screenId, path }) => {
@@ -242,8 +367,7 @@ export async function scanSeoSite(
       layoutNodes.some((nodes) => nodesReferenceScreen(nodes, screenId)) ||
       checked.some(
         (other) =>
-          other.screenId !== screenId &&
-          nodesReferenceScreen(versions.get(other.screenId)?.nodes ?? null, screenId),
+          other.screenId !== screenId && nodesReferenceScreen(composedPages.get(other.screenId) ?? null, screenId),
       )
     return {
       screenId,
@@ -262,7 +386,10 @@ export async function scanSeoSite(
       },
       storedSeo,
       description: str(screen.description),
-      facts: seoPageFacts(version?.nodes as PageMarkdownNodes | undefined, { rootId: version?.rootId }),
+      facts: seoPageFacts(composedPages.get(screenId) as PageMarkdownNodes | null | undefined, {
+        rootId: version?.rootId,
+        pageNodes: version?.nodes as PageMarkdownNodes | undefined,
+      }),
       linkedFrom,
       keywords: keywordsByPath[seoNormalizePath(path)] ?? [],
       nodes: version?.nodes ?? null,

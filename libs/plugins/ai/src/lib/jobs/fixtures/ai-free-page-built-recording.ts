@@ -58,6 +58,7 @@ export const AI_FREE_PAGE_BUILT_RECORDING: AiEvalRecording = {
           slug: '/about',
           layout: 'new:main-layout',
           template: null,
+          record: null,
           duplicateOf: null,
           nav: true,
           seoTitle: 'About Brightwater Law | Our Firm & Practice Areas',

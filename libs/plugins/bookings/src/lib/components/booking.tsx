@@ -34,7 +34,14 @@ import MenuItem from '@mui/material/MenuItem'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
   BOOKING_RECORD_PARAM,
@@ -42,6 +49,13 @@ import {
   formatBookingRecordRef,
   parseBookingRecordRef,
 } from '../model/booking-record'
+import {
+  bookingContactAsks,
+  readBookingContactFields,
+  readBookingPhone,
+} from '../model/booking-contact-fields'
+import { bookingPriceDisplay, bookingPriceText } from '../model/booking-price'
+import { BOOKING_MAX_DAYS_AHEAD, BOOKING_SLOT_PAGE_DAYS } from '../model/bookings'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { useBookingPurchaseEvent } from '../utils/use-booking-purchase-event'
 
@@ -59,7 +73,12 @@ interface ServiceOption {
   name: string
   durationMinutes: number
   priceUsd: number
+  /** How the service states its price (AGL-3475); a label books with no charge. */
+  priceDisplay?: string
   description?: string
+  /** What the service asks for beyond a name and an email (AGL-3493). */
+  askPhone?: string
+  askAddress?: string
 }
 
 /**
@@ -79,6 +98,93 @@ function readLinkParam(key: string): string | null {
 interface SlotOption {
   startsAtMs: number
   endsAtMs: number
+}
+
+/** One day of the strip: the visitor's local calendar day and its times. */
+export interface BookingSlotDay {
+  /** Local midnight that starts the day, in epoch ms — key and sort order. */
+  startMs: number
+  slots: SlotOption[]
+}
+
+/**
+ * Slots grouped by the VISITOR's local day, in order (AGL-3492).
+ *
+ * A page of the listing is whole days in the SERVICE's zone, so for a
+ * visitor in another zone the last day of a page can be one the page ended
+ * part way through. `nextFromMs` is where the page stopped — every open time
+ * before it is loaded — so a day that runs past it is held back until the
+ * next page completes it, rather than shown with its later times missing.
+ */
+export function groupSlotsByLocalDay(
+  slots: SlotOption[],
+  nextFromMs: number | null,
+): BookingSlotDay[] {
+  const byDay = new Map<number, SlotOption[]>()
+  for (const slot of slots) {
+    const at = new Date(slot.startsAtMs)
+    const startMs = new Date(
+      at.getFullYear(),
+      at.getMonth(),
+      at.getDate(),
+    ).getTime()
+    const day = byDay.get(startMs)
+    if (day) day.push(slot)
+    else byDay.set(startMs, [slot])
+  }
+  return [...byDay.entries()]
+    .map(([startMs, daySlots]) => ({
+      startMs,
+      slots: daySlots.sort((a, b) => a.startsAtMs - b.startsAtMs),
+    }))
+    .filter((day) => {
+      if (nextFromMs === null) return true
+      const start = new Date(day.startMs)
+      const nextDayMs = new Date(
+        start.getFullYear(),
+        start.getMonth(),
+        start.getDate() + 1,
+      ).getTime()
+      return nextDayMs <= nextFromMs
+    })
+    .sort((a, b) => a.startMs - b.startMs)
+}
+
+/** A day chip's label: `Mon, Oct 5` in the visitor's locale. */
+export function bookingDayLabel(startMs: number): string {
+  return new Date(startMs).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
+/** A time chip's label: `2:30 PM` in the visitor's locale. */
+export function bookingTimeLabel(startsAtMs: number): string {
+  return new Date(startsAtMs).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+/**
+ * A day's times in the parts of the day a visitor scans for (AGL-3492): a
+ * day open 8 to 5 at 15-minute steps holds 33 starts, and one unbroken run
+ * of chips that long reads as noise. Empty parts are left out.
+ */
+export function partsOfDay(
+  slots: SlotOption[],
+): Array<{ label: string; slots: SlotOption[] }> {
+  const parts = [
+    { label: 'Morning', slots: [] as SlotOption[] },
+    { label: 'Afternoon', slots: [] as SlotOption[] },
+    { label: 'Evening', slots: [] as SlotOption[] },
+  ]
+  for (const slot of slots) {
+    const hour = new Date(slot.startsAtMs).getHours()
+    parts[hour < 12 ? 0 : hour < 17 ? 1 : 2].slots.push(slot)
+  }
+  return parts.filter((part) => part.slots.length > 0)
 }
 
 /**
@@ -102,10 +208,22 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
 
   const [services, setServices] = useState<ServiceOption[] | null>(null)
   const [serviceId, setServiceId] = useState('')
+  // Every page of the listing loaded so far, in order (AGL-3492).
   const [slots, setSlots] = useState<SlotOption[] | null>(null)
+  // Where the next page starts; `null` once the horizon is loaded.
+  const [nextFromMs, setNextFromMs] = useState<number | null>(null)
+  const [horizonDays, setHorizonDays] = useState(BOOKING_MAX_DAYS_AHEAD)
+  const [loadingMore, setLoadingMore] = useState(false)
+  // The first day of the strip on screen, as an index into the loaded days.
+  const [stripStart, setStripStart] = useState(0)
+  // The service the loaded pages belong to, so a page that lands after the
+  // visitor switched service is dropped rather than mixed into the new one.
+  const slotsServiceRef = useRef('')
   const [slotMs, setSlotMs] = useState<number | null>(null)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [address, setAddress] = useState('')
   const [marketingConsent, setMarketingConsent] = useState(false)
   const [status, setStatus] = useState<
     'idle' | 'loading' | 'booking' | 'booked' | 'error'
@@ -140,40 +258,110 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
     }
   }, [hostId])
 
-  useEffect(() => {
-    if (!hostId || !serviceId) return setSlots(null)
-    let active = true
-    setSlots(null)
-    setSlotMs(null)
-    void fetch(
-      `/api/bookings/slots?hostId=${encodeURIComponent(hostId)}` +
-        `&serviceId=${encodeURIComponent(serviceId)}`,
-    )
-      .then((response) => response.json())
-      .then((payload) => {
-        if (active) setSlots(payload?.slots ?? [])
+  /**
+   * One page of the listing (AGL-3492): the next strip's worth of days from
+   * `fromMs`, or from now. Appended, never replacing, so a day split across
+   * two pages for a visitor in another zone is whole once both are in.
+   */
+  const fetchSlotPage = useCallback(
+    async (forService: string, fromMs: number | null) => {
+      const response = await fetch(
+        `/api/bookings/slots?hostId=${encodeURIComponent(hostId ?? '')}` +
+          `&serviceId=${encodeURIComponent(forService)}` +
+          (fromMs !== null ? `&from=${encodeURIComponent(String(fromMs))}` : ''),
+      )
+      const payload = await response.json()
+      if (slotsServiceRef.current !== forService) return
+      const page: SlotOption[] = Array.isArray(payload?.slots)
+        ? payload.slots
+        : []
+      setSlots((loaded) => {
+        const seen = new Set((loaded ?? []).map((slot) => slot.startsAtMs))
+        return [
+          ...(loaded ?? []),
+          ...page.filter((slot) => !seen.has(slot.startsAtMs)),
+        ]
       })
-      .catch(() => {
-        if (active) setSlots([])
-      })
-    return () => {
-      active = false
-    }
-  }, [hostId, serviceId])
+      setNextFromMs(
+        typeof payload?.nextFromMs === 'number' ? payload.nextFromMs : null,
+      )
+      if (Number(payload?.horizonDays) > 0) {
+        setHorizonDays(Number(payload.horizonDays))
+      }
+    },
+    [hostId],
+  )
 
-  // Slots grouped by local day for a compact two-step pick.
-  const slotsByDay = useMemo(() => {
-    const groups: Record<string, SlotOption[]> = {}
-    for (const slot of slots ?? []) {
-      const day = new Date(slot.startsAtMs).toLocaleDateString()
-      ;(groups[day] ??= []).push(slot)
-    }
-    return groups
-  }, [slots])
-  const [day, setDay] = useState('')
   useEffect(() => {
-    setDay('')
+    slotsServiceRef.current = serviceId
+    setSlots(null)
+    setNextFromMs(null)
+    setStripStart(0)
+    setSlotMs(null)
+    if (!hostId || !serviceId) return
+    fetchSlotPage(serviceId, null).catch(() => {
+      if (slotsServiceRef.current === serviceId) setSlots([])
+    })
+  }, [hostId, serviceId, fetchSlotPage])
+
+  const days = useMemo(
+    () => groupSlotsByLocalDay(slots ?? [], nextFromMs),
+    [slots, nextFromMs],
+  )
+  const visibleDays = days.slice(stripStart, stripStart + BOOKING_SLOT_PAGE_DAYS)
+
+  // The strip asks for the next page itself when the days it is showing run
+  // out before the horizon does — after "Later dates", or when a page held
+  // no open day this visitor can see whole.
+  useEffect(() => {
+    if (slots === null || nextFromMs === null || loadingMore) return
+    if (days.length >= stripStart + BOOKING_SLOT_PAGE_DAYS) return
+    if (stripStart === 0 && days.length > 0) return
+    const forService = serviceId
+    setLoadingMore(true)
+    fetchSlotPage(forService, nextFromMs)
+      .catch(() => {
+        // Stop asking: a page that failed would otherwise be asked for
+        // again on every render.
+        if (slotsServiceRef.current === forService) setNextFromMs(null)
+      })
+      .finally(() => setLoadingMore(false))
+  }, [
+    slots,
+    nextFromMs,
+    loadingMore,
+    days.length,
+    stripStart,
+    serviceId,
+    fetchSlotPage,
+  ])
+
+  const [day, setDay] = useState<number | null>(null)
+  useEffect(() => {
+    setDay(null)
   }, [serviceId])
+  const dayTimes = useMemo(
+    () => partsOfDay(days.find((one) => one.startMs === day)?.slots ?? []),
+    [days, day],
+  )
+  const hasEarlierDates = stripStart > 0
+  const hasLaterDates =
+    days.length > stripStart + BOOKING_SLOT_PAGE_DAYS || nextFromMs !== null
+  const moveStrip = (toStart: number) => {
+    setStripStart(Math.max(0, toStart))
+    setDay(null)
+    setSlotMs(null)
+  }
+
+  // What the picked service asks for beyond a name and an email, and
+  // whether what was typed answers it (AGL-3493) — the route's own reading,
+  // so the button and the server cannot disagree about a required field.
+  const asks = bookingContactAsks(
+    (services ?? []).find((one) => one.$id === serviceId),
+  )
+  const contactCheck = readBookingContactFields(asks, { phone, address })
+  const phoneUnreadable =
+    asks.phone !== 'off' && Boolean(phone.trim()) && !readBookingPhone(phone)
 
   const handleBook = useCallback(async () => {
     if (!hostId || !serviceId || !slotMs || status === 'booking') return
@@ -194,6 +382,8 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
           startsAtMs: slotMs,
           name,
           email,
+          // Only what the service asks for: the route drops anything else.
+          ...(contactCheck.ok ? contactCheck.fields : {}),
           ...(recordRef ? { crmRef: formatBookingRecordRef(recordRef) } : {}),
           ...(marketingConsent ? { marketingConsent: true } : {}),
           // The campaign this visitor came from, when they came from one.
@@ -273,6 +463,7 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
     slotMs,
     name,
     email,
+    contactCheck,
     marketingConsent,
     status,
     siteFetch,
@@ -347,7 +538,9 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
           {services.map((service) => (
             <MenuItem key={service.$id} value={service.$id}>
               {`${service.name} · ${service.durationMinutes} min` +
-                (service.priceUsd > 0 ? ` · $${service.priceUsd}` : '')}
+                (bookingPriceDisplay(service.priceDisplay) !== 'fixed' || service.priceUsd > 0
+                  ? ` · ${bookingPriceText(service)}`
+                  : '')}
             </MenuItem>
           ))}
         </TextField>
@@ -358,11 +551,11 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
         </Typography>
       ) : null}
       {serviceId ? (
-        slots === null ? (
+        slots === null || (days.length === 0 && nextFromMs !== null) ? (
           <CircularProgress size={24} />
-        ) : slots.length === 0 ? (
+        ) : days.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            {'No open times in the next 60 days.'}
+            {`No open times in the next ${horizonDays} days.`}
           </Typography>
         ) : (
           <>
@@ -371,40 +564,89 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
               spacing={1}
               sx={{ flexWrap: 'wrap', rowGap: 1 }}
             >
-              {Object.keys(slotsByDay)
-                .slice(0, 14)
-                .map((value) => (
-                  <Chip
-                    key={value}
-                    label={value}
-                    color={day === value ? 'primary' : 'default'}
-                    variant={day === value ? 'filled' : 'outlined'}
-                    onClick={() => {
-                      setDay(value)
-                      setSlotMs(null)
-                    }}
-                  />
-                ))}
+              {visibleDays.map((one) => (
+                <Chip
+                  key={one.startMs}
+                  label={bookingDayLabel(one.startMs)}
+                  color={day === one.startMs ? 'primary' : 'default'}
+                  variant={day === one.startMs ? 'filled' : 'outlined'}
+                  onClick={() => {
+                    setDay(one.startMs)
+                    setSlotMs(null)
+                  }}
+                />
+              ))}
+              {loadingMore && visibleDays.length < BOOKING_SLOT_PAGE_DAYS ? (
+                <CircularProgress size={20} sx={{ alignSelf: 'center' }} />
+              ) : null}
             </Stack>
-            {day ? (
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{ flexWrap: 'wrap', rowGap: 1 }}
-              >
-                {(slotsByDay[day] ?? []).slice(0, 24).map((slot) => (
-                  <Chip
-                    key={slot.startsAtMs}
-                    label={new Date(slot.startsAtMs).toLocaleTimeString([], {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                    })}
-                    color={slotMs === slot.startsAtMs ? 'primary' : 'default'}
-                    variant={
-                      slotMs === slot.startsAtMs ? 'filled' : 'outlined'
+            {hasEarlierDates || hasLaterDates ? (
+              <Stack direction="row" spacing={1}>
+                {hasEarlierDates ? (
+                  <Button
+                    size="small"
+                    onClick={() =>
+                      moveStrip(stripStart - BOOKING_SLOT_PAGE_DAYS)
                     }
-                    onClick={() => setSlotMs(slot.startsAtMs)}
-                  />
+                  >
+                    {'Earlier dates'}
+                  </Button>
+                ) : null}
+                {hasLaterDates ? (
+                  <Button
+                    size="small"
+                    disabled={
+                      loadingMore && visibleDays.length < BOOKING_SLOT_PAGE_DAYS
+                    }
+                    // Never past the last day loaded: a strip that was short
+                    // moves on from where it ended, so no day is stepped over
+                    // while the next page loads.
+                    onClick={() =>
+                      moveStrip(
+                        Math.min(
+                          stripStart + BOOKING_SLOT_PAGE_DAYS,
+                          days.length,
+                        ),
+                      )
+                    }
+                  >
+                    {'Later dates'}
+                  </Button>
+                ) : null}
+              </Stack>
+            ) : null}
+            {day !== null ? (
+              <Stack spacing={1.5}>
+                {dayTimes.map((part) => (
+                  <Stack key={part.label} spacing={0.75}>
+                    <Typography variant="caption" color="text.secondary">
+                      {part.label}
+                    </Typography>
+                    <Box
+                      role="group"
+                      aria-label={`${part.label} times`}
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns:
+                          'repeat(auto-fill, minmax(5.5rem, 1fr))',
+                        gap: 1,
+                      }}
+                    >
+                      {part.slots.map((slot) => (
+                        <Chip
+                          key={slot.startsAtMs}
+                          label={bookingTimeLabel(slot.startsAtMs)}
+                          color={
+                            slotMs === slot.startsAtMs ? 'primary' : 'default'
+                          }
+                          variant={
+                            slotMs === slot.startsAtMs ? 'filled' : 'outlined'
+                          }
+                          onClick={() => setSlotMs(slot.startsAtMs)}
+                        />
+                      ))}
+                    </Box>
+                  </Stack>
                 ))}
               </Stack>
             ) : null}
@@ -428,6 +670,33 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
             size="small"
             fullWidth
           />
+          {asks.phone !== 'off' ? (
+            <TextField
+              label="Phone"
+              type="tel"
+              autoComplete="tel"
+              required={asks.phone === 'required'}
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              error={phoneUnreadable}
+              helperText={phoneUnreadable ? 'Enter a valid phone number' : undefined}
+              size="small"
+              fullWidth
+            />
+          ) : null}
+          {asks.address !== 'off' ? (
+            <TextField
+              label="Address"
+              autoComplete="street-address"
+              required={asks.address === 'required'}
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+              size="small"
+              fullWidth
+              multiline
+              minRows={2}
+            />
+          ) : null}
           <FormControlLabel
             control={
               <Checkbox
@@ -444,7 +713,10 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
           <Button
             variant="contained"
             disabled={
-              !name.trim() || !email.trim() || status === 'booking'
+              !name.trim() ||
+              !email.trim() ||
+              !contactCheck.ok ||
+              status === 'booking'
             }
             onClick={handleBook}
             sx={{ alignSelf: 'flex-start' }}

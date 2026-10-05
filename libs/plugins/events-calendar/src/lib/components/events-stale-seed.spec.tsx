@@ -40,7 +40,7 @@
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { setFirestoreSessionReporters } from '@aglyn/tenant-feature-instance'
-import { setDoc } from 'firebase/firestore'
+import { deleteField, setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import EventsConsolePage from './events-console-page'
 
@@ -314,5 +314,59 @@ describe('EventsConsolePage (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save event' }))
 
     await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+  })
+})
+
+/**
+ * The editor stores through the same rule the events import writes through
+ * (`model/event-write.ts`); these pin what one Save sends, so moving the
+ * rule out of the page changed nothing it stores.
+ */
+describe('EventsConsolePage save payload', () => {
+  it('writes the whole stored event back on an edit, deleting a cover description with no cover', async () => {
+    renderPage()
+
+    editFirstEventAndSave()
+
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+    const [, payload, options] = (setDoc as jest.Mock).mock.calls[0]
+    expect(options).toEqual({ merge: true })
+    const { coverImageAlt, updatedAt, ...rest } = payload
+    expect(rest).toEqual({
+      title: 'Launch party',
+      startsAtMs: Date.parse('2026-09-01T18:00:00Z'),
+      endsAtMs: Date.parse('2026-09-01T21:00:00Z'),
+      location: 'The Warehouse',
+      organizer: 'Ada',
+      description: 'Doors at six',
+      status: 'published',
+    })
+    expect(coverImageAlt.isEqual(deleteField())).toBe(true)
+    expect(typeof updatedAt.toMillis).toBe('function')
+  })
+
+  it('gives a new event without an end one hour, and stamps its creation', async () => {
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add event' }))
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: '  Open house  ' },
+    })
+    fireEvent.change(screen.getByLabelText('Starts'), {
+      target: { value: '2026-10-01T10:00' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save event' }))
+
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+    const [, payload] = (setDoc as jest.Mock).mock.calls[0]
+    const startsAtMs = new Date('2026-10-01T10:00').getTime()
+    expect(payload).toMatchObject({
+      title: 'Open house',
+      startsAtMs,
+      endsAtMs: startsAtMs + 60 * 60 * 1000,
+      status: 'draft',
+    })
+    expect(payload).not.toHaveProperty('location')
+    expect(typeof payload.createdAt.toMillis).toBe('function')
   })
 })

@@ -54,6 +54,7 @@ import {
   engageMediaBandwidthCap,
   invalidateMediaBandwidthCapState,
 } from './media-bandwidth-cap'
+import { mintMediaSignature } from './media-signing'
 import { invalidateMediaCdnLockCache, serveMediaCdn } from './serve-media-cdn'
 
 const FILM = Buffer.from('FILM-BYTES')
@@ -70,6 +71,8 @@ const mockWrites: Array<{ path: string; data: Data }> = []
 const mockQueries: string[] = []
 const mockNotices: Array<{ hostId: string; payload: Data }> = []
 let mockRedirect: Data | null = null
+/** Stands between a day-document write and the store; a rejection is a failed write. */
+let mockDayWriteGate: (() => Promise<void>) | null = null
 
 /** A Firestore merge: maps merge recursively, increments add at the leaves. */
 function mockMerge(target: Data, patch: Data): Data {
@@ -114,7 +117,10 @@ jest.mock('./firebase-admin', () => {
       id: path.split('/').pop(),
       collection: (name: string) => collectionRef(`${path}/${name}`),
       get: async () => snapshotOf(path),
-      set: async (data: Data, options?: { merge?: boolean }) => write(path, data, options),
+      set: async (data: Data, options?: { merge?: boolean }) => {
+        if (mockDayWriteGate && path.includes('/analytics/')) await mockDayWriteGate()
+        write(path, data, options)
+      },
     }
   }
   function collectionRef(path: string): any {
@@ -288,6 +294,7 @@ beforeEach(() => {
   mockQueries.length = 0
   mockNotices.length = 0
   mockRedirect = null
+  mockDayWriteGate = null
   invalidateMediaCdnLockCache()
   invalidateMediaBandwidthCapState()
   mockStore['hosts/site-1'] = { orgId: 'org-1', displayName: 'Acme' }
@@ -378,6 +385,135 @@ describe('a video request’s bytes reach the bandwidth total (AGL-3474)', () =>
     expect(res.getHeader('location')).toBe('https://delivery.test/film')
     expect(siteDay()?.[MEDIA_BANDWIDTH_DAY_FIELD]).toBe(5_000_000)
     expect(siteDay()?.media?.film).toEqual({ serves: 1, redirects: 1 })
+  })
+})
+
+/**
+ * THE COUNT OUTLIVES THE RESPONSE, OR IT IS NOT A COUNT.
+ *
+ * The day-document write used to be `void …catch(() => undefined)`: nothing
+ * waited for it, so a serverless instance frozen once the response left took
+ * the write with it, and a write that failed said so to nobody. Bandwidth the
+ * day document never takes is bandwidth the band and the invoice never see.
+ */
+describe('a serve is counted before the request is done', () => {
+  const released = () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    return { gate, release }
+  }
+
+  it('holds the request open until the streamed film is counted', async () => {
+    const { gate, release } = released()
+    mockDayWriteGate = () => gate
+    let done = false
+    const pending = film().then((res) => ((done = true), res))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(done).toBe(false)
+    release()
+    const res = await pending
+    expect(res.statusCode).toBe(200)
+    expect(siteDay()?.[MEDIA_BANDWIDTH_DAY_FIELD]).toBe(FILM.length)
+  })
+
+  it('holds the delivery provider’s redirect open until it is counted', async () => {
+    mockRedirect = {
+      location: 'https://delivery.test/film',
+      expiresAtMs: Date.now() + 60_000,
+      key: 'hosts/site-1/film/master',
+      sizeBytes: 5_000_000,
+    }
+    const { gate, release } = released()
+    mockDayWriteGate = () => gate
+    let done = false
+    const pending = film().then((res) => ((done = true), res))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(done).toBe(false)
+    release()
+    expect((await pending).statusCode).toBe(302)
+    expect(siteDay()?.[MEDIA_BANDWIDTH_DAY_FIELD]).toBe(5_000_000)
+  })
+
+  it('reports a count the day document refused, and still serves the film', async () => {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockDayWriteGate = async () => {
+      throw new Error('ABORTED: too much contention')
+    }
+    const res = await film()
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toBe(FILM.toString())
+    expect(error).toHaveBeenCalledWith(
+      '[media-cdn] serve not counted',
+      'site-1',
+      'film',
+      expect.any(Error),
+    )
+    error.mockRestore()
+  })
+})
+
+/**
+ * A PRIVATE IMAGE IS A FILE, NOT PAGE WEIGHT.
+ *
+ * Public images stay out of the count because a page's weight already holds
+ * them and the edge serves most of them. A private image can be placed on no
+ * page and is `no-store`, so every request reaches origin: it counts like any
+ * other file. The workspace previewing its own library in the console does
+ * not, and its link says so inside the signature.
+ */
+describe('a private image counts toward the band; the team’s own preview does not', () => {
+  const original = process.env['TOKEN_SIGNING_SECRET']
+  beforeAll(() => {
+    process.env['TOKEN_SIGNING_SECRET'] = 'test-secret'
+  })
+  afterAll(() => {
+    if (original === undefined) delete process.env['TOKEN_SIGNING_SECRET']
+    else process.env['TOKEN_SIGNING_SECRET'] = original
+  })
+  beforeEach(() => {
+    mockStore['hosts/site-1/media/private-picture'] = {
+      fileName: 'receipt.png',
+      contentType: 'image/png',
+      contentHash: '1111222233334444',
+      storagePath: 'hosts/site-1/media/private-picture',
+      variants: [],
+      private: true,
+    }
+  })
+  const signedPicture = (audience?: 'team') => {
+    const signature = mintMediaSignature('site-1', 'private-picture', Date.now(), undefined, audience)
+    return serve(['site-1', 'private-picture'], {
+      query: {
+        exp: String(signature.exp),
+        sig: signature.sig,
+        ...(signature.aud ? { aud: signature.aud } : {}),
+      },
+    })
+  }
+
+  it('counts every byte a buyer’s signed link sends', async () => {
+    const res = await signedPicture()
+    expect(res.statusCode).toBe(200)
+    expect(siteDay()?.[MEDIA_BANDWIDTH_DAY_FIELD]).toBe(PICTURE.length)
+    expect(meteredBytesOf('hosts/site-1')).toBe(PICTURE.length)
+  })
+
+  it('counts nothing toward the band for the team’s preview, and still records the delivery', async () => {
+    const res = await signedPicture('team')
+    expect(res.statusCode).toBe(200)
+    expect(siteDay()?.[MEDIA_BANDWIDTH_DAY_FIELD]).toBeUndefined()
+    expect(siteDay()?.media?.['private-picture']).toEqual({ serves: 1, bytes: PICTURE.length })
+  })
+
+  it('stops with the band on Free — and the team can still see its own file', async () => {
+    mockStore['orgs/org-1'] = freeOrg({ bandwidthCap: { month: MONTH, engagedAt: 1 } })
+    expect((await signedPicture()).statusCode).toBe(503)
+    expect((await signedPicture('team')).statusCode).toBe(200)
+  })
+
+  it('NEGATIVE: a public image is still page weight', async () => {
+    await picture()
+    expect(siteDay()?.[MEDIA_BANDWIDTH_DAY_FIELD]).toBeUndefined()
   })
 })
 

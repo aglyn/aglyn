@@ -69,6 +69,7 @@ on:
       - production
     paths:
       - cloud/firebase-firestore.rules
+      - cloud/firebase-firestore.deploy.rules
       - cloud/firebase-storage.rules
       - cloud/firebase-database.rules.json
       - tools/scripts/check-rules-drift.mjs

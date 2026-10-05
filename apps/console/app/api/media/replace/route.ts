@@ -35,17 +35,13 @@ import {
 } from '@aglyn/aglyn/app-utils/sanitize-svg'
 import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import {
-  mediaPosterObjectPath,
-  mediaRenditionObjectPath,
-  MEDIA_POSTER_OBJECT_SUFFIX,
-  parseMediaRenditions,
-} from '@aglyn/aglyn/app-utils/media-ref'
-import {
   emailUnverifiedResponse,
   firebaseAdmin,
   generateMediaVariants,
   generateStoredMediaVariants,
   isImpersonationSession,
+  mediaDerivedObjectPaths,
+  mediaVariantDocFields,
   MEDIA_STRONG_DIGEST_MAX_BYTES,
   quarantinedUploadRefusal,
   storedObjectSha256,
@@ -602,25 +598,15 @@ async function handler(request: Request): Promise<Response> {
      * Best-effort, exactly as the variant deletes have always been: a
      * derived object that fails to delete is storage to reclaim, and the
      * document below stops pointing at all of them regardless.
+     *
+     * The list is `mediaDerivedObjectPaths`, shared with folder moves and
+     * deletes, and it includes the display copy (AGL-3486).
      */
-    const previousVariants: number[] = mediaSnapshot.get('variants') ?? []
-    const previousPoster = mediaSnapshot.get('poster')
-    const previousPosterWidths: number[] = previousPoster?.variants ?? []
-    const previousRenditions = parseMediaRenditions(
-      mediaSnapshot.get('videoRenditions'),
+    await Promise.all(
+      mediaDerivedObjectPaths(objectPath, mediaSnapshot).map(
+        (path) => bucket.file(path).delete().catch(() => undefined),
+      ),
     )
-    const drop = (path: string) =>
-      bucket.file(path).delete().catch(() => undefined)
-    await Promise.all([
-      ...previousVariants.map((width) => drop(`${objectPath}__w${width}.webp`)),
-      ...(previousPoster ? [drop(mediaPosterObjectPath(objectPath))] : []),
-      ...previousPosterWidths.map((width) =>
-        drop(`${objectPath}${MEDIA_POSTER_OBJECT_SUFFIX}__w${width}.webp`),
-      ),
-      ...previousRenditions.map((rendition) =>
-        drop(mediaRenditionObjectPath(objectPath, rendition)),
-      ),
-    ])
 
     const token = randomUUID()
     const file = bucket.file(objectPath)
@@ -707,9 +693,9 @@ async function handler(request: Request): Promise<Response> {
     // branch below means the field is actively removed if one lingers.
     const cdnAllowed =
       checkEntitlement(org, 'mediaCdn') && mediaSnapshot.get('private') !== true
-    const saveDerived = (path: string, bytes: Buffer) =>
+    const saveDerived = (path: string, bytes: Buffer, type = 'image/webp') =>
       bucket.file(path).save(bytes, {
-        contentType: 'image/webp',
+        contentType: type,
         metadata: { cacheControl: 'public, max-age=31536000, immutable' },
       })
     // Same shape as upload, same reason (AGL-1468): the previous `catch` here
@@ -720,14 +706,17 @@ async function handler(request: Request): Promise<Response> {
     // widths before they touch the source, so a PDF, a film or an SVG comes
     // back `{ variants: [] }` having read nothing. Restating that rule at the
     // call site is how two copies of it came to disagree in the first place.
-    const { variants, error: variantsError } = !cdnAllowed
-      ? { variants: [] as number[], error: undefined }
+    //
+    // The display copy rides the same call (AGL-3486), as on upload.
+    const variantOutcome = !cdnAllowed
+      ? null
       : buffer
         ? await generateMediaVariants({
             buffer,
             contentType,
             sourceWidth: dimensions?.width,
             objectPath,
+            display: true,
             saveVariant: saveDerived,
           })
         : await generateStoredMediaVariants({
@@ -735,9 +724,11 @@ async function handler(request: Request): Promise<Response> {
             sizeBytes: uploadedBytes,
             sourceWidth: dimensions?.width,
             objectPath,
+            display: true,
             readSource: async () => (await file.download())[0],
             saveVariant: saveDerived,
           })
+    const variantsError = variantOutcome?.error
 
     /**
      * The video half, on the route that changes a film (AGL-2742/AGL-2732).
@@ -799,7 +790,13 @@ async function handler(request: Request): Promise<Response> {
         height: dimensions?.height ?? remove,
         ...(contentHash ? { contentHash } : { contentHash: remove }),
         ...(contentSha256 ? { contentSha256 } : { contentSha256: remove }),
-        variants,
+        // `variants`, their encoder generation and the display copy
+        // (AGL-3486) — each one landing or cleared, since the objects behind
+        // the previous ones were dropped above. Without the CDN there is no
+        // generation to record, and no display copy to keep.
+        ...(variantOutcome
+          ? mediaVariantDocFields(variantOutcome)
+          : { variants: [], variantEncoderVersion: remove, display: remove }),
         // A merge write, so this has to CLEAR on success rather than simply
         // not be set: an asset whose first upload failed and whose replace
         // succeeded would otherwise keep a fault marker for bytes that are

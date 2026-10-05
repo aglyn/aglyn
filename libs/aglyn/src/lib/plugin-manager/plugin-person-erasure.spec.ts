@@ -17,7 +17,12 @@
 
 import { setRegisteringPluginId } from '../app-utils/registering-plugin'
 import {
+  registerPluginDeclarationsRepair,
+  resetPluginDeclarationsRepairForTests,
+} from './plugin-declarations-repair'
+import {
   listPluginPersonErasers,
+  missingRequiredPersonErasersAfterRepair,
   PLUGIN_REQUIRED_PERSON_ERASERS,
   registerPluginPersonEraser,
   registerPluginPersonRecordsEraser,
@@ -253,5 +258,74 @@ describe('a share the erasure promises (AGL-3080)', () => {
       crm: { standIn: true },
       email: { standIn: true },
     })
+  })
+})
+
+describe('one set of person erasers per process (AGL-3464)', () => {
+  it('an eraser registered in one copy of the module runs from another', async () => {
+    // The shape of Next's boot file and the route that runs the erasure: two
+    // evaluations of this module in one process. What boot registers, the
+    // route must run — and a required share registered at boot must not read
+    // as missing there.
+    type Erasers = typeof import('./plugin-person-erasure')
+    let boot!: Erasers
+    let route!: Erasers
+    jest.isolateModules(() => {
+      boot = jest.requireActual('./plugin-person-erasure')
+    })
+    jest.isolateModules(() => {
+      route = jest.requireActual('./plugin-person-erasure')
+    })
+    expect(route).not.toBe(boot)
+    boot.registerPluginPersonEraser(async () => ({ removed: 1 }), { pluginId: 'shop' })
+    boot.registerPluginPersonRecordsEraser(
+      { locate: async () => ['contact-1'], erase: async () => ({ contacts: 1 }) },
+      { pluginId: 'people' },
+    )
+    expect(route.missingRequiredPersonErasers(['shop', 'people'])).toEqual([])
+    expect((await route.runPluginPersonErasure(TARGET, ['shop', 'people'])).reports).toEqual({
+      shop: { removed: 1 },
+      people: { contacts: 1 },
+    })
+    route.resetPluginPersonErasersForTests()
+    expect(boot.listPluginPersonErasers()).toEqual([])
+  })
+})
+
+describe('a required share missing at first (AGL-3464)', () => {
+  afterEach(() => resetPluginDeclarationsRepairForTests())
+
+  it("runs the app's boot step once, and erases when the boot registers it", async () => {
+    const repair = jest.fn(async (): Promise<void> => {
+      registerPluginPersonEraser(async () => ({ removed: 2 }), { pluginId: 'shop' })
+    })
+    registerPluginDeclarationsRepair(repair)
+    expect((await runPluginPersonErasure(TARGET, ['shop'])).reports).toEqual({ shop: { removed: 2 } })
+    expect(repair).toHaveBeenCalledTimes(1)
+  })
+
+  it('still refuses, before any eraser runs, when the boot step leaves it unregistered', async () => {
+    const mail = jest.fn(async () => ({}))
+    registerPluginPersonEraser(mail, { pluginId: 'mail' })
+    const repair = jest.fn(async (): Promise<void> => undefined)
+    registerPluginDeclarationsRepair(repair)
+    await expect(runPluginPersonErasure(TARGET, ['shop'])).rejects.toThrow(/refused: shop/)
+    expect(repair).toHaveBeenCalledTimes(1)
+    expect(mail).not.toHaveBeenCalled()
+  })
+
+  it('answers what is still missing after the repair, for the erasure to ask before it writes', async () => {
+    registerPluginDeclarationsRepair(async () => {
+      registerPluginPersonEraser(async () => ({}), { pluginId: 'shop' })
+    })
+    expect(await missingRequiredPersonErasersAfterRepair(['shop', 'lists'])).toEqual(['lists'])
+  })
+
+  it('runs no boot step when every required share is registered', async () => {
+    const repair = jest.fn(async (): Promise<void> => undefined)
+    registerPluginDeclarationsRepair(repair)
+    registerPluginPersonEraser(async () => ({}), { pluginId: 'shop' })
+    expect(await missingRequiredPersonErasersAfterRepair(['shop'])).toEqual([])
+    expect(repair).not.toHaveBeenCalled()
   })
 })

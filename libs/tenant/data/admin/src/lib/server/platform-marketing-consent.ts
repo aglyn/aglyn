@@ -65,6 +65,7 @@
  * reopen that list and nothing else (`plugin-email-streams`).
  */
 
+import { stampRecordOrigin } from '@aglyn/aglyn/plugin-manager/plugin-record-origin'
 import {
   readTopicSubscriptionState,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
@@ -272,6 +273,11 @@ export async function recordPlatformMarketingConsent(
     'refused' in verdict
       ? { status: 'refused', reason: verdict.refused }
       : { status: 'recorded', contactId: verdict.contactId, created: verdict.created }
+  // Where the person came from (AGL-3519): an account sign-up, on a record
+  // the platform's own CRM just started and that names no lead source.
+  if (contact.status === 'recorded') {
+    await stampRecordOrigin({ hostId, email, origin: 'account', firstTouchOnly: true })
+  }
   if (input.decision !== 'granted') return { atMs, contact }
 
   /*

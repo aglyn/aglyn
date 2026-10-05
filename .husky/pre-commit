@@ -27,3 +27,19 @@ if [ -n "$staged_tools" ]; then
   # separated and this repository has no whitespace in tracked filenames.
   npx --no-install eslint --no-error-on-unmatched-pattern $staged_tools || exit 1
 fi
+
+# The Firestore rules deploy from a comment-stripped artifact (AGL-3544), so a
+# commit that changes the source must carry the regenerated artifact with it.
+# Checked against the INDEX, not the working tree: what is being committed is
+# the staged pair, and a peer's unstaged rules edit is not this commit's.
+if git diff --cached --name-only --diff-filter=ACMRD |
+  grep -qE '^cloud/firebase-firestore(\.deploy)?\.rules$'; then
+  node tools/scripts/generate-rules-deploy-artifact.mjs --check --staged || exit 1
+fi
+
+# A JSON key written twice survives a git merge with no conflict, and
+# `JSON.parse` keeps only the last copy (AGL-3553). Checked against the INDEX
+# copy of each staged JSON file, so what is judged is what is committed.
+if git diff --cached --name-only --diff-filter=ACMR | grep -qE '\.jsonc?$'; then
+  node tools/scripts/check-json-duplicate-keys.mjs --staged || exit 1
+fi

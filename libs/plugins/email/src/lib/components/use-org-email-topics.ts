@@ -21,7 +21,7 @@ import {
   normalizeSubscriptionTopic,
   type SubscriptionTopic,
 } from '@aglyn/aglyn'
-import { EMAIL_TOPICS_COLLECTION } from '../model/email-topic-catalog'
+import { EMAIL_TOPICS_COLLECTION, emailTopicDocument } from '../model/email-topic-catalog'
 import type { Firestore } from 'firebase/firestore'
 import {
   collection,
@@ -87,17 +87,7 @@ export async function writeEmailTopic(
 ): Promise<void> {
   await setDoc(
     doc(firestore, scope[0], scope[1], EMAIL_TOPICS_COLLECTION, topic.id),
-    {
-      name: topic.name,
-      description: topic.description,
-      archived: topic.archived,
-      ...(topic.doubleOptIn === undefined
-        ? {}
-        : {
-            doubleOptIn:
-              topic.doubleOptIn === null ? deleteField() : topic.doubleOptIn,
-          }),
-    },
+    emailTopicDocument(topic, deleteField()),
     { merge: true },
   )
 }

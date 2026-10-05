@@ -34,6 +34,21 @@ row.
   "address": { "line1": "1 Main St", "city": "Austin", "state": "TX", "postalCode": "78701", "country": "US" },
   "ownerUid": "u_9f1c",
   "lifecycleStage": "customer",
+  "leadSource": "Trade show",
+  "salutation": "Ms.",
+  "firstName": "Robin",
+  "lastName": "Wholesale",
+  "department": "Purchasing",
+  "mobilePhone": "+15125550124",
+  "homePhone": null,
+  "otherPhone": null,
+  "fax": null,
+  "birthdate": "1984-07-21",
+  "assistantName": "Sam Rivera",
+  "assistantPhone": "+15125550125",
+  "reportsToContactId": "k3c8e1a207",
+  "otherAddress": null,
+  "doNotCall": false,
   "companyIds": ["c_1a2b"],
   "alternateEmails": ["robin.w@example.org"],
   "created": "2026-07-20T18:23:23.941Z",
@@ -55,9 +70,20 @@ row.
 | `phone` | string \| null | E.164 (`+15125550123`). Normalized before storing; a number that cannot be normalized confidently is a `400`. Writable — see [the CRM profile](#crm-profile). |
 | `jobTitle` | string \| null | 120 characters. Writable. |
 | `companyId` | string \| null | The [company](companies.md) this person works for, as this site knows it. Must exist. Writable. |
-| `address` | object \| null | `line1`, `line2`, `city`, `state`, `postalCode`, `country` (two-letter ISO code). Blank parts dropped; an empty address is stored as `null`. Writable. |
+| `address` | object \| null | The **mailing** address: `line1`, `line2`, `city`, `state`, `postalCode`, `country` (two-letter ISO code). Blank parts dropped; an empty address is stored as `null`. Writable. |
 | `ownerUid` | string \| null | The team member responsible for the relationship. Must be a member of your organization. Writable. |
 | `lifecycleStage` | string \| null | `subscriber`, `lead`, `marketing-qualified`, `sales-qualified`, `opportunity`, `customer`, `evangelist` or `other`. Writable. |
+| `leadSource` | string \| null | Where this person came from, as this site records it — one of the organization's [lead source values](/content-and-data/crm/custom-fields#picklist-values), the same list a [lead](./leads.md)'s `leadSource` is restricted to. Writable — see [the CRM profile](#crm-profile): restricted to the list's **active** values, matched without regard to case and stored as the list spells it; any other value is refused with `400 validation_failed`, the allowed values named under `fields.leadSource`. The value the site's profile already holds is kept even after it is deactivated. |
+| `salutation` | string \| null | One of your organization's [salutation values](/content-and-data/crm/custom-fields#picklist-values) — `Mr.`, `Ms.`, `Mrs.`, `Dr.`, `Prof.` and any you added — matched without regard to case and stored as the list spells it. A value the list does not hold is a `400` naming the values allowed; one the contact already holds is kept. Writable. |
+| `firstName` / `lastName` | string \| null | 59 characters each. While either is set, the name the named site shows is made of them, *First Last*; the top-level `name` is the shared identity and is not rewritten, except that a create with no `name` takes theirs. Writable. |
+| `department` | string \| null | 120 characters. Writable. |
+| `mobilePhone` / `homePhone` / `otherPhone` / `fax` | string \| null | E.164, normalized like `phone`; a number that cannot be normalized is a `400`. Writable. |
+| `birthdate` | string \| null | `YYYY-MM-DD`, a real date that is not in the future; anything else is a `400`. Writable. |
+| `assistantName` | string \| null | 120 characters. Writable. |
+| `assistantPhone` | string \| null | E.164, normalized like `phone`. Writable. |
+| `reportsToContactId` | string \| null | The contact this person reports to. Must be a contact of your organization, never this contact, and never one whose own chain — through the named site's profiles — already reaches this contact; each is a `400` that says which. Cleared when the contact it names is deleted or erased; a merge moves it to the surviving contact. Writable. |
+| `otherAddress` | object \| null | A second postal address, shaped like `address`. Writable. |
+| `doNotCall` | boolean | The person asked not to be phoned. `false` when unset; send `false` or `null` to clear it. Writable. |
 | `mediaIds` | string[] | Files from the organization's [media library](./media.md) attached to this person **by the named site**, by media id, at most 20. Part of [the CRM profile](#crm-profile), so a write needs `consentSiteId`; a read with no site named returns the first holder's list. An empty array clears them. Writable. |
 | `companyIds` | string[] | Every company any of your sites has filed this person under — the set of the per-site `companyId`s. What `?companyId=` queries. **Read-only.** |
 | `alternateEmails` | string[] | The other addresses this person answers to — each one the address of a record [merged](#merge) into this one. A capture on any of them lands here. **Read-only** — written by a merge. |
@@ -68,10 +94,11 @@ wrote. The interaction timeline shown in the console isn't exposed over the API.
 
 ### The CRM profile is per site {#crm-profile}
 
-`phone`, `jobTitle`, `companyId`, `address`, `ownerUid` and `lifecycleStage` are one
-**site's** knowledge of a person, not the person's own facts. A contact is one record
+`phone`, `jobTitle`, `companyId`, `address`, `ownerUid`, `lifecycleStage` and `leadSource` —
+and Salesforce's standard contact fields beside them, `salutation` through `doNotCall` —
+are one **site's** knowledge of a person, not the person's own facts. A contact is one record
 shared by every site that has captured them, and an agency's two brands that both know
-somebody must not read each other's notes on them — so the console stores these six
+somebody must not read each other's notes on them — so the console stores these
 per site (strictly, per [consent group](/marketing-and-automation/email-campaigns/overview#consent-groups)),
 and the API does the same.
 Two consequences:
@@ -215,7 +242,7 @@ Returns a contact object, or `404 not_found` (`"No such contact"`).
 | `tags` | string[] | no | Blanks dropped; each tag truncated to 60 characters, at most 50 kept. |
 | `notes` | string | no | Truncated to 2,000 characters. |
 | `marketingConsent` | boolean | no | `true` also stamps the consent timestamp, and requires `consentSiteId`. |
-| `phone`, `jobTitle`, `companyId`, `address`, `ownerUid`, `lifecycleStage` | see [the object](#the-contact-object) | no | The [CRM profile](#crm-profile). Each requires `consentSiteId`, and lands on that site's profile of the person. |
+| `phone`, `jobTitle`, `companyId`, `address`, `ownerUid`, `lifecycleStage`, `leadSource` | see [the object](#the-contact-object) | no | The [CRM profile](#crm-profile). Each requires `consentSiteId`, and lands on that site's profile of the person. |
 | `consentSiteId` | string | with `marketingConsent: true` or any profile field | The site this write is made on behalf of: the site the person opted in to, and the site whose profile the fields land on. Required for an opt-in and for a profile field; rejected alongside `marketingConsent: false` unless a profile field needs it. A site your organization does not own is a `400`. |
 | `consentGroupId` | string | no | With `marketingConsent: true`, the id of the [consent group](/marketing-and-automation/email-campaigns/overview#consent-groups) `consentSiteId` belongs to — see [opting in for a whole group](#consent-group-opt-in). Without it the opt-in is recorded for `consentSiteId` alone. |
 
@@ -376,7 +403,10 @@ original `200` receipt is replayed. Send a key whenever a deletion runs from a s
 which is most of them: an erasure request on somebody else's deadline is exactly the
 case where a response lost to a timeout must not read as a failure.
 
-This removes the contact record. It does not remove the
+This removes the contact record, clears every other contact's
+`reportsToContactId` that named the person, in every site's profile, and takes
+the person off every [deal's `contactRoles`](deals.md#contact-roles) — clearing
+a deal's `contactId` where they were its Primary. It does not remove the
 [form submissions](form-submissions.md), orders, or bookings that person left behind —
 those are separate records with their own endpoints.
 
@@ -431,7 +461,7 @@ A retry after a lost response finds no source contact and answers `404`; send an
 | Status | `type` | When |
 | --- | --- | --- |
 | `400` | `bad_request` | `code: "validation_failed"` — on a write, a missing or unusable `email`, a non-boolean `marketingConsent`, a `marketingConsent: true` with no
-`consentSiteId` (or one naming a site the organization does not own), a profile field with no `consentSiteId`, a `phone` that does not normalize, a `lifecycleStage` outside the list, a `companyId` that does not exist, an `ownerUid` who is not a member, or an attempt
+`consentSiteId` (or one naming a site the organization does not own), a profile field with no `consentSiteId`, a `phone` that does not normalize, a `lifecycleStage` outside the list, a `leadSource` that is not one of the organization's active lead source values, a `companyId` that does not exist, an `ownerUid` who is not a member, or an attempt
 to write `email`/`sources`/`alternateEmails`. On a merge, a missing `sourceContactId`, one naming the contact in the path, or any other key. On the list, an `?email=` that isn't a usable address, a `?lifecycleStage=` outside the list, or a `?consentSiteId=` naming a site the organization does not own. `fields` names each offending key. |
 | `403` | `plan_required` | `code: "contact_quota"` — the CRM records band (contacts, companies and deals together) is full on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `contacts:read` / `contacts:write`. Checked before the method, so a write attempt with a read-only key returns `403`, not `405`. |

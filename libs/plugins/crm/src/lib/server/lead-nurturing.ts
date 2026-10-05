@@ -45,7 +45,14 @@
  * written is one a rep sets by hand.
  */
 
-import { type CrmLeadStatus, crmLeadStatus } from '@aglyn/aglyn/app-utils/crm'
+import {
+  CRM_COLLECTIONS,
+  CRM_LEAD_STATUS_PICKLIST,
+  type CrmLeadStatus,
+  crmLeadStatus,
+  crmLeadStatusLabelFor,
+  effectiveCrmLeadStatusPicklist,
+} from '@aglyn/aglyn/app-utils/crm'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
@@ -65,6 +72,28 @@ async function advanceLeadsAt(
     ...new Set(input.emails.map((email) => personKey(email)).filter((key): key is string => Boolean(key))),
   ]
   const leads = firestore.collection('orgs').doc(input.orgId).collection('leads')
+  /*
+   * The org's label for the stage, stamped beside the meaning (AGL-3512) —
+   * read once, and only once a lead is due to move. A list that cannot be
+   * read stamps the meaning alone, which every reader labels itself.
+   */
+  let label: string | null | undefined
+  const labelFor = async (): Promise<string | null> => {
+    if (label !== undefined) return label
+    try {
+      const list = await firestore
+        .collection('orgs')
+        .doc(input.orgId)
+        .collection(CRM_COLLECTIONS.picklists)
+        .doc(CRM_LEAD_STATUS_PICKLIST)
+        .get()
+      label = crmLeadStatusLabelFor(effectiveCrmLeadStatusPicklist(list.data()), to)
+    } catch (error) {
+      console.error('[crm] the lead statuses could not be read', input.orgId, error)
+      label = null
+    }
+    return label
+  }
   let moved = 0
   for (let start = 0; start < keys.length; start += CHUNK) {
     try {
@@ -77,7 +106,12 @@ async function advanceLeadsAt(
         if (lead['convertedContactId']) continue
         if (!visibleToHost(lead['visibleTo'] as string[] | undefined, input.hostId)) continue
         if (!from.includes(crmLeadStatus(lead as never))) continue
-        batch.set(snapshot.ref, { status: to, updatedAt: FieldValue.serverTimestamp() }, { merge: true })
+        const statusLabel = await labelFor()
+        batch.set(
+          snapshot.ref,
+          { status: to, ...(statusLabel ? { statusLabel } : {}), updatedAt: FieldValue.serverTimestamp() },
+          { merge: true },
+        )
         writes += 1
       }
       if (writes) {

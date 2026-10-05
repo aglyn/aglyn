@@ -69,14 +69,77 @@ function hostQualified(scope: string, hostId: string | undefined | null) {
   return `${ORG_SCOPE_PREFIX}${orgId}:${hostId}`
 }
 
-/** Mirrors `resolveMediaSrc`. */
+/** Mirrors `MEDIA_POSTER_OBJECT_SUFFIX`. */
+const MEDIA_POSTER_OBJECT_SUFFIX = '__poster'
+/** Mirrors `STORAGE_DOWNLOAD_HOST`. */
+const STORAGE_DOWNLOAD_HOST = 'firebasestorage.googleapis.com'
+
+/** Mirrors `storageEmulatorHost`. */
+function storageEmulatorHost(): string {
+  const env =
+    typeof process === 'undefined'
+      ? undefined
+      : process.env?.['FIREBASE_STORAGE_EMULATOR_HOST']
+  return String(env ?? '')
+    .trim()
+    .toLowerCase()
+}
+
+/**
+ * Mirrors `mediaRefFromStorageUrl` and the `mediaAssetOfObjectKey` grammar
+ * it reads the key with (AGL-3506): the `media:` reference a Storage
+ * download URL for a library object names, or undefined.
+ */
+function mediaRefOfStorageUrl(value: string): string | undefined {
+  if (!value.includes('/v0/b/')) return undefined
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    return undefined
+  }
+  const emulator = storageEmulatorHost()
+  if (
+    url.hostname.toLowerCase() !== STORAGE_DOWNLOAD_HOST &&
+    !(emulator && url.host.toLowerCase() === emulator)
+  ) {
+    return undefined
+  }
+  const match = /^\/v0\/b\/[^/]+\/o\/([^/]+)$/.exec(url.pathname)
+  if (!match) return undefined
+  let objectPath: string
+  try {
+    objectPath = decodeURIComponent(match[1])
+  } catch {
+    return undefined
+  }
+  const segments = objectPath.split('/')
+  if (segments.length < 4 || segments[2] !== 'media') return undefined
+  if (segments.some((segment) => !segment || segment === '..')) return undefined
+  const [root, scopeId] = segments
+  const scope =
+    root === 'hosts' ? scopeId : root === 'orgs' ? `${ORG_SCOPE_PREFIX}${scopeId}` : null
+  const leaf = segments[segments.length - 1]
+  if (!scope || leaf.endsWith(MEDIA_POSTER_OBJECT_SUFFIX)) return undefined
+  if (!isCdnScope(scope) || !SEGMENT.test(leaf)) return undefined
+  return `${MEDIA_REF_PREFIX}${scope}/${leaf}`
+}
+
+/**
+ * Mirrors `resolveMediaSrc`, including its routing of a library object's
+ * Storage download URL through the CDN (AGL-3506) — an inbox is a visitor
+ * too, and its bytes count and stop like a page's.
+ */
 export function resolveEmailMediaSrc(
   value: string | undefined | null,
   hostId?: string | null,
 ): string | undefined {
   if (!value) return undefined
-  if (!value.startsWith(MEDIA_REF_PREFIX)) return value
-  const rest = value.slice(MEDIA_REF_PREFIX.length)
+  const stored = value.startsWith(MEDIA_REF_PREFIX)
+    ? value
+    : mediaRefOfStorageUrl(value)
+  if (!stored) return value
+  const rest = stored.slice(MEDIA_REF_PREFIX.length)
   // The scope may contain ':' but never '/', so the FIRST slash is the
   // boundary and the media id is everything after it.
   const slash = rest.indexOf('/')

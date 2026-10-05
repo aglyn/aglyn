@@ -51,6 +51,7 @@ function screen(overrides: Partial<AiBuildPlanScreen> = {}): AiBuildPlanScreen {
     slug: 'home',
     layout: null,
     template: null,
+    record: null,
     duplicateOf: null,
     nav: true,
     seoTitle: 'Home',

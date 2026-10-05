@@ -136,8 +136,10 @@ jest.mock('../hooks/use-org-scope', () => ({
 jest.mock('../hooks/use-secondary-nav', () => ({
   useUrlNamesOrg: () => routeScope.namesOrg,
 }))
+/** The site the page is on; `null` on an org page. */
+let mockHostId: string | null = 'host-1'
 jest.mock('../components/host-id-provider', () => ({
-  useHostId: () => 'host-1',
+  useHostId: () => mockHostId,
 }))
 jest.mock('next/navigation', () => ({ useParams: () => ({}) }))
 
@@ -518,6 +520,7 @@ describe('QuotaWarningsBanner storage row (AGL-3479)', () => {
   })
   afterEach(() => {
     for (const key of Object.keys(mockCountFor)) delete mockCountFor[key]
+    mockHostId = 'host-1'
   })
 
   it('reads the pooled band through the site library, never the site’s counter', async () => {
@@ -610,6 +613,14 @@ describe('QuotaWarningsBanner storage row (AGL-3479)', () => {
     await screen.findByText(/reached your pages limit/)
     await waitFor(() => expect(storageFetches).toHaveLength(2))
     expect(bannerText()).not.toMatch(/storage/)
+  })
+
+  it('reads the same band through the organization library on an org page', async () => {
+    mockHostId = null
+    answerStorage(250, 300, true)
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/above 80% of your workspace's storage/)
+    expect(storageFetches).toEqual(['/api/media/storage?orgId=org-1'])
   })
 
   it('asks for no storage band off an org route', async () => {

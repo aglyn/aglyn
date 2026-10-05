@@ -58,6 +58,8 @@ import {
   NODE_ANIMATION_TRIGGER_PROP,
   NODE_HIDE_IF_PROP,
   isPlacedFormNode,
+  formPropsOnBind,
+  FORM_COMPONENT_ID,
   NODE_HIDE_UNLESS_PROP,
   normalizeBindingTokens,
   readInstanceIconValue,
@@ -2724,7 +2726,18 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             node?.props as Record<string, unknown> | undefined,
           ),
         )
-        canvas.updateNodeProps(node, normalized)
+        // Picking a saved form drops what the page's form node started with
+        // (AGL-3494) — a preset's button text kept here would mask the form's
+        // own for good. See `formPropsOnBind`.
+        canvas.updateNodeProps(
+          node,
+          node?.componentId === FORM_COMPONENT_ID
+            ? formPropsOnBind(
+                node?.props as Record<string, unknown> | undefined,
+                normalized,
+              )
+            : normalized,
+        )
       },
       [node, bindingVariables, bindingFunctions, numericFieldNames],
     )

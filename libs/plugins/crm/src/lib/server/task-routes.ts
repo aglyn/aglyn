@@ -20,8 +20,10 @@ import {
   consentGroupForHost,
   CRM_COLLECTIONS,
   type CrmTask,
+  type CrmTaskPicklists,
   crmScopeTokens,
   crmTaskListFields,
+  crmTaskStatusWrite,
   crmTaskReminderAfterEdit,
   crmTaskReminderPending,
   crmTaskReminderWhen,
@@ -54,6 +56,8 @@ import {
   readCrmTaskFields,
 } from '../model/task-routes'
 import { CRM_ORG_TASK_SCOPE } from '../model/task-scope'
+import { type CrmTaskPicklistWrite, resolveCrmTaskPicklistWrite } from '../model/task-picklists'
+import { readCrmTaskPicklists } from './read-picklist'
 import { digestTimeZone } from '../model/crm-digest'
 import {
   authorizeOrgCaller,
@@ -307,14 +311,19 @@ function assignmentLink(hostId: string | null, fields: CrmTaskFields): string {
 function storedFields(
   fields: CrmTaskFields,
   mode: 'create' | 'update',
+  picked: CrmTaskPicklistWrite,
 ): Record<string, unknown> {
   const absent = mode === 'update' ? FieldValue.delete() : undefined
   const optional = (value: string | null) =>
     value ? { present: true, value } : { present: mode === 'update', value: absent }
+  // The meanings every query reads, with the org's labels beside them (AGL-3517).
   const out: Record<string, unknown> = {
     title: fields.title,
-    kind: fields.kind,
-    priority: fields.priority,
+    kind: picked.kind,
+    typeLabel: picked.typeLabel,
+    priority: picked.priority,
+    priorityLabel: picked.priorityLabel,
+    statusLabel: picked.statusLabel,
     dueAtMs: fields.dueAtMs,
     notes: fields.notes,
   }
@@ -459,6 +468,7 @@ async function updateTask(
   taskId: string,
   fields: CrmTaskFields,
   onRoster: (uid: string) => Promise<boolean>,
+  picklists: CrmTaskPicklists,
 ): Promise<{ ok: true; notified: boolean } | Refusal> {
   if (fields.assigneeUid && !(await onRoster(fields.assigneeUid))) {
     return refuse(400, 'The assignee is not a member of this organization.')
@@ -468,9 +478,15 @@ async function updateTask(
   if (!canReach(writer, existing.get('visibleTo'))) {
     return refuse(403, 'That task is not visible to you.')
   }
+  const picked = resolveCrmTaskPicklistWrite(
+    picklists,
+    fields,
+    existing.data() as Partial<CrmTask>,
+  )
+  if (picked.ok === false) return refuse(400, picked.error)
   const previousAssignee = String(existing.get('assigneeUid') ?? '') || null
   const previousLinks = crmNextActivityLinksOf(existing.data() as Record<string, unknown>)
-  const stored = storedFields(fields, 'update')
+  const stored = storedFields(fields, 'update', picked.write)
   await tasks.doc(taskId).update({
     ...stored,
     ...reminderFields(fields, existing),
@@ -524,10 +540,13 @@ async function createTask(
   tasks: TasksCollection,
   fields: CrmTaskFields,
   onRoster: (uid: string) => Promise<boolean>,
+  picklists: CrmTaskPicklists,
 ): Promise<{ ok: true; taskId: string; notified: boolean } | Refusal> {
   if (fields.assigneeUid && !(await onRoster(fields.assigneeUid))) {
     return refuse(400, 'The assignee is not a member of this organization.')
   }
+  const picked = resolveCrmTaskPicklistWrite(picklists, fields, null)
+  if (picked.ok === false) return refuse(400, picked.error)
   const filed = await resolveFiledFrom(writer, scope)
   if (filed.ok === false) return filed
   const { hostId } = filed
@@ -538,11 +557,12 @@ async function createTask(
     return refuse(403, 'Your access to this organization does not reach this site.')
   }
   const ref = tasks.doc()
+  const stored = storedFields(fields, 'create', picked.write)
   await ref.set({
-    ...storedFields(fields, 'create'),
+    ...stored,
     ...reminderFields(fields, null),
     // What the Tasks list searches (AGL-3321).
-    ...crmTaskListFields({ ...storedFields(fields, 'create'), visibleTo }),
+    ...crmTaskListFields({ ...stored, visibleTo }),
     status: 'open',
     completedAtMs: null,
     visibleTo,
@@ -603,16 +623,17 @@ export const crmTaskSaveHandler: PluginApiHandler = async (req, res) => {
     }
     const tasks = tasksCollection(writer.orgId)
     const onRoster = rosterOf(writer.orgId)
+    const picklists = await readCrmTaskPicklists(firebaseAdmin.app().firestore(), writer.orgId)
     let body: CrmTaskSaveResponse
     if (taskId) {
-      const saved = await updateTask(writer, scope, tasks, taskId, fields, onRoster)
+      const saved = await updateTask(writer, scope, tasks, taskId, fields, onRoster, picklists)
       if (saved.ok === false) {
         res.status(saved.status).json(saved.body)
         return
       }
       body = { ok: true, taskId, notified: saved.notified }
     } else {
-      const saved = await createTask(writer, scope, tasks, fields, onRoster)
+      const saved = await createTask(writer, scope, tasks, fields, onRoster, picklists)
       if (saved.ok === false) {
         res.status(saved.status).json(saved.body)
         return
@@ -671,9 +692,10 @@ async function saveBatch(
     }
     const tasks = tasksCollection(writer.orgId)
     const onRoster = rosterOf(writer.orgId)
+    const picklists = await readCrmTaskPicklists(firebaseAdmin.app().firestore(), writer.orgId)
     const results: CrmTaskSaveOutcome[] = []
     for (const { taskId, fields } of parsed) {
-      const saved = await updateTask(writer, scope, tasks, taskId, fields, onRoster)
+      const saved = await updateTask(writer, scope, tasks, taskId, fields, onRoster, picklists)
       results.push(
         saved.ok === false
           ? { taskId, ok: false, error: saved.body.error }
@@ -706,6 +728,7 @@ async function completeTask(
   scope: CrmRouteScope,
   tasks: TasksCollection,
   taskId: string,
+  picklists: CrmTaskPicklists,
 ): Promise<CrmTaskCompleteOutcome> {
   const ref = tasks.doc(taskId)
   const snapshot = await ref.get()
@@ -727,7 +750,8 @@ async function completeTask(
 
   const completedAtMs = Date.now()
   await ref.update({
-    status: 'done',
+    // Done, labeled with the first active done value — "Completed" (AGL-3517).
+    ...crmTaskStatusWrite(picklists.status, true),
     completedAtMs,
     completedByUid: writer.uid,
     // A reminder still owed on a task that is done is owed to nobody
@@ -804,7 +828,14 @@ export const crmTaskCompleteHandler: PluginApiHandler = async (req, res) => {
       res.status(writer.status).json(writer.body)
       return
     }
-    const outcome = await completeTask(writer, scope, tasksCollection(writer.orgId), taskId)
+    const picklists = await readCrmTaskPicklists(firebaseAdmin.app().firestore(), writer.orgId)
+    const outcome = await completeTask(
+      writer,
+      scope,
+      tasksCollection(writer.orgId),
+      taskId,
+      picklists,
+    )
     if (outcome.ok === false) {
       res.status(completeStatus(outcome)).json({ error: outcome.error })
       return
@@ -857,9 +888,10 @@ async function completeBatch(
       return
     }
     const tasks = tasksCollection(writer.orgId)
+    const picklists = await readCrmTaskPicklists(firebaseAdmin.app().firestore(), writer.orgId)
     const results: CrmTaskCompleteOutcome[] = []
     for (const taskId of taskIds) {
-      results.push(await completeTask(writer, scope, tasks, taskId))
+      results.push(await completeTask(writer, scope, tasks, taskId, picklists))
     }
     const body: CrmTasksCompleteResponse = { ok: true, results }
     res.status(200).json(body)

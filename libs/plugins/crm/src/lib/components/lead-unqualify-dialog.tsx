@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { CrmLeadFields } from '@aglyn/aglyn'
+import { type CrmLeadFields, crmLeadStatusLabelFor, crmLeadStatusOptions } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
@@ -26,12 +26,15 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  MenuItem,
+  Stack,
   TextField,
 } from '@mui/material'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
+import { useLeadStatusPicklist } from '../hooks/use-lead-status-picklist'
 
 /** The most a reason may say — shared with the bulk bar's one-reason-for-all (AGL-2662). */
 export const UNQUALIFY_REASON_MAX = 500
@@ -49,6 +52,11 @@ export interface LeadUnqualifyDialogProps {
   leadId: string
   /** How the lead reads in the title — its name, else its address. */
   leadLabel: string
+  /**
+   * The Unqualified value the lead is closed as, when the reader already
+   * picked one (AGL-3512); the meaning's default label otherwise.
+   */
+  statusLabel?: string | null
 }
 
 /**
@@ -61,7 +69,7 @@ export interface LeadUnqualifyDialogProps {
  * author may update it, and nothing here needs the server.
  */
 export function LeadUnqualifyDialog(props: LeadUnqualifyDialogProps) {
-  const { open, onClose, hostId, leadId, leadLabel } = props
+  const { open, onClose, hostId, leadId, leadLabel, statusLabel } = props
   // The lead's collection is the org's now (AGL-3275); the site still names
   // the surface, and the scope hook resolves the org from it.
   const { orgId } = useCrmScope({ hostId })
@@ -70,10 +78,18 @@ export function LeadUnqualifyDialog(props: LeadUnqualifyDialogProps) {
   const { enqueueSnackbar } = useSnackbar()
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
+  // The org's Unqualified values (AGL-3512): a choice only when it keeps several.
+  const statuses = useLeadStatusPicklist(orgId)
+  const closedAs = crmLeadStatusOptions(statuses.picklist, ['unqualified'])
+  const [label, setLabel] = useState('')
 
   useEffect(() => {
-    if (open) setReason('')
-  }, [open])
+    if (!open) return
+    setReason('')
+    setLabel(statusLabel || crmLeadStatusLabelFor(statuses.picklist, 'unqualified'))
+    // Seeded as the dialog opens; the list arriving later does not reset a pick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, statusLabel])
 
   const submit = async () => {
     const trimmed = reason.trim()
@@ -87,8 +103,10 @@ export function LeadUnqualifyDialog(props: LeadUnqualifyDialogProps) {
     }
     setBusy(true)
     try {
-      const fields: Required<Pick<CrmLeadFields, 'status' | 'unqualifiedReason'>> = {
+      const fields: Required<Pick<CrmLeadFields, 'status' | 'statusLabel' | 'unqualifiedReason'>> = {
         status: 'unqualified',
+        // The meaning and the org's label for it, always together (AGL-3512).
+        statusLabel: label || crmLeadStatusLabelFor(statuses.picklist, 'unqualified'),
         unqualifiedReason: trimmed.slice(0, REASON_MAX),
       }
       await updateDoc(doc(firestore, 'orgs', orgId, 'leads', leadId), {
@@ -97,7 +115,7 @@ export function LeadUnqualifyDialog(props: LeadUnqualifyDialogProps) {
       })
       // A rule may share by status (AGL-3336).
       followUpSharing('leads', [leadId])
-      enqueueSnackbar('Lead marked unqualified', { variant: 'success', persist: false })
+      enqueueSnackbar(`Lead marked ${fields.statusLabel}`, { variant: 'success', persist: false })
       onClose()
     } catch (error) {
       enqueueSnackbar(
@@ -117,16 +135,34 @@ export function LeadUnqualifyDialog(props: LeadUnqualifyDialogProps) {
           {'The lead stays on file and drops out of the open list. Say why, ' +
             'so the reason can be counted later.'}
         </DialogContentText>
-        <TextField
-          label="Reason"
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-          multiline
-          minRows={2}
-          fullWidth
-          autoFocus
-          slotProps={{ htmlInput: { maxLength: REASON_MAX } }}
-        />
+        <Stack spacing={2}>
+          {closedAs.length > 1 ? (
+            <TextField
+              select
+              size="small"
+              label="Status"
+              value={closedAs.some((option) => option.label === label) ? label : ''}
+              onChange={(event) => setLabel(String(event.target.value))}
+              fullWidth
+            >
+              {closedAs.map((option) => (
+                <MenuItem key={option.label} value={option.label}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : null}
+          <TextField
+            label="Reason"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            multiline
+            minRows={2}
+            fullWidth
+            autoFocus
+            slotProps={{ htmlInput: { maxLength: REASON_MAX } }}
+          />
+        </Stack>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={busy}>

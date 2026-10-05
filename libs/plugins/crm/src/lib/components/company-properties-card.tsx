@@ -23,12 +23,13 @@ import {
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { mdiDeleteOutline, mdiPencilOutline } from '@aglyn/shared-data-mdi'
-import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { AppLink, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, Link, Stack, Typography } from '@mui/material'
 import { type ReactNode, useCallback, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
+import { useCrmRecordNames } from '../hooks/use-crm-record-names'
 import type { CrmScope } from '../hooks/use-crm-scope'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { COMPANY_DETACH_LIMIT } from '../model/companies'
@@ -37,6 +38,7 @@ import {
   deleteCompanyThroughRoute,
 } from '../model/company-delete'
 import type { CrmRoutes } from '../model/crm-routes'
+import { formatMoney } from '../model/deal-board-model'
 import CompanyEditDrawer from './company-edit-drawer'
 import { formatContactCustomValue } from './contact-custom-columns'
 import { CrmCallButton, CrmPhoneLink } from './crm-call-actions'
@@ -169,10 +171,28 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
     }
   }, [scope, deleting, company, confirm, callCrm, logActivity, enqueueSnackbar, onDeleted])
 
-  const address = formatAddress(company.address)
-  // The domain, the industry and the owner read on the header — the
-  // subtitle and the chip row — so the rows list what is left.
+  // The parent company by name (AGL-3514), resolved once and cached.
+  const parentId = company.parentCompanyId || null
+  const recordName = useCrmRecordNames({
+    orgId: crmScope.orgId,
+    groupId: null,
+    records: parentId ? [{ kind: 'company', id: parentId }] : [],
+  })
+  /*
+   * Grouped as Salesforce's Account page groups them (AGL-3514): what the
+   * company is, where it is, and what the team knows. The domain, the
+   * industry, the type, the rating and the owner read on the header — the
+   * subtitle and the chip row — so the rows list what is left.
+   */
   const rows: Array<{ label: string; value: ReactNode }> = [
+    {
+      label: 'Parent company',
+      value: parentId ? (
+        <AppLink href={routes.company(parentId)}>
+          {recordName('company', parentId) || 'Open company'}
+        </AppLink>
+      ) : null,
+    },
     {
       label: 'Website',
       value: company.website ? (
@@ -183,8 +203,34 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
     },
     // Callable in one tap (AGL-2661); plain text for a value no dialer takes.
     { label: 'Phone', value: <CrmPhoneLink phone={company.phone} /> },
-    { label: 'Address', value: address },
+    { label: 'Fax', value: company.fax },
+    { label: 'Ownership', value: company.ownership },
+    { label: 'Account source', value: company.accountSource },
+    { label: 'Account number', value: company.accountNumber },
+    { label: 'Account site', value: company.site },
+    { label: 'Ticker symbol', value: company.tickerSymbol },
+    { label: 'SIC code', value: company.sicCode },
+    {
+      label: 'Employees',
+      value:
+        typeof company.numberOfEmployees === 'number'
+          ? company.numberOfEmployees.toLocaleString()
+          : null,
+    },
+    {
+      label: 'Annual revenue',
+      value:
+        typeof company.annualRevenueCents === 'number'
+          ? formatMoney(company.annualRevenueCents, company.currency)
+          : null,
+    },
     { label: 'Tags', value: (company.tags ?? []).join(', ') },
+  ]
+  const addressRows: Array<{ label: string; value: ReactNode }> = [
+    { label: 'Billing address', value: formatAddress(company.address) },
+    { label: 'Shipping address', value: formatAddress(company.shippingAddress) },
+  ]
+  const descriptionRows: Array<{ label: string; value: ReactNode }> = [
     { label: 'Notes', value: company.notes },
   ]
   // The org's own company fields (AGL-2661), after the built-in ones under
@@ -270,7 +316,9 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
       ]}
       chips={
         <>
+          <CrmRecordChip label="Type" value={company.type ?? undefined} />
           <CrmRecordChip label="Industry" value={company.industry} />
+          <CrmRecordChip label="Rating" value={company.rating ?? undefined} />
           <CrmRecordChip
             label="Owner"
             value={
@@ -286,6 +334,14 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
     >
       <Stack spacing={1}>
         {factRows(rows)}
+        <Typography variant="subtitle2" sx={{ pt: 1 }}>
+          {'Address information'}
+        </Typography>
+        {factRows(addressRows)}
+        <Typography variant="subtitle2" sx={{ pt: 1 }}>
+          {'Description information'}
+        </Typography>
+        {factRows(descriptionRows)}
         {moreRows.length ? (
           <>
             <Typography variant="subtitle2" sx={{ pt: 1 }}>

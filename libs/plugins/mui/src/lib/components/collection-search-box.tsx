@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiMagnify } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { useSoftGetSubmit } from '@aglyn/shared-ui-jsx/hooks/use-soft-get-submit'
 // The icon picker's fuzzy matcher (use-mdi-icons-fuzzy), not a re-implementation
 // (AGL-1516): search here has to feel like search does everywhere else in the
 // product, and two matchers is how they drift. A TYPE here: the matcher itself
@@ -28,7 +29,7 @@ import Chip from '@mui/material/Chip'
 import InputBase from '@mui/material/InputBase'
 import MuiStack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
-import { useMemo, useState } from 'react'
+import { type FormEvent, useMemo, useState } from 'react'
 
 /**
  * The search box the Collection Entries block and the standalone Collection
@@ -374,6 +375,7 @@ export const SuggestSearchBox = ({
   const [query, setQuery] = useState('')
   /** Escape dismissed THIS answer (AGL-1525); typing brings it back. */
   const [closed, setClosed] = useState(false)
+  const softSubmit = useSoftGetSubmit()
   const trimmed = query.trim()
   const suggestions =
     !inert && trimmed && fuzzy && items
@@ -406,6 +408,13 @@ export const SuggestSearchBox = ({
       role="search"
       action="/search"
       method="get"
+      onSubmit={(event: FormEvent<HTMLFormElement>) => {
+        // The client router keeps this box mounted when it sits in the
+        // site's chrome, so the panel is shut here rather than left open
+        // over the results page it just opened.
+        setClosed(true)
+        softSubmit(event)
+      }}
       sx={suggestionAnchorSx}
     >
       {field}

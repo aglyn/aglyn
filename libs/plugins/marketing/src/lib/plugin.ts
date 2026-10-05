@@ -37,6 +37,7 @@ import {
   MARKETING_CONSOLE_SECTIONS,
   MARKETING_ORG_CONSOLE_SECTIONS,
 } from './components/marketing-console-sections'
+import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { StaffOrgEmailCard } from './components/staff-org-email-card.component'
 import { registerMarketingRecordLists } from './model/overlay-record-list'
@@ -95,6 +96,8 @@ const BesignerSectionExperiments = lazy(
  * uses the shell's media browser via `useMediaPicker`.
  */
 export function registerMarketingConsole(): void {
+  // How the Import & export hub names campaigns in a workspace package (AGL-3535).
+  registerPluginTransferResourceUi('marketing.campaigns', { label: 'Campaigns' }, { pluginId: BUNDLE_ID })
   /*
    * The two positions the A/B testing card hosts (AGL-2914), declared before
    * the extension that draws the card. An id another plugin has already taken

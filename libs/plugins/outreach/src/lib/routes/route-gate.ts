@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-import { checkEntitlement } from '@aglyn/aglyn/server'
 import {
   isEmailVerified,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import type { DecodedIdToken } from 'firebase-admin/auth'
-import { OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
+import { outreachEntitlementRefusal, outreachMembershipRefusal } from '../engine/outreach-access'
 import { outreachRefusal, readOutreachDocumentId } from './route-http'
 
 /**
@@ -138,21 +137,8 @@ export async function outreachRouteGate(
   if (!orgId) return outreachRefusal(400, 'org-required', 'Open an organization before using Sequences.')
 
   const membership = await deps.resolveOrgPermissions(decoded.uid, { orgId })
-  // A targeted org the account is not on answers with that org's id and no
-  // role — as does a lookup that failed closed — so the role is the test.
-  if (!membership.role || membership.orgId !== orgId) {
-    return outreachRefusal(403, 'not-a-member', 'You are not a member of that organization.')
-  }
-  if (!membership.orgWide) {
-    return outreachRefusal(
-      403,
-      'not-org-wide',
-      'Sequences covers the whole organization, and your access is to particular sites.',
-    )
-  }
-  if (membership.permissions[OUTREACH_USE_PERMISSION] !== true) {
-    return outreachRefusal(403, 'permission', 'Your role does not include Use Sequences.')
-  }
+  const refused = outreachMembershipRefusal(membership, orgId)
+  if (refused) return outreachRefusal(refused.status, refused.code, refused.message)
   for (const permission of extra) {
     if (!(await deps.holdsOrgCatalogPermission(decoded.uid, orgId, permission.key))) {
       return outreachRefusal(403, 'permission', permission.refusal)
@@ -160,9 +146,8 @@ export async function outreachRouteGate(
   }
 
   const org = (await deps.readOrg(orgId)) ?? {}
-  if (!checkEntitlement(org, 'outreach')) {
-    return outreachRefusal(403, 'entitlement', "Sequences isn't available to this workspace yet.")
-  }
+  const unentitled = outreachEntitlementRefusal(org)
+  if (unentitled) return outreachRefusal(unentitled.status, unentitled.code, unentitled.message)
   const staff = decoded['staff'] === true
   const locked = await deps.lockdownRefusal({ request, staff, uid: decoded.uid, org })
   if (locked) return locked

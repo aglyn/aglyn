@@ -204,6 +204,9 @@ export enum Route {
   // flagged, locked or paused, its status, and the way to request a review.
   // Where every risk notice's "Request a review" lands (`?notice=<id>`).
   ORG_SETTINGS_HOLDS = '/[orgSlug]/settings/holds',
+  // Import & export (AGL-3535): every resource the workspace can move,
+  // workspace packages, and the history of its imports with undo.
+  ORG_SETTINGS_DATA = '/[orgSlug]/settings/data',
   ORG_SETTINGS_DELETE = '/[orgSlug]/settings/delete',
   /**
    * Billing, section by section (AGL-2501).
@@ -606,6 +609,7 @@ export interface RoutePayload {
   [Route.ORG_SETTINGS_OWNERSHIP]: { orgSlug: string }
   [Route.ORG_SETTINGS_PRIVACY]: { orgSlug: string }
   [Route.ORG_SETTINGS_HOLDS]: { orgSlug: string }
+  [Route.ORG_SETTINGS_DATA]: { orgSlug: string }
   [Route.ORG_SETTINGS_DELETE]: { orgSlug: string }
   [Route.HOST_LIST]: { orgSlug: string }
   [Route.HOST_CONTENT]: { orgSlug: string; host: string }

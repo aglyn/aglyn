@@ -235,7 +235,13 @@ export function validateDocument(
     if (!field) continue
     const value = values[fieldId]
     const required = field.required || field.validation?.required
-    if (value == null || value === '') {
+    // An empty list holds nothing, so it answers "required" as an empty
+    // string does: `,,` typed into a list field coerces to `[]` (AGL-3496).
+    const empty =
+      value == null ||
+      value === '' ||
+      (Array.isArray(value) && !value.length && isListField(field))
+    if (empty) {
       if (required) errors[fieldId] = `${field.name} is required`
       continue
     }
@@ -313,7 +319,12 @@ export function validateDocument(
         break
       }
       case 'sorted':
-        if (!Array.isArray(value)) {
+        // A list of values: an entry that is itself an object or a list is
+        // not one, and `coerceListValue` leaves it here to be refused.
+        if (
+          !Array.isArray(value) ||
+          value.some((entry) => entry !== null && typeof entry === 'object')
+        ) {
           errors[fieldId] = `${field.name} must be a list`
         }
         break
@@ -409,6 +420,79 @@ export function datasetValueToInput(
   return String(value)
 }
 
+/**
+ * Whether a field stores a list: `sorted`, and a `reference` that may point at
+ * more than one record. Both go through {@link coerceListValue}.
+ */
+export function isListField(field: DatasetFieldDefinition): boolean {
+  return (
+    field.type === 'sorted' ||
+    (field.type === 'reference' && Boolean(field.reference?.multiple))
+  )
+}
+
+/**
+ * The entries of a list given as an array, each a trimmed string with the
+ * empty ones dropped — or `null` when an entry is not a scalar (an object, a
+ * nested list), which is not a list of values and is left for
+ * `validateDocument` to refuse rather than flattened into `[object Object]`.
+ */
+function listEntries(input: readonly unknown[]): string[] | null {
+  const entries: string[] = []
+  for (const entry of input) {
+    if (entry == null) continue
+    if (
+      typeof entry !== 'string' &&
+      typeof entry !== 'number' &&
+      typeof entry !== 'boolean'
+    ) {
+      return null
+    }
+    const text = String(entry).trim()
+    if (text) entries.push(text)
+  }
+  return entries
+}
+
+/**
+ * A list field's value in storage form (AGL-3496) — the ONE coercion every
+ * writer of a `sorted` or multiple-`reference` field reaches through
+ * {@link coerceDocumentValues}: the console's record form and its CSV/JSON
+ * import, `/api/orgs/datasets`, `/v1` record create and update, form
+ * submissions and workflow steps (`prepareDatasetRecordWrite`).
+ *
+ * - An array is taken as the list: entries stringified and trimmed, empty
+ *   ones dropped.
+ * - A string that parses as a JSON array of scalars is that array. A JSON
+ *   import hands a list cell over as `["Residential","Commercial"]`, and so
+ *   does any API client that serialized one; split on commas, it was stored
+ *   as `["[\"Residential\"", "\"Commercial\"]"]` and no filter matched it.
+ *   The console form round-trips such a record too: it shows the stored
+ *   fragments joined, which reads back as the JSON array, so re-saving a
+ *   record written that way repairs it.
+ * - Any other string is comma-separated, as typed into the form.
+ * - Anything else (a number, an object, an array holding objects) passes
+ *   through untouched for `validateDocument` to refuse.
+ */
+export function coerceListValue(raw: unknown): unknown {
+  if (Array.isArray(raw)) return listEntries(raw) ?? raw
+  if (typeof raw !== 'string') return raw
+  const text = raw.trim()
+  if (text.startsWith('[') && text.endsWith(']')) {
+    try {
+      const parsed: unknown = JSON.parse(text)
+      const entries = Array.isArray(parsed) ? listEntries(parsed) : null
+      if (entries) return entries
+    } catch {
+      // Bracketed but not JSON — `[draft], final` — is a comma list.
+    }
+  }
+  return text
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
+
 const BOOL_TRUE_WORDS = new Set(['true', 'yes', 'on', '1'])
 const BOOL_FALSE_WORDS = new Set(['false', 'no', 'off', '0'])
 
@@ -416,6 +500,10 @@ const BOOL_FALSE_WORDS = new Set(['false', 'no', 'off', '0'])
  * Coerces user-input strings (form fields, CSV cells) into storage form
  * per the field type. Unparseable input is passed through untouched so
  * `validateDocument` reports it instead of silently mangling it.
+ *
+ * A list field is coerced whatever shape it arrives in — array or string —
+ * through {@link coerceListValue}; every other non-string value is already
+ * in storage form and passes through.
  */
 export function coerceDocumentValues(
   model: DatasetModel,
@@ -426,6 +514,10 @@ export function coerceDocumentValues(
     const field = model.fields[fieldId]
     const raw = input[fieldId]
     if (!field || raw == null || raw === '') continue
+    if (isListField(field)) {
+      values[fieldId] = coerceListValue(raw)
+      continue
+    }
     if (typeof raw !== 'string') {
       values[fieldId] = raw
       continue
@@ -466,26 +558,12 @@ export function coerceDocumentValues(
             : raw
         break
       }
-      case 'sorted':
-        values[fieldId] = raw
-          .split(',')
-          .map((part) => part.trim())
-          .filter(Boolean)
-        break
       case 'map':
         try {
           values[fieldId] = JSON.parse(raw)
         } catch {
           values[fieldId] = raw
         }
-        break
-      case 'reference':
-        values[fieldId] = field.reference?.multiple
-          ? raw
-              .split(',')
-              .map((part) => part.trim())
-              .filter(Boolean)
-          : raw
         break
       default:
         values[fieldId] = raw

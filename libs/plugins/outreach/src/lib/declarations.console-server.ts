@@ -32,11 +32,23 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
 import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import {
+  registerPluginTransferResource,
+  type PluginTransferResource,
+} from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import {
   listPluginUserErasers,
   registerPluginUserEraser,
 } from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
 import { OUTREACH_PLUGIN_ID } from './constants/bundle-common'
+import {
+  OUTREACH_SEQUENCE_PACKAGE_RULES,
+  OUTREACH_SEQUENCES_TRANSFER_KEY,
+  outreachSequenceDependencies,
+  remapOutreachSequenceIds,
+  type OutreachSequencePackageContent,
+} from './transfer/sequences-package'
 import { OUTREACH_SEND_JOB_ID, OUTREACH_SYNC_JOB_ID } from './constants/runtime-jobs'
+import { OUTREACH_DNC_MATCH_KEYS, OUTREACH_DO_NOT_CONTACT_TRANSFER_KEY } from './constants/transfer-resources'
 
 /**
  * Outreach's CONSOLE-ONLY server declarations (AGL-2978), named under
@@ -56,10 +68,17 @@ import { OUTREACH_SEND_JOB_ID, OUTREACH_SYNC_JOB_ID } from './constants/runtime-
  * console's `plugin-console-crons` tick and nowhere else, and the person
  * eraser removes the enrollments a workspace kept about someone it erases.
  *
+ * The do-not-contact list's transfer resource (`outreach.do-not-contact`) is
+ * declared here as well: its import writes the list as a member would, and
+ * its export reads it, through the Admin SDK the console's transfer routes
+ * run on.
+ *
  * Light at boot: every module that does the work is imported when a job, an
- * erasure or a tick first asks for it, so the boot cost is the registration.
+ * erasure, a tick or a transfer first asks for it, so the boot cost is the
+ * registration.
  */
 export function registerOutreachConsoleServerDeclarations(): void {
+  registerOutreachTransferResources()
   // Idempotent against the REGISTRY, so a reset (a spec) registers again.
   if (!listPluginOrgErasers().includes(OUTREACH_PLUGIN_ID)) {
     registerPluginOrgEraser(
@@ -148,6 +167,72 @@ export function registerOutreachConsoleServerDeclarations(): void {
         const [{ runOutreachSyncJob }, platform] = await Promise.all([import('./runtime/sync-job'), runtime()])
         return runOutreachSyncJob(platform.platformOutreachRuntimeDeps(), context)
       },
+    },
+    { pluginId: OUTREACH_PLUGIN_ID },
+  )
+  // The do-not-contact list as a file: an import adds domains and
+  // addresses, an export reads the domains. Each hook loads the resource
+  // and the Admin SDK the first time a transfer asks.
+  registerPluginTransferResource(OUTREACH_DO_NOT_CONTACT_TRANSFER_KEY, lazyDoNotContactTransfer(), {
+    pluginId: OUTREACH_PLUGIN_ID,
+  })
+}
+
+/**
+ * The do-not-contact resource with every hook deferred to its module; the
+ * match keys are read at registration, so they come from the light constants.
+ */
+function lazyDoNotContactTransfer(): PluginTransferResource {
+  const load = async () => {
+    const [{ createOutreachDoNotContactTransferResource }, { platformOutreachTransferDeps }] = await Promise.all([
+      import('./transfer/do-not-contact-transfer'),
+      import('./transfer/platform-transfer-deps'),
+    ])
+    return createOutreachDoNotContactTransferResource(platformOutreachTransferDeps())
+  }
+  return {
+    matchKeys: OUTREACH_DNC_MATCH_KEYS,
+    planGate: outreachTransferPlanGate,
+    fields: async (ctx) => (await load()).fields(ctx),
+    count: async (ctx, options) => (await load()).count(ctx, options),
+    readPage: async (ctx, cursor, fieldIds, options) => (await load()).readPage(ctx, cursor, fieldIds, options),
+    lookup: async (ctx, requests) => (await load()).lookup(ctx, requests),
+    plan: async (ctx, input) => (await load()).plan(ctx, input),
+    lockedRules: async (ctx) => (await load()).lockedRules(ctx),
+    apply: async (ctx, chunk, writer) => (await load()).apply(ctx, chunk, writer),
+    revert: async (ctx, snapshot, decisions) => (await load()).revert(ctx, snapshot, decisions),
+  }
+}
+
+/**
+ * Sequences' entitlement, asked by the transfer gate for both resources and
+ * every intent (AGL-3548); the answer's module loads with the first ask.
+ */
+const outreachTransferPlanGate: NonNullable<PluginTransferResource['planGate']> = async (subject, intent) =>
+  (await import('./transfer/plan-gate')).outreachTransferPlanGate(subject, intent)
+
+/** The sequences package's server half (AGL-3535), loaded when an import or export first asks. */
+const sequencesPackage = async () => (await import('./transfer/sequences-package.server')).createOutreachSequencesPackage()
+
+/**
+ * Sequences in a workspace package (AGL-3535): what a sequence names and
+ * how a reference moves are answered here; reading and writing load the
+ * server half on first use.
+ */
+function registerOutreachTransferResources(): void {
+  registerPluginTransferResource(
+    OUTREACH_SEQUENCES_TRANSFER_KEY,
+    {
+      items: async (ctx) => (await sequencesPackage()).items(ctx),
+      dependencies: (item) => outreachSequenceDependencies(item as OutreachSequencePackageContent),
+      remapIds: (item, idMap) => remapOutreachSequenceIds(item as OutreachSequencePackageContent, idMap),
+      readItems: async (ctx, ids) => (await sequencesPackage()).readItems(ctx, ids),
+      writeItems: async (ctx, items, writer) => (await sequencesPackage()).writeItems(ctx, items as never, writer),
+      revertItems: async (ctx, steps) => (await sequencesPackage()).revertItems(ctx, steps as never),
+      problems: async (ctx, write) => (await sequencesPackage()).problems(ctx, write as never),
+      referenceTargets: async (ctx, kinds) => (await sequencesPackage()).referenceTargets(ctx, kinds),
+      rules: OUTREACH_SEQUENCE_PACKAGE_RULES,
+      planGate: outreachTransferPlanGate,
     },
     { pluginId: OUTREACH_PLUGIN_ID },
   )

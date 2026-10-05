@@ -1,7 +1,10 @@
 {
   "firestore": {
-    "rules": "firebase-firestore.rules",
-    "indexes": "firebase-firestore.indexes.json"
+    "rules": "firebase-firestore.deploy.rules",
+    "indexes": "firebase-firestore.indexes.json",
+    "predeploy": [
+      "node \"$PROJECT_DIR/../tools/scripts/generate-rules-deploy-artifact.mjs\" --check"
+    ]
   },
   "emulators": {
     "auth": {
