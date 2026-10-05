@@ -2816,6 +2816,15 @@ export function previousCronFire(
  * every row would be red on the day this deploys, and `usage-email` would
  * stay red until the 1st.
  *
+ * `jobFirstSeenAtMs` is the same rule per job (AGL-3580), and it is the one
+ * that matters after the first day. The watch window opened once, on
+ * 2026-08-20, so a job ADDED later was graded against fire times from before
+ * it existed: `transfer-jobs` and `render-monitor` shipped in beta.223 and
+ * read `job-never-reported` within minutes of the console going live, which
+ * took the public `Scheduled jobs` monitor red for fifteen minutes and posted
+ * a must-know alert about two jobs that had not yet had a chance to run. A
+ * job with no mark is now judged from whichever is later.
+ *
  * Pure on purpose, like its siblings: the route reads, this decides, the
  * spec exercises every branch without a network.
  */
@@ -2825,6 +2834,7 @@ export function cronJobsHealth(
   ms: number,
   now: number = Date.now(),
   jobs: readonly ScheduledJob[] = SCHEDULED_JOBS,
+  jobFirstSeenAtMs: Readonly<Record<string, number>> = {},
 ): Record<string, CronJobCheck> {
   const byId = new Map((beats ?? []).map((beat) => [beat.jobId, beat.atMs]))
   const checks: Record<string, CronJobCheck> = {}
@@ -2855,7 +2865,7 @@ export function cronJobsHealth(
     if (lastBeatMs === null) {
       // Never reported. Only a defect once a fire time has passed since we
       // started watching — before that it is a job we have not met yet.
-      const overdue = dueMs > watchStartedAtMs
+      const overdue = dueMs > Math.max(watchStartedAtMs, jobFirstSeenAtMs[job.id] ?? 0)
       checks[job.id] = overdue
         ? { ...base, ok: false, code: 'job-never-reported' }
         : { ...base, ok: true, code: 'awaiting-first-run' }

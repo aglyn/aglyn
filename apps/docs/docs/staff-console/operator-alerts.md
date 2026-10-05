@@ -91,7 +91,7 @@ alerts.
 | Billing | Billing webhook failing its signature check; a delivery that moved nothing | Must |
 | Data protection | A person's erasure failed; a workspace's erasure failed; the database export failed | Must |
 | Legal | DMCA counter-notice; a DMCA takedown, impersonation or illegal-content report | Must |
-| Operations | A health check went degraded; a published site not rendering pages; the production canary found a deploy not rendering pages, rolled back or not | Must |
+| Operations | A health check went degraded; a published site not rendering pages; the render monitor cannot see a site; the production canary found a deploy not rendering pages, rolled back or not | Must |
 | Operations | A health check recovered; a published site rendering again; a reaper stuck; a plugin job, consent group change, publish outbox or sending-domain provisioning failing; the bandwidth ceiling reached | Should |
 | Billing | Automatic billing lock; an invoice voided or uncollectible; a connected account's payout or transfer failed; a workspace's payment failed | Should |
 | Security | Staff access granted or a role raised; a plugin verifier regression | Should |
@@ -158,6 +158,19 @@ fails two runs in a row, **Published site not rendering pages** goes out once,
 naming what failed (a timeout, an error status, an unfinished page). The first
 passing run after that sends **Published site rendering again**. Each watched site
 is listed among the health checks on this page with its state and since when.
+
+A run where bot protection answered instead of the site has seen nothing. It
+does not count as a failure and never sends **Published site not rendering
+pages**. Two such runs in a row send **Render monitor cannot see a site** once,
+which names the setup to fix: `AGLYN_PROBE_TOKEN` on the console, and the
+firewall rule on your published-site runtime that admits it. The site keeps the
+last state the monitor actually saw.
+
+The same verdicts are public at `/api/health/pages` on the console, per site with
+`?site=<host>`, so an external uptime monitor can watch real pages without
+carrying a firewall bypass. It answers `503` only when a site is not rendering,
+when a site it was asked about is not watched, or when the verdicts cannot be
+read.
 
 It watches your demonstration site by default. Add your own sites, or your
 marketing site, with `RENDER_MONITOR_ORIGINS`; see

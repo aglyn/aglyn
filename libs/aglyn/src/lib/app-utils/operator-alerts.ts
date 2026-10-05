@@ -482,6 +482,27 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     dedupeWindowMinutes: 30,
     defaultEnabled: true,
   },
+  {
+    // The render monitor could not see the site (AGL-3580): bot protection
+    // answered every probe it made, so it knows nothing about whether pages
+    // render. Not an outage, and never worded as one — on 2026-10-05 a
+    // missing probe token read as "pages are not rendering" for three hours
+    // while the site served pages. Amber: detection is off until it is fixed.
+    type: 'system.renderMonitorBlind',
+    label: 'Render monitor cannot see a site',
+    description:
+      'Bot protection answered the render monitor instead of a published site, several runs in a row, so nothing is checking whether that site renders pages. The site itself may be fine. Check AGLYN_PROBE_TOKEN on the console and the "CI and uptime probe bypass" firewall rule on the site runtime.',
+    tier: 'must',
+    category: 'ops',
+    title: 'The render monitor cannot see {{site}}',
+    body:
+      'Bot protection answered instead of {{site}} for {{runs}} runs in a row, so nothing is checking its pages. {{detail}} This is not a verdict on the site.',
+    link: '/admin/health',
+    delivery: 'immediate',
+    level: 'warning',
+    dedupeWindowMinutes: 360,
+    defaultEnabled: true,
+  },
 
   // ── SHOULD: billing ─────────────────────────────────────────────────────
   {

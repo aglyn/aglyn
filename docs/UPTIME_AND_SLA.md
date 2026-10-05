@@ -56,6 +56,10 @@ GET  https://app.aglyn.com/api/health/journeys
                                                admits real visitors (AGL-2715)
 GET  https://aglyn.com/api/health/funnel       contact / sales / demo forms still
                                                ACCEPT and ROUTE a lead (AGL-2586)
+GET  https://app.aglyn.com/api/health/pages[?site=<host>,…]
+                                               published sites render REAL pages,
+                                               fresh — the render monitor's
+                                               verdict per site (AGL-3580)
 HEAD <any>                                     the SAME probe and status as GET
 ```
 
@@ -455,6 +459,15 @@ for most of that day, because five more were created after it was written:
 | Sign-in doors | 2026-09-04 22:55 |
 | First-run journeys | 2026-09-04 23:07 |
 | Lead forms | 2026-09-04 23:09 |
+
+**Marketing site and Published sites watch real pages (AGL-3580).** Marketing site reads
+`https://app.aglyn.com/api/health/pages?site=aglyn.com`, Published sites
+`https://app.aglyn.com/api/health/pages?site=ready-to-roll.aglyn.app,edr-construction.aglyn.app`.
+Until 2026-10-05 they read `/api/health/render/{marketing,site}` on the tenant, which build a
+node tree in a route handler and never draw a page; both stayed at 100% through the two
+outages that day in which every fresh page hung. The pages door publishes the render
+monitor's verdict instead (see [Uncached renders](#uncached-renders)), which an UptimeRobot
+free-tier monitor can read without the firewall bypass header it cannot carry.
 
 Sign-in doors watches `/api/health/auth-doors`, First-run journeys `/api/health/journeys`,
 Lead forms `aglyn.com/api/health/funnel`. The same evening **Signups** was repointed from
@@ -881,7 +894,18 @@ by AGL-3564). Nothing alerted:
    25 s. Two failing runs in a row raise `system.siteRenderFailing` (must,
    immediate, red) through `raiseOperatorAlert`, which also posts the
    Slack-compatible `OPERATOR_ALERT_WEBHOOK_URL`; the first pass after raises
-   `system.siteRenderRecovered`. State lives in
+   `system.siteRenderRecovered`.
+
+   **A challenge is blind, not down (AGL-3580).** A run whose only failures
+   are Vercel checkpoint 429s saw nothing of the site. It leaves the site's
+   status and failure count as they were, and two such runs in a row raise
+   `system.renderMonitorBlind` once instead. On 2026-10-05 the console had
+   no `AGLYN_PROBE_TOKEN` (set 22:57Z), every probe was challenged from
+   18:35Z, and the monitor reported "Pages are not rendering on aglyn.com"
+   then "rendering again after 3 h" for a site that was serving pages
+   throughout. It cleared at 21:35Z only because beta.224's console also sends
+   `x-vercel-protection-bypass`, which skips bot protection as well as
+   Deployment Protection. State lives in
    `operatorHealthState/render-monitor--<host>`, beside every other health
    check. Watched by default: `demo.<NEXT_PUBLIC_TENANT_DOMAIN>`; add
    `aglyn.com` and any other site with `RENDER_MONITOR_ORIGINS` on the
