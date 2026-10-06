@@ -13,6 +13,10 @@ content on the marketing site and is written separately.
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.225...v1.0.0-beta.226)
 
+### Added
+
+- **content:** a featured video carries its length, so a watch page publishes duration ([AGL-3584](https://linear.app/aglyn/issue/AGL-3584))
+
 ### Fixed
 
 - **crm:** a lead's tasks have the index their facts read needs ([AGL-3520](https://linear.app/aglyn/issue/AGL-3520))
