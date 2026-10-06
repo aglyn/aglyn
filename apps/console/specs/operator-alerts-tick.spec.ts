@@ -144,7 +144,11 @@ afterEach(() => {
 describe('the operator alerts tick (AGL-3377)', () => {
   it('asks every console health endpoint there is', () => {
     // `/api/health/signups` is the old path of signup-volume, re-exported.
-    const routes = routePaths(join(__dirname, '..')).filter((path) => path !== '/api/health/signups')
+    // `/api/health/pages` republishes the render monitor's own stored verdict
+    // for external monitors (AGL-3580); the monitor already raises its alert
+    // on the same edge, so the tick asking it would tell every outage twice.
+    const notAsked = new Set(['/api/health/signups', '/api/health/pages'])
+    const routes = routePaths(join(__dirname, '..')).filter((path) => !notAsked.has(path))
     expect([...CONSOLE_HEALTH_PATHS].sort()).toEqual(routes)
   })
 
