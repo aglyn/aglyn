@@ -17,6 +17,10 @@ content on the marketing site and is written separately.
 
 - **media:** a streamed serve's count is written in after(), not frozen in flight ([AGL-3474](https://linear.app/aglyn/issue/AGL-3474))
 
+### Performance
+
+- **tenant:** one store build per page load, and no first-visit retry for the scheme hint ([AGL-3583](https://linear.app/aglyn/issue/AGL-3583))
+
 ### Documentation
 
 - **ops:** the uptime probe is dispatched by Cloud Scheduler ([AGL-3580](https://linear.app/aglyn/issue/AGL-3580))
