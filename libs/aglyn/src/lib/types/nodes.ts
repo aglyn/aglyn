@@ -706,6 +706,33 @@ export interface ComponentSchema<P = any> {
      * the Branch/Stem/Leaf seam swappable for everything else.
      */
     positionalChildren?: FEATURE_FLAG
+    /**
+     * Nothing this component renders responds to the visitor until it is
+     * hydrated, beyond what its server HTML does on its own — copy, images,
+     * layout, a plain `<a href>` (AGL-3581).
+     *
+     * On a published page, a subtree made ONLY of components declaring this
+     * may keep its server HTML through hydration and render when the visitor
+     * nears it, instead of hydrating with the rest of the page. One component
+     * without it keeps its whole ancestry hydrating at once, so leave it off
+     * anything with a handler, state or an effect a visitor could reach:
+     * menus, toggles, forms, accordions, carousels, players.
+     */
+    lazyHydration?: FEATURE_FLAG
+    /**
+     * Renders its node children directly inside its root DOM element, adds
+     * nothing of its own around or among them, and passes props it does not
+     * know through to that element (AGL-3581).
+     *
+     * That is what lets a static subtree keep its server HTML: the renderer
+     * hands such a component `dangerouslySetInnerHTML` in place of its
+     * children while the page hydrates, so its root hydrates and its contents
+     * are left exactly as the server sent them. A component that wraps,
+     * joins or decorates its children (a divider between them, a ripple
+     * after them) must not declare it — React refuses an element that has
+     * both.
+     */
+    childrenInRoot?: FEATURE_FLAG
   }
 }
 

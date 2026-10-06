@@ -27,6 +27,7 @@ import { setUtmTouchConsent } from '@aglyn/aglyn/app-utils/utm-touch'
 import { setPageFirstTouchStorage } from '@aglyn/shared-util-first-touch/first-touch-page'
 import { installWebVitalsReporting } from '@aglyn/aglyn/app-utils/web-vitals-rum'
 import { analyticsMayEmit } from '@aglyn/aglyn/app-utils/analytics-environment'
+import { usePageIdle } from '@aglyn/aglyn/app-utils/page-idle'
 import {
   analyticsProviders,
   loadAnalyticsProviders,
@@ -378,8 +379,8 @@ export default function SiteAnalytics({
   // installed during render, once per page load, delivered to the resident
   // tag through its adapter so the consent gate above stays structural — a
   // visitor whose tag never loads produces nothing. The module holds early
-  // metrics briefly because the tags load late by design (`afterInteractive`
-  // here, after the adapter's chunk); see `web-vitals-rum.ts` for why that hold is not the forbidden
+  // metrics briefly because the tags load late by design (once the page is
+  // idle here, after the adapter's chunk); see `web-vitals-rum.ts` for why that hold is not the forbidden
   // pre-consent queue. The library itself arrives as a lazy chunk, so the
   // surface being measured pays nothing on its critical path.
   installWebVitalsReporting({ surface: 'site' })
@@ -410,12 +411,19 @@ export default function SiteAnalytics({
   // of the gate, so the ISR-cached HTML carries neither snippet.
   const advertisingAllowed =
     consentRequired && advertisingGrantedByRecord(host, consent.stored)
+  // Not before the page has loaded and gone idle (AGL-3581): a tag injected
+  // during hydration is vendor long tasks stacked on React's own, and nothing
+  // it records is better for arriving a second sooner. A render gate, not
+  // `lazyOnload` — see `page-idle.ts` for why the consent teardown needs it
+  // to be. The advertising pairs below read the SAME store, so both flip in
+  // one render and the shared-library hand-off stays true (AGL-2681).
+  const pageIsIdle = usePageIdle()
   // The tags render on exactly this condition. `analyticsMayEmit()` is the
   // half that needs nobody's click (AGL-2067): `next dev` and Vercel preview
   // builds resolve a site's settings exactly as production does, and without
   // it they reported as real visits.
   const mounts: readonly AnalyticsTagMount[] =
-    tagConfigured && analyticsAllowed && analyticsMayEmit()
+    pageIsIdle && tagConfigured && analyticsAllowed && analyticsMayEmit()
       ? providers.flatMap((provider) =>
           mountsOf(provider, host, {
             consentRequired,

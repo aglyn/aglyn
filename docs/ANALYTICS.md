@@ -133,9 +133,15 @@ rather than certain, both worth knowing before reading the funnel:
   gtag is consent-gated and never loads for a visitor who has not granted, so
   their hop carries no linker parameter. US visitors default to an implied
   grant, so most do stitch; a declining or EU visitor does not, and cannot.
-- **The tag only starts after hydration.** AGL-1538 recorded a tenant hydration
-  stall of 30s+ on some pages; a CTA clicked before gtag exists is undecorated
-  even for a consenting visitor. That makes hydration performance an
+- **The tag only starts once the page has loaded and gone idle** (AGL-3581,
+  `libs/aglyn/src/lib/app-utils/page-idle.ts`): after the window `load` event
+  (capped at 3s) and an idle period (capped at 1s), never on hydration and
+  never on interaction. Before AGL-3581 it started at hydration, and its long
+  tasks were half of `aglyn.com/`'s mobile Total Blocking Time. A CTA clicked
+  before gtag exists is undecorated even for a consenting visitor — the window
+  is now a second or two wider on a fast page — and AGL-1538 recorded a tenant
+  hydration stall of 30s+ on some pages. The campaign itself still crosses on
+  the UTM forwarding, which needs no tag. Hydration performance is therefore an
   _attribution_ problem, not only a speed one.
 
 **`docs.aglyn.com` needed no GA admin change, and that was verified rather than

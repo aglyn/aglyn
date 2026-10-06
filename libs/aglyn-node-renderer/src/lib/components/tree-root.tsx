@@ -21,17 +21,25 @@
 // is pinned into the published page's first load.
 import type * as Aglyn from '@aglyn/aglyn'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, useMemo } from 'react'
+import { forwardRef, useEffect, useMemo } from 'react'
+import { DeferredHydrationContext } from '../contexts/deferred-hydration'
 import RendererComponents, {
   type RenderComponentsContext,
 } from '../contexts/renderer-components'
 import Branch from './branch'
+import { markTreeHydrated } from './deferred-hydration'
 import Leaf from './leaf'
 import Stem from './stem'
 import Trunk from './trunk'
 
 export interface TreeRootProps extends Partial<RenderComponentsContext> {
   node: Aglyn.NodeSchema
+  /**
+   * Keep static subtrees' server HTML through hydration and render them
+   * when the visitor nears them (AGL-3581). Only for a tree that arrived as
+   * server HTML — the published page. See `deferred-hydration.tsx`.
+   */
+  deferHydration?: boolean
 }
 
 export const TreeRoot = observer(
@@ -42,6 +50,7 @@ export const TreeRoot = observer(
       StemComponent,
       BranchComponent,
       LeafComponent,
+      deferHydration,
     } = props
 
     const Components = useMemo<RenderComponentsContext>(
@@ -54,10 +63,18 @@ export const TreeRoot = observer(
       [TrunkComponent, StemComponent, BranchComponent, LeafComponent],
     )
 
+    // After the first commit — which is the hydration — no leaf mounting
+    // later may hold server HTML it never had (AGL-3581).
+    useEffect(() => {
+      if (deferHydration) markTreeHydrated()
+    }, [deferHydration])
+
     return (
-      <RendererComponents.Provider value={Components}>
-        <Components.TrunkComponent ref={ref} node={node} />
-      </RendererComponents.Provider>
+      <DeferredHydrationContext.Provider value={Boolean(deferHydration)}>
+        <RendererComponents.Provider value={Components}>
+          <Components.TrunkComponent ref={ref} node={node} />
+        </RendererComponents.Provider>
+      </DeferredHydrationContext.Provider>
     )
   }),
 )

@@ -38,6 +38,8 @@ export const schema: Aglyn.ComponentSchema<ListItemTextProps> = {
   // Text lives in `primary`/`secondary` (not `children`), so this component
   // exposes its own text fields instead of FIELD_TEXT_CONTENT.
   flags: {
+    // Static: may sit in a subtree that keeps its server HTML (AGL-3581).
+    lazyHydration: Aglyn.FEATURE_FLAG.ENABLED,
     // …and MUI reads `children` ONLY as a fallback for a missing `primary`
     // (`primary = primaryProp != null ? primaryProp : children`), so with a
     // primary set — which every preset and every authored row has — a node

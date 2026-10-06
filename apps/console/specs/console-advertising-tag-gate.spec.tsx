@@ -38,6 +38,7 @@ import {
   storePlatformConsent,
 } from '@aglyn/aglyn/app-utils/platform-visitor-consent'
 import { visitorConsentStorageKey } from '@aglyn/aglyn/app-utils/visitor-consent'
+import { subscribePageIdle } from '@aglyn/aglyn/app-utils/page-idle'
 import { act, render } from '@testing-library/react'
 import PlatformAdvertisingTags from '../components/advertising-tags.component'
 import {
@@ -173,6 +174,21 @@ const savedEnv = {
  * The pragma counts only in the FIRST docblock of the file. jest reads no
  * other one, and ignores a later one without saying so.
  */
+/**
+ * The page has loaded and gone idle before any case renders (AGL-3581), so
+ * every refusal below is the consent gate refusing and not the idle gate
+ * waiting. `advertising-tag-mounts.spec.tsx` pins the idle gate itself.
+ */
+beforeAll(
+  () =>
+    new Promise<void>((resolve) => {
+      const unsubscribe = subscribePageIdle(() => {
+        unsubscribe()
+        resolve()
+      })
+    }),
+)
+
 beforeEach(() => {
   mutableEnv.NODE_ENV = 'production'
   process.env.NEXT_PUBLIC_DEPLOY_ENV = 'production'

@@ -39,6 +39,7 @@ import {
   type ResolvedAdvertisingTag,
 } from './advertising-tags'
 import AdvertisingTagMounts from './advertising-tag-mounts'
+import { PAGE_IDLE_WAIT_CAP_MS, resetPageIdleForTests } from './page-idle'
 import { act, render } from '@testing-library/react'
 
 /**
@@ -105,6 +106,14 @@ async function mount(nonce?: string) {
   return result
 }
 
+/**
+ * Let the page go idle (AGL-3581). jsdom's document is already `complete` and
+ * has no idle callback, so the wait is one short macrotask.
+ */
+async function settlePageIdle(): Promise<void> {
+  await act(() => new Promise((resolve) => setTimeout(resolve, 5)))
+}
+
 afterEach(() => {
   for (const element of markedScripts()) element.remove()
 })
@@ -112,6 +121,7 @@ afterEach(() => {
 describe('the advertising mount and the CSP nonce', () => {
   it('stamps the nonce onto the inline boot AND the library of every pair', async () => {
     await mount(NONCE)
+    await settlePageIdle()
 
     // Non-emptiness first: two vendors, a boot and a library each.
     const scripts = markedScripts()
@@ -134,11 +144,40 @@ describe('the advertising mount and the CSP nonce', () => {
     // The control for the case above: a double that stamped a nonce of its own
     // would make that case pass against a mount that forwards nothing.
     await mount(undefined)
+    await settlePageIdle()
 
     const scripts = markedScripts()
     expect(scripts).toHaveLength(4)
     for (const element of scripts) {
       expect(element.hasAttribute('nonce')).toBe(false)
+    }
+  })
+})
+
+describe('the advertising mount and the page-idle gate (AGL-3581)', () => {
+  beforeEach(() => resetPageIdleForTests())
+
+  it('injects nothing until the page has loaded and gone idle, then every pair', async () => {
+    await mount(NONCE)
+    // Committed, consented, configured — and still nothing, because a tag
+    // injected during hydration is vendor long tasks on top of React's.
+    expect(markedScripts()).toHaveLength(0)
+
+    await settlePageIdle()
+    expect(markedScripts()).toHaveLength(4)
+  })
+
+  it('does not wait on interaction: idle alone releases it, within the cap', async () => {
+    jest.useFakeTimers()
+    try {
+      await mount(NONCE)
+      expect(markedScripts()).toHaveLength(0)
+      await act(async () => {
+        jest.advanceTimersByTime(PAGE_IDLE_WAIT_CAP_MS)
+      })
+      expect(markedScripts()).toHaveLength(4)
+    } finally {
+      jest.useRealTimers()
     }
   })
 })

@@ -75,9 +75,23 @@ import { isValidElementType } from 'react-is'
 import RendererComponents from '../contexts/renderer-components'
 import { LeafSxTransformContext } from '../contexts/leaf-sx-transform'
 import { RealmBoundaryContext } from '../contexts/realm-boundary'
+import { DeferredHydrationContext } from '../contexts/deferred-hydration'
+import {
+  HELD_SERVER_HTML,
+  mayHoldServerHtml,
+  useHeldServerHtml,
+} from './deferred-hydration'
 import { resolvePaletteVarsSx, resolveSchemeSx } from '../utils/scheme-sx'
 
 const DefaultComponent = styled('div')({})
+
+/** Leaf props with any `children` a resolved prop carried, for a held root. */
+function withoutChildren<T extends Record<string, unknown>>(
+  props: T,
+): Omit<T, 'children'> {
+  const { children: _children, ...rest } = props
+  return rest
+}
 
 export interface LeafProps extends HTMLAttributes<any> {
   children?: any
@@ -223,6 +237,15 @@ export const Leaf = observer(
       pinnedScheme && pinnedScheme !== activeScheme && schemeThemes
         ? schemeThemes(pinnedScheme)
         : undefined
+    // A static subtree far from the viewport keeps its server HTML through
+    // hydration and renders when the visitor nears it (AGL-3581). Only on a
+    // tree that asked for it — the published page — and decided once, on the
+    // leaf's first render. See `deferred-hydration.tsx`.
+    const deferHydration = useContext(DeferredHydrationContext)
+    const holdServerHtml = useHeldServerHtml(
+      deferHydration && !offForSite && mayHoldServerHtml(node),
+      node?.$id ?? '',
+    )
     // Each realm element hydrates in a boundary of its own (AGL-3390), so one
     // waiting for its bundle holds only itself. Rendered on the server too:
     // the browser's tree has to have the same boundary to hydrate into.
@@ -350,7 +373,14 @@ export const Leaf = observer(
     )
     const childNodes = positional ? (node?.children ?? []) : null
 
-    const element = selfClosing ? (
+    const element = holdServerHtml ? (
+      // The root hydrates; its contents stay the server's until released.
+      <Component
+        {...withoutChildren(leafProps)}
+        dangerouslySetInnerHTML={HELD_SERVER_HTML}
+        suppressHydrationWarning
+      />
+    ) : selfClosing ? (
       <Component {...leafProps} />
     ) : positional ? (
       <RendererComponents.Consumer>

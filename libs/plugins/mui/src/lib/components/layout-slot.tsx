@@ -169,6 +169,10 @@ export const schema: Aglyn.ComponentSchema<LayoutSlotProps> = {
   // The slot's children come from screen composition, never from the canvas.
   restrictChildren: [Aglyn.LinealDirectiveFlag.LIMIT_TO, { components: [] }],
   flags: {
+    // Static: may sit in a subtree that keeps its server HTML (AGL-3581).
+    // Not `childrenInRoot` — it draws its own placeholder when it has
+    // no children, which is what a held root looks like.
+    lazyHydration: Aglyn.FEATURE_FLAG.ENABLED,
     cloning: Aglyn.FEATURE_FLAG.DISABLED,
     dropping: Aglyn.FEATURE_FLAG.DISABLED,
   },

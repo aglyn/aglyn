@@ -603,6 +603,8 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
     sx: { color: '#7b1fa2' },
   },
   flags: {
+    // Static: may sit in a subtree that keeps its server HTML (AGL-3581).
+    lazyHydration: Aglyn.FEATURE_FLAG.ENABLED,
     selfClosing: Aglyn.FEATURE_FLAG.ENABLED,
   },
   attributes: [

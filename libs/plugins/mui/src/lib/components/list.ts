@@ -62,6 +62,8 @@ export const schema: Aglyn.ComponentSchema<ListElementProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'List',
+  // Static: may sit in a subtree that keeps its server HTML (AGL-3581).
+  flags: { lazyHydration: Aglyn.FEATURE_FLAG.ENABLED },
   description: 'Vertical list of items, optionally under a sticky heading.',
   category: Aglyn.ComponentCategory.DATA_DISPLAY,
   icon: { path: mdiFormatListBulletedSquare.path },

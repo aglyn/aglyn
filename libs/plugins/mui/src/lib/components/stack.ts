@@ -161,6 +161,8 @@ export const schema: Aglyn.ComponentSchema = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Stack',
+  // Static: may sit in a subtree that keeps its server HTML (AGL-3581).
+  flags: { lazyHydration: Aglyn.FEATURE_FLAG.ENABLED },
   description:
     'Lays children out in a row or column with even spacing — the workhorse for most layouts.',
   category: Aglyn.ComponentCategory.LAYOUT,

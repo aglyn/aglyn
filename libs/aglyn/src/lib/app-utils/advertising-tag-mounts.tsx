@@ -31,6 +31,7 @@ import {
   restoreAdvertisingTags,
   revokeAdvertisingTags,
 } from './advertising-tags'
+import { usePageIdle } from './page-idle'
 import { VISITOR_CONSENT_CHANGED_EVENT } from './visitor-consent'
 import Script from 'next/script'
 import { Fragment, useEffect, useRef, type ReactElement } from 'react'
@@ -200,7 +201,15 @@ export default function AdvertisingTagMounts({
     return () => window.removeEventListener(VISITOR_CONSENT_CHANGED_EVENT, sync)
   }, [active])
 
-  if (!active || tags.length === 0) return null
+  // Nothing is injected before the page has loaded and gone idle (AGL-3581).
+  // The withdrawal listener above is NOT behind this: a visitor who refuses
+  // before the page idles has nothing to tear down, and one who refuses after
+  // needs the listener already there. Every surface reads the same store, so
+  // a page that mounts its own loader flips in the same render as this one
+  // and `sharedLibraries` still describes it (AGL-2681).
+  const pageIsIdle = usePageIdle()
+
+  if (!active || tags.length === 0 || !pageIsIdle) return null
 
   return (
     <>
