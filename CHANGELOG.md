@@ -16,11 +16,13 @@ content on the marketing site and is written separately.
 ### Added
 
 - **content:** a featured video carries its length, so a watch page publishes duration ([AGL-3584](https://linear.app/aglyn/issue/AGL-3584))
+- **mui:** an App Bar can shrink to the dense height once the page scrolls ([AGL-3587](https://linear.app/aglyn/issue/AGL-3587))
 
 ### Fixed
 
 - **crm:** a lead's tasks have the index their facts read needs ([AGL-3520](https://linear.app/aglyn/issue/AGL-3520))
 - **media:** a streamed serve's count is written in after(), not frozen in flight ([AGL-3474](https://linear.app/aglyn/issue/AGL-3474))
+- **tenant:** the admin bar nudges a pinned header that mounts after it ([AGL-3586](https://linear.app/aglyn/issue/AGL-3586))
 
 ### Performance
 
