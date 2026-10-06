@@ -38,13 +38,25 @@ import {
   type AiPlanJobScope,
 } from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
-import { AI_SITE_CREATE_KINDS, aiSitePlanShapeRefusal } from '../model/ai-site-job'
-import { aiDoctrineSystemBlocks, runValidatedGeneration } from '../runtime/ai-doctrine'
-import { AI_STEP_TIERS } from '../providers/catalog'
 import {
+  AI_FREE_SITE_WORST_CASE_CREDITS,
+  AI_SITE_CREATE_KINDS,
+  AI_SITE_FREE_PAGES,
+  AI_SITE_PLAN_MAX_TOKENS,
+  aiFreeSiteSectionsWithin,
+  aiSitePlanShapeRefusal,
+} from '../model/ai-site-job'
+import { aiPlanFailureCopy, aiPlanRetryRefusal } from '../model/ai-job-failure-copy'
+import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
+import { aiDoctrineSystemBlocks, runValidatedGeneration } from '../runtime/ai-doctrine'
+import { AI_STEP_TIERS, aiCatalogEntry, aiDefaultModelFor } from '../providers/catalog'
+import {
+  AI_FREE_PAGE_WORST_CASE_CREDITS,
   aiPlanEmbedBriefViolations,
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
+import { assistCreditsFromUsd } from '../usage/assist-credits'
+import { freeAccountUsageRef, freeAssistAccount, type AssistMeteredOrg } from '../usage/assist-free-taste'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import type { AiTool } from '../providers/contract'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
@@ -143,6 +155,7 @@ export const AI_JOB_PLAN_REVIEW_COPY =
 export function aiJobPlanPrompt(
   job: Pick<AiJob, 'kind' | 'brief' | 'inputs'>,
   capabilities: AiPlanCapabilities | null = null,
+  inventory: AiSiteInventory | null = null,
 ): string {
   const lines = [`Job kind: ${job.kind}`, `Brief: ${job.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)}`]
   for (const [key, value] of Object.entries(job.inputs ?? {})) {
@@ -152,7 +165,57 @@ export function aiJobPlanPrompt(
   }
   if (capabilities) lines.push(...aiPlanCapabilityLines(capabilities))
   lines.push(...aiPlanTemplateTokenLines(job))
+  lines.push(...aiPlanSiteLines(job, inventory, capabilities))
   return lines.join('\n')
+}
+
+/**
+ * What a SITE job's plan is told beside the inventory (AGL-3594): the pages
+ * the site already has and that their addresses are taken, which one — the
+ * untouched starter home — a planned home page at `/` replaces, the Free page
+ * cap and its guidance, and that a plan is an outline.
+ *
+ * A site job only. A new site is born with a published home page at `/`
+ * (AGL-3497), and a plan that did not know it could replace it planned its own
+ * home there and was refused for the clash on every new site. Kept off a page
+ * job's turn, whose length the Free page's wall is proven at.
+ */
+export function aiPlanSiteLines(
+  job: Pick<AiJob, 'kind'>,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null,
+): string[] {
+  if (job.kind !== 'site') return []
+  const lines: string[] = []
+  const pages = (inventory?.screens ?? []).filter((screen) => !screen.template)
+  const starter = pages.find((screen) => screen.replaceable)
+  if (pages.length) {
+    lines.push('Pages the site already has; their addresses are taken unless a line says otherwise:')
+    for (const page of pages) {
+      lines.push(
+        page.replaceable
+          ? `- ${page.name} at ${page.slug}: the starter home page the site was created with. Plan this site's home page at / and it replaces this one.`
+          : `- ${page.name} at ${page.slug}`,
+      )
+    }
+    if (!starter && pages.some((page) => page.slug.trim() === '/' || page.slug.trim() === '')) {
+      lines.push("The home page at / is the owner's own and stays: give every page you plan another address.")
+    }
+  }
+  const cap = capabilities?.freeSitePages
+  if (cap !== undefined) {
+    const sections = aiFreeSiteSectionsWithin(
+      { layouts: (inventory?.layouts.length ?? 0) ? 0 : 1, pages: cap },
+      FREE_AI_TASTE_CREDITS_PER_MONTH,
+    )
+    lines.push(
+      `This is a Free workspace: plan at most ${cap} ${cap === 1 ? 'page' : 'pages'} — the home page at / and the one page the brief most needs, such as services, booking or contact — with at most ${sections} sections across them. Put the contact form on one of them.`,
+    )
+  }
+  lines.push(
+    "Keep the plan an outline: each page's title, address, a short search title and description, and its sections named in a few words. The build writes the copy.",
+  )
+  return lines
 }
 
 /**
@@ -191,7 +254,7 @@ export function aiPlanTemplateTokenLines(job: Pick<AiJob, 'kind' | 'inputs'>): s
 /** A kind that builds only some plans: the creations it makes, and the shapes it refuses. */
 export interface AiJobPlanScope extends AiPlanJobScope {
   /** Why a job of the kind cannot build a plan of this shape; `null` when it can. Pure. */
-  shapeRefusal: (plan: AiBuildPlan) => string | null
+  shapeRefusal: (plan: AiBuildPlan, options?: { freeTaste?: boolean }) => string | null
 }
 
 /**
@@ -221,9 +284,10 @@ export const AI_JOB_PLAN_SCOPES: Readonly<Partial<Record<AiJobKind, AiJobPlanSco
 function planViolations(
   scope: AiJobPlanScope | null,
   brief: string,
+  freeTaste = false,
 ): (plan: AiBuildPlan) => AiDoctrineViolation[] {
   return (plan) => {
-    const message = scope?.shapeRefusal(plan) ?? null
+    const message = scope?.shapeRefusal(plan, { freeTaste }) ?? null
     return [
       ...aiPlanEmbedBriefViolations(plan, brief),
       ...(message ? [{ rule: null, code: 'plan-job-shape', message }] : []),
@@ -449,14 +513,20 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       readCapabilities({ job, org, firestore }),
     ])
     const scope = AI_JOB_PLAN_SCOPES[job.kind] ?? null
-    const capabilities = workspace ? aiPlanCapabilitiesForJob(workspace, scope) : null
+    const capabilities = aiSitePlanCapabilities(
+      job,
+      workspace ? aiPlanCapabilitiesForJob(workspace, scope) : null,
+    )
+    const freeTaste = capabilities?.freeTaste === true
+    const site = job.kind === 'site'
     // The model switch's answer for this job (AGL-2942): the creator's pick
     // where the plan, the org restriction and the allotment allowlists allow
     // it, and Auto held to those same lists otherwise. Without a resolver the
-    // doctrine asks the routing table itself.
-    const model = modelFor?.('job.plan')
+    // doctrine asks the routing table itself. A Free site plans on its
+    // provider's fast tier (AGL-3594), unless the creator picked a model.
+    const model = aiSitePlanModel(job, modelFor?.('job.plan'), freeTaste)
     const route = AI_ROUTING_TABLE['job.plan']
-    const prompt = aiJobPlanPrompt(job, capabilities)
+    const prompt = aiJobPlanPrompt(job, capabilities, inventory)
 
     /**
      * The confirm door's answer for this plan, asked before the plan is kept
@@ -540,13 +610,16 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       messages: [{ role: 'user', content: prompt }],
       tool,
       // The routing ceiling, lowered on a tier too slow to look records up,
-      // answer and ask again inside the least time the step registered.
-      maxTokens: aiJobPlanMaxTokens(resolved),
-      ...(route.thinking ? { thinking: route.thinking } : {}),
+      // answer and ask again inside the least time the step registered; a
+      // scaffold's outline is held to its own, far lower ceiling (AGL-3594).
+      maxTokens: aiSitePlanMaxTokens(job, resolved, freeTaste),
+      // A scaffold plans an outline without thinking (AGL-3594): the thinking
+      // was nearly all of the 13,491 tokens a Free site's plan spent.
+      ...(site ? { thinking: 'off' as const } : route.thinking ? { thinking: route.thinking } : {}),
       ...(route.effort ? { effort: route.effort } : {}),
       ...(signal ? { signal } : {}),
       capabilities,
-      extend: planViolations(scope, job.brief),
+      extend: planViolations(scope, job.brief, freeTaste),
     })
     const spent: AiJobStepOutcome = {
       outputs: [],
@@ -557,7 +630,29 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       ...(result.effort ? { effort: result.effort } : {}),
     }
     if (result.status === 'refused') return { ...spent, refused: true }
-    if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
+    if (result.status === 'needs_input') {
+      // Refused by our own checks, after the one re-ask (AGL-3594): the member
+      // reads a sentence and an action, staff the rules; on the Free taste
+      // the tokens draw no credits, and Try again says when it cannot work.
+      const review = aiDoctrineReview(result)
+      const retryRefusal = freeTaste
+        ? await aiFreePlanRetryRefusal({ job, org, firestore, now, site })
+        : null
+      return {
+        ...spent,
+        ...(freeTaste ? { uncredited: true } : {}),
+        review: {
+          ...review,
+          message: aiPlanFailureCopy({
+            kind: job.kind,
+            codes: result.violations.map((violation) => violation.code),
+            refunded: freeTaste,
+          }),
+          detail: review.message,
+          ...(retryRefusal ? { retryRefusal } : {}),
+        },
+      }
+    }
     // Each draft the plan decides is named as the plan is kept, before anything is built (AGL-3079).
     const plan: AiJobPlan = aiPlanWithDraftIds(job.kind, {
       ...result.value,
@@ -576,6 +671,97 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         review: { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] },
       }
     )
+  }
+}
+
+/**
+ * A site job's capabilities on the Free taste (AGL-3594): its plan holds at
+ * most the pages the member asked for within the Free band, which the Free
+ * wall then holds it to, and it changes no theme — the site was born with
+ * one (AGL-3497), and a palette pass is credits the two pages need. Every
+ * other job's capabilities pass through.
+ */
+export function aiSitePlanCapabilities(
+  job: Pick<AiJob, 'kind' | 'inputs'>,
+  capabilities: AiPlanCapabilities | null,
+): AiPlanCapabilities | null {
+  if (job.kind !== 'site' || !capabilities?.freeTaste) return capabilities
+  const asked = Number((job.inputs ?? {})['pages'])
+  const pages =
+    Number.isInteger(asked) && asked >= AI_SITE_FREE_PAGES.min
+      ? Math.min(asked, AI_SITE_FREE_PAGES.max)
+      : AI_SITE_FREE_PAGES.max
+  return {
+    ...capabilities,
+    freeSitePages: pages,
+    create: {
+      ...capabilities.create,
+      'theme-change': {
+        allowed: false,
+        left: null,
+        reason: "a Free workspace's site start keeps the theme the site was created with",
+      },
+    },
+  }
+}
+
+/**
+ * The model a plan runs on (AGL-3594): the resolved one, except a Free site
+ * plans on its provider's fast tier — an outline the plan rules hold and
+ * re-ask, at a fifth of the balanced tier's output rate. A model the creator
+ * picked by name stays theirs.
+ */
+export function aiSitePlanModel(
+  job: Pick<AiJob, 'kind' | 'model'>,
+  resolved: string | undefined,
+  freeTaste: boolean,
+): string | undefined {
+  if (job.kind !== 'site' || !freeTaste) return resolved
+  const picked = typeof job.model === 'string' ? job.model.trim() : ''
+  if (picked && picked !== 'auto') return resolved
+  const entry = aiCatalogEntry(resolved ?? aiModelForStep('job.plan'))
+  return (entry ? aiDefaultModelFor(entry.provider, 'fast') : undefined) ?? resolved
+}
+
+/** The plan's answer ceiling: the step's own, and a scaffold's outline ceiling under it (AGL-3594). */
+export function aiSitePlanMaxTokens(
+  job: Pick<AiJob, 'kind'>,
+  model: string,
+  freeTaste: boolean,
+): number {
+  const ceiling = aiJobPlanMaxTokens(model)
+  if (job.kind !== 'site') return ceiling
+  return Math.min(ceiling, freeTaste ? AI_SITE_PLAN_MAX_TOKENS.free : AI_SITE_PLAN_MAX_TOKENS.paid)
+}
+
+/**
+ * Why trying a Free plan again cannot work this month, or `null` (AGL-3594):
+ * the owner's Free allowance left, read off the account month the meter
+ * writes, against what a plan of this kind costs at its worst. A refused plan
+ * drew nothing, so the figure read is the figure left. A read that fails
+ * leaves the button on: the reservation still refuses at the wall.
+ */
+async function aiFreePlanRetryRefusal(input: {
+  job: AiJob
+  org: Partial<AglynOrgBilling> | null
+  firestore: FirebaseFirestore.Firestore
+  now: Date
+  site: boolean
+}): Promise<string | null> {
+  const account = freeAssistAccount(input.org as AssistMeteredOrg | null)
+  if (!account?.accountUid) return null
+  try {
+    // The meter's month key, `YYYY-MM` in UTC (`assistUsageMonth`).
+    const month = input.now.toISOString().slice(0, 7)
+    const snapshot = await freeAccountUsageRef(input.firestore, account.accountUid, month).get()
+    const spent = assistCreditsFromUsd(Number(snapshot.get('estCostUsd') ?? 0))
+    return aiPlanRetryRefusal({
+      creditsLeft: FREE_AI_TASTE_CREDITS_PER_MONTH - spent,
+      planCredits: input.site ? AI_FREE_SITE_WORST_CASE_CREDITS.plan : AI_FREE_PAGE_WORST_CASE_CREDITS.plan,
+    })
+  } catch (error) {
+    console.error('ai plan retry allowance read failed', { orgId: input.job.orgId, jobId: input.job.$id, error })
+    return null
   }
 }
 

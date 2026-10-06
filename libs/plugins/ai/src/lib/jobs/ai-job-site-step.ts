@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
   isAiPlanNewRef,
@@ -33,6 +34,7 @@ import {
   AI_SITE_EMAIL_TYPE,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
+  aiSitePagesRefusal,
   aiSitePlanRefusal,
   aiSiteSubmissions,
   aiSiteWords,
@@ -542,6 +544,15 @@ export function aiSiteUnitJob(
 export const aiSiteJobAdmission: AiJobAdmission = async (context) => {
   const inputs = parseAiSiteJobInputs(context.inputs)
   if (typeof inputs === 'string') return { status: 400, error: inputs }
+  // The workspace's own page band (AGL-3594): one or two pages on the Free
+  // taste, four to eight on a paid plan.
+  const freeTaste = aiSiteFreeTaste(context.org)
+  const pages = aiSitePagesRefusal(inputs.pages, freeTaste)
+  if (pages) return { status: 400, error: pages }
+  if (context.plan) {
+    const shape = aiSitePlanRefusal(context.plan, { freeTaste })
+    if (shape) return { status: 400, error: shape }
+  }
   if (!context.hostId) {
     return {
       status: 400,
@@ -555,6 +566,19 @@ export const aiSiteJobAdmission: AiJobAdmission = async (context) => {
     return { status: 400, error: AI_SITE_NO_PAGE_STEP_COPY }
   }
   return null
+}
+
+/** Whether a scaffold's workspace spends the Free taste (AGL-3594); a missing org reads as paid, as the band has always been. */
+export function aiSiteFreeTaste(org: object | null | undefined): boolean {
+  return Boolean(org) && resolveEffectivePlan(org as never) === 'free'
+}
+
+/**
+ * Whether a scaffold drafts its welcome email (AGL-3594): where it was asked
+ * for, and never on the Free taste, whose credits its pages need.
+ */
+export function aiSiteWelcomeEmail(inputs: AiSiteJobInputs, freeTaste: boolean): boolean {
+  return inputs.welcomeEmail && !freeTaste
 }
 
 /** What one delegated pass came to: the unit's spend as the job records it, and whether the unit is built. */
@@ -626,7 +650,8 @@ export function createAiJobSiteStep(
       return { ...aiUnspentOutcome(model), failure: AI_SITE_NO_PLAN_COPY }
     // The resume door refuses such a plan at confirmation once it can read
     // one; a plan confirmed before a site changed still stops here, unspent.
-    const refusal = aiSitePlanRefusal(plan)
+    const freeTaste = aiSiteFreeTaste(context.org)
+    const refusal = aiSitePlanRefusal(plan, { freeTaste })
     if (refusal) return { ...aiUnspentOutcome(model), failure: refusal }
     const inputs = parseAiSiteJobInputs(job.inputs)
     if (typeof inputs === 'string')
@@ -635,7 +660,7 @@ export function createAiJobSiteStep(
     // A kind this deployment has not loaded is not among the units at all, so
     // a scaffold owes only what something can build.
     const units = aiSiteJobUnits(plan, {
-      welcomeEmail: inputs.welcomeEmail,
+      welcomeEmail: aiSiteWelcomeEmail(inputs, freeTaste),
     }).filter((unit) => runnerFor(unit.jobKind))
     const outputs = job.outputs ?? []
     const pending = aiSitePendingUnits(units, outputs)

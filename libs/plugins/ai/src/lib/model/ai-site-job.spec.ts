@@ -145,9 +145,11 @@ describe('a scaffold’s inputs', () => {
 
   it('refuses a missing business, a page count outside the band and a bad batch', () => {
     expect(parseAiSiteJobInputs({ pages: 4 })).toMatch(/what kind of business/)
-    expect(parseAiSiteJobInputs({ businessType: 'bakery', pages: 3 })).toMatch(
-      new RegExp(`${AI_SITE_PAGES.min} to ${AI_SITE_PAGES.max}`),
+    // Read across both bands; the door holds each workspace to its own (AGL-3594).
+    expect(parseAiSiteJobInputs({ businessType: 'bakery', pages: 0 })).toMatch(
+      new RegExp(`1 to ${AI_SITE_PAGES.max}`),
     )
+    expect(parseAiSiteJobInputs({ businessType: 'bakery', pages: 2 })).toMatchObject({ pages: 2 })
     expect(parseAiSiteJobInputs({ businessType: 'bakery', pages: 9 })).toMatch(
       /pages must be/,
     )

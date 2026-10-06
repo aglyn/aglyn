@@ -279,7 +279,7 @@ describe('the plan step', () => {
     expect(outcome.model).toBe('picked-model')
   })
 
-  it('stops for review with the rules named when the re-ask still breaks one, and keeps no plan', async () => {
+  it('stops for review when the re-ask still breaks a rule, a plain sentence for the member and the rules for staff, and keeps no plan', async () => {
     const unlaid: AiBuildPlan = { ...PLAN, screens: [{ ...PLAN.screens[0], layout: null }] }
     mockRunAiRequest
       .mockResolvedValueOnce(planAnswer(unlaid))
@@ -291,10 +291,15 @@ describe('the plan step', () => {
     expect(outcome.estCostUsd).toBe(0.021)
     expect(outcome.review).toEqual({
       reason: 'doctrine',
-      message: expect.stringContaining(`Rule 2 (${AI_DOCTRINE_RULES[2]})`),
+      // No rule number reaches the member (AGL-3594); the checks' sentence is staff's.
+      message: 'Something went wrong planning this page. Try again.',
+      detail: expect.stringContaining(`Rule 2 (${AI_DOCTRINE_RULES[2]})`),
       // A plan's finding keeps the entry it names (AGL-3078); a plan has no nodes to outline.
       findings: [{ rule: 2, code: 'plan-screen-without-layout', message: expect.any(String), paths: ['screens[0].layout'] }],
     })
+    expect(outcome.review?.message).not.toMatch(/Rule \d/)
+    // A paid workspace's refused plan is metered as it always was.
+    expect(outcome.uncredited).toBeUndefined()
   })
 
   it('reports a declined brief as refused, with no plan and nothing to review', async () => {

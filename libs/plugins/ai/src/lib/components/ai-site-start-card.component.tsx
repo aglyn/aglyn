@@ -43,11 +43,15 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  AI_SITE_PAGES,
+  AI_SITE_FREE_PAGES,
+  AI_SITE_FREE_PAGES_NOTE,
   AI_SITE_SUBMISSION_CHOICES,
+  aiFreeSiteCreditEstimate,
   aiSiteCreditEstimate,
+  aiSitePagesBand,
   type AiSiteSubmissions,
 } from '../model/ai-site-job'
+import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   AI_SITE_START_ANSWERS,
   AI_SITE_START_EXAMPLES,
@@ -127,6 +131,8 @@ export function AiSiteStartCard({
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [started, setStarted] = useState(false)
+  // The Free taste's page band (AGL-3594), read off the verdict request.
+  const [freeTaste, setFreeTaste] = useState(false)
 
   useEffect(() => {
     if (!orgId || !uid) return
@@ -137,7 +143,12 @@ export function AiSiteStartCard({
           userRef.current,
           `/api/ai/jobs?orgId=${encodeURIComponent(orgId)}&limit=1`,
         )
+        const payload = response.ok ? await response.json().catch(() => null) : null
         if (active) {
+          if (payload?.freeTaste === true) {
+            setFreeTaste(true)
+            setAnswers((current) => ({ ...current, pages: AI_SITE_FREE_PAGES.max, welcomeEmail: false }))
+          }
           setVerdict(response.status === 404 || response.status === 403 ? 'hidden' : 'ready')
         }
       } catch {
@@ -155,10 +166,11 @@ export function AiSiteStartCard({
     [],
   )
 
-  const refusal = aiSiteStartRefusal(answers)
+  const refusal = aiSiteStartRefusal(answers, { freeTaste })
+  const band = aiSitePagesBand(freeTaste)
 
   const plan = useCallback(async () => {
-    if (!orgId || aiSiteStartRefusal(answers)) return
+    if (!orgId || aiSiteStartRefusal(answers, { freeTaste })) return
     setBusy(true)
     setNotice(null)
     try {
@@ -189,13 +201,15 @@ export function AiSiteStartCard({
     } finally {
       setBusy(false)
     }
-  }, [orgId, hostId, answers])
+  }, [orgId, hostId, answers, freeTaste])
 
   if (verdict !== 'ready') return null
 
-  const estimate = aiSiteCreditEstimate(answers.pages, {
-    welcomeEmail: answers.welcomeEmail,
-  })
+  const estimate = freeTaste
+    ? aiFreeSiteCreditEstimate(answers.pages)
+    : aiSiteCreditEstimate(answers.pages, {
+        welcomeEmail: answers.welcomeEmail,
+      })
 
   return (
     <Dialog open fullScreen onClose={startBlank} aria-labelledby={TITLE_ID}>
@@ -331,28 +345,39 @@ export function AiSiteStartCard({
                     sx={{ minWidth: 160 }}
                   >
                     {Array.from(
-                      { length: AI_SITE_PAGES.max - AI_SITE_PAGES.min + 1 },
-                      (_, index) => AI_SITE_PAGES.min + index,
+                      { length: band.max - band.min + 1 },
+                      (_, index) => band.min + index,
                     ).map((count) => (
                       <MenuItem key={count} value={count}>
                         {count}
                       </MenuItem>
                     ))}
                   </TextField>
-                  <TextField
-                    select
-                    label="Welcome email"
-                    value={answers.welcomeEmail ? 'yes' : 'no'}
-                    onChange={(event) => answer({ welcomeEmail: event.target.value === 'yes' })}
-                    sx={{ minWidth: 160 }}
-                  >
-                    <MenuItem value="yes">{'Draft one'}</MenuItem>
-                    <MenuItem value="no">{'No'}</MenuItem>
-                  </TextField>
+                  {!freeTaste && (
+                    <TextField
+                      select
+                      label="Welcome email"
+                      value={answers.welcomeEmail ? 'yes' : 'no'}
+                      onChange={(event) => answer({ welcomeEmail: event.target.value === 'yes' })}
+                      sx={{ minWidth: 160 }}
+                    >
+                      <MenuItem value="yes">{'Draft one'}</MenuItem>
+                      <MenuItem value="no">{'No'}</MenuItem>
+                    </TextField>
+                  )}
                 </Stack>
+                {freeTaste && (
+                  <Typography variant="body2" color="text.secondary">
+                    {AI_SITE_FREE_PAGES_NOTE}
+                  </Typography>
+                )}
                 <Typography variant="body2" color="text.secondary">
-                  {`About ${estimate.toLocaleString('en-US')} credits, estimated. What it really ` +
-                    'costs is what each step spends, and you can watch that add up while it runs.'}
+                  {freeTaste
+                    ? `Up to about ${estimate.toLocaleString('en-US')} of the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI ` +
+                      'credits your Free workspace has each month, estimated. You can watch what each step ' +
+                      'spends while it runs.'
+                    : `About ${estimate.toLocaleString('en-US')} credits, estimated. What it really ` +
+                      'costs is what each step spends, and you can watch that add up while it runs.'}
                 </Typography>
               </>
             )}

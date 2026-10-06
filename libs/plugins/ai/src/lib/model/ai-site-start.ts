@@ -17,8 +17,8 @@
 
 import {
   AI_SITE_INPUT_MAX_CHARS,
-  AI_SITE_PAGES,
   AI_SITE_SUBMISSIONS,
+  aiSitePagesBand,
   type AiSiteJobInputs,
   type AiSiteSubmissions,
 } from './ai-site-job'
@@ -169,7 +169,12 @@ export function aiSiteStartExample(
  * when they can. The door's own parser is what actually admits the job — this
  * is what the card says before it asks for one.
  */
-export function aiSiteStartRefusal(answers: AiSiteStartAnswers): string | null {
+export function aiSiteStartRefusal(
+  answers: AiSiteStartAnswers,
+  options: { freeTaste?: boolean } = {},
+): string | null {
+  // The workspace's own band (AGL-3594): one or two pages on the Free taste.
+  const band = aiSitePagesBand(options.freeTaste)
   const siteType = answers.siteType.trim()
   if (!siteType) return 'Say what kind of site this is.'
   if (siteType.length > AI_SITE_INPUT_MAX_CHARS) {
@@ -178,12 +183,8 @@ export function aiSiteStartRefusal(answers: AiSiteStartAnswers): string | null {
   if (answers.audience.trim().length > AI_SITE_INPUT_MAX_CHARS) {
     return `Keep who the site is for under ${AI_SITE_INPUT_MAX_CHARS} characters.`
   }
-  if (
-    !Number.isInteger(answers.pages) ||
-    answers.pages < AI_SITE_PAGES.min ||
-    answers.pages > AI_SITE_PAGES.max
-  ) {
-    return `A site is planned with ${AI_SITE_PAGES.min} to ${AI_SITE_PAGES.max} pages.`
+  if (!Number.isInteger(answers.pages) || answers.pages < band.min || answers.pages > band.max) {
+    return `A site is planned with ${band.min} to ${band.max} pages.`
   }
   if (answers.example !== null && !aiSiteStartExample(answers)) {
     return 'Pick one of the examples, or none of them.'

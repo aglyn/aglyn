@@ -874,6 +874,38 @@ describe('a step’s own failure, and what a runner is handed (AGL-2938)', () =>
       NOW,
     )
 
+  it('meters a Free step our checks refused as a declined turn: no credits on the job, the org or the account (AGL-3594)', async () => {
+    registerAiJobStep('insight', async () => ({
+      outputs: [],
+      usage: USAGE,
+      estCostUsd: 0.006,
+      model: 'claude-sonnet-5',
+      stopReason: 'tool_use',
+      uncredited: true,
+      review: { reason: 'doctrine', message: 'Something went wrong planning this. Try again.', findings: [] },
+    }))
+    mockDocs.set('orgs/org-free', { plan: 'free', ownerUid: 'owner-1' })
+    const free = await createAiJob(
+      firestore,
+      { orgId: 'org-free', hostId: 'host-1', kind: 'insight', brief: 'Anything at all.', createdBy: 'uid-1' },
+      NOW,
+    )
+    const run = await runAiJobStep(firestore, 'org-free', free.$id, { owner: 'route-1', now: NOW })
+    expect(run.outcome).toBe('needs_review')
+    const stored = await getAiJob(firestore, 'org-free', free.$id)
+    expect(stored).toMatchObject({ status: 'needs_review', creditsSpent: 0 })
+    expect(stored?.steps[0]).toMatchObject({ creditsSpent: 0 })
+    const month = mockDocs.get(`orgs/org-free/assistUsage/${assistUsageMonth(NOW)}`) ?? {}
+    expect(month).toMatchObject({ estCostUsd: 0, refusedTurns: 1, refusedCostUsd: 0.006 })
+    const account = mockDocs.get(`users/owner-1/aiUsage/${assistUsageMonth(NOW)}`) ?? {}
+    expect(account['estCostUsd']).toBeUndefined()
+
+    // The same outcome on a paid workspace is billed as it always was.
+    const paid = await newInsightJob()
+    await runAiJobStep(firestore, ORG, paid.$id, { owner: 'route-1', now: NOW })
+    expect(await getAiJob(firestore, ORG, paid.$id)).toMatchObject({ creditsSpent: 6 })
+  })
+
   it('hands the runner the machine’s Firestore and the org it reserved against', async () => {
     const contexts: Array<Record<string, unknown>> = []
     registerAiJobStep('insight', async (context) => {

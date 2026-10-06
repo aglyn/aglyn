@@ -2294,6 +2294,23 @@ the element budget its request asks for.
   Recordings are never committed; the first live one, which stopped at its plan, is
   kept by hand as `src/lib/jobs/fixtures/ai-free-page-recording.ts` for the specs to
   hold that check and the plan rules to.
+- **A Free site fits the taste (AGL-3594).** A Free workspace's guided start builds one
+  or two pages (`AI_SITE_FREE_PAGES`, a product decision), and its plan is an outline:
+  a site plan runs with no thinking, at `AI_SITE_PLAN_MAX_TOKENS` (2,000 Free, 4,000
+  paid), and a Free site plans on its provider's fast tier (claude-haiku-4-5). The
+  site plan that failed on 2026-10-06 measured 2,201 input, 4,343 cache write, 4,343
+  cache read and 13,491 output tokens on claude-sonnet-5 — 227 credits, the output
+  nearly all thinking. `ai-job-free-site.spec.ts` replays a Free two-page site through
+  the real plan step (a three-page answer re-asked to two) and prices both requests
+  at their ceilings, never under the measured input, the first writing the cache and
+  the second paying for the prefix as plain input: a Free site's plan comes to at most
+  35 credits, its answer and its re-ask together. Each page then costs a listing and a
+  first section pass at the Free page's figures, and the wall keeps room for one
+  retried section: a Free site with its layout fits 8 sections across its two pages, at most 249 credits
+  of the 300. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the plan it derives
+  and to the Free page's build figures, and the Free wall holds a Free site's plan to
+  that section count and to its page cap. On a paid workspace a site plan's one answer comes to at most 84 credits
+  for five pages, where the routing table's ceiling with thinking spent 227.
 - **Every device width, and an axe audit.** `libs/plugins/ai/scripts/record-ai-page-axe.mts`
   (AGL-3020) assembles each golden page the page step builds from a site — the ten
   briefs, both Free pages and the two-person page — through the step's own section

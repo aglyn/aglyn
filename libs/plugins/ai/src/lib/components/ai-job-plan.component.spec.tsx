@@ -217,6 +217,39 @@ describe('where a refused answer broke its rules (AGL-3078)', () => {
   })
 })
 
+describe('a plan refused in words written for the member (AGL-3594)', () => {
+  const PLAIN = job({
+    kind: 'site',
+    plan: null,
+    review: {
+      reason: 'doctrine',
+      message: 'Something went wrong planning your site, and it did not use any of your AI credits. Try again.',
+      detail: 'This could not be built within the building rules. Rule 10 (Navigation and SEO travel with a page): A page reuses an address…',
+      findings: [{ rule: 10, code: 'plan-slug-taken', message: 'A page reuses an address the site or the plan already uses (/).', paths: ['screens[0].slug'] }],
+    },
+  })
+
+  it('shows a member no rule and no finding, and Try again', () => {
+    render(<AiJobPlan job={PLAIN} onResume={jest.fn()} />)
+    expect(screen.queryByText(/Rule 10/)).toBeNull()
+    expect(screen.queryByText(/reuses an address/)).toBeNull()
+    expect((screen.getByRole('button', { name: 'Try again' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('shows staff the checks’ own sentence and the findings', () => {
+    render(<AiJobPlan job={PLAIN} onResume={jest.fn()} staff />)
+    expect(screen.getByText(/Rule 10/)).toBeTruthy()
+    expect(screen.getByText('A page reuses an address the site or the plan already uses (/).')).toBeTruthy()
+  })
+
+  it('disables Try again with its reason when the Free allowance cannot cover a plan', () => {
+    const reason = 'You have 10 AI credits left this month, and a plan needs up to 35. Your credits refresh next month, or upgrade for more.'
+    render(<AiJobPlan job={job({ ...PLAIN, review: { ...PLAIN.review!, retryRefusal: reason } })} onResume={jest.fn()} />)
+    expect(screen.getByText(reason)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Try again' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
 describe('a planned third-party player, read with its cost before it is confirmed (AGL-3433)', () => {
   const named = (ref: string) => (ref.startsWith('new:') ? ref.slice(4) : ref)
 

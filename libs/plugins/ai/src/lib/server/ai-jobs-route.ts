@@ -20,6 +20,7 @@
 // GET climbs `ai-jobs-gate.ts`, which carries the same rung.
 
 import { randomUUID } from 'crypto'
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   AI_JOB_KINDS,
   type AiJobKind,
@@ -311,7 +312,12 @@ export async function GET(request: Request): Promise<Response> {
     ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}),
   })
   return Response.json(
-    { jobs: jobs.map((job) => aiJobSummary(job, now)) },
+    {
+      jobs: jobs.map((job) => aiJobSummary(job, now)),
+      // Whether the workspace spends the Free taste (AGL-3594), so the guided
+      // start offers the Free page band from the request it already makes.
+      freeTaste: resolveEffectivePlan(gate.org as never) === 'free',
+    },
     { status: 200, headers: { 'Cache-Control': 'no-store' } },
   )
 }

@@ -114,6 +114,13 @@ export interface AiJobStepOutcome {
    * step back, so trying again runs the same one.
    */
   review?: AiJobReview
+  /**
+   * The answer was refused by the platform's own checks, not the model's
+   * (AGL-3594): on the Free taste its tokens draw no credits — the machine
+   * meters them as it meters a declined Free turn, on the platform's day and
+   * the account's refusal count, whose daily pause bounds how often.
+   */
+  uncredited?: boolean
 }
 
 export interface AiJobStepContext {

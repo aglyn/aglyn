@@ -1572,6 +1572,8 @@ export async function runAiJobStep(
           // The step is the creator's spend, under the job's kind (AGL-2928).
           uid: job.createdBy,
           kind: job.kind,
+          // A plan our own checks refused draws no Free credits (AGL-3594).
+          ...(outcome.uncredited ? { uncredited: true } : {}),
         },
         now,
       )
@@ -1579,7 +1581,10 @@ export async function runAiJobStep(
       console.error('ai job cost record failed', { orgId, jobId, error })
     }
   }
-  const credits = assistCreditsFromUsd(outcome.estCostUsd)
+  // What the step drew, as the meter above drew it: nothing from the Free
+  // taste for an answer our own checks refused (AGL-3594).
+  const credits =
+    outcome.uncredited && reservation.free ? 0 : assistCreditsFromUsd(outcome.estCostUsd)
 
   // A model that declined, or a step that got nothing usable out of the
   // model's answer (AGL-2938), fails the job with its own sentence. The

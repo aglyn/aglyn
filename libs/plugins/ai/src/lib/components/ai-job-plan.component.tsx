@@ -160,7 +160,17 @@ export function AiJobPlan({
           ))}
         </Stack>
       )}
-      {review?.reason === 'doctrine' && review.findings.length > 0 && (
+      {/*
+        A review written for the member (AGL-3594) carries the checks' own
+        sentence as `detail`: its findings are then staff reading too, and the
+        member reads the job's one sentence alone.
+      */}
+      {staff && review?.detail && (
+        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+          {review.detail}
+        </Typography>
+      )}
+      {review?.reason === 'doctrine' && review.findings.length > 0 && (staff || !review.detail) && (
         <Box
           component="ul"
           sx={{ my: 0.5, pl: 2.5 }}
@@ -207,11 +217,18 @@ export function AiJobPlan({
           {`Estimated cost: about ${estimate.toLocaleString('en-US')} credits. What it costs is what its steps spend.`}
         </Typography>
       )}
+      {waiting && review.retryRefusal && review.reason !== 'plan' && (
+        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1 }}>
+          {review.retryRefusal}
+        </Typography>
+      )}
       {waiting && (
         <Button
           size="small"
           variant="contained"
-          disabled={busy}
+          // Disabled with its reason above when the Free allowance left
+          // cannot pay for another try (AGL-3594).
+          disabled={busy || (review.reason !== 'plan' && Boolean(review.retryRefusal))}
           onClick={() => onResume(job)}
           sx={{ mt: 1 }}
         >

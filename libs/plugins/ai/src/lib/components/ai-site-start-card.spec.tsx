@@ -56,7 +56,11 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 import { AI_PLUGIN_ID } from '../constants'
 import { registerAiConsole } from '../plugin'
-import { AI_SITE_SUBMISSION_CHOICES } from '../model/ai-site-job'
+import {
+  AI_SITE_FREE_PAGES_NOTE,
+  AI_SITE_SUBMISSION_CHOICES,
+  aiFreeSiteCreditEstimate,
+} from '../model/ai-site-job'
 import { AI_SITE_START_EXAMPLES } from '../model/ai-site-start'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
@@ -437,5 +441,44 @@ describe('the questions become a site scaffold', () => {
       (screen.getByLabelText(/What kind of site are you creating\?/) as HTMLInputElement).value,
     ).toBe('a neighborhood dog groomer')
     expect(screen.getByRole('button', { name: 'Skip and start blank' })).toBeTruthy()
+  })
+})
+
+describe('a Free workspace’s guided start (AGL-3594)', () => {
+  async function openFreeCard() {
+    const Widget = widget()
+    mockFetch.mockResolvedValueOnce(json({ jobs: [], freeTaste: true }))
+    render(<Widget {...zoneProps()} />)
+    await screen.findByText('Start this site with AI')
+    await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
+  }
+
+  it('offers one or two pages, starting on two, says paid plans generate more, and drafts no welcome email', async () => {
+    await openFreeCard()
+    fireEvent.mouseDown(screen.getByLabelText('Pages'))
+    const options = (await screen.findAllByRole('option')).map((option) => option.textContent)
+    expect(options).toEqual(['1', '2'])
+    expect(screen.queryByLabelText('Welcome email')).toBeNull()
+    expect(
+      screen.getByText(new RegExp(`Up to about ${aiFreeSiteCreditEstimate(2)} of the 300 AI credits`)),
+    ).toBeTruthy()
+  })
+
+  it('starts a two-page site job with no welcome email', async () => {
+    await openFreeCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    mockFetch.mockResolvedValueOnce(json({ job: { id: 'job-1', kind: 'site', status: 'queued' } }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await screen.findByText(/Your site is being planned/)
+    const [, init] = mockFetch.mock.calls[mockFetch.mock.calls.length - 1]
+    expect(JSON.parse(init.body).inputs).toEqual(expect.objectContaining({ pages: 2, welcomeEmail: false }))
+  })
+
+  it('keeps a paid workspace’s four to eight pages', async () => {
+    await openCard()
+    fireEvent.mouseDown(screen.getByLabelText('Pages'))
+    const options = (await screen.findAllByRole('option')).map((option) => option.textContent)
+    expect(options).toEqual(['4', '5', '6', '7', '8'])
+    expect(screen.queryByText(AI_SITE_FREE_PAGES_NOTE)).toBeNull()
   })
 })

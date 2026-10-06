@@ -363,6 +363,18 @@ export interface AiJobReview {
    * for diagnosis, and shown to staff.
    */
   outline?: AiJobReviewOutlineNode[]
+  /**
+   * The checks' own sentence, where `message` was written for the member
+   * instead (AGL-3594): rule numbers and all, for staff. Its presence is what
+   * tells the drawer the findings are staff reading too.
+   */
+  detail?: string
+  /**
+   * Why trying again cannot work yet (AGL-3594) — the Free allowance left is
+   * less than the step can cost — or absent when it can. The button is drawn
+   * disabled with this beside it.
+   */
+  retryRefusal?: string
 }
 
 export type AiJobPlanStatus = 'proposed' | 'confirmed'

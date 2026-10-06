@@ -815,13 +815,14 @@ describe('what a scaffold is admitted with', () => {
   const ask = (
     inputs: Record<string, unknown>,
     hostId: string | null = 'host-1',
+    org: object = { plan: 'pro' },
   ) =>
     aiJobAdmissionRefusal('site', {
       firestore: {} as unknown as FirebaseFirestore.Firestore,
       orgId: 'org-1',
       hostId,
       inputs,
-      org: {},
+      org,
     })
 
   const good = { businessType: 'dog groomer', pages: AI_SITE_PAGES.min }
@@ -833,6 +834,22 @@ describe('what a scaffold is admitted with', () => {
   it('refuses inputs that do not read, and a job that names no site', async () => {
     await expect(ask({ pages: 4 })).resolves.toMatchObject({ status: 400 })
     await expect(ask(good, null)).resolves.toMatchObject({ status: 400 })
+  })
+
+  it('holds a Free workspace to one or two pages and a paid one to its band, refusing rather than clamping (AGL-3594)', async () => {
+    const free = { plan: 'free' }
+    await expect(ask({ ...good, pages: 2 }, 'host-1', free)).resolves.toBeNull()
+    await expect(ask({ ...good, pages: 1 }, 'host-1', free)).resolves.toBeNull()
+    await expect(ask({ ...good, pages: 3 }, 'host-1', free)).resolves.toEqual({
+      status: 400,
+      error: "A Free workspace's AI site start builds 1 or 2 pages. Paid plans can generate more pages.",
+    })
+    await expect(ask({ ...good, pages: AI_SITE_PAGES.min }, 'host-1', free)).resolves.toMatchObject({ status: 400 })
+    // A paid workspace keeps the band it always had.
+    await expect(ask({ ...good, pages: 2 })).resolves.toEqual({
+      status: 400,
+      error: `A site is planned with ${AI_SITE_PAGES.min} to ${AI_SITE_PAGES.max} pages.`,
+    })
   })
 
   it('refuses a site of another workspace', async () => {
