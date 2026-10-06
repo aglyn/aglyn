@@ -17,6 +17,7 @@ content on the marketing site and is written separately.
 
 - **content:** a featured video carries its length, so a watch page publishes duration ([AGL-3584](https://linear.app/aglyn/issue/AGL-3584))
 - **mui:** an App Bar can shrink to the dense height once the page scrolls ([AGL-3587](https://linear.app/aglyn/issue/AGL-3587))
+- **mui:** an App Bar can hide while the visitor scrolls down ([AGL-3588](https://linear.app/aglyn/issue/AGL-3588))
 
 ### Fixed
 
