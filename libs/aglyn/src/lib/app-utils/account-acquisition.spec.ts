@@ -59,6 +59,7 @@ describe('building the record at account creation', () => {
       viaHost: null,
       utm: null,
       clickIds: [],
+      adCampaignId: null,
       door: 'signup-password',
       provider: 'password',
       invitedToOrgId: null,
@@ -118,6 +119,7 @@ describe('building the record at account creation', () => {
         via: 'status.example.com',
         utm: { source: 'google', medium: 'cpc', campaign: 'sept-launch', term: 'site builder' },
         click: ['gclid'],
+        adCampaign: '24332209621',
       },
       door: 'invite',
       provider: 'google.com',
@@ -130,6 +132,7 @@ describe('building the record at account creation', () => {
     expect(record.medium).toBe('cpc')
     expect(record.campaign).toBe('sept-launch')
     expect(record.clickIds).toEqual(['gclid'])
+    expect(record.adCampaignId).toBe('24332209621')
     expect(record.viaHost).toBe('status.example.com')
     expect(describeAccountAcquisition(record, { primaryHost: 'example.com' })).toBe(
       'Paid search (google, sept-launch) → docs.example.com/guides/start → signed up from an invitation, with Google',

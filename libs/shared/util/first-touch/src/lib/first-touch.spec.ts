@@ -157,6 +157,22 @@ describe('building a first touch from a landing', () => {
     expect(JSON.stringify(built)).not.toContain('abc')
   })
 
+  it('keeps the Google Ads campaign id auto-tagging appends, and only digits', () => {
+    const built = buildFirstTouch({
+      href: 'https://example.com/free?gad_source=1&gad_campaignid=24332209621&gclid=Cj0KCQ-secret',
+      hosts: HOSTS,
+      now: NOW,
+    })
+    expect(built?.adCampaign).toBe('24332209621')
+    expect(built?.click).toEqual(['gclid'])
+    const forged = buildFirstTouch({
+      href: 'https://example.com/?gad_campaignid=someone%40example.com',
+      hosts: HOSTS,
+      now: NOW,
+    })
+    expect(forged?.adCampaign).toBeUndefined()
+  })
+
   it('refuses a landing that is not a web page, or has no time', () => {
     expect(buildFirstTouch({ href: 'file:///etc/passwd', hosts: HOSTS, now: NOW })).toBeNull()
     expect(buildFirstTouch({ href: 'nonsense', hosts: HOSTS, now: NOW })).toBeNull()
@@ -196,6 +212,7 @@ describe('reading an untrusted record', () => {
       via: 'bad host!',
       utm: { source: 'g2', term: 'a@b.co', evil: 'x' },
       click: ['gclid', 'gclid', 'value'],
+      adCampaign: '24332209621',
       email: 'someone@example.com',
     })
     expect(cleaned).toEqual({
@@ -206,6 +223,7 @@ describe('reading an untrusted record', () => {
       ref: 'www.g2.com',
       utm: { source: 'g2' },
       click: ['gclid'],
+      adCampaign: '24332209621',
     })
   })
 
