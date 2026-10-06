@@ -38,7 +38,7 @@
  *
  * `after()` rather than a bare promise (AGL-2327): a serverless invocation
  * is frozen the moment its response is sent, and work scheduled any other
- * way does not run. `after-response.ts` loads it, and says why through
+ * way does not run. `@aglyn/aglyn/app-utils/after-response` loads it, and says why through
  * `import()`: the `require()` this module once used compiled to a
  * ReferenceError under Turbopack, and the check never ran in production.
  * Outside a request — a script, a spec — there is nothing to defer to, and
@@ -55,6 +55,7 @@
  * read a withdrawal costs.
  *==========================================*/
 
+import { scheduleAfterResponse } from '@aglyn/aglyn/app-utils/after-response'
 import type { EmailState } from '@aglyn/aglyn/app-utils/email-state'
 import { isPublicMailboxDomain } from '@aglyn/aglyn/app-utils/crm'
 import { stampRecordEmailState } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
@@ -70,7 +71,6 @@ import {
   mailGatewayStanding,
   normalizeDeliverabilityEmail,
 } from '@aglyn/shared-util-email'
-import { scheduleAfterResponse } from './after-response'
 import {
   isGatewayHeldVerdict,
   isNoMailServerVerdict,

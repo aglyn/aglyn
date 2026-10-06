@@ -17,8 +17,10 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiPageLayoutHeader } from '@aglyn/shared-data-mdi'
+import { ScrollReaction } from '@aglyn/shared-ui-jsx/components/scroll-reaction'
 import MuiAppBar, { type AppBarProps } from '@mui/material/AppBar'
-import { createElement, forwardRef } from 'react'
+import { type SxProps, type Theme } from '@mui/material/styles'
+import { createElement, forwardRef, type Ref } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
   applySemanticElement,
@@ -30,6 +32,97 @@ import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { ID as toolbarId } from './toolbar'
 
+export interface AglynAppBarProps extends AppBarProps {
+  /**
+   * Compacts the bar's Toolbar Content to the dense height once the page
+   * has scrolled, and back at the top. Meant for a pinned (sticky/fixed)
+   * bar, where the full height costs the reader a band of every screen.
+   */
+  shrinkOnScroll?: boolean
+  /**
+   * Slides the bar up out of view while the visitor scrolls down, and back
+   * the moment they scroll up. Meant for a pinned (sticky/fixed) bar.
+   */
+  hideOnScroll?: boolean
+}
+
+/** Scroll distance before a shrinking bar compacts. */
+const SHRINK_THRESHOLD = 16
+/** Scroll distance before a hiding bar may slide away — past its own height. */
+const HIDE_THRESHOLD = 120
+
+/**
+ * Both scroll states ride data attributes, not a re-styled sx, so the
+ * server render and every scroll position share one emotion class.
+ */
+const scrollSx: SxProps<Theme> = (theme) => ({
+  transition: theme.transitions.create(['transform', 'box-shadow'], {
+    duration: theme.transitions.duration.shorter,
+  }),
+  '& .MuiToolbar-root': {
+    transition: theme.transitions.create('min-height', {
+      duration: theme.transitions.duration.shorter,
+    }),
+  },
+  '&[data-scrolled] .MuiToolbar-root': {
+    // MUI's dense toolbar height.
+    minHeight: theme.spacing(6),
+  },
+  '&[data-scroll-hidden]': {
+    transform: 'translateY(-100%)',
+  },
+})
+
+function withScrollSx(sx: AppBarProps['sx']): AppBarProps['sx'] {
+  return [scrollSx, ...(Array.isArray(sx) ? sx : [sx])] as AppBarProps['sx']
+}
+
+function renderAppBar(props: AppBarProps, ref: Ref<HTMLElement>) {
+  return createElement(MuiAppBar, {
+    // Unset leaves MUI's own default, which is `header` — the banner
+    // landmark every site's chrome depends on (AGL-2525). A resolver that
+    // answered `div` for "unset" would have stripped it the moment the
+    // picker appeared.
+    ...applySemanticElement(dropClearedProps(props) as Record<string, unknown>),
+    ref,
+  })
+}
+
+interface ScrollAwareAppBarProps extends AppBarProps {
+  shrink: boolean
+  hide: boolean
+}
+
+/**
+ * Its own component so the scroll listeners exist only on a bar that asked
+ * to react — a hook behind a prop check would break the rules of hooks.
+ * `ScrollReaction` answers both questions: past the threshold (shrink),
+ * and scrolling down rather than up (hide), which is what MUI's scroll
+ * trigger means by hysteresis.
+ */
+const ScrollAwareAppBar = forwardRef<HTMLElement, ScrollAwareAppBarProps>(
+  ({ shrink, hide, ...props }, ref) =>
+    createElement(ScrollReaction, {
+      threshold: SHRINK_THRESHOLD,
+      withHysteresis: { threshold: HIDE_THRESHOLD },
+      children: ({ activeWithHysteresis, activeWithoutHysteresis }) =>
+        renderAppBar(
+          {
+            ...props,
+            sx: withScrollSx(props.sx),
+            ...({
+              'data-scrolled':
+                shrink && activeWithoutHysteresis ? '' : undefined,
+              'data-scroll-hidden':
+                hide && activeWithHysteresis ? '' : undefined,
+            } as AppBarProps),
+          },
+          ref,
+        ),
+    }),
+)
+ScrollAwareAppBar.displayName = 'AglynScrollAwareAppBar'
+
 /**
  * MUI's AppBar behind the cleared-prop guard (AGL-1226).
  *
@@ -39,22 +132,23 @@ import { ID as toolbarId } from './toolbar'
  * wrapper is the only place to intercept it, since the schema's props reach
  * MUI directly. `createElement` rather than JSX keeps this a `.ts` file.
  */
-const AppBar = forwardRef<HTMLElement, AppBarProps>((props, ref) =>
-  createElement(MuiAppBar, {
-    // Unset leaves MUI's own default, which is `header` — the banner
-    // landmark every site's chrome depends on (AGL-2525). A resolver that
-    // answered `div` for "unset" would have stripped it the moment the
-    // picker appeared.
-    ...applySemanticElement(dropClearedProps(props) as Record<string, unknown>),
-    ref,
-  }),
+const AppBar = forwardRef<HTMLElement, AglynAppBarProps>(
+  ({ shrinkOnScroll, hideOnScroll, ...props }, ref) =>
+    shrinkOnScroll || hideOnScroll
+      ? createElement(ScrollAwareAppBar, {
+          ...props,
+          shrink: Boolean(shrinkOnScroll),
+          hide: Boolean(hideOnScroll),
+          ref,
+        })
+      : renderAppBar(props, ref),
 )
 AppBar.displayName = 'AglynAppBar'
 
 // Component ids are persisted in screen documents; keep the legacy ids.
 export const ID: Aglyn.ComponentId = 'muiAppBar'
 
-export const schema: Aglyn.ComponentSchema<AppBarProps> = {
+export const schema: Aglyn.ComponentSchema<AglynAppBarProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'App Bar',
@@ -70,6 +164,22 @@ export const schema: Aglyn.ComponentSchema<AppBarProps> = {
     semanticElementLabelAttribute(),
     FIELD_COLOR_ALT1,
     FIELD_POSITION,
+    {
+      name: 'shrinkOnScroll',
+      description:
+        'Compacts the bar to the dense height once the page scrolls, and ' +
+        'restores it at the top. Pair with a Sticky or Fixed position.',
+      component: Aglyn.FieldComponentType.SWITCH,
+      label: 'Shrink when scrolled?',
+    },
+    {
+      name: 'hideOnScroll',
+      description:
+        'Slides the bar up out of view while the visitor scrolls down, and ' +
+        'back as soon as they scroll up. Pair with a Sticky or Fixed position.',
+      component: Aglyn.FieldComponentType.SWITCH,
+      label: 'Hide while scrolling down?',
+    },
   ],
 }
 

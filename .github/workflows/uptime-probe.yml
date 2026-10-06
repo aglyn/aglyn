@@ -67,6 +67,13 @@ name: Uptime probe
 # below is what actually ran. `tools/scripts/lib/uptime-targets.test.mjs`
 # now fails if the tenant target goes back to that shape.
 
+# TRIGGERED BY CLOUD SCHEDULER (AGL-3580). `uptime-probe-dispatch-app`
+# (7,22,37,52 * * * * UTC) runs the Cloud Run job
+# `github-dispatch-uptime-probe` — the signup canary's GitHub App dispatcher
+# (tools/scripts/github-app-dispatch.mjs) with GITHUB_WORKFLOW_FILE set to this
+# file — which sends a workflow_dispatch. The `schedule` below stays as a
+# fallback; the concurrency group cancels whichever run is older.
+
 on:
   schedule:
     # Every 15 minutes. Finer than GitHub reliably delivers, and there is no

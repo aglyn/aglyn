@@ -32,10 +32,11 @@
  * `Sec-CH-Prefers-Color-Scheme` client hint — which a browser sends solely
  * where the origin asked for it.
  *
- * These headers are the ask, and each of the three earns its place:
- * `Accept-CH` alone leaves the FIRST navigation hint-less, `Critical-CH` is
- * what makes the browser retry it immediately, and `Vary` is what keeps a
- * cache from handing one visitor's document to a browser in the other scheme.
+ * These headers are the ask: `Accept-CH` makes every navigation after the
+ * first carry the hint, and `Vary` is what keeps a cache from handing one
+ * visitor's document to a browser in the other scheme. `Critical-CH` is
+ * deliberately absent (AGL-3583): it retries every first visit to get the
+ * hint, a whole extra request ahead of the page for every visitor.
  *
  * `hostVerdict` memoizes per isolate for 30 seconds, so every case below uses
  * a DISTINCT tenant host — otherwise the second case reads the first case's
@@ -125,12 +126,14 @@ describe('the tenant page response negotiates the color-scheme hint', () => {
     )
   })
 
-  it('marks it critical, so the FIRST navigation carries it', async () => {
-    // `Accept-CH` on its own only reaches the second request to an origin, and
-    // the first load is the one where a wrong scheme is most visible.
+  it('never marks it critical, so a first visit is not retried', async () => {
+    // `Critical-CH` makes a browser that has not sent the hint discard the
+    // response and request the page again — on every first visit, for a hint
+    // only dark-scheme devices benefit from. Their first page settles the
+    // scheme at hydration instead; later navigations carry the hint.
     expect(
       (await pageResponse('hint-critical')).headers.get('Critical-CH'),
-    ).toBe(HINT)
+    ).toBeNull()
   })
 
   it('varies on it, so no cache serves dark markup to a light browser', async () => {

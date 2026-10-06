@@ -386,6 +386,9 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     // a list without it ERASES the film from every restored entry, and
     // nothing reports the loss.
     'coverVideo',
+    // Its length in seconds (AGL-3584), for the same reason: a restore that
+    // drops it leaves the watch page's VideoObject without a duration.
+    'coverVideoDuration',
     'seoTitle',
     'seoDescription',
     'authorName',

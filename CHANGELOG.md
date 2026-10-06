@@ -9,6 +9,30 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.226 — 2026-10-06
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.225...v1.0.0-beta.226)
+
+### Added
+
+- **content:** a featured video carries its length, so a watch page publishes duration ([AGL-3584](https://linear.app/aglyn/issue/AGL-3584))
+- **mui:** an App Bar can shrink to the dense height once the page scrolls ([AGL-3587](https://linear.app/aglyn/issue/AGL-3587))
+- **mui:** an App Bar can hide while the visitor scrolls down ([AGL-3588](https://linear.app/aglyn/issue/AGL-3588))
+
+### Fixed
+
+- **crm:** a lead's tasks have the index their facts read needs ([AGL-3520](https://linear.app/aglyn/issue/AGL-3520))
+- **media:** a streamed serve's count is written in after(), not frozen in flight ([AGL-3474](https://linear.app/aglyn/issue/AGL-3474))
+- **tenant:** the admin bar nudges a pinned header that mounts after it ([AGL-3586](https://linear.app/aglyn/issue/AGL-3586))
+
+### Performance
+
+- **tenant:** one store build per page load, and no first-visit retry for the scheme hint ([AGL-3583](https://linear.app/aglyn/issue/AGL-3583))
+
+### Documentation
+
+- **ops:** the uptime probe is dispatched by Cloud Scheduler ([AGL-3580](https://linear.app/aglyn/issue/AGL-3580))
+
 ## v1.0.0-beta.225 — 2026-10-05
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/3661b5772...v1.0.0-beta.225)

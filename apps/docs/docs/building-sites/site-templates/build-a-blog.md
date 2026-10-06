@@ -108,8 +108,9 @@ Each entry carries, besides the title, excerpt, cover image, and markdown body:
 - **SEO title / SEO description** — search & social overrides; they fall back to the
   title and excerpt when blank.
 - **Featured video** — a film for the entry's page: one from your media library, a video
-  link, or a Wistia link. It plays where the cover image would sit. See
-  [Build a video collection](#video-collection).
+  link, or a Wistia link. It plays where the cover image would sit. **Video length
+  (seconds)** beside it is how long the film runs, which search results can show; it
+  fills in when you choose a library film. See [Build a video collection](#video-collection).
 
 ### Scheduling
 
@@ -515,6 +516,7 @@ on the empty listing above. Prefer linking with the pills.
 | `{{entry.url}}` | Entry route, e.g. `/blog/my-post` |
 | `{{entry.coverImage}}` | Cover image URL |
 | `{{entry.coverVideo}}` | Featured video, as picked: a media library film, a video link or a Wistia link |
+| `{{entry.coverVideoDuration}}` | Featured video's length in seconds, e.g. `754`; blank when the entry has none — for a Video element's **Duration (seconds)** |
 | `{{entry.category}}` | Entry category |
 | `{{entry.tags}}` | Comma-joined tags, e.g. `nextjs, seo` |
 | `{{entry.seoTitle}}` | SEO title (falls back to the title) |
@@ -614,6 +616,12 @@ your media library, a video link, or a Wistia link. Picking a library film that 
 captured frame also fills an empty **Cover image** with that frame; a cover you already
 chose is kept.
 
+**Say how long it runs.** **Video length (seconds)**, under the featured video, is the
+film's running time, which a video search result can show beside it. Choosing a film
+from your media library fills it in from the file. For a video link or a Wistia link,
+type it yourself: `754` for a film that runs 12 minutes 34 seconds. Leave it blank if you
+don't know it; the page is still listed without one.
+
 **Place the player on the entry template.** Add a **Video** element where the cover would
 go and set its fields to the entry's tokens, typed or picked with the field's **`{x}`**
 button under **Entry**:
@@ -625,6 +633,7 @@ button under **Entry**:
 | **Video title** | `{{entry.title}}` |
 | **Video description** | `{{entry.excerpt}}` |
 | **Publication date** | `{{entry.publishedAt}}` |
+| **Duration (seconds)** | `{{entry.coverVideoDuration}}` |
 
 Use `{{entry.publishedAt}}` for the date, not `{{entry.date}}`: the date token is written
 for readers, like `8/9/2026`, which a search engine cannot read as a date. See
@@ -636,7 +645,8 @@ a card: a list with a player in every card is one page holding many videos, not 
 about any one of them.
 
 **No entry template?** The built-in entry page plays the featured video with no setup,
-in the cover's place, with the cover as its poster. A Wistia film needs a cover image to
+in the cover's place, with the cover as its poster and the entry's video length as its
+duration. A Wistia film needs a cover image to
 show as its poster; without one, the page shows the article without the player.
 
 ## Tips

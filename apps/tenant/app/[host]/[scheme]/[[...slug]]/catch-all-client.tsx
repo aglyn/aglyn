@@ -114,6 +114,21 @@ const CollectionFallback = dynamic(() => import('./collection-fallback'), {
 })
 
 /**
+ * Node documents the first client render already put on the canvas, for the
+ * `NODE_SET_ITEMS` effect to skip once (AGL-3583).
+ *
+ * Re-announcing the document the render just filled rebuilds every node of
+ * the canvas as a fresh observable, which re-renders every observer on the
+ * page in the same task as hydration — on `aglyn.com/` that was the store
+ * built twice and the whole page rendered twice. Only the canvas listens, so
+ * skipping the repeat changes nothing it holds.
+ *
+ * A `WeakSet` rather than a ref, because the render that fills the canvas is
+ * where it is recorded and a ref must not be written during render.
+ */
+const seededByRender = new WeakSet<object>()
+
+/**
  * In-flight and settled requests for a page's full node document (AGL-1285),
  * keyed by the exact page asked for.
  *
@@ -426,10 +441,12 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // mounted observers aren't invalidated mid-render.
   if (nodes && (typeof window === 'undefined' || !canvas.rootNode)) {
     canvas.setNodes(nodes)
+    if (typeof window !== 'undefined') seededByRender.add(nodes)
   }
 
   useEffect(() => {
     if (!nodes) return
+    if (seededByRender.delete(nodes)) return
     emitter.emit(AglynEvent.NODE_SET_ITEMS, { nodes: nodes })
   }, [nodes])
 

@@ -382,6 +382,15 @@ export interface CollectionEntryRecord {
    * the built-in entry page plays it with no template at all.
    */
   coverVideo?: string
+  /**
+   * How long {@link coverVideo} runs, in whole seconds (AGL-3584) — the unit
+   * the Video element's `durationSeconds` takes, because an author types 63
+   * and not 63000. The page's `VideoObject` publishes it as `duration`, which
+   * Google recommends, and nothing else knows it for a hosted player's link.
+   * Read through {@link collectionEntryVideoDurationSeconds}, so a value that
+   * is not a positive number is no duration at all.
+   */
+  coverVideoDuration?: number
   /** Search-result title override (AGL-582); falls back to `title`. */
   seoTitle?: string
   /** Meta description override (AGL-582); falls back to `excerpt`. */
@@ -578,6 +587,30 @@ export function collectionEntryAuthorValues(entry: CollectionEntryRecord): {
 }
 
 /**
+ * A featured video's stored length as whole seconds, or `undefined` when it
+ * names none (AGL-3584).
+ *
+ * The one reading of `coverVideoDuration` for every side that touches it: the
+ * console's save, the loader, the token and the built-in page. A number or a
+ * numeric string (a form field, an import) counts when it is finite and
+ * positive; it is rounded to the second, never down to `0`, because a stored
+ * `0` reads as "no duration" downstream — the rule `videoMediaProps` applies
+ * to a library film's own length.
+ */
+export function collectionEntryVideoDurationSeconds(
+  value: unknown,
+): number | undefined {
+  const seconds =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim()
+        ? Number(value.trim())
+        : Number.NaN
+  if (!Number.isFinite(seconds) || seconds <= 0) return undefined
+  return Math.max(1, Math.round(seconds))
+}
+
+/**
  * The `{{entry.*}}` token map for one entry (AGL-105/551): substituted
  * globally on entry-template screens and per-clone inside the Collection
  * entries block. `entry.url` resolves to the entry's auto-route so links
@@ -610,6 +643,12 @@ export function collectionEntryTokens(
     // into a Video element's source, and the element resolves a reference
     // against the site rendering it.
     'entry.coverVideo': entry.coverVideo ?? '',
+    // Its length in seconds (AGL-3584), for the Video element's duration, so
+    // the watch page's `VideoObject` carries `duration`. `''` when unknown,
+    // which the element reads as no duration.
+    'entry.coverVideoDuration': String(
+      collectionEntryVideoDurationSeconds(entry.coverVideoDuration) ?? '',
+    ),
     'entry.slug': entry.slug ?? '',
     'entry.url': `/${slug}/${entry.slug ?? ''}`,
     // Which section this entry belongs to (AGL-2518). Worth binding only on a

@@ -153,6 +153,18 @@ describe('AdminBar top chrome (AGL-1829)', () => {
     expect(siteHeader.style.top).toBe('0px')
   })
 
+  it('nudges a pinned header that mounts after the bar is up, as a soft navigation does', async () => {
+    const { unmount } = await renderReadyBar()
+    const nextPageHeader = document.createElement('header')
+    nextPageHeader.style.position = 'sticky'
+    nextPageHeader.style.top = '0px'
+    document.body.appendChild(nextPageHeader)
+
+    await waitFor(() => expect(nextPageHeader.style.top).toBe('40px'))
+    unmount()
+    expect(nextPageHeader.style.top).toBe('0px')
+  })
+
   it('brands the bar with the real Aglyn mark, not a placeholder glyph', async () => {
     await renderReadyBar()
     const brandLink = linkByText('Aglyn Marketing')

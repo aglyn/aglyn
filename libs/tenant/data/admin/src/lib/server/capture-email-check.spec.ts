@@ -54,12 +54,12 @@ jest.mock('next/server', () => ({
   },
 }))
 
+import { resetAfterResponseForTests } from '@aglyn/aglyn/app-utils/after-response'
 import {
   registerPluginRecordEmailStateWriter,
   type PluginRecordEmailStateRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
-import { resetAfterResponseForTests } from './after-response'
 import {
   capturedEmailCheckScheduledForTests,
   checkCapturedEmails,

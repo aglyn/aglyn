@@ -146,6 +146,13 @@ export const ENTRY_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
       'a video host’s link — for a Video element.',
   },
   {
+    token: '{{entry.coverVideoDuration}}',
+    label: 'Featured video length',
+    description:
+      'How long the featured video runs, in seconds, for a Video element’s ' +
+      'duration field. Blank when the entry does not say.',
+  },
+  {
     token: '{{entry.category}}',
     label: 'Category',
     description: 'The entry category.',

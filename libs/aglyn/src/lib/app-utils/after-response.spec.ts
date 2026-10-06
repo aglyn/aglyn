@@ -23,8 +23,8 @@
  * Work run after the response (AGL-3328, AGL-3486): Next's `after()`
  * loaded once, a task it refuses or cannot be given reported once per
  * reason, and a failing task reported every time. Then the guard the
- * mocks below cannot be: nothing in this package loads `next/*` through a
- * bare `require()`, which Turbopack compiled into a ReferenceError that the
+ * mocks below cannot be: nothing in this package or `tenant-data-admin`
+ * loads `next/*` through a bare `require()`, which Turbopack compiled into a ReferenceError that the
  * callers' `catch` turned into "no request" — in production, every time.
  */
 
@@ -90,8 +90,9 @@ describe('scheduleAfterResponse', () => {
   })
 })
 
-describe('the package loads next/* through import(), never a bare require()', () => {
-  const root = join(__dirname, '..', '..')
+describe('the packages that run after() load next/* through import(), never a bare require()', () => {
+  const libs = join(__dirname, '..', '..', '..', '..')
+  const roots = [join(libs, 'aglyn', 'src'), join(libs, 'tenant', 'data', 'admin', 'src')]
 
   function sources(dir: string): string[] {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -107,13 +108,19 @@ describe('the package loads next/* through import(), never a bare require()', ()
   }
 
   it('finds the sources it guards', () => {
-    expect(sources(root).map((path) => relative(root, path))).toContain(join('lib', 'server', 'capture-email-check.ts'))
+    const found = roots.flatMap((root) => sources(root)).map((path) => relative(libs, path))
+    expect(found).toEqual(
+      expect.arrayContaining([
+        join('aglyn', 'src', 'lib', 'app-utils', 'api-adapter.ts'),
+        join('tenant', 'data', 'admin', 'src', 'lib', 'server', 'capture-email-check.ts'),
+      ]),
+    )
   })
 
   it('has no require() of next/server or any other next/* entry', () => {
-    const offenders = sources(root).flatMap((path) =>
+    const offenders = roots.flatMap((root) => sources(root)).flatMap((path) =>
       /\brequire\s*\(\s*['"`]next(\/[^'"`]*)?['"`]\s*\)/.test(code(readFileSync(path, 'utf8')))
-        ? [relative(root, path)]
+        ? [relative(libs, path)]
         : [],
     )
     expect(offenders).toEqual([])

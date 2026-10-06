@@ -47,6 +47,7 @@ import {
   aiBindingTokensIn,
   aiTemplateAddressTokens,
   isAiAddressToken,
+  isAiUnreadToken,
   parseAiTemplateJobInputs,
 } from './ai-template-subjects'
 
@@ -130,6 +131,15 @@ describe('template subjects (AGL-2909)', () => {
     expect(isAiAddressToken('{{entry.title}}')).toBe(false)
     expect(isAiAddressToken('{{entry.slug}}')).toBe(false)
     expect(isAiAddressToken('{{product.price}}')).toBe(false)
+  })
+
+  it('keeps the bare seconds of a video length off the page (AGL-3584)', () => {
+    // Machine-read like the publish timestamp: a Video's duration takes it,
+    // and a reader shown it sees a bare number.
+    expect(isAiUnreadToken('{{entry.coverVideoDuration}}')).toBe(true)
+    expect(isAiUnreadToken('{{entry.publishedAt}}')).toBe(true)
+    expect(isAiUnreadToken('{{entry.date}}')).toBe(false)
+    expect(isAiAddressToken('{{entry.coverVideoDuration}}')).toBe(false)
   })
 
   it('reads every token a string holds, spelled without inner whitespace', () => {

@@ -147,13 +147,14 @@ export function aiTemplateAddressTokens(definition: AiTemplateSubjectDefinition)
 /**
  * Whether a token is filled for a machine and never read on the page: a URL
  * segment (`{{entry.slug}}`, `{{collection.slug}}`, `{{entry.collectionSlug}}`)
- * or the ISO timestamp a Video element's publication date takes
- * (`{{entry.publishedAt}}`). A block may be handed one whole; a reader shown
- * one sees hyphens and digits (AGL-3143 §16).
+ * the ISO timestamp a Video element's publication date takes
+ * (`{{entry.publishedAt}}`), or the bare seconds its duration takes
+ * (`{{entry.coverVideoDuration}}`, AGL-3584). A block may be handed one whole;
+ * a reader shown one sees hyphens and digits (AGL-3143 §16).
  */
 export function isAiUnreadToken(token: string): boolean {
   const field = token.replace(/[{}\s]/g, '').split('.').pop() ?? ''
-  return /^(?:slug|publishedAt)$|Slug$/.test(field)
+  return /^(?:slug|publishedAt)$|Slug$|Duration$/.test(field)
 }
 
 /** The tokens of a subject its page shows: every one a reader reads or follows, which is all but the unread. */
