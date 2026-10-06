@@ -9,6 +9,38 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.225 — 2026-10-05
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/3661b5772...v1.0.0-beta.225)
+
+### Added
+
+- **legal:** v10 — Privacy and Subprocessors say CRM assistance reads the whole record ([AGL-3520](https://linear.app/aglyn/issue/AGL-3520))
+- **tenant:** a page's FAQ section publishes FAQPage structured data ([AGL-3574](https://linear.app/aglyn/issue/AGL-3574), [AGL-3572](https://linear.app/aglyn/issue/AGL-3572))
+- **outreach:** a sequence sends from several mailboxes in rotation ([AGL-3489](https://linear.app/aglyn/issue/AGL-3489))
+- **outreach:** connect and send from Microsoft 365 mailboxes ([AGL-3489](https://linear.app/aglyn/issue/AGL-3489))
+
+### Fixed
+
+- **ops:** the render monitor names a host's state by a key function ([AGL-3580](https://linear.app/aglyn/issue/AGL-3580))
+- **crm:** the deliverability check at capture loads after() through import() ([AGL-3328](https://linear.app/aglyn/issue/AGL-3328))
+- **tenant:** markdown render keeps accordion questions above their answers ([AGL-3575](https://linear.app/aglyn/issue/AGL-3575))
+- **media:** a missing width serves the next variant up; regeneration loads after() ([AGL-3486](https://linear.app/aglyn/issue/AGL-3486))
+- **outreach:** the Microsoft disconnect notice names no product ([AGL-3489](https://linear.app/aglyn/issue/AGL-3489))
+- **tenant:** llms.txt lists indexable pages in site order, each paragraph once ([AGL-3576](https://linear.app/aglyn/issue/AGL-3576))
+- **crm:** the Lead source direction filter works for every org ([AGL-3577](https://linear.app/aglyn/issue/AGL-3577))
+- **signup:** a phone Google sign-up lands before the auth layout moves it ([AGL-3578](https://linear.app/aglyn/issue/AGL-3578))
+- **ops:** status checks watch real pages, and a monitor blocked by bot protection reports itself instead of an outage ([AGL-3580](https://linear.app/aglyn/issue/AGL-3580))
+- **ops:** a new scheduled job no longer reads as failing on its first deploy, and a daily job refused during a functions deploy is retried ([AGL-3580](https://linear.app/aglyn/issue/AGL-3580))
+
+<details>
+<summary>Also in this release: 1 test, 1 build</summary>
+
+- **transfer-ui:** @aglyn/aglyn-transfer-ui is a public package ([AGL-3579](https://linear.app/aglyn/issue/AGL-3579))
+- **outreach:** the mailbox erasers report unsupported revocations too ([AGL-3489](https://linear.app/aglyn/issue/AGL-3489))
+
+</details>
+
 ## v1.0.0-beta.224 — 2026-10-05
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/b89f8dd0e...v1.0.0-beta.224)

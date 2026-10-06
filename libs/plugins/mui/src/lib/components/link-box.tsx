@@ -161,6 +161,10 @@ export const schema: Aglyn.ComponentSchema<LinkBoxProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Link Container',
+  // Static: may sit in a subtree that keeps its server HTML (AGL-3581).
+  // Not `childrenInRoot`: the anchor it renders through adds markup of
+  // its own beside its children.
+  flags: { lazyHydration: Aglyn.FEATURE_FLAG.ENABLED },
   description:
     'Container that is itself a link — put an icon, a heading and a ' +
     'description inside and the whole box becomes one target.',

@@ -29,6 +29,7 @@ import {
   crmContactFacetKeys,
   crmPicklistDefinition,
   crmPicklistKey,
+  crmPicklistValueByLabel,
   effectiveCrmPicklist,
   newResourceScopeFields,
   normalizeCrmPicklist,
@@ -38,10 +39,13 @@ import {
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
 import {
+  addPicklistValue,
   deletePicklistValue,
+  picklistKeepsGroups,
   type PicklistMove,
   type PicklistValuesResponse,
   renamePicklistValue,
+  setPicklistValueGroup,
 } from '../model/picklist-values'
 import { orgHostIds, readCrmRouteScope } from './org-caller'
 import { authorizeCrmWriter } from './task-routes'
@@ -169,6 +173,53 @@ async function replaceInArrayEverywhere(
   }
 }
 
+/** The group a label is filed under in `picklist` — `null` for none, or a label it does not hold. */
+export function picklistGroupOf(picklist: CrmPicklist, label: string | null): string | null {
+  return (label === null ? null : crmPicklistValueByLabel(picklist, label)?.group) ?? null
+}
+
+/**
+ * Rewrite a target's GROUP field (AGL-3577) — a lead's
+ * `leadSourceDirection` — on every record holding `label` in any spelling
+ * (by its `keyField`) whose group is not `group` already. Answers how many
+ * were written. The field is derived, like the list keys a restamp writes,
+ * so `updatedAt` is left alone.
+ *
+ * Paged by document id rather than re-run: a record already holding the
+ * group stays in the query's answer.
+ */
+export async function regroupEverywhere(
+  firestore: FirebaseFirestore.Firestore,
+  records: FirebaseFirestore.CollectionReference,
+  target: CrmPicklistTarget,
+  label: string,
+  group: string | null,
+): Promise<number> {
+  const key = crmPicklistKey(label)
+  if (!key || !target.keyField || !target.groupField) return 0
+  const query = records
+    .where(target.keyField, '==', key)
+    .orderBy(FieldPath.documentId())
+    .limit(BATCH_SIZE)
+  let written = 0
+  let after: FirebaseFirestore.QueryDocumentSnapshot | null = null
+  for (;;) {
+    const page: FirebaseFirestore.QuerySnapshot = await (after ? query.startAfter(after) : query).get()
+    if (page.empty) return written
+    const batch = firestore.batch()
+    let changed = 0
+    for (const snapshot of page.docs) {
+      if (snapshot.get(target.groupField) === group) continue
+      batch.update(snapshot.ref, { [target.groupField]: group })
+      changed += 1
+    }
+    if (changed) await batch.commit()
+    written += changed
+    if (page.size < BATCH_SIZE) return written
+    after = page.docs[page.docs.length - 1] ?? null
+  }
+}
+
 /** A contact as it reads once one holder's facet field holds `to` (or nothing, for `null`). */
 function withFacetValue(
   data: Record<string, unknown>,
@@ -191,8 +242,20 @@ function withFacetValue(
  * picklist fixed to the lead source.
  *
  * Body: `{ hostId | orgId, picklistId, action: 'rename', valueId, label }` or
- * `{ hostId | orgId, picklistId, action: 'delete', valueId, replaceWith: label | null }`.
+ * `{ hostId | orgId, picklistId, action: 'delete', valueId, replaceWith: label | null }`,
+ * and, on a list whose records keep the value's group (`picklistKeepsGroups`,
+ * AGL-3577), `{ …, action: 'group', valueId, group: id | null }` or
+ * `{ …, action: 'add', label, group?, meaning? }`.
  * `picklistId` is one of `CRM_PICKLIST_DEFINITIONS`; anything else is refused.
+ *
+ * ## A value's group on its records
+ *
+ * A lead keeps its lead source's group as `leadSourceDirection` — the field
+ * the Leads list's direction filter asks. Any move can change the group a
+ * label has: a regroup, an add of a value records already hold, a rename
+ * onto such a label, a delete. So after the move, every target naming a
+ * `groupField` has it rewritten on the records holding the old label and
+ * the new one, from the list as it now stands.
  *
  * Records store the value's LABEL (see the picklist block in `crm.ts`), so
  * both moves change records as well as the list: every record the
@@ -243,10 +306,19 @@ function picklistValuesHandler(fixed?: CrmPicklistId): PluginApiHandler {
     const picklistId = definition.id as CrmPicklistId
     const action = body['action']
     const valueId = String(body['valueId'] ?? '').trim().slice(0, 64)
-    if ((action !== 'rename' && action !== 'delete') || !valueId) {
+    const regrouping = action === 'group' || action === 'add'
+    if (regrouping && !picklistKeepsGroups(definition)) {
+      res.status(400).json({ error: `The ${definition.plural} are added and grouped on the Fields page.` })
+      return
+    }
+    if (
+      !(action === 'rename' || action === 'delete' || regrouping) ||
+      (action === 'add' ? !String(body['label'] ?? '').trim() : !valueId)
+    ) {
       res.status(400).json({ error: 'Name a value, and whether to rename or delete it.' })
       return
     }
+    const asGroup = (raw: unknown) => (typeof raw === 'string' && raw ? raw : null)
     const replaceWith =
       body['replaceWith'] === null || body['replaceWith'] === undefined
         ? null
@@ -269,12 +341,22 @@ function picklistValuesHandler(fixed?: CrmPicklistId): PluginApiHandler {
       const moved = await firestore.runTransaction(async (transaction) => {
         const snapshot = await transaction.get(listRef)
         const before: CrmPicklist = effectiveCrmPicklist(picklistId, snapshot.data())
-        const value = before.values.find((entry) => entry.id === valueId)
-        if (!value) return { ok: false as const, error: 'That value is no longer in the list.' }
+        const value =
+          action === 'add' ? null : before.values.find((entry) => entry.id === valueId)
+        if (action !== 'add' && !value) {
+          return { ok: false as const, error: 'That value is no longer in the list.' }
+        }
         const move: PicklistMove =
-          action === 'rename'
-            ? renamePicklistValue(before, valueId, String(body['label'] ?? ''))
-            : deletePicklistValue(definition, before, valueId, replaceWith)
+          action === 'add'
+            ? addPicklistValue(definition, before, String(body['label'] ?? ''), {
+                group: asGroup(body['group']),
+                meaning: asGroup(body['meaning']),
+              })
+            : action === 'group'
+              ? { ok: true, picklist: setPicklistValueGroup(definition, before, valueId, asGroup(body['group'])) }
+              : action === 'rename'
+                ? renamePicklistValue(before, valueId, String(body['label'] ?? ''))
+                : deletePicklistValue(definition, before, valueId, replaceWith)
         if (move.ok === false) return move
         const created = normalizeCrmPicklist(snapshot.data()) === null
         transaction.set(
@@ -295,15 +377,22 @@ function picklistValuesHandler(fixed?: CrmPicklistId): PluginApiHandler {
           },
           { merge: true },
         )
+        // A regroup and an add move no label: `from` and `to` are the value's own.
+        const own =
+          action === 'add'
+            ? (move.picklist.values[move.picklist.values.length - 1]?.label ?? '')
+            : (value?.label ?? '')
         const to =
           action === 'rename'
             ? (move.picklist.values.find((entry) => entry.id === valueId)?.label ?? null)
-            : replaceWith === null
-              ? null
-              : (move.picklist.values.find(
-                  (entry) => entry.label.toLowerCase() === replaceWith.trim().toLowerCase(),
-                )?.label ?? null)
-        return { ok: true as const, from: value.label, to }
+            : regrouping
+              ? own
+              : replaceWith === null
+                ? null
+                : (move.picklist.values.find(
+                    (entry) => entry.label.toLowerCase() === replaceWith.trim().toLowerCase(),
+                  )?.label ?? null)
+        return { ok: true as const, from: regrouping ? own : (value?.label ?? ''), to, after: move.picklist }
       })
       if (moved.ok === false) {
         res.status(400).json({ error: moved.error })
@@ -322,6 +411,45 @@ function picklistValuesHandler(fixed?: CrmPicklistId): PluginApiHandler {
       let groupIds: string[] | null = null
       for (const target of definition.targets) {
         updated[target.object] ??= 0
+        if (target.groupField && !target.facet && !target.arrayKey) {
+          // The group each label now has, on every record holding either (AGL-3577).
+          const labels = new Map<string, string>()
+          for (const label of [moved.from, moved.to]) {
+            const key = label === null ? null : crmPicklistKey(label)
+            if (key && label !== null) labels.set(key, label)
+          }
+          const regroup = async () => {
+            for (const label of labels.values()) {
+              updated[target.object] =
+                (updated[target.object] ?? 0) +
+                (await regroupEverywhere(
+                  firestore,
+                  orgRef.collection(TARGET_COLLECTIONS[target.object]),
+                  target,
+                  label,
+                  picklistGroupOf(moved.after, label),
+                ))
+            }
+          }
+          if (moved.from === moved.to) {
+            await regroup()
+            continue
+          }
+          updated[target.object] =
+            (updated[target.object] ?? 0) +
+            (await replaceEverywhere(
+              firestore,
+              orgRef.collection(TARGET_COLLECTIONS[target.object]).where(target.field, '==', moved.from),
+              target.field,
+              moved.to,
+              {
+                ...(target.keyField ? { [target.keyField]: crmPicklistKey(moved.to) } : {}),
+                [target.groupField]: picklistGroupOf(moved.after, moved.to),
+              },
+            ))
+          await regroup()
+          continue
+        }
         if (moved.from === moved.to) continue
         const records = orgRef.collection(TARGET_COLLECTIONS[target.object])
         if (target.arrayKey && target.keyField) {

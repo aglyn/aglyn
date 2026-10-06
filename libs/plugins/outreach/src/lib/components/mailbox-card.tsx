@@ -68,9 +68,9 @@ export interface MailboxCardProps {
   /** The viewer may change, pause and disconnect it: its member, or an org owner or admin. */
   canManage: boolean
   api: OutreachMailboxApi
-  /** Starts a new Google connect, for a mailbox that needs reconnecting. */
+  /** Starts a new connect with the mailbox's provider, for a mailbox that needs reconnecting. */
   onReconnect(): void
-  /** True while that connect is on its way to Google. */
+  /** True while that connect is on its way to the provider. */
   reconnecting?: boolean
   /** The clock the health window and today's limit are read on. */
   nowMs?: number
@@ -160,18 +160,20 @@ const draftOf = (mailbox: OutreachMailbox): Draft => ({
  * Every control is offered only where the route will allow it: the settings
  * form and pause and disconnect to the member who connected the mailbox or an
  * org owner or admin, and the test and the reconnect to its member alone,
- * because both act in that member's own Google account.
+ * because both act in that member's own Google or Microsoft account.
  */
 export function MailboxCard(props: MailboxCardProps) {
   const { mailbox, isMine, canManage, api, onReconnect, reconnecting = false, nowMs = Date.now() } = props
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  const microsoft = mailbox.provider === 'microsoft'
+  const providerName = microsoft ? 'Microsoft' : 'Google'
   const [draft, setDraft] = useState<Draft>(() => draftOf(mailbox))
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [busy, setBusy] = useState<'status' | 'test' | 'disconnect' | null>(null)
   // Where a test goes when not to the member themself (AGL-3228): a test to
-  // one's own address never leaves Google and shows no authentication result.
+  // one's own address never leaves the provider and shows no authentication result.
   const [testAddress, setTestAddress] = useState('')
 
   /*
@@ -302,7 +304,9 @@ export function MailboxCard(props: MailboxCardProps) {
     const confirmed = await confirm({
       title: 'Disconnect this mailbox?',
       description:
-        'Disconnecting deletes the access stored for this mailbox and asks Google to revoke it. ' +
+        (microsoft
+          ? 'Disconnecting deletes the access stored for this mailbox. '
+          : 'Disconnecting deletes the access stored for this mailbox and asks Google to revoke it. ') +
         'Nothing is sent from it again unless it is connected again.',
       confirmationText: MAILBOX_ACTION_LABELS.disconnect,
       confirmationButtonProps: { color: 'error' },
@@ -318,6 +322,11 @@ export function MailboxCard(props: MailboxCardProps) {
           'Mailbox disconnected, but Google could not confirm the access was revoked. ' +
             'Remove it from the Google Account’s third-party connections to be sure.',
           { variant: 'warning', persist: true },
+        )
+      } else if (revocation === 'unsupported') {
+        enqueueSnackbar(
+          'Mailbox disconnected. To end the access at Microsoft too, remove the app at myapps.microsoft.com.',
+          { variant: 'success' },
         )
       } else if (revocation === 'kept-for-other-mailbox') {
         enqueueSnackbar(
@@ -370,7 +379,7 @@ export function MailboxCard(props: MailboxCardProps) {
             {`${
               mailbox.status === 'disconnected'
                 ? 'This mailbox was disconnected.'
-                : 'Google stopped accepting this mailbox’s connection.'
+                : `${providerName} stopped accepting this mailbox’s connection.`
             } ${
               isMine
                 ? 'Nothing sends from it until you connect it again.'
@@ -426,7 +435,7 @@ export function MailboxCard(props: MailboxCardProps) {
           </Stack>
         ) : readiness ? (
           <Typography variant="caption" color="text.secondary">
-            {`Google authenticates mail from ${readiness.sendAs.slice(readiness.sendAs.lastIndexOf('@') + 1)} ` +
+            {`${providerName} authenticates mail from ${readiness.sendAs.slice(readiness.sendAs.lastIndexOf('@') + 1)} ` +
               'itself, so there are no records to publish for this address.'}
           </Typography>
         ) : null}

@@ -65,8 +65,12 @@ export const OUTREACH_DEFAULT_WINDOW: OutreachSendWindow = {
   endMinute: 17 * 60,
 }
 
-/** How many mailboxes one member may connect in one organization. */
-export const OUTREACH_MAX_MAILBOXES_PER_MEMBER = 5
+/**
+ * How many mailboxes one member may connect in one organization: room for a
+ * rep's own mailbox beside a set of cold-email inboxes a sequence sends from
+ * in rotation (AGL-3489).
+ */
+export const OUTREACH_MAX_MAILBOXES_PER_MEMBER = 10
 
 /** The longest From name accepted. */
 export const OUTREACH_DISPLAY_NAME_MAX = 100

@@ -109,16 +109,39 @@ const PROBE_TTL_MS = HEALTH_PROBE_TTL_MS
 async function readWatchStart(
   db: FirebaseFirestore.Firestore,
   now: number,
-): Promise<number> {
+  jobIds: readonly string[],
+): Promise<{ startedAtMs: number; jobFirstSeenAtMs: Record<string, number> }> {
   const ref = db.collection(CRON_BEAT_COLLECTION).doc(CRON_BEAT_WATCH_DOC)
   const snapshot = await ref.get()
   const existing = snapshot.get('startedAtMs')
-  if (typeof existing === 'number' && Number.isFinite(existing)) return existing
-  await ref.set(
-    { startedAtMs: now, startedAt: new Date(now).toISOString() },
-    { merge: true },
-  )
-  return now
+  const startedAtMs =
+    typeof existing === 'number' && Number.isFinite(existing) ? existing : now
+  // When each job was first judged here (AGL-3580). A job added after the
+  // window opened gets its own floor the first time this sees it, so its
+  // first deploy is not graded against fire times from before it existed.
+  const recorded = snapshot.get('jobFirstSeenAtMs')
+  const jobFirstSeenAtMs: Record<string, number> = {}
+  for (const [id, value] of Object.entries(
+    recorded && typeof recorded === 'object' ? (recorded as Record<string, unknown>) : {},
+  )) {
+    if (typeof value === 'number' && Number.isFinite(value)) jobFirstSeenAtMs[id] = value
+  }
+  const unseen = jobIds.filter((id) => !(id in jobFirstSeenAtMs))
+  for (const id of unseen) jobFirstSeenAtMs[id] = now
+  if (startedAtMs === now || unseen.length) {
+    await ref.set(
+      {
+        ...(startedAtMs === now
+          ? { startedAtMs: now, startedAt: new Date(now).toISOString() }
+          : {}),
+        ...(unseen.length
+          ? { jobFirstSeenAtMs: Object.fromEntries(unseen.map((id) => [id, now])) }
+          : {}),
+      },
+      { merge: true },
+    )
+  }
+  return { startedAtMs, jobFirstSeenAtMs }
 }
 
 /**
@@ -345,14 +368,25 @@ const cronsProbe = memoizeWithTtl<Record<string, CronJobCheck>>(
       void firebaseAdmin
       const db = getFirestore(getApp())
       const now = Date.now()
-      const watchStartedAtMs = await readWatchStart(db, now)
+      const watch = await readWatchStart(
+        db,
+        now,
+        jobs.map((job) => job.id),
+      )
       const summary = await db
         .collection(CRON_BEAT_COLLECTION)
         .doc(CRON_BEAT_SUMMARY_DOC)
         .get()
       let beats = cronBeatsFromSummary(summary.get('beats'))
       const judge = () =>
-        cronJobsHealth(beats, watchStartedAtMs, Date.now() - startedAt, now, jobs)
+        cronJobsHealth(
+          beats,
+          watch.startedAtMs,
+          Date.now() - startedAt,
+          now,
+          jobs,
+          watch.jobFirstSeenAtMs,
+        )
       let checks = judge()
       const suspects = Object.entries(checks)
         .filter(([, check]) => !check.ok)

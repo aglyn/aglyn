@@ -20,6 +20,8 @@ import {
   OUTREACH_GMAIL_HOST,
   OUTREACH_GOOGLE_CONSENT_HOST,
   OUTREACH_GOOGLE_TOKEN_USE,
+  OUTREACH_GRAPH_HOST,
+  OUTREACH_MICROSOFT_LOGIN_HOST,
   outreachSubprocessors,
 } from './subprocessors'
 
@@ -33,12 +35,21 @@ import {
  */
 
 describe('outreachSubprocessors (AGL-2978)', () => {
-  it('declares no recipient of its own, two hosts and one use', () => {
+  it('declares no recipient of its own, four hosts and one use', () => {
     expect(outreachSubprocessors()).toStrictEqual({
       subprocessors: [],
-      hosts: [OUTREACH_GMAIL_HOST, OUTREACH_GOOGLE_CONSENT_HOST],
+      hosts: [OUTREACH_GMAIL_HOST, OUTREACH_GOOGLE_CONSENT_HOST, OUTREACH_GRAPH_HOST, OUTREACH_MICROSOFT_LOGIN_HOST],
       uses: [OUTREACH_GOOGLE_TOKEN_USE],
     })
+  })
+
+  it('classifies Microsoft Graph and Microsoft’s sign-in as the rep’s own provider (AGL-3489)', () => {
+    expect(OUTREACH_GRAPH_HOST.host).toBe('graph.microsoft.com')
+    expect(OUTREACH_MICROSOFT_LOGIN_HOST.host).toBe('login.microsoftonline.com')
+    for (const host of [OUTREACH_GRAPH_HOST, OUTREACH_MICROSOFT_LOGIN_HOST]) {
+      expect(host.disposition).toBe('not-a-subprocessor')
+      expect(host.reason).toMatch(/^Customer-chosen destination\. /)
+    }
   })
 
   it('classifies the Gmail API as a customer-chosen destination', () => {

@@ -78,7 +78,7 @@ lists.
 | -- | -- | -- | -- | -- | -- |
 | `aglyn` | `@aglyn/aglyn` | `libs/aglyn` | `scope:core` `type:data` `type:feature` | yes | `.`, `./server`, `./*` |
 | `aglyn-markdown-editor` | `@aglyn/aglyn-markdown-editor` | `libs/aglyn-markdown-editor` | `scope:core` `type:ui` | with the designer UI | `.`, `./*` |
-| `aglyn-transfer-ui` | `@aglyn/aglyn-transfer-ui` | `libs/aglyn-transfer-ui` | `scope:core` `type:ui` | yes — the import wizard and export dialog any plugin's surface renders | `.`, `./*` |
+| `aglyn-transfer-ui` | `@aglyn/aglyn-transfer-ui` | `libs/aglyn-transfer-ui` | `scope:core` `type:ui` | yes — the import wizard and export dialog; the console renders them, and a plugin opens them through `useTransferLauncher()` in `@aglyn/aglyn`, never by importing this | `.`, `./*` |
 | `aglyn-node-renderer` | `@aglyn/aglyn-node-renderer` | `libs/aglyn-node-renderer` | `scope:renderer` `type:feature` | yes | `.`, `./*` |
 | `cli` | `@aglyn/cli` | `libs/cli` | `scope:cli` `type:util` | yes — already on the registry at its own version | `.` |
 

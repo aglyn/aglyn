@@ -58,7 +58,7 @@ import { readLeadSourcePicklist } from './lead-source-picklist'
  *
  * Each stamp is a transaction that reads the field and writes only into an
  * empty one, so a rep's pick made a moment earlier is never overwritten;
- * the list fields follow (`leadSourceKey`, `facetKeys`).
+ * the list fields follow (`leadSourceKey`, `leadSourceDirection`, `facetKeys`).
  *=========================================*/
 
 type Firestore = FirebaseFirestore.Firestore
@@ -84,7 +84,8 @@ export async function stampCrmRecordOrigin(
     orgId = resolved.orgId
     org = resolved.org as Record<string, unknown>
   }
-  const label = crmLeadSourceForOrigin(await readLeadSourcePicklist(firestore, orgId), input.origin)
+  const leadSources = await readLeadSourcePicklist(firestore, orgId)
+  const label = crmLeadSourceForOrigin(leadSources, input.origin)
   if (!label) return { records: 0 }
   const orgRef = firestore.collection('orgs').doc(orgId)
   let records = 0
@@ -107,7 +108,8 @@ export async function stampCrmRecordOrigin(
   })
   if (leadStamped) {
     records += 1
-    await restampCrmListFieldsAt(leadRef, 'leads')
+    // Its direction is the label's group in the list just read (AGL-3577).
+    await restampCrmListFieldsAt(leadRef, 'leads', { leadSources })
   }
 
   /* THE CONTACT, on the site's own facet — present only once the site holds the person. */

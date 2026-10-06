@@ -43,6 +43,10 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import SignUp from '../app/(auth)/signup/page'
+import {
+  isSignUpLandingHeld,
+  releaseSignUpLanding,
+} from '../utils/sign-up-landing-hold'
 
 const mockPopup = jest.fn()
 const mockRedirect = jest.fn()
@@ -60,6 +64,10 @@ let mockPlanIntent: { plan: string; interval: string } | null = null
 let redirectOnCredential:
   | ((credential: unknown) => void | Promise<unknown>)
   | undefined
+/** The redirect hook's settled callback (AGL-3578). */
+let redirectOnSettled: (() => void) | undefined
+/** Whether a sign-up redirect is coming back to this page (AGL-3578). */
+let mockPendingConsent = false
 
 const googleUser = (over: Record<string, unknown> = {}) => ({
   user: {
@@ -218,13 +226,17 @@ jest.mock('../hooks/use-google-redirect-result', () => ({
     _onError: unknown,
     _enabled: unknown,
     onCredential?: (credential: unknown) => void | Promise<unknown>,
+    _campaign?: unknown,
+    onSettled?: () => void,
   ) => {
     redirectOnCredential = onCredential
+    redirectOnSettled = onSettled
   },
 }))
 jest.mock('../utils/legal-consent', () => ({
   clearLegalConsent: jest.fn(),
   consumeLegalConsent: jest.fn(() => true),
+  hasPendingLegalConsent: () => mockPendingConsent,
   isNewAccount: () => mockIsNewAccount,
   markLegalConsent: jest.fn(),
   postLegalAcceptance: jest.fn(async () => undefined),
@@ -301,6 +313,10 @@ beforeEach(() => {
   mockIsNewAccount = true
   mockPlanIntent = null
   redirectOnCredential = undefined
+  redirectOnSettled = undefined
+  mockPendingConsent = false
+  releaseSignUpLanding('signup:redirect')
+  releaseSignUpLanding('signup:door')
   mockPopup.mockResolvedValue(googleUser())
   // The password door's account is ALWAYS unverified at this moment — the
   // account was made seconds ago and the mail has not been opened.
@@ -440,5 +456,47 @@ describe('AGL-1942 · a Google sign-up gets a ready workspace', () => {
       name: 'Ada Lovelace',
       nameWasTyped: false,
     })
+  })
+})
+
+describe('AGL-3578 · a landing sign-up holds the auth layout', () => {
+  it('holds from the moment a Google redirect comes back to the page', () => {
+    mockPendingConsent = true
+    render(<SignUp />)
+    // Red before the fix: nothing held, so the layout pushed the freshly
+    // signed-in visitor to `/` and a phone reloaded the handler away.
+    expect(isSignUpLandingHeld()).toBe(true)
+  })
+
+  it('keeps holding until the redirect round trip has settled', async () => {
+    mockPendingConsent = true
+    render(<SignUp />)
+    await act(async () => {
+      await redirectOnCredential?.(googleUser())
+      await settle()
+    })
+    expect(orgCreateBodies()).toEqual([{ name: 'Ada Lovelace' }])
+    expect(isSignUpLandingHeld()).toBe(true)
+    act(() => redirectOnSettled?.())
+    expect(isSignUpLandingHeld()).toBe(false)
+  })
+
+  it('holds nothing on an ordinary visit to the sign-up page', () => {
+    render(<SignUp />)
+    expect(isSignUpLandingHeld()).toBe(false)
+  })
+
+  it('holds while a door clicked on the page lands, then lets go', async () => {
+    let finish: (value: unknown) => void = () => undefined
+    mockPopup.mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    render(<SignUp />)
+    await clickGoogle()
+    expect(isSignUpLandingHeld()).toBe(true)
+    await act(async () => {
+      finish(googleUser())
+      await settle()
+    })
+    expect(orgCreateBodies()).toEqual([{ name: 'Ada Lovelace' }])
+    expect(isSignUpLandingHeld()).toBe(false)
   })
 })

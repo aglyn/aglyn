@@ -253,6 +253,7 @@ describeEmulated('a mailbox connect against Firestore (AGL-2978)', () => {
       revoked: null,
       alreadyInvalid: null,
       kept: null,
+      unsupported: null,
       failed: null,
     })
     expect(revokedTokens).toEqual([])
@@ -263,6 +264,7 @@ describeEmulated('a mailbox connect against Firestore (AGL-2978)', () => {
       revoked: 1,
       alreadyInvalid: 0,
       kept: 0,
+      unsupported: 0,
       failed: 0,
     })
     expect(revokedTokens).toEqual([REFRESH_TOKEN])

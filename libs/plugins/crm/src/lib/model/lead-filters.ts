@@ -21,6 +21,7 @@ import {
   CRM_LEAD_STATUS_LABELS,
   CRM_LEAD_OPEN_STATUSES,
   CRM_LEAD_SCOPED_CAMPAIGNS_FIELD,
+  CRM_LEAD_SOURCE_DIRECTION_FIELD,
   CRM_LEAD_STATUSES,
   type EmailStateStatus,
   type CrmLeadStatus,
@@ -32,11 +33,7 @@ import type { CrmViewFilterClause } from '@aglyn/aglyn'
 import { SCOPED_SEARCH_JOIN } from '@aglyn/aglyn/app-utils/name-search'
 import type { ListFilterField, ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { type ListGridFilterCodec, listSelectCodec } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import {
-  LIST_QUERY_DISJUNCTIONS,
-  type ListQueryDeclaration,
-  type ListQuerySort,
-} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import type { ListQueryDeclaration, ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
   CRM_LIST_SEARCH,
   type CrmClauseAsked,
@@ -48,8 +45,6 @@ import {
   isLeadSourceDirection,
   LEAD_SOURCE_DIRECTION_LABELS,
   LEAD_SOURCE_DIRECTIONS,
-  leadSourceLabelsOfDirection,
-  STANDARD_LEAD_SOURCES,
 } from './lead-source-direction'
 
 /**
@@ -295,12 +290,11 @@ export const LEAD_FILTER_CODECS: Readonly<Record<string, ListGridFilterCodec>> =
  *                emailed" is every verdict but `ok`
  *   leadSource   `leadSourceKey`, the label as the picklist compares it, or
  *                `null` for none
- *   leadSourceDirection   `leadSourceKey in [...]` over the key of every
- *                value the org's list files under that group, read when
- *                the clause is asked — a direction is never stored on a
- *                lead, so regrouping a value moves its leads with it. One
- *                `in` holds thirty keys, and a group holding more is
- *                refused by name rather than half asked
+ *   leadSourceDirection   `leadSourceDirection` (AGL-3577), the group of
+ *                the lead's value in the org's list, stamped by the writers
+ *                from that list and rewritten on every lead holding a value
+ *                the list regroups — so one equality asks a group however
+ *                many values it holds
  *   ownerUid     as stored
  *   industry, rating   `industryKey`, `ratingKey` (AGL-3513), each label
  *                as the picklist compares it
@@ -339,6 +333,8 @@ export const LEAD_QUERY_FIELDS: readonly ListFilterField[] = [
     tokensPath: 'campaignIds',
     operators: ['contains'],
   },
+  // The lead source's group (AGL-3577), as stamped on the lead.
+  crmSelectField(CRM_LEAD_SOURCE_DIRECTION_FIELD),
   // Industry and Rating (AGL-3513), by the key each writer stores.
   crmSelectField('industryKey'),
   crmSelectField('ratingKey'),
@@ -388,11 +384,6 @@ export interface LeadQueryReader {
   scopeTokens: readonly string[] | null
   /** Whether the reader may run a query without the scope clause (`useCrmFoldsScope`). */
   foldsScope: boolean
-  /**
-   * The org's Lead source list, which a direction is expanded through;
-   * the standard values alone while it has not been read.
-   */
-  leadSources?: CrmPicklist
 }
 
 const ORG_READER: LeadQueryReader = { scopeTokens: null, foldsScope: true }
@@ -438,23 +429,10 @@ export function leadQueryClause(
       return crmAnyOf('leadSourceKey', keys)
     }
     case 'leadSourceDirection': {
-      const picklist = reader.leadSources ?? STANDARD_LEAD_SOURCES
-      const keys: string[] = []
       for (const value of values) {
         if (!isLeadSourceDirection(value)) return { refused: `${value} is not a lead source direction` }
-        for (const label of leadSourceLabelsOfDirection(picklist, value)) {
-          const key = crmLeadSourceKey(label)
-          if (key) keys.push(key)
-        }
       }
-      const unique = [...new Set(keys)]
-      if (!unique.length) return { refused: 'no lead source is in that direction yet' }
-      if (unique.length > LIST_QUERY_DISJUNCTIONS) {
-        return {
-          refused: `more than ${LIST_QUERY_DISJUNCTIONS} lead sources are in that direction — filter by Lead source instead`,
-        }
-      }
-      return crmAnyOf('leadSourceKey', unique)
+      return crmAnyOf(CRM_LEAD_SOURCE_DIRECTION_FIELD, values)
     }
     case 'ownerUid':
       return crmAnyOf('ownerUid', values)

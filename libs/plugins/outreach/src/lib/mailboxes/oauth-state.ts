@@ -19,6 +19,7 @@ import { consumeOnce } from '@aglyn/tenant-data-admin/server/consume-once'
 import { tokenSigningSecret } from '@aglyn/tenant-data-admin/server/media-signing'
 import { safeEqual } from '@aglyn/tenant-data-admin/server/safe-equal'
 import { createHash, createHmac, randomBytes } from 'node:crypto'
+import type { OutreachMailboxProvider } from '../model/outreach.types'
 
 /**
  * THE OAUTH `state` FOR A MAILBOX CONNECT (AGL-2978): signed, short-lived,
@@ -27,11 +28,14 @@ import { createHash, createHmac, randomBytes } from 'node:crypto'
  * ## Signed
  *
  * `os1.<payload>.<signature>`, the payload `{ o: orgId, u: uid, n: nonce,
- * e: expiry }` and the signature an HMAC under the shared, fail-closed
+ * e: expiry, p: provider }` and the signature an HMAC under the shared, fail-closed
  * `TOKEN_SIGNING_SECRET` with its own `outreach-oauth-state:` context — the
  * construction every other signed token here uses, and domain-separated from
  * all of them. Google hands the state back verbatim, so a state that verifies
- * names the org and the member it was minted for. The console dispatcher
+ * names the org and the member it was minted for, and the provider whose
+ * consent screen it went to (AGL-3489) — Google's and Microsoft's both
+ * return to the one callback, and the state is what tells them apart. A
+ * state with no provider is Google's. The console dispatcher
  * reads exactly that to ask its release gate about the right organization on
  * a redirect that carries no bearer token.
  *
@@ -80,6 +84,8 @@ export interface OutreachOAuthStateClaims {
   nonce: string
   /** Expiry, epoch ms. */
   exp: number
+  /** The provider the connect went to. */
+  provider: OutreachMailboxProvider
 }
 
 interface WireClaims {
@@ -87,6 +93,7 @@ interface WireClaims {
   u: string
   n: string
   e: number
+  p?: string
 }
 
 const hmac = (context: string, value: string): string =>
@@ -100,6 +107,8 @@ export function mintOutreachOAuthState(input: {
   orgId: string
   uid: string
   nowMs: number
+  /** Google when omitted. */
+  provider?: OutreachMailboxProvider
   /** Test seam; a random 32 bytes otherwise. */
   nonce?: string
 }): { state: string; claims: OutreachOAuthStateClaims } {
@@ -108,8 +117,15 @@ export function mintOutreachOAuthState(input: {
     uid: input.uid,
     nonce: input.nonce ?? randomBytes(32).toString('base64url'),
     exp: input.nowMs + OUTREACH_OAUTH_STATE_TTL_MS,
+    provider: input.provider ?? 'google',
   }
-  const wire: WireClaims = { o: claims.orgId, u: claims.uid, n: claims.nonce, e: claims.exp }
+  const wire: WireClaims = {
+    o: claims.orgId,
+    u: claims.uid,
+    n: claims.nonce,
+    e: claims.exp,
+    ...(claims.provider === 'google' ? {} : { p: claims.provider }),
+  }
   const payload = Buffer.from(JSON.stringify(wire), 'utf8').toString('base64url')
   return { state: `${STATE_VERSION}.${payload}.${hmac(STATE_CONTEXT, payload)}`, claims }
 }
@@ -146,7 +162,9 @@ export function readOutreachOAuthState(state: unknown, nowMs: number): OutreachO
     uid: typeof wire?.u === 'string' ? wire.u : '',
     nonce: typeof wire?.n === 'string' ? wire.n : '',
     exp: Number(wire?.e),
+    provider: wire?.p === 'microsoft' ? 'microsoft' : 'google',
   }
+  if (wire?.p !== undefined && wire.p !== 'microsoft') return invalid
   if (!claims.orgId || !claims.uid || !claims.nonce || !Number.isFinite(claims.exp)) return invalid
   if (claims.exp <= nowMs) return { ok: false, refusal: 'state-expired', claims }
   return { ok: true, claims }
@@ -157,7 +175,7 @@ export function outreachPkceVerifier(nonce: string): string {
   return hmac(PKCE_CONTEXT, nonce)
 }
 
-/** The OpenID `nonce` Google must echo in the ID token for this connect. */
+/** The OpenID `nonce` the provider must echo in the ID token for this connect. */
 export function outreachOidcNonce(nonce: string): string {
   return hmac(OIDC_NONCE_CONTEXT, nonce)
 }

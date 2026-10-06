@@ -158,6 +158,11 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     return { ok: true }
   },
 }))
+// A move that changes records goes to `crm/picklist-values` (AGL-3577).
+const mockAuthorizedFetch = jest.fn()
+jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
+  authorizedFetch: (...args: unknown[]) => mockAuthorizedFetch(...args),
+}))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
 }))
@@ -276,9 +281,10 @@ describe('the Fields section tabs (AGL-2661)', () => {
 /*
  * Lead source values (AGL-3298, AGL-3510) — Salesforce's Lead Source
  * picklist, kept on the Leads tab. The list is the org's (here the standard
- * values, which an org reads until it writes its own), and a list-only move
- * such as Add is one write of the whole document, stamped org-wide the
- * first time. A standard value is marked, grouped, and cannot be deleted.
+ * values, which an org reads until it writes its own). Its leads keep each
+ * value's group as their direction (AGL-3577), so an Add or a regroup goes
+ * to the route that rewrites them with the list. A standard value is
+ * marked, grouped, and cannot be deleted.
  */
 describe('the lead source values on the Leads tab (AGL-3298, AGL-3510)', () => {
   it('lists the standard values only on the Leads tab, each marked Standard and grouped', () => {
@@ -338,29 +344,36 @@ describe('the lead source values on the Leads tab (AGL-3298, AGL-3510)', () => {
     }
   })
 
-  it('adds a value last under the group picked, writing the whole list with the org-wide stamp', async () => {
-    render(<ContactsFieldsSection hostId="host-1" org={{}} />)
-    fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
-    // The Lead source card's, the first of the tab's two.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add value' })[0])
-    fireEvent.change(screen.getByRole('textbox', { name: 'Value' }), {
-      target: { value: 'Podcast' },
+  it('adds a value under the group picked through the route, since leads holding it take its group (AGL-3577)', async () => {
+    mockAuthorizedFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, updated: { lead: 2, contact: 0, company: 0, deal: 0 } }),
     })
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Group' }))
-    fireEvent.click(screen.getByRole('option', { name: 'Inbound' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
-    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
-    const [ref, written, options] = (setDoc as jest.Mock).mock.calls[0]
-    expect(ref.path).toBe('orgs/org-1/crmPicklists/leadSource')
-    expect(options).toEqual({ merge: true })
-    expect(written.values.at(-1)).toEqual({
-      id: 'podcast',
-      label: 'Podcast',
-      active: true,
-      group: 'inbound',
-    })
-    expect(written.values).toHaveLength(21)
-    expect(written).toMatchObject({ hostId: 'host-1', visibleTo: ['org'], defaultValueId: null })
+    try {
+      render(<ContactsFieldsSection hostId="host-1" org={{}} />)
+      fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
+      // The Lead source card's, the first of the tab's two.
+      fireEvent.click(screen.getAllByRole('button', { name: 'Add value' })[0])
+      fireEvent.change(screen.getByRole('textbox', { name: 'Value' }), {
+        target: { value: 'Podcast' },
+      })
+      fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Group' }))
+      fireEvent.click(screen.getByRole('option', { name: 'Inbound' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+      await waitFor(() => expect(mockAuthorizedFetch).toHaveBeenCalledTimes(1))
+      const [, url, init] = mockAuthorizedFetch.mock.calls[0]
+      expect(url).toBe('/api/crm/picklist-values')
+      expect(JSON.parse(init.body)).toMatchObject({
+        action: 'add',
+        label: 'Podcast',
+        group: 'inbound',
+        picklistId: 'leadSource',
+      })
+      // The route writes the list; the card writes nothing itself.
+      expect(setDoc).not.toHaveBeenCalled()
+    } finally {
+      mockAuthorizedFetch.mockReset()
+    }
   })
 
   it('refuses a value the list already holds, in any case, and writes nothing', () => {

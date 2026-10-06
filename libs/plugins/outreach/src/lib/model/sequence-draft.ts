@@ -36,6 +36,7 @@
  *==========================================*/
 
 import { normalizeContainerIds } from '@aglyn/aglyn/app-utils/container-membership'
+import { outreachSequenceMailboxIds } from '../engine/mailbox-rotation'
 import {
   readOutreachSequenceSettings,
   type OutreachValidationIssue,
@@ -59,6 +60,11 @@ export interface OutreachSequenceDraft {
   hostId: string
   /** `''` until a mailbox is chosen. */
   mailboxId: string
+  /**
+   * More mailboxes it sends from in rotation (AGL-3489): ids, the sequence's
+   * own left out, each once. Absent for none.
+   */
+  mailboxIds?: string[]
   steps: OutreachSequenceStep[]
   settings: OutreachSequenceSettings
   /**
@@ -125,6 +131,16 @@ function readStep(value: unknown): OutreachSequenceStep {
   return { id, kind: text(raw['kind']) } as unknown as OutreachSequenceStep
 }
 
+/** The rotation a draft names, or nothing when it names none. */
+function readRotation(raw: Record<string, unknown>): { mailboxIds?: string[] } {
+  const own = text(raw['mailboxId']).trim()
+  const ids = outreachSequenceMailboxIds({
+    mailboxId: own,
+    mailboxIds: Array.isArray(raw['mailboxIds']) ? raw['mailboxIds'].map((id) => text(id)) : [],
+  }).filter((id) => id !== own)
+  return ids.length ? { mailboxIds: ids } : {}
+}
+
 /**
  * A draft read out of anything — a request body, a stored sequence — with
  * every field the model does not name left behind and every value coerced
@@ -141,6 +157,7 @@ export function readOutreachSequenceDraft(input: unknown): OutreachSequenceDraft
     name: text(raw['name']).replace(/\s+/g, ' ').trim(),
     hostId: text(raw['hostId']).trim(),
     mailboxId: text(raw['mailboxId']).trim(),
+    ...readRotation(raw),
     steps: (Array.isArray(raw['steps']) ? raw['steps'] : []).slice(0, STEPS_READ_MAX).map(readStep),
     settings: {
       ...settings,
@@ -152,7 +169,7 @@ export function readOutreachSequenceDraft(input: unknown): OutreachSequenceDraft
 
 /** The draft a stored sequence opens as in the editor. */
 export function outreachSequenceDraftOf(
-  sequence: Pick<OutreachSequence, 'name' | 'hostId' | 'mailboxId' | 'steps' | 'settings' | 'campaignIds'>,
+  sequence: Pick<OutreachSequence, 'name' | 'hostId' | 'mailboxId' | 'mailboxIds' | 'steps' | 'settings' | 'campaignIds'>,
 ): OutreachSequenceDraft {
   return readOutreachSequenceDraft(sequence)
 }
@@ -340,7 +357,7 @@ const MAILBOX_ACTIVATION_ISSUES: Record<
   reconnect_required: {
     code: 'mailbox_not_sending',
     message:
-      "Google stopped accepting this sequence's mailbox. Reconnect it in Mailboxes, then activate the sequence.",
+      "The provider stopped accepting this sequence's mailbox. Reconnect it in Mailboxes, then activate the sequence.",
   },
 }
 

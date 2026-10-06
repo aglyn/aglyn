@@ -462,6 +462,7 @@ context about your content.
 | An author page | `ProfilePage` wrapping the author as a `Person` or `Organization` |
 | A product page | `Product` with its `Offer`, availability and — where you have reviews — an `AggregateRating` |
 | Any page more than one level deep | `BreadcrumbList` naming the trail to it |
+| A page with a FAQ section — a Section whose accessible label names it (`FAQ`, `Frequently asked questions`) — holding two or more question-and-answer pairs, as two-line items or accordions | `FAQPage` listing each question with its answer, the block AI search quotes and FAQ rich results read |
 
 Your **social links**, from Setup → Details → **Business details**, are published as
 the entity's `sameAs` — the property that tells a search engine your site, your
@@ -536,6 +537,12 @@ A short guide at `https://your-site/llms.txt` telling an agent what the site is 
 which addresses answer what — your collections that have published entries and their
 entry counts, search, the sitemap, the API description, and a contact route when you
 publish one.
+
+It also lists your pages in the order your site is built: the home page, then the
+top-level pages as your screens list arranges them, then the pages under each of those.
+A page you have hidden from search — unlisted, password-protected, members-only — is
+never listed, so the guide agrees with your `robots` meta about which pages exist. A very
+large site lists its first two hundred in that order and leaves the rest to the sitemap.
 
 You can lead it with your own words. **Setup → SEO → AI agents** has two boxes:
 

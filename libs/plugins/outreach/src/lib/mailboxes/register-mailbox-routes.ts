@@ -29,7 +29,7 @@ import {
 } from './mailbox-routes'
 import { readOutreachOAuthState } from './oauth-state'
 import { outreachOAuthRedirectUri } from './oauth-redirect'
-import { readOutreachGoogleConfig } from './outreach-config'
+import { readOutreachGoogleConfig, readOutreachMicrosoftConfig } from './outreach-config'
 
 /**
  * Wires the mailbox routes into the console dispatcher (AGL-2978), with the
@@ -60,6 +60,7 @@ export function defaultOutreachMailboxRouteDeps(): OutreachMailboxRouteDeps {
         (await import('@aglyn/tenant-data-admin/server/lockdown')).lockdownRefusal(options),
     },
     readConfig: readOutreachGoogleConfig,
+    readMicrosoftConfig: readOutreachMicrosoftConfig,
     stateSigningConfigured: () => {
       try {
         return Boolean(tokenSigningSecret())

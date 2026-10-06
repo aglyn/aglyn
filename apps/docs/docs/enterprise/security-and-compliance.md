@@ -33,6 +33,14 @@ your reviewers directly:
   authoritative one. The table on [Trust & security](/trust) is the engineering
   view of the same set and may lag it.
 
+**AI assistance in the CRM sends the whole record.** When a member asks AI to
+summarize a contact, company, deal or lead, or to draft an email from one, the
+AI provider receives the record as the CRM shows it — every standard and custom
+field, contact details and postal addresses included, with its notes, timeline
+and related records — and never a password, a sign-in token, an account
+identifier or a record's internal id. [CRM by AI](../ai/crm-by-ai.md#what-is-sent)
+lists it field by field.
+
 **One thing that list does not contain, stated here so a reviewer does not have
 to infer it.** It names the parties *Aglyn* engages. It does not name a host
 *your own authors* point at — a hotlinked image, or a `url(...)` in a

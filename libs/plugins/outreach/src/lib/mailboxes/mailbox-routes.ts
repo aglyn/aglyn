@@ -19,14 +19,20 @@ import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import {
   googleMailboxSenderExpectation,
+  microsoftMailboxSenderExpectation,
   type SenderReadiness,
   type SenderReadinessExpectation,
 } from '@aglyn/shared-util-email'
-import type {
-  OutreachMailbox,
-  OutreachMailboxStatus,
+import type { SecretBoxKeyring } from '@aglyn/shared-util-tools/secret-box'
+import {
+  OUTREACH_MAILBOX_PROVIDERS,
+  type OutreachMailbox,
+  type OutreachMailboxProvider,
+  type OutreachMailboxStatus,
+  type OutreachSendAsAddress,
 } from '../model/outreach.types'
 import { createGmailClient } from '../transport/gmail-client'
+import { createGraphClient, type GraphProfile } from '../transport/graph-client'
 import { GmailTransportError, googleFailureAnswer } from '../transport/gmail-errors'
 import {
   buildGoogleAuthorizationUrl,
@@ -38,6 +44,13 @@ import {
   type GoogleTokenResponse,
 } from '../transport/google-oauth'
 import type { TransportDeps } from '../transport/http'
+import {
+  buildMicrosoftAuthorizationUrl,
+  exchangeMicrosoftAuthorizationCode,
+  microsoftScopesInclude,
+  readMicrosoftIdToken,
+  type MicrosoftTokenResponse,
+} from '../transport/microsoft-oauth'
 import { Rfc5322MessageError } from '../transport/rfc5322'
 import { sendOutreachMessage } from '../transport/send-message'
 import {
@@ -55,7 +68,7 @@ import {
   outreachMailboxId,
   readMailboxCredentials,
   sealMailboxRefreshToken,
-  type OutreachGoogleMailboxCredentials,
+  type OutreachStoredMailboxCredentials,
 } from './mailbox-credentials'
 import { revokeMailboxGrant } from './mailbox-revoke'
 import {
@@ -86,15 +99,24 @@ import {
   outreachPkceVerifier,
   readOutreachOAuthState,
   recordOutreachOAuthState,
+  type OutreachOAuthStateClaims,
 } from './oauth-state'
 import {
-  OUTREACH_NOT_CONFIGURED_MESSAGE,
+  outreachNotConfiguredMessage,
+  readOutreachMicrosoftConfig,
   type OutreachGoogleConfigResult,
+  type OutreachMicrosoftConfigResult,
 } from './outreach-config'
 
 /**
- * THE MAILBOX ROUTES (AGL-2978): connect a rep's Google mailbox, keep its
- * settings, pause it, test it, and disconnect it.
+ * THE MAILBOX ROUTES (AGL-2978): connect a rep's Google or Microsoft 365
+ * mailbox, keep its settings, pause it, test it, and disconnect it.
+ *
+ * A connect names its provider (AGL-3489). Both providers' consent screens
+ * return to the one callback; the signed state says which one a connect went
+ * to, and `connect/complete` redeems the code with that provider. Everything
+ * after the provider has named the account — the mailbox limit, the mailbox
+ * and its sealed grant, the activity row — is the same for both.
  *
  * ## The connect, end to end
  *
@@ -147,6 +169,8 @@ export interface OutreachMailboxRouteDeps {
   firestore(): FirebaseFirestore.Firestore
   gate: OutreachGateDeps
   readConfig(): OutreachGoogleConfigResult
+  /** The Microsoft app registration (AGL-3489); the environment's when omitted. */
+  readMicrosoftConfig?(): OutreachMicrosoftConfigResult
   /** Whether the signing secret the OAuth state needs is configured. */
   stateSigningConfigured(): boolean
   redirectUri(requestUrl: string): string | null
@@ -208,8 +232,27 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
   return body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {}
 }
 
-function notConfigured(): Response {
-  return refusal(503, 'not-configured', OUTREACH_NOT_CONFIGURED_MESSAGE)
+function notConfigured(provider: OutreachMailboxProvider = 'google'): Response {
+  return refusal(503, 'not-configured', outreachNotConfiguredMessage(provider))
+}
+
+/** The provider a request names; Google when it names none, `null` for one that is not a provider. */
+function readProvider(value: unknown): OutreachMailboxProvider | null {
+  if (value === undefined || value === null || value === '') return 'google'
+  return (OUTREACH_MAILBOX_PROVIDERS as readonly unknown[]).includes(value) ? (value as OutreachMailboxProvider) : null
+}
+
+const providerName = (provider: OutreachMailboxProvider) => (provider === 'microsoft' ? 'Microsoft' : 'Google')
+
+/** What a provider's sign-in established about the account a connect is for. */
+interface ConnectedAccount {
+  provider: OutreachMailboxProvider
+  providerAccountId: string
+  email: string
+  sendAsOptions: OutreachSendAsAddress[]
+  scopes: string[]
+  refreshToken: string
+  keyring: SecretBoxKeyring
 }
 
 /** A mailbox document read defensively into the model shape. */
@@ -221,6 +264,11 @@ function readMailbox(id: string, data: Record<string, unknown> | undefined): Out
 const activityName = (mailbox: Pick<OutreachMailbox, 'email'>) => mailbox.email
 
 export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): OutreachMailboxRoutes {
+  const readMicrosoftConfig = () => (deps.readMicrosoftConfig ?? readOutreachMicrosoftConfig)()
+  /** Whether a provider's client and the token key are configured here. */
+  const providerConfigured = (provider: OutreachMailboxProvider) =>
+    provider === 'microsoft' ? readMicrosoftConfig().configured : deps.readConfig().configured
+
   /** The gate, then the mailbox the body names, then who may touch it. */
   async function loadManagedMailbox(
     request: Request,
@@ -255,11 +303,17 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     // should see the whole list once rather than one variable per redeploy.
     const missing: OutreachMailboxAvailabilityGate[] = []
     const config = deps.readConfig()
+    const microsoft = readMicrosoftConfig()
     if (config.configured === false) missing.push({ gate: 'google', missing: config.missing })
+    if (microsoft.configured === false) missing.push({ gate: 'microsoft', missing: microsoft.missing })
+    const shared = deps.stateSigningConfigured() && Boolean(deps.redirectUri(request.url))
     if (!deps.stateSigningConfigured()) missing.push({ gate: 'state' })
     if (!deps.redirectUri(request.url)) missing.push({ gate: 'redirect' })
+    const providers = { google: shared && config.configured, microsoft: shared && microsoft.configured }
     return ok({
-      configured: missing.length === 0,
+      // Google's readiness, as this field has always meant; `providers` says each.
+      configured: providers.google,
+      providers,
       canManageAll: gate.isOrgAdmin,
       ...(missing.length ? { missing } : {}),
     } satisfies OutreachMailboxAvailability)
@@ -270,10 +324,31 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     const body = await readBody(request)
     const gate = await outreachMemberGate(request, body['orgId'], deps.gate)
     if (gate instanceof Response) return gate
-    const config = deps.readConfig()
+    const provider = readProvider(body['provider'])
+    if (!provider) return refusal(400, 'invalid-request', 'Choose Google or Microsoft.')
     const redirectUri = deps.redirectUri(request.url)
-    if (!config.configured || !redirectUri || !deps.stateSigningConfigured()) return notConfigured()
+    if (!redirectUri || !deps.stateSigningConfigured()) return notConfigured(provider)
 
+    if (provider === 'microsoft') {
+      const microsoft = readMicrosoftConfig()
+      if (!microsoft.configured) return notConfigured(provider)
+      const nowMs = deps.now()
+      const { state, claims } = mintOutreachOAuthState({ orgId: gate.orgId, uid: gate.uid, nowMs, provider })
+      await recordOutreachOAuthState(deps.firestore(), { claims, redirectUri, nowMs })
+      const url = buildMicrosoftAuthorizationUrl({
+        clientId: microsoft.config.clientId,
+        tenant: microsoft.config.tenant,
+        redirectUri,
+        state,
+        codeChallenge: pkceChallenge(outreachPkceVerifier(claims.nonce)),
+        nonce: outreachOidcNonce(claims.nonce),
+        loginHint: typeof body['loginHint'] === 'string' ? normalizeContactEmail(body['loginHint']) : null,
+      })
+      return ok({ url })
+    }
+
+    const config = deps.readConfig()
+    if (!config.configured) return notConfigured()
     const nowMs = deps.now()
     const { state, claims } = mintOutreachOAuthState({ orgId: gate.orgId, uid: gate.uid, nowMs })
     await recordOutreachOAuthState(deps.firestore(), { claims, redirectUri, nowMs })
@@ -300,20 +375,22 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     if (read.ok === false && read.refusal === 'state-invalid') {
       return plain(400, 'This connection link is not valid. Return to the console and connect the mailbox again.')
     }
-    const claims = read.ok ? read.claims : (read as { claims: { orgId: string } }).claims
+    const claims = read.ok ? read.claims : (read as { claims: OutreachOAuthStateClaims }).claims
     const org = await deps.gate.readOrg(claims.orgId)
     const slug = typeof org?.['slug'] === 'string' ? org['slug'] : ''
     if (!slug) return plain(404, 'That organization could not be found.')
 
     let fragment: OutreachConnectReturn
-    const googleError = params.get('error')
+    const providerError = params.get('error')
     const code = params.get('code') ?? ''
-    if (googleError) {
-      fragment = { kind: 'error', reason: googleError === 'access_denied' ? 'access_denied' : 'google_error' }
+    // An error fragment names a Microsoft connect, so the page says whose screen it was.
+    const named = claims.provider === 'microsoft' ? { provider: claims.provider } : {}
+    if (providerError) {
+      fragment = { kind: 'error', reason: providerError === 'access_denied' ? 'access_denied' : 'google_error', ...named }
     } else if (!read.ok) {
-      fragment = { kind: 'error', reason: 'expired' }
+      fragment = { kind: 'error', reason: 'expired', ...named }
     } else if (!code || code.length > MAX_CODE_CHARS) {
-      fragment = { kind: 'error', reason: 'google_error' }
+      fragment = { kind: 'error', reason: 'google_error', ...named }
     } else {
       fragment = { kind: 'code', code, state: params.get('state') ?? '' }
     }
@@ -334,8 +411,8 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     const body = await readBody(request)
     const gate = await outreachMemberGate(request, body['orgId'], deps.gate)
     if (gate instanceof Response) return gate
-    const config = deps.readConfig()
-    if (!config.configured || !deps.stateSigningConfigured()) return notConfigured()
+    if (!deps.stateSigningConfigured()) return notConfigured()
+    if (!deps.readConfig().configured && !readMicrosoftConfig().configured) return notConfigured()
     const code = typeof body['code'] === 'string' ? body['code'] : ''
     if (!code || code.length > MAX_CODE_CHARS) return refusal(400, 'invalid-request', 'The connection did not return a code.')
 
@@ -357,6 +434,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
       return refusal(400, 'state-org-mismatch', 'This connection was started in another organization.')
     }
     if (!read.ok) return refusal(410, 'state-expired', 'This connection took too long. Connect the mailbox again.')
+    if (!providerConfigured(claims.provider)) return notConfigured(claims.provider)
 
     const consumed = await consumeOutreachOAuthState(firestore, { claims, nowMs })
     if (consumed.ok === false) {
@@ -372,6 +450,24 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
       )
     }
 
+    const account =
+      claims.provider === 'microsoft'
+        ? await redeemMicrosoftCode({ code, claims, redirectUri: consumed.redirectUri, nowMs })
+        : await redeemGoogleCode({ code, claims, redirectUri: consumed.redirectUri, nowMs })
+    if (account instanceof Response) return account
+    return storeConnectedMailbox({ gate, body, account, nowMs })
+  }
+
+  /** Google's half of a connect: the code redeemed, the grant and the account checked. */
+  async function redeemGoogleCode(input: {
+    code: string
+    claims: OutreachOAuthStateClaims
+    redirectUri: string
+    nowMs: number
+  }): Promise<Response | ConnectedAccount> {
+    const { code, claims, nowMs } = input
+    const config = deps.readConfig()
+    if (!config.configured) return notConfigured()
     let grant: GoogleTokenResponse
     try {
       grant = await exchangeGoogleAuthorizationCode(
@@ -379,7 +475,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
           clientId: config.config.clientId,
           clientSecret: config.config.clientSecret,
           code,
-          redirectUri: consumed.redirectUri,
+          redirectUri: input.redirectUri,
           codeVerifier: outreachPkceVerifier(claims.nonce),
         },
         deps.transport,
@@ -461,7 +557,127 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
       ]
     }
 
-    const mailboxId = outreachMailboxId(gate.orgId, gate.uid, identity.identity.sub)
+    return {
+      provider: 'google',
+      providerAccountId: identity.identity.sub,
+      email: profileEmail,
+      sendAsOptions,
+      scopes: grant.scope.split(/\s+/).filter(Boolean),
+      refreshToken: grant.refreshToken,
+      keyring: config.config.keyring,
+    }
+  }
+
+  /**
+   * Microsoft's half of a connect (AGL-3489): the code redeemed, the grant's
+   * permissions checked, the ID token read, and the account read back from
+   * Graph — the same account the sign-in named, by its directory id.
+   */
+  async function redeemMicrosoftCode(input: {
+    code: string
+    claims: OutreachOAuthStateClaims
+    redirectUri: string
+    nowMs: number
+  }): Promise<Response | ConnectedAccount> {
+    const { code, claims, nowMs } = input
+    const config = readMicrosoftConfig()
+    if (!config.configured) return notConfigured('microsoft')
+    const scopesMissing = () =>
+      refusal(
+        422,
+        'scopes-missing',
+        'Sequences needs permission to send and to read your mail. Connect again and allow both.',
+      )
+    let grant: MicrosoftTokenResponse
+    try {
+      grant = await exchangeMicrosoftAuthorizationCode(
+        {
+          clientId: config.config.clientId,
+          clientSecret: config.config.clientSecret,
+          tenant: config.config.tenant,
+          code,
+          redirectUri: input.redirectUri,
+          codeVerifier: outreachPkceVerifier(claims.nonce),
+        },
+        deps.transport,
+      )
+    } catch (error) {
+      if (error instanceof GmailTransportError && error.code === 'invalid_grant') {
+        return refusal(400, 'code-rejected', "Microsoft's sign-in expired or was already used. Connect the mailbox again.")
+      }
+      if (error instanceof GmailTransportError && error.code === 'client_misconfigured') {
+        return refusal(503, 'not-configured', "Microsoft refused this deployment's app registration.")
+      }
+      if (error instanceof GmailTransportError && error.code === 'insufficient_scope') return scopesMissing()
+      return googleFailure(error, 'connect/complete Microsoft token exchange')
+    }
+    if (!grant.refreshToken) {
+      return refusal(
+        422,
+        'refresh-token-missing',
+        'Microsoft did not grant offline access, so the mailbox could not send later. Connect it again.',
+      )
+    }
+    if (!microsoftScopesInclude(grant.scope)) return scopesMissing()
+    const identity = readMicrosoftIdToken(grant.idToken, {
+      clientId: config.config.clientId,
+      nonce: outreachOidcNonce(claims.nonce),
+      nowMs,
+    })
+    if (identity.ok === false) {
+      return refusal(422, 'identity-unverified', "Microsoft's answer could not be verified. Connect the mailbox again.")
+    }
+    const client = createGraphClient({
+      ...deps.transport,
+      clientId: config.config.clientId,
+      clientSecret: config.config.clientSecret,
+      tenant: config.config.tenant,
+      refreshToken: grant.refreshToken,
+      accessToken: { token: grant.accessToken, expiresInSeconds: grant.expiresInSeconds },
+    })
+    let profile: GraphProfile
+    try {
+      profile = await client.getProfile()
+    } catch (error) {
+      if (error instanceof GmailTransportError && error.reconnectRequired) return scopesMissing()
+      return googleFailure(error, 'connect/complete Microsoft profile')
+    }
+    if (profile.id !== identity.identity.oid || !profile.emailAddress) {
+      return refusal(
+        422,
+        'account-mismatch',
+        'The Microsoft 365 mailbox and the Microsoft sign-in did not match. Connect again.',
+      )
+    }
+    return {
+      provider: 'microsoft',
+      providerAccountId: identity.identity.sub,
+      email: profile.emailAddress,
+      sendAsOptions: [
+        { email: profile.emailAddress, displayName: profile.displayName, isPrimary: true, isDefault: true },
+      ],
+      scopes: grant.scope.split(/\s+/).filter(Boolean),
+      refreshToken: grant.refreshToken,
+      keyring: config.config.keyring,
+    }
+  }
+
+  /**
+   * The connect's end, whichever provider named the account: the member's
+   * mailbox limit, the mailbox (new, or a reconnect that keeps its
+   * settings), its sealed grant, the aliases the provider confirmed, and the
+   * activity row.
+   */
+  async function storeConnectedMailbox(input: {
+    gate: OutreachGateContext
+    body: Record<string, unknown>
+    account: ConnectedAccount
+    nowMs: number
+  }): Promise<Response> {
+    const { gate, body, account, nowMs } = input
+    const { provider, email: profileEmail, sendAsOptions } = account
+    const firestore = deps.firestore()
+    const mailboxId = outreachMailboxId(gate.orgId, gate.uid, account.providerAccountId, provider)
     const mailboxDoc = mailboxRef(firestore, gate.orgId, mailboxId)
     const credentialDoc = mailboxCredentialsRef(firestore, mailboxId)
     const [existingMailbox, existingCredential] = await Promise.all([mailboxDoc.get(), credentialDoc.get()])
@@ -490,11 +706,11 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     if (current) {
       const keepSendAs = sendAsOptions.some((option) => option.email === current.sendAs)
       reconnected = {
-        provider: 'google',
+        provider,
         email: profileEmail,
         sendAs: keepSendAs ? current.sendAs : (defaultOption?.email ?? profileEmail),
         sendAsOptions,
-        // A reconnect restores a mailbox Google had cut off, and leaves a
+        // A reconnect restores a mailbox the provider had cut off, and leaves a
         // mailbox its member paused paused.
         status: (current.status === 'paused' ? 'paused' : 'connected') satisfies OutreachMailboxStatus,
         connectedAtMs: nowMs,
@@ -506,7 +722,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
       const displayName = validateDisplayName(defaultOption?.displayName || gate.name || '')
       mailbox = {
         id: mailboxId,
-        provider: 'google',
+        provider,
         email: profileEmail,
         sendAs: defaultOption?.email ?? profileEmail,
         sendAsOptions,
@@ -532,16 +748,16 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
         updatedAtMs: nowMs,
       }
     }
-    const credential: OutreachGoogleMailboxCredentials = {
+    const credential: OutreachStoredMailboxCredentials = {
       id: mailboxId,
       orgId: gate.orgId,
       mailboxId,
-      provider: 'google',
+      provider,
       connectedByUid: gate.uid,
-      providerAccountId: identity.identity.sub,
+      providerAccountId: account.providerAccountId,
       email: profileEmail,
-      scopes: grant.scope.split(/\s+/).filter(Boolean),
-      ...sealMailboxRefreshToken(grant.refreshToken, mailboxId, config.config.keyring),
+      scopes: account.scopes,
+      ...sealMailboxRefreshToken(account.refreshToken, mailboxId, account.keyring),
       createdAtMs: Number(existingCredential.exists ? existingCredential.get('createdAtMs') : 0) || nowMs,
       updatedAtMs: nowMs,
     }
@@ -591,7 +807,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     if (body['sendAs'] !== undefined) {
       const sendAs = typeof body['sendAs'] === 'string' ? body['sendAs'].trim().toLowerCase() : ''
       if (!(mailbox.sendAsOptions ?? []).some((option) => option.email === sendAs)) {
-        return invalid('Choose one of the addresses Gmail has verified for this account.')
+        return invalid('Choose one of the addresses the provider has verified for this account.')
       }
       update.sendAs = sendAs
     }
@@ -670,7 +886,8 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     if (mailbox.status === 'reconnect_required' || mailbox.status === 'disconnected') {
       return refusal(409, 'reconnect-required', 'Reconnect this mailbox before sending from it.')
     }
-    if (!deps.readConfig().configured) return notConfigured()
+    const provider: OutreachMailboxProvider = mailbox.provider === 'microsoft' ? 'microsoft' : 'google'
+    if (!providerConfigured(provider)) return notConfigured(provider)
     const limited = await deps.consumeRateLimit(`outreach-mailbox-test:${mailbox.id}`, {
       limit: OUTREACH_TEST_SENDS_PER_HOUR,
       windowMs: 60 * 60 * 1000,
@@ -680,7 +897,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     }
     /*
      * To the member's own address unless they name another (AGL-3228). A
-     * test to oneself never leaves Google, so it arrives with no
+     * test to oneself never leaves the provider, so it arrives with no
      * Authentication-Results at all and cannot show whether the send-as
      * domain's DKIM and DMARC hold; an outside mailbox the member can read
      * is the only place that can be seen. The rate limit above is the
@@ -700,10 +917,10 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     const opened = await openOutreachMailboxClient(
       firestore,
       { mailboxId: mailbox.id },
-      { ...deps.transport, readConfig: deps.readConfig, now: deps.now },
+      { ...deps.transport, readConfig: deps.readConfig, readMicrosoftConfig, now: deps.now },
     )
     if (opened.ok === false) {
-      if (opened.reason === 'not-configured') return notConfigured()
+      if (opened.reason === 'not-configured') return notConfigured(provider)
       await markOutreachMailboxReconnectRequired(firestore, {
         orgId: gate.orgId,
         mailboxId: mailbox.id,
@@ -740,7 +957,11 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
           errorCode: error.code,
           nowMs,
         })
-        return refusal(409, 'reconnect-required', 'Google refused this mailbox’s access. Connect it again.')
+        return refusal(
+          409,
+          'reconnect-required',
+          `${providerName(provider)} refused this mailbox’s access. Connect it again.`,
+        )
       }
       if (error instanceof Rfc5322MessageError) {
         return refusal(400, 'invalid-settings', `The test could not be written: ${error.message}`)
@@ -791,7 +1012,10 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     const mailbox = readMailbox(mailboxId, snapshot.exists ? snapshot.data() : undefined)
     if (!mailbox) return refusal(404, 'mailbox-not-found', 'That mailbox is not connected to this organization.')
     const sendAs = mailbox.sendAs || mailbox.email
-    const expectation = googleMailboxSenderExpectation(sendAs)
+    const expectation =
+      mailbox.provider === 'microsoft'
+        ? microsoftMailboxSenderExpectation(sendAs)
+        : googleMailboxSenderExpectation(sendAs)
     const read = expectation
       ? await deps.readSenderReadiness(expectation, { fresh: body['fresh'] === true }).catch(() => null)
       : null

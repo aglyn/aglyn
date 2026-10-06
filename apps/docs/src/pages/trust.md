@@ -43,6 +43,7 @@ does not exist.
 | **Vercel** | Application hosting and CDN for the console, published sites and docs. |
 | **Stripe** | Payments. Card details go directly to Stripe; Aglyn never receives or stores a card number. |
 | **Resend** | Transactional email delivery. |
+| **Anthropic** | AI-assisted features: Aglyn Assist, editor assistance, AI generation, automation explanations, AI insights and AI assistance in the CRM. For CRM assistance it receives the opened record as the CRM shows it, with all of its standard and custom fields, including contact details, notes, timeline and related records — email addresses, phone numbers, postal addresses and marketing consent included. It never receives a password, a sign-in token, an account identifier or a record's internal id. |
 
 The authoritative versions are published, not gated: the
 [Data Processing Addendum](https://aglyn.com/legal/dpa) and the

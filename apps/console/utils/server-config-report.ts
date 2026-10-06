@@ -412,6 +412,17 @@ export function buildServerConfigReport(
       value: describePresence(env['OPERATOR_HEALTH_TENANT_ORIGIN']),
     }),
     analyzeOpaqueKnob({
+      key: 'AGLYN_PROBE_TOKEN',
+      label: 'Monitor firewall bypass',
+      drives:
+        'Sent as `x-aglyn-probe` by the render monitor and the operator ' +
+        'alerts tick, so bot protection on your published-site runtime lets ' +
+        'them through. Absent, a challenging firewall answers every probe and ' +
+        'the render monitor reports that it cannot see the site (AGL-3580).',
+      raw: env['AGLYN_PROBE_TOKEN'],
+      value: describePresence(env['AGLYN_PROBE_TOKEN']),
+    }),
+    analyzeOpaqueKnob({
       key: 'RENDER_MONITOR_ORIGINS',
       label: 'Render monitor sites',
       drives:

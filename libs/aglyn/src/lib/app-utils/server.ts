@@ -32,6 +32,9 @@ export * from './seo-listing-fields'
 // Beside the other structured-data builders, and server-only like them: only
 // the route emits JSON-LD, and a crawler-facing block has no client caller.
 export * from './video-object'
+// `FAQPage` for the FAQ section a page draws (AGL-3574): the same input, the
+// same reason, and server-only for the same one — only the route emits it.
+export * from './faq-page'
 export * from './collection-delete'
 export * from './collection-entries'
 export * from './collection-kind'

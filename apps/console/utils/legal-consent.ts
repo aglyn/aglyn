@@ -114,6 +114,22 @@ export function markLegalConsent(): void {
 }
 
 /**
+ * Whether this tab consented recently enough for a sign-up to be completing
+ * now, WITHOUT clearing the marker (AGL-3578). The sign-up page reads it on
+ * load to know that a Google redirect may be landing and that the auth
+ * layout must wait for it; {@link consumeLegalConsent} stays the one place
+ * the marker is spent.
+ */
+export function hasPendingLegalConsent(maxAgeMs = DEFAULT_MAX_AGE_MS): boolean {
+  try {
+    const raw = window.sessionStorage.getItem(MARKER_KEY)
+    return raw !== null && Date.now() - Number(raw) < maxAgeMs
+  } catch {
+    return false
+  }
+}
+
+/**
  * Reads-and-clears the marker. True only when consent was given in this tab
  * within `maxAgeMs` — i.e. the sign-up now completing is the one it was for.
  */

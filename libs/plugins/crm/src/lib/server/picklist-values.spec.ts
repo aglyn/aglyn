@@ -441,3 +441,87 @@ describe('crm/picklist-values on a deal’s contact roles (AGL-3521)', () => {
     })
   })
 })
+
+/*
+ * A LEAD'S DIRECTION (AGL-3577). A lead keeps its lead source's group as
+ * `leadSourceDirection`, the field the Leads list's direction filter asks,
+ * so every move that can change the group a label has rewrites it on the
+ * leads holding that label in any spelling (by `leadSourceKey`).
+ */
+describe('crm/picklist-values and a lead’s direction (AGL-3577)', () => {
+  const lead = (leadSource: string, leadSourceDirection: string | null) => ({
+    leadSource,
+    leadSourceKey: leadSource.toLowerCase(),
+    leadSourceDirection,
+  })
+
+  beforeEach(() => {
+    store[`orgs/${ORG}/leads/l1`] = lead('Outbound · Apollo', null)
+    store[`orgs/${ORG}/leads/l2`] = lead('outbound · APOLLO', null)
+    store[`orgs/${ORG}/leads/l3`] = lead('Partner portal', null)
+    store[`orgs/${ORG}/leads/l4`] = lead('Referral', null)
+    store[`orgs/${ORG}/leads/l5`] = lead('Web', 'inbound')
+  })
+
+  it('regroups a value on the list and on every lead holding it, in any spelling', async () => {
+    const out = await call({ orgId: ORG, action: 'group', valueId: 'apollo', group: 'outbound' })
+    expect(out).toEqual({ status: 200, payload: { ok: true, updated: { lead: 2, contact: 0, company: 0, deal: 0 } } })
+    expect(writes[0]).toBe(LIST)
+    expect((store[LIST]['values'] as { id: string; group: string }[])[0]).toMatchObject({
+      id: 'apollo',
+      group: 'outbound',
+    })
+    expect(store[`orgs/${ORG}/leads/l1`]['leadSourceDirection']).toBe('outbound')
+    expect(store[`orgs/${ORG}/leads/l2`]['leadSourceDirection']).toBe('outbound')
+    expect(store[`orgs/${ORG}/leads/l3`]['leadSourceDirection']).toBeNull()
+    // A derived field: the record's own edit time is left alone.
+    expect(store[`orgs/${ORG}/leads/l1`]).not.toHaveProperty('updatedAt')
+    // Again is a no-op on the records.
+    const again = await call({ orgId: ORG, action: 'group', valueId: 'apollo', group: 'outbound' })
+    expect(again.payload).toEqual({ ok: true, updated: { lead: 0, contact: 0, company: 0, deal: 0 } })
+    // Ungrouping a standard value takes its leads out of Inbound.
+    await call({ orgId: ORG, action: 'group', valueId: 'web', group: null })
+    expect(store[`orgs/${ORG}/leads/l5`]['leadSourceDirection']).toBeNull()
+  })
+
+  it('adds a value records already hold, and files them under its group', async () => {
+    const out = await call({ orgId: ORG, action: 'add', label: 'referral', group: 'inbound' })
+    expect(out.payload).toEqual({ ok: true, updated: { lead: 1, contact: 0, company: 0, deal: 0 } })
+    expect(store[`orgs/${ORG}/leads/l4`]['leadSourceDirection']).toBe('inbound')
+    expect((store[LIST]['values'] as { label: string; group: string }[]).find((value) => value.label === 'referral'))
+      .toMatchObject({ group: 'inbound', active: true })
+    const twice = await call({ orgId: ORG, action: 'add', label: 'Referral', group: 'inbound' })
+    expect(twice).toEqual({ status: 400, payload: { error: '“referral” is already in the list.' } })
+  })
+
+  it('moves the direction with a delete onto a value of another group, and clears it with the label', async () => {
+    store[LIST]['values'] = (store[LIST]['values'] as Record<string, unknown>[]).map((value) =>
+      value['id'] === 'apollo' ? { ...value, group: 'outbound' } : value,
+    )
+    await call({ orgId: ORG, action: 'delete', valueId: 'site', replaceWith: 'Outbound · Apollo' })
+    expect(store[`orgs/${ORG}/leads/l3`]).toMatchObject({
+      leadSource: 'Outbound · Apollo',
+      leadSourceDirection: 'outbound',
+    })
+    // A lead holding the deleted label in another spelling keeps it, in no group now.
+    await call({ orgId: ORG, action: 'delete', valueId: 'apollo', replaceWith: null })
+    expect(store[`orgs/${ORG}/leads/l1`]).toMatchObject({ leadSourceKey: null, leadSourceDirection: null })
+    expect(store[`orgs/${ORG}/leads/l2`]).toMatchObject({ leadSource: 'outbound · APOLLO', leadSourceDirection: null })
+  })
+
+  it('files a rename onto a label leads already hold under the renamed value’s group', async () => {
+    const out = await call({ orgId: ORG, action: 'rename', valueId: 'web', label: 'Referral' })
+    expect(out.status).toBe(200)
+    expect(store[`orgs/${ORG}/leads/l5`]).toMatchObject({ leadSource: 'Referral', leadSourceDirection: 'inbound' })
+    expect(store[`orgs/${ORG}/leads/l4`]['leadSourceDirection']).toBe('inbound')
+  })
+
+  it('refuses a regroup or an add on a list whose records keep no group', async () => {
+    const out = await call(
+      { orgId: ORG, picklistId: 'industry', action: 'add', label: 'Robotics' },
+      crmPicklistValuesHandler,
+    )
+    expect(out.status).toBe(400)
+    expect(writes).toEqual([])
+  })
+})

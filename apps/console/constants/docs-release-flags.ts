@@ -323,13 +323,14 @@ export const FLAG_DOC_PAGES: Partial<
  */
 export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {
   // AGL-3520. The flag widens what a door already documented sends; it opens
-  // no surface. While it is off the CRM by AI page, the AI overview and the
-  // trust and compliance pages describe exactly what is sent with it off, so
-  // there is nothing unreleased for them to disclose. The whole-record
-  // wording waits in docs/drafts/agl-3520-crm-assistance-whole-record-disclosure.md
-  // and goes into those pages in the change that turns the flag on.
+  // no surface. The Privacy Policy and the subprocessor list were republished
+  // with the whole-record wording on October 5, 2026 (legal v10), and the CRM
+  // by AI page, the AI overview and the trust and compliance pages carry the
+  // same wording: they describe what CRM assistance can send, which is the
+  // disclosure the flag needs before it turns on. With it off a record sends
+  // less than they say, never more, so there is no rollout to disclose.
   release_crm_assist_whole_record:
-    'Widens what CRM assistance sends the model provider without opening any surface. The published pages describe the flag-off behavior, which is what production does; the whole-record wording is published only with the flip.',
+    'Widens what CRM assistance sends the model provider without opening any surface. The legal pages (v10, October 5, 2026) and the docs describe the whole record, which is what the flag can send; with it off a record sends less than they say, never more.',
 }
 
 /**

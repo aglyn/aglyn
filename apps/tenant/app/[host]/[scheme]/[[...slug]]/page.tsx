@@ -848,6 +848,26 @@ function buildJsonLd(props: Props): string[] {
   }).map((video) => Aglyn.safeJsonLd(video))
 
   /*
+    THE QUESTIONS THE PAGE ANSWERS (AGL-3574).
+
+    A FAQ is the block search engines and AI assistants quote, and the only
+    record that a page has one is its nodes — so this reads `props.nodes` the
+    way the videos above do, through `pageFaqPage` beside `pageVideoObjects`.
+    It finds a Section whose accessible label names a FAQ and reads the pairs
+    inside it: two-text items in a grid or a column, or accordions.
+
+    In the leading set, and computed HERE, for the reason the site entity and
+    the videos are: every marketing page carries a FAQ now (AGL-3572), and
+    this function returns early four times.
+
+    `pageFaqPage` is `null` for a page with no FAQ section and for one that
+    resolves to fewer than two pairs — Google requires a real list — so the
+    common page emits nothing extra.
+  */
+  const faq = Aglyn.pageFaqPage(props.nodes)
+  const faqLd = faq ? [Aglyn.safeJsonLd(faq)] : []
+
+  /*
     THE SITE ITSELF, on every page (AGL-3148).
 
     `WebSite` was pushed in the general case only, and this function returns
@@ -891,7 +911,7 @@ function buildJsonLd(props: Props): string[] {
         }),
       ]
     : []
-  const leadingLd = [...siteEntityLd, ...videoLd, ...websiteLd]
+  const leadingLd = [...siteEntityLd, ...videoLd, ...faqLd, ...websiteLd]
 
   /**
    * The author page → `ProfilePage` wrapping the `Person` (AGL-2518).

@@ -470,6 +470,65 @@ describe('buildPageMarkdown', () => {
     expect(buildPageMarkdown({ nodes, context: { origin: ORIGIN } })).toBe('Click\n')
   })
 
+  it('keeps an accordion FAQ’s question above its answer (AGL-3575)', () => {
+    /*
+      The summary holds its text in its own props and has no child node, so
+      the default recursion emitted nothing for it: an agent read "Rebuild on
+      the canvas…" with no question above it on every `/alternatives/*` page.
+      The question is an `###` because the page publishes it inside MUI's
+      `h3` heading slot.
+    */
+    const faq = (id: string, question: string, answer: string): PageMarkdownNodes => ({
+      [id]: { componentId: 'muiAccordion', nodes: [`${id}s`, `${id}d`] },
+      [`${id}s`]: { componentId: 'muiAccordionSummary', props: { children: question } },
+      [`${id}d`]: { componentId: 'muiAccordionDetails', nodes: [`${id}t`] },
+      [`${id}t`]: { componentId: 'muiTypography', props: { children: answer } },
+    })
+    const nodes = page(
+      {
+        h: { componentId: 'muiTypography', props: { component: 'h2', children: 'FAQ' } },
+        stack: { componentId: 'muiStack', nodes: ['q1', 'q2'] },
+        ...faq('q1', 'Can I import my Wix site?', 'There is no one-click importer.'),
+        ...faq('q2', 'What does it cost?', 'Start free; paid plans from $25.'),
+      },
+      ['h', 'stack'],
+    )
+    const markdown = buildPageMarkdown({ nodes })
+    expect(markdown).toBe(
+      '## FAQ\n\n' +
+        '### Can I import my Wix site?\n\nThere is no one-click importer.\n\n' +
+        '### What does it cost?\n\nStart free; paid plans from $25.\n',
+    )
+    expect(markdown.indexOf('Can I import')).toBeLessThan(
+      markdown.indexOf('one-click importer'),
+    )
+  })
+
+  it('reads an accordion question’s rich label, and links a header that links', () => {
+    const nodes = page(
+      {
+        a: { componentId: 'muiAccordion', nodes: ['as', 'ad'] },
+        as: {
+          componentId: 'muiAccordionSummary',
+          props: {
+            children: 'Is it free?',
+            html: 'Is it <strong>free</strong>?',
+            screenId: 'pricing',
+          },
+        },
+        ad: { componentId: 'muiAccordionDetails', nodes: ['at'] },
+        at: { componentId: 'muiTypography', props: { children: 'Yes, to start.' } },
+      },
+      ['a'],
+    )
+    expect(
+      buildPageMarkdown({
+        nodes,
+        context: { origin: ORIGIN, screenRoutes: { pricing: 'pricing' } },
+      }),
+    ).toBe('### [Is it **free**?](https://example.test/pricing)\n\nYes, to start.\n')
+  })
+
   it('groups list items into one list rather than a run of paragraphs', () => {
     const nodes = page(
       {

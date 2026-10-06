@@ -35,6 +35,15 @@ import {
  */
 
 describe('readOutreachSequenceDraft (AGL-2980)', () => {
+  it('reads the mailboxes a sequence rotates through without its own, and leaves the field off for none (AGL-3489)', () => {
+    expect(readOutreachSequenceDraft({ mailboxId: 'a', mailboxIds: ['b', 'a', 7, 'c', 'b'] }).mailboxIds).toEqual([
+      'b',
+      'c',
+    ])
+    expect(readOutreachSequenceDraft({ mailboxId: 'a', mailboxIds: ['a'] })).not.toHaveProperty('mailboxIds')
+    expect(readOutreachSequenceDraft({ mailboxId: 'a' })).not.toHaveProperty('mailboxIds')
+  })
+
   it('keeps what the model names, coerced, and leaves everything else behind', () => {
     const draft = readOutreachSequenceDraft({
       name: '  Second   locations ',
@@ -186,7 +195,7 @@ describe('outreachMailboxActivationIssue (AGL-2980)', () => {
       message: "This sequence's mailbox is paused. Resume it in Mailboxes, then activate the sequence.",
     })
     expect(outreachMailboxActivationIssue('mbx-1', { status: 'reconnect_required' })?.message).toMatch(
-      /^Google stopped accepting this sequence's mailbox\. Reconnect it in Mailboxes/,
+      /^The provider stopped accepting this sequence's mailbox\. Reconnect it in Mailboxes/,
     )
   })
 })

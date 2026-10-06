@@ -398,7 +398,7 @@ describe('a sequence: what stops activation, said before a click (AGL-2980)', ()
     renderDetail({ mailboxes: mailboxesOf('reconnect_required') })
     expect(button('Activate')?.disabled).toBe(true)
     expect(blockers()?.textContent).toContain(
-      "Google stopped accepting this sequence's mailbox. Reconnect it in Mailboxes, then activate the sequence.",
+      "The provider stopped accepting this sequence's mailbox. Reconnect it in Mailboxes, then activate the sequence.",
     )
   })
 

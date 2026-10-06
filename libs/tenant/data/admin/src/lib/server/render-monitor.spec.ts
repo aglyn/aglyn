@@ -157,6 +157,57 @@ describe('nextRenderMonitorState (AGL-3568)', () => {
     expect(up.transition).toBe('recovered')
     expect(up.next).toMatchObject({ status: 'ok', consecutiveFailures: 0, failingSinceMs: null, sinceMs: 900_000 })
   })
+
+  describe('a challenged run is blind, not a failure (AGL-3580)', () => {
+    const blind = { ok: false, blind: true, detail: 'dynamic /search: bot protection answered (HTTP 429)' }
+
+    it('never marks a healthy site degraded, however long it lasts, and says so once', () => {
+      let state: RenderMonitorStateDoc | null = nextRenderMonitorState(null, pass, context(0)).next
+      const transitions: unknown[] = []
+      for (let run = 1; run <= 36; run += 1) {
+        const decided = nextRenderMonitorState(state, blind, context(run * 300_000))
+        transitions.push(decided.transition)
+        state = decided.next
+      }
+      expect(transitions.filter(Boolean)).toEqual(['blind'])
+      expect(transitions.indexOf('blind')).toBe(1)
+      expect(state).toMatchObject({
+        status: 'ok',
+        sinceMs: 0,
+        consecutiveFailures: 0,
+        consecutiveBlindRuns: 36,
+        blindSinceMs: 300_000,
+        lastObservedAtMs: 0,
+      })
+      expect(state?.detail).toContain('cannot see this site')
+    })
+
+    it('a sighted pass after a blind stretch is not a recovery, because nothing failed', () => {
+      const start = nextRenderMonitorState(null, pass, context(0)).next
+      const dark = nextRenderMonitorState(start, blind, context(300_000)).next
+      const darker = nextRenderMonitorState(dark, blind, context(600_000)).next
+      const seen = nextRenderMonitorState(darker, pass, context(900_000))
+      expect(seen.transition).toBeNull()
+      expect(seen.next).toMatchObject({ status: 'ok', consecutiveBlindRuns: 0, blindSinceMs: null, lastObservedAtMs: 900_000 })
+    })
+
+    it('neither advances nor resets a run of real failures', () => {
+      const first = nextRenderMonitorState(null, fail, context(0)).next
+      const dark = nextRenderMonitorState(first, blind, context(300_000))
+      expect(dark.transition).toBeNull()
+      expect(dark.next).toMatchObject({ consecutiveFailures: 1, failingSinceMs: 0, status: 'ok' })
+      const second = nextRenderMonitorState(dark.next, fail, context(600_000))
+      expect(second.transition).toBe('failing')
+    })
+
+    it('keeps a site that is down reported down while the monitor is blind', () => {
+      const first = nextRenderMonitorState(null, fail, context(0)).next
+      const down = nextRenderMonitorState(first, fail, context(300_000)).next
+      const dark = nextRenderMonitorState(down, blind, context(600_000))
+      expect(dark.next).toMatchObject({ status: 'degraded', sinceMs: 0 })
+      expect(dark.transition).toBeNull()
+    })
+  })
 })
 
 describe('runRenderMonitor (AGL-3568)', () => {
@@ -240,6 +291,38 @@ describe('runRenderMonitor (AGL-3568)', () => {
     expect(back.sites[0]).toMatchObject({ ok: true, status: 'ok', transition: 'recovered' })
     expect(raised.map((r) => r.type)).toEqual(['system.siteRenderFailing', 'system.siteRenderRecovered'])
     expect(raised[1].context).toMatchObject({ site: 'demo.sites.example.test', duration: '20 min' })
+  })
+
+  it('a challenged site is blind: no outage alert, one blind alert naming the setup (AGL-3580)', async () => {
+    const { store, docs } = memoryStore()
+    const raised: Array<{ type: string; context: Record<string, unknown> }> = []
+    const raise = async (type: string, options: { context?: Record<string, unknown> }) => {
+      raised.push({ type, context: options.context ?? {} })
+    }
+    let now = 0
+    const checkpoint = site(() => ({ status: 429, body: '<title>Vercel Security Checkpoint</title>' }))
+    const run = () => runRenderMonitor({ env, store, fetcher: checkpoint.fetcher, raise, now: () => now })
+
+    for (let i = 0; i < 4; i += 1) {
+      now = i * 300_000
+      const report = await run()
+      expect(report.sites[0]).toMatchObject({ ok: false, blind: true, status: 'ok', consecutiveFailures: 0 })
+    }
+    expect(raised.map((r) => r.type)).toEqual(['system.renderMonitorBlind'])
+    expect(raised[0].context).toMatchObject({ site: 'demo.sites.example.test', runs: 2 })
+    expect(String(raised[0].context['detail'])).toContain('AGLYN_PROBE_TOKEN')
+    expect([...docs.values()][0]).toMatchObject({ status: 'ok', consecutiveBlindRuns: 4 })
+  })
+
+  it('a real failure beside a challenge is still a failure', async () => {
+    const { store } = memoryStore()
+    const mixed = site((url) =>
+      url.endsWith('/search')
+        ? { status: 429, body: 'Vercel Security Checkpoint' }
+        : { status: 504, body: '' },
+    )
+    const report = await runRenderMonitor({ env, store, fetcher: mixed.fetcher, raise: async () => undefined })
+    expect(report.sites[0]).toMatchObject({ ok: false, blind: false, consecutiveFailures: 1 })
   })
 
   it('a dry run fetches and grades and records nothing', async () => {

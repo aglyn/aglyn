@@ -183,6 +183,8 @@ export const schema: Aglyn.ComponentSchema<InlineTextProps> = {
   category: Aglyn.ComponentCategory.TEXT,
   icon: { path: mdiFormatColorText.path, sx: { color: '#057822' } },
   flags: {
+    // Static: may sit in a subtree that keeps its server HTML (AGL-3581).
+    lazyHydration: Aglyn.FEATURE_FLAG.ENABLED,
     // The run IS its text: edited inline on the canvas, like Typography.
     textEditable: Aglyn.FEATURE_FLAG.ENABLED,
     richTextEditable: Aglyn.FEATURE_FLAG.ENABLED,

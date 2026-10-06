@@ -53,6 +53,7 @@ import {
   storeVisitorConsent,
   visitorConsentStorageKey,
 } from '@aglyn/aglyn/app-utils/visitor-consent'
+import { subscribePageIdle } from '@aglyn/aglyn/app-utils/page-idle'
 import { act, render } from '@testing-library/react'
 import AdvertisingTags from '../app/[host]/[scheme]/[[...slug]]/advertising-tags'
 import { execFileSync } from 'node:child_process'
@@ -196,6 +197,21 @@ afterAll(() => {
     process.env.NEXT_PUBLIC_DEPLOY_ENV = savedEnv.deployEnv
   }
 })
+
+/**
+ * The page has loaded and gone idle before any case renders (AGL-3581), so
+ * every refusal below is the consent gate refusing and not the idle gate
+ * waiting. `advertising-tag-mounts.spec.tsx` pins the idle gate itself.
+ */
+beforeAll(
+  () =>
+    new Promise<void>((resolve) => {
+      const unsubscribe = subscribePageIdle(() => {
+        unsubscribe()
+        resolve()
+      })
+    }),
+)
 
 afterEach(() => {
   window.localStorage.clear()

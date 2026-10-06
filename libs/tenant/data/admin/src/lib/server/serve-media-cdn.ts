@@ -61,6 +61,7 @@ import {
   SITE_ICON_VERSION_PARAM,
 } from '@aglyn/aglyn/app-utils/site-icon-set'
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { scheduleAfterResponse } from './after-response'
 import { analyticsDayExpiresAt } from './analytics-retention'
 import { firebaseAdmin } from './firebase-admin'
 import { recordMediaServe } from './media-serve-count'
@@ -242,6 +243,26 @@ export const MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL =
  */
 export const MEDIA_CDN_VERSIONED_CACHE_CONTROL =
   'public, max-age=31536000, s-maxage=3600, stale-while-revalidate=86400, immutable'
+
+/**
+ * The generated width that answers a `?w=` request (AGL-3486): the width
+ * itself when the asset has it, otherwise the smallest larger one, and `null`
+ * when every variant is narrower than asked — then the display copy or the
+ * original is the closest picture there is.
+ */
+export function mediaCdnVariantFor(
+  variants: readonly unknown[],
+  width: number,
+): number | null {
+  if (!(width > 0)) return null
+  let best: number | null = null
+  for (const candidate of variants) {
+    if (typeof candidate !== 'number' || !Number.isInteger(candidate)) continue
+    if (candidate === width) return width
+    if (candidate > width && (best === null || candidate < best)) best = candidate
+  }
+  return best
+}
 
 /**
  * Whether a versioned request may be answered with
@@ -838,29 +859,6 @@ export function mediaCdnDisplayCopy(
     return null
   }
   return { contentType }
-}
-
-/**
- * Runs `task` once the response has been sent, through Next's `after()`.
- * Required when first asked for rather than imported, for the reason
- * `capture-email-check.ts` gives; false where there is no request to run
- * after — a spec, a script — and the task is then not run at all.
- */
-function scheduleAfterResponse(task: () => Promise<void>): boolean {
-  try {
-    const loaded = require('next/server') as {
-      after?: (task: () => Promise<void>) => void
-    }
-    if (typeof loaded?.after !== 'function') return false
-    loaded.after(() =>
-      task().catch((error) => {
-        console.error('[media-cdn] after-response task failed', error)
-      }),
-    )
-    return true
-  } catch {
-    return false
-  }
 }
 
 /**
@@ -1496,9 +1494,10 @@ export async function serveMediaCdn(
      *
      * ## Falling back to the master is right for a WIDTH and wrong for a POSTER
      *
-     * `?w=` on an asset with no such variant serves the original, and that has
-     * always been safe because both answers are the same KIND of thing: an
-     * image, larger than asked for. A rendition inherits it for the same
+     * `?w=` on an asset with no such variant serves the next larger variant,
+     * or the display copy or original when none is larger, and that is safe
+     * because every answer is the same KIND of thing: an image, larger than
+     * asked for. A rendition inherits it for the same
      * reason — an unknown `?r=` serves the master, which is the same video in
      * more bytes.
      *
@@ -1561,8 +1560,22 @@ export async function serveMediaCdn(
       // handed out without it would be reused across representations.
       res.setHeader('Vary', 'Accept')
     }
-    const useVariant =
-      !usePoster && !rendition && Boolean(width) && variants.includes(width)
+    /*
+     * The variant that answers `?w=`: the width itself, or the smallest one
+     * above it the asset has (AGL-3486). An asset made by an older encoder
+     * lacks steps the page now asks for — generation 1 had 320/640/1280/1920
+     * and srcsets ask for 768 — and answering those from the original sent
+     * every phone the full-size JPEG. The next width up is the same picture,
+     * a little larger than asked for, as a WebP. Only an exact width is a
+     * `variantServed` for the year-long policy: a stand-in is replaced by the
+     * real width once the asset is regenerated.
+     */
+    const variantWidth =
+      !usePoster && !rendition && width > 0
+        ? mediaCdnVariantFor(variants, width)
+        : null
+    const useVariant = variantWidth !== null
+    const exactVariant = variantWidth === width
     // Read only here, past every gate — a refusal above returns before the
     // parameter is ever looked at, so `?download=1` can never be the reason
     // a response happens (AGL-1411).
@@ -1607,7 +1620,7 @@ export async function serveMediaCdn(
       : rendition
         ? `-r${rendition.key}`
         : useVariant
-          ? `-w${width}${encoderTag}`
+          ? `-w${variantWidth}${encoderTag}`
           : useDisplay
             ? `-d${encoderTag}`
             : ''
@@ -1641,7 +1654,7 @@ export async function serveMediaCdn(
         token: parseMediaCdnVersionToken(req.query[MEDIA_CDN_VERSION_PARAM]),
         currentHash,
         widthRequested: Boolean(width),
-        variantServed: useVariant,
+        variantServed: exactVariant,
         otherRepresentation: usePoster || Boolean(rendition),
         documentEncoderVersion: snapshot.get(
           MEDIA_VARIANT_ENCODER_VERSION_FIELD,
@@ -1803,7 +1816,7 @@ export async function serveMediaCdn(
         variantRegeneration: snapshot.get('variantRegeneration'),
       })
     ) {
-      scheduleAfterResponse(async () => {
+      await scheduleAfterResponse(async () => {
         const regenerationPath = mediaStoragePathInScope({
           storagePath: snapshot.get('storagePath'),
           base: `${isOrg ? 'orgs' : 'hosts'}/${scopeId}`,
@@ -1821,7 +1834,7 @@ export async function serveMediaCdn(
         if (outcome === 'failed') {
           console.error('[media-cdn] delivery copies could not be regenerated', scopeSegment, mediaId)
         }
-      })
+      }, '[media-cdn]')
     }
     if (!hashed) {
       setCacheControl(stableCacheControlFor(docServedType))
@@ -1870,7 +1883,7 @@ export async function serveMediaCdn(
       : rendition
         ? mediaRenditionObjectPath(basePath, rendition)
         : useVariant
-          ? `${basePath}__w${width}.webp`
+          ? `${basePath}__w${variantWidth}.webp`
           : useDisplay
             ? mediaDisplayObjectPath(basePath)
             : basePath
