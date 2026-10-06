@@ -1644,6 +1644,18 @@ had stopped working.
    apart. Only a call that never reached code is retried: the handler never
    throws, so a route that refuses still ends the tick and still reads silent.
 
+**The GitHub uptime probe is dispatched by Cloud Scheduler (AGL-3580).** GitHub ran
+its own `*/15` schedule four times on 2026-10-05. Since 2026-10-06 the scheduler row
+`uptime-probe-dispatch-app` (`7,22,37,52 * * * *` UTC) runs the Cloud Run job
+`github-dispatch-uptime-probe`, a copy of the signup canary's dispatcher with
+`GITHUB_WORKFLOW_FILE=uptime-probe.yml`, under the same `github-dispatch` service
+account and GitHub App. To check it:
+
+```bash
+gcloud scheduler jobs run uptime-probe-dispatch-app --location=us-central1 --project=aglyn-main
+gh run list --workflow=uptime-probe.yml --event workflow_dispatch --limit 3
+```
+
 ### Creating the missing `scheduled-jobs` check {#creating-the-missing-scheduled-jobs-check}
 
 **This is the one open item in AGL-1148's "wire an external monitor" step.**
