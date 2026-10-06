@@ -9,6 +9,19 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.227 — 2026-10-06
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.226...v1.0.0-beta.227)
+
+### Added
+
+- **acquisition:** a paid signup names its Google Ads campaign ([AGL-3590](https://linear.app/aglyn/issue/AGL-3590))
+
+### Fixed
+
+- **ai:** a Free account may plan its site at once — no account-age hold ([AGL-3591](https://linear.app/aglyn/issue/AGL-3591))
+- **console:** the Versions help says what a version is, not that each publish makes one ([AGL-3589](https://linear.app/aglyn/issue/AGL-3589))
+
 ## v1.0.0-beta.226 — 2026-10-06
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.225...v1.0.0-beta.226)
