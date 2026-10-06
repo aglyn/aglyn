@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.226 — 2026-10-06
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.225...v1.0.0-beta.226)
+
+### Fixed
+
+- **media:** a streamed serve's count is written in after(), not frozen in flight ([AGL-3474](https://linear.app/aglyn/issue/AGL-3474))
+
+### Documentation
+
+- **ops:** the uptime probe is dispatched by Cloud Scheduler ([AGL-3580](https://linear.app/aglyn/issue/AGL-3580))
+
 ## v1.0.0-beta.225 — 2026-10-05
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/3661b5772...v1.0.0-beta.225)
