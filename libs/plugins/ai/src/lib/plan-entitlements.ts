@@ -138,9 +138,9 @@ export const ENTERPRISE_ASSIST_CREDITS_PER_MONTH = 116_000
  *  - it is metered per ACCOUNT as well as per workspace, so the three free
  *    workspaces an account may hold (AGL-2265) share one 300-credit
  *    allowance rather than tripling it (`reserveAssistMessage`);
- *  - a fresh account waits `AI_FREE_MIN_ACCOUNT_AGE_HOURS` before it can
- *    spend, and every free request is bounded per IP, per uid and per
- *    account per day;
+ *  - every free request is bounded per IP, per uid and per account per
+ *    day (a minimum account age, `AI_FREE_MIN_ACCOUNT_AGE_HOURS`, is
+ *    available and off by default — AGL-3591);
  *  - a platform-wide daily ceiling on free spend pauses the taste for
  *    everyone until the UTC day rolls, paid workspaces untouched.
  *

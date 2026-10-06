@@ -92,6 +92,14 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-10-06 — Free AI has no account-age hold: a new account may generate at once (AGL-3591)
+
+- **Decided by:** the account owner, 2026-10-06, after a new paid-search sign-up was offered "Start this site with AI" on its first Setup page and the 24-hour hold would have refused "Plan my site": remove the hold — the Free taste is 300 credits, and the refusal was losing new users at their first try.
+- **Scope:** policy
+- **Evidence:** `aiFreeMinAccountAgeHours` default 24 → 0 in `libs/plugins/ai/src/lib/runtime/ai-abuse-guards.ts` (the knob stays for self-hosters); `ai-abuse-guards.spec.ts`, `ai-gate.spec.ts`; `docs/RATE_LIMITING.md`; `apps/docs/docs/developers/self-hosting-environment.md`; `.env.selfhost.example`; AGL-3591. The 300-credit wall, the per-account daily cap, the per-address window and the platform daily ceiling are unchanged.
+
+---
+
 ## 2026-10-05 — Private images served through the media CDN count toward bandwidth (AGL-3518)
 
 - **Decided by:** the account owner, 2026-10-05, asked in session whether private images (signed, `no-store`, served by the media CDN on every request) should count: anything served through the CDN that is not page weight counts, the `/pricing` copy moving first but staying general rather than naming images. The team's own console preview is excluded.
@@ -832,7 +840,7 @@ workspace's band and its owner's allowance, never their own account.
 
 **The precautions that ship with it**, each one a rung that can go red on its
 own: a verified email and a minimum account age (`AI_FREE_MIN_ACCOUNT_AGE_HOURS`,
-default 24, read off the Auth record's creation time and never the token); a
+default 24 then, 0 — off — since 2026-10-06 (AGL-3591), read off the Auth record's creation time and never the token); a
 per-address window of 60 / min on every AI door beside the per-uid 20 / min; a
 per-account daily cap of `AI_FREE_DAILY_REQUESTS` (default 30); a pause for the
 day after three `refusal` stops, with a refusal drawing no credits; a

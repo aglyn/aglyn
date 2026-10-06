@@ -77,16 +77,24 @@ describe('the account-age rung', () => {
   const PRO = { plan: 'pro' as const }
   const FREE = { plan: 'free' as const }
 
-  it('defaults to a day; junk takes the default; zero is honored as off', () => {
-    expect(aiFreeMinAccountAgeHours()).toBe(24)
+  it('is off by default (AGL-3591); a positive number turns it on; junk takes the default', () => {
+    expect(aiFreeMinAccountAgeHours()).toBe(0)
     process.env.AI_FREE_MIN_ACCOUNT_AGE_HOURS = '6'
     expect(aiFreeMinAccountAgeHours()).toBe(6)
-    process.env.AI_FREE_MIN_ACCOUNT_AGE_HOURS = '0'
-    expect(aiFreeMinAccountAgeHours()).toBe(0)
+    process.env.AI_FREE_MIN_ACCOUNT_AGE_HOURS = '24'
+    expect(aiFreeMinAccountAgeHours()).toBe(24)
     for (const junk of ['a day', '', '-4']) {
       process.env.AI_FREE_MIN_ACCOUNT_AGE_HOURS = junk
-      expect(aiFreeMinAccountAgeHours()).toBe(24)
+      expect(aiFreeMinAccountAgeHours()).toBe(0)
     }
+  })
+
+  it('admits a minutes-old Free account by default, without reading its record (AGL-3591)', async () => {
+    const young = jest.fn(async () => ({ metadata: { creationTime: hoursAgo(0) } }))
+    expect(
+      await freeAccountAgeRefusal({ uid: 'u1', org: FREE, staff: false, getUser: young, now: NOW }),
+    ).toBeNull()
+    expect(young).not.toHaveBeenCalled()
   })
 
   it('reads the creation time off the RECORD, and caches it per instance', async () => {
@@ -124,7 +132,8 @@ describe('the account-age rung', () => {
     expect(getUser).toHaveBeenCalledTimes(ACCOUNT_AGE_CACHE_MAX_ENTRIES + 2)
   })
 
-  it('refuses a Free workspace’s young caller with 403, admits at the line, and never reads for paid or staff', async () => {
+  it('when set, refuses a Free workspace’s young caller with 403, admits at the line, and never reads for paid or staff', async () => {
+    process.env.AI_FREE_MIN_ACCOUNT_AGE_HOURS = '24'
     const young = jest.fn(async () => ({ metadata: { creationTime: hoursAgo(1) } }))
     const refused = await freeAccountAgeRefusal({ uid: 'u1', org: FREE, staff: false, getUser: young, now: NOW })
     expect(refused?.status).toBe(403)
@@ -158,7 +167,8 @@ describe('the account-age rung', () => {
     ).toBe(403)
   })
 
-  it('a record with no creation time counts as brand new, and a failed read is a 503', async () => {
+  it('when set, a record with no creation time counts as brand new, and a failed read is a 503', async () => {
+    process.env.AI_FREE_MIN_ACCOUNT_AGE_HOURS = '24'
     const blank = async () => ({ metadata: {} })
     expect(
       (await freeAccountAgeRefusal({ uid: 'u1', org: FREE, staff: false, getUser: blank, now: NOW }))?.status,
