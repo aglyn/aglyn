@@ -57,6 +57,7 @@ const mockEntries = {
       slug: 'the-night-crew',
       status: 'draft',
       coverVideo: 'media:host-1/film-1',
+      coverVideoDuration: 120,
     },
   ] as Array<Record<string, unknown>>,
   status: 'success' as 'success' | 'error',
@@ -350,6 +351,7 @@ describe('what picking a film writes (AGL-2954)', () => {
   it('fills an empty cover with the frame the film records, and its description', () => {
     expect(pick(film())).toEqual({
       coverVideo: 'media:host-1/film-1',
+      coverVideoDuration: '63',
       coverImage: '/api/media/cdn/host-1/film-1?poster=1',
       coverImageAlt: 'Cranes over the harbor at dawn',
     })
@@ -371,14 +373,20 @@ describe('what picking a film writes (AGL-2954)', () => {
       coverImage: 'media:host-1/hero',
       coverImageAlt: 'The crew on deck',
     })
-    expect(picked).toEqual({ coverVideo: 'media:host-1/film-1' })
+    expect(picked).toEqual({
+      coverVideo: 'media:host-1/film-1',
+      coverVideoDuration: '63',
+    })
   })
 
   it('leaves the cover empty for a film with no captured frame', () => {
     const picked = pick(
       film({ poster: undefined, posterError: 'browser could not decode this video' }),
     )
-    expect(picked).toEqual({ coverVideo: 'media:host-1/film-1' })
+    expect(picked).toEqual({
+      coverVideo: 'media:host-1/film-1',
+      coverVideoDuration: '63',
+    })
   })
 
   it('fills nothing from a film the CDN cannot serve a frame for', () => {
@@ -386,7 +394,7 @@ describe('what picking a film writes (AGL-2954)', () => {
     // storage URL, which has no poster to ask for.
     const raw = film({ cdnPath: undefined })
     const picked = pick({ ...raw, src: raw.url })
-    expect(picked).toEqual({ coverVideo: raw.url })
+    expect(picked).toEqual({ coverVideo: raw.url, coverVideoDuration: '63' })
   })
 
   it('keeps a description the author already wrote', () => {
@@ -404,21 +412,37 @@ describe('what picking a film writes (AGL-2954)', () => {
   it('refuses a file that is not a video', () => {
     expect(pick(film({ contentType: 'image/png' }))).toBeNull()
   })
+
+  it('takes the length the library measured, in whole seconds (AGL-3584)', () => {
+    expect(
+      pick(film({ video: { durationMs: 754_400, width: 1920, height: 1080 } })),
+    ).toEqual(expect.objectContaining({ coverVideoDuration: '754' }))
+  })
+
+  it('blanks the length for a film the library never measured (AGL-3584)', () => {
+    // The length typed for the film being replaced does not describe this one.
+    expect(pick(film({ video: undefined }))).toEqual(
+      expect.objectContaining({ coverVideoDuration: '' }),
+    )
+  })
 })
 
 describe('the featured video field (AGL-2954)', () => {
-  const renderField = (value: string) => {
+  const renderField = (value: string, duration = '') => {
     const onValueChange = jest.fn()
+    const onDurationChange = jest.fn()
     const onChoose = jest.fn()
     render(
       <EntryCoverVideoField
         hostId="host-1"
         value={value}
         onValueChange={onValueChange}
+        duration={duration}
+        onDurationChange={onDurationChange}
         onChoose={onChoose}
       />,
     )
-    return { onValueChange, onChoose }
+    return { onValueChange, onDurationChange, onChoose }
   }
 
   it('previews the frame a library film records', () => {
@@ -472,6 +496,35 @@ describe('the featured video field (AGL-2954)', () => {
     expect(screen.getByRole('button', { name: 'Replace video' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     expect(onValueChange).toHaveBeenCalledWith('')
+  })
+
+  it('clears the length with the video (AGL-3584)', () => {
+    const { onDurationChange } = renderField(
+      'https://videos.example/harbor.mp4',
+      '90',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(onDurationChange).toHaveBeenCalledWith('')
+  })
+
+  it('offers the length a library film records, without writing it (AGL-3584)', () => {
+    mockMediaDocs.set('hosts/host-1/media/film-1', film())
+    const { onDurationChange } = renderField('media:host-1/film-1')
+    // Offered rather than written: opening an older entry must not mark it
+    // edited.
+    expect(onDurationChange).not.toHaveBeenCalled()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Use the library length (63 seconds)' }),
+    )
+    expect(onDurationChange).toHaveBeenCalledWith('63')
+  })
+
+  it('offers nothing once the length matches the library (AGL-3584)', () => {
+    mockMediaDocs.set('hosts/host-1/media/film-1', film())
+    renderField('media:host-1/film-1', '63')
+    expect(
+      screen.queryByRole('button', { name: /Use the library length/ }),
+    ).toBeNull()
   })
 })
 
@@ -571,5 +624,56 @@ describe('the entry page stores a featured video (AGL-2954)', () => {
     )
     const payload = await save()
     expect(payload['coverVideo']).toBe('https://acme.wistia.com/medias/e4a27b971d')
+  })
+})
+
+describe('the entry page stores the featured video length (AGL-3584)', () => {
+  const lengthInput = () =>
+    screen.getByRole('spinbutton', { name: 'Video length (seconds)' })
+
+  it('saves the library film’s measured length as a number', async () => {
+    renderEntry('entry-1')
+    fireEvent.click(
+      within(videoField()).getByRole('button', { name: 'Choose video' }),
+    )
+    act(() => {
+      mockPicker.props?.['onPick'](film())
+    })
+    expect((lengthInput() as HTMLInputElement).value).toBe('63')
+    const payload = await save()
+    expect(payload['coverVideoDuration']).toBe(63)
+  })
+
+  it('saves a typed length for a linked video as a whole number', async () => {
+    renderEntry('entry-1')
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Featured video link' }),
+      { target: { value: 'https://acme.wistia.com/medias/e4a27b971d' } },
+    )
+    fireEvent.change(lengthInput(), { target: { value: '754.4' } })
+    const payload = await save()
+    expect(payload['coverVideoDuration']).toBe(754)
+  })
+
+  it('keeps a stored length through an unrelated save', async () => {
+    renderEntry('entry-2')
+    expect((lengthInput() as HTMLInputElement).value).toBe('120')
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'The night crew, again' },
+    })
+    const payload = await save()
+    expect(payload['coverVideoDuration']).toBe(120)
+  })
+
+  it('deletes a blank length', async () => {
+    renderEntry('entry-2')
+    fireEvent.change(lengthInput(), { target: { value: '' } })
+    expect((await save())['coverVideoDuration']).toBe('__delete__')
+  })
+
+  it('deletes the length when the video is gone, whatever the field says', async () => {
+    renderEntry('entry-1')
+    fireEvent.change(lengthInput(), { target: { value: '90' } })
+    expect((await save())['coverVideoDuration']).toBe('__delete__')
   })
 })

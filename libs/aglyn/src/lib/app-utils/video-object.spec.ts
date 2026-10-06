@@ -509,3 +509,53 @@ describe('the generated poster is used only when one is known to exist', () => {
     })
   })
 })
+
+describe('an entry template publishes the featured video’s length (AGL-3584)', () => {
+  /** The watch page's Video, bound field by field as the docs teach. */
+  const entryFilm = node({
+    src: '{{entry.coverVideo}}',
+    poster: '{{entry.coverImage}}',
+    title: '{{entry.title}}',
+    description: '{{entry.excerpt}}',
+    uploadDate: '{{entry.publishedAt}}',
+    durationSeconds: '{{entry.coverVideoDuration}}',
+  })
+  const routed = (entry: Record<string, unknown>) =>
+    resolveNamedTokens(
+      { film: entryFilm } as any,
+      collectionEntryTokens(
+        {
+          title: 'The 60-second tour',
+          excerpt: 'What Aglyn does, end to end.',
+          slug: 'tour',
+          coverImage: 'media:host1/still',
+          coverVideo: 'https://aglyn.wistia.com/medias/e4a27b971d',
+          publishedAt: { seconds: 1_784_116_800 },
+          ...entry,
+        },
+        'videos',
+      ),
+    )['film'] as any
+
+  it('publishes the bound seconds as an ISO 8601 duration', () => {
+    const film = routed({ coverVideoDuration: 754 })
+    expect(film.props.durationSeconds).toBe('754')
+    expect(
+      videoObjectJsonLd(film, { origin: ORIGIN, hostId: 'host1' }),
+    ).toMatchObject({
+      '@type': 'VideoObject',
+      name: 'The 60-second tour',
+      uploadDate: '2026-07-15T12:00:00.000Z',
+      duration: 'PT12M34S',
+    })
+  })
+
+  it('publishes no duration, and still the block, for an entry that names none', () => {
+    const block = videoObjectJsonLd(routed({}), {
+      origin: ORIGIN,
+      hostId: 'host1',
+    })
+    expect(block).toMatchObject({ '@type': 'VideoObject' })
+    expect(block).not.toHaveProperty('duration')
+  })
+})
