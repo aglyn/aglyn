@@ -17,9 +17,9 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiPageLayoutHeader } from '@aglyn/shared-data-mdi'
+import { ScrollReaction } from '@aglyn/shared-ui-jsx/components/scroll-reaction'
 import MuiAppBar, { type AppBarProps } from '@mui/material/AppBar'
 import { type SxProps, type Theme } from '@mui/material/styles'
-import useScrollTrigger from '@mui/material/useScrollTrigger'
 import { createElement, forwardRef, type Ref } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
@@ -39,16 +39,26 @@ export interface AglynAppBarProps extends AppBarProps {
    * bar, where the full height costs the reader a band of every screen.
    */
   shrinkOnScroll?: boolean
+  /**
+   * Slides the bar up out of view while the visitor scrolls down, and back
+   * the moment they scroll up. Meant for a pinned (sticky/fixed) bar.
+   */
+  hideOnScroll?: boolean
 }
 
 /** Scroll distance before a shrinking bar compacts. */
 const SHRINK_THRESHOLD = 16
+/** Scroll distance before a hiding bar may slide away — past its own height. */
+const HIDE_THRESHOLD = 120
 
 /**
- * The scrolled state rides a data attribute, not a re-styled sx, so the
+ * Both scroll states ride data attributes, not a re-styled sx, so the
  * server render and every scroll position share one emotion class.
  */
-const shrinkSx: SxProps<Theme> = (theme) => ({
+const scrollSx: SxProps<Theme> = (theme) => ({
+  transition: theme.transitions.create(['transform', 'box-shadow'], {
+    duration: theme.transitions.duration.shorter,
+  }),
   '& .MuiToolbar-root': {
     transition: theme.transitions.create('min-height', {
       duration: theme.transitions.duration.shorter,
@@ -58,10 +68,13 @@ const shrinkSx: SxProps<Theme> = (theme) => ({
     // MUI's dense toolbar height.
     minHeight: theme.spacing(6),
   },
+  '&[data-scroll-hidden]': {
+    transform: 'translateY(-100%)',
+  },
 })
 
-function withShrinkSx(sx: AppBarProps['sx']): AppBarProps['sx'] {
-  return [shrinkSx, ...(Array.isArray(sx) ? sx : [sx])] as AppBarProps['sx']
+function withScrollSx(sx: AppBarProps['sx']): AppBarProps['sx'] {
+  return [scrollSx, ...(Array.isArray(sx) ? sx : [sx])] as AppBarProps['sx']
 }
 
 function renderAppBar(props: AppBarProps, ref: Ref<HTMLElement>) {
@@ -75,25 +88,40 @@ function renderAppBar(props: AppBarProps, ref: Ref<HTMLElement>) {
   })
 }
 
+interface ScrollAwareAppBarProps extends AppBarProps {
+  shrink: boolean
+  hide: boolean
+}
+
 /**
- * Its own component so the scroll listener exists only on a bar that asked
- * to shrink — a hook behind a prop check would break the rules of hooks.
+ * Its own component so the scroll listeners exist only on a bar that asked
+ * to react — a hook behind a prop check would break the rules of hooks.
+ * `ScrollReaction` answers both questions: past the threshold (shrink),
+ * and scrolling down rather than up (hide), which is what MUI's scroll
+ * trigger means by hysteresis.
  */
-const ShrinkingAppBar = forwardRef<HTMLElement, AppBarProps>((props, ref) => {
-  const scrolled = useScrollTrigger({
-    disableHysteresis: true,
-    threshold: SHRINK_THRESHOLD,
-  })
-  return renderAppBar(
-    {
-      ...props,
-      sx: withShrinkSx(props.sx),
-      ...({ 'data-scrolled': scrolled ? '' : undefined } as AppBarProps),
-    },
-    ref,
-  )
-})
-ShrinkingAppBar.displayName = 'AglynShrinkingAppBar'
+const ScrollAwareAppBar = forwardRef<HTMLElement, ScrollAwareAppBarProps>(
+  ({ shrink, hide, ...props }, ref) =>
+    createElement(ScrollReaction, {
+      threshold: SHRINK_THRESHOLD,
+      withHysteresis: { threshold: HIDE_THRESHOLD },
+      children: ({ activeWithHysteresis, activeWithoutHysteresis }) =>
+        renderAppBar(
+          {
+            ...props,
+            sx: withScrollSx(props.sx),
+            ...({
+              'data-scrolled':
+                shrink && activeWithoutHysteresis ? '' : undefined,
+              'data-scroll-hidden':
+                hide && activeWithHysteresis ? '' : undefined,
+            } as AppBarProps),
+          },
+          ref,
+        ),
+    }),
+)
+ScrollAwareAppBar.displayName = 'AglynScrollAwareAppBar'
 
 /**
  * MUI's AppBar behind the cleared-prop guard (AGL-1226).
@@ -105,9 +133,14 @@ ShrinkingAppBar.displayName = 'AglynShrinkingAppBar'
  * MUI directly. `createElement` rather than JSX keeps this a `.ts` file.
  */
 const AppBar = forwardRef<HTMLElement, AglynAppBarProps>(
-  ({ shrinkOnScroll, ...props }, ref) =>
-    shrinkOnScroll
-      ? createElement(ShrinkingAppBar, { ...props, ref })
+  ({ shrinkOnScroll, hideOnScroll, ...props }, ref) =>
+    shrinkOnScroll || hideOnScroll
+      ? createElement(ScrollAwareAppBar, {
+          ...props,
+          shrink: Boolean(shrinkOnScroll),
+          hide: Boolean(hideOnScroll),
+          ref,
+        })
       : renderAppBar(props, ref),
 )
 AppBar.displayName = 'AglynAppBar'
@@ -138,6 +171,14 @@ export const schema: Aglyn.ComponentSchema<AglynAppBarProps> = {
         'restores it at the top. Pair with a Sticky or Fixed position.',
       component: Aglyn.FieldComponentType.SWITCH,
       label: 'Shrink when scrolled?',
+    },
+    {
+      name: 'hideOnScroll',
+      description:
+        'Slides the bar up out of view while the visitor scrolls down, and ' +
+        'back as soon as they scroll up. Pair with a Sticky or Fixed position.',
+      component: Aglyn.FieldComponentType.SWITCH,
+      label: 'Hide while scrolling down?',
     },
   ],
 }

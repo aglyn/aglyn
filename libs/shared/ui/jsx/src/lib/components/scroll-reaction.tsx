@@ -16,7 +16,7 @@
  */
 
 import { _isFnT } from '@aglyn/shared-util-tools'
-import { useScrollTrigger } from '@mui/material'
+import useScrollTrigger from '@mui/material/useScrollTrigger'
 import { cloneElement, type ReactElement } from 'react'
 
 type UseScrollTriggerOptions = Parameters<typeof useScrollTrigger>[0]

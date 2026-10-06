@@ -78,7 +78,7 @@ describe('MUI AppBar color premise (AGL-1191)', () => {
  * once the page scrolls, and restores at the top. The state is a data
  * attribute so the server render and every scroll position share one class.
  */
-describe('App Bar "Shrink when scrolled"', () => {
+describe('App Bar scroll reactions: shrink and hide', () => {
   function scrollTo(y: number) {
     act(() => {
       Object.defineProperty(window, 'pageYOffset', {
@@ -110,11 +110,35 @@ describe('App Bar "Shrink when scrolled"', () => {
     expect(bar.hasAttribute('data-scrolled')).toBe(false)
   })
 
+  it('hides while scrolling down past the threshold, and returns on the way up', () => {
+    const { container } = render(<AglynAppBar hideOnScroll />)
+    const bar = container.querySelector('header') as HTMLElement
+
+    scrollTo(60)
+    expect(bar.hasAttribute('data-scroll-hidden')).toBe(false)
+
+    scrollTo(400)
+    expect(bar.hasAttribute('data-scroll-hidden')).toBe(true)
+    // Hiding is its own switch: this bar never shrinks.
+    expect(bar.hasAttribute('data-scrolled')).toBe(false)
+
+    scrollTo(350)
+    expect(bar.hasAttribute('data-scroll-hidden')).toBe(false)
+  })
+
+  it('offers hiding as its own authorable switch', () => {
+    const attribute = schema.attributes?.find(
+      (field) => field.name === 'hideOnScroll',
+    )
+    expect(attribute?.component).toBe('switch')
+  })
+
   it('never reaches the DOM as a prop, and leaves an unshrinking bar alone', () => {
     const { container } = render(<AglynAppBar />)
     const bar = container.querySelector('header') as HTMLElement
     scrollTo(200)
     expect(bar.hasAttribute('data-scrolled')).toBe(false)
     expect(bar.hasAttribute('shrinkonscroll')).toBe(false)
+    expect(bar.hasAttribute('data-scroll-hidden')).toBe(false)
   })
 })
