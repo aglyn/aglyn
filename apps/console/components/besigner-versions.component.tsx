@@ -786,7 +786,7 @@ export const BesignerVersionsComponent = observer(
                 {...docsHelp('versionsAndPublishing', {
                   anchor: '#the-versions-dialog',
                   excerpt:
-                    'Every publish creates a version you can view, restore, or schedule to go live at a set time.',
+                    'Save named versions of a page, open any of them, and publish one to roll back or schedule it to go live at a set time.',
                 })}
                 sx={{ fontSize: '0.7em' }}
               />
