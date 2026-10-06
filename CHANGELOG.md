@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **crm:** a lead's tasks have the index their facts read needs ([AGL-3520](https://linear.app/aglyn/issue/AGL-3520))
 - **media:** a streamed serve's count is written in after(), not frozen in flight ([AGL-3474](https://linear.app/aglyn/issue/AGL-3474))
 
 ### Performance
