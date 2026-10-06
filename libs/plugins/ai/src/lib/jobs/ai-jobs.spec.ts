@@ -874,7 +874,7 @@ describe('a step’s own failure, and what a runner is handed (AGL-2938)', () =>
       NOW,
     )
 
-  it('meters a Free step our checks refused as a declined turn: no credits on the job, the org or the account (AGL-3594)', async () => {
+  it('meters a Free step our checks refused, then gives its credits back to the workspace and the account, a bounded number a day (AGL-3594)', async () => {
     registerAiJobStep('insight', async () => ({
       outputs: [],
       usage: USAGE,
@@ -895,10 +895,32 @@ describe('a step’s own failure, and what a runner is handed (AGL-2938)', () =>
     const stored = await getAiJob(firestore, 'org-free', free.$id)
     expect(stored).toMatchObject({ status: 'needs_review', creditsSpent: 0 })
     expect(stored?.steps[0]).toMatchObject({ creditsSpent: 0 })
+    // The bill keeps what it cost; the give-back nets it out of both meters.
     const month = mockDocs.get(`orgs/org-free/assistUsage/${assistUsageMonth(NOW)}`) ?? {}
-    expect(month).toMatchObject({ estCostUsd: 0, refusedTurns: 1, refusedCostUsd: 0.006 })
+    expect(month).toMatchObject({ estCostUsd: 0.006, returnedUsd: 0.006 })
     const account = mockDocs.get(`users/owner-1/aiUsage/${assistUsageMonth(NOW)}`) ?? {}
-    expect(account['estCostUsd']).toBeUndefined()
+    expect(account).toMatchObject({ estCostUsd: 0.006, returnedUsd: 0.006 })
+    const [key] = Object.keys(account['creditReturns'] as object)
+    expect((account['creditReturns'] as Record<string, unknown>)[key]).toMatchObject({
+      credits: 6,
+      source: 'plan-refund',
+      actorUid: 'system:plan-refund',
+      jobId: free.$id,
+    })
+
+    // Past the day's bound, a refused plan is metered like any other step.
+    const day = assistUsageDay(NOW).replace(/-/g, '')
+    mockDocs.set(`users/owner-1/aiUsage/${assistUsageMonth(NOW)}`, {
+      ...account,
+      creditReturns: Object.fromEntries(['a', 'b', 'c'].map((id) => [`plan-refund-${day}-${id}-0-1`, { credits: 1 }])),
+    })
+    const again = await createAiJob(
+      firestore,
+      { orgId: 'org-free', hostId: 'host-1', kind: 'insight', brief: 'Anything at all.', createdBy: 'uid-1' },
+      NOW,
+    )
+    await runAiJobStep(firestore, 'org-free', again.$id, { owner: 'route-1', now: NOW })
+    expect(await getAiJob(firestore, 'org-free', again.$id)).toMatchObject({ creditsSpent: 6 })
 
     // The same outcome on a paid workspace is billed as it always was.
     const paid = await newInsightJob()

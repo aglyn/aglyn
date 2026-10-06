@@ -77,11 +77,14 @@ import { AI_JOB_SEO_STEP_MINIMUM_MS } from './ai-job-seo-budget'
 import { AI_JOB_THEME_STEP_MINIMUM_MS } from './ai-job-theme-budget'
 import {
   assistExchangeExpiry,
+  assistUsageDay,
+  assistUsageMonth,
   recordAssistCost,
   releaseAssistMessage,
   reserveAssistMessage,
   type AssistReservation,
 } from '../usage/assist-usage'
+import { refundRefusedFreePlan } from '../usage/assist-plan-refund'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
@@ -1572,8 +1575,6 @@ export async function runAiJobStep(
           // The step is the creator's spend, under the job's kind (AGL-2928).
           uid: job.createdBy,
           kind: job.kind,
-          // A plan our own checks refused draws no Free credits (AGL-3594).
-          ...(outcome.uncredited ? { uncredited: true } : {}),
         },
         now,
       )
@@ -1581,10 +1582,28 @@ export async function runAiJobStep(
       console.error('ai job cost record failed', { orgId, jobId, error })
     }
   }
-  // What the step drew, as the meter above drew it: nothing from the Free
-  // taste for an answer our own checks refused (AGL-3594).
-  const credits =
-    outcome.uncredited && reservation.free ? 0 : assistCreditsFromUsd(outcome.estCostUsd)
+  let credits = assistCreditsFromUsd(outcome.estCostUsd)
+  // A Free step our own checks refused gives its credits back (AGL-3594),
+  // through the one give-back writer, bounded a day an account; the bill
+  // above keeps what it cost. A give-back that fails is a log line: the
+  // step is metered, which is the state every other step leaves.
+  if (!spentNothing && outcome.uncredited && reservation.free && credits > 0) {
+    try {
+      const refund = await refundRefusedFreePlan(firestore, {
+        orgId,
+        free: reservation.free,
+        jobId,
+        stepIndex,
+        credits,
+        month: reservation.monthKey ?? assistUsageMonth(now),
+        day: assistUsageDay(now),
+        now,
+      })
+      if (refund.status === 'returned') credits = 0
+    } catch (error) {
+      console.error('ai plan refund failed', { orgId, jobId, error })
+    }
+  }
 
   // A model that declined, or a step that got nothing usable out of the
   // model's answer (AGL-2938), fails the job with its own sentence. The

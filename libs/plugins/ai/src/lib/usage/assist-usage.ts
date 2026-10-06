@@ -1111,15 +1111,6 @@ export interface AssistSignalRecord {
    */
   free?: FreeAssistAccount | null
   /**
-   * The answer was refused by the platform's own checks (AGL-3594) — a plan
-   * the plan rules turned away on its re-ask. On the Free taste it is metered
-   * as a declined turn is: no credits from the org's band or the account's
-   * allowance, its cost on the platform's day, and a refusal on the account's
-   * day, which the taste's daily refusal pause bounds. Ignored on a paid
-   * workspace, whose tokens are metered as they always were.
-   */
-  uncredited?: boolean
-  /**
    * Who asked, for the per-user rollup (AGL-2928) and NOTHING else: the
    * signal document never carries it, for the reason the module header
    * gives. Optional because a meter that cannot say who asked still owes
@@ -1178,8 +1169,7 @@ function writeSignalAndRollup(
   // org's band and the account's allowance stay where they were, and the
   // cost goes to the platform's day instead, where it is still our money.
   // Everywhere else the tokens are metered as they always were.
-  const refusedFree =
-    free !== null && (record.stopReason === 'refusal' || record.uncredited === true)
+  const refusedFree = free !== null && record.stopReason === 'refusal'
   // The site's credits for its allotment (AGL-2942), rounded as the person's
   // own `byHost` rounds them, so a site's month equals the sum of its
   // people's months on it. Not zeroed for a declined Free turn, for the same

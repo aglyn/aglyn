@@ -56,6 +56,7 @@ import {
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
+import { ASSIST_RETURNED_USD_FIELD, assistSpendAfterReturnsUsd } from '../usage/assist-credit-returns'
 import { freeAccountUsageRef, freeAssistAccount, type AssistMeteredOrg } from '../usage/assist-free-taste'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import type { AiTool } from '../providers/contract'
@@ -633,7 +634,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     if (result.status === 'needs_input') {
       // Refused by our own checks, after the one re-ask (AGL-3594): the member
       // reads a sentence and an action, staff the rules; on the Free taste
-      // the tokens draw no credits, and Try again says when it cannot work.
+      // the machine gives the credits back, and Try again says when it cannot work.
       const review = aiDoctrineReview(result)
       const retryRefusal = freeTaste
         ? await aiFreePlanRetryRefusal({ job, org, firestore, now, site })
@@ -737,8 +738,9 @@ export function aiSitePlanMaxTokens(
 /**
  * Why trying a Free plan again cannot work this month, or `null` (AGL-3594):
  * the owner's Free allowance left, read off the account month the meter
- * writes, against what a plan of this kind costs at its worst. A refused plan
- * drew nothing, so the figure read is the figure left. A read that fails
+ * writes net of give-backs, against what a plan of this kind costs at its
+ * worst. Read before this step is metered, and the machine gives a refused
+ * plan's credits back, so the figure read is the figure left. A read that fails
  * leaves the button on: the reservation still refuses at the wall.
  */
 async function aiFreePlanRetryRefusal(input: {
@@ -754,7 +756,9 @@ async function aiFreePlanRetryRefusal(input: {
     // The meter's month key, `YYYY-MM` in UTC (`assistUsageMonth`).
     const month = input.now.toISOString().slice(0, 7)
     const snapshot = await freeAccountUsageRef(input.firestore, account.accountUid, month).get()
-    const spent = assistCreditsFromUsd(Number(snapshot.get('estCostUsd') ?? 0))
+    const spent = assistCreditsFromUsd(
+      assistSpendAfterReturnsUsd(snapshot.get('estCostUsd'), snapshot.get(ASSIST_RETURNED_USD_FIELD)),
+    )
     return aiPlanRetryRefusal({
       creditsLeft: FREE_AI_TASTE_CREDITS_PER_MONTH - spent,
       planCredits: input.site ? AI_FREE_SITE_WORST_CASE_CREDITS.plan : AI_FREE_PAGE_WORST_CASE_CREDITS.plan,

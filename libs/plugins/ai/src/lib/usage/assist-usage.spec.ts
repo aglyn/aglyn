@@ -275,12 +275,9 @@ const {
   reserveAssistMessage,
 } = require('./assist-usage') as typeof import('./assist-usage')
 const {
-  AI_FREE_REFUSALS_PER_DAY,
   aiFreeDailyPlatformCeilingUsd,
   aiFreeDailyRequests,
   freeAssistAccount,
-  freeTasteReadsFrom,
-  freeTasteRefusal,
   readPlatformFreeSpend,
 } = require('./assist-free-taste') as typeof import('./assist-free-taste')
 
@@ -2044,28 +2041,6 @@ describe('a Free turn is metered on the account and the platform; a refusal draw
     // The signal keeps the true cost: the staff board reads our money there.
     const signal = [...mockDocs.entries()].find(([path]) => path.includes('/assistSignals/'))?.[1]
     expect(signal).toMatchObject({ stopReason: 'refusal', estCostUsd: cost })
-  })
-
-  it('a Free plan OUR checks refused draws no credits either, and counts toward the same daily pause (AGL-3594)', async () => {
-    // FORCED RED by metering it like an answered turn: the org's month and
-    // the owner's allowance both move by the cost of a plan nobody can use.
-    await recordAssistCost(firestore(), ORG, { ...record('end_turn', { accountUid: 'owner-1' }), uncredited: true }, NOW)
-    expect(mockDocs.get(orgMonthPath)).toMatchObject({ estCostUsd: 0, refusedTurns: 1, refusedCostUsd: cost })
-    expect(mockDocs.get(accountPath)).toMatchObject({ days: { [day]: { refusals: 1 } } })
-    expect(mockDocs.get(accountPath)?.estCostUsd).toBeUndefined()
-    expect(mockDocs.get(platformPath)).toMatchObject({ estCostUsd: cost, refusals: 1 })
-    // Bounded: the refusals it counts are the ones the Free taste pauses on.
-    const reads = freeTasteReadsFrom(
-      { get: (field: string) => (field === 'days' ? { [day]: { refusals: AI_FREE_REFUSALS_PER_DAY } } : undefined) } as never,
-      null,
-      day,
-    )
-    expect(freeTasteRefusal(reads)).toBe('refusals')
-  })
-
-  it('a PAID plan our checks refused is metered as it always was (AGL-3594)', async () => {
-    await recordAssistCost(firestore(), ORG, { ...record('end_turn', null), tier: 'entitled', uncredited: true }, NOW)
-    expect(mockDocs.get(orgMonthPath)).toMatchObject({ estCostUsd: cost, refusedTurns: 0 })
   })
 
   it('a PAID turn — no attribution — is metered exactly as before, refusal or not', async () => {
