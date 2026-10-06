@@ -215,8 +215,8 @@ describe('every reader takes the figure it means', () => {
     {
       path: 'libs/plugins/ai/src/lib/usage/staff-org-ai.ts',
       means: 'what we pay',
-      fragment: `assistProviderCostUsd(\n    billedUsd,\n    monthDoc?.[${'ASSIST_PROVIDER_COST_FIELD'}],\n  )`,
-      why: "The staff card's margin section and its spend line: what this workspace cost us.",
+      fragment: `assistProviderCostUsd(\n    grossBilledUsd,\n    monthDoc?.[${'ASSIST_PROVIDER_COST_FIELD'}],\n  )`,
+      why: "The staff card's margin section and its spend line: what this workspace cost us — gross of credits given back (AGL-3595), which refund the customer and not the provider.",
     },
     {
       path: 'libs/plugins/ai/src/lib/usage/staff-org-ai.ts',

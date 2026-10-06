@@ -56,6 +56,7 @@ import { GET as aiAdminOrgsSpend } from './server/ai-admin-orgs-spend'
 import { GET as aiAdminSignals } from './server/ai-admin-signals'
 import { GET as aiAdminUser } from './server/ai-admin-user'
 import { POST as aiAdminOverage } from './server/ai-admin-overage'
+import { POST as aiAdminCredits } from './server/ai-admin-credits'
 import { GET as aiUsage } from './server/ai-usage'
 import { GET as aiAllotments } from './server/ai-allotments'
 import { GET as aiInsightAnswer } from './server/ai-insight-answer'
@@ -221,6 +222,10 @@ export function registerAiConsoleApi(): void {
   // (AGL-3011): the ceiling override, lifting a pause — the only way a
   // dispute pause comes off — and resetting the step. Every act audited.
   registerPluginApiRoute('ai/admin/overage', { web: aiAdminOverage })
+  // Credits given back to a workspace's band or a Free owner's allowance
+  // (AGL-3595): compensation for a fault of ours, bounded by what the month
+  // used, keyed against a double-click, and audited.
+  registerPluginApiRoute('ai/admin/credits', { web: aiAdminCredits })
 }
 
 // Type-only (AGL-3080): the plugin's entitlement keys, declared by module

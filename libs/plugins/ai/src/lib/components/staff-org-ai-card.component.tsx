@@ -42,7 +42,7 @@ import {
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   StaffOrgAiJob,
   StaffOrgAiJobs,
@@ -54,6 +54,10 @@ import type {
   StaffOrgAiTokens,
   StaffOrgAiUser,
 } from '../usage/staff-org-ai'
+import {
+  StaffCreditReturnActions,
+  StaffCreditReturnDialog,
+} from './staff-ai-credit-return.component'
 
 /**
  * THE STAFF AI CARD (AGL-2930): everything about one org's AI usage on the
@@ -79,6 +83,11 @@ import type {
  *    sends and generates, and how much of its prompt the cache served.
  *  - **Margin** — spend against what AI brings in, red when it is over.
  *  - **Actions** — where the override editor and the AI pause live.
+ *
+ * The header carries the card's two acts (AGL-3595): give credits back to
+ * the band (and, on a Free workspace, to the owner's allowance), or reset
+ * the month — and each recent job offers the same give-back, prefilled with
+ * that job's spend.
  */
 
 const credits = (value: number | null | undefined): string =>
@@ -177,7 +186,14 @@ function RefusalsRow({ refusals }: { refusals: StaffOrgAiRefusals }) {
   )
 }
 
-function JobsSection({ jobs }: { jobs: StaffOrgAiJobs | null }) {
+function JobsSection({
+  jobs,
+  onGiveBack,
+}: {
+  jobs: StaffOrgAiJobs | null
+  onGiveBack: (job: StaffOrgAiJob) => void
+}) {
+  const columns = useMemo(() => jobColumns(onGiveBack), [onGiveBack])
   if (jobs === null) {
     return (
       <Alert severity="warning">
@@ -222,7 +238,7 @@ function JobsSection({ jobs }: { jobs: StaffOrgAiJobs | null }) {
           starter's uid never push the card's content past its edge. */}
       <ListTable
         rows={jobs.recent}
-        columns={JOB_COLUMNS}
+        columns={columns}
         getRowId={(job: StaffOrgAiJob) => job.id}
         rowHeight={TABLE_ROW_HEIGHT}
         noRowsLabel="No recent jobs"
@@ -239,9 +255,11 @@ function JobsSection({ jobs }: { jobs: StaffOrgAiJobs | null }) {
  * The recent jobs, one column per fact. Who started a job is a column of
  * its own rather than a link tucked beside the date, so it sorts like the
  * rest; the credits sort by what was SPENT, which is the figure the
- * pool was charged.
+ * pool was charged. The row's action gives that spend back (AGL-3595).
  */
-const JOB_COLUMNS: GridColDef<StaffOrgAiJob>[] = [
+const jobColumns = (
+  onGiveBack: (job: StaffOrgAiJob) => void,
+): GridColDef<StaffOrgAiJob>[] => [
   {
     field: 'id',
     headerName: 'Job',
@@ -301,6 +319,20 @@ const JOB_COLUMNS: GridColDef<StaffOrgAiJob>[] = [
         '—'
       ),
   },
+  listActionsColumn((row: StaffOrgAiJob) => (
+    <ListRowActions
+      label={row.id}
+      items={[
+        {
+          key: 'give-back',
+          label: 'Give back this job’s credits',
+          disabled: row.creditsSpent <= 0,
+          disabledReason: row.creditsSpent <= 0 ? 'This job spent no credits.' : undefined,
+          onClick: () => onGiveBack(row),
+        },
+      ]}
+    />
+  )),
 ]
 
 const tokenCount = (value: number): string => Math.round(value).toLocaleString()
@@ -473,6 +505,19 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
   const [data, setData] = useState<StaffOrgAiResponse | null>(null)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Bumped after a give-back, so the card re-reads the figures it changed.
+  const [version, setVersion] = useState(0)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [returning, setReturning] = useState<{
+    mode: 'give' | 'reset'
+    jobId?: string
+    jobCredits?: number
+  } | null>(null)
+  const giveBackJob = useCallback(
+    (job: StaffOrgAiJob) =>
+      setReturning({ mode: 'give', jobId: job.id, jobCredits: job.creditsSpent }),
+    [],
+  )
 
   useEffect(() => {
     // Mounted only for a confirmed staff reader — the `staffOrg` zone sits
@@ -511,7 +556,7 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
     return () => {
       active = false
     }
-  }, [orgId, signedInUid])
+  }, [orgId, signedInUid, version])
 
   const name = aiAddonName()
   return (
@@ -522,9 +567,44 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
         excerpt:
           'The add-on, the credit pool and its parts, this month’s overage and refusals, generation jobs, tokens and the cache hit rate by kind, the people spending the most, and the margin — for this organization.',
       })}
+      HeaderProps={{
+        action: (
+          <StaffCreditReturnActions
+            disabled={!data}
+            onGive={() => setReturning({ mode: 'give' })}
+            onReset={() => setReturning({ mode: 'reset' })}
+          />
+        ),
+      }}
       contentGutterX
       contentGutterY
     >
+      {data ? (
+        <StaffCreditReturnDialog
+          open={returning !== null}
+          mode={returning?.mode ?? 'give'}
+          target={{ orgId }}
+          workspace={{ used: data.pool.usedCredits, limit: data.pool.totalCredits }}
+          account={
+            data.account
+              ? { used: data.account.usedCredits, limit: data.account.limitCredits }
+              : null
+          }
+          jobId={returning?.jobId ?? null}
+          jobCredits={returning?.jobCredits ?? null}
+          onClose={() => setReturning(null)}
+          onReturned={(message) => {
+            setReturning(null)
+            setNotice(message)
+            setVersion((current) => current + 1)
+          }}
+        />
+      ) : null}
+      {notice ? (
+        <Alert severity="success" onClose={() => setNotice(null)} sx={{ mb: 2 }}>
+          {notice}
+        </Alert>
+      ) : null}
       {!ready ? (
         <Typography variant="body2" color="text.secondary">
           {'Loading…'}
@@ -591,6 +671,19 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
                 ? ` · ${credits(data.pool.remainingCredits)} remaining`
                 : ''}
             </Typography>
+            {data.pool.returnedCredits ? (
+              <Typography variant="body2" color="text.secondary">
+                {`${credits(data.pool.returnedCredits)} credits given back this month — already taken off the figure above.`}
+              </Typography>
+            ) : null}
+            {data.account ? (
+              <Typography variant="body2">
+                {`Owner’s Free allowance: ${credits(data.account.usedCredits)} of ${credits(data.account.limitCredits)} used across their free workspaces` +
+                  (data.account.returnedCredits
+                    ? ` (${credits(data.account.returnedCredits)} given back)`
+                    : '')}
+              </Typography>
+            ) : null}
             <Typography variant="body2" color="text.secondary">
               {`Projected month-end at this pace: ${credits(data.pool.projectedCredits)} credits (${usd(data.pool.projectedUsd)}) · ${data.pool.messages.toLocaleString()} model turns, ${data.pool.deflected.toLocaleString()} answered from the docs`}
             </Typography>
@@ -622,7 +715,7 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
             <Typography variant="overline" color="text.secondary">
               {'Generation jobs'}
             </Typography>
-            <JobsSection jobs={data.jobs} />
+            <JobsSection jobs={data.jobs} onGiveBack={giveBackJob} />
           </Stack>
 
           {/* Tokens — absent from a route older than the card */}

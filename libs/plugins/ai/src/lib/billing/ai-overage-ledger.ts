@@ -60,6 +60,10 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { assistMonthOverage } from '../usage/assist-credits'
 import {
+  ASSIST_RETURNED_USD_FIELD,
+  assistSpendAfterReturnsUsd,
+} from '../usage/assist-credit-returns'
+import {
   AI_OVERAGE_MIN_CHARGE_USD,
   AI_OVERAGE_THRESHOLD_USD,
   aiOverageCardOnFile,
@@ -187,9 +191,13 @@ export async function claimAiOverageCharge(
     if (usageSnapshot.get('overageInvoiceOpen')) {
       return { claimed: null, refused: 'charge-already-open' as const }
     }
+    // Net of credits given back (AGL-3595), as the meter and the gate read it.
     const priced = assistMonthOverage(
       request.org,
-      money(usageSnapshot.get('estCostUsd')),
+      assistSpendAfterReturnsUsd(
+        usageSnapshot.get('estCostUsd'),
+        usageSnapshot.get(ASSIST_RETURNED_USD_FIELD),
+      ),
     )
     // A plan that sells nothing past its band prices its overage to zero, so
     // this is structural rather than a check that could be forgotten — but

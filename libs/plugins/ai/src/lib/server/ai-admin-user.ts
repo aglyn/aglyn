@@ -22,6 +22,9 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { readUserAiUsageMonths } from '../usage/ai-usage-by-user'
+import { freeAccountUsageRef } from '../usage/assist-free-taste'
+import { assistUsageMonth } from '../usage/assist-usage'
+import { composeStaffAiAccountAllowance } from '../usage/staff-org-ai'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /**
@@ -101,8 +104,18 @@ async function handler(request: Request): Promise<Response> {
     rows.sort(
       (a, b) => b.month.localeCompare(a.month) || b.credits - a.credits,
     )
+    // The account's own Free allowance this month (AGL-2925), which every
+    // free workspace this person owns draws on and which staff can give
+    // credits back to from this page (AGL-3595).
+    const month = assistUsageMonth()
+    const allowanceSnap = await freeAccountUsageRef(firestore, uid, month).get()
+    const allowance = composeStaffAiAccountAllowance(
+      uid,
+      month,
+      allowanceSnap.exists ? (allowanceSnap.data() ?? null) : null,
+    )
     return Response.json(
-      { uid, rows, truncated: reverse.size >= MAX_ORGS },
+      { uid, rows, truncated: reverse.size >= MAX_ORGS, allowance },
       { status: 200 },
     )
   } catch (error) {

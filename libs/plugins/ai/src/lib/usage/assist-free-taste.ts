@@ -22,6 +22,10 @@ import {
 } from './assist-credits'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
+import {
+  ASSIST_RETURNED_USD_FIELD,
+  assistSpendAfterReturnsUsd,
+} from './assist-credit-returns'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { sendStaffAlertEmail } from '@aglyn/tenant-data-admin/server/staff-alert-email'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
@@ -205,7 +209,12 @@ export function freeTasteReadsFrom(
   >
   const today = days[day] ?? {}
   return {
-    accountCostUsd: Number(account?.get('estCostUsd') ?? 0),
+    // Net of credits given back (AGL-3595), the same figure every reader
+    // of this meter takes.
+    accountCostUsd: assistSpendAfterReturnsUsd(
+      account?.get('estCostUsd'),
+      account?.get(ASSIST_RETURNED_USD_FIELD),
+    ),
     accountRequestsToday: Number(today.requests ?? 0),
     accountRefusalsToday: Number(today.refusals ?? 0),
     platformCostUsd: Number(platform?.get('estCostUsd') ?? 0),

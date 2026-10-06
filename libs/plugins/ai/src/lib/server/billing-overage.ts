@@ -35,6 +35,10 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { logAiOverageControl } from '../activity/ai-activity'
 import { assistMonthOverage } from '../usage/assist-credits'
+import {
+  ASSIST_RETURNED_USD_FIELD,
+  assistSpendAfterReturnsUsd,
+} from '../usage/assist-credit-returns'
 import { assistUsageMonth } from '../usage/assist-usage'
 import { aiOverageBillsByInvoice } from '../billing/ai-overage-cutover'
 import { aiOverageNextChargeUsd } from '../billing/ai-overage-gate'
@@ -137,7 +141,13 @@ async function readAiOverageStandingForCard(
   const ledger = readAiOverageMonthLedger(
     usageSnapshot.exists ? (usageSnapshot.data() ?? null) : null,
   )
-  const priced = assistMonthOverage(org, Number(usageSnapshot.get('estCostUsd') ?? 0))
+  const priced = assistMonthOverage(
+    org,
+    assistSpendAfterReturnsUsd(
+      usageSnapshot.get('estCostUsd'),
+      usageSnapshot.get(ASSIST_RETURNED_USD_FIELD),
+    ),
+  )
   return {
     aglynCeilingUsd: aiOverageStandingCeilingUsd(standing, now),
     overageStep: aiOverageStep(standing),

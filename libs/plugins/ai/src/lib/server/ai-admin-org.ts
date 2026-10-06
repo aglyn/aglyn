@@ -39,6 +39,11 @@ import {
   assistMarginMultiple,
 } from '../usage/assist-spend-guards'
 import {
+  freeAccountUsageRef,
+  freeAssistAccount,
+} from '../usage/assist-free-taste'
+import {
+  composeStaffAiAccountAllowance,
   composeStaffOrgAiAddon,
   composeStaffOrgAiMargin,
   composeStaffOrgAiOverage,
@@ -326,10 +331,17 @@ async function handler(request: Request): Promise<Response> {
     } as Record<string, unknown>
     const monthDoc = monthSnap.exists ? (monthSnap.data() ?? {}) : null
 
-    const [jobs, users, since] = await Promise.all([
+    // A Free workspace also draws on its OWNER's account allowance
+    // (AGL-2925), which is what staff give credits back to beside the band
+    // (AGL-3595). One more document, read only for a Free workspace.
+    const free = freeAssistAccount(org as never)
+    const [jobs, users, since, accountSnap] = await Promise.all([
       readOrgAiJobsSummary(db, orgId, month),
       readOrgAiTopUsers(db, orgId, month),
       addonSinceFor(orgId),
+      free?.accountUid
+        ? freeAccountUsageRef(db, free.accountUid, month).get()
+        : Promise.resolve(null),
     ])
 
     const pool = composeStaffOrgAiPool(org as never, monthDoc, now)
@@ -384,6 +396,14 @@ async function handler(request: Request): Promise<Response> {
       users,
       margin,
       tokens: composeStaffOrgAiTokens(monthDoc),
+      account:
+        free?.accountUid && accountSnap
+          ? composeStaffAiAccountAllowance(
+              free.accountUid,
+              month,
+              accountSnap.exists ? (accountSnap.data() ?? null) : null,
+            )
+          : null,
     }
     return Response.json(body, { status: 200 })
   } catch (error) {

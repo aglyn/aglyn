@@ -437,6 +437,39 @@ describe('StaffOrgAiCard (AGL-2930)', () => {
     expect(assist.getByText('90%')).toBeTruthy()
   })
 
+  it('shows credits given back, and a Free owner’s allowance beside the band (AGL-3595)', async () => {
+    const base = body()
+    mockAnswer.payload = body({
+      pool: { ...base.pool, totalCredits: 300, usedCredits: 27, remainingCredits: 273, returnedCredits: 200 },
+      account: {
+        uid: 'owner-1',
+        month: '2026-09',
+        usedCredits: 27,
+        limitCredits: 300,
+        returnedCredits: 200,
+      },
+    })
+    render(<StaffOrgAiCard orgId="org-1" />)
+    await waitFor(() =>
+      expect(
+        screen.getByText('200 credits given back this month — already taken off the figure above.'),
+      ).toBeTruthy(),
+    )
+    expect(screen.getByText(/Used 27 credits .* · 273 remaining/)).toBeTruthy()
+    expect(
+      screen.getByText(
+        'Owner’s Free allowance: 27 of 300 used across their free workspaces (200 given back)',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('names no give-back and no allowance for a paid workspace that has neither', async () => {
+    render(<StaffOrgAiCard orgId="org-1" />)
+    await waitFor(() => expect(screen.getByText('Acme AI on')).toBeTruthy())
+    expect(screen.queryByText(/given back/)).toBeNull()
+    expect(screen.queryByText(/Owner’s Free allowance/)).toBeNull()
+  })
+
   it('draws no token section for a route that sends none', async () => {
     render(<StaffOrgAiCard orgId="org-1" />)
     await waitFor(() => expect(screen.getByText('Acme AI on')).toBeTruthy())
