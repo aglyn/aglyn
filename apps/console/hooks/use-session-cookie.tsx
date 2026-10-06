@@ -22,6 +22,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { signOut } from 'firebase/auth'
 import { useEffect, useRef } from 'react'
 import { tombstoneEndsSession } from '../app/api/auth/session/session-tombstone'
+import { isCrossPoolDesync } from '../utils/cross-pool-desync'
 import {
   clearInteractiveSignIn,
   consumeInteractiveSignIn,
@@ -119,8 +120,27 @@ export async function mintSession(
 
 /** A live local user, as much of one as these two paths read. */
 type SessionUser = Parameters<typeof mintSession>[0] & {
+  tenantId?: string | null
   metadata?: { lastSignInTime?: string | null }
   providerData?: Array<{ providerId?: string | null; email?: string | null } | null>
+}
+
+/**
+ * Whether a valid shared cookie belongs to a DIFFERENT account than the one
+ * this tab holds — another uid, or the same uid in another pool, since a uid
+ * is unique only within a pool (AGL-1993). A tab that answers true adopts
+ * the cookie (AGL-3592).
+ */
+export function sessionNamesAnotherAccount(
+  payload: { uid?: unknown; tenantId?: unknown } | null | undefined,
+  user: { uid: string; tenantId?: string | null },
+): boolean {
+  const uid = payload?.uid
+  // An answer without a uid (a server from before this field) says nothing
+  // about whose cookie it is, so it never moves the tab.
+  if (typeof uid !== 'string' || !uid) return false
+  const pool = typeof payload?.tenantId === 'string' ? payload.tenantId : null
+  return uid !== user.uid || pool !== (user.tenantId ?? null)
 }
 
 /**
@@ -143,11 +163,29 @@ async function validateSharedSession(
   auth: Parameters<typeof signOut>[0],
   user: SessionUser,
   mintedForUid: { current: string | null },
+  restoredSilently: { current: boolean },
   isActive: () => boolean,
+  remint = true,
 ): Promise<void> {
   try {
     const response = await fetch('/api/auth/session')
-    if (!isActive() || response.ok || response.status !== 401) return
+    if (!isActive()) return
+    if (response.ok) {
+      // The cookie is valid — but it may be ANOTHER account's. Signing in as
+      // someone else in a sibling tab re-mints the shared cookie, and a tab
+      // still holding the old user (a cross-pool switch the SDK refused to
+      // sync, AGL-3280) would otherwise keep it, and its next token refresh
+      // writes the old user back over the shared auth record for every tab.
+      // The cookie is the session the person chose most recently; adopt it,
+      // silently, in its own pool (AGL-1993), never re-minting (AGL-804).
+      const payload = await response.json().catch(() => null)
+      if (payload?.token && sessionNamesAnotherAccount(payload, user) && isActive()) {
+        restoredSilently.current = true
+        await signInWithPooledCustomToken(auth, payload.token, payload.tenantId)
+      }
+      return
+    }
+    if (response.status !== 401) return
     const payload = await response.json().catch(() => null)
     const reason = payload?.reason
     // A revocation always ends the session. A `signed-out` tombstone only
@@ -180,7 +218,10 @@ async function validateSharedSession(
         return
       }
     }
-    await mintSession(user, mintedForUid)
+    // `remint` is false when the caller already knows this tab's user is
+    // stale (a cross-pool desync): healing an absent cookie from it would
+    // mint the OLD account over the one a sibling is signing in.
+    if (remint) await mintSession(user, mintedForUid)
   } catch {
     // Network trouble never signs anyone out.
   }
@@ -228,6 +269,13 @@ async function restoreFromSharedCookie(
  * a failed one is a beat away, not a wait.
  */
 export const SESSION_RECHECK_THROTTLE_MS = 10_000
+
+/**
+ * How long after a cross-pool desync the adoption runs a second time: the
+ * sibling writes the shared auth record before its `/api/auth/session` mint
+ * lands, so the first read can still find the previous cookie or none.
+ */
+export const CROSS_POOL_ADOPT_RETRY_MS = 3_000
 
 /**
  * Cross-subdomain session sync (AGL-236). Firebase client auth is
@@ -317,6 +365,7 @@ export function useSessionCookie(): void {
             auth,
             user as SessionUser,
             mintedForUid,
+            restoredSilently,
             () => active,
           )
           return
@@ -411,16 +460,17 @@ export function useSessionCookie(): void {
   useEffect(() => {
     if (FIREBASE_AUTH_EMULATOR_ENABLED) return undefined
     let active = true
-    const recheck = () => {
+    const timers: Array<ReturnType<typeof setTimeout>> = []
+    const run = (force: boolean) => {
       // `visibilitychange` fires on the way INTO hidden as well as out of it.
-      if (document.visibilityState !== 'visible') return
+      if (!force && document.visibilityState !== 'visible') return
       // Nothing to re-check before the load-time pass has run — and running
       // first would read a token before `adoptRestoredPool` has repaired the
       // instance's pool, which is the AGL-2486 trap.
       if (!sawInitialState.current) return
       if (rechecking.current) return
       const at = Date.now()
-      if (at - lastRecheckAt.current < SESSION_RECHECK_THROTTLE_MS) return
+      if (!force && at - lastRecheckAt.current < SESSION_RECHECK_THROTTLE_MS) return
       rechecking.current = true
       lastRecheckAt.current = at
       void (async () => {
@@ -431,7 +481,9 @@ export function useSessionCookie(): void {
               auth,
               current,
               mintedForUid,
+              restoredSilently,
               () => active,
+              !force,
             )
           } else {
             // No local user: this is the tab parked on `/signin` after a
@@ -445,14 +497,37 @@ export function useSessionCookie(): void {
         }
       })()
     }
+    const recheck = () => run(false)
+    // A sibling tab signed in to an account in ANOTHER pool, and the SDK
+    // refused to sync it here (`auth/tenant-id-mismatch`, AGL-3280). Until
+    // this tab moves it keeps the old user, and that user's next token
+    // refresh writes it back over the shared record — which is how an
+    // account switch "did not stick" with an old console open. The reload in
+    // `useCrossPoolTabRecovery` waits for the tab to be hidden; this adopts
+    // the shared cookie now, whatever the tab is showing, because the cookie
+    // is the account the person just chose. Once more a beat later, in case
+    // the sibling's sign-in had not minted its cookie yet. Observed, never
+    // handled: the beacon still counts the rejection.
+    const onRejection = (event: PromiseRejectionEvent) => {
+      try {
+        if (!isCrossPoolDesync(event.reason)) return
+        run(true)
+        timers.push(setTimeout(() => run(true), CROSS_POOL_ADOPT_RETRY_MS))
+      } catch {
+        // Never throw from a rejection handler.
+      }
+    }
     document.addEventListener('visibilitychange', recheck)
     // Coming back from a dropped connection is the other moment a session
     // that could not be validated can be (`use-is-staff` pairs the same two).
     window.addEventListener('online', recheck)
+    window.addEventListener('unhandledrejection', onRejection)
     return () => {
       active = false
+      timers.forEach(clearTimeout)
       document.removeEventListener('visibilitychange', recheck)
       window.removeEventListener('online', recheck)
+      window.removeEventListener('unhandledrejection', onRejection)
     }
   }, [auth])
 }
