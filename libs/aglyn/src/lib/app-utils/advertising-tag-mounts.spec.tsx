@@ -158,13 +158,23 @@ describe('the advertising mount and the page-idle gate (AGL-3581)', () => {
   beforeEach(() => resetPageIdleForTests())
 
   it('injects nothing until the page has loaded and gone idle, then every pair', async () => {
-    await mount(NONCE)
-    // Committed, consented, configured — and still nothing, because a tag
-    // injected during hydration is vendor long tasks on top of React's.
-    expect(markedScripts()).toHaveLength(0)
+    // jsdom has no idle callback, so the gate's stand-in is a 1 ms timer. Real
+    // timers let a slow runner fire it inside the mount's act(), before the
+    // first assertion; fake ones hold it until the test releases it.
+    jest.useFakeTimers()
+    try {
+      await mount(NONCE)
+      // Committed, consented, configured — and still nothing, because a tag
+      // injected during hydration is vendor long tasks on top of React's.
+      expect(markedScripts()).toHaveLength(0)
 
-    await settlePageIdle()
-    expect(markedScripts()).toHaveLength(4)
+      await act(async () => {
+        jest.advanceTimersByTime(1)
+      })
+      expect(markedScripts()).toHaveLength(4)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('does not wait on interaction: idle alone releases it, within the cap', async () => {
