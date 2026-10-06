@@ -18,7 +18,9 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiPageLayoutHeader } from '@aglyn/shared-data-mdi'
 import MuiAppBar, { type AppBarProps } from '@mui/material/AppBar'
-import { createElement, forwardRef } from 'react'
+import { type SxProps, type Theme } from '@mui/material/styles'
+import useScrollTrigger from '@mui/material/useScrollTrigger'
+import { createElement, forwardRef, type Ref } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
   applySemanticElement,
@@ -30,6 +32,69 @@ import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { ID as toolbarId } from './toolbar'
 
+export interface AglynAppBarProps extends AppBarProps {
+  /**
+   * Compacts the bar's Toolbar Content to the dense height once the page
+   * has scrolled, and back at the top. Meant for a pinned (sticky/fixed)
+   * bar, where the full height costs the reader a band of every screen.
+   */
+  shrinkOnScroll?: boolean
+}
+
+/** Scroll distance before a shrinking bar compacts. */
+const SHRINK_THRESHOLD = 16
+
+/**
+ * The scrolled state rides a data attribute, not a re-styled sx, so the
+ * server render and every scroll position share one emotion class.
+ */
+const shrinkSx: SxProps<Theme> = (theme) => ({
+  '& .MuiToolbar-root': {
+    transition: theme.transitions.create('min-height', {
+      duration: theme.transitions.duration.shorter,
+    }),
+  },
+  '&[data-scrolled] .MuiToolbar-root': {
+    // MUI's dense toolbar height.
+    minHeight: theme.spacing(6),
+  },
+})
+
+function withShrinkSx(sx: AppBarProps['sx']): AppBarProps['sx'] {
+  return [shrinkSx, ...(Array.isArray(sx) ? sx : [sx])] as AppBarProps['sx']
+}
+
+function renderAppBar(props: AppBarProps, ref: Ref<HTMLElement>) {
+  return createElement(MuiAppBar, {
+    // Unset leaves MUI's own default, which is `header` — the banner
+    // landmark every site's chrome depends on (AGL-2525). A resolver that
+    // answered `div` for "unset" would have stripped it the moment the
+    // picker appeared.
+    ...applySemanticElement(dropClearedProps(props) as Record<string, unknown>),
+    ref,
+  })
+}
+
+/**
+ * Its own component so the scroll listener exists only on a bar that asked
+ * to shrink — a hook behind a prop check would break the rules of hooks.
+ */
+const ShrinkingAppBar = forwardRef<HTMLElement, AppBarProps>((props, ref) => {
+  const scrolled = useScrollTrigger({
+    disableHysteresis: true,
+    threshold: SHRINK_THRESHOLD,
+  })
+  return renderAppBar(
+    {
+      ...props,
+      sx: withShrinkSx(props.sx),
+      ...({ 'data-scrolled': scrolled ? '' : undefined } as AppBarProps),
+    },
+    ref,
+  )
+})
+ShrinkingAppBar.displayName = 'AglynShrinkingAppBar'
+
 /**
  * MUI's AppBar behind the cleared-prop guard (AGL-1226).
  *
@@ -39,22 +104,18 @@ import { ID as toolbarId } from './toolbar'
  * wrapper is the only place to intercept it, since the schema's props reach
  * MUI directly. `createElement` rather than JSX keeps this a `.ts` file.
  */
-const AppBar = forwardRef<HTMLElement, AppBarProps>((props, ref) =>
-  createElement(MuiAppBar, {
-    // Unset leaves MUI's own default, which is `header` — the banner
-    // landmark every site's chrome depends on (AGL-2525). A resolver that
-    // answered `div` for "unset" would have stripped it the moment the
-    // picker appeared.
-    ...applySemanticElement(dropClearedProps(props) as Record<string, unknown>),
-    ref,
-  }),
+const AppBar = forwardRef<HTMLElement, AglynAppBarProps>(
+  ({ shrinkOnScroll, ...props }, ref) =>
+    shrinkOnScroll
+      ? createElement(ShrinkingAppBar, { ...props, ref })
+      : renderAppBar(props, ref),
 )
 AppBar.displayName = 'AglynAppBar'
 
 // Component ids are persisted in screen documents; keep the legacy ids.
 export const ID: Aglyn.ComponentId = 'muiAppBar'
 
-export const schema: Aglyn.ComponentSchema<AppBarProps> = {
+export const schema: Aglyn.ComponentSchema<AglynAppBarProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'App Bar',
@@ -70,6 +131,14 @@ export const schema: Aglyn.ComponentSchema<AppBarProps> = {
     semanticElementLabelAttribute(),
     FIELD_COLOR_ALT1,
     FIELD_POSITION,
+    {
+      name: 'shrinkOnScroll',
+      description:
+        'Compacts the bar to the dense height once the page scrolls, and ' +
+        'restores it at the top. Pair with a Sticky or Fixed position.',
+      component: Aglyn.FieldComponentType.SWITCH,
+      label: 'Shrink when scrolled?',
+    },
   ],
 }
 

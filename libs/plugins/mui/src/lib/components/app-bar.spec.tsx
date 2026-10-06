@@ -19,9 +19,9 @@
  */
 
 import AppBar from '@mui/material/AppBar'
-import { render } from '@testing-library/react'
+import { act, fireEvent, render } from '@testing-library/react'
 import { FIELD_COLOR_ALT1 } from '../constants/field-presets'
-import { schema } from './app-bar'
+import AglynAppBar, { schema } from './app-bar'
 
 /**
  * AGL-1191: picking "Theme color → Default" on an App Bar silently reverted
@@ -70,5 +70,51 @@ describe('MUI AppBar color premise (AGL-1191)', () => {
   it('renders colorPrimary when the prop is absent — why "" could not mean Default', () => {
     const { container } = render(<AppBar />)
     expect(container.querySelector('.MuiAppBar-colorPrimary')).not.toBeNull()
+  })
+})
+
+/**
+ * "Shrink when scrolled": a pinned bar compacts to the dense toolbar height
+ * once the page scrolls, and restores at the top. The state is a data
+ * attribute so the server render and every scroll position share one class.
+ */
+describe('App Bar "Shrink when scrolled"', () => {
+  function scrollTo(y: number) {
+    act(() => {
+      Object.defineProperty(window, 'pageYOffset', {
+        configurable: true,
+        value: y,
+      })
+      fireEvent.scroll(window)
+    })
+  }
+
+  afterEach(() => scrollTo(0))
+
+  it('is an authorable switch on the schema', () => {
+    const attribute = schema.attributes?.find(
+      (field) => field.name === 'shrinkOnScroll',
+    )
+    expect(attribute?.component).toBe('switch')
+  })
+
+  it('marks the bar scrolled past the threshold, and clears it at the top', () => {
+    const { container } = render(<AglynAppBar shrinkOnScroll />)
+    const bar = container.querySelector('header') as HTMLElement
+    expect(bar.hasAttribute('data-scrolled')).toBe(false)
+
+    scrollTo(200)
+    expect(bar.hasAttribute('data-scrolled')).toBe(true)
+
+    scrollTo(0)
+    expect(bar.hasAttribute('data-scrolled')).toBe(false)
+  })
+
+  it('never reaches the DOM as a prop, and leaves an unshrinking bar alone', () => {
+    const { container } = render(<AglynAppBar />)
+    const bar = container.querySelector('header') as HTMLElement
+    scrollTo(200)
+    expect(bar.hasAttribute('data-scrolled')).toBe(false)
+    expect(bar.hasAttribute('shrinkonscroll')).toBe(false)
   })
 })
