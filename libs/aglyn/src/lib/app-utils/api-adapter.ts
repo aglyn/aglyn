@@ -16,8 +16,12 @@
  */
 
 import { Writable } from 'node:stream'
+import { loadAfterResponse, scheduleAfterResponse } from './after-response'
 import type { PluginApiRequest, PluginApiResponse } from './api-plugins'
 import { readClientIp } from './request-ip'
+
+/** What this adapter's `after()` drops are logged under. */
+const AFTER_RESPONSE_LABEL = '[api-adapter]'
 
 /**
  * A node-style API handler runnable through {@link runLegacyHandler}. Both
@@ -391,15 +395,28 @@ class PluginResponseCollector extends Writable implements PluginApiResponse {
  * streams gets its `Response` back at the first chunk while it keeps writing;
  * if it fails after that, the body fails with it (see
  * {@link PluginResponseCollector}).
+ *
+ * ## What a streaming handler does after its last byte
+ *
+ * The request ends when the streamed body closes, and the platform may
+ * freeze the instance then, while the handler is still awaiting what it
+ * started: the media CDN's serve count and bandwidth evaluation. A write
+ * frozen in flight resumes on the instance's next request and fails there
+ * with a 60-second deadline, so the serve goes uncounted. The rest of such
+ * a handler is therefore handed to `after()`, which keeps the invocation
+ * alive until it settles.
  */
 export async function runLegacyHandler(
   handler: LegacyApiHandler,
   request: Request,
   params: Record<string, string | string[]> = {},
 ): Promise<Response> {
+  // Loaded ahead of the handler, so `after()` is in hand by the first chunk.
+  void loadAfterResponse(AFTER_RESPONSE_LABEL)
   const req = await pluginRequestFromWeb(request, params)
   const res = new PluginResponseCollector()
   const failure: { error?: unknown; failed: boolean } = { failed: false }
+  let settled = false
   const handled = (async (): Promise<void> => {
     try {
       await handler(req, res)
@@ -411,9 +428,12 @@ export async function runLegacyHandler(
       }
       failure.failed = true
       failure.error = error
+    } finally {
+      settled = true
     }
   })()
   await Promise.race([handled, res.firstChunkWritten])
   if (failure.failed) throw failure.error
+  if (!settled) void scheduleAfterResponse(() => handled, AFTER_RESPONSE_LABEL)
   return res.toResponse()
 }

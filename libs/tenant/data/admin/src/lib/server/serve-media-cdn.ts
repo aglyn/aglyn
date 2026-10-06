@@ -53,6 +53,7 @@ import {
   mediaCdnScopeRefusal,
   parseMediaCdnScope,
 } from '@aglyn/aglyn/app-utils/media-cdn-scope'
+import { scheduleAfterResponse } from '@aglyn/aglyn/app-utils/after-response'
 import { mediaDeliveryProvider } from '@aglyn/aglyn/plugin-manager/media-delivery-provider'
 import {
   parseSiteIconSpec,
@@ -61,7 +62,6 @@ import {
   SITE_ICON_VERSION_PARAM,
 } from '@aglyn/aglyn/app-utils/site-icon-set'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { scheduleAfterResponse } from './after-response'
 import { analyticsDayExpiresAt } from './analytics-retention'
 import { firebaseAdmin } from './firebase-admin'
 import { recordMediaServe } from './media-serve-count'
@@ -2099,8 +2099,9 @@ export async function serveMediaCdn(
       )
       .catch((error: unknown) => logUncountedServe(scopeSegment, mediaId, error))
     // Totalled beside the stream rather than ahead of it, and awaited — with
-    // the count above — once the stream ends, so the function lives until
-    // both are done.
+    // the count above — once the stream ends. The request is over by then;
+    // `runLegacyHandler` hands what this still awaits to `after()`, which is
+    // what keeps the function alive until both are written.
     const evaluation =
       countedBytes > 0 ? mediaCdnBandwidthEvaluation(scope, countedBytes) : null
     if (partial) res.status(206)

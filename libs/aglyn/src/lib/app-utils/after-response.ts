@@ -20,13 +20,16 @@
  *
  * A serverless invocation is frozen the moment its response is sent, and
  * work scheduled any other way does not run (AGL-2327). `after()` is the
- * one way to keep it.
+ * one way to keep it. Three callers use it: the media CDN's lazy
+ * regeneration, the deliverability check at capture, and
+ * `runLegacyHandler` (`api-adapter.ts`), which hands it whatever a
+ * streaming handler is still awaiting when its body closes.
  *
  * ## Loaded, not imported
  *
  * `next/server` evaluates web `Request` classes at load, which a jsdom spec
- * reaching one of this package's writers cannot, and the modules that
- * schedule work ride every writer's import. So it is loaded the first time
+ * reaching one of `tenant-data-admin`'s writers cannot, and the modules
+ * that schedule work ride every writer's import. So it is loaded the first time
  * work is scheduled.
  *
  * ## Through `import()`, never `require()`
@@ -39,7 +42,8 @@
  * media CDN's regeneration (AGL-3486) nor the deliverability check at
  * capture (AGL-3328) ever ran in production. A spec cannot see this:
  * `jest.mock('next/server')` answers `require` and `import()` alike.
- * `after-response.spec.ts` holds the package to `import()`.
+ * `after-response.spec.ts` holds this package and `tenant-data-admin`
+ * to `import()`.
  *
  * ## Every drop is said once
  *
@@ -71,11 +75,11 @@ function logOnce(label: string, reason: string, message: string, error?: unknown
  */
 export function loadAfterResponse(label = '[after-response]'): Promise<AfterResponse | null> {
   afterResponseLoad ??= import('next/server').then(
-    (loaded) =>
+    (loaded: unknown): AfterResponse | null =>
       typeof (loaded as { after?: unknown }).after === 'function'
         ? (loaded as { after: AfterResponse }).after
         : null,
-    (error: unknown) => {
+    (error: unknown): null => {
       logOnce(label, 'load', 'next/server could not be loaded', error)
       return null
     },

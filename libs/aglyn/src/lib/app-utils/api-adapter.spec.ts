@@ -33,6 +33,18 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { runLegacyHandler } from './api-adapter'
 
+/** `after()` as a request runs it: recorded, for the spec to run when the response has gone. */
+const mockAfter: Array<() => Promise<unknown>> = []
+jest.mock('next/server', () => ({
+  after: (task: () => Promise<unknown>) => {
+    mockAfter.push(task)
+  },
+}))
+
+beforeEach(() => {
+  mockAfter.length = 0
+})
+
 const request = (init?: RequestInit) =>
   new Request('https://site.test/api/thing', init)
 
@@ -246,5 +258,48 @@ describe('AGL-2810 · a complete body is still one buffered response', () => {
         throw new Error('boom')
       }, request()),
     ).rejects.toThrow('boom')
+  })
+})
+
+describe('what a streaming handler awaits after its body closes runs in after()', () => {
+  it('hands the rest of the handler to after(), which settles only when the handler does', async () => {
+    const source = heldSource()
+    let releaseCount!: () => void
+    const counted = new Promise<void>((resolve) => {
+      releaseCount = resolve
+    })
+    const state = { counted: false }
+    source.push(Buffer.from('bytes'))
+    source.push(null)
+    const response = await runLegacyHandler(async (_req, res) => {
+      try {
+        await pipeline(source, res)
+      } finally {
+        // The media CDN's serve count, awaited once the stream ends.
+        await counted
+        state.counted = true
+      }
+    }, request())
+    expect(await readRest(readerOf(response))).toBe('bytes')
+    await eventually(() => mockAfter.length === 1)
+
+    let afterSettled = false
+    const running = mockAfter[0]().then(() => {
+      afterSettled = true
+    })
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(afterSettled).toBe(false)
+    releaseCount()
+    await running
+    expect(state.counted).toBe(true)
+  })
+
+  it('asks nothing of after() when the handler finished before answering', async () => {
+    const response = await runLegacyHandler(async (_req, res) => {
+      res.status(200).json({ ok: true })
+    }, request())
+    expect(await response.json()).toEqual({ ok: true })
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(mockAfter).toHaveLength(0)
   })
 })
