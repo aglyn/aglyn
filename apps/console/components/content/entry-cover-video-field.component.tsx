@@ -23,7 +23,10 @@ import {
   mediaAssetDocumentPath,
   mediaAssetFactsFromDocument,
 } from '@aglyn/aglyn/app-utils/media-asset-facts'
-import { inheritedMediaAlt } from '@aglyn/aglyn/app-utils/media-metadata'
+import {
+  inheritedMediaAlt,
+  videoMediaProps,
+} from '@aglyn/aglyn/app-utils/media-metadata'
 import {
   mediaPosterSrc,
   parseMediaRef,
@@ -53,8 +56,29 @@ export interface EntryCoverVideoFieldProps {
   /** The stored value: a `media:` reference, or a pasted video link. */
   value: string
   onValueChange: (value: string) => void
+  /**
+   * How long the film runs, in seconds, as the editor holds it (AGL-3584):
+   * what the watch page's `VideoObject` publishes as `duration`. Blank is
+   * unknown.
+   */
+  duration: string
+  onDurationChange: (value: string) => void
   /** Opens the page's ONE media picker, targeted at the featured video. */
   onChoose: () => void
+}
+
+/**
+ * A library film's length in whole seconds as its document records it, or
+ * `undefined` when it records none (AGL-3584). Through `videoMediaProps`, the
+ * rule a Video element's own pick uses, so an entry and a placed Video agree
+ * on how long the same film is.
+ */
+export function libraryVideoSeconds(assetVideo: unknown): number | undefined {
+  return videoMediaProps({
+    componentId: 'video',
+    propName: 'src',
+    assetVideo,
+  }).durationSeconds
 }
 
 /**
@@ -63,6 +87,8 @@ export interface EntryCoverVideoFieldProps {
  *
  * `coverVideo` stores `src`, the asset's `media:` reference, so a folder move
  * or a replace reaches the entry the way it reaches a cover image.
+ * `coverVideoDuration` becomes the film's measured length (AGL-3584), so the
+ * watch page publishes a `duration` without the author typing one.
  *
  * ## The poster fill
  *
@@ -86,7 +112,13 @@ export interface EntryCoverVideoFieldProps {
  */
 export function featuredVideoPick(options: {
   /** The picked media document, as the picker dialog hands it back. */
-  media: { contentType?: unknown; poster?: unknown; alt?: unknown }
+  media: {
+    contentType?: unknown
+    poster?: unknown
+    alt?: unknown
+    /** The film's measured record — `durationMs`, `width`, `height`. */
+    video?: unknown
+  }
   /** The picked asset's stored form, from `mediaNodeSrc`. */
   src: string
   hostId: string
@@ -94,10 +126,22 @@ export function featuredVideoPick(options: {
   coverImage: string
   /** The cover's description as the editor holds it now. */
   coverImageAlt: string
-}): { coverVideo: string; coverImage?: string; coverImageAlt?: string } | null {
+}): {
+  coverVideo: string
+  coverVideoDuration: string
+  coverImage?: string
+  coverImageAlt?: string
+} | null {
   const { media, src, hostId, coverImage, coverImageAlt } = options
   if (!String(media?.contentType ?? '').startsWith('video/')) return null
-  const picked = { coverVideo: src }
+  // The length goes with the film (AGL-3584): the library's measurement when
+  // it has one, and blank otherwise, because a length typed for the film
+  // being replaced does not describe this one.
+  const seconds = libraryVideoSeconds(media.video)
+  const picked = {
+    coverVideo: src,
+    coverVideoDuration: seconds ? String(seconds) : '',
+  }
   if (coverImage.trim()) return picked
   if (!media.poster || typeof media.poster !== 'object') return picked
   const poster = mediaPosterSrc(src, { hostId })
@@ -156,7 +200,8 @@ function sourceLabel(value: string): string {
  * placeholder that says what the value is and shows it.
  */
 export function EntryCoverVideoField(props: EntryCoverVideoFieldProps) {
-  const { hostId, value, onValueChange, onChoose } = props
+  const { hostId, value, onValueChange, duration, onDurationChange, onChoose } =
+    props
   const trimmed = value.trim()
   const ref = parseMediaRef(trimmed)
   const path = ref ? mediaAssetDocumentPath(ref) : null
@@ -173,6 +218,12 @@ export function EntryCoverVideoField(props: EntryCoverVideoFieldProps) {
     facts?.poster && typeof facts.poster === 'object'
       ? mediaPosterSrc(trimmed, { hostId, width: PREVIEW_POSTER_WIDTH })
       : undefined
+  // The library's own measurement, offered rather than written, so opening
+  // an entry whose film was picked before lengths were stored does not mark
+  // it edited (AGL-3584).
+  const measured = facts ? libraryVideoSeconds(facts.video) : undefined
+  const offerMeasured =
+    measured !== undefined && duration.trim() !== String(measured)
 
   return (
     <Stack spacing={1.5}>
@@ -235,7 +286,14 @@ export function EntryCoverVideoField(props: EntryCoverVideoFieldProps) {
           {trimmed ? 'Replace video' : 'Choose video'}
         </Button>
         {trimmed ? (
-          <Button size="small" color="error" onClick={() => onValueChange('')}>
+          <Button
+            size="small"
+            color="error"
+            onClick={() => {
+              onValueChange('')
+              onDurationChange('')
+            }}
+          >
             {'Clear'}
           </Button>
         ) : null}
@@ -252,6 +310,28 @@ export function EntryCoverVideoField(props: EntryCoverVideoFieldProps) {
           'image with that frame.'
         }
       />
+      <TextField
+        label="Video length (seconds)"
+        type="number"
+        value={duration}
+        onChange={(event) => onDurationChange(event.target.value)}
+        size="small"
+        slotProps={{ htmlInput: { min: 1, step: 1, inputMode: 'numeric' } }}
+        helperText={
+          'How long the video runs, for search results that show a length. ' +
+          'Filled in when you choose a library video; type it for a linked ' +
+          'video. Leave it blank if you do not know.'
+        }
+      />
+      {offerMeasured ? (
+        <Button
+          size="small"
+          sx={{ alignSelf: 'flex-start' }}
+          onClick={() => onDurationChange(String(measured))}
+        >
+          {`Use the library length (${measured} seconds)`}
+        </Button>
+      ) : null}
     </Stack>
   )
 }

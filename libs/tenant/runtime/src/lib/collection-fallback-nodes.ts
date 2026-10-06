@@ -42,6 +42,8 @@ interface FallbackEntry {
   coverImage?: string
   /** The featured video (AGL-2956); plays in the cover's place. */
   coverVideo?: string
+  /** Its length in seconds (AGL-3584); the Video's `durationSeconds`. */
+  coverVideoDuration?: number
   /** Meta description override (AGL-582); falls back to `excerpt`. */
   seoDescription?: string
   /** Stable taxonomy reference (AGL-582); wins over `category`. */
@@ -237,7 +239,10 @@ type AglynNodeEntry = [string, Aglyn.AglynNodeSchema]
  * `{{entry.seoDescription}}` does, and the ISO publish instant
  * `{{entry.publishedAt}}` resolves to. An instant rather than a calendar day:
  * the builder publishes `uploadDate` as a date-time with a zone, and it keeps
- * an instant as given where it would publish a bare day at noon UTC.
+ * an instant as given where it would publish a bare day at noon UTC. The
+ * film's length rides along when the entry names one (AGL-3584), as
+ * `{{entry.coverVideoDuration}}` would bind it, and becomes the block's
+ * `duration`.
  *
  * `undefined` rather than a Video node in two cases, because the element's
  * answer to each is a labeled placeholder, which a published article must
@@ -273,12 +278,18 @@ function featuredVideoProps(
   if (videoEmbedOf(src) && !poster) return undefined
   const description = entry.seoDescription || entry.excerpt || ''
   const uploadDate = Aglyn.collectionEntryPublishedAtIso(entry.publishedAt)
+  const durationSeconds = Aglyn.collectionEntryVideoDurationSeconds(
+    entry.coverVideoDuration,
+  )
   return {
     src,
     ...(poster ? { poster } : {}),
     title: entry.title ?? '',
     ...(description ? { description } : {}),
     ...(uploadDate ? { uploadDate } : {}),
+    // The length the entry names (AGL-3584), which `{{entry.coverVideoDuration}}`
+    // resolves to, so the page's `VideoObject` carries `duration`.
+    ...(durationSeconds ? { durationSeconds } : {}),
     width: '100%',
   }
 }

@@ -162,6 +162,7 @@ const publishedEntry = (extra: Record<string, unknown>) => ({
   coverImage: 'media:host-1/cover',
   coverImageAlt: 'A cover',
   coverVideo: 'media:host-1/film',
+  coverVideoDuration: 754,
   seoTitle: 'SEO title',
   seoDescription: 'SEO description',
   categoryId: 'guides',
@@ -418,6 +419,25 @@ describe('the loader carries the featured video (AGL-2956)', () => {
     })
 
     expect(content.entry?.coverVideo).toBe('')
+  })
+
+  it("carries the film's length, and nothing for one that is not a length (AGL-3584)", async () => {
+    entryDocs = [publishedEntry({ coverVideoDuration: 754 })]
+    const routed = await getCollectionContent({
+      hostId: HOST,
+      collectionSlug: 'blog',
+      entrySlug: 'shipping-the-export',
+    })
+    expect(routed.entry?.coverVideoDuration).toBe(754)
+
+    for (const coverVideoDuration of [undefined, 0, -1, 'soon']) {
+      entryDocs = [publishedEntry({ coverVideoDuration })]
+      const content = await getCollectionContent({
+        hostId: HOST,
+        collectionSlug: 'blog',
+      })
+      expect(content.entries[0]).not.toHaveProperty('coverVideoDuration')
+    }
   })
 })
 
