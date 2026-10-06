@@ -77,6 +77,12 @@ export const schema: Aglyn.ComponentSchema<BoxElementProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Box',
+  // Static, and its children sit directly in its root: a subtree it heads
+  // keeps its server HTML until the visitor nears it (AGL-3581).
+  flags: {
+    lazyHydration: Aglyn.FEATURE_FLAG.ENABLED,
+    childrenInRoot: Aglyn.FEATURE_FLAG.ENABLED,
+  },
   description:
     'Generic container with no styling of its own — style it from the ' +
     'styles panel.',

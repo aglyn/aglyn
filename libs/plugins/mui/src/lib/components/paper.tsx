@@ -94,6 +94,12 @@ export const schema: Aglyn.ComponentSchema<PaperElementProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Paper',
+  // Static, and its children sit directly in its root: a subtree it heads
+  // keeps its server HTML until the visitor nears it (AGL-3581).
+  flags: {
+    lazyHydration: Aglyn.FEATURE_FLAG.ENABLED,
+    childrenInRoot: Aglyn.FEATURE_FLAG.ENABLED,
+  },
   description: 'Themed surface with a shadow or an outline.',
   category: Aglyn.ComponentCategory.SURFACE,
   icon: { path: mdiFileDocumentOutline.path, sx: { color: '#2196f3' } },

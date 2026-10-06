@@ -739,7 +739,10 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
       ))}
       <EnabledPluginsContext.Provider value={renderedPlugins}>
         <RealmElementsContext.Provider value={realmLoadFor}>
-          <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
+          {/* Static subtrees keep their server HTML and hydrate as the
+              visitor nears them (AGL-3581); anything interactive, and every
+              element that has not declared otherwise, hydrates now. */}
+          <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} deferHydration />
         </RealmElementsContext.Provider>
       </EnabledPluginsContext.Provider>
       {props.showBranding ? (

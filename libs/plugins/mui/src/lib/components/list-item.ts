@@ -50,6 +50,8 @@ export const schema: Aglyn.ComponentSchema<ListItemProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'List Item',
+  // Static: may sit in a subtree that keeps its server HTML (AGL-3581).
+  flags: { lazyHydration: Aglyn.FEATURE_FLAG.ENABLED },
   description: 'One row of a list.',
   category: Aglyn.ComponentCategory.DATA_DISPLAY,
   icon: { path: mdiFormatListText.path },

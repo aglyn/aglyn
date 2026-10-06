@@ -216,6 +216,8 @@ export const schema: Aglyn.ComponentSchema<LinkableButtonProps> = {
     sx: { color: '#2196f3' },
   },
   flags: {
+    // Static: may sit in a subtree that keeps its server HTML (AGL-3581).
+    lazyHydration: Aglyn.FEATURE_FLAG.ENABLED,
     textEditable: Aglyn.FEATURE_FLAG.ENABLED,
     richTextEditable: Aglyn.FEATURE_FLAG.ENABLED,
   },
