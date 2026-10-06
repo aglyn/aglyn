@@ -20,6 +20,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 // The leaf module, not the barrel: the entry specs mock the barrel as a closed
 // world, and a search key derivation is nothing they have reason to stage.
+import { collectionEntryVideoDurationSeconds } from '@aglyn/aglyn/app-utils/collection-entries'
 import { entryTitleSearchFields } from '@aglyn/aglyn/app-utils/content-query-fields'
 import { planLabelGrantingFeature } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
@@ -227,6 +228,12 @@ type EntryEditorState = {
    * reference to a library film, or a pasted link. Blank stores nothing.
    */
   coverVideo: string
+  /**
+   * How long the featured video runs, in seconds, as typed (AGL-3584). A
+   * string while editing, like every field here; saved as a whole number, and
+   * removed when blank, not a positive number, or there is no video.
+   */
+  coverVideoDuration: string
   // Entry model v2 (AGL-582): SEO overrides + taxonomy. Tags stay a
   // comma-separated STRING while editing; saved as string[].
   seoTitle: string
@@ -261,6 +268,7 @@ const BLANK_ENTRY_EDITOR: EntryEditorState = {
   coverImage: '',
   coverImageAlt: '',
   coverVideo: '',
+  coverVideoDuration: '',
   seoTitle: '',
   seoDescription: '',
   authorName: '',
@@ -290,6 +298,9 @@ const editorStateForEntry = (entry: any): EntryEditorState => ({
   coverImage: entry.coverImage ?? '',
   coverImageAlt: entry.coverImageAlt ?? '',
   coverVideo: entry.coverVideo ?? '',
+  coverVideoDuration: String(
+    collectionEntryVideoDurationSeconds(entry.coverVideoDuration) ?? '',
+  ),
   seoTitle: entry.seoTitle ?? '',
   seoDescription: entry.seoDescription ?? '',
   authorName: entry.authorName ?? '',
@@ -628,6 +639,11 @@ export function EntryDetailPage() {
      * the buffer started blank — so the read that has not happened is not
      * evidence of anything, and letting it stand would refuse every create.
      */
+    // The featured video's length as stored: whole seconds, and only beside a
+    // video (AGL-3584).
+    const coverVideoSeconds = editor.coverVideo.trim()
+      ? collectionEntryVideoDurationSeconds(editor.coverVideoDuration)
+      : undefined
     const verdict = await writeGuardedBySeed(
       {
         subject: 'entry',
@@ -670,6 +686,12 @@ export function EntryDetailPage() {
             ...(editor.coverVideo.trim()
               ? { coverVideo: editor.coverVideo.trim() }
               : { coverVideo: deleteField() }),
+            // Its length (AGL-3584), a number the page's `VideoObject`
+            // publishes as `duration`. Removed with the video, and when it is
+            // not a length, so a stale or stray value never describes a film.
+            ...(coverVideoSeconds
+              ? { coverVideoDuration: coverVideoSeconds }
+              : { coverVideoDuration: deleteField() }),
             // Entry model v2 (AGL-582): SEO overrides + taxonomy.
             seoTitle: editor.seoTitle.trim(),
             seoDescription: editor.seoDescription.trim(),
@@ -2004,6 +2026,12 @@ export function EntryDetailPage() {
                       onValueChange={(value) =>
                         setEditor((prev) =>
                           prev ? { ...prev, coverVideo: value } : prev,
+                        )
+                      }
+                      duration={editor.coverVideoDuration}
+                      onDurationChange={(value) =>
+                        setEditor((prev) =>
+                          prev ? { ...prev, coverVideoDuration: value } : prev,
                         )
                       }
                       onChoose={() => setPickerTarget('video')}

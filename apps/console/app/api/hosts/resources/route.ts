@@ -331,6 +331,8 @@ const RESOURCES: Record<string, HostResource> = {
       // The featured video (AGL-2954), which the editor writes beside the
       // cover.
       'coverVideo',
+      // Its length in seconds (AGL-3584), written beside it.
+      'coverVideoDuration',
       'seoTitle',
       'seoDescription',
       'authorName',

@@ -414,6 +414,21 @@ describe('the built-in entry page plays a featured video (AGL-2956)', () => {
     )
   })
 
+  it("passes the entry's video length, so the VideoObject carries a duration (AGL-3584)", () => {
+    const nodes = article({ ...film, coverVideoDuration: 754 }, 'host1')
+    expect(nodes[VIDEO_ID].props.durationSeconds).toBe(754)
+    const [block] = pageVideoObjects(nodes, { origin: ORIGIN, hostId: 'host1' })
+    expect(block).toMatchObject({ duration: 'PT12M34S' })
+    // An entry that names no length publishes no duration, rather than `PT0S`.
+    for (const coverVideoDuration of [undefined, 0, -3]) {
+      const plain = article({ ...film, coverVideoDuration }, 'host1')
+      expect(Object.keys(plain[VIDEO_ID].props)).not.toContain('durationSeconds')
+      expect(
+        pageVideoObjects(plain, { origin: ORIGIN, hostId: 'host1' })[0],
+      ).not.toHaveProperty('duration')
+    }
+  })
+
   it('plays a Wistia film behind the cover as its poster', () => {
     expect(article({ ...film, coverVideo: WISTIA })[VIDEO_ID].props).toMatchObject(
       { src: WISTIA, poster: 'media:host1/still' },

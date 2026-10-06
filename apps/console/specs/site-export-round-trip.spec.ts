@@ -896,6 +896,8 @@ const SEEDS: Array<{
       // The import writes with `merge: false`, so a field missing from the
       // allow-list would come back erased rather than merely unset.
       coverVideo: 'media:org:org-1/film-1',
+      // Its length (AGL-3584), which the watch page publishes as `duration`.
+      coverVideoDuration: 754,
       seoTitle: 'Shipping the export',
       seoDescription: 'How the bundle works',
       authorName: 'Zach',

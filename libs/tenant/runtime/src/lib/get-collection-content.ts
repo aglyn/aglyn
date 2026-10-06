@@ -21,6 +21,7 @@ import {
   collectionCategorySlug,
   checkEntitlement,
   COLLECTION_SOURCE_MAX,
+  collectionEntryVideoDurationSeconds,
   collectionTotalPages,
   type ContentAuthorRecord,
   entryMatchesCategoryRoute,
@@ -117,6 +118,11 @@ export interface CollectionEntrySummary {
    * `CollectionEntryRecord.coverVideo`.
    */
   coverVideo?: string
+  /**
+   * The featured video's length in whole seconds (AGL-3584), or unset when the
+   * entry names none. See `CollectionEntryRecord.coverVideoDuration`.
+   */
+  coverVideoDuration?: number
   /** Search-result title override (AGL-582); falls back to `title`. */
   seoTitle?: string
   /** Meta description override (AGL-582); falls back to `excerpt`. */
@@ -159,6 +165,7 @@ function mapEntryFields(
   | 'coverImage'
   | 'coverImageAlt'
   | 'coverVideo'
+  | 'coverVideoDuration'
   | 'seoTitle'
   | 'seoDescription'
   | 'authorName'
@@ -168,6 +175,9 @@ function mapEntryFields(
   | 'tags'
   | 'updatedAt'
 > {
+  const coverVideoDuration = collectionEntryVideoDurationSeconds(
+    value['coverVideoDuration'],
+  )
   return {
     excerpt: value['excerpt'] ?? '',
     // The byline was DECLARED on `CollectionEntrySummary` (AGL-686) and
@@ -185,6 +195,10 @@ function mapEntryFields(
     // Here, where both read paths pick it up, so a list card and the routed
     // entry page can each bind the featured video (AGL-2956).
     coverVideo: value['coverVideo'] ?? '',
+    // Its length (AGL-3584), for the Video's `durationSeconds` and so the
+    // watch page's `VideoObject.duration`. Absent rather than `0` when the
+    // entry names none, which every reader treats as no duration.
+    ...(coverVideoDuration ? { coverVideoDuration } : {}),
     seoTitle: value['seoTitle'] ?? '',
     seoDescription: value['seoDescription'] ?? '',
     categoryId: value['categoryId'] ?? '',
@@ -804,6 +818,7 @@ const LIVE_ENTRY_FIELDS = [
   'coverImage',
   'coverImageAlt',
   'coverVideo',
+  'coverVideoDuration',
   'seoTitle',
   'seoDescription',
   'categoryId',

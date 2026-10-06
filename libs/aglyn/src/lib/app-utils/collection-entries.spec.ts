@@ -37,6 +37,7 @@ import {
   collectionEntryMetaValues,
   collectionEntryPublishedAtIso,
   collectionEntryTokens,
+  collectionEntryVideoDurationSeconds,
   collectionListUrl,
   collectionPaginationLinks,
   collectionEntriesPageWindow,
@@ -245,6 +246,33 @@ describe('collectionEntryTokens (AGL-551)', () => {
       ).toBe(coverVideo)
     }
     expect(collectionEntryTokens({}, 'videos')['entry.coverVideo']).toBe('')
+  })
+
+  it('exposes the featured video length in whole seconds (AGL-3584)', () => {
+    // A string, as every token is, that a Video element's `durationSeconds`
+    // reads as a number; blank for an entry that names no length.
+    const token = (coverVideoDuration: unknown) =>
+      collectionEntryTokens({ coverVideoDuration } as any, 'videos')[
+        'entry.coverVideoDuration'
+      ]
+    expect(token(754)).toBe('754')
+    expect(token(62.6)).toBe('63')
+    expect(token(0.2)).toBe('1')
+    for (const none of [undefined, 0, -5, Number.NaN, 'soon', '']) {
+      expect(token(none)).toBe('')
+    }
+    expect(collectionEntryTokens({}, 'videos')['entry.coverVideoDuration']).toBe(
+      '',
+    )
+  })
+
+  it('reads a stored or typed length one way (AGL-3584)', () => {
+    expect(collectionEntryVideoDurationSeconds(754)).toBe(754)
+    expect(collectionEntryVideoDurationSeconds(' 90 ')).toBe(90)
+    expect(collectionEntryVideoDurationSeconds('1.4')).toBe(1)
+    for (const none of [null, undefined, 0, '0', -1, Infinity, '1:30', {}]) {
+      expect(collectionEntryVideoDurationSeconds(none)).toBeUndefined()
+    }
   })
 
   it('exposes the publish instant as an ISO date-time (AGL-2956)', () => {
