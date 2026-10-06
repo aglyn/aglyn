@@ -29,11 +29,12 @@ import type { ThemeMode } from '../hocs/create-with-theme-provider'
  * repaints once React has hydrated the whole page.
  *
  * A browser sends it only where the origin asked for it, and the tenant
- * middleware is what asks — it advertises this same token in `Accept-CH` and
- * `Critical-CH` and splits its cache on it in `Vary`, from a copy of its own,
- * since an edge bundle takes no library imports. Reading the request header by
- * this constant is safe whatever the transport did to the casing: `Headers`
- * matches case-insensitively.
+ * middleware is what asks — it advertises this same token in `Accept-CH`
+ * (not `Critical-CH`, so a first visit is never retried for it; that visit
+ * settles the scheme at hydration) and splits its cache on it in `Vary`, from
+ * a copy of its own, since an edge bundle takes no library imports. Reading
+ * the request header by this constant is safe whatever the transport did to
+ * the casing: `Headers` matches case-insensitively.
  *
  * ⚠️ CHROMIUM ONLY. Firefox and Safari implement neither this hint nor the
  * `Accept-CH` negotiation that asks for it, so on those browsers the header is

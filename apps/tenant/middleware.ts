@@ -1368,15 +1368,18 @@ export const middleware: NextMiddleware = async (req, event) => {
    * anywhere but a browser. Left there, the server render falls back to light
    * and the page turns over a component at a time as it hydrates.
    *
-   * These three headers are how the request comes to carry that answer:
+   * These two headers are how the request comes to carry that answer:
    *
    *  - `Accept-CH` advertises the hint, which is what makes a browser attach
    *    it to later requests to this origin at all.
-   *  - `Critical-CH` names it as one the response could not be built correctly
-   *    without, so a browser that has not sent it retries the navigation
-   *    immediately with it. Without this line the FIRST page load of a session
-   *    is always hint-less — the load where a wrong scheme is most visible —
-   *    and only the second is right.
+   *  - NOT `Critical-CH` (AGL-3583). It would make a browser that has not sent
+   *    the hint discard the response and retry the navigation with it, and
+   *    that retry is every first visit to every site: a whole extra request
+   *    ahead of the page, measured at 480–670ms in Lighthouse (which charges it
+   *    0.8–2.4s of simulated LCP) and paid by light-scheme visitors, who gain
+   *    nothing from it. Without it, a dark-scheme device's FIRST page renders
+   *    light and turns dark as it hydrates; every later navigation carries the
+   *    hint and renders dark from the server.
    *  - `Vary` is the correctness half of the pair: the HTML genuinely differs
    *    by the hint, so a cache that served one visitor's document to another
    *    would serve dark markup into a light browser.
@@ -1405,12 +1408,11 @@ export const middleware: NextMiddleware = async (req, event) => {
    * can hand one scheme's document to a browser in the other.
    *
    * ⚠️ CHROMIUM ONLY. Firefox and Safari implement neither the hint nor this
-   * negotiation and simply ignore all three headers, so their visitors keep
+   * negotiation and simply ignore both headers, so their visitors keep
    * settling the scheme at hydration. The render path stays correct without
    * the hint for exactly that reason.
    */
   response.headers.set('Accept-CH', COLOR_SCHEME_HINT)
-  response.headers.set('Critical-CH', COLOR_SCHEME_HINT)
   response.headers.append('Vary', COLOR_SCHEME_HINT)
   /*
    * `Vary: Accept` — the other half of markdown negotiation (AGL-2716).
