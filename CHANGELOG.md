@@ -20,6 +20,7 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **ai:** a Free account may plan its site at once — no account-age hold ([AGL-3591](https://linear.app/aglyn/issue/AGL-3591))
+- **console:** an account switch sticks with other console tabs open ([AGL-3592](https://linear.app/aglyn/issue/AGL-3592))
 - **console:** the Versions help says what a version is, not that each publish makes one ([AGL-3589](https://linear.app/aglyn/issue/AGL-3589))
 
 ## v1.0.0-beta.226 — 2026-10-06
