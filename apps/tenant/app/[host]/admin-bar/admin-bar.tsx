@@ -602,47 +602,76 @@ export default function AdminBar({
   // across a live window resize — is what the page must be offset by.
   // `BAR_HEIGHT` is only the fallback for a bar that reports no geometry
   // (jsdom, display:none edge cases).
+  //
+  // The header scan re-runs whenever the page's DOM gains or loses nodes.
+  // The bar stays 'ready' across soft navigations (AGL-3064), and a soft
+  // navigation replaces the site's header with a fresh element at `top: 0`
+  // — a scan taken once at mount leaves that one under the bar.
   useEffect(() => {
     if (phase !== 'ready') return undefined
     const html = document.documentElement
     const previousMargin = html.style.marginTop
     const previousScrollPadding = html.style.scrollPaddingTop
 
-    const adjusted: Array<{ element: HTMLElement; previousTop: string }> = []
-    try {
-      document
-        .querySelectorAll<HTMLElement>(HEADER_CANDIDATE_SELECTOR)
-        .forEach((element) => {
-          if (element.closest('[data-aglyn-admin-bar]')) return
-          const computed = window.getComputedStyle(element)
-          const isPinned =
-            computed.position === 'fixed' || computed.position === 'sticky'
-          // `top: 0` (give or take a subpixel) means viewport-anchored where
-          // the bar now sits; anything else is not under the bar.
-          if (!isPinned || Math.abs(parseFloat(computed.top)) > 1) return
-          adjusted.push({ element, previousTop: element.style.top })
-        })
-    } catch {
-      // A theme's exotic DOM must never break the page — worst case the
-      // site header sits behind the bar until dismissed.
+    // Element → its inline `top` before the nudge, for the restore.
+    const adjusted = new Map<HTMLElement, string>()
+    const scan = () => {
+      adjusted.forEach((_, element) => {
+        if (!element.isConnected) adjusted.delete(element)
+      })
+      try {
+        document
+          .querySelectorAll<HTMLElement>(HEADER_CANDIDATE_SELECTOR)
+          .forEach((element) => {
+            if (adjusted.has(element)) return
+            if (element.closest('[data-aglyn-admin-bar]')) return
+            const computed = window.getComputedStyle(element)
+            const isPinned =
+              computed.position === 'fixed' || computed.position === 'sticky'
+            // `top: 0` (give or take a subpixel) means viewport-anchored where
+            // the bar now sits; anything else is not under the bar.
+            if (!isPinned || Math.abs(parseFloat(computed.top)) > 1) return
+            adjusted.set(element, element.style.top)
+          })
+      } catch {
+        // A theme's exotic DOM must never break the page — worst case the
+        // site header sits behind the bar until dismissed.
+      }
     }
 
     const apply = () => {
       const height = barRef.current?.offsetHeight || BAR_HEIGHT
       html.style.marginTop = `${height}px`
       html.style.scrollPaddingTop = `${height}px`
-      adjusted.forEach(({ element }) => {
+      adjusted.forEach((_, element) => {
         element.style.top = `${height}px`
       })
     }
+    scan()
     apply()
     window.addEventListener('resize', apply)
 
+    // One rescan per frame however many mutations land in it. Only
+    // childList is observed, so the nudge's own `style.top` writes never
+    // feed back into the observer.
+    let frame = 0
+    const observer = new MutationObserver(() => {
+      if (frame) return
+      frame = window.requestAnimationFrame(() => {
+        frame = 0
+        scan()
+        apply()
+      })
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+
     return () => {
+      observer.disconnect()
+      if (frame) window.cancelAnimationFrame(frame)
       window.removeEventListener('resize', apply)
       html.style.marginTop = previousMargin
       html.style.scrollPaddingTop = previousScrollPadding
-      adjusted.forEach(({ element, previousTop }) => {
+      adjusted.forEach((previousTop, element) => {
         element.style.top = previousTop
       })
     }
