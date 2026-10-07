@@ -17,6 +17,7 @@
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { isEmailVerified, isImpersonationSession } from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { FONT_UPLOAD_MAX_BYTES, type PrepareFontResponse } from '../installer/constants'
 import { FontPrepareError, prepareFontFile } from '../installer/prepare-font'
 
@@ -29,6 +30,7 @@ import { FontPrepareError, prepareFontFile } from '../installer/prepare-font'
  * What it cannot know is the member, so this asks:
  *
  *   401  no bearer token, or one the verifier refused
+ *   500  the token could not be checked at all
  *   403  unverified address (impersonation exempt), or not a site admin or
  *        editor — the people who may change its theme
  *   400  no site named
@@ -59,8 +61,13 @@ export async function prepareFontRoute(request: Request): Promise<Response> {
   let decoded: Parameters<typeof isEmailVerified>[0]
   try {
     decoded = await firebaseAdmin.app().auth().verifyIdToken(authorization.slice('Bearer '.length))
-  } catch {
-    return refuse(401, 'Unauthenticated')
+  } catch (error) {
+    // A refused credential is the caller's 401. A failure to check one is
+    // ours and keeps a 5xx, so an outage pages instead of reading as a bad
+    // token (AGL-2852).
+    if (isRefusedIdToken(error)) return refuse(401, 'Unauthenticated')
+    console.error('[fonts] the caller could not be verified', error)
+    return refuse(500, 'The sign-in could not be checked. Try again.')
   }
   if (!isEmailVerified(decoded) && !isImpersonationSession(decoded)) {
     return refuse(403, 'Verify your email address first')
