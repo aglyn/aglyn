@@ -396,8 +396,11 @@ export const BesignerDocumentSwitcherComponent = observer(
             <MdiIcon path={ICON_VARIANT_MENU_DOWN.path} fontSize="small" />
           }
           sx={{
-            maxWidth: 280,
-            mx: 1,
+            // On a phone it shares the bar with the menu and publish actions.
+            maxWidth: { xs: 140, sm: 280 },
+            minWidth: 0,
+            flexShrink: 1,
+            mx: { xs: 0.5, sm: 1 },
             textTransform: 'none',
             '& .MuiButton-endIcon': { marginLeft: 0.25 },
           }}

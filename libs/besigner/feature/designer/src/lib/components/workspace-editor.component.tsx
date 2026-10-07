@@ -28,12 +28,12 @@ import {
   DragStartEvent,
   useDndMonitor,
 } from '@dnd-kit/core'
-import { Stack } from '@mui/material'
+import { getEventCoordinates } from '@dnd-kit/utilities'
+import { Stack, useMediaQuery, useTheme } from '@mui/material'
 import clsx from 'clsx'
 import dynamic from 'next/dynamic'
 import type { ComponentProps } from 'react'
-import { ChangeEvent, forwardRef, useCallback, useRef } from 'react'
-import { useMouse } from 'react-use'
+import { ChangeEvent, forwardRef, useCallback, useEffect, useRef } from 'react'
 import useAglynBesignerPanelValue from '../hooks/use-aglyn-besigner-panel-value'
 import AppBarBreadcrumbsComponent from './app-bar-breadcrumbs.component'
 import type { AsidePanelComponentProps } from './aside-panel.component'
@@ -49,6 +49,42 @@ const PanelLeftComponent = dynamic<AsidePanelComponentProps>(
     import('./aside-panel.component').then((mod) => mod.AsidePanelComponent),
   { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
 )
+
+type ClientPoint = { x: number; y: number }
+
+/**
+ * The last viewport-relative position of whatever is pointing — mouse, pen or
+ * finger. Kept in a ref rather than state: it is read once per drag move, and
+ * re-rendering the whole workspace on every pointer move bought nothing.
+ *
+ * Touch needs `touchmove` as well as `pointermove`: once a touch drag is
+ * active the sensor cancels the touch's default action, and some browsers
+ * stop reporting that finger as a pointer from then on.
+ */
+function useLastClientPoint() {
+  const point = useRef<ClientPoint | null>(null)
+  useEffect(() => {
+    const onPointer = (e: PointerEvent) => {
+      point.current = { x: e.clientX, y: e.clientY }
+    }
+    const onTouch = (e: TouchEvent) => {
+      const touch = e.touches[0]
+      if (touch) point.current = { x: touch.clientX, y: touch.clientY }
+    }
+    const options = { capture: true, passive: true }
+    document.addEventListener('pointerdown', onPointer, options)
+    document.addEventListener('pointermove', onPointer, options)
+    document.addEventListener('touchstart', onTouch, options)
+    document.addEventListener('touchmove', onTouch, options)
+    return () => {
+      document.removeEventListener('pointerdown', onPointer, options)
+      document.removeEventListener('pointermove', onPointer, options)
+      document.removeEventListener('touchstart', onTouch, options)
+      document.removeEventListener('touchmove', onTouch, options)
+    }
+  }, [])
+  return point
+}
 
 const WorkspaceEditor = styled('div', {
   name: 'AglynWorkspaceEditor',
@@ -77,8 +113,14 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
   (props, ref) => {
     const { children, className, ...rest } = props
 
-    const [leftToggled] = useAglynBesignerPanelValue('panelLeft', 'toggled')
-    const [rightToggled] = useAglynBesignerPanelValue('panelRight', 'toggled')
+    const [leftToggled, setLeftToggled] = useAglynBesignerPanelValue(
+      'panelLeft',
+      'toggled',
+    )
+    const [rightToggled, setRightToggled] = useAglynBesignerPanelValue(
+      'panelRight',
+      'toggled',
+    )
     const [bottomToggled] = useAglynBesignerPanelValue('panelBottom', 'toggled')
 
     const elemClassName = clsx(
@@ -89,6 +131,41 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
       },
       className,
     )
+
+    // Below `md` the panels overlay the canvas (see AsidePanelComponent), so
+    // the open-by-default a docked panel gets would greet a phone with a
+    // covered canvas. They start closed there, and the toolbar opens them.
+    // Only the live panel state changes — the defaults a wide screen starts
+    // from are untouched.
+    const theme = useTheme()
+    const compact = useMediaQuery(theme.breakpoints.down('md'), {
+      noSsr: true,
+    })
+    const closedForCompact = useRef(false)
+    useEffect(() => {
+      if (!compact) {
+        closedForCompact.current = false
+        return
+      }
+      if (closedForCompact.current) return
+      closedForCompact.current = true
+      setLeftToggled(false)
+      setRightToggled(false)
+      // The setters are rebuilt every render; the guard is what matters.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [compact])
+
+    // Two overlays at once is one hidden behind the other, so below `md`
+    // opening a panel closes the one that was already open.
+    const lastToggled = useRef({ left: leftToggled, right: rightToggled })
+    useEffect(() => {
+      const last = lastToggled.current
+      lastToggled.current = { left: leftToggled, right: rightToggled }
+      if (!compact || !leftToggled || !rightToggled) return
+      if (last.left) setLeftToggled(false)
+      else setRightToggled(false)
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [compact, leftToggled, rightToggled])
 
     const pannerRef = useRef<any>(null)
 
@@ -111,22 +188,23 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
     }, [])
 
     const localRef = useRef(null)
-    const mouse = useMouse(localRef)
+    const pointer = useLastClientPoint()
     // Null-safe: surfaces render without a snackbar provider in tests.
     const { enqueueSnackbar } = useSnackbar() ?? {}
 
     useDndMonitor({
       onDragMove(event: DragMoveEvent): void {
         let region: Besigner.DropRegion = null
-        if (event.over) {
-          // dnd-kit rects are viewport-relative; useMouse coords are
-          // document-relative — subtract the page scroll so region hit
-          // tests keep working when the page is scrolled.
+        // A keyboard drag has no pointer of its own; it keeps reading the
+        // last place the pointer was, as it always has.
+        const at = pointer.current
+        if (event.over && at) {
+          // Both viewport-relative: dnd-kit rects and client coordinates.
           const overNode = event.over.data.current?.node
           region = Besigner.determineDropRegion(
             event.over.rect,
-            mouse.docX - window.scrollX,
-            mouse.docY - window.scrollY,
+            at.x,
+            at.y,
             // Leaves (self-closing / text-editable) never offer a CHILDREN
             // region — the center reads as a sibling insert, matching where
             // the drop actually lands (see dnd-manager onDragEnd).
@@ -139,7 +217,11 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
 
         event.activatorEvent.stopPropagation()
       },
-      onDragStart({ active }: DragStartEvent) {
+      onDragStart({ active, activatorEvent }: DragStartEvent) {
+        // The gesture that started the drag is the freshest position there
+        // is — a touch hold may not have moved since it went down.
+        const start = getEventCoordinates(activatorEvent)
+        if (start) pointer.current = start
         const node = active?.data.current.node
         Besigner.dnd.setDragNode(node)
       },

@@ -722,6 +722,11 @@ const NodeTreeItem = observer(
                   transition: 'opacity 120ms',
                   '&:focus-visible': { opacity: 1 },
                   [`.${classKey.treeListItem}:hover &`]: { opacity: 1 },
+                  // No hover on a touch screen, so nothing would ever reveal
+                  // it: there the eye shows on every row, quietly.
+                  '@media (hover: none)': {
+                    opacity: authorHidden ? 1 : 0.6,
+                  },
                 }}
               >
                 <MdiIcon

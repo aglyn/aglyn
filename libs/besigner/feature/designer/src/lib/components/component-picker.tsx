@@ -34,6 +34,8 @@ import {
   Slide,
   Toolbar,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import type { TransitionProps } from '@mui/material/transitions'
 import { Observer, observer } from 'mobx-react-lite'
@@ -104,6 +106,10 @@ export const ComponentPicker = observer(
 
     const [filterOpen, setFilterOpen] = useState(false)
     const [selected, setSelected] = useState<PickerOption>(null)
+    // A phone has no room for the paper's margins: the picker takes the
+    // whole screen there, with its close button where the toolbar puts it.
+    const theme = useTheme()
+    const fullScreen = useMediaQuery(theme.breakpoints.down('sm'))
 
     const clearSelected = useCallback(() => setSelected(null), [])
 
@@ -158,6 +164,7 @@ export const ComponentPicker = observer(
         // at this one.
         maxWidth="xl"
         fullWidth
+        fullScreen={fullScreen}
         slots={{ transition: Transition }}
         {...rest}
       >
