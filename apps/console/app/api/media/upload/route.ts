@@ -18,6 +18,7 @@
 import {
   checkEntitlement,
   createResourceUid,
+  defaultMediaScopeOf,
   defaultScopeForNewResource,
   inspectUploadBytes,
   pluginRequestFromWeb,
@@ -491,9 +492,9 @@ async function handler(request: Request): Promise<Response> {
       ...(scope.collection === 'orgs'
         ? {
             visibleTo: defaultScopeForNewResource({
-              defaultResourceScope: (scope.billing as {
-                defaultResourceScope?: 'org' | 'host'
-              }).defaultResourceScope,
+              defaultResourceScope: defaultMediaScopeOf(
+                scope.billing as Parameters<typeof defaultMediaScopeOf>[0],
+              ),
               hostId: uploadSite.hostId,
             }),
           }

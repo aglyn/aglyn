@@ -247,6 +247,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // which is precisely the failure shape the comments above guard against.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/media-ref'),
   createResourceUid: () => 'media-1',
+  defaultMediaScopeOf: () => undefined,
   defaultScopeForNewResource: () => ['org'],
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,

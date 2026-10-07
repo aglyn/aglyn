@@ -89,6 +89,7 @@ import {
   type ContactCampaignEmail,
   type CrmActivityRow,
   crmReadTokens,
+  crmDefaultScopeOf,
   crmScopeTokens,
   isCrmActivityKind,
   isCrmTaskKind,
@@ -866,6 +867,29 @@ describe('crmScopeTokens', () => {
     expect(crmScopeTokens({ defaultResourceScope: 'org' }, soloConsentGroup('host-a'))).toEqual(['org'])
     // The other value of the same field is the narrow answer, not a third.
     expect(crmScopeTokens({ defaultResourceScope: 'host' }, soloConsentGroup('host-a'))).toEqual(['host:host-a'])
+  })
+
+  // AGL-3662: the CRM's own default, set apart from the dataset one.
+  it('reads crm.defaultRecordScope over the dataset default', () => {
+    const group = soloConsentGroup('host-a')
+    expect(
+      crmScopeTokens({ defaultResourceScope: 'org', crm: { defaultRecordScope: 'host' } }, group),
+    ).toEqual(['host:host-a'])
+    expect(
+      crmScopeTokens({ defaultResourceScope: 'host', crm: { defaultRecordScope: 'org' } }, group),
+    ).toEqual(['org'])
+  })
+})
+
+describe('crmDefaultScopeOf (AGL-3662)', () => {
+  it('is the CRM value when set, the dataset value until then, else undefined', () => {
+    expect(crmDefaultScopeOf({ crm: { defaultRecordScope: 'org' } })).toBe('org')
+    expect(crmDefaultScopeOf({ defaultResourceScope: 'org' })).toBe('org')
+    expect(crmDefaultScopeOf({ defaultResourceScope: 'org', crm: { defaultRecordScope: 'host' } })).toBe('host')
+    expect(crmDefaultScopeOf({})).toBeUndefined()
+    expect(crmDefaultScopeOf(null)).toBeUndefined()
+    // A value the select cannot write is not a choice.
+    expect(crmDefaultScopeOf({ crm: { defaultRecordScope: 'everyone' } })).toBeUndefined()
   })
 })
 

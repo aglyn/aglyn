@@ -16,6 +16,7 @@
  */
 
 import { isFirstPublishedRoute, trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import { liveCustomDomain, TENANT_APEX, type HostCustomDomainState } from '@aglyn/aglyn/app-utils/host-naming'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 /**
@@ -105,4 +106,18 @@ export async function requestStarterSite(
   } catch {
     return false
   }
+}
+
+/**
+ * The address a visitor reaches the site at: its custom domain only once that
+ * domain actually serves (`liveCustomDomain`), otherwise its platform
+ * subdomain. `null` for a host with neither, so a caller never shows a
+ * half-built URL as the site's address.
+ */
+export function hostLiveUrl(
+  host: HostCustomDomainState | null | undefined,
+): string | null {
+  const domain = host ? liveCustomDomain(host) : undefined
+  if (domain) return `https://${domain}`
+  return host?.subdomain ? `https://${host.subdomain}.${TENANT_APEX}` : null
 }

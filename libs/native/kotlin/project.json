@@ -7,7 +7,7 @@
     "type:feature"
   ],
   "targets": {
-    "build": {
+    "build-native": {
       "executor": "nx:run-commands",
       "cache": false,
       "options": {

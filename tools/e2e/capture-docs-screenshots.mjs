@@ -316,7 +316,10 @@ const shots = [
   {
     out: 'analytics/analytics-page.png',
     path: `/${HOST_BASE}/analytics`,
-    waitFor: 'Analytics',
+    // The Traffic card's figures, not the heading: the heading paints while
+    // the card is still a progress bar and the Pages card is checking the plan.
+    waitFor: 'Page views',
+    settleMs: 3000,
   },
   {
     out: 'besigner/besigner-editor.png',

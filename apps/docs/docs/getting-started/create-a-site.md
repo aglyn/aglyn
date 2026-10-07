@@ -24,7 +24,9 @@ settings. Everything you build lives under a site, and you can own several.
    AI**, which plans your pages from a few questions — see
    [Generate a website from a prompt](../ai/generate-a-site.md). Choosing the
    starter site, skipping or closing the window all give the site the starter
-   described below. Until you choose, the site's address shows a short *coming
+   described below. Choosing **Start from the starter site** publishes it at once,
+   and the console says so: **Your site is live**, with the site's address,
+   **View your site** and **Edit your pages**. Until you choose, the site's address shows a short *coming
    soon* page with its name, kept out of search results.
 
    Every other new site starts with the starter straight away. The starter is a

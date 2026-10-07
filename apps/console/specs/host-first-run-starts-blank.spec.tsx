@@ -29,7 +29,7 @@
  * this file red.
  */
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
 
@@ -75,6 +75,7 @@ jest.mock('../hooks/use-host', () => ({
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(mockSearch),
   usePathname: () => '/acme/hosts/shop',
+  useParams: () => ({ orgSlug: 'acme', host: 'host-1' }),
   useRouter: () => ({ replace: mockReplace, push: jest.fn() }),
 }))
 jest.mock('../utils/host-first-run', () => ({
@@ -155,12 +156,29 @@ describe('the start a new site is offered', () => {
     expect(screen.queryByText('guided start')).toBeNull()
   })
 
-  it('asks for the starter on the blank path, closes, and drops the parameter', async () => {
+  it('asks for the starter on the blank path, says the site is live with its address, then drops the parameter', async () => {
+    mockHost = { subdomain: 'shop' }
     render(<HostFirstRunGate />)
     fireEvent.click(await screen.findByText('Skip and start blank'))
     expect(mockRequestStarter).toHaveBeenCalledWith(mockUser, 'host-1')
-    expect(mockReplace).toHaveBeenCalledWith('/acme/hosts/shop')
     expect(screen.queryByText('guided start')).toBeNull()
+    // The starter is published the moment it is chosen; nothing else says so.
+    expect(await screen.findByText('Your site is live')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'View your site' }).getAttribute('href')).toBe('https://shop.aglyn.app')
+    expect(screen.getByRole('link', { name: 'Edit your pages' }).getAttribute('href')).toContain('/acme/hosts/host-1/screens')
+    // The parameter stays while the notice shows: dropping it unmounts the gate.
+    expect(mockReplace).not.toHaveBeenCalled()
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    expect(mockReplace).toHaveBeenCalledWith('/acme/hosts/shop')
+    await waitFor(() => expect(screen.queryByText('Your site is live')).toBeNull())
+  })
+
+  it('drops the parameter without a notice when the starter published nothing', async () => {
+    mockRequestStarter.mockResolvedValueOnce(false)
+    render(<HostFirstRunGate />)
+    fireEvent.click(await screen.findByText('Skip and start blank'))
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/acme/hosts/shop'))
+    expect(screen.queryByText('Your site is live')).toBeNull()
   })
 
   it('closes after a guided start began without asking for the starter', async () => {

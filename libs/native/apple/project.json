@@ -5,7 +5,7 @@
   "tags": ["scope:mobile", "type:feature"],
   "//": "Swift package AglynKit (iOS 17+, macOS 14+), built and tested by xcodebuild, never by the root toolchain (docs/mobile/native-architecture.md).",
   "targets": {
-    "build": {
+    "build-native": {
       "executor": "nx:run-commands",
       "cache": false,
       "options": {
