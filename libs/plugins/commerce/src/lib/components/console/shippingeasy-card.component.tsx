@@ -80,6 +80,18 @@ export function describeShippingEasySync(sync: NonNullable<ConnectionStatus['syn
 const when = (ms: number | undefined): string =>
   ms ? new Date(ms).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Not yet'
 
+/** One fixed fact of the connection: a label and its value. */
+function FactRow(props: { label: string; value: string }) {
+  return (
+    <TableRow>
+      <TableCell component="th" scope="row">
+        {props.label}
+      </TableCell>
+      <TableCell>{props.value}</TableCell>
+    </TableRow>
+  )
+}
+
 const EMPTY_KEYS = { apiKey: '', apiSecret: '', storeApiKey: '' }
 
 /**
@@ -235,19 +247,10 @@ export function ShippingEasyCard(props: ShippingEasyCardProps) {
             />
             <ScrollTable size="small" aria-label="ShippingEasy connection">
               <TableBody>
-                {[
-                  ['API key', status?.apiKeyEnding ? `Ends in ${status.apiKeyEnding}` : ''],
-                  ['Store API key', status?.storeApiKeyEnding ? `Ends in ${status.storeApiKeyEnding}` : ''],
-                  ['Last order sent', when(status?.lastPushAtMs)],
-                  ['Last shipment received', when(status?.lastCallbackAtMs)],
-                ].map(([label, value]) => (
-                  <TableRow key={label}>
-                    <TableCell component="th" scope="row">
-                      {label}
-                    </TableCell>
-                    <TableCell>{value}</TableCell>
-                  </TableRow>
-                ))}
+                <FactRow label="API key" value={status?.apiKeyEnding ? `Ends in ${status.apiKeyEnding}` : ''} />
+                <FactRow label="Store API key" value={status?.storeApiKeyEnding ? `Ends in ${status.storeApiKeyEnding}` : ''} />
+                <FactRow label="Last order sent" value={when(status?.lastPushAtMs)} />
+                <FactRow label="Last shipment received" value={when(status?.lastCallbackAtMs)} />
               </TableBody>
             </ScrollTable>
           </>
