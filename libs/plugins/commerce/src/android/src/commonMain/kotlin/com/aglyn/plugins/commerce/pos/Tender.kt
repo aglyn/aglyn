@@ -104,8 +104,8 @@ enum class CardReaderKind { SMART, DEVICE, SIMULATED }
  *   driven entirely by the server (`card-present` + `status`); no SDK, and the
  *   only kind a desktop register offers;
  * - [DeviceReaderService] over the device's [CardCollector]: Tap to Pay or a
- *   Bluetooth reader through the Stripe Terminal SDK (a stub until the SDK is
- *   approved), or the simulated reader for tests and training.
+ *   Bluetooth reader through the Stripe Terminal SDK (in the Aglyn POS Android
+ *   app only), or the simulated reader for tests and training.
  */
 interface CardReaderService {
   val id: String

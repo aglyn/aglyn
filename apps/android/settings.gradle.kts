@@ -37,6 +37,9 @@ for (lib in nativeLibs) {
   include(":native-$lib")
   project(":native-$lib").projectDir = file("../../libs/native/kotlin/$lib")
 }
+// Android only: the camera barcode scanner, for the apps that scan.
+include(":native-camera")
+project(":native-camera").projectDir = file("../../libs/native/kotlin/camera")
 
 /*
  * Plugin id -> module dir. The generated file is the source of truth; the

@@ -8,7 +8,7 @@ The native Kotlin apps (AGL-3652, AGL-3653). One Gradle root builds:
 | `:pos` | **Aglyn POS** (`com.aglyn.pos`; debug builds are `com.aglyn.pos.dev`) |
 | `:desktop` | both apps on the JVM desktop: `AglynDesktop` and `AglynPosDesktop` (Windows ships from here) |
 | `:plugin-manifest` | every plugin's native registrar, from the generated `PluginManifest.generated.kt` |
-| `:native-*` | the shared foundation in `libs/native/kotlin` (`core`, `ui`, `plugin-host`, `webview`, `shell`, `contracts`, `hardware`) |
+| `:native-*` | the shared foundation in `libs/native/kotlin` (`core`, `ui`, `plugin-host`, `webview`, `shell`, `contracts`, `hardware`, and the Android-only `camera`) |
 | `:plugin-<id>` | a plugin's `src/android` module, from `native-plugins.generated.properties` |
 
 The architecture is `docs/mobile/native-architecture.md`.
@@ -91,6 +91,31 @@ Enter or Tab is a scan, not typing). A network receipt printer is named with
 print as ESC/POS and a cash sale kicks the drawer. Register shortcuts:
 ⌘/Ctrl F search, ⌘/Ctrl Enter or F12 charge, ⌘/Ctrl + and − the last line's
 quantity, ⌘/Ctrl H hold the basket, Esc closes the item sheet.
+
+### Aglyn POS on Android: card readers and the camera
+
+The POS app carries the Stripe Terminal Android SDK (`com.stripe:stripeterminal`
+and `stripeterminal-taptopay`); the Aglyn app does not. Card readers → This
+device offers **Use Tap to Pay** (an NFC device on Android 13+) and **Find
+Bluetooth readers** (Stripe M2, WisePad 3, Chipper 2X), after asking for
+location and nearby devices. Connection tokens come from
+`/api/commerce/pos-terminal-connection-token` for the open site, scoped to its
+Terminal Location; readers never connect on behalf of a merchant, because
+card-present payments settle on the platform account. A connected reader
+becomes the first card tender; the payment is the shared
+`collectCardPayment` sequence (retrieve → collect → confirm, which
+authorizes; the server captures). The reader's prompts show on the checkout
+screen, and a reader update is offered (or required) on the readers screen.
+
+Every build uses the SDK's **simulated** readers until live readers are
+switched on with `-Paglyn.terminalLiveReaders=true` on a release build, which
+needs Stripe Terminal live mode. Tap to Pay's PIN screens run in the SDK's
+`:stripetaptopay` process, where the app does nothing on start.
+
+The register's camera button scans barcodes with CameraX and ML Kit's bundled
+model (`libs/native/kotlin/camera`, provided to the kit's `BarcodeScanSheet`
+through `LocalCameraScanner`). Each code goes through the same barcode-then-SKU
+lookup as a keyboard-wedge scan, and the sheet stays open for the next item.
 
 Release builds take no emulator host and default the console to
 `https://app.aglyn.com`; `AglynConfig.problems()` logs anything missing.

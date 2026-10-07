@@ -2,6 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- The register's camera barcode scanner; a register without a camera still works. -->
+  <uses-permission android:name="android.permission.CAMERA" />
+  <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+  <!-- Card readers: Tap to Pay needs NFC, Bluetooth readers need Bluetooth LE; neither is required to install. -->
+  <uses-feature android:name="android.hardware.nfc" android:required="false" />
+  <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
   <application
     android:name=".AglynPosApplication"
