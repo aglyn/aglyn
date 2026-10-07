@@ -1435,7 +1435,7 @@
         "libs/plugins/accounting/src/lib/server/accounting-routes.ts"
       ],
       "catalog": {
-        "order": 18,
+        "order": 19,
         "$comment": "AGL-3614. Posts commerce sales, refunds, fees and payouts to QuickBooks Online or Xero. Sold with commerce: the extension's entitlement is `features.commerce`, so no plan and no add-on of its own.",
         "label": "Accounting",
         "description": "Sales, refunds, fees and payouts posted to QuickBooks Online or Xero.",
