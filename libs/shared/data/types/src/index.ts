@@ -18,6 +18,7 @@
 export * as DoD from './lib/dod'
 export * from './lib/crud'
 export * from './lib/host-theme'
+export type * from './lib/host-theme-fonts'
 export * from './lib/initializable'
 export * from './lib/lifecycle'
 export * from './lib/normalized'

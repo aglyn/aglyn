@@ -50,6 +50,7 @@ import {
 } from '@mui/material'
 import { useMemo } from 'react'
 import {
+  isOrgAutomationStepType,
   isOrgAutomationTriggerEvent,
   ORG_AUTOMATION_STEP_KINDS,
   ORG_AUTOMATION_TRIGGER_EVENTS,
@@ -73,8 +74,10 @@ import { orgSiteOptions, type WorkflowsOrgMount } from './workflows-org-mount'
 import {
   type HostActionStep,
   type HostActionStepType,
+  type HostActionTriggerCondition,
   stepRunsAfterWait,
 } from '../model/host-actions'
+import type { OrgAutomationProposal } from './workflow-zones'
 
 /** An org automation as the editor holds it. */
 export interface OrgAutomationDraft {
@@ -124,6 +127,39 @@ export function orgAutomationDraft(row: OrgAutomationRow): OrgAutomationDraft {
     enabled: row.enabled !== false,
     placement: isOrgWideScope(row.visibleTo) ? 'org' : 'sites',
     siteIds: hostIdsFromScope(row.visibleTo),
+  }
+}
+
+/**
+ * An automation another plugin proposed (AGL-3603) as the editor opens it:
+ * NEW, switched off and placed on every site until the person chooses, or
+ * `null` when its trigger or a step is not one an org automation may hold.
+ * Nothing is stored; the editor's Save is the write, through the route's
+ * own reader.
+ */
+export function orgAutomationDraftFromProposal(
+  proposal: OrgAutomationProposal,
+): OrgAutomationDraft | null {
+  const event = proposal.trigger?.event
+  if (!isOrgAutomationTriggerEvent(event)) return null
+  const steps = proposal.steps ?? []
+  if (!steps.length || !steps.every((step) => isOrgAutomationStepType(step?.type))) {
+    return null
+  }
+  return {
+    ...newOrgAutomationDraft(),
+    name: String(proposal.name ?? ''),
+    event,
+    conditionRows: conditionRowsFromTrigger({
+      conditions: (proposal.trigger.conditions ?? []).map((condition) => ({
+        field: condition.field,
+        op: condition.op,
+        ...(condition.value !== undefined ? { value: condition.value } : {}),
+      })) as HostActionTriggerCondition[],
+    }),
+    conditionCombinator: proposal.trigger.combinator === 'or' ? 'or' : 'and',
+    steps: steps.map((step) => ({ ...step }) as unknown as HostActionStep),
+    enabled: false,
   }
 }
 

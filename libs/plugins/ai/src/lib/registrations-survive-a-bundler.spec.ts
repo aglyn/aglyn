@@ -178,6 +178,8 @@ interface Registered {
   pauseReader: boolean
   /** Whether the jobs machine tells a job's creator when it needs them or settles (AGL-3593). */
   notifier: boolean
+  /** The build operations the plugin registered on the core's capability contract (AGL-3616). */
+  capabilities: string[]
 }
 
 /**
@@ -204,7 +206,21 @@ function registered(plugin: Loaded): Registered {
     .map((job) => job.name)
     .sort()
   const routes = (listPluginApiRoutes() as string[]).slice().sort()
-  return { steps, admissions, passes, jobs, routes, pauseReader: plugin.aiJobPauseReaderRegistered() as boolean, notifier: plugin.aiJobTransitionListenerRegistered() as boolean }
+  const { pluginAiCapabilities } = reRequire('@aglyn/aglyn/plugin-manager/plugin-ai-capabilities')
+  const capabilities = (pluginAiCapabilities() as Array<{ pluginId: string; capability: { op: string } }>)
+    .filter((entry) => entry.pluginId === 'ai')
+    .map((entry) => entry.capability.op)
+    .sort()
+  return {
+    steps,
+    admissions,
+    passes,
+    jobs,
+    routes,
+    pauseReader: plugin.aiJobPauseReaderRegistered() as boolean,
+    notifier: plugin.aiJobTransitionListenerRegistered() as boolean,
+    capabilities,
+  }
 }
 
 /** The AI activity codes the activity registry holds, with their labels. */
@@ -263,6 +279,16 @@ describe('the AI plugin, loaded through a bundler that honors sideEffects', () =
     expect(Object.fromEntries(bundled.kinds.map((kind) => [kind, bundled.registered.steps[kind]])))
       .toEqual(Object.fromEntries(bundled.kinds.map((kind) => [kind, both])))
     expect(bundled.registered.admissions).toEqual(expect.arrayContaining(bundled.kinds))
+  })
+
+  it('registers what a build can make on the core’s capability contract, by calling, from a bundle (AGL-3616)', () => {
+    const bundled = isolated(() => registered(load(serverBundle)))
+    expect(bundled.capabilities).toEqual(['campaign', 'component', 'email', 'form', 'layout', 'page', 'template', 'workflow'])
+    expect(bundled.steps['build']).toEqual([
+      { step: 'plan', runner: true, minimumMs: expect.any(Number) },
+      { step: 'generate', runner: true, minimumMs: expect.any(Number) },
+    ])
+    expect(bundled.admissions).toContain('build')
   })
 
   it('keeps the least time a plan needs, so a bundled door leaves every plan to the beat', () => {

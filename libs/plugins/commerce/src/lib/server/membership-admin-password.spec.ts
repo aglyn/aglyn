@@ -37,9 +37,11 @@
  */
 
 import {
+  listPluginPermissions,
   type PluginApiRequest,
   type PluginApiResponse,
   resolvePluginApiRoute,
+  resolveRolePermissions,
   unregisterPluginApiRoute,
 } from '@aglyn/aglyn/server'
 import {
@@ -534,6 +536,20 @@ describe('route registration', () => {
     expect(resolvePluginApiRoute('membership/admin-remove')).toBe(
       membershipAdminRemoveHandler,
     )
+  })
+})
+
+describe('the register gate on the console surface (AGL-3646)', () => {
+  it('registers managePos where the POS routes run, so an admin may ring a sale', async () => {
+    // Every POS route runs in the console, whose dispatcher loads only the
+    // `consoleApi` surface. Registered on the tenant surface alone, the key
+    // was absent from the console's resolved map, an absent key reads as
+    // refused, and the site's own owner was answered 403 at the register.
+    const { registerCommerceConsoleApi } = await import('../server')
+    registerCommerceConsoleApi()
+    expect(listPluginPermissions().map((permission) => permission.key)).toContain('managePos')
+    expect(resolveRolePermissions('admin').managePos).toBe(true)
+    expect(resolveRolePermissions('viewer').managePos).toBe(false)
   })
 })
 

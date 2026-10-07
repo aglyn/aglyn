@@ -1,0 +1,30 @@
+{
+  "name": "plugins-shipping",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/plugins/shipping/src",
+  "projectType": "library",
+  "tags": ["aglyn:addons", "scope:plugin", "type:feature"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/plugins/shipping",
+        "main": "libs/plugins/shipping/src/index.ts",
+        "tsConfig": "libs/plugins/shipping/tsconfig.lib.json",
+        "assets": ["libs/plugins/shipping/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/shipping"],
+      "options": {
+        "jestConfig": "libs/plugins/shipping/jest.config.ts"
+      }
+    }
+  }
+}

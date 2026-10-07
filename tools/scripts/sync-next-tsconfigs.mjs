@@ -101,15 +101,15 @@ function expectedContent() {
  * the drift that actually happened (AGL-1069) was a handful of missing
  * aliases in a 94-entry map.
  */
-function describeDrift(actualJson) {
+function describeDrift(actualJson, expectedPaths) {
   const actual = actualJson?.compilerOptions?.paths
   if (!actual) return ['  the file is missing its `compilerOptions.paths`']
-  const missing = Object.keys(rebased).filter((alias) => !(alias in actual))
-  const extra = Object.keys(actual).filter((alias) => !(alias in rebased))
-  const wrong = Object.keys(rebased).filter(
+  const missing = Object.keys(expectedPaths).filter((alias) => !(alias in actual))
+  const extra = Object.keys(actual).filter((alias) => !(alias in expectedPaths))
+  const wrong = Object.keys(expectedPaths).filter(
     (alias) =>
       alias in actual &&
-      JSON.stringify(actual[alias]) !== JSON.stringify(rebased[alias]),
+      JSON.stringify(actual[alias]) !== JSON.stringify(expectedPaths[alias]),
   )
   const lines = []
   if (missing.length) lines.push(`  missing (${missing.length}): ${missing.join(', ')}`)
@@ -120,12 +120,17 @@ function describeDrift(actualJson) {
   return lines
 }
 
+const TARGETS = [
+  ...NEXT_APPS.map((app) => ({
+    relative: join('apps', app, 'tsconfig.next.json'),
+    content: expectedContent(),
+  })),
+]
+
 const drifted = []
 
-for (const app of NEXT_APPS) {
-  const relative = join('apps', app, 'tsconfig.next.json')
+for (const { relative, content } of TARGETS) {
   const file = join(root, relative)
-  const content = expectedContent()
 
   if (!check) {
     writeFileSync(file, content)
@@ -152,7 +157,7 @@ for (const app of NEXT_APPS) {
   drifted.push(
     actualText === null
       ? `${relative}\n  the file does not exist`
-      : `${relative}\n${describeDrift(actualJson).join('\n')}`,
+      : `${relative}\n${describeDrift(actualJson, JSON.parse(content).compilerOptions.paths).join('\n')}`,
   )
 }
 
@@ -167,4 +172,4 @@ if (check && drifted.length) {
   process.exit(1)
 }
 
-if (check) console.log(`\n${NEXT_APPS.length} generated tsconfigs in sync`)
+if (check) console.log(`\n${TARGETS.length} generated tsconfigs in sync`)

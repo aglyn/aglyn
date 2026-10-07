@@ -292,6 +292,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'platform',
     why: "The starter site's SEO (AGL-3497): the `image:` marker is `defaultSiteSeo`'s sharing image, `DEFAULT_SITE_IMAGES.hero.src` — a same-origin `/_static/starter/` path to a photo shipped in the tenant app's own public folder. provision-host.ts stores it as a new site's `seo.image`; from then on it is the owner's stored value, rendered through resolveSocialImage like any other. No author string reaches this file and no third-party host is named.",
   },
+  'libs/plugins/ai/src/lib/providers/vertex-image.ts': {
+    markers: 3,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: the Vertex AI photo provider (AGL-3602) runs only in the console's AI media route. The `image` the sweep sees is the generated picture's BYTES, returned to that route, which stores them as an upload in the site's media library; no URL is rendered for a visitor from here.",
+  },
   'libs/plugins/ai/src/lib/jobs/ai-job-products-step.ts': {
     markers: 1,
     guard: 'off-tenant',
@@ -372,6 +377,51 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: 'The merchant editing their own catalogue in the console, picker-only. The IP at risk is the merchant\'s own.',
   },
+  'libs/plugins/commerce/src/lib/components/console/pos/pos-product-grid.component.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The till's product tiles on the console's register page (AGL-3607). The tile image is the product's first media item, or its imageUrl, through resolveMediaSrc with the site's id. The reader is the merchant's own cashier on the store's own device, signed in to the console, so the IP at risk is the store's, never a visitor's.",
+  },
+  'libs/plugins/commerce/src/lib/components/console/pos-display/brand-screen.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The store's logo on the customer display (AGL-3608), the console's public kiosk page at `/kiosk/commerce/pos-display`, which only a display paired to a register can read. The src is the branding server/pos-display.ts answers, where the host's logoUrl and logoDarkUrl go through resolveMediaSrc. The device is the store's own screen turned toward the counter, so the request comes from the store's network, not a site visitor's.",
+  },
+  'libs/plugins/commerce/src/lib/components/console/pos-ops/pos-receipt.ts': {
+    markers: 2,
+    guard: 'off-tenant',
+    why: "The 80 mm thermal receipt (AGL-3609), printed from a hidden frame on the console's register and order pages. Its `<style>` is POS_RECEIPT_STYLES, a literal in this file. The logo is the host's stored logoUrl through posReceiptLogoUrl in this file: absoluteMediaSrc with the site's id against the console's origin, then kept only if it is https:, and escaped into the attribute. The printing device is the store's own.",
+  },
+  'libs/plugins/commerce/src/lib/components/console/pos-ops/pos-shift-report.component.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The printable Z report (AGL-3609), printed from the console's shift history and register. The marker is its `<style>`, the receipt's own POS_RECEIPT_STYLES constant imported from pos-receipt.ts; the document carries no image and no URL, only escaped report rows.",
+  },
+  'libs/plugins/commerce/src/lib/printing/product-labels.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The printable product and shelf labels (AGL-3619), opened from the console's product labels dialog for the store's label printer. The marker is the page's `<style>`: literal CSS whose only interpolations are the width and height of a size from the LABEL_SIZES table in this file. The labels carry text and an inline SVG barcode, no image URL.",
+  },
+  'libs/plugins/sales-channels/src/lib/model/feed-columns.ts': {
+    markers: 9,
+    guard: 'projection',
+    why: "The shopping-channel feeds' image_link and additional_image_link columns (AGL-3637), written into an XML, CSV or TSV file a channel's fetcher reads, never into a page a visitor's browser loads. Every URL is the catalog's: core.product-catalog's offers, whose photos commerce resolves in absoluteImage (libs/plugins/commerce/src/lib/server/product-catalog.ts), which keeps an absolute http(s) URL, joins a site-relative path to the store's origin and drops anything else.",
+  },
+  'libs/plugins/sales-channels/src/lib/server/connect/google-merchant.ts': {
+    markers: 2,
+    guard: 'off-tenant',
+    why: "imageLink and additionalImageLinks in a Merchant API productInputs:insert body (AGL-3637), sent from the console's sync route to Google, never rendered. The URLs are the feed row's, from resolveOffer over the same catalog offers.",
+  },
+  'libs/plugins/sales-channels/src/lib/server/connect/meta-catalog.ts': {
+    markers: 3,
+    guard: 'off-tenant',
+    why: "image_link and additional_image_link in a Meta items_batch request (AGL-3637), sent from the console's sync route to Graph, never rendered. The URLs are the feed row's, from resolveOffer over the same catalog offers.",
+  },
+  'libs/plugins/shipping/src/lib/model/printables.ts': {
+    markers: 2,
+    guard: 'off-tenant',
+    why: "The packing slips and the label sheet a batch prints (AGL-3612), opened in a tab of their own from the console's orders list batch widget. Both markers are a `<style>` holding PAGE_STYLE, a literal in this file. Neither page has an image: each label is an `Open label` link written only when the carrier's URL is https, and every typed value is escaped.",
+  },
   'libs/plugins/commerce/src/lib/components/product-detail.tsx': {
     markers: 3,
     guard: 'raw',
@@ -391,11 +441,6 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     markers: 1,
     guard: 'media-ref',
     why: 'Wishlist tile through siteRelativeMediaSrc (9a517e5ec). Resolution only; no scheme refusal.',
-  },
-  'libs/plugins/commerce/src/lib/server/feed.ts': {
-    markers: 1,
-    guard: 'raw',
-    why: 'g:image_link in the Google Merchant feed takes product.mediaUrls[0] with escapeXml and nothing else. Google fetches it, so a relative stored value is also simply broken there.',
   },
   'libs/plugins/commerce/src/lib/server/site-page-resolver.ts': {
     markers: 2,
@@ -612,7 +657,6 @@ const RAW_SINK_FILES = [
   'apps/tenant/app/[host]/[scheme]/[[...slug]]/page.tsx',
   'libs/aglyn/src/lib/app-utils/content-authors.ts',
   'libs/plugins/commerce/src/lib/components/product-detail.tsx',
-  'libs/plugins/commerce/src/lib/server/feed.ts',
   'libs/plugins/commerce/src/lib/server/site-page-resolver.ts',
 ]
 

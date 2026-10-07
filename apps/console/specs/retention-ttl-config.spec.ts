@@ -132,6 +132,17 @@ const POLICIES: Array<{
     writers: ['apps/tenant/app/api/analytics/collect/route.ts'],
     stamp: 'expiresAt: analyticsDayExpiresAt(day)',
   },
+  // AGL-3605: a recorded site visit for funnels, and a funnel's cached result.
+  {
+    collectionGroup: 'funnelJourneys',
+    writers: ['libs/plugins/funnels/src/lib/server/journey-beacon.ts'],
+    stamp: 'expiresAt: journeyExpiresAt(now)',
+  },
+  {
+    collectionGroup: 'funnelResults',
+    writers: ['libs/plugins/funnels/src/lib/server/funnel-results.server.ts'],
+    stamp: 'expiresAt: new Date(now + 2 * CLOSED_RESULT_TTL_MS)',
+  },
   // AGL-1972: the verbatim half of an Assist exchange.
   {
     collectionGroup: 'assistExchanges',
@@ -220,6 +231,28 @@ const POLICIES: Array<{
     collectionGroup: 'imports',
     writers: ['libs/plugins/email/src/lib/transfer/list-members.server.ts'],
     stamp: 'expiresAt: listImportLedgerExpiry(',
+  },
+  // AGL-3611: a signed order webhook's delivery log, request body included.
+  {
+    collectionGroup: 'orderWebhookDeliveries',
+    writers: ['libs/plugins/commerce/src/lib/server/order-webhooks.ts'],
+    stamp: 'expiresAt: expiresAt(now)',
+  },
+  // AGL-3619: a cloud receipt printer's job queue, receipt content included.
+  {
+    collectionGroup: 'printJobs',
+    writers: ['libs/plugins/commerce/src/lib/server/print-queue.ts'],
+    stamp: 'expiresAt: new Date(nowMs + PRINT_JOB_RETENTION_MS)',
+  },
+  // AGL-3612: live carrier rates — checkout's ten-minute cache and the
+  // half-hour hold on a label quote share one collection.
+  {
+    collectionGroup: 'shippingQuoteCache',
+    writers: [
+      'libs/plugins/shipping/src/lib/server/quote-cache.ts',
+      'libs/plugins/shipping/src/lib/server/labels.ts',
+    ],
+    stamp: 'expiresAt: new Date(',
   },
 ]
 

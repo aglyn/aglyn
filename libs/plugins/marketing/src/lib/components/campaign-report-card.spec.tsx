@@ -34,6 +34,7 @@ import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type { SendStats } from '@aglyn/shared-ui-email-campaigns/model/send-report'
 import { standInEmailsPageRoutes } from '../testing/stand-in-emails-page-routes'
+import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 
 // The Emails page this campaign links into is the email plugin's (AGL-3080).
 standInEmailsPageRoutes()
@@ -300,5 +301,39 @@ describe('a send reached through a campaign URL says what it is', () => {
     await renderReport(undefined)
 
     expect(screen.queryByText('The email in this campaign')).toBeNull()
+  })
+})
+
+/**
+ * The `marketingInsights` zone (AGL-3603) in the report's header: handed the
+ * site the email was SENT AS — which is what the figures are one site's,
+ * also on the organization's hub where the page names no site — and the
+ * subject line the campaign is known by.
+ */
+describe('the marketingInsights zone on the report', () => {
+  const zoneCalls: Array<Record<string, unknown>> = []
+  function ZoneRenderer(props: { slot: string } & Record<string, unknown>) {
+    zoneCalls.push(props)
+    return <span>{`widget in ${props.slot}`}</span>
+  }
+
+  it('is handed the site the email was sent as, and its subject', async () => {
+    zoneCalls.length = 0
+    mockDocs.clear()
+    mockDocs.set(CAMPAIGN_PATH, { subject: 'Spring sale', stats: STATS, hostId: 'site-sent-as' })
+    const { CampaignReportCard } = await import('./campaign-report-card')
+    render(
+      (
+        <ConsoleWidgetSlotContext.Provider value={ZoneRenderer as never}>
+          <CampaignReportCard hostId={null} campaignId="camp_1" basePath="/acme/marketing" />
+        </ConsoleWidgetSlotContext.Provider>
+      ) as ReactNode as never,
+    )
+    expect(screen.getByText('widget in marketingInsights')).toBeTruthy()
+    expect(zoneCalls.find((call) => call['slot'] === 'marketingInsights')).toMatchObject({
+      hostId: 'site-sent-as',
+      subject: 'campaign',
+      campaign: 'Spring sale',
+    })
   })
 })

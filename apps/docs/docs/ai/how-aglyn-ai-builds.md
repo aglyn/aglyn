@@ -86,9 +86,9 @@ lists each job with where it stands.
 1. **Repeats become one reusable component.** A block that appears three or more
    times on a page, such as the same card with different words, is built once as
    a reusable component and placed as instances. The AI looks for a component you
-   already have first, and never makes a second copy of one. On a plan without
-   reusable components, such as Free, the block is built into the page each time it
-   repeats instead. Either way, a list of such blocks is one section of the page, never a
+   already have first, and never makes a second copy of one. On Free, which includes
+   one reusable component per site and leaves it for you to spend, the block is built
+   into the page each time it repeats instead. Either way, a list of such blocks is one section of the page, never a
    section for each block.
 2. **Site-wide regions live in the layout.** Headers, navigation, footers,
    announcement bars and cookie notices belong to the site's layout. A generated

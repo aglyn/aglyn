@@ -302,6 +302,15 @@ back afterwards, so Aglyn asks first.
   replaced. Videos already in your library keep playing, and the **Video** element can
   still use them. While the pause lasts, the library shows a **Video uploads paused**
   chip beside **Upload media**.
+- **Create images with AI.** **Create with AI**, beside **Upload media**, draws an
+  illustration, icon, pattern or logo mark as an SVG from a description, or makes a photo
+  where photos are on, and adds it to the folder you have open with alt text. Each picture
+  is stored like an upload and costs AI credits — see
+  [Create images with AI](../../ai/create-images.md).
+- **Web fonts** (WOFF2) are accepted too. The usual way to add one is
+  [Upload your own font](../../building-sites/theme-builder/edit-your-theme.md#upload-your-own-font)
+  in the theme editor, which checks the font's license, converts a TTF, OTF or WOFF to
+  WOFF2 and stores it here.
 - Documents and archives are stored and served exactly as you uploaded them — nothing
   is opened, extracted or converted. Macro-enabled Office files (`.docm`, `.xlsm`,
   `.pptm`) are not accepted.
@@ -322,6 +331,7 @@ back afterwards, so Aglyn asks first.
 | Documents (Word, Excel, CSV, RTF, text, Markdown, JSON) | 25 MB per file | **Pro and above** |
 | Presentations (PowerPoint) | 50 MB per file | **Pro and above** |
 | ZIP archives | 50 MB per file | **Pro and above** |
+| Web fonts (WOFF2) | 10 MB per file | Every plan |
 | Video | 200 MB per file | **Paused** on every plan |
 
 Any file over 3 MB automatically uses **signed-URL uploads**, so big files go straight to

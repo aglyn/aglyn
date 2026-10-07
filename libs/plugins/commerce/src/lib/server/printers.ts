@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import type { PluginApiHandler, PluginApiRequest } from '@aglyn/aglyn/server'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { resolveSiteTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -25,11 +26,13 @@ import {
   PRINTER_BRANDS,
   type PosPrinter,
   type PrinterBrand,
+  type PrintReport,
 } from '../model/commerce-printers'
 import { receiptDataFromOrder, type ReceiptData } from '../model/commerce-receipt'
 import type { HostOrder } from '../model/commerce-orders'
 import { enqueuePrintJob, printJobsRef, printersRef } from './print-queue'
 import { printerPollUrl } from './printer-secret'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /**
  * `POST /api/commerce/printers` (AGL-3619): a register's cloud receipt
@@ -64,7 +67,8 @@ export async function authorizePrinterManager(
   let uid: string
   try {
     uid = (await firebaseAdmin.app().auth().verifyIdToken(idToken)).uid
-  } catch {
+  } catch (error) {
+    if (!isRefusedIdToken(error)) throw error
     return { ok: false, status: 401, error: 'Unauthenticated' }
   }
   const host = await firebaseAdmin.app().firestore().collection('hosts').doc(hostId).get()
@@ -122,6 +126,7 @@ export function printerSettingsFromBody(
   if ('paperWidthMm' in body) patch.paperWidthMm = Number(body['paperWidthMm']) === 58 ? 58 : 80
   if ('autoPrintReceipts' in body) patch.autoPrintReceipts = body['autoPrintReceipts'] === true
   if ('kickDrawer' in body) patch.kickDrawer = body['kickDrawer'] === true
+  if ('kitchenTickets' in body) patch.kitchenTickets = body['kitchenTickets'] === true
   if ('logoKey' in body) {
     const logoKey = text(body['logoKey'], 10)
     const valid =
@@ -196,6 +201,14 @@ export async function orderReceipt(
  * When the receipt printer is also the drawer printer, the kick rides the
  * receipt job so the drawer opens as the receipt starts.
  *
+ * `kitchenTicket` prints on every printer set to print kitchen tickets, and
+ * only when asked for: a Z-report or a paid-out slip is not an order to make.
+ *
+ * `receiptChoice` is what the customer said at the register: `none` (or a
+ * receipt sent by email or text) prints no customer receipt; `print` prints
+ * one even when no printer auto-prints, on the register's first printer.
+ * Absent, the printers' own "every sale" setting decides.
+ *
  * `idempotencyKey` names the cause (a sale's order id, a shift event's id): a
  * cause delivered twice queues its jobs once.
  */
@@ -203,6 +216,10 @@ export async function queueRegisterPrint(input: {
   hostId: string
   registerId: string
   receipt?: ReceiptData
+  /** A shift report (AGL-3609): printed once, on the register's receipt printer. */
+  report?: PrintReport
+  kitchenTicket?: ReceiptData
+  receiptChoice?: 'print' | 'none'
   openDrawer?: boolean
   orderId?: string
   reason: string
@@ -229,9 +246,15 @@ export async function queueRegisterPrint(input: {
       ? `${input.reason}-${input.idempotencyKey}-${suffix}`.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 120)
       : undefined
   let drawerHandled = false
+  const receiptPrinters =
+    input.receiptChoice === 'none'
+      ? []
+      : printers.filter((entry: any) => entry.printer.autoPrintReceipts)
+  if (input.receiptChoice === 'print' && !receiptPrinters.length && printers.length) {
+    receiptPrinters.push(printers[0])
+  }
   if (input.receipt) {
-    for (const entry of printers) {
-      if (!entry.printer.autoPrintReceipts) continue
+    for (const entry of receiptPrinters) {
       const openDrawer = drawerPrinter?.id === entry.id
       drawerHandled ||= openDrawer
       const { jobId } = await enqueuePrintJob(
@@ -247,6 +270,48 @@ export async function queueRegisterPrint(input: {
           reason: input.reason,
           createdBy: input.createdBy,
           jobId: key(entry.id),
+        },
+        input.nowMs,
+      )
+      jobIds.push(jobId)
+    }
+  }
+  if (input.report) {
+    // One copy, on the printer that prints receipts — or the till's only one.
+    const target = printers.find((entry: any) => entry.printer.autoPrintReceipts) ?? printers[0]
+    if (target) {
+      const { jobId } = await enqueuePrintJob(
+        firestore,
+        input.hostId,
+        target.id,
+        {
+          kind: 'report',
+          report: input.report,
+          registerId: input.registerId,
+          reason: input.reason,
+          createdBy: input.createdBy,
+          jobId: key(`${target.id}-report`),
+        },
+        input.nowMs,
+      )
+      jobIds.push(jobId)
+    }
+  }
+  if (input.kitchenTicket) {
+    for (const entry of printers) {
+      if (!entry.printer.kitchenTickets) continue
+      const { jobId } = await enqueuePrintJob(
+        firestore,
+        input.hostId,
+        entry.id,
+        {
+          kind: 'kitchen',
+          receipt: input.kitchenTicket,
+          orderId: input.orderId,
+          registerId: input.registerId,
+          reason: input.reason,
+          createdBy: input.createdBy,
+          jobId: key(`${entry.id}-kitchen`),
         },
         input.nowMs,
       )
@@ -314,7 +379,7 @@ export const printersHandler: PluginApiHandler = async (req, res) => {
         if (!duplicate.empty) {
           return res.status(409).json({ error: 'That printer is already added to this site.' })
         }
-        const ref = printers.doc()
+        const ref = printers.doc(createResourceUid())
         const printer: PosPrinter = {
           name: settings.patch.name!,
           brand,
@@ -324,6 +389,7 @@ export const printersHandler: PluginApiHandler = async (req, res) => {
           paperWidthMm: settings.patch.paperWidthMm ?? 80,
           autoPrintReceipts: settings.patch.autoPrintReceipts ?? true,
           kickDrawer: settings.patch.kickDrawer ?? false,
+          kitchenTickets: settings.patch.kitchenTickets ?? false,
           ...(settings.patch.logoKey ? { logoKey: settings.patch.logoKey } : {}),
           secretVersion: 1,
           createdAtMs: Date.now(),

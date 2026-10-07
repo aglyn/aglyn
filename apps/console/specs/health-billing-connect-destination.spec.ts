@@ -100,6 +100,9 @@ const PLATFORM_EVENTS = [
   // Fraud signals to staff (AGL-3356).
   'radar.early_fraud_warning.created',
   'review.opened',
+  // Register card readers (AGL-3607).
+  'terminal.reader.action_succeeded',
+  'terminal.reader.action_failed',
 ]
 
 const platformEndpoint = {

@@ -91,6 +91,8 @@ export interface ReturnLine {
   lineItemId: number
   quantity: number
   reason: ReturnReason
+  /** The line's name when the return was opened, for lists that read no order. */
+  name?: string
 }
 
 /** A return label a shipping plugin bought for the buyer to send the parcel with. */
@@ -127,6 +129,13 @@ export interface HostReturn {
   status: ReturnStatus
   /** Who opened it: the buyer, or the merchant on their behalf. */
   requestedBy: 'buyer' | 'merchant'
+  /**
+   * `register` for a return taken and refunded at a POS register (AGL-3609):
+   * it is created already `refunded`, and the register's own record under
+   * `registers/{registerId}/returns` holds the tenders it went back to.
+   */
+  source?: 'register'
+  registerId?: string
   customerNote?: string
   merchantNote?: string
   returnLabel?: ReturnLabel
@@ -196,7 +205,7 @@ export function returnIsOpen(entry: Pick<HostReturn, 'status'>): boolean {
 }
 
 /** Whether a return is still holding units, or took them: anything not declined. */
-function returnHoldsUnits(entry: Pick<HostReturn, 'status' | 'refundedAtMs'>): boolean {
+export function returnHoldsUnits(entry: Pick<HostReturn, 'status' | 'refundedAtMs'>): boolean {
   if (entry.status === 'declined') return false
   // A return closed without a refund gave its units back to the order.
   if (entry.status === 'closed') return Boolean(entry.refundedAtMs)
@@ -279,7 +288,7 @@ export type ReturnRequestProblem =
   | { problem: 'too_many'; lineItemId: number; returnable: number }
 
 /** Order statuses a return may be opened against. */
-const RETURNABLE_ORDER_STATUSES = ['paid', 'partially_fulfilled', 'fulfilled', 'delivered']
+export const RETURNABLE_ORDER_STATUSES: readonly string[] = ['paid', 'partially_fulfilled', 'fulfilled', 'delivered']
 
 /**
  * Checks a return request against the order and the returns already open on

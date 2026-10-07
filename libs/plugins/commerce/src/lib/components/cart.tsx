@@ -143,6 +143,10 @@ function CartLines(props: {
   // itself the server's answer rather than a guess made here.
   const [shipTo, setShipTo] = useState('')
   const [shipCountries, setShipCountries] = useState<string[] | null>(null)
+  // Live carrier rates price by postal code (AGL-3612): asked only when the
+  // store prices that way and the server says so.
+  const [shipPostal, setShipPostal] = useState('')
+  const [askPostal, setAskPostal] = useState(false)
   // `paused` is its own state, not an `error` with gentler words (AGL-1511):
   // the two need different severities, and a shopper told in red that
   // checkout failed does not read the sentence explaining it did not. `ask` is
@@ -163,6 +167,8 @@ function CartLines(props: {
   const [nativeCheckout, setNativeCheckout] = useState<{
     clientSecret: string
     publishableKey: string
+    /** The wallets the merchant hid (AGL-3629). */
+    wallets?: CommerceModel.StorefrontCheckoutWallets
   } | null>(null)
   /**
    * In-progress quantity edits, keyed by line, as the raw field text
@@ -243,7 +249,7 @@ function CartLines(props: {
   )
   useEffect(() => {
     attemptKey.current = ''
-  }, [cartSignature, email, coupon, giftCard, shipTo])
+  }, [cartSignature, email, coupon, giftCard, shipTo, shipPostal])
 
   const handleCheckout = useCallback(async () => {
     if (status === 'sending') return
@@ -274,6 +280,7 @@ function CartLines(props: {
           // addresses to it, so declaring one cannot buy a cheaper zone's
           // rate than the address the shopper then enters (AGL-1721).
           ...(shipTo ? { shippingCountry: shipTo } : {}),
+          ...(shipPostal.trim() ? { shippingPostalCode: shipPostal.trim() } : {}),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -296,6 +303,7 @@ function CartLines(props: {
         setNativeCheckout({
           clientSecret: String(payload.clientSecret),
           publishableKey: String(payload.publishableKey),
+          wallets: CommerceModel.readStorefrontCheckoutWallets(payload.wallets),
         })
         setStatus('idle')
         return
@@ -358,6 +366,7 @@ function CartLines(props: {
       // price this cart until it knows one (AGL-1721). Reveal the field and
       // let the shopper answer; a store that never sends this never shows it.
       if (payload?.needsShippingCountry) {
+        if (payload?.needsShippingPostalCode) setAskPostal(true)
         setShipCountries(
           (payload.shippingCountries as string[] | undefined)?.length
             ? (payload.shippingCountries as string[])
@@ -380,7 +389,7 @@ function CartLines(props: {
     // subtotal and the OLD lines. The pre-AGL-1591 raw call had the same bug
     // in the `value` alone, where a wrong number is indistinguishable from a
     // right one.
-  }, [hostId, cart, coupon, email, optIn, giftCard, shipTo, status, siteFetch])
+  }, [hostId, cart, coupon, email, optIn, giftCard, shipTo, shipPostal, status, siteFetch])
 
   if (!cart || cart.lines.length === 0) {
     return (
@@ -534,6 +543,16 @@ function CartLines(props: {
           ))}
         </TextField>
       ) : null}
+      {askPostal ? (
+        <TextField
+          label="Postal code"
+          value={shipPostal}
+          onChange={(event) => setShipPostal(event.target.value)}
+          size="small"
+          helperText="Carrier rates depend on the postal code"
+          slotProps={{ htmlInput: { autoComplete: 'shipping postal-code', maxLength: 12 } }}
+        />
+      ) : null}
       {status === 'paused' || status === 'ask' || status === 'unconfigured' ? (
         <Alert severity="info">{message}</Alert>
       ) : null}
@@ -553,7 +572,8 @@ function CartLines(props: {
           // cannot succeed (AGL-2019).
           status === 'unconfigured' ||
           // Asked but unanswered: the server would only refuse again.
-          (shipCountries !== null && !shipTo)
+          (shipCountries !== null && !shipTo) ||
+          (askPostal && !shipPostal.trim())
         }
         onClick={handleCheckout}
       >
@@ -570,6 +590,7 @@ function CartLines(props: {
           <StorefrontPaymentElement
             clientSecret={nativeCheckout.clientSecret}
             publishableKey={nativeCheckout.publishableKey}
+            wallets={nativeCheckout.wallets}
             payLabel={checkoutLabel || 'Pay now'}
             defaultEmail={email}
             // An expired or unloadable session is replaced, never replayed:

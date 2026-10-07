@@ -50,7 +50,8 @@ export const AI_USAGE_BY_USER_RETENTION_MONTHS = 13
  * What an AI request was FOR, as the per-user rollup buckets it.
  *
  * `assist` is a console chat turn; `element`, `blog` and `section` are the
- * besigner's three assist modes; the rest are generation job kinds, named
+ * besigner's three assist modes; `image` is a picture made in the Media
+ * library (AGL-3602); the rest are generation job kinds, named
  * exactly as the job document names them so a reader can join the two — or
  * a purpose another plugin named on the text-generation seam.
  */
@@ -59,6 +60,7 @@ export type AiUsageKind =
   | 'element'
   | 'blog'
   | 'section'
+  | 'image'
   | AiJobKind
   | PluginAiUsageKind
 

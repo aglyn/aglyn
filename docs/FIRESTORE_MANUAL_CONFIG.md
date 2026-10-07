@@ -93,6 +93,8 @@ running the deploy, which is the one action that can destroy them.
 | `cspViolationDaily` | `expiresAt` | Durable CSP-violation counters (AGL-1799) written by the console and tenant `/api/csp-report` collectors — one doc per (day × app × directive × disposition × blocked origin), never report bodies. 60-day retention (`CSP_AGGREGATE_RETENTION_DAYS` in `libs/tenant/data/admin/src/lib/server/csp-aggregate.ts`); the evidence AGL-1702/AGL-1726 gate their enforcing flips on. **TTL `ACTIVE`, re-verified 2026-08-18.** |
 | `analytics` | `expiresAt` | Per-day pageview/serve/redirect counters on hosts and orgs (AGL-1844). **400 days** (`ANALYTICS_DAY_RETENTION_DAYS` in `libs/tenant/data/admin/src/lib/server/analytics-retention.ts`) — wide enough for the console's 90-day range, a usage-metering dispute a year later, and a year-over-year comparison no surface renders yet. TTL `ACTIVE`. |
 | `screenAnalytics` | `expiresAt` | The same counters per screen, same 400 days, same policy. TTL `ACTIVE`. |
+| `funnelJourneys` | `expiresAt` | One recorded site visit (AGL-3605) at `hosts/{hostId}/funnelJourneys/{visitId}`: its steps in order — page paths, form, service, product and overlay ids, custom event names — with server times, and where it arrived from (UTM labels, referring host). Keyed by a random per-tab id; a visit a form submission ended carries the submitter's address (`personEmail`), an anonymous one identifies nobody. **90 days** (`FUNNEL_JOURNEY_RETENTION_DAYS` in `libs/plugins/funnels/src/lib/model/funnels.types.ts`); the site collector's journey beacon stamps `journeyExpiresAt(now)` on every write. **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
+| `funnelResults` | `expiresAt` | A funnel's computed result over a range (AGL-3605): counts, shares, durations and source labels. Kept as a cache for up to a day by the results route, which stamps two days out so the document outlives its use and then goes. **OWED: not yet enabled.** |
 | `assistExchanges` | `expiresAt` | The **verbatim** half of an Aglyn Assist exchange (AGL-1972) — the question, the answer and the asking `uid`. **180 days** (`ASSIST_EXCHANGE_RETENTION_DAYS` in `libs/plugins/ai/src/lib/usage/assist-usage.ts`). The number is only affordable because the analytic half was split into `assistSignals`, which carries `docsPaths`, the thumbs rating, tokens and cost, has NO expiry and no `uid` — so the docs-gap data loop keeps its corpus while the prose expires. Both are org subcollections, so `recursiveDelete(orgRef)` still takes them on erasure. TTL `ACTIVE`, enabled and verified 2026-08-19. |
 | `aiCrmAnswers` | `expiresAt` | A CRM job's answer (AGL-2917), at `orgs/{orgId}/aiCrmAnswers/{jobId}`: a record's summary and proposed next step, an email draft, or an import's column matches, written from a person's CRM record, with the record's id and the asking `uid`. **14 days** (`AI_CRM_ANSWER_RETENTION_DAYS` in `libs/plugins/ai/src/lib/model/ai-crm.ts`) — `createAiJobCrmStep` in `libs/plugins/ai/src/lib/jobs/ai-job-crm-step.ts` stamps `aiCrmAnswerExpiry(now)`. A person erasure does not sweep it, so the period is what bounds a copy of an erased person. **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
 | `aiJobs` | `expiresAt` | An AI generation job (AGL-2904): the customer's **brief verbatim**, the step ledger, the outputs it named and the creating `uid`, under `orgs/{orgId}`. **180 days**, the exchange's clock — `createAiJob` in `libs/plugins/ai/src/lib/jobs/ai-jobs.ts` stamps `assistExchangeExpiry(now)`. The drafts a job writes are ordinary content and are not touched by this policy. TTL `ACTIVE`, enabled and verified 2026-09-14. |
@@ -105,6 +107,9 @@ running the deploy, which is the one action that can destroy them.
 | `snapshots` | `expiresAt` | The undo snapshot beneath a package import (AGL-3543), `packageImports/{importId}/snapshots/{n}`: every replaced or merged item's previous content **verbatim**, as JSON pieces of up to 900,000 characters — a whole-site restore into itself snapshots the whole site. Same 8 days; `writeLedgerPieces` stamps each piece, since TTL does not cascade from the record. The collection-group name is the generic `snapshots`; nothing else in the schema writes a subcollection by that name. **OWED: not yet enabled.** |
 | `writtenPaths` | `expiresAt` | The document paths a package import wrote per item (AGL-3543), `packageImports/{importId}/writtenPaths/{n}`, which undo deletes. Same 8 days, same writer. **OWED: not yet enabled.** |
 | `imports` | `expiresAt` | An email list's import ledger (AGL-3529, AGL-3549) at `orgs/{orgId}/lists/{listId}/imports/{jobId}`: up to 25 sample shared-mailbox addresses **verbatim**, the column names that read as a bought list, the consent sample's counts, and who stated permission (`attestedByUid`). **15 days** — the 7 days a planned import may wait to be applied, its 7-day undo window, and a day (`LIST_IMPORT_LEDGER_RETENTION_MS` in `libs/plugins/email/src/lib/transfer/list-members.server.ts`); every dry run re-stamps `listImportLedgerExpiry(Date.now())`. The collection-group name is the generic `imports`; nothing else in the schema writes a subcollection by that name. **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
+| `orderWebhookDeliveries` | `expiresAt` | One signed order-webhook delivery (AGL-3611) at `hosts/{hostId}/orderWebhookDeliveries/{deliveryId}`: the event, its attempts and the request body **verbatim** (up to `ORDER_WEBHOOK_BODY_MAX`), which is the order as the API publishes it — buyer email and shipping address included. **30 days** (`ORDER_WEBHOOK_LOG_RETENTION_MS` in `libs/plugins/commerce/src/lib/server/order-webhooks.ts`); every attempt re-stamps `expiresAt(now)`. **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
+| `printJobs` | `expiresAt` | A cloud receipt printer's job (AGL-3619) at `hosts/{hostId}/printJobs/{jobId}`: the receipt or shift report it prints, the register and cashier names on it, and the printer's result. **7 days** (`PRINT_JOB_RETENTION_MS` in `libs/plugins/commerce/src/lib/model/commerce-printers.ts`); `enqueuePrintJob` stamps it when the job is queued. A job is never delivered past its `deliverByMs`, minutes after it is written, so the week is only the jobs list's history. **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
+| `shippingQuoteCache` | `expiresAt` | Live carrier rates (AGL-3612), top-level: a checkout quote keyed by a SHA-256 of the site, the destination address and the parcels — the address itself is not stored — for **10 minutes** (`QUOTE_CACHE_TTL_MS` in `libs/plugins/shipping/src/lib/server/quote-cache.ts`), and a label quote held for purchase as `q_{shipmentId}` for **30 minutes** (`QUOTE_HOLD_MS` in `libs/plugins/shipping/src/lib/server/labels.ts`). Both are refused by age on read, so a missing policy costs storage, not a stale price. **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
 
 Not TTL targets (deliberately): `apiKeys.expiresAt` (validity field — keep expired
 keys as records), `orgSlugs.movedTo` tombstones (intentional persistent
@@ -126,6 +131,13 @@ gcloud firestore fields ttls update expiresAt \
   --project=aglyn-main --database='(default)'
 gcloud firestore fields ttls update expiresAt \
   --collection-group=screenAnalytics --enable-ttl \
+  --project=aglyn-main --database='(default)'
+# AGL-3605 — OWED, after the index deploy that declares them:
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=funnelJourneys --enable-ttl \
+  --project=aglyn-main --database='(default)'
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=funnelResults --enable-ttl \
   --project=aglyn-main --database='(default)'
 # AGL-1972 / AGL-1978 — run 2026-08-19, now ACTIVE:
 gcloud firestore fields ttls update expiresAt \
@@ -168,6 +180,16 @@ gcloud firestore fields ttls update expiresAt \
   --project=aglyn-main --database='(default)'
 gcloud firestore fields ttls update expiresAt \
   --collection-group=writtenPaths --enable-ttl \
+  --project=aglyn-main --database='(default)'
+# AGL-3611 / AGL-3612 / AGL-3619 — OWED, run after the index deploy that declares them:
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=orderWebhookDeliveries --enable-ttl \
+  --project=aglyn-main --database='(default)'
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=printJobs --enable-ttl \
+  --project=aglyn-main --database='(default)'
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=shippingQuoteCache --enable-ttl \
   --project=aglyn-main --database='(default)'
 # verify:
 gcloud firestore fields ttls list --project=aglyn-main --database='(default)'

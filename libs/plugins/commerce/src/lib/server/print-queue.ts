@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import {
   PRINT_JOB_CLAIM_TIMEOUT_MS,
   PRINT_JOB_DELIVER_WITHIN_MS,
@@ -24,11 +25,14 @@ import {
   type PosPrinter,
   type PrintJob,
   type PrintJobKind,
+  type PrintReport,
 } from '../model/commerce-printers'
 import type { ReceiptData } from '../model/commerce-receipt'
 import {
   layoutDrawerKick,
+  layoutKitchenTicket,
   layoutReceipt,
+  layoutReport,
   layoutTestPage,
   type PrintDocument,
 } from '../printing/print-document'
@@ -75,6 +79,7 @@ export function printersRef(firestore: Firestore, hostId: string) {
 export interface EnqueuePrintJobInput {
   kind: PrintJobKind
   receipt?: ReceiptData
+  report?: PrintReport
   openDrawer?: boolean
   storeName?: string
   timeZone?: string
@@ -99,13 +104,14 @@ export async function enqueuePrintJob(
   nowMs: number = Date.now(),
 ): Promise<{ jobId: string; created: boolean }> {
   const collection = printJobsRef(firestore, hostId)
-  const ref = input.jobId ? collection.doc(input.jobId) : collection.doc()
+  const ref = input.jobId ? collection.doc(input.jobId) : collection.doc(createResourceUid())
   const job: PrintJob = {
     printerId,
     ...(input.registerId ? { registerId: input.registerId } : {}),
     kind: input.kind,
     status: 'queued',
     ...(input.receipt ? { receipt: input.receipt } : {}),
+    ...(input.report ? { report: input.report } : {}),
     ...(input.openDrawer ? { openDrawer: true } : {}),
     ...(input.storeName ? { storeName: input.storeName } : {}),
     ...(input.timeZone ? { timeZone: input.timeZone } : {}),
@@ -341,6 +347,12 @@ export function printJobDocument(
   if (job.kind === 'receipt' && job.receipt) {
     return layoutReceipt(job.receipt, { columns, logo, openDrawer: job.openDrawer })
   }
+  if (job.kind === 'report' && job.report) {
+    return layoutReport(job.report, { columns, logo })
+  }
+  if (job.kind === 'kitchen' && job.receipt) {
+    return layoutKitchenTicket(job.receipt, { columns })
+  }
   if (job.kind === 'test') {
     return layoutTestPage({
       columns,
@@ -352,5 +364,8 @@ export function printJobDocument(
       openDrawer: job.openDrawer,
     })
   }
-  return layoutDrawerKick(columns)
+  if (job.kind === 'drawer') return layoutDrawerKick(columns)
+  // A receipt or ticket with nothing to print prints nothing: falling through
+  // to the drawer kick would open a till nobody asked to open.
+  return { columns, ops: [] }
 }

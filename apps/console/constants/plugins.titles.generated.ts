@@ -10,6 +10,7 @@
 
 /** A surface's display name, by its URL slug. */
 export const PLUGIN_SURFACE_TITLES: Readonly<Record<string, string>> = {
+  accounting: 'Accounting',
   'ai-jobs': 'AI jobs',
   automation: 'Automation',
   bookings: 'Bookings',
@@ -32,6 +33,10 @@ export const PLUGIN_SURFACE_TITLES: Readonly<Record<string, string>> = {
 export const PLUGIN_SURFACE_SECTIONS: Readonly<
   Record<string, Readonly<Record<string, string>>>
 > = {
+  accounting: {
+    connection: 'Connection',
+    activity: 'Sync activity',
+  },
   automation: {
     workflows: 'Workflows',
     actions: 'Actions',
@@ -77,6 +82,7 @@ export const PLUGIN_SURFACE_SECTIONS: Readonly<
   products: {
     catalog: 'Catalog',
     orders: 'Orders',
+    returns: 'Returns',
     promotions: 'Promotions',
     reservations: 'Reservations',
     settings: 'Settings',

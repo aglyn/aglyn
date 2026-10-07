@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
+import { modifierGroupsProblem, type ProductModifierGroup } from './product-modifiers'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
+import { draftProductChannelFacts, type ProductChannelFacts } from './product-channel'
 
 /**
  * Commerce catalog v1 (AGL-276): products with options/variants,
@@ -80,11 +82,102 @@ export interface ProductVariant {
   imageUrl?: string
 }
 
+/** A product's packed size and customs facts (AGL-3612). */
+export interface ProductShippingFacts {
+  lengthCm?: number | null
+  widthCm?: number | null
+  heightCm?: number | null
+  /** Harmonized System tariff code. */
+  hsCode?: string
+  /** ISO-3166 alpha-2 country the product was made in. */
+  originCountry?: string
+}
+
+/** A place's postal address, in parts (AGL-3612). Country is ISO-3166 alpha-2. */
+export interface PostalAddress {
+  line1?: string
+  line2?: string
+  city?: string
+  state?: string
+  postalCode?: string
+  country?: string
+  phone?: string
+}
+
 /** `hosts/{hostId}/locations/{id}` doc (AGL-286). */
 export interface InventoryLocation {
   name: string
   isDefault?: boolean
+  /** Free text, as the location was first described. */
   address?: string
+  /**
+   * The same place as a postal address (AGL-3612), so parcels can ship from
+   * it. Optional: a location written before this has only `address`.
+   */
+  postalAddress?: PostalAddress
+}
+
+/** A product's packed size for one unit, when all three sides are known. */
+export function productParcelDimensions(
+  product: Pick<HostProduct, 'shipping'> | null | undefined,
+): { lengthCm: number; widthCm: number; heightCm: number } | undefined {
+  const facts = product?.shipping
+  const side = (value: unknown) => {
+    const number = Number(value)
+    return Number.isFinite(number) && number > 0 ? Math.min(number, 300) : 0
+  }
+  const lengthCm = side(facts?.lengthCm)
+  const widthCm = side(facts?.widthCm)
+  const heightCm = side(facts?.heightCm)
+  return lengthCm && widthCm && heightCm ? { lengthCm, widthCm, heightCm } : undefined
+}
+
+/**
+ * Shipping facts as the product editor stages them, keystroke by keystroke
+ * (AGL-3647): {@link normalizeProductShippingFacts}, except that a country
+ * of origin being typed keeps its first letter. The editor runs this on
+ * every keystroke, and the strict form drops anything short of two letters,
+ * so the field could never be typed into. Readers normalize what is stored.
+ */
+export function draftProductShippingFacts(value: unknown): ProductShippingFacts | undefined {
+  const facts = normalizeProductShippingFacts(value)
+  const typed = String((value as Record<string, unknown> | null)?.['originCountry'] ?? '')
+    .trim()
+    .toUpperCase()
+  if (/^[A-Z]$/.test(typed)) return { ...facts, originCountry: typed }
+  return facts
+}
+
+/** A stored product's shipping facts made safe (AGL-3612); never throws. */
+export function normalizeProductShippingFacts(value: unknown): ProductShippingFacts | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Record<string, unknown>
+  const facts: ProductShippingFacts = {}
+  for (const side of ['lengthCm', 'widthCm', 'heightCm'] as const) {
+    const number = Number(raw[side])
+    if (raw[side] !== null && raw[side] !== undefined && Number.isFinite(number) && number > 0) {
+      facts[side] = Math.min(Math.round(number * 10) / 10, 300)
+    }
+  }
+  const hsCode = String(raw['hsCode'] ?? '').replace(/[^0-9.]/g, '').slice(0, 14)
+  if (hsCode) facts.hsCode = hsCode
+  const originCountry = String(raw['originCountry'] ?? '').trim().toUpperCase()
+  if (/^[A-Z]{2}$/.test(originCountry)) facts.originCountry = originCountry
+  return Object.keys(facts).length ? facts : undefined
+}
+
+/** A stored location's postal address made safe (AGL-3612); never throws. */
+export function normalizePostalAddress(value: unknown): PostalAddress | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Record<string, unknown>
+  const address: PostalAddress = {}
+  for (const field of ['line1', 'line2', 'city', 'state', 'postalCode', 'phone'] as const) {
+    const text = String(raw[field] ?? '').trim().slice(0, 120)
+    if (text) address[field] = text
+  }
+  const country = String(raw['country'] ?? '').trim().toUpperCase()
+  if (/^[A-Z]{2}$/.test(country)) address.country = country
+  return Object.keys(address).length ? address : undefined
 }
 
 /**
@@ -153,6 +246,12 @@ export interface HostProduct {
   variants: ProductVariant[]
   /** Per-product overrides for PDP meta tags (AGL-299 consumes). */
   seo?: { title?: string; description?: string; imageUrl?: string }
+  /**
+   * What shopping channels ask of the product (AGL-3637): brand, GTIN, MPN,
+   * condition and Google category. Absent means nothing was entered; the
+   * channel feeds fall back to the store's defaults.
+   */
+  channel?: ProductChannelFacts
   /** Supplier for dropship routing (AGL-289). */
   supplierId?: string
   /** Out-of-stock behavior (AGL-281): deny (default) or allow backorder. */
@@ -183,10 +282,25 @@ export interface HostProduct {
   gatedVideos?: Array<{ url: string; title?: string }>
   /** Manual related products for the upsell block (AGL-325). */
   relatedProductIds?: string[]
+  /**
+   * What one unit ships as (AGL-3612): its packed size, for a carrier to
+   * price, and its customs facts, for a parcel that crosses a border. Weight
+   * stays per variant. Absent means unknown, and a label is priced in the
+   * merchant's default box.
+   */
+  shipping?: ProductShippingFacts
   /** Buying this issues a gift-card code for its price (AGL-322). */
   giftCard?: boolean
   /** Tracked-total at/below this alerts host managers (AGL-281). */
   lowStockThreshold?: number
+  /**
+   * Choices added to the item at the register (AGL-3607) — "Oat milk",
+   * "Extra shot" — priced by the server from this list. See
+   * `product-modifiers.ts`.
+   */
+  modifierGroups?: ProductModifierGroup[]
+  /** Shown under Quick keys on the register's first screen (AGL-3607). */
+  posQuickKey?: boolean
   createdAtMs?: number
   updatedAtMs?: number
   deletedAt?: number | null
@@ -518,6 +632,16 @@ export interface ProductCopyValues {
   optionNames?: string[]
   seoTitle?: string
   seoDescription?: string
+  /**
+   * Packed size and customs facts (AGL-3612), merged over what the product
+   * has; a side set to `null` is cleared.
+   */
+  shipping?: Partial<ProductShippingFacts>
+  /**
+   * Shopping-channel facts (AGL-3637), merged over what the product has; a
+   * field set to `''` is cleared.
+   */
+  channel?: { [Field in keyof ProductChannelFacts]?: string }
 }
 
 /**
@@ -528,12 +652,25 @@ export interface ProductCopyValues {
  * variant, only when they name each option once with a name of its own.
  */
 export function productCopyPatch(
-  product: Pick<HostProduct, 'options' | 'variants' | 'seo'>,
+  product: Pick<HostProduct, 'options' | 'variants' | 'seo' | 'shipping'> &
+    Pick<Partial<HostProduct>, 'channel'>,
   values: ProductCopyValues,
-): Partial<Pick<HostProduct, 'description' | 'tags' | 'categoryIds' | 'seo' | 'options' | 'variants'>> {
+): Partial<
+  Pick<HostProduct, 'description' | 'tags' | 'categoryIds' | 'seo' | 'options' | 'variants' | 'shipping' | 'channel'>
+> {
   const patch: Partial<
-    Pick<HostProduct, 'description' | 'tags' | 'categoryIds' | 'seo' | 'options' | 'variants'>
+    Pick<HostProduct, 'description' | 'tags' | 'categoryIds' | 'seo' | 'options' | 'variants' | 'shipping' | 'channel'>
   > = {}
+  if (values.shipping && typeof values.shipping === 'object') {
+    // Stored whole, never `undefined`: the editor's save is a full `setDoc`,
+    // which refuses an undefined field. Nothing known is an empty map.
+    patch.shipping = draftProductShippingFacts({ ...product.shipping, ...values.shipping }) ?? {}
+  }
+  if (values.channel && typeof values.channel === 'object') {
+    // Stored whole, never `undefined`, for the same reason. Nothing entered
+    // is an empty map. Kept as typed: this runs on every keystroke.
+    patch.channel = draftProductChannelFacts({ ...product.channel, ...values.channel }) ?? {}
+  }
   if (typeof values.description === 'string') patch.description = values.description
   if (Array.isArray(values.tags)) {
     patch.tags = [...new Set(values.tags.map((tag) => tag.trim()).filter(Boolean))]
@@ -1153,6 +1290,8 @@ export function validateProduct(product: HostProduct): string | null {
   if (new Set(options.map((option) => option.name.trim())).size !== options.length) {
     return 'Each option needs its own name'
   }
+  const modifierProblem = modifierGroupsProblem(product.modifierGroups)
+  if (modifierProblem) return modifierProblem
   const variants = product.variants ?? []
   if (variants.length === 0) return 'Products need at least one variant'
   if (variants.length > COMMERCE_MAX_VARIANTS) {

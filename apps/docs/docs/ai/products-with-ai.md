@@ -54,7 +54,9 @@ the first 50 products of a larger import.
 
 ## Propose a first catalog
 
-**Propose products** takes a brief, such as *"a candle studio: hand-poured soy candles in
+On the products page, press **Create with AI** beside **Add product** (and beside **Add your
+first product** while the catalog is empty), or **Propose products** in **Build your
+catalog with AI** — both open the same brief. **Propose products** takes a brief, such as *"a candle studio: hand-poured soy candles in
 8 oz and 16 oz jars, and wax melts"*, and proposes up to twelve products, usually six or
 more unless your brief says how many: each with a name, type, description, tags, options,
 a search listing and a sentence saying what its photo should show.

@@ -22,16 +22,19 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   Button,
+  Checkbox,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { AiEmailType } from '../jobs/ai-job-email-step'
 import type { AiJobKind, AiJobSummary } from '../model/ai-jobs.types'
 import { AI_PAGE_TYPES, type AiPageType } from '../model/ai-page-job'
 import {
@@ -46,13 +49,19 @@ import { AiTemplateCollectionField } from './ai-template-collection-field.compon
 /**
  * The brief dialog every "Create with AI" opens (AGL-2907, AGL-3043, AGL-3051):
  * a page from the Screens page and from the Assist panel's AI jobs, a page
- * template from Templates, a layout from Layouts, a form from Forms and a
- * reusable component from Components.
+ * template from Templates, a layout from Layouts, a form from Forms, a
+ * reusable component from Components, and an email design from the Emails
+ * page's templates (AGL-3596). The `campaign` kind is the job an email's door
+ * starts when the campaign is asked for too; the Campaigns section's own door
+ * is a dialog of its own (`ai-campaign-create.component`, AGL-3603).
  *
  * One text box, and whatever the kind's door reads beside it, start one job of
  * that kind: a page's optional page type; a template's subject and, for a
  * collection entry's page, its collection. A layout, a form and a component
- * read nothing but the brief and the site. The job plans first; once it
+ * read nothing but the brief and the site. An email's reads the optional
+ * kind of email, and its door also offers to draft the
+ * campaign that would send it, which starts a `campaign` job instead — the
+ * same design, plus a draft campaign aimed at nobody. The job plans first; once it
  * exists the dialog follows it live (AGL-3593) — planning, the plan with its
  * Confirm, building, then the draft to open — and "Open AI jobs" follows it
  * anywhere else in the console. Nothing here builds or writes anything until
@@ -65,7 +74,7 @@ const BRIEF_MAX_CHARS = 4_000
 /** The job kinds a member describes from a console page. */
 export type AiBriefKind = Extract<
   AiJobKind,
-  'page' | 'template' | 'layout' | 'form' | 'component'
+  'page' | 'template' | 'layout' | 'form' | 'component' | 'email' | 'campaign'
 >
 
 /** What the dialog says for one kind. */
@@ -162,6 +171,52 @@ export const AI_BRIEF_COPY: Readonly<Record<AiBriefKind, AiBriefCopy>> = {
       'it.',
     failed: 'The component could not be started. Try again.',
   },
+  email: {
+    title: 'Describe an email',
+    briefLabel: 'What is the email for?',
+    placeholder:
+      'Announce the autumn menu to our regulars, and point them at the class page to book ' +
+      'the Tuesday bread class',
+    next:
+      'A plan comes first, and nothing is built until you confirm it. The email is built ' +
+      'from email blocks, with three subject lines and three preheaders to choose from. ' +
+      'Nothing is sent or scheduled.',
+    submit: 'Plan the email',
+    started:
+      'The email is being planned. Review the plan here or in AI jobs, and confirm it to ' +
+      'build. The email is saved as a draft template, and nothing sends it until a ' +
+      'campaign does.',
+    failed: 'The email could not be started. Try again.',
+  },
+  campaign: {
+    title: 'Describe a campaign',
+    briefLabel: 'What is the campaign’s email for?',
+    placeholder:
+      'Announce the autumn menu to our regulars, and point them at the class page to book ' +
+      'the Tuesday bread class',
+    next:
+      'A plan comes first, and nothing is built until you confirm it. The job writes the ' +
+      'email and a draft campaign that would send it. The campaign is aimed at nobody and ' +
+      'sends nothing until you pick who receives it and schedule it.',
+    submit: 'Plan the campaign',
+    started:
+      'The campaign is being planned. Review the plan here or in AI jobs, and confirm it ' +
+      'to build. The email and the campaign are saved as drafts, and nothing is sent.',
+    failed: 'The campaign could not be started. Try again.',
+  },
+}
+
+/**
+ * The kinds of email a member picks from, as their chips name them. The jobs'
+ * own catalog (`AI_EMAIL_TYPES`) also holds `reply`, which only a job the
+ * platform composes sets, so it is not offered here.
+ */
+export const AI_EMAIL_TYPE_LABELS: Readonly<Record<Exclude<AiEmailType, 'reply'>, string>> = {
+  welcome: 'Welcome',
+  newsletter: 'Newsletter',
+  launch: 'Launch',
+  abandonedCart: 'Cart reminder',
+  eventReminder: 'Event reminder',
 }
 
 /** Each template subject as its chip names it: what one page is drawn for. */
@@ -179,12 +234,27 @@ export interface AiBriefChoice {
   subject: AiTemplateSubject | null
   /** A collection entry template's collection, or `null` until one is picked. */
   collectionId: string | null
+  /** An email's or a campaign's kind of email; `null` or absent for none. */
+  emailType?: Exclude<AiEmailType, 'reply'> | null
+  /** An email's door only: also draft the campaign that would send it. */
+  withCampaign?: boolean
 }
 
 export const AI_BRIEF_NO_CHOICE: AiBriefChoice = {
   pageType: null,
   subject: null,
   collectionId: null,
+  emailType: null,
+  withCampaign: false,
+}
+
+/**
+ * The job the door starts: its own kind, except an email that also asked for
+ * its campaign, which is a `campaign` job — the campaign step writes the same
+ * design and drafts the campaign around it.
+ */
+export function aiBriefJobKind(kind: AiBriefKind, choice: AiBriefChoice): AiBriefKind {
+  return kind === 'email' && choice.withCampaign ? 'campaign' : kind
 }
 
 /**
@@ -193,7 +263,8 @@ export const AI_BRIEF_NO_CHOICE: AiBriefChoice = {
  *
  * A template's are read by the parser its door reads, so the dialog cannot
  * send a subject the door does not know or an entry page with no collection.
- * A page's type is optional. A layout, a form and a component read no inputs
+ * A page's type is optional, and so is an email's or a campaign's kind of
+ * email (`inputs.emailType`, which both steps read). A layout, a form and a component read no inputs
  * at all (AGL-2909, AGL-2913, AGL-2908), so theirs are empty.
  */
 export function aiBriefJobInputs(
@@ -201,6 +272,9 @@ export function aiBriefJobInputs(
   choice: AiBriefChoice,
 ): Record<string, string> | null {
   if (kind === 'page') return choice.pageType ? { pageType: choice.pageType } : {}
+  if (kind === 'email' || kind === 'campaign') {
+    return choice.emailType ? { emailType: choice.emailType } : {}
+  }
   if (kind === 'template') {
     const inputs = parseAiTemplateJobInputs({
       subject: choice.subject,
@@ -239,7 +313,6 @@ export function AiBriefDialog({
   orgSlug,
   isStaff,
 }: AiBriefDialogProps) {
-  const copy = AI_BRIEF_COPY[kind]
   // Held in a ref so the request reads WHO is signed in, and nothing keys on
   // the identity of the object that says so.
   const userRef = useRef(user)
@@ -250,6 +323,13 @@ export function AiBriefDialog({
   const [notice, setNotice] = useState<string | null>(null)
   /** The job the brief started, as the create door answered with it. */
   const [started, setStarted] = useState<AiJobSummary | null>(null)
+  // An email that asked for its campaign is said as the campaign it starts,
+  // and a started job as the kind it is (the choice is cleared once it starts).
+  const shownKind =
+    started && (started.kind === 'email' || started.kind === 'campaign')
+      ? started.kind
+      : aiBriefJobKind(kind, choice)
+  const copy = AI_BRIEF_COPY[shownKind]
 
   useEffect(() => {
     if (!open) return
@@ -265,6 +345,7 @@ export function AiBriefDialog({
 
   const start = useCallback(async () => {
     const inputs = aiBriefJobInputs(kind, choice)
+    const jobKind = aiBriefJobKind(kind, choice)
     if (!orgId || !brief.trim() || !inputs) return
     setBusy(true)
     setNotice(null)
@@ -272,7 +353,7 @@ export function AiBriefDialog({
       const response = await authorizedFetch(userRef.current, '/api/ai/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orgId, hostId, kind, brief: brief.trim(), inputs }),
+        body: JSON.stringify({ orgId, hostId, kind: jobKind, brief: brief.trim(), inputs }),
       })
       const payload = await response.json().catch(() => null)
       if (!response.ok) {
@@ -336,6 +417,37 @@ export function AiBriefDialog({
                   pick({ pageType: choice.pageType === id ? null : (id as AiPageType) })
                 }
                 disabled={busy}
+              />
+            ) : null}
+            {kind === 'email' || kind === 'campaign' ? (
+              <ChipGroup
+                id="ai-email-type-label"
+                label="Kind of email (optional)"
+                options={Object.entries(AI_EMAIL_TYPE_LABELS).map(([id, label]) => ({
+                  id,
+                  label,
+                }))}
+                value={choice.emailType ?? null}
+                // Optional: pressing the pressed kind again sends none.
+                onPress={(id) =>
+                  pick({
+                    emailType:
+                      choice.emailType === id ? null : (id as AiBriefChoice['emailType']),
+                  })
+                }
+                disabled={busy}
+              />
+            ) : null}
+            {kind === 'email' ? (
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={Boolean(choice.withCampaign)}
+                    onChange={(event) => pick({ withCampaign: event.target.checked })}
+                    disabled={busy}
+                  />
+                }
+                label="Also draft a campaign that sends it"
               />
             ) : null}
             {kind === 'template' ? (

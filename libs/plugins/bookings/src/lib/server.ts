@@ -36,7 +36,7 @@ import {
   renderLoadedHostEmailWithTokens,
   type LoadedHostEmailWithTokens,
 } from '@aglyn/tenant-data-admin/server/host-email-tokens'
-import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, bookingChargeUsd, bookingContactAsks, bookingPriceDisplay, bookingContactLines, readBookingContactFields, bookingTimeZone, computeOpenSlotPage, formatBookingWhen, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
+import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, bookingChargeUsd, bookingContactAsks, bookingPriceDisplay, bookingContactLines, readBookingContactFields, bookingServiceIsOffered, bookingTimeZone, computeOpenSlotPage, formatBookingWhen, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
 import { bookingTimeZoneFor } from './server/booking-time-zone'
 import {
   registerBillingWebhookHandler,
@@ -52,7 +52,15 @@ import { BOOKINGS_CONFIG_SCHEMA } from './plugin-config'
 import { bookingsBillingWebhookHandler } from './server/billing-webhook'
 import { bookingAnalyticsHandler } from './server/booking-analytics'
 import { registerBookingFigureReader } from './server/booking-figures'
+import { registerBookingServiceAiCapability } from './server/booking-service-ai-capability'
+import { registerBookingServiceDraftWriter } from './server/booking-service-drafts'
 import { bookingRefundHandler } from './server/refund'
+import { bookingInPersonPaymentHandler } from './server/in-person-payment'
+import {
+  bookingManageDeps,
+  createBookingCheckInHandler,
+  createBookingRescheduleHandler,
+} from './server/booking-manage'
 // The booking's way back to the record it was booked from (AGL-2660): the
 // reference a booking link carried, and the meeting a free booking files on
 // landing.
@@ -183,8 +191,9 @@ export const slotsHandler: PluginApiHandler = async (req, res) => {
     if (!serviceId) {
       const services = await hostRef.collection('services').limit(50).get()
       return res.status(200).json({
+        // A draft service is offered nowhere until it is activated (AGL-3616).
         services: services.docs
-          .filter((doc) => !doc.get('deletedAt'))
+          .filter((doc) => bookingServiceIsOffered(doc.data()))
           .map((doc) => ({
             $id: doc.id,
             name: doc.get('name') ?? '',
@@ -207,7 +216,8 @@ export const slotsHandler: PluginApiHandler = async (req, res) => {
       .doc(serviceId)
       .get()
     const service = serviceSnapshot.data() as HostBookingService | undefined
-    if (!service || (serviceSnapshot.get('deletedAt') as unknown)) {
+    // A draft has no slots to show (AGL-3616): it reads as no service at all.
+    if (!service || !bookingServiceIsOffered(service)) {
       return res.status(404).json({ error: 'Unknown service' })
     }
     const nowMs = Date.now()
@@ -368,7 +378,9 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       return res.status(404).json({ error: 'Unknown site' })
     }
     const service = serviceSnapshot.data() as HostBookingService | undefined
-    if (!service || (serviceSnapshot.get('deletedAt') as unknown)) {
+    // Refused for a draft as for a deleted service (AGL-3616): a request can
+    // name a service id the directory never listed.
+    if (!service || !bookingServiceIsOffered(service)) {
       return res.status(404).json({ error: 'Unknown service' })
     }
     // The phone and the address, held to what THIS service asks for
@@ -1171,6 +1183,13 @@ export function registerBookingsConsoleApi(): void {
   // Refunding a paid booking (AGL-2315). Console-side, because it is
   // site-admin-gated and moves money — never a site-facing route.
   registerPluginApiRoute('bookings/refund', bookingRefundHandler)
+  // Paying for a booking at the counter, on the native Aglyn POS app's reader
+  // (AGL-3618). Staff-gated like a refund, and it moves money the same way.
+  registerPluginApiRoute('bookings/in-person-payment', bookingInPersonPaymentHandler)
+  // Checking a guest in and moving a booking (AGL-3621), for the site's
+  // team in the native Aglyn app: member routes, one transaction each.
+  registerPluginApiRoute('bookings/check-in', createBookingCheckInHandler(bookingManageDeps()))
+  registerPluginApiRoute('bookings/reschedule', createBookingRescheduleHandler(bookingManageDeps()))
   // The merchant-side `purchase` lookup (AGL-2481). A public, unauthenticated
   // read like `bookings/slots`, authorised by the unguessable Stripe session
   // id and answering with a projection that carries no guest identity.
@@ -1180,4 +1199,9 @@ export function registerBookingsConsoleApi(): void {
   // Bookings by service as a figure table (AGL-2915), for the AI plugin's
   // insights to read by id; the console runs insight jobs.
   registerBookingFigureReader(() => firebaseAdmin.app().firestore())
+  // A draft service another plugin asks for by name (AGL-3616) — an AI build
+  // setting a site up from a brief. The console runs AI jobs (AGL-3026).
+  registerBookingServiceDraftWriter()
+  // …and the operation an AI build plans for it, which that writer executes.
+  registerBookingServiceAiCapability()
 }

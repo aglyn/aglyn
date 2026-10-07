@@ -161,6 +161,26 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
           body: { error: `Orders in "${order.status}" cannot cancel` },
         }
       }
+      // An OPEN register sale that has taken money (AGL-3607) is voided at
+      // the register, which hands each payment back first. Cancelling it here
+      // would mark it cancelled with a card charge, a gift card debit or a
+      // room charge still standing.
+      if (
+        order.status === 'pending' &&
+        CommerceModel.orderPayments(order).some(
+          (payment) => payment.status === 'succeeded' || payment.status === 'pending',
+        ) &&
+        Array.isArray(order.payments)
+      ) {
+        return {
+          status: 409,
+          body: {
+            error:
+              'This register sale has payments on it. Void it at the register, ' +
+              'which hands each payment back first.',
+          },
+        }
+      }
 
       // A POS CARD order's decrement happens in the webhook that pays it —
       // and before AGL-1825 it did not happen AT ALL: the paying branch's

@@ -64,6 +64,14 @@ import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import type { AiTool } from '../providers/contract'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
+import {
+  AI_BUILD_CREATE_KINDS,
+  AI_BUILD_STRUCTURAL_OPS,
+  aiBuildPageLimit,
+  aiBuildPlanShapeRefusal,
+  type AiBuildOps,
+} from '../model/ai-build-job'
+import { aiBuildOpLines, aiBuildOps } from './ai-build-capabilities'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
 import { readAiPlanCapabilities } from './ai-job-drafts'
 import {
@@ -159,6 +167,7 @@ export function aiJobPlanPrompt(
   job: Pick<AiJob, 'kind' | 'brief' | 'inputs'>,
   capabilities: AiPlanCapabilities | null = null,
   inventory: AiSiteInventory | null = null,
+  ops: AiBuildOps | null = null,
 ): string {
   const lines = [`Job kind: ${job.kind}`, `Brief: ${job.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)}`]
   for (const [key, value] of Object.entries(job.inputs ?? {})) {
@@ -174,7 +183,28 @@ export function aiJobPlanPrompt(
   }
   lines.push(...aiPlanTemplateTokenLines(job))
   lines.push(...aiPlanSiteLines(job, inventory, capabilities))
+  lines.push(...aiPlanBuildLines(job, capabilities, ops))
   return lines.join('\n')
+}
+
+/**
+ * What a BUILD job's plan is told (AGL-3616): that one request becomes pages,
+ * creations and items, how many pages it may hold, and the item operations
+ * this site has with their arguments. On the job's own turn, never a cached
+ * system block, because the operations are per site.
+ */
+export function aiPlanBuildLines(
+  job: Pick<AiJob, 'kind'>,
+  capabilities: AiPlanCapabilities | null,
+  ops: AiBuildOps | null,
+): string[] {
+  if (job.kind !== 'build') return []
+  const pages = aiBuildPageLimit(capabilities?.freeTaste === true)
+  return [
+    `This is a build from one request: plan each page it asks for in screens (at most ${pages}), each new layout, form, component or email design in create, and anything else in items. Plan only what the request asks for; reuse what the site has.`,
+    'A page section that shows a form or an item places it: put its new:<name> in that section\'s uses. An item built after another lists it in dependsOn.',
+    ...(ops ? aiBuildOpLines(ops, AI_BUILD_STRUCTURAL_OPS) : []),
+  ]
 }
 
 /**
@@ -274,6 +304,13 @@ export interface AiJobPlanScope extends AiPlanJobScope {
  */
 export const AI_JOB_PLAN_SCOPES: Readonly<Partial<Record<AiJobKind, AiJobPlanScope>>> = {
   page: { noun: 'a page job', creates: AI_PAGE_CREATE_KINDS, shapeRefusal: aiPagePlanShapeRefusal },
+  // A build from one request (AGL-3616): its operations are judged against
+  // the site's registry by the step, which reads it (`aiBuildPlanViolations`).
+  build: {
+    noun: 'a build',
+    creates: AI_BUILD_CREATE_KINDS,
+    shapeRefusal: (plan, options) => aiBuildPlanShapeRefusal(plan, { freeTaste: options?.freeTaste }),
+  },
   site: { noun: 'a site scaffold', creates: AI_SITE_CREATE_KINDS, shapeRefusal: aiSitePlanShapeRefusal },
   ...Object.fromEntries(
     Object.entries(AI_JOB_CREATE_KINDS).map(([kind, creates]) => [
@@ -293,9 +330,15 @@ function planViolations(
   scope: AiJobPlanScope | null,
   brief: string,
   freeTaste = false,
+  ops: AiBuildOps | null = null,
 ): (plan: AiBuildPlan) => AiDoctrineViolation[] {
   return (plan) => {
-    const message = scope?.shapeRefusal(plan, { freeTaste }) ?? null
+    // A build's plan is held to the operations this site has (AGL-3616):
+    // an unknown op, arguments its schema refuses, a cycle or a reference
+    // nothing makes are re-asked once like every other plan rule.
+    const message = ops
+      ? aiBuildPlanShapeRefusal(plan, { freeTaste, ops })
+      : (scope?.shapeRefusal(plan, { freeTaste }) ?? null)
     return [
       ...aiPlanEmbedBriefViolations(plan, brief),
       ...(message ? [{ rule: null, code: 'plan-job-shape', message }] : []),
@@ -506,6 +549,40 @@ export interface AiJobPlanStepDeps {
   readCapabilities?: AiPlanCapabilitiesReader
   /** The kind's admission, asked of a plan before it is kept; the registry's otherwise. */
   admissionRefusal?: typeof aiJobAdmissionRefusal
+  /** A build's operations on its site (AGL-3616); the registry and its gates otherwise. */
+  readOps?: AiBuildOpsReader
+}
+
+/** What a build may plan on its site (AGL-3616). */
+export type AiBuildOpsReader = (input: {
+  job: AiJob
+  org: Partial<AglynOrgBilling> | null
+  firestore: FirebaseFirestore.Firestore
+  freeTaste: boolean
+}) => Promise<AiBuildOps>
+
+/** The reader the step uses in production: the registry, gated for the job's site. */
+export const readAiBuildOps: AiBuildOpsReader = async ({ job, org, firestore, freeTaste }) => {
+  const host = job.hostId
+    ? (((await firestore.collection('hosts').doc(job.hostId).get()).data() ?? null) as Record<string, unknown> | null)
+    : null
+  return aiBuildOps({ orgId: job.orgId, hostId: job.hostId ?? null, org, host, freeTaste })
+}
+
+/**
+ * A build plan's items with what each can cost (AGL-3616), from its
+ * capability, recorded as the plan is kept so the console's estimate and the
+ * confirm door read one figure without the registry.
+ */
+export function aiPlanWithItemCredits<T extends AiBuildPlan>(ops: AiBuildOps | null, plan: T): T {
+  if (!ops || !plan.items?.length) return plan
+  return {
+    ...plan,
+    items: plan.items.map((item) => {
+      const capability = ops.get(item.op)
+      return capability ? { ...item, credits: Math.max(0, Math.floor(capability.estimateCredits(item.args))) } : item
+    }),
+  }
 }
 
 export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunner {
@@ -514,6 +591,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     deps.findPlansByKey === undefined ? findAiJobsByPlanKey : deps.findPlansByKey
   const readCapabilities = deps.readCapabilities ?? readAiJobPlanCapabilities
   const admissionRefusal = deps.admissionRefusal ?? aiJobAdmissionRefusal
+  const readOps = deps.readOps ?? readAiBuildOps
   return async ({ job, now, signal, firestore, modelFor, org: orgDocument }) => {
     const org = (orgDocument ?? null) as Partial<AglynOrgBilling> | null
     const [inventory, workspace] = await Promise.all([
@@ -526,6 +604,8 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       workspace ? aiPlanCapabilitiesForJob(workspace, scope) : null,
     )
     const freeTaste = capabilities?.freeTaste === true
+    // A build's operations, as this site has them (AGL-3616).
+    const ops = job.kind === 'build' ? await readOps({ job, org, firestore, freeTaste }) : null
     const site = job.kind === 'site'
     // The model switch's answer for this job (AGL-2942): the creator's pick
     // where the plan, the org restriction and the allotment allowlists allow
@@ -534,7 +614,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // provider's fast tier (AGL-3594), unless the creator picked a model.
     const model = aiSitePlanModel(job, modelFor?.('job.plan'), freeTaste)
     const route = AI_ROUTING_TABLE['job.plan']
-    const prompt = aiJobPlanPrompt(job, capabilities, inventory)
+    const prompt = aiJobPlanPrompt(job, capabilities, inventory, ops)
 
     /**
      * The confirm door's answer for this plan, asked before the plan is kept
@@ -574,6 +654,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // each screen (AGL-3475).
     const tool = aiBuildPlanToolFor(job.brief, {
       records: Boolean(inventory?.datasets.length) || capabilities?.create.dataset.allowed === true,
+      items: job.kind === 'build',
     })
     const key = aiJobPlanKey({
       job,
@@ -590,7 +671,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       : null
     if (reused) {
       // The reused plan's draft ids name the other job's drafts; this job's are its own.
-      const plan: AiJobPlan = aiPlanWithDraftIds(job.kind, {
+      const plan: AiJobPlan = aiPlanWithItemCredits(ops, aiPlanWithDraftIds(job.kind, {
         ...reused.plan,
         status: 'proposed',
         labels: aiPlanLabels(reused.plan, inventory),
@@ -599,7 +680,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         confirmedBy: null,
         key,
         reusedFrom: reused.jobId,
-      })
+      }))
       const unspent = aiUnspentOutcome(resolved)
       return (
         (await refusalOnKeep(plan, unspent)) ?? {
@@ -627,7 +708,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       ...(route.effort ? { effort: route.effort } : {}),
       ...(signal ? { signal } : {}),
       capabilities,
-      extend: planViolations(scope, job.brief, freeTaste),
+      extend: planViolations(scope, job.brief, freeTaste, ops),
     })
     const spent: AiJobStepOutcome = {
       outputs: [],
@@ -664,7 +745,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       }
     }
     // Each draft the plan decides is named as the plan is kept, before anything is built (AGL-3079).
-    const plan: AiJobPlan = aiPlanWithDraftIds(job.kind, {
+    const plan: AiJobPlan = aiPlanWithItemCredits(ops, aiPlanWithDraftIds(job.kind, {
       ...result.value,
       status: 'proposed',
       labels: aiPlanLabels(result.value, inventory),
@@ -673,7 +754,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       confirmedAt: null,
       confirmedBy: null,
       key,
-    })
+    }))
     return (
       (await refusalOnKeep(plan, spent)) ?? {
         ...spent,

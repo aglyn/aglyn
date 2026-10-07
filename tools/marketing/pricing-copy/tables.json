@@ -160,7 +160,7 @@
             "label": "Reusable components",
             "duplicateOf": null,
             "values": {
-              "free": "—",
+              "free": "1",
               "starter": "✓",
               "pro": "✓",
               "business": "✓",

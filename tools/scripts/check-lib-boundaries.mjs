@@ -58,6 +58,7 @@ import {
   compareToAllowlist,
   declarationsOwed,
   evaluateEdges,
+  isNpmLibrary,
   lazyAndStaticPairs,
   missingMapRows,
   overrideWiring,
@@ -162,7 +163,7 @@ const subpathTarget = (name) => {
 }
 for (const project of packageMap) {
   const root = join(REPO_ROOT, project.root)
-  if (project.projectType !== 'library') continue
+  if (!isNpmLibrary(project)) continue
   const packagePath = join(root, 'package.json')
   if (!existsSync(packagePath)) {
     problems.push(`${project.root} has no package.json; a lib is a package and states its name.`)

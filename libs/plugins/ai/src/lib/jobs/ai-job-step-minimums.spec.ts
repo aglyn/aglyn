@@ -228,7 +228,7 @@ describe('every step the console runs registers the least time it needs (AGL-303
     expect(steps.filter(({ minimumMs }) => !(minimumMs > 0))).toEqual([])
     expect(steps.filter(({ minimumMs }) => minimumMs > AI_JOB_STEP_MAX_MINIMUM_MS)).toEqual([])
     // Every kind with a step module beside the machine is among them.
-    for (const kind of ['text', 'theme', 'seo', 'component', 'layout', 'template', 'form', 'page', 'email', 'campaign', 'site', 'workflow', 'insight', 'products', 'crm'] as const) {
+    for (const kind of ['text', 'theme', 'seo', 'component', 'layout', 'template', 'form', 'page', 'email', 'campaign', 'site', 'workflow', 'insight', 'products', 'crm', 'build'] as const) {
       expect([kind, steps.some((entry) => entry.kind === kind)]).toEqual([kind, true])
     }
   })
@@ -422,6 +422,33 @@ describe('a pass needs the time of the step its unit is handed to (AGL-3035)', (
     // A scaffold with nothing left to build spends nothing; a page pass's time covers it.
     expect(aiJobNextStepMinimumMs({ ...job, outputs })).toBe(aiJobStepMinimumMs('site', 'generate'))
     expect(aiJobStepMinimumMs('site', 'generate')).toBe(aiJobStepMinimumMs('page', 'generate'))
+  })
+
+  it('gives a build’s units the time of the step that builds each, by its item ledger (AGL-3616)', () => {
+    const job = plannedJob('build', {
+      create: [creation('layout', 'Site frame', 'drftFrameL'), creation('form', 'Contact', 'drftContct')],
+      screens: [screen(0)],
+      items: [{ slot: 'i0', op: 'template', name: 'Post', why: '', dependsOn: [], degrade: 'omit', args: { subject: 'product' } }],
+    })
+    const ledger = (done: string[]) =>
+      ['c0', 'c1', 'i0', 'p0'].map((slot) => ({
+        slot,
+        op: 'x',
+        label: slot,
+        status: done.includes(slot) ? ('succeeded' as const) : ('pending' as const),
+        attempt: 1,
+        creditsSpent: 0,
+        creditsRefunded: 0,
+        outputs: [],
+      }))
+    const next = (done: string[]) => aiJobNextStepMinimumMs({ ...job, items: ledger(done) })
+    expect(next([])).toBe(aiJobStepMinimumMs('layout', 'generate'))
+    expect(next(['c0'])).toBe(aiJobStepMinimumMs('form', 'generate'))
+    expect(next(['c0', 'c1'])).toBe(aiJobStepMinimumMs('template', 'generate'))
+    expect(next(['c0', 'c1', 'i0'])).toBe(aiJobStepMinimumMs('page', 'generate'))
+    // Nothing left: a page pass's time covers the last, publishing pass.
+    expect(next(['c0', 'c1', 'i0', 'p0'])).toBe(aiJobStepMinimumMs('build', 'generate'))
+    expect(aiJobStepMinimumMs('build', 'generate')).toBe(aiJobStepMinimumMs('page', 'generate'))
   })
 
   it('gives a products job’s catalog and categories passes their own time, above the copy the step registers', () => {

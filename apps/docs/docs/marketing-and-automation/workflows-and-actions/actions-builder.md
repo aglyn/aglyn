@@ -47,8 +47,10 @@ the editor, from the organization's
 Beside **Recipes**, **Create with AI** drafts an automation from a sentence, using only the
 triggers and steps your plan includes. The draft arrives in the list switched off, with
 anything your site is missing left in square brackets for you to fill in. A saved
-automation's editor also has **Explain it**, and a failed run has **Why did this fail?**.
-See [Draft and explain automations with AI](../../ai/automations-with-ai.md).
+automation's editor also has **Explain it**, a saved action's has **Change with AI** and
+**Fix with AI** — each drafts a changed copy, switched off, and leaves the action as it is —
+and a failed run has **Why did this fail?**.
+See [Automations with AI](../../ai/automations-with-ai.md) to draft, change, fix or explain one.
 
 ## Triggers
 
@@ -97,6 +99,12 @@ so in ordinary use every one of these is announced. Contacts **added by hand** i
 console, **imported**, or created through the **REST API** are written without an
 announcement and fire nothing.
 :::
+
+### Funnel events {#funnel-events}
+
+| Event | Fires when | Keys in scope for filters and conditions |
+| --- | --- | --- |
+| **Left a funnel** (`funnelLeft`) | A person who submitted a form on your site reached a [funnel](../analytics/funnels.md#act-on-drop-off) step that an automation follows up on, and had not reached the next step after the wait. Once per person, funnel, step and wait; never for an anonymous visitor. **Act on this drop-off** on the Funnels card drafts an automation on it, switched off. | `funnelId` · `funnelName` · `step` (the step reached, from 1) · `stepLabel` · `nextStepLabel` · `afterHours` (the wait) · `email` |
 
 ### Only run when a field matches
 

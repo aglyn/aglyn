@@ -228,9 +228,15 @@ const RESOURCES: Record<string, HostResource> = {
     activity: { type: 'layout', noun: 'shared layout' },
     fields: ['displayName', 'description', 'versionId'],
   },
-  // Entitlement-only (boolean feature, no numeric cap): reusable
-  // components render on the live site, so a Starter+ gate must be
-  // server-enforced, not just hidden in the console (AGL-473).
+  // Counted against `componentsPerHost` alone since AGL-3615: Free 1, every
+  // paid plan unlimited. It was entitlement-only (`reusableComponents`, a
+  // Starter+ boolean), and the create is still server-enforced because a
+  // component renders on the live site (AGL-473). It is no longer behind the
+  // flag, the way a saved form left it (AGL-3597): a Free site saves its one
+  // component and is refused the second for capacity, with the upgrade
+  // path. Refused at the create only, so a site already holding more keeps
+  // every component; nothing is counted on a plan whose allowance is
+  // unlimited beyond the one aggregation the count costs.
   //
   // `hostId` used to sit here: it duplicated the document's own path,
   // hosts/{hostId}/components/{id}, nothing read it, and the other two
@@ -239,7 +245,11 @@ const RESOURCES: Record<string, HostResource> = {
   // then here (AGL-1384).
   reusableComponent: {
     collection: 'components',
-    entitlement: 'reusableComponents',
+    quotaKey: 'componentsPerHost',
+    // Deleting a component stamps `deletedAt` and keeps the document, so the
+    // allowance counts LIVE ones: a Free site that deletes its one component
+    // may make another (the AGL-1173 screens bug, one collection over).
+    softDeletes: true,
     label: 'reusable components',
     activity: { type: 'component', noun: 'reusable component' },
     // `props` is sent by Use template, whose tree binds to the properties it
@@ -258,7 +268,7 @@ const RESOURCES: Record<string, HostResource> = {
    * ONE gate: `formsPerHost`, how many saved forms one site may hold — Free
    * 1, Starter 5, Pro 25, Business 100, `FORMS_PER_HOST_CEILING` above
    * (AGL-3597). It is deliberately NOT behind `reusableComponents`: a Free
-   * site saves its one form, and only components stay Starter-and-above. It
+   * site saves its one form, as it saves its one component (AGL-3615). It
    * rides an entitlement key so the refusal happens inside the counting
    * transaction, and so one org's number can be overridden by contract.
    *
@@ -808,7 +818,9 @@ async function handler(request: Request): Promise<Response> {
               ).data().count
             : resourceKey === 'screen'
               ? billableScreenIds(screenRows, routingMap).size
-              : (await tx.get(collectionRef.count())).data().count
+              : resource.softDeletes
+                ? await liveCount(tx, collectionRef, org, resource.quotaKey)
+                : (await tx.get(collectionRef.count())).data().count
         // Register seats are the one quota whose cap is not the org-level
         // value (AGL-1775). `seatAddons.posRegisters` is an org POOL and
         // `org.registerAllocations` says which site holds each seat, so a
@@ -1022,6 +1034,28 @@ async function handler(request: Request): Promise<Response> {
 
 export const dynamic = 'force-dynamic'
 export { handler as POST }
+
+/**
+ * The live documents a soft-deleting collection holds, for a plan quota.
+ *
+ * Read with a `deletedAt` projection and counted where it is `null` — the
+ * same arithmetic the flat-cap branch uses — because a component created
+ * here carries no `deletedAt` while a marketplace copy carries an explicit
+ * `null`, and no single Firestore filter matches both. Every document is
+ * read, so a plan whose allowance is unlimited is not counted at all: its
+ * answer is yes whatever the number (AGL-3615).
+ */
+async function liveCount(
+  tx: FirebaseFirestore.Transaction,
+  collectionRef: FirebaseFirestore.CollectionReference,
+  org: Parameters<typeof checkQuota>[0],
+  quotaKey: string,
+): Promise<number> {
+  if (!Number.isFinite(checkQuota(org, quotaKey as any, 0).limit)) return 0
+  return (await tx.get(collectionRef.select('deletedAt'))).docs.filter(
+    (entry) => entry.get('deletedAt') == null,
+  ).length
+}
 
 /** "1 form", never "1 forms": a label's last word in the singular. */
 function singularLabel(label: string): string {

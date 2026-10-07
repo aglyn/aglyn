@@ -35,7 +35,7 @@
 
 import { CONSOLE_WIDGET_SLOTS, listConsoleWidgets } from '@aglyn/aglyn'
 import type { ConsoleHostSeoZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentType } from 'react'
 
 // ONE held object for the whole file: a fresh double each render turns the
@@ -54,6 +54,7 @@ import {
   AI_SITE_SEO_OUTPUT_ID,
   aiSiteSeoProposalForInputs,
 } from '../model/ai-site-start-seo'
+import type { LazyWidget } from '../lazy-widget'
 import { registerAiConsole } from '../plugin'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
@@ -211,7 +212,10 @@ describe('it is absent unless there is something to offer', () => {
   it('asks nothing while the page has not resolved its org', async () => {
     const Widget = widget()
     const { container } = render(<Widget {...zoneProps({ orgId: undefined })} />)
-    await Promise.resolve()
+    // Mounted, not merely loading: the card is registered lazily (AGL-3649).
+    await act(async () => {
+      await (Widget as LazyWidget).load()
+    })
     expect(mockFetch).not.toHaveBeenCalled()
     expectNothingDrawn(container)
   })

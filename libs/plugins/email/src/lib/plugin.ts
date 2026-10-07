@@ -28,6 +28,7 @@ import {
   EMAIL_MESSAGES_ZONE,
   EMAIL_TEMPLATE_RECIPIENTS_ZONE,
   EMAIL_TEMPLATE_REPORT_ZONE,
+  HOST_EMAIL_TEMPLATES_ZONE,
 } from './components/email-zones'
 import { EMAILS_CONSOLE_SECTIONS } from './components/emails-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -171,6 +172,18 @@ export function registerEmailConsole(): void {
       surface: 'console',
       description:
         'On one template’s page, under its report. A widget here lists the recipients of every send built from that template; it is handed the site and the template’s id.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: HOST_EMAIL_TEMPLATES_ZONE,
+      label: 'A site’s email templates',
+      surface: 'console',
+      // One item in the list's row of actions, beside New template.
+      layout: 'bare',
+      description:
+        'On a site’s Emails page, beside New template and in the empty list: another way to start an email design. A widget here is handed the site and its org and writes nothing through the page.',
     },
     { pluginId: BUNDLE_ID },
   )

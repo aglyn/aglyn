@@ -2857,6 +2857,72 @@ describe('the saved-form ladder (AGL-3597)', () => {
   })
 })
 
+describe('reusable components per site (AGL-3615)', () => {
+  const PLANS = Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]
+
+  it('gives Free one, and every paid plan the unlimited room it had as a feature', () => {
+    // Read as a map so a failure prints the whole shape, over every plan the
+    // table holds so a new plan is noticed. Paid plans did not shrink: before
+    // the count they had the `reusableComponents` flag and no number at all.
+    expect(
+      Object.fromEntries(PLANS.map((plan) => [plan, PLAN_ENTITLEMENTS[plan].componentsPerHost])),
+    ).toEqual(
+      Object.fromEntries(PLANS.map((plan) => [plan, plan === 'free' ? 1 : UNLIMITED])),
+    )
+  })
+
+  it('keeps the flag where the allowance is unlimited, and off on Free', () => {
+    // The flag now states "components without a count"; the count decides
+    // whether a site may make one.
+    for (const plan of PLANS) {
+      expect([plan, Boolean(PLAN_ENTITLEMENTS[plan].features?.reusableComponents)]).toEqual([
+        plan,
+        !Number.isFinite(PLAN_ENTITLEMENTS[plan].componentsPerHost),
+      ])
+    }
+  })
+
+  it('admits Free’s first component and refuses its second, on the count alone', () => {
+    const free = { plan: 'free' } as any
+    expect(checkEntitlement(free, 'reusableComponents')).toBe(false)
+    expect(checkQuota(free, 'componentsPerHost', 0)).toMatchObject({ allowed: true, limit: 1 })
+    expect(checkQuota(free, 'componentsPerHost', 1)).toMatchObject({ allowed: false, limit: 1 })
+  })
+
+  it('never refuses a paid plan, however many it holds', () => {
+    const starter = { plan: 'starter', subscription: { status: 'active' } } as any
+    expect(checkQuota(starter, 'componentsPerHost', 10_000).allowed).toBe(true)
+  })
+
+  it('counts a lapsed paid workspace as Free, without taking a component away', () => {
+    // A downgrade grandfathers: the count is asked at the create only, so
+    // the 40 stay and only the 41st is refused.
+    const lapsed = { plan: 'pro', subscription: { status: 'canceled' } } as any
+    const held = checkQuota(lapsed, 'componentsPerHost', 40)
+    expect(held).toMatchObject({ allowed: false, limit: 1, remaining: 0 })
+  })
+
+  it('lifts the count for an org granted the feature by override, as the grant always meant', () => {
+    const granted = { plan: 'free', entitlements: { features: { reusableComponents: true } } } as any
+    expect(resolveOrgEntitlements(granted).componentsPerHost).toBe(UNLIMITED)
+    expect(checkQuota(granted, 'componentsPerHost', 40).allowed).toBe(true)
+  })
+
+  it('lets a numeric override decide over the flag when both are set', () => {
+    const both = {
+      plan: 'free',
+      entitlements: { componentsPerHost: 3, features: { reusableComponents: true } },
+    } as any
+    expect(resolveOrgEntitlements(both).componentsPerHost).toBe(3)
+  })
+
+  it('takes a per-org override like any count', () => {
+    const raised = { plan: 'free', entitlements: { componentsPerHost: 5 } } as any
+    expect(checkQuota(raised, 'componentsPerHost', 4).allowed).toBe(true)
+    expect(checkQuota(raised, 'componentsPerHost', 5).allowed).toBe(false)
+  })
+})
+
 describe('the Aglyn AI add-on (AGL-2896)', () => {
   const PLANS = Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]
   const SOLD = ['starter', 'pro', 'business', 'scale', 'advanced', 'agency'] as const

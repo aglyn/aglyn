@@ -1,5 +1,5 @@
 {
-  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests — the only files allowed to reference @aglyn/plugins-* outside libs/plugins. `catalog` is the plugin's row on the workspace and site switchboards (label, description, release flag, what switching it off for a site stops, and what a published site loses); the generator compiles every row, in `order`, into libs/aglyn plugin-manager/first-party-plugins.generated.ts, so a new plugin is declared here and nowhere in core (AGL-3080). An entry with no `catalog` is not on the switchboard. `capabilities` are further switchboard ids the same bundle serves. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry), declarations = the light registrations core reads before any surface loads (`/declarations`, both apps, client and server), serverDeclarations = the same for the server alone (`/declarations.server`, platform-event subscriptions), consoleServerDeclarations = the same for the CONSOLE's server alone (`/declarations.console-server`, never loaded or bundled by the tenant runtime: for registrations that open what only the console holds), subprocessors = the third-party recipients the plugin's code sends data to, and its other hosts and its uses of hosts declared elsewhere (`/subprocessors`, called by the generator rather than at runtime, and written into the console's subprocessors manifest as data for the subprocessor inventory), planEntitlements = what each plan includes of the plugin's own entitlement keys (`/plan-entitlements`, called by the generator rather than at runtime and compiled into the catalog file as data that core's PLAN_ENTITLEMENTS composes, because the pricing tables and the plan comparison read it without loading a plugin), usageAxes = the meters the plugin contributes to the platform's cost model and utilization table, and the lines of spend it adds to a workspace's usage budget (`/usage-axes`, called by the generator and compiled into the catalog file as data, because the discount guardrail and the staff org page price a rollup without loading a plugin), videoEmbedProviders = the video hosts whose own player the plugin's Video element frames (`/video-embed-providers`, called by the generator and compiled into the catalog file as data, which the published page and the tenant's frame-src read without loading the plugin), tenantEmails = the emails a site sends its own customers through the plugin (`/tenant-emails`, called by the generator and compiled into the email lib's tenant email catalog as data, which the send path reads without loading the plugin). activityMutationPaths = the plugin's modules that create, transfer or destroy a durable customer object, which `tools/scripts/check-activity-coverage.mjs` holds to logging an activity entry like the platform's own. `alwaysOn` here is the LOADER's meaning — the bundle activates whatever ids `ensure()` is given, so it defeats the per-page narrowing in required-site-plugins.ts and belongs only to `mui`, which the canvas cannot render without. A plugin that merely may not be switched OFF says so with `alwaysOn` in FIRST_PARTY_PLUGINS instead. `modules` (AGL-3116) names the subpath a surface registers from when that surface's code must not ride with the package root's — each site surface has its own module, so a published page never loads a console registrar. `contributes` (AGL-3116, required) declares what the plugin adds and where, in the shape a marketplace manifest uses (core `plugin-contributions.ts`): `site.components` = the canvas component ids it registers, `site.features` = the site runtimes it mounts on every page of a site that switched it on, `console.slots` = the widget slots and panels it fills, `console.routes` / `console.orgRoutes` = the console routes it serves, `console.shell` = it draws a nav tab, a provider or a staff tab the shell renders on every screen. The loaders place a plugin by this declaration alone, so `apps/console/specs/plugin-contributions-declared.spec.ts` holds it to what the registrars actually register. `hostCollections` (AGL-3080) = the subcollections under a site the plugin owns (core `plugin-host-collections.ts`); a collection's `resource` is the KIND a client creates a document in it as, through the platform's generic create route — its field allow-list, plan counter, feature and stamps (core `plugin-host-resources.ts`), compiled and never registered, because that route is a security path. A collection's `siteExport` is how the whole-site backup carries it and what a restore writes back (core `plugin-site-export.ts`). `sitemapSections` (AGL-3080) = the child sitemaps the plugin's own pages fill (core `plugin-sitemap-sections.ts`), compiled because the tenant's sitemap is a published-site reader. `sitemapReaders` (AGL-3475) = child-sitemap families a plugin's READER lists, for pages no single site collection describes (core `plugin-sitemap-readers.ts`): each `section` is a family whose children are `{section}-{key}`, compiled so an index cannot silently drop them, with the reader registered from `serverDeclarations`. `consoleRedirects` (AGL-3080) = the plugin's old console addresses and where each answers now, in Next's redirect shape, compiled into `apps/console/constants/plugins.redirects.generated.json`, which the console's next.config.js spreads into its redirects. `siteBundleSections` (AGL-3080) = the sections of the whole-site backup the plugin answers for itself, data a host collection's `siteExport` cannot describe (core `plugin-site-bundle.ts`): declared here, registered from `serverDeclarations`, and an export fails rather than leaving a declared section out. `transferResources` (AGL-3523) = what the plugin can import and export, each a `TransferResourceDescriptor` from core `data-transfer/resource.ts` (key, label, scope, kinds, formats, limits; core `plugin-transfer-resources.ts`): declared here, the server half registered from `serverDeclarations` or `consoleServerDeclarations`, the client half from the console registrar loaded at the `transferResources` slot, and a job fails rather than leaving a declared resource out. `taxReturnSource: true` (AGL-3080) = the plugin sells through the platform's own account and registers a tax return source (core `plugin-tax-return-sources.ts`); the operator's sales tax return refuses to be filed while a declared source is unregistered. `revenueSource: true` (AGL-3080) = the plugin earns the operator a take through the platform's account and registers a revenue source (core `plugin-revenue-sources.ts`); the staff revenue report names a declared source it could not read rather than counting it as zero. `notificationCategories` (AGL-3080) = the preference buckets the plugin's notification types fall in, by the prefix before the dot: an `id` no other plugin and not the core owns, a `label` and `description` for the settings page, and `defaults` for the console and email channels; compiled into the catalog file and read by core `notifications.ts`, because the fan-out resolves channels in processes that load no plugin. The id keys stored preferences, so it is never renamed. `notificationDigests` (AGL-3080) = the digests the plugin sends on its own schedule: the `key` its on-by-default switch is stored under in `users/{uid}.digestPrefs`, and the switch's `label` and `description`, compiled the same way so the settings page draws it without loading the plugin. `interactionSteps` (AGL-3080) = the steps the plugin adds to interactions: the stored `type`, the `label` editors, run histories and drafters name it by, and for a step that acts on one of the plugin's records, `picks` — the site collection it lists them from (one the plugin declares under `hostCollections`), the step fields holding the pick, and the words for the picker and for a step with none. `offered: false` keeps a step only an automation holds out of the besigner's interaction builder; `holds` marks a step that suspends the run, with the band of whole minutes it may hold and the `timeoutField` a hold that ran out of time leaves in scope, and a visitor's page never runs a step past one; `typedFields` are the fields a person types words into, each with the words a sentence `names` it by, where a drafted step may leave a bracketed placeholder. Compiled into the catalog file and read by core `site-interactions.ts` and `draft-placeholders.ts`. `hostEvents` (AGL-3080) = the host events the plugin's server doors raise with `emitHostEvent`: the `type` an automation's trigger stores (never renamed), its `order` in every trigger picker (the platform's own `pageView` is 20), the `label` pickers and run rows show, and the `payloadKeys` it puts in scope; compiled into `app-utils/plugin-host-events.generated.ts` and read by core `host-events.ts`, because the event bus, the trigger pickers and the validators read them with no plugin loaded. `containers` (AGL-3080) = the container kinds the plugin keeps — a document other records are filed under by naming its id in `<kind>Ids` on their own document, a campaign being the first — with the org collection a picker reads them from; compiled into core `plugin-manager/plugin-containers.generated.ts`, which the membership helpers and the container picker read. `subscriptionTopics` (AGL-3080) = the streams the plugin's mail is sent under, which a recipient can leave one at a time (`id` is a wire value: it rides in every signed unsubscribe link and keys every recorded opt-out, so it is never renamed), in the preference page's `order`; exactly one plugin marks its topic `default`, the stream a campaign or a scheduled automated email belongs to when it names none. Compiled into core `plugin-manager/plugin-subscription-topics.generated.ts`, the built-in floor of every org's topic catalog.",
+  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests — the only files allowed to reference @aglyn/plugins-* outside libs/plugins. `catalog` is the plugin's row on the workspace and site switchboards (label, description, release flag, what switching it off for a site stops, and what a published site loses); the generator compiles every row, in `order`, into libs/aglyn plugin-manager/first-party-plugins.generated.ts, so a new plugin is declared here and nowhere in core (AGL-3080). An entry with no `catalog` is not on the switchboard. `capabilities` are further switchboard ids the same bundle serves. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry), declarations = the light registrations core reads before any surface loads (`/declarations`, both apps, client and server), serverDeclarations = the same for the server alone (`/declarations.server`, platform-event subscriptions), consoleServerDeclarations = the same for the CONSOLE's server alone (`/declarations.console-server`, never loaded or bundled by the tenant runtime: for registrations that open what only the console holds), subprocessors = the third-party recipients the plugin's code sends data to, and its other hosts and its uses of hosts declared elsewhere (`/subprocessors`, called by the generator rather than at runtime, and written into the console's subprocessors manifest as data for the subprocessor inventory), planEntitlements = what each plan includes of the plugin's own entitlement keys (`/plan-entitlements`, called by the generator rather than at runtime and compiled into the catalog file as data that core's PLAN_ENTITLEMENTS composes, because the pricing tables and the plan comparison read it without loading a plugin), usageAxes = the meters the plugin contributes to the platform's cost model and utilization table, and the lines of spend it adds to a workspace's usage budget (`/usage-axes`, called by the generator and compiled into the catalog file as data, because the discount guardrail and the staff org page price a rollup without loading a plugin), videoEmbedProviders = the video hosts whose own player the plugin's Video element frames (`/video-embed-providers`, called by the generator and compiled into the catalog file as data, which the published page and the tenant's frame-src read without loading the plugin), tenantEmails = the emails a site sends its own customers through the plugin (`/tenant-emails`, called by the generator and compiled into the email lib's tenant email catalog as data, which the send path reads without loading the plugin). activityMutationPaths = the plugin's modules that create, transfer or destroy a durable customer object, which `tools/scripts/check-activity-coverage.mjs` holds to logging an activity entry like the platform's own. `alwaysOn` here is the LOADER's meaning — the bundle activates whatever ids `ensure()` is given, so it defeats the per-page narrowing in required-site-plugins.ts and belongs only to `mui`, which the canvas cannot render without. A plugin that merely may not be switched OFF says so with `alwaysOn` in FIRST_PARTY_PLUGINS instead. `modules` (AGL-3116) names the subpath a surface registers from when that surface's code must not ride with the package root's — each site surface has its own module, so a published page never loads a console registrar. `contributes` (AGL-3116, required) declares what the plugin adds and where, in the shape a marketplace manifest uses (core `plugin-contributions.ts`): `site.components` = the canvas component ids it registers, `site.features` = the site runtimes it mounts on every page of a site that switched it on, `console.slots` = the widget slots and panels it fills, `console.routes` / `console.orgRoutes` = the console routes it serves, `console.shell` = it draws a nav tab, a provider or a staff tab the shell renders on every screen. The loaders place a plugin by this declaration alone, so `apps/console/specs/plugin-contributions-declared.spec.ts` holds it to what the registrars actually register. `hostCollections` (AGL-3080) = the subcollections under a site the plugin owns (core `plugin-host-collections.ts`); a collection's `resource` is the KIND a client creates a document in it as, through the platform's generic create route — its field allow-list, plan counter, feature and stamps (core `plugin-host-resources.ts`), compiled and never registered, because that route is a security path. A collection's `siteExport` is how the whole-site backup carries it and what a restore writes back (core `plugin-site-export.ts`). `sitemapSections` (AGL-3080) = the child sitemaps the plugin's own pages fill (core `plugin-sitemap-sections.ts`), compiled because the tenant's sitemap is a published-site reader. `sitemapReaders` (AGL-3475) = child-sitemap families a plugin's READER lists, for pages no single site collection describes (core `plugin-sitemap-readers.ts`): each `section` is a family whose children are `{section}-{key}`, compiled so an index cannot silently drop them, with the reader registered from `serverDeclarations`. `consoleRedirects` (AGL-3080) = the plugin's old console addresses and where each answers now, in Next's redirect shape, compiled into `apps/console/constants/plugins.redirects.generated.json`, which the console's next.config.js spreads into its redirects. `siteBundleSections` (AGL-3080) = the sections of the whole-site backup the plugin answers for itself, data a host collection's `siteExport` cannot describe (core `plugin-site-bundle.ts`): declared here, registered from `serverDeclarations`, and an export fails rather than leaving a declared section out. `transferResources` (AGL-3523) = what the plugin can import and export, each a `TransferResourceDescriptor` from core `data-transfer/resource.ts` (key, label, scope, kinds, formats, limits; core `plugin-transfer-resources.ts`): declared here, the server half registered from `serverDeclarations` or `consoleServerDeclarations`, the client half from the console registrar loaded at the `transferResources` slot, and a job fails rather than leaving a declared resource out. `taxReturnSource: true` (AGL-3080) = the plugin sells through the platform's own account and registers a tax return source (core `plugin-tax-return-sources.ts`); the operator's sales tax return refuses to be filed while a declared source is unregistered. `revenueSource: true` (AGL-3080) = the plugin earns the operator a take through the platform's account and registers a revenue source (core `plugin-revenue-sources.ts`); the staff revenue report names a declared source it could not read rather than counting it as zero. `notificationCategories` (AGL-3080) = the preference buckets the plugin's notification types fall in, by the prefix before the dot: an `id` no other plugin and not the core owns, a `label` and `description` for the settings page, and `defaults` for the console and email channels; compiled into the catalog file and read by core `notifications.ts`, because the fan-out resolves channels in processes that load no plugin. The id keys stored preferences, so it is never renamed. `notificationDigests` (AGL-3080) = the digests the plugin sends on its own schedule: the `key` its on-by-default switch is stored under in `users/{uid}.digestPrefs`, and the switch's `label` and `description`, compiled the same way so the settings page draws it without loading the plugin. `interactionSteps` (AGL-3080) = the steps the plugin adds to interactions: the stored `type`, the `label` editors, run histories and drafters name it by, and for a step that acts on one of the plugin's records, `picks` — the site collection it lists them from (one the plugin declares under `hostCollections`), the step fields holding the pick, and the words for the picker and for a step with none. `offered: false` keeps a step only an automation holds out of the besigner's interaction builder; `holds` marks a step that suspends the run, with the band of whole minutes it may hold and the `timeoutField` a hold that ran out of time leaves in scope, and a visitor's page never runs a step past one; `typedFields` are the fields a person types words into, each with the words a sentence `names` it by, where a drafted step may leave a bracketed placeholder. Compiled into the catalog file and read by core `site-interactions.ts` and `draft-placeholders.ts`. `hostEvents` (AGL-3080) = the host events the plugin's server doors raise with `emitHostEvent`: the `type` an automation's trigger stores (never renamed), its `order` in every trigger picker (the platform's own `pageView` is 20), the `label` pickers and run rows show, and the `payloadKeys` it puts in scope; compiled into `app-utils/plugin-host-events.generated.ts` and read by core `host-events.ts`, because the event bus, the trigger pickers and the validators read them with no plugin loaded. `containers` (AGL-3080) = the container kinds the plugin keeps — a document other records are filed under by naming its id in `<kind>Ids` on their own document, a campaign being the first — with the org collection a picker reads them from; compiled into core `plugin-manager/plugin-containers.generated.ts`, which the membership helpers and the container picker read. `mobile` (AGL-3620) = the plugin's surface in the Aglyn mobile apps: `register` names the registrar its `./mobile` entry (`src/mobile/index.ts`, never re-exported from a web entry) exports, and `contributes` lists the ids it registers by kind (`screens`, `tabs`, `widgets`, `quickActions`, `deepLinks`); the generator compiles them into the SEPARATE `apps/mobile/src/plugins.mobile.generated.ts`, the only manifest a mobile app reads, so the web manifests never change for it, and the app's loader refuses a registration the declaration does not name. `subscriptionTopics` (AGL-3080) = the streams the plugin's mail is sent under, which a recipient can leave one at a time (`id` is a wire value: it rides in every signed unsubscribe link and keys every recorded opt-out, so it is never renamed), in the preference page's `order`; exactly one plugin marks its topic `default`, the stream a campaign or a scheduled automated email belongs to when it names none. Compiled into core `plugin-manager/plugin-subscription-topics.generated.ts`, the built-in floor of every org's topic catalog.",
   "plugins": [
     {
       "id": "mui",
@@ -270,8 +270,18 @@
       "apiPrefixes": [
         "bookings"
       ],
+      "mobile": {
+        "$comment": "AGL-3652: today's bookings at the Aglyn POS counter, paid on the device's own card reader through bookings/in-person-payment.",
+        "android": {
+          "package": "com.aglyn.plugins.bookings",
+          "register": "registerBookingsNative"
+        },
+        "contributes": {
+          "screens": ["bookings.counter"]
+        }
+      },
       "catalog": {
-        "order": 5,
+        "order": 6,
         "label": "Bookings",
         "description": "Services, open slots, and paid bookings.",
         "releaseFlag": "release_bookings",
@@ -395,6 +405,21 @@
         "planEntitlements": "commercePlanEntitlements",
         "starterTemplates": "commerceStarterTemplates"
       },
+      "mobile": {
+        "$comment": "AGL-3621: the Aglyn app's store screens. Orders (list, detail, fulfill, refund, receipt print and share), products (list, edit, camera photos to the DAM, stock), barcode scan, and the sales and traffic dashboard; list and detail split side by side on tablets.",
+        "android": {
+          "$comment": "AGL-3652: the Aglyn POS register (item grid, basket, checkout, receipt), its card readers panel and today's bookings at the counter; the Aglyn app's store screens open the console's pages until their native versions land.",
+          "package": "com.aglyn.plugins.commerce",
+          "register": "registerCommerceNative"
+        },
+        "contributes": {
+          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers"],
+          "tabs": ["commerce.orders-tab", "commerce.products-tab"],
+          "widgets": ["commerce.today", "commerce.sales-trend"],
+          "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
+          "deepLinks": ["commerce.orders-page", "commerce.products-page"]
+        }
+      },
       "requiredPersonEraser": true,
       "modules": {
         "site": "site"
@@ -407,7 +432,7 @@
         {
           "id": "accounts",
           "catalog": {
-            "order": 4,
+            "order": 5,
             "$comment": "The Members blocks and the membership/* handlers are registered by this bundle, so there is no separate package to load; what this id contributes is the SWITCH the tenant route gate, the console card and the sitemap all ask (AGL-2486). Commerce off = member pages with no server, hence requires.",
             "label": "User Accounts",
             "description": "Visitor accounts on the site: the /signin, /signup and /recover pages, and the Members blocks. On for a new site; a site created before that stays off until you turn it on.",
@@ -426,7 +451,7 @@
         }
       ],
       "catalog": {
-        "order": 6,
+        "order": 7,
         "label": "Commerce",
         "description": "Products, carts, checkout, orders, POS.",
         "releaseFlag": "release_commerce_v2",
@@ -467,6 +492,7 @@
               "options",
               "variants",
               "seo",
+              "channel",
               "supplierId",
               "oversellPolicy",
               "taxExempt",
@@ -478,6 +504,7 @@
               "relatedProductIds",
               "giftCard",
               "lowStockThreshold",
+              "shipping",
               "createdAtMs",
               "updatedAtMs",
               "nameLower",
@@ -514,7 +541,7 @@
             "activityNoun": "inventory location",
             "quotaKey": "inventoryLocations",
             "entitlement": "commerce",
-            "fields": ["name", "isDefault", "address"]
+            "fields": ["name", "isDefault", "address", "postalAddress"]
           }
         },
         {
@@ -628,6 +655,46 @@
           "name": "returns",
           "mediaScan": "none",
           "mediaScanReason": "Returns (AGL-3611): line indexes, quantities, reasons and a return label link, written only by the returns routes. A return names no image of its own; the order's lines carry the copies, and the order is not scanned for the same reason."
+        },
+        {
+          "name": "orderWebhooks",
+          "mediaScan": "none",
+          "mediaScanReason": "The merchant's outbound order webhook endpoints (AGL-3611): a URL and the event names it takes. Scanning reads every endpoint for a URL that is never a media file."
+        },
+        {
+          "name": "orderWebhookSecrets",
+          "mediaScan": "none",
+          "mediaScanReason": "Sealed HMAC signing secrets for the order webhooks (AGL-3611). Reading them for media would put a secret on a scan path to match nothing."
+        },
+        {
+          "name": "orderWebhookDeliveries",
+          "mediaScan": "none",
+          "mediaScanReason": "The webhook delivery log (AGL-3611): one row per event per endpoint, expiring after 30 days. A body copies the order, whose image URLs record what was sold rather than use the file, so a match would be wrong, and a busy store holds thousands."
+        },
+        {
+          "name": "posStaffPins",
+          "mediaScan": "none",
+          "mediaScanReason": "Register staff PINs (AGL-3609): a salted hash and a lockout counter per member, written only by the staff PIN route. No content field at all."
+        },
+        {
+          "name": "terminal",
+          "mediaScan": "none",
+          "mediaScanReason": "The site's Stripe Terminal Location (AGL-3607): a vendor id and the address it was registered with, written only by the reader routes. No content field."
+        },
+        {
+          "name": "terminalReaders",
+          "mediaScan": "none",
+          "mediaScanReason": "The site's card readers (AGL-3607): a Stripe reader id, a label and a status, written only by `/api/commerce/pos-readers`. No content field."
+        },
+        {
+          "name": "printers",
+          "mediaScan": "none",
+          "mediaScanReason": "Cloud receipt printers (AGL-3619): a device id, a secret version, a paper width and a status. A receipt logo is the one stored IN the printer and named by a key code, never a file URL, so nothing here can use an asset."
+        },
+        {
+          "name": "printJobs",
+          "mediaScan": "none",
+          "mediaScanReason": "The printers' queue (AGL-3619): rendered receipt, ticket and label bytes waiting for a printer's poll, written by the print routes and gone once printed. Printer commands, not content, and a busy register queues hundreds a day."
         }
       ],
       "sitemapSections": [
@@ -720,8 +787,26 @@
           "payloadKeys": ["orderId", "orderNumber", "email", "name", "returnId", "returnStatus"]
         },
         {
-          "type": "returnRefunded",
+          "type": "returnApproved",
           "order": 146,
+          "label": "Return approved",
+          "payloadKeys": ["orderId", "orderNumber", "email", "name", "returnId", "returnStatus"]
+        },
+        {
+          "type": "returnDeclined",
+          "order": 147,
+          "label": "Return declined",
+          "payloadKeys": ["orderId", "orderNumber", "email", "name", "returnId", "returnStatus"]
+        },
+        {
+          "type": "returnReceived",
+          "order": 148,
+          "label": "Return received",
+          "payloadKeys": ["orderId", "orderNumber", "email", "name", "returnId", "returnStatus"]
+        },
+        {
+          "type": "returnRefunded",
+          "order": 149,
           "label": "Return refunded",
           "payloadKeys": ["orderId", "orderNumber", "email", "name", "returnId", "returnStatus", "returnRefundCents"]
         }
@@ -883,7 +968,9 @@
             "member-signup",
             "reservation-widget",
             "product-reviews",
-            "related-products"
+            "related-products",
+            "return-request",
+            "order-status"
           ]
         },
         "console": {
@@ -898,6 +985,9 @@
             "hostDashboard",
             "siteMember",
             "transferResources"
+          ],
+          "publicRoutes": [
+            "/pos-display"
           ]
         }
       }
@@ -924,7 +1014,7 @@
         "marketplace"
       ],
       "catalog": {
-        "order": 7,
+        "order": 8,
         "label": "Marketplace",
         "description": "Marketplace listings, templates, and installs.",
         "releaseFlag": "release_marketplace",
@@ -1016,7 +1106,7 @@
         "libs/plugins/crm/src/lib/server/merge-contacts.ts"
       ],
       "catalog": {
-        "order": 8,
+        "order": 9,
         "$comment": "The id was contacts until AGL-2595 widened one list into the hub; the release flag kept its key because it is persisted in Remote Config.",
         "label": "CRM",
         "description": "Leads, contacts, companies, deals, tasks and reports.",
@@ -1340,7 +1430,7 @@
         "libs/plugins/outreach/src/lib/transfer/do-not-contact-transfer.ts"
       ],
       "catalog": {
-        "order": 9,
+        "order": 10,
         "$comment": "Works the CRM's records but is released and entitled on its own (AGL-2974). Reads Sequences since AGL-3199; the id is stored on every org, so it stays.",
         "label": "Sequences",
         "description": "One-to-one email sequences sent from connected mailboxes.",
@@ -1380,6 +1470,46 @@
           "shell": true,
           "orgRoutes": [
             "/outreach"
+          ]
+        }
+      }
+    },
+    {
+      "id": "accounting",
+      "package": "@aglyn/plugins-accounting",
+      "register": {
+        "console": "registerAccountingConsole",
+        "consoleApi": "registerAccountingConsoleApi",
+        "serverDeclarations": "registerAccountingServerDeclarations",
+        "consoleServerDeclarations": "registerAccountingConsoleServerDeclarations",
+        "subprocessors": "accountingSubprocessors"
+      },
+      "apiPrefixes": [
+        "accounting"
+      ],
+      "activityMutationPaths": [
+        "libs/plugins/accounting/src/lib/server/accounting-routes.ts"
+      ],
+      "catalog": {
+        "order": 19,
+        "$comment": "AGL-3614. Posts commerce sales, refunds, fees and payouts to QuickBooks Online or Xero. Sold with commerce: the extension's entitlement is `features.commerce`, so no plan and no add-on of its own.",
+        "label": "Accounting",
+        "description": "Sales, refunds, fees and payouts posted to QuickBooks Online or Xero.",
+        "releaseFlag": "release_accounting",
+        "releaseFlagDefinition": {
+          "$comment": "OFF by default and the release gate for an env-gated feature: switch it on only for a deployment whose console has an Intuit or Xero app's credentials and the accounting token key (the variables are named in libs/plugins/accounting/README.md). The docs guard holds the Connect QuickBooks Online and Connect Xero guides unclaimed while it is off.",
+          "label": "Accounting",
+          "description": "QuickBooks Online and Xero sync for commerce: sales receipts or a daily summary journal, refunds, platform fees and Stripe payouts, with a mapping page and a sync log (AGL-3614). OFF by default; needs the deployment's Intuit or Xero app credentials and the accounting token key on the console.",
+          "defaultEnabled": false,
+          "navTabId": "nav-tab-org-accounting"
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "shell": true,
+          "orgRoutes": [
+            "/accounting"
           ]
         }
       }
@@ -1460,7 +1590,7 @@
         }
       ],
       "catalog": {
-        "order": 10,
+        "order": 11,
         "label": "Data",
         "description": "Datasets, records, and CSV import/export.",
         "releaseFlag": "release_data_store",
@@ -1623,7 +1753,7 @@
         }
       ],
       "catalog": {
-        "order": 11,
+        "order": 12,
         "label": "Email",
         "description": "Designed emails and campaign sending.",
         "releaseFlag": "release_email",
@@ -1691,7 +1821,7 @@
         "events"
       ],
       "catalog": {
-        "order": 12,
+        "order": 13,
         "label": "Events Calendar",
         "description": "Event lists and calendars.",
         "releaseFlag": "release_events",
@@ -1778,7 +1908,7 @@
         "inbox"
       ],
       "catalog": {
-        "order": 13,
+        "order": 14,
         "label": "Inbox",
         "description": "Form submissions and lead inbox.",
         "releaseFlag": "release_inbox",
@@ -1829,7 +1959,7 @@
         "serverDeclarations": "registerLogicServerDeclarations"
       },
       "catalog": {
-        "order": 14,
+        "order": 15,
         "label": "Logic",
         "description": "Variables, functions, and reference health.",
         "releaseFlag": "release_logic",
@@ -1935,7 +2065,7 @@
         ]
       },
       "catalog": {
-        "order": 15,
+        "order": 16,
         "label": "Marketing",
         "description": "Overlays, campaigns, and experiments.",
         "releaseFlag": "release_marketing",
@@ -2098,8 +2228,18 @@
         "tenantApi": "registerRedirectsApi",
         "consoleServerDeclarations": "registerRedirectsConsoleServerDeclarations"
       },
+      "mobile": {
+        "$comment": "AGL-3620: the sample mobile registration. The site's rules as a native list (a split view on tablets), a dashboard count, a quick action, and the console's Redirects page opening natively from a link or a notification.",
+        "ios": { "module": "AglynRedirectsPlugin", "register": "registerRedirectsNative" },
+        "contributes": {
+          "screens": ["redirects.list"],
+          "widgets": ["redirects.summary"],
+          "quickActions": ["redirects.open"],
+          "deepLinks": ["redirects.page"]
+        }
+      },
       "catalog": {
-        "order": 16,
+        "order": 17,
         "label": "Redirects",
         "description": "URL redirect rules.",
         "releaseFlag": "release_redirects",
@@ -2220,7 +2360,7 @@
         "automations"
       ],
       "catalog": {
-        "order": 17,
+        "order": 18,
         "$comment": "The id is stored on every org's enabled-plugin list; only the label moved.",
         "label": "Automation",
         "description": "Workflows, actions, webhooks, and run logs.",
@@ -2455,23 +2595,38 @@
             "besignerToolbar",
             "experimentResult",
             "experimentVariants",
+            "funnelInsight",
+            "funnelsCreate",
             "hostAutomations",
+            "hostCampaigns",
             "hostComponents",
+            "hostEmailTemplates",
+            "hostDashboard",
             "hostFirstRun",
             "hostForms",
             "hostLayouts",
+            "hostLogic",
             "hostMembers",
+            "hostOverlays",
             "hostScreens",
             "hostSeo",
             "hostTemplates",
             "hostTheme",
             "importMapping",
+            "marketingInsights",
+            "logicFunctionEditor",
+            "logicReferenceIssue",
+            "mediaLibrary",
+            "orgAutomations",
             "orgBillingUsage",
+            "orgDashboard",
             "orgMember",
             "orgMembersListColumn",
             "orgSites",
+            "overlayEditor",
             "productEditor",
             "productImport",
+            "productsCreate",
             "productsHub",
             "recordEmail",
             "recordInsights",
@@ -2480,6 +2635,36 @@
             "staffOrgUsageColumn",
             "staffOrgsListColumn",
             "staffUser"
+          ]
+        }
+      }
+    },
+    {
+      "id": "fonts",
+      "$comment": "AGL-3656: the platform's fonts. serverDeclarations registers the Google Fonts catalog (families, weights, italics and the metrics of each regular face) as core's theme font catalog, which a published page loads its theme fonts by: only the faces a family offers, and a local fallback sized to the family's metrics. console fills the theme editor's Typography card (`themeEditorFonts`) with the font picker (the whole Google Fonts catalog, previews in the site's own words, pairings, cost) and the font installer, which uploads a site's own font files. consoleApi serves /api/fonts/cost, what a theme's fonts cost a visitor worked out as the published page loads them, and /api/fonts/prepare, which checks an uploaded file's embedding license and converts and subsets it to WOFF2 with harfbuzz; the file is then stored through the media library's own upload and replace routes. Always on: a published page's fonts are part of its theme, so there is no switch to turn them off.",
+      "package": "@aglyn/plugins-fonts",
+      "modules": {
+        "console": "console"
+      },
+      "register": {
+        "console": "registerFontsConsole",
+        "consoleApi": "registerFontsConsoleApi",
+        "serverDeclarations": "registerFontsServerDeclarations"
+      },
+      "apiPrefixes": [
+        "fonts"
+      ],
+      "catalog": {
+        "order": 24,
+        "label": "Fonts",
+        "alwaysOn": true,
+        "description": "Upload your own fonts and pick from the Google Fonts catalog for your site's theme.",
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "themeEditorFonts"
           ]
         }
       }
@@ -2524,12 +2709,256 @@
       "contributes": {}
     },
     {
+      "id": "shipping",
+      "package": "@aglyn/plugins-shipping",
+      "register": {
+        "console": "registerShippingConsole",
+        "consoleApi": "registerShippingConsoleApi",
+        "serverDeclarations": "registerShippingServerDeclarations",
+        "subprocessors": "shippingSubprocessors",
+        "usageAxes": "shippingUsageAxes"
+      },
+      "apiPrefixes": [
+        "shipping"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A tracking number's workspace, site and record, so a provider's webhook finds what it is about (AGL-3612). Top level, so org erasure removes them by orgId.",
+          "name": "shippingTrackers",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "Carrier quotes kept ten minutes, and the quote a label is bought from (AGL-3612).",
+          "name": "shippingQuoteCache",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 20,
+        "$comment": "Carrier rates at checkout, labels, tracking and address checks for the commerce plugin's orders (AGL-3612), through core's shipping-rate and shipment-record seams; it never imports commerce. No `requires` edge: a workspace cannot switch it off, so an edge to commerce would refuse every set that switches commerce off; instead it runs only on a site where commerce is on (site-context.ts). On for every workspace like AI, off for a site only when that site says so, and no release flag: every surface hides itself until the deployment names a provider (SHIPPO_API_TOKEN or EASYPOST_API_KEY, with SHIPPING_TOKEN_KEY).",
+        "label": "Shipping",
+        "alwaysOnForWorkspace": true,
+        "description": "Carrier rates at checkout, shipping labels and tracking for physical orders, where the platform has connected a carrier provider.",
+        "siteOff": {
+          "stops": "Switching Shipping off for this site stops live carrier rates at its checkout, which falls back to the site’s own shipping rates, and removes label buying from its orders.",
+          "keeps": "Labels already bought, their tracking and their charges are kept, and Shipping keeps working on the workspace’s other sites."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "orderDetail",
+            "returnDetail",
+            "ordersBulk",
+            "productEditor",
+            "orgBillingUsage"
+          ]
+        }
+      }
+    },
+    {
+      "id": "tax-engines",
+      "package": "@aglyn/plugins-tax-engines",
+      "register": {
+        "console": "registerTaxEnginesConsole",
+        "consoleApi": "registerTaxEnginesConsoleApi",
+        "serverDeclarations": "registerTaxEnginesServerDeclarations",
+        "subprocessors": "taxEnginesSubprocessors"
+      },
+      "apiPrefixes": ["tax-engines"],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's connection to its own Avalara or TaxJar account, the credential sealed (AGL-3631). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "taxEngineConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One product's tax code at the connected tax service (AGL-3631).",
+          "name": "taxEngineProductCodes",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "A customer the merchant recorded as tax-exempt, by email (AGL-3631).",
+          "name": "taxEngineExemptions",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One order as recorded with the tax service, and the refunds reversed against it (AGL-3631).",
+          "name": "taxEngineTransactions",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 21,
+        "$comment": "Outside sales tax engines (AGL-3631): a merchant connects their OWN Avalara AvaTax or TaxJar account, and commerce asks it for tax through core's core.tax-engine contract; paid orders and refunds are recorded there through commerce's order events. It never imports commerce. No `requires` edge, for the reason shipping gives: a workspace cannot switch it off, so an edge to commerce would refuse every set that switches commerce off; instead it runs only on a site where commerce is on (site-context.ts). On for every workspace, off for a site only when that site says so, and no release flag: every surface hides itself until the deployment sets TAX_ENGINES_TOKEN_KEY, the key merchants' credentials are sealed under. Aglyn holds no vendor account.",
+        "label": "Tax services",
+        "alwaysOnForWorkspace": true,
+        "description": "Sales tax from your own Avalara AvaTax or TaxJar account at checkout and the register.",
+        "siteOff": {
+          "stops": "Switching Tax services off for this site stops checkout and the register asking its connected tax service, which then use the site’s own tax rates, and stops recording its paid orders there.",
+          "keeps": "The connection, product tax codes and exempt customers are kept, and orders already recorded stay recorded."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": ["commerceSettings", "orderDetail", "productEditor"]
+        }
+      }
+    },
+    {
+      "id": "marketing-platforms",
+      "package": "@aglyn/plugins-marketing-platforms",
+      "register": {
+        "console": "registerMarketingPlatformsConsole",
+        "consoleApi": "registerMarketingPlatformsConsoleApi",
+        "serverDeclarations": "registerMarketingPlatformsServerDeclarations",
+        "consoleServerDeclarations": "registerMarketingPlatformsConsoleServerDeclarations",
+        "subprocessors": "marketingPlatformsSubprocessors"
+      },
+      "apiPrefixes": [
+        "marketing-platforms"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's connection to the merchant's OWN Mailchimp, Klaviyo, Omnisend or Attentive account, the credential sealed, with its sync cursors and its log subcollection (AGL-3639). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "marketingPlatformConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "Commerce events owed to one connection, written by the event subscriber and delivered by the console job (AGL-3639).",
+          "name": "marketingPlatformEvents",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 23,
+        "$comment": "Two-way contact and consent sync with a merchant's OWN email platform (AGL-3639): Mailchimp, Klaviyo and Omnisend by the merchant's own API key, and by OAuth where the deployment registered the app (MAILCHIMP_CLIENT_ID/SECRET, KLAVIYO_CLIENT_ID/SECRET); Attentive only with its partner app (ATTENTIVE_CLIENT_ID/SECRET). It reaches the CRM's people only through core's person-records seam and each site's consent only through core's site-marketing-sync module, and commerce's events only through the domain-event outbox; it imports neither plugin. Sold with the CRM (`features.crm`), no price of its own. On for every workspace, off for a site only when that site says so, and no release flag: the card draws nothing until the console sets MARKETING_PLATFORMS_TOKEN_KEY, the key merchants' credentials are sealed under.",
+        "label": "Email platforms",
+        "alwaysOnForWorkspace": true,
+        "description": "Two-way contact and unsubscribe sync with your own Mailchimp, Klaviyo or Omnisend account, and order events for their flows.",
+        "siteOff": {
+          "stops": "Switching Email platforms off for this site stops its contacts, unsubscribes and order events syncing with the email platforms it connected.",
+          "keeps": "The connections and everything already synced are kept, and an unsubscribe already read back stays on the site’s list."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "hostSettings"
+          ]
+        }
+      }
+    },
+    {
+      "id": "sales-channels",
+      "package": "@aglyn/plugins-sales-channels",
+      "register": {
+        "console": "registerSalesChannelsConsole",
+        "tenantApi": "registerSalesChannelsApi",
+        "consoleApi": "registerSalesChannelsConsoleApi",
+        "serverDeclarations": "registerSalesChannelsServerDeclarations",
+        "subprocessors": "salesChannelsSubprocessors"
+      },
+      "apiPrefixes": [
+        "sales-channels"
+      ],
+      "hostCollections": [
+        {
+          "name": "salesChannels",
+          "mediaScan": "none",
+          "mediaScanReason": "A site's shopping-channel state (AGL-3637): one feed document per channel holding the token that locks its URL, the store's defaults for blank product fields, and a sealed OAuth token per API connection. No client reads or writes it, and nothing in it names a library asset."
+        }
+      ],
+      "catalog": {
+        "order": 22,
+        "$comment": "AGL-3637. Product feeds of the commerce catalog for Google (and YouTube), Meta, TikTok, Pinterest, Snapchat and Microsoft, read through core's core.product-catalog contract; it never imports commerce. Like Shipping: on for every workspace, off for a site only when that site says so, no release flag, and it runs only on a site where commerce is on (server/site-gate.ts). Sold with commerce: its entitlement is `features.commerce`. The pre-channels Google address (/api/commerce/feed) is still commerce's route and answers through core.catalog-feed, registered from serverDeclarations. The Google Merchant API and Meta Catalog API connections are hidden until their env vars are set (libs/plugins/sales-channels/README.md).",
+        "label": "Sales channels",
+        "alwaysOnForWorkspace": true,
+        "description": "Product feeds for Google, YouTube, Facebook, Instagram, TikTok, Pinterest, Snapchat and Microsoft Shopping.",
+        "siteOff": {
+          "stops": "Switching Sales channels off for this site stops every product feed it publishes, including the Google Merchant Center address set up before sales channels existed, so channels stop receiving updates.",
+          "keeps": "Each feed's address, its switch and the store's defaults are kept, so switching it back on resumes the same feeds."
+        },
+        "publishedSiteImpact": "routes"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "productEditor"
+          ]
+        }
+      }
+    },
+    {
       "id": "video-delivery",
       "package": "@aglyn/plugins-video-delivery",
       "register": {
         "serverDeclarations": "registerVideoDeliveryServerDeclarations"
       },
       "contributes": {}
+    },
+    {
+      "id": "funnels",
+      "package": "@aglyn/plugins-funnels",
+      "register": {
+        "console": "registerFunnelsConsole",
+        "consoleApi": "registerFunnelsConsoleApi",
+        "serverDeclarations": "registerFunnelsServerDeclarations",
+        "consoleServerDeclarations": "registerFunnelsConsoleServerDeclarations"
+      },
+      "apiPrefixes": [
+        "funnels"
+      ],
+      "catalog": {
+        "order": 4,
+        "$comment": "On for every workspace, off for a site only when that site says so (AGL-3605): funnels are a way of reading the paid analytics tier, so the card needs no switch of its own to be sold, and it records nothing until a site saves its first funnel.",
+        "label": "Funnels",
+        "alwaysOnForWorkspace": true,
+        "description": "Step-by-step conversion on a site's Analytics page: visits at each step, drop-off and time between steps.",
+        "siteOff": {
+          "stops": "Switching Funnels off for this site removes the Funnels card from its Analytics page.",
+          "keeps": "Saved funnels are kept, and visits keep being recorded while the site has one; delete the funnels to stop recording."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "hostEvents": [
+        {
+          "$comment": "Raised by the funnels plugin's drop-off sweep (AGL-3605) once per person, funnel step and wait: a person who identified themselves by submitting a form reached `step` and had not reached the next step `afterHours` later, in this visit or any other of theirs. Never for an anonymous visit. Not the person's own action, so an email on it is a mailing with its unsubscribe link.",
+          "type": "funnelLeft",
+          "order": 150,
+          "label": "Left a funnel",
+          "payloadKeys": ["funnelId", "funnelName", "step", "stepLabel", "nextStepLabel", "afterHours", "email"]
+        }
+      ],
+      "hostCollections": [
+        {
+          "name": "funnels",
+          "mediaScan": "none",
+          "mediaScanReason": "A funnel is a name and its steps — paths and record ids, never an asset. Written only by the funnels save route."
+        },
+        {
+          "name": "funnelJourneys",
+          "mediaScan": "none",
+          "mediaScanReason": "One document per recorded visit: step types, paths or record ids, server times and UTM labels. Written only by the site collector on the Admin SDK, read only by the results route; expires 90 days after the visit."
+        },
+        {
+          "name": "funnelResults",
+          "mediaScan": "none",
+          "mediaScanReason": "A computed funnel result — counts, shares and durations — kept up to a day by the results route and expiring on its own."
+        }
+      ],
+      "contributes": {
+        "console": {
+          "slots": [
+            "hostAnalytics"
+          ]
+        }
+      }
     }
   ]
 }

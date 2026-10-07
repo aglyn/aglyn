@@ -21,6 +21,7 @@ import {
   consoleThemeDark,
   consoleThemeLight,
 } from './console.theme'
+import { TENANT_SYSTEM_FONT_STACK, wearsPlatformBrand } from './platform-brand'
 import createResponsiveTheme from './util/create-responsive-theme'
 
 /**
@@ -204,8 +205,15 @@ const tenantColorScheme = {
   },
 }
 
+// A site serves no Roboto Flex, so its default stack names none (AGL-3656).
+const tenantTypography = (base: ThemeOptions): ThemeOptions['typography'] => ({
+  ...(base.typography as object),
+  fontFamily: TENANT_SYSTEM_FONT_STACK,
+})
+
 export const tenantOptions: ThemeOptions = {
   ...consoleOptions,
+  typography: tenantTypography(consoleOptions),
   palette: {
     mode: 'light',
     ...tenantColorScheme.light,
@@ -213,6 +221,7 @@ export const tenantOptions: ThemeOptions = {
 }
 export const tenantOptionsDark: ThemeOptions = {
   ...consoleOptionsDark,
+  typography: tenantTypography(consoleOptionsDark),
   palette: {
     mode: 'dark',
     ...tenantColorScheme.dark,
@@ -226,47 +235,7 @@ export const tenantThemeDark: Theme = createResponsiveTheme({
   themeOptions: { ...tenantOptionsDark },
 })
 
-/**
- * Hosts whose brand IS the operator's own brand, and which therefore keep
- * `consoleOptions` rather than the tenant default.
- *
- * Comma-separated in `NEXT_PUBLIC_PLATFORM_BRAND_HOSTS`, so a self-host
- * operator points it at their own marketing domain and their customers still
- * resolve the neutral tenant palette. The literal is the `??` default and
- * nothing else reads it: the platform's own deployment needs no variable to
- * keep its brand. Setting the variable to an empty string puts every host,
- * including the operator's own, on the tenant default.
- *
- * Matched on the registrable domain, after stripping the `cname--` prefix the
- * tenant middleware puts on a CUSTOM DOMAIN before it becomes the `[host]`
- * route segment: the param this is handed reads `cname--example.com`, never
- * the bare apex. A platform subdomain resolves to a bare label instead
- * (`acme` for `acme.aglyn.app`), which correctly matches nothing — a customer
- * on a platform subdomain is still a tenant.
- */
-const CNAME_PREFIX = 'cname--'
-
-export const PLATFORM_BRAND_HOSTS: ReadonlySet<string> = new Set(
-  // Dot notation, not brackets: Next substitutes `process.env.NAME`
-  // TEXTUALLY, and never the bracket form, so a bracket read is `undefined`
-  // in any browser or edge bundle and silently falls back to the default
-  // below — which on a self-host install would hand the operator Aglyn's
-  // hosts (AGL-2037).
-  (process.env.NEXT_PUBLIC_PLATFORM_BRAND_HOSTS ?? 'aglyn.com,aglyn.io')
-    .split(',')
-    .map((host) => host.trim().toLowerCase())
-    .filter(Boolean),
-)
-
-export function wearsPlatformBrand(host: string | undefined): boolean {
-  if (!host) return false
-  const normalized = host.trim().toLowerCase()
-  return PLATFORM_BRAND_HOSTS.has(
-    normalized.startsWith(CNAME_PREFIX)
-      ? normalized.slice(CNAME_PREFIX.length)
-      : normalized,
-  )
-}
+export { PLATFORM_BRAND_HOSTS, wearsPlatformBrand } from './platform-brand'
 
 /**
  * The site key {@link wearsPlatformBrand} is asked about, read off a host

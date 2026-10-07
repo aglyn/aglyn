@@ -227,7 +227,17 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
       { label: 'Bandwidth / mo', value: talk((p) => gb(E(p).bandwidthGb)) },
       { label: 'Custom domain & SSL', value: (p) => bool(F(p).customDomain) },
       { label: 'Remove Aglyn branding', value: (p) => bool(F(p).removeBranding) },
-      { label: 'Reusable components', value: (p) => bool(F(p).reusableComponents) },
+      /*
+       * A count on Free since AGL-3615 — one per site — and a tick where the
+       * allowance is unlimited, which is every paid plan. The live row was
+       * "—" under Free; `tools/scripts/publish-pricing-free-component-cell.mjs`
+       * sets it to "1".
+       */
+      {
+        label: 'Reusable components',
+        value: (p) =>
+          Number.isFinite(E(p).componentsPerHost) ? num(E(p).componentsPerHost) : YES,
+      },
       {
         label: 'Page versioning',
         frameLabel: 'Screen versioning',
@@ -1221,7 +1231,14 @@ for (const [label, [why]] of injected('--declare-extra-row', 2)) {
  * matching and is reported as resolved, so it cannot outlive its reason. An
  * exemption that outlives its reason is just an untested cell.
  */
-const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
+const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
+  'Reusable components · Free': {
+    frame: '—',
+    why:
+      'Free saves one reusable component per site since AGL-3615; the Figma ' +
+      'Pricing frames still print the dash from when components were Starter+.',
+  },
+}
 
 /*
  * `--declare-stale-cell='<row> · <plan>|<frame value>'`, repeatable.

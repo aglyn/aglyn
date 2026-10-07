@@ -1694,3 +1694,41 @@ describe('refund and the gift cards the order bought (AGL-3363)', () => {
     expect(card('GC-REFUND')).toMatchObject({ balanceCents: 4200 })
   })
 })
+
+/**
+ * A register sale paid with several cards (AGL-3607) has no single charge to
+ * refund: each refund comes off one card that can cover it, and a refund
+ * larger than any one card is refused with the largest that fits.
+ */
+describe('refunding a split-tender register sale (AGL-3607)', () => {
+  beforeEach(() => {
+    docs.set('hosts/host-1/orders/order-1', {
+      status: 'paid',
+      channel: 'pos',
+      paymentIntentIds: ['pi_card_a', 'pi_card_b'],
+      lineItems: [{ productId: 'product-1', name: 'Chair', quantity: 1, unitAmountCents: 5000 }],
+      totals: { itemsCents: 5000, shippingCents: 0, taxCents: 0, discountCents: 0, feeCents: 0, totalCents: 5000 },
+      payments: [
+        { id: 'a', method: 'card_present', amountCents: 1500, status: 'succeeded', atMs: 1, paymentIntentId: 'pi_card_a' },
+        { id: 'b', method: 'card_keyed', amountCents: 2500, status: 'succeeded', atMs: 2, paymentIntentId: 'pi_card_b' },
+        { id: 'c', method: 'cash', amountCents: 1000, status: 'succeeded', atMs: 3 },
+      ],
+    })
+  })
+
+  it('takes a refund from the first card that can cover it', async () => {
+    const result = await post({ amountCents: 2000 }, { 'idempotency-key': 'split-1' })
+    expect(result.status).toBe(200)
+    expect(refundCalls).toHaveLength(1)
+    expect(refundCalls[0].paymentIntent).toBe('pi_card_b')
+    expect(refundCalls[0].amount).toBe('2000')
+  })
+
+  it('refuses a refund no one card can cover, and reserves nothing', async () => {
+    const result = await post({ amountCents: 4000 }, { 'idempotency-key': 'split-2' })
+    expect(result.status).toBe(409)
+    expect(result.body.error).toContain('$25.00')
+    expect(refundCalls).toHaveLength(0)
+    expect(storedOrder().refundedCents ?? 0).toBe(0)
+  })
+})

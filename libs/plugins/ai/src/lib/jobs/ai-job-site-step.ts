@@ -25,11 +25,21 @@ import {
 } from '../model/ai-build-plan'
 import type {
   AiJob,
+  AiJobItemLedger,
   AiJobKind,
   AiJobOutput,
   AiJobOutputResource,
   AiJobPlan,
 } from '../model/ai-jobs.types'
+import {
+  aiBuildDegradation,
+  aiBuildInitialLedger,
+  aiBuildItemDelivered,
+  aiBuildItemOpen,
+  aiBuildNextUnit,
+  type AiBuildUnit,
+} from '../model/ai-build-job'
+import { aiBuildBuiltRefs, aiUnitErrorRetryable, aiUnitFailure, aiUnitSpend } from './ai-build-unit-outcome'
 import {
   AI_SITE_EMAIL_TYPE,
   AI_SITE_MAX_SECTIONS,
@@ -55,6 +65,7 @@ import { aiJobPublishesSite, aiPublishGuidedSite } from './ai-site-publish'
 import { aiConfirmedPlan, aiUnspentOutcome } from './ai-job-generation'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
+  type AiJobItemOutcome,
   type AiJobStepContext,
   type AiJobStepOutcome,
   type AiJobStepRunner,
@@ -687,30 +698,63 @@ export async function aiSitePageWritten(
   return input.screen.sections.every((_, index) => aiPageSectionNodeId(input.unitJobId, index) in stored.nodes)
 }
 
+/**
+ * A scaffold's units as a build's (AGL-3616): the same slots, each unit's
+ * kind as its operation, and every page built after the layout and the form
+ * it renders inside and places. What the build's ledger, degradation and
+ * Try again read, so a site is settled item by item exactly as a build is.
+ */
+export function aiSiteLedgerUnits(units: readonly AiSiteUnit[]): AiBuildUnit[] {
+  const creations = units.filter((unit) => unit.kind === 'layout' || unit.kind === 'form').map((unit) => unit.slot)
+  return units.map((unit) => ({
+    slot: unit.slot,
+    op: unit.kind === 'theme' ? 'theme' : unit.jobKind,
+    label: unit.label,
+    ...(unit.creation ? { creation: unit.creation } : {}),
+    ...(unit.screen ? { screen: unit.screen } : {}),
+    deps: unit.kind === 'page' ? creations : [],
+  }))
+}
+
+/**
+ * A scaffold's ledger to start from (AGL-3616): every unit pending, except
+ * the units a job already running when the ledger arrived had built, read
+ * off its outputs as the scaffold always read them, which stand as built.
+ */
+export function aiSiteInitialLedger(
+  units: readonly AiSiteUnit[],
+  outputs: readonly AiJobOutput[],
+): AiJobItemLedger[] {
+  const pending = new Set(aiSitePendingUnits(units, outputs).map((unit) => unit.slot))
+  const byResource = new Map<AiJobOutputResource, string[]>()
+  for (const output of outputs) byResource.set(output.resource, [...(byResource.get(output.resource) ?? []), output.id])
+  return aiBuildInitialLedger(aiSiteLedgerUnits(units)).map((row, index) => {
+    const unit = units[index]
+    if (pending.has(unit.slot)) return row
+    const id = byResource.get(unit.resource)?.shift()
+    return { ...row, status: 'succeeded', outputs: id ? [id] : [] }
+  })
+}
+
+/** The units a scaffold owes on this job: what its plan implies that this deployment can build. */
+function aiSiteOwedUnits(
+  job: AiJob,
+  plan: AiJobPlan,
+  inputs: AiSiteJobInputs,
+  freeTaste: boolean,
+  runnerFor: typeof aiJobStepRunnerFor,
+): AiSiteUnit[] {
+  return aiSiteJobUnits(plan, { welcomeEmail: aiSiteWelcomeEmail(inputs, freeTaste) }).filter((unit) =>
+    runnerFor(unit.jobKind),
+  )
+}
+
 export function createAiJobSiteStep(
   deps: AiJobSiteStepDeps = {},
 ): AiJobStepRunner {
   const runnerFor = deps.runnerFor ?? aiJobStepRunnerFor
   const readNodes = deps.readNodes ?? readAiDraftNodes
   const publish = deps.publish ?? aiPublishGuidedSite
-  /** A guided start's last pass puts what it built on the site, once (AGL-3596). */
-  const published = async (
-    context: AiJobStepContext,
-    outcome: AiJobStepOutcome,
-  ): Promise<AiJobStepOutcome> => {
-    const { job } = context
-    if (!aiJobPublishesSite(job) || job.sitePublish || !job.hostId) return outcome
-    const sitePublish = await publish(context.firestore, {
-      job,
-      outputs: [...(job.outputs ?? []), ...outcome.outputs],
-      now: context.now,
-    }).catch((error: unknown) => {
-      // The site is built either way; the pages stay drafts and say so.
-      console.error('ai site publish threw', { orgId: job.orgId, jobId: job.$id, error })
-      return null
-    })
-    return sitePublish ? { ...outcome, sitePublish } : outcome
-  }
   return async (context): Promise<AiJobStepOutcome> => {
     const { job } = context
     // The scaffold asks no model of its own. What it names where it spends
@@ -731,34 +775,91 @@ export function createAiJobSiteStep(
 
     // A kind this deployment has not loaded is not among the units at all, so
     // a scaffold owes only what something can build.
-    const units = aiSiteJobUnits(plan, {
-      welcomeEmail: aiSiteWelcomeEmail(inputs, freeTaste),
-    }).filter((unit) => runnerFor(unit.jobKind))
-    const outputs = job.outputs ?? []
-    const pending = aiSitePendingUnits(units, outputs)
-    if (!pending.length) return published(context, aiUnspentOutcome(model))
-    const unit = pending[0]
-    const runner = runnerFor(unit.jobKind)
-    if (!runner) return aiUnspentOutcome(model)
+    const units = aiSiteOwedUnits(job, plan, inputs, freeTaste, runnerFor)
+    const ledgerUnits = aiSiteLedgerUnits(units)
+    // Settled item by item, like a build (AGL-3616): the ledger, not the
+    // outputs, says where the scaffold stands once it has one.
+    const starting = !job.items?.length
+    const ledger = starting ? aiSiteInitialLedger(units, job.outputs ?? []) : (job.items as AiJobItemLedger[])
+    const init = starting ? { items: ledger } : {}
+    const rows = new Map(ledger.map((row) => [row.slot, row]))
+    const next = aiBuildNextUnit(ledgerUnits, ledger)
 
-    const pass = await aiRunJobUnit(context, {
-      unit,
-      units,
-      runner,
-      emptyCopy: AI_SITE_UNIT_EMPTY_COPY,
-    })
+    /** A guided start's last pass puts what it built on the site, once (AGL-3596): only its pages that were built. */
+    const finish = async (outcome: AiJobStepOutcome, pages: readonly AiJobOutput[]): Promise<AiJobStepOutcome> => {
+      if (!aiJobPublishesSite(job) || job.sitePublish || !job.hostId || !pages.length) return outcome
+      const sitePublish = await publish(context.firestore, {
+        job,
+        outputs: pages,
+        now: context.now,
+      }).catch((error: unknown) => {
+        // The site is built either way; the pages stay drafts and say so.
+        console.error('ai site publish threw', { orgId: job.orgId, jobId: job.$id, error })
+        return null
+      })
+      return sitePublish ? { ...outcome, sitePublish } : outcome
+    }
+    /** The pages built so far, as the job reported them. */
+    const builtPages = (extra: readonly AiJobOutput[] = []) => {
+      const ids = new Set(
+        units
+          .filter((unit) => unit.kind === 'page' && aiBuildItemDelivered(rows.get(unit.slot) ?? { status: 'pending' }))
+          .flatMap((unit) => rows.get(unit.slot)?.outputs ?? []),
+      )
+      return [...(job.outputs ?? []).filter((output) => output.resource === 'screen' && ids.has(output.id)), ...extra]
+    }
+
+    if (!next) return finish({ ...aiUnspentOutcome(model), ...init }, builtPages())
+    const unit = units.find((one) => one.slot === next.slot) as AiSiteUnit
+    const runner = runnerFor(unit.jobKind)
+    if (!runner) return { ...aiUnspentOutcome(model), ...init }
+    const othersOpen = ledgerUnits.some(
+      (one) => one.slot !== unit.slot && aiBuildItemOpen(rows.get(one.slot) ?? { status: 'pending' }),
+    )
     // The site's own listing rides out beside the first unit's output, once
     // (AGL-2918): it is derived from the answers rather than generated, so it
     // is ready before anything is built and costs the pass nothing.
-    const outcome: AiJobStepOutcome = {
-      ...pass.outcome,
-      outputs: [...aiSiteSeoOutputs(job), ...pass.outcome.outputs],
+    const listing = aiSiteSeoOutputs(job)
+    const settle = (item: AiJobItemOutcome, spent: AiJobStepOutcome = aiUnspentOutcome(model)): AiJobStepOutcome => ({
+      ...spent,
+      outputs: [...listing, ...spent.outputs],
+      ...init,
+      item,
+      ...(item.status === 'running' || othersOpen ? { continue: true } : {}),
+    })
+
+    // A page whose layout or form failed is built without it, and says so.
+    const degradation = aiBuildDegradation(next, { units: ledgerUnits, ledger })
+    const degraded = degradation.degradedBy.length > 0
+    const note = degradation.notes.length ? degradation.notes.join(' ') : null
+    const built = aiBuildBuiltRefs(ledgerUnits, ledger, job.outputs ?? [])
+    const derived = aiSiteUnitJob(job, unit, built)
+    const handed: AiJob = degradation.briefLines.length
+      ? { ...derived, brief: [derived.brief, ...degradation.briefLines].join('\n').slice(0, AI_JOB_BRIEF_MAX_CHARS) }
+      : derived
+
+    let outcome: AiJobStepOutcome
+    try {
+      outcome = await runner({ ...context, job: handed })
+    } catch (error) {
+      if (aiUnitErrorRetryable(error)) throw error
+      console.error('ai site unit threw', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
+      return settle({ slot: unit.slot, status: 'failed', failure: { ours: true, reason: 'provider', message: AI_SITE_UNIT_EMPTY_COPY } })
+    }
+    const spent = aiUnitSpend(outcome)
+    const stopped = aiUnitFailure(unit.slot, outcome)
+    if (stopped) {
+      return settle(
+        stopped.status === 'failed' && stopped.failure && !outcome.failure && !outcome.refused && !outcome.review
+          ? { ...stopped, failure: { ...stopped.failure, message: AI_SITE_UNIT_EMPTY_COPY } }
+          : stopped,
+        spent,
+      )
     }
     // A page counts as built only when its plan's sections are in it
-    // (AGL-3596): otherwise the pass fails, which is our failure and gives
-    // the job's credits back, and the page it reported is not reported.
-    if (pass.built && unit.kind === 'page' && unit.screen && job.hostId) {
-      const page = pass.outcome.outputs.find((output) => output.resource === 'screen')
+    // (AGL-3596): otherwise the page fails, on our side, and is not reported.
+    if (unit.kind === 'page' && unit.screen && job.hostId) {
+      const page = outcome.outputs.find((output) => output.resource === 'screen')
       const written =
         page !== undefined &&
         (await aiSitePageWritten(
@@ -767,16 +868,25 @@ export function createAiJobSiteStep(
           readNodes,
         ))
       if (!written) {
-        return {
-          ...outcome,
-          outputs: outcome.outputs.filter((output) => output.resource !== 'screen'),
-          failure: AI_SITE_PAGE_NOT_WRITTEN_COPY,
-        }
+        return settle(
+          { slot: unit.slot, status: 'failed', failure: { ours: true, reason: 'step-failure', message: AI_SITE_PAGE_NOT_WRITTEN_COPY } },
+          { ...spent, outputs: spent.outputs.filter((output) => output.resource !== 'screen') },
+        )
       }
     }
-    // A built unit continues the scaffold while units remain after it.
-    if (pass.built && pending.length > 1) return { ...outcome, continue: true }
-    return pass.built ? published(context, outcome) : outcome
+    const done = settle(
+      {
+        slot: unit.slot,
+        status: degraded ? 'degraded' : 'succeeded',
+        outputs: outcome.outputs.map((output) => output.id),
+        note,
+        ...(degraded ? { degradedBy: degradation.degradedBy } : {}),
+      },
+      spent,
+    )
+    if (done.continue) return done
+    rows.set(unit.slot, { ...(rows.get(unit.slot) as AiJobItemLedger), status: degraded ? 'degraded' : 'succeeded' })
+    return finish(done, builtPages(unit.kind === 'page' ? outcome.outputs.filter((output) => output.resource === 'screen') : []))
   }
 }
 
@@ -798,9 +908,11 @@ export function aiSiteJobRunMinimumMs(job: AiJob): number {
     aiJobStepRunnerFor(unit.jobKind),
   )
   const outputs = job.outputs ?? []
-  const [unit] = aiSitePendingUnits(units, outputs)
+  const ledger = job.items?.length ? job.items : aiSiteInitialLedger(units, outputs)
+  const next = aiBuildNextUnit(aiSiteLedgerUnits(units), ledger)
+  const unit = next ? units.find((one) => one.slot === next.slot) : undefined
   if (!unit) return AI_JOB_PAGE_STEP_MINIMUM_MS
-  return aiJobStepRunMinimumMs(aiSiteUnitJob(job, unit, aiSiteBuiltRefs(units, outputs)))
+  return aiJobStepRunMinimumMs(aiSiteUnitJob(job, unit, aiBuildBuiltRefs(aiSiteLedgerUnits(units), ledger, outputs)))
 }
 
 /**

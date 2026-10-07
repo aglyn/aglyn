@@ -169,7 +169,7 @@ describe('the plan', () => {
     expect(rows[0]).toMatchObject({ verdict: 'skip' })
   })
 
-  it('fails a row naming no order, a cancelled order, a missing tracking number and an over-quantity', () => {
+  it('fails a row naming no order, a canceled order, a missing tracking number and an over-quantity', () => {
     const { rows, summary } = plan([
       { orderRef: '9999', trackingNumber: 'X' },
       { orderRef: '1004', trackingNumber: 'X' },

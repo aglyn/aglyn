@@ -380,3 +380,48 @@ describe('the public service directory', () => {
   })
 })
 
+
+/**
+ * A draft service is offered nowhere (AGL-3616): a writer that sets a site up
+ * from a brief makes its services as drafts, and a person activates each one.
+ * Until then the directory leaves it out and its slots read as no service.
+ */
+describe('a draft service', () => {
+  afterEach(() => {
+    mockDirectory = []
+    mockService = CONSULT
+  })
+
+  it('is left out of the public directory, beside live and grandfathered services', async () => {
+    mockDirectory = [
+      { ...CONSULT, name: 'Live', status: 'active' },
+      { ...CONSULT, name: 'Draft', status: 'draft' },
+      { ...CONSULT, name: 'Before the field' },
+      { ...CONSULT, name: 'Gone', deletedAt: 1 },
+    ]
+    const { res, result } = makeResponse()
+    await slotsHandler(
+      { method: 'GET', query: { hostId: 'h1' }, body: {}, headers: {}, cookies: {}, socket: {} } as never,
+      res,
+    )
+    expect(result.status).toBe(200)
+    expect(result.body.services.map((service: { name: string }) => service.name)).toEqual([
+      'Live',
+      'Before the field',
+    ])
+  })
+
+  it('has no slots: asked by id, it reads as an unknown service', async () => {
+    mockService = { ...CONSULT, status: 'draft' }
+    const result = await run()
+    expect(result.status).toBe(404)
+    expect(result.body).toEqual({ error: 'Unknown service' })
+    expect(mockBookingDocsRead).toBe(0)
+  })
+
+  it('serves its slots once activated', async () => {
+    mockService = { ...CONSULT, status: 'active' }
+    const result = await run()
+    expect(result.status).toBe(200)
+  })
+})

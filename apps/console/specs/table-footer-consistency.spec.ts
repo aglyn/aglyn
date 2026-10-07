@@ -963,6 +963,65 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
+    'libs/plugins/commerce/src/lib/components/console/pos-devices-card.component.tsx',
+    'The hardware at the tills (AGL-3607, AGL-3608): the Stripe Terminal ' +
+      'card readers the site registered — the readers route reads at most 50 ' +
+      '— and the customer displays paired to each register, at most 10 per ' +
+      'register over the `limit(25)` registers. A row per physical device, ' +
+      'bounded by what fits on a counter rather than by how long the store ' +
+      'has traded.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/register-hardware-card.component.tsx',
+    'One register’s devices (AGL-3619): at most 4 paired printers, 10 card ' +
+      'readers and 10 displays, plus the 6 most recent print jobs as a ' +
+      'health readout — whether the printer is collecting its queue — not ' +
+      'a view of the print log. Every bound is a `limit()` on the query, set ' +
+      'by what one till carries.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/pos-ops/pos-staff-pins-card.component.tsx',
+    'The staff with a register PIN (AGL-3609): the roster the staff-PIN ' +
+      'route answers, limited to the site’s admins and editors — a row per ' +
+      'seat on the site, not per anything that accrues. Its `limit(1)` read ' +
+      'only asks whether the site has a register at all.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/return-detail-dialog.component.tsx',
+    'ONE return (AGL-3611): a row per line coming back, bounded by the ' +
+      'lines of the order it returns, and the restock panel’s location ' +
+      'picker over the locations card’s own `limit(25)` window. A detail ' +
+      'view of one record, where every line is part of the decision on ' +
+      'screen.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/shipstation-card.component.tsx',
+    'Connection details, not a list (AGL-3613): the fixed rows of the ' +
+      'Custom Store form — URL, username, password — and the constant ' +
+      '`SHIPSTATION_STATUS_ROWS` a merchant types into ShipStation. Nothing ' +
+      'behind it grows.',
+  ],
+  [
+    'libs/plugins/shipping/src/lib/components/label-spend-card.component.tsx',
+    'Label spend by month on Billing → Usage (AGL-3612): exactly the six ' +
+      'calendar months the spend route totals, a fixed window like the ' +
+      'other usage summaries on that page. A row per month in a fixed ' +
+      'window, never per label.',
+  ],
+  [
+    'libs/plugins/shipping/src/lib/components/orders-batch-widget.component.tsx',
+    'The rates for the orders ticked in the list (AGL-3612): a row per ' +
+      'selected order, refused past `MAX_BATCH` (50) by the batch route, ' +
+      'reviewed together before one purchase buys them all. A pager would ' +
+      'hide part of what the Buy button is about to charge for.',
+  ],
+  [
+    'libs/plugins/funnels/src/lib/components/funnel-results.component.tsx',
+    "One funnel's results by source (AGL-3605): at most `FUNNEL_SOURCE_ROWS` sources and " +
+      'an Other row, ranked by the compute, beside the step figures they ' +
+      'break down. A summary of one result, not a list to page through.',
+  ],
+  [
     'apps/console/components/transfer-hub/org-package-import.component.tsx',
     'The dry run of ONE package file (AGL-3535): a row per item the file ' +
       'carries, each with the choice it needs, beside the references and ' +
@@ -1610,13 +1669,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
       'without editing across that work.',
   ],
   [
-    'libs/plugins/commerce/src/lib/components/console/pos-page.component.tsx',
-    'The POS catalog grid, a page shell reading `limit(500)`. It is also the ' +
-      'one surface here where a pager is the wrong control — a till is ' +
-      'searched, not paged — so it wants the search-first treatment the DAM ' +
-      'grid has rather than a footer.',
-  ],
-  [
     'libs/plugins/marketplace/src/lib/components/host-plugins-card.component.tsx',
     'Installed plugins, per site and per org, both unordered `limit(50)`. ' +
       'Bounded by the marketplace rather than by the account, but the ' +
@@ -1767,7 +1819,12 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // 13 since the staff CSP report became a paged grid (AGL-3317): it drew
     // the first 100 violations and dropped the rest, and now pages them all
     // under the grid's own footer.
-    expect(OWES_A_FOOTER).toHaveLength(13)
+    //
+    // 12 since the till's product grid left the register page for its own
+    // component (AGL-3607). The entry asked for a search-first grid rather
+    // than a footer, and that is the grid it is: a typed name narrows the
+    // query to the whole catalog, and a scan reads one product by barcode.
+    expect(OWES_A_FOOTER).toHaveLength(12)
     // 37 since a site's senders became a list the composer picks from: the
     // drawer that edits one carries a picker of teammates, and a picker's
     // option list is a lookup rather than a window a reader pages through.
@@ -1960,7 +2017,15 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     //
     // 70 since the CRM's imports moved onto the transfer wizard (AGL-3528):
     // the shared CSV import drawer, and its preview table, are gone.
-    expect(NOT_A_LIST).toHaveLength(70)
+    // 71 with a funnel's results by source (AGL-3605), bounded by the compute.
+    //
+    // 78 with Commerce v3's hardware and shipping cards (AGL-3607, AGL-3609,
+    // AGL-3611, AGL-3612, AGL-3613, AGL-3619): devices per till, a site's
+    // PIN holders, one return's lines, connection rows, six months of label
+    // spend and one batch of ticked orders — each bounded by something other
+    // than how long the store has traded. The two that were real lists, a
+    // register's shifts and a webhook's deliveries, page instead.
+    expect(NOT_A_LIST).toHaveLength(78)
   })
 })
 

@@ -74,7 +74,7 @@ import {
  *   field's choice. Keep existing (the start) leaves the shipment as it is;
  *   Overwrite replaces its tracking; Fill blanks adds tracking only to a
  *   shipment recorded without any.
- * - A pending, cancelled or refunded order is refused, by name.
+ * - A pending, canceled or refunded order is refused, by name.
  *
  * Nothing here creates an order: a row naming no order fails with the
  * number it named.

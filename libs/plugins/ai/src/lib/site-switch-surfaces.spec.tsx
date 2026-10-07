@@ -81,6 +81,14 @@ const SITE_ZONES: readonly string[] = [
   'hostForms',
   // And on its Components page (AGL-3051).
   CONSOLE_WIDGET_SLOTS.hostComponents,
+  // And on its email templates (AGL-3596), a zone the email plugin declares
+  // on a site's pages: a plain id.
+  'hostEmailTemplates',
+  // Create with AI in the media library (AGL-3602). On a site's Media page,
+  // and in a picker opened for a site, it is listed from the site's set; on
+  // the organization's Media page, which names no site, from the
+  // workspace's, the way the CRM's zones below are.
+  CONSOLE_WIDGET_SLOTS.mediaLibrary,
   CONSOLE_WIDGET_SLOTS.hostSeo,
   CONSOLE_WIDGET_SLOTS.seoFields,
   CONSOLE_WIDGET_SLOTS.hostTheme,
@@ -92,11 +100,17 @@ const SITE_ZONES: readonly string[] = [
   'hostAutomations',
   'automationEditor',
   'automationRun',
+  // The Functions & Variables page's zones (AGL-3603), which the logic
+  // plugin declares and hosts on a site's page.
+  'hostLogic',
+  'logicFunctionEditor',
+  'logicReferenceIssue',
   // The zones the commerce plugin hosts on a site's products pages
   // (AGL-2916). Plain ids: the commerce plugin declares them, so the
   // catalog names none of them.
   'productEditor',
   'productsHub',
+  'productsCreate',
   'productImport',
   // The CRM's record pages, composer and imports (AGL-2917). Under a site
   // they are listed from the site's set; at the organization level, from the
@@ -112,6 +126,24 @@ const SITE_ZONES: readonly string[] = [
   // about is that site's.
   'experimentVariants',
   'experimentResult',
+  // The overlays list's two zones (AGL-3603), hosted by the marketing plugin
+  // on a site's Overlays section and declared by it, so plain ids again.
+  'hostOverlays',
+  'overlayEditor',
+  // The Campaigns section's zone (AGL-3603). On the organization's hub it is
+  // listed from the workspace's set, and the job it starts still names the
+  // site it is placed on, which the jobs route refuses when AI is off there.
+  'hostCampaigns',
+  // The figures in words on a report (AGL-3603): the figures are one site's,
+  // and the site's switch decides as it does for the Assist panel's ask.
+  'marketingInsights',
+  // "Ask AI about these numbers" on a site's dashboard and Analytics page
+  // (AGL-3603).
+  CONSOLE_WIDGET_SLOTS.hostDashboard,
+  // The Funnels card's two zones (AGL-3605), hosted by the funnels plugin on
+  // a site's Analytics page. Plain ids for the same reason.
+  'funnelsCreate',
+  'funnelInsight',
 ]
 
 /** Zones drawn on the WORKSPACE's pages, where no site's switch reaches. */
@@ -120,6 +152,10 @@ const WORKSPACE_ZONES: readonly string[] = [
   CONSOLE_WIDGET_SLOTS.orgMember,
   CONSOLE_WIDGET_SLOTS.orgMembersListColumn,
   CONSOLE_WIDGET_SLOTS.orgSites,
+  // "Ask AI about these numbers" on the workspace's sites page (AGL-3603).
+  CONSOLE_WIDGET_SLOTS.orgDashboard,
+  // "Create with AI" on the workspace's Org automations (AGL-3603).
+  'orgAutomations',
 ]
 
 /** A workspace that never listed AI, and one of its sites that switched it off. */

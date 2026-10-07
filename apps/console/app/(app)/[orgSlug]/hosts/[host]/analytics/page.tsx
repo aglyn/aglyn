@@ -31,6 +31,7 @@ import DashboardLayout from '../../../../../../components/layouts/dashboard.layo
 import MainLayout from '../../../../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
+import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
 
 /**
@@ -42,6 +43,7 @@ const HostAnalytics: NextPageWithLayout<Record<string, never>> = () => {
   const hostId = useHostId()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
+  const { org, ready: orgReady } = useCurrentOrg()
 
   return (
     <DashboardLayout
@@ -66,6 +68,15 @@ const HostAnalytics: NextPageWithLayout<Record<string, never>> = () => {
           <HostAnalyticsCard hostId={hostId} />
           {/* Per-screen comparison (AGL-1844), Pro-gated inside. */}
           <ScreensAnalyticsTable hostId={hostId} />
+          {/*
+            Analytics sections a plugin computes from what the site records
+            (AGL-3605) — funnels — registered rather than imported.
+           */}
+          <PluginWidgetSlot
+            slot="hostAnalytics"
+            hostId={hostId}
+            orgId={orgReady ? org?.$id : undefined}
+          />
           <PluginWidgetSlot slot="commerceGlance" hostId={hostId} />
           {/*
             The capability glances, registered rather than imported

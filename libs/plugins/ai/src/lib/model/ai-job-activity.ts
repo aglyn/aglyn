@@ -242,10 +242,12 @@ const KIND_NOUNS: Partial<Record<AiJobKind, string>> = {
   email: 'email',
   campaign: 'campaign',
   workflow: 'automation',
+  logic: 'function',
   theme: 'theme',
   products: 'products',
   experiment: 'experiment',
   insight: 'answer',
+  build: 'build',
 }
 
 /** The noun for what a job of this kind makes, or `AI job` for a kind with none. */

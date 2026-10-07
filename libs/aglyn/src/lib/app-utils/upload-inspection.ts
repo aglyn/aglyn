@@ -264,6 +264,9 @@ const TYPE_SIGNATURES: Readonly<Record<string, readonly Signature[]>> = {
   'video/mp4': [ISO_BMFF],
   'video/quicktime': [ISO_BMFF],
   'video/webm': [{ magic: [0x1a, 0x45, 0xdf, 0xa3], label: 'Matroska/WebM' }],
+
+  // A web font (AGL-3656): the theme's font installer stores WOFF2 only.
+  'font/woff2': [{ magic: ascii('wOF2'), label: 'WOFF2' }],
 }
 
 /** The OOXML document types whose archive is scanned for a macro project. */

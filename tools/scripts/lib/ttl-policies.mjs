@@ -83,6 +83,18 @@ export const TTL_POLICIES = Object.freeze([
   // live on aglyn-main is recorded in the doc, not here. Nothing here applies
   // anything on import — only `set-firestore-ttl.mjs` does, and only when run.
   {
+    collection: 'funnelJourneys',
+    field: 'expiresAt',
+    // AGL-3605 — one recorded site visit, for funnels.
+    why: 'recorded site visits for funnels, 90 days',
+  },
+  {
+    collection: 'funnelResults',
+    field: 'expiresAt',
+    // AGL-3605 — a funnel's cached result.
+    why: 'cached funnel results, 2 days',
+  },
+  {
     collection: 'assistExchanges',
     field: 'expiresAt',
     // AGL-1972 — the verbatim question/answer/uid half of an Assist exchange.
@@ -173,5 +185,28 @@ export const TTL_POLICIES = Object.freeze([
     // addresses and who stated permission. Kept while its job can write
     // (`LIST_IMPORT_LEDGER_RETENTION_MS`).
     why: 'email list import ledgers (sample addresses), 15 days',
+  },
+  {
+    collection: 'orderWebhookDeliveries',
+    field: 'expiresAt',
+    // AGL-3611 — one signed order-webhook delivery under
+    // `hosts/{hostId}/orderWebhookDeliveries/{deliveryId}`, with the request
+    // body it posted (`ORDER_WEBHOOK_LOG_RETENTION_MS`).
+    why: 'order webhook delivery logs (order payloads), 30 days',
+  },
+  {
+    collection: 'printJobs',
+    field: 'expiresAt',
+    // AGL-3619 — a cloud receipt printer's job under
+    // `hosts/{hostId}/printJobs/{jobId}`, with the receipt or report it
+    // prints (`PRINT_JOB_RETENTION_MS`).
+    why: 'register print jobs (receipt content), 7 days',
+  },
+  {
+    collection: 'shippingQuoteCache',
+    field: 'expiresAt',
+    // AGL-3612 — cached carrier rates (10 minutes) and held label quotes
+    // (30 minutes); both are also refused by age on read.
+    why: 'cached carrier rate quotes, 30 minutes',
   },
 ])

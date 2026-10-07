@@ -28,6 +28,7 @@ import {
   AI_BUILD_PLAN_TOOL,
   aiBuildPlanToolFor,
   aiEmbedVideoKey,
+  aiPlanLayoutRegionWords,
   aiPlanCreateFor,
   aiPlanEmbedsFor,
   aiPlanRecordBase,
@@ -483,5 +484,47 @@ describe('a planned third-party player (AGL-3433)', () => {
     for (const link of ['http://youtu.be/dQw4w9WgXcQ', 'https://video.example.com/x', '{{entry.coverVideo}}', 'not a link']) {
       expect([link, aiEmbedVideoKey(link)]).toEqual([link, null])
     }
+  })
+})
+
+/*
+ * A layout's regions written as one entry (job AvVxbFbzQx, 2026-10-07): the
+ * plan named regions the platform builds, and was refused for one unknown
+ * word. Each region is read on its own.
+ */
+describe("a layout's regions written as one list", () => {
+  it('reads "regions: header, nav, main, footer" as four regions', () => {
+    const parsed = parseAiBuildPlan(
+      plan({
+        create: [
+          {
+            kind: 'layout',
+            name: 'Site layout',
+            why: 'The site has no layout yet.',
+            duplicateOf: null,
+            fields: ['regions: header, nav, main, footer'],
+          },
+        ],
+      }),
+    )
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.plan.create[0].fields).toEqual(['header', 'nav', 'main', 'footer'])
+  })
+
+  it('splits on "and", slashes and plus signs, drops repeats, and keeps a single region as it was', () => {
+    expect(aiPlanLayoutRegionWords(['Header and Nav', 'main / footer', 'footer', 'sidebar + main'])).toEqual([
+      'Header',
+      'Nav',
+      'main',
+      'footer',
+      'sidebar',
+    ])
+    expect(aiPlanLayoutRegionWords(['header: logo'])).toEqual(['header: logo'])
+  })
+
+  it("leaves a component's fields as they were written", () => {
+    const parsed = parseAiBuildPlan(plan())
+    expect(parsed.ok && parsed.plan.create[0].fields).toEqual(['title:text', 'image:image'])
   })
 })

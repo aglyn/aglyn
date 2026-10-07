@@ -184,6 +184,8 @@ describe('the zones the Actions card hosts (AGL-2919)', () => {
       hostId: 'host-1',
       orgId: 'org-1',
       target: { type: 'action', id: 'act-welcome', name: 'Welcome new leads' },
+      // A changed copy a widget drafts opens in place of this one (AGL-3603).
+      openAction: lastDrawn('hostAutomations')?.props['openAction'],
     })
     // A rename being typed is not a different automation.
     fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Renamed' } })
@@ -199,6 +201,17 @@ describe('the zones the Actions card hosts (AGL-2919)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
     const dialog = await screen.findByRole('dialog', { name: 'Add action' })
     expect(within(dialog).queryByTestId('zone-automationEditor')).toBeNull()
+  })
+
+  it('opens the action its address names once the list has read it, and drops it from the address (AGL-3603)', async () => {
+    window.history.replaceState(null, '', '/acme/automation/actions?action=act-draft')
+    renderInShell()
+    const dialog = await screen.findByRole('dialog', { name: 'Edit action' })
+    expect((within(dialog).getByLabelText('Name') as HTMLInputElement).value).toBe(
+      'Welcome newsletter sign-ups',
+    )
+    expect(window.location.search).toBe('')
+    window.history.replaceState(null, '', '/')
   })
 
   it('draws no zone at all outside the console shell', () => {

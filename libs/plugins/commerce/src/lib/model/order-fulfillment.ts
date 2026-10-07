@@ -256,3 +256,18 @@ export const FULFILLMENT_CARRIER_CHOICES: readonly string[] = [
   'Royal Mail',
   'Australia Post',
 ]
+
+/** What a merchant reads for a carrier's tracking status (AGL-3612). */
+const TRACKING_STATUS_LABELS: Readonly<Record<string, string>> = {
+  pre_transit: 'Label created',
+  in_transit: 'In transit',
+  out_for_delivery: 'Out for delivery',
+  delivered: 'Delivered',
+  exception: 'Delivery problem',
+  returned: 'Returned to sender',
+}
+
+/** The words for a fulfillment's `trackingStatus`, or the status itself. */
+export function trackingStatusLabel(status: string | undefined | null): string {
+  return status ? TRACKING_STATUS_LABELS[status] ?? status : ''
+}

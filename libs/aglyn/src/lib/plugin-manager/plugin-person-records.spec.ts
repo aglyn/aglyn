@@ -19,12 +19,16 @@ import { setRegisteringPluginId } from '../app-utils/registering-plugin'
 import {
   filePluginPersonUnder,
   findPluginPerson,
+  pluginPeopleChangedSince,
   pluginPeopleInView,
   pluginPeopleWroteIn,
   pluginPersonRecords,
   readPluginPeople,
   recordPluginPersonRefund,
   registerPluginPersonRecords,
+  searchPluginPeople,
+  type PluginPersonChangesPage,
+  type PluginPersonChangesRequest,
   type PluginPersonRecords,
 } from './plugin-person-records'
 import { resetPluginServicesForTests } from './plugin-services'
@@ -231,5 +235,71 @@ describe('views and what people wrote', () => {
       { pluginId: 'records' },
     )
     expect(await pluginPeopleWroteIn({ orgId: 'o', records: [{ kind: 'contact', id: 'c-1' }] })).toBeNull()
+  })
+})
+
+describe('searching people by what was typed (AGL-3609)', () => {
+  const SEARCH = { hostId: 'h', text: 'pat', limit: 10 }
+
+  it('answers null while no plugin keeps people, or the one that does keeps no search', async () => {
+    expect(await searchPluginPeople(SEARCH)).toBeNull()
+    registerPluginPersonRecords(owner(), { pluginId: 'records' })
+    expect(await searchPluginPeople(SEARCH)).toBeNull()
+  })
+
+  it('hands the request over whole and answers what the owner found', async () => {
+    const search = jest.fn(async () => [PERSON])
+    registerPluginPersonRecords({ ...owner(), search }, { pluginId: 'records' })
+    expect(await searchPluginPeople(SEARCH)).toEqual([PERSON])
+    expect(search).toHaveBeenCalledWith(SEARCH)
+  })
+
+  it('answers no one for blank text or no room, without asking', async () => {
+    const search = jest.fn(async () => [PERSON])
+    registerPluginPersonRecords({ ...owner(), search }, { pluginId: 'records' })
+    expect(await searchPluginPeople({ ...SEARCH, text: '   ' })).toEqual([])
+    expect(await searchPluginPeople({ ...SEARCH, limit: 0 })).toEqual([])
+    expect(search).not.toHaveBeenCalled()
+  })
+
+  it('lets a failed search reach the caller', async () => {
+    registerPluginPersonRecords(
+      {
+        ...owner(),
+        async search() {
+          throw new Error('index down')
+        },
+      },
+      { pluginId: 'records' },
+    )
+    await expect(searchPluginPeople(SEARCH)).rejects.toThrow('index down')
+  })
+})
+
+describe('the people a site holds, walked by change (AGL-3639)', () => {
+  const REQUEST: PluginPersonChangesRequest = { hostId: 'h', after: null, limit: 50 }
+
+  it('answers null while no plugin keeps people, or the one that does cannot walk them', async () => {
+    expect(await pluginPeopleChangedSince(REQUEST)).toBeNull()
+    registerPluginPersonRecords(owner(), { pluginId: 'records' })
+    expect(await pluginPeopleChangedSince(REQUEST)).toBeNull()
+  })
+
+  it('hands the owner the request with its limit clamped, and its page back', async () => {
+    const page: PluginPersonChangesPage = { people: [], next: 'cursor-2' }
+    const changedSince = jest.fn(async () => page)
+    registerPluginPersonRecords({ ...owner(), changedSince }, { pluginId: 'records' })
+    expect(await pluginPeopleChangedSince({ ...REQUEST, limit: 10_000 })).toBe(page)
+    expect(changedSince).toHaveBeenCalledWith({ ...REQUEST, limit: 500 })
+    await pluginPeopleChangedSince({ ...REQUEST, limit: 0 })
+    expect(changedSince).toHaveBeenLastCalledWith({ ...REQUEST, limit: 1 })
+  })
+
+  it('lets a failed read throw, so a walk never advances past what it did not read', async () => {
+    registerPluginPersonRecords(
+      { ...owner(), changedSince: async () => Promise.reject(new Error('quota')) },
+      { pluginId: 'records' },
+    )
+    await expect(pluginPeopleChangedSince(REQUEST)).rejects.toThrow('quota')
   })
 })

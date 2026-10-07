@@ -77,6 +77,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     }
   },
   {
+    "id": "funnels",
+    "label": "Funnels",
+    "alwaysOnForWorkspace": true,
+    "description": "Step-by-step conversion on a site's Analytics page: visits at each step, drop-off and time between steps.",
+    "siteOff": {
+      "stops": "Switching Funnels off for this site removes the Funnels card from its Analytics page.",
+      "keeps": "Saved funnels are kept, and visits keep being recorded while the site has one; delete the funnels to stop recording."
+    }
+  },
+  {
     "id": "accounts",
     "label": "User Accounts",
     "description": "Visitor accounts on the site: the /signin, /signup and /recover pages, and the Members blocks. On for a new site; a site created before that stays off until you turn it on.",
@@ -164,6 +174,58 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     "description": "Workflows, actions, webhooks, and run logs.",
     "releaseFlag": "release_workflows"
   },
+  {
+    "id": "accounting",
+    "label": "Accounting",
+    "description": "Sales, refunds, fees and payouts posted to QuickBooks Online or Xero.",
+    "releaseFlag": "release_accounting"
+  },
+  {
+    "id": "shipping",
+    "label": "Shipping",
+    "alwaysOnForWorkspace": true,
+    "description": "Carrier rates at checkout, shipping labels and tracking for physical orders, where the platform has connected a carrier provider.",
+    "siteOff": {
+      "stops": "Switching Shipping off for this site stops live carrier rates at its checkout, which falls back to the site’s own shipping rates, and removes label buying from its orders.",
+      "keeps": "Labels already bought, their tracking and their charges are kept, and Shipping keeps working on the workspace’s other sites."
+    }
+  },
+  {
+    "id": "tax-engines",
+    "label": "Tax services",
+    "alwaysOnForWorkspace": true,
+    "description": "Sales tax from your own Avalara AvaTax or TaxJar account at checkout and the register.",
+    "siteOff": {
+      "stops": "Switching Tax services off for this site stops checkout and the register asking its connected tax service, which then use the site’s own tax rates, and stops recording its paid orders there.",
+      "keeps": "The connection, product tax codes and exempt customers are kept, and orders already recorded stay recorded."
+    }
+  },
+  {
+    "id": "sales-channels",
+    "label": "Sales channels",
+    "alwaysOnForWorkspace": true,
+    "description": "Product feeds for Google, YouTube, Facebook, Instagram, TikTok, Pinterest, Snapchat and Microsoft Shopping.",
+    "siteOff": {
+      "stops": "Switching Sales channels off for this site stops every product feed it publishes, including the Google Merchant Center address set up before sales channels existed, so channels stop receiving updates.",
+      "keeps": "Each feed's address, its switch and the store's defaults are kept, so switching it back on resumes the same feeds."
+    }
+  },
+  {
+    "id": "marketing-platforms",
+    "label": "Email platforms",
+    "alwaysOnForWorkspace": true,
+    "description": "Two-way contact and unsubscribe sync with your own Mailchimp, Klaviyo or Omnisend account, and order events for their flows.",
+    "siteOff": {
+      "stops": "Switching Email platforms off for this site stops its contacts, unsubscribes and order events syncing with the email platforms it connected.",
+      "keeps": "The connections and everything already synced are kept, and an unsubscribe already read back stays on the site’s list."
+    }
+  },
+  {
+    "id": "fonts",
+    "label": "Fonts",
+    "alwaysOn": true,
+    "description": "Upload your own fonts and pick from the Google Fonts catalog for your site's theme."
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -171,6 +233,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "forms": "elements",
   "ai": "console-only",
   "theme-presets": "console-only",
+  "funnels": "console-only",
   "accounts": "routes",
   "bookings": "elements",
   "commerce": "elements",
@@ -185,6 +248,12 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "marketing": "elements",
   "redirects": "routes",
   "workflows": "routes",
+  "accounting": "console-only",
+  "shipping": "console-only",
+  "tax-engines": "console-only",
+  "sales-channels": "routes",
+  "marketing-platforms": "console-only",
+  "fonts": "console-only",
 }
 
 /**
@@ -333,6 +402,7 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "options",
         "variants",
         "seo",
+        "channel",
         "supplierId",
         "oversellPolicy",
         "taxExempt",
@@ -344,6 +414,7 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "relatedProductIds",
         "giftCard",
         "lowStockThreshold",
+        "shipping",
         "createdAtMs",
         "updatedAtMs",
         "nameLower",
@@ -386,7 +457,8 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
       "fields": [
         "name",
         "isDefault",
-        "address"
+        "address",
+        "postalAddress"
       ]
     }
   },
@@ -525,6 +597,54 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "name": "returns",
     "mediaScan": "none",
     "mediaScanReason": "Returns (AGL-3611): line indexes, quantities, reasons and a return label link, written only by the returns routes. A return names no image of its own; the order's lines carry the copies, and the order is not scanned for the same reason."
+  },
+  {
+    "pluginId": "commerce",
+    "name": "orderWebhooks",
+    "mediaScan": "none",
+    "mediaScanReason": "The merchant's outbound order webhook endpoints (AGL-3611): a URL and the event names it takes. Scanning reads every endpoint for a URL that is never a media file."
+  },
+  {
+    "pluginId": "commerce",
+    "name": "orderWebhookSecrets",
+    "mediaScan": "none",
+    "mediaScanReason": "Sealed HMAC signing secrets for the order webhooks (AGL-3611). Reading them for media would put a secret on a scan path to match nothing."
+  },
+  {
+    "pluginId": "commerce",
+    "name": "orderWebhookDeliveries",
+    "mediaScan": "none",
+    "mediaScanReason": "The webhook delivery log (AGL-3611): one row per event per endpoint, expiring after 30 days. A body copies the order, whose image URLs record what was sold rather than use the file, so a match would be wrong, and a busy store holds thousands."
+  },
+  {
+    "pluginId": "commerce",
+    "name": "posStaffPins",
+    "mediaScan": "none",
+    "mediaScanReason": "Register staff PINs (AGL-3609): a salted hash and a lockout counter per member, written only by the staff PIN route. No content field at all."
+  },
+  {
+    "pluginId": "commerce",
+    "name": "terminal",
+    "mediaScan": "none",
+    "mediaScanReason": "The site's Stripe Terminal Location (AGL-3607): a vendor id and the address it was registered with, written only by the reader routes. No content field."
+  },
+  {
+    "pluginId": "commerce",
+    "name": "terminalReaders",
+    "mediaScan": "none",
+    "mediaScanReason": "The site's card readers (AGL-3607): a Stripe reader id, a label and a status, written only by `/api/commerce/pos-readers`. No content field."
+  },
+  {
+    "pluginId": "commerce",
+    "name": "printers",
+    "mediaScan": "none",
+    "mediaScanReason": "Cloud receipt printers (AGL-3619): a device id, a secret version, a paper width and a status. A receipt logo is the one stored IN the printer and named by a key code, never a file URL, so nothing here can use an asset."
+  },
+  {
+    "pluginId": "commerce",
+    "name": "printJobs",
+    "mediaScan": "none",
+    "mediaScanReason": "The printers' queue (AGL-3619): rendered receipt, ticket and label bytes waiting for a printer's poll, written by the print routes and gone once printed. Printer commands, not content, and a busy register queues hundreds a day."
   },
   {
     "pluginId": "marketplace",
@@ -870,6 +990,30 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "nameField": "name"
       }
     }
+  },
+  {
+    "pluginId": "sales-channels",
+    "name": "salesChannels",
+    "mediaScan": "none",
+    "mediaScanReason": "A site's shopping-channel state (AGL-3637): one feed document per channel holding the token that locks its URL, the store's defaults for blank product fields, and a sealed OAuth token per API connection. No client reads or writes it, and nothing in it names a library asset."
+  },
+  {
+    "pluginId": "funnels",
+    "name": "funnels",
+    "mediaScan": "none",
+    "mediaScanReason": "A funnel is a name and its steps — paths and record ids, never an asset. Written only by the funnels save route."
+  },
+  {
+    "pluginId": "funnels",
+    "name": "funnelJourneys",
+    "mediaScan": "none",
+    "mediaScanReason": "One document per recorded visit: step types, paths or record ids, server times and UTM labels. Written only by the site collector on the Admin SDK, read only by the results route; expires 90 days after the visit."
+  },
+  {
+    "pluginId": "funnels",
+    "name": "funnelResults",
+    "mediaScan": "none",
+    "mediaScanReason": "A computed funnel result — counts, shares and durations — kept up to a day by the results route and expiring on its own."
   },
 ]
 
@@ -2017,6 +2161,7 @@ export const PLUGIN_USAGE_METERS_DECLARED: readonly ResolvedPluginUsageMeter[] =
   {"pluginId":"data","id":"dataset-storage"},
   {"pluginId":"ai","id":"assist"},
   {"pluginId":"sms","id":"sms-texts"},
+  {"pluginId":"shipping","id":"shipping-labels"},
 ]
 
 /**
@@ -2032,6 +2177,46 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "outreach",
     "name": "outreachLinks",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "shipping",
+    "name": "shippingTrackers",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "shipping",
+    "name": "shippingQuoteCache",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "tax-engines",
+    "name": "taxEngineConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "tax-engines",
+    "name": "taxEngineProductCodes",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "tax-engines",
+    "name": "taxEngineExemptions",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "tax-engines",
+    "name": "taxEngineTransactions",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "marketing-platforms",
+    "name": "marketingPlatformConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "marketing-platforms",
+    "name": "marketingPlatformEvents",
     "orgField": "orgId"
   },
 ]

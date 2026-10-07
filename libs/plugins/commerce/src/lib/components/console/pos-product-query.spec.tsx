@@ -119,6 +119,37 @@ function mockAnswer(asked: Asked): Row[] {
   return cap ? rows.slice(0, Number(cap.value)) : rows
 }
 
+// The register's operations (AGL-3609) have specs of their own; this one
+// reads the page around them.
+// The register panel renders beside the grid on a wide screen and in a
+// bottom sheet below that (AGL-3607); the basket a scan fills is read in the
+// panel, so the page is drawn wide here, where the panel is on screen.
+jest.mock('@mui/material', () => ({
+  ...jest.requireActual('@mui/material'),
+  useMediaQuery: () => true,
+}))
+jest.mock('./pos-ops/register-ops', () => ({
+  PosOperationsBar: () => null,
+  PosCustomerLookup: () => null,
+  PosLastReceipt: () => null,
+  usePosOpsSettings: () => ({
+    requireOpenShift: false,
+    refundLimitCents: 0,
+    autoLockMinutes: 0,
+    receiptAddress: '',
+    returnPolicy: '',
+  }),
+  usePosCashier: () => ({
+    cashier: null,
+    assertion: undefined,
+    locked: false,
+    switchTo: () => undefined,
+    signOutCashier: () => undefined,
+    lock: () => undefined,
+    unlock: () => undefined,
+  }),
+}))
+
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...path: string[]) => ({ path: path.join('/'), constraints: [] }),
   query: (base: Asked, ...constraints: Array<Record<string, unknown>>) => ({
@@ -177,6 +208,24 @@ describe('the till asks the products query (AGL-3321)', () => {
     fireEvent.keyDown(search(), { key: 'Enter' })
     // Added to the cart: the search box clears on a hit.
     await waitFor(() => expect((search() as HTMLInputElement).value).toBe(''))
+  })
+
+  it('takes a keyboard-mode scanner’s code with focus off the search box (AGL-3619)', async () => {
+    render(<PosConsolePage hostId="host-1" {...({} as any)} />)
+    expect(screen.queryByText(/Zebra Latte/)).toBeNull()
+    const button = screen.getAllByRole('button')[0]
+    // A scanner's pace, whatever the test machine's: 5 ms a key.
+    let clock = Date.now()
+    const now = jest.spyOn(Date, 'now').mockImplementation(() => (clock += 5))
+    for (const key of [...'0123456789012', 'Enter']) fireEvent.keyDown(button, { key })
+    now.mockRestore()
+    // Past the grid's window, so on screen only once it is in the basket.
+    expect(await screen.findByText(/1× Zebra Latte/)).toBeTruthy()
+  })
+
+  it('offers the camera beside the search box (AGL-3619)', () => {
+    render(<PosConsolePage hostId="host-1" {...({} as any)} />)
+    expect(screen.getByRole('button', { name: 'Scan a barcode with the camera' })).toBeTruthy()
   })
 
   it('asks the hub’s scope, status and search in one plan', () => {

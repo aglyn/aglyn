@@ -45,10 +45,12 @@ jest.mock('../../constants/docs-links', () => ({ docsHelp: () => undefined }))
 
 jest.mock('next/dynamic', () => ({ __esModule: true, default: () => () => null }))
 
-jest.mock('next/head', () => ({
-  __esModule: true,
-  default: ({ children }: { children: ReactNode }) => <>{children}</>,
+// The Typography card's font zone (AGL-3656): empty unless a case fills it.
+let mockFontWidgets: Array<{ widgetId: string; Component: (props: any) => ReactNode }> = []
+jest.mock('../plugin-widget-slot.component', () => ({
+  useSlotWidgets: () => ({ widgets: mockFontWidgets, ready: true }),
 }))
+jest.mock('../host-id-provider', () => ({ useHostId: () => 'host-1' }))
 
 jest.mock('./theme-preview.component', () => ({ __esModule: true, default: () => null }))
 
@@ -164,5 +166,45 @@ describe('a draft handed to the editor (AGL-2938)', () => {
     rerender(editor(null))
     rerender(editor(proposal))
     expect(spacing()).toBe('6')
+  })
+})
+
+describe('the font control (AGL-3656)', () => {
+  afterEach(() => {
+    mockFontWidgets = []
+  })
+
+  it('offers its own short list where no plugin fills the zone', () => {
+    render(<ThemeEditor theme={{}} onSave={jest.fn()} />)
+    expect(screen.getByRole('combobox', { name: startsWith('Font family') })).toBeTruthy()
+  })
+
+  it('hands a plugin control the draft, and saves what it writes', () => {
+    const seen: Array<{ hostId: string | null; draft: unknown }> = []
+    mockFontWidgets = [
+      {
+        widgetId: 'picker',
+        Component: (props: { hostId: string | null; draft: unknown; updateDraft: (fn: (draft: any) => any) => void }) => {
+          seen.push({ hostId: props.hostId, draft: props.draft })
+          return (
+            <button
+              type="button"
+              onClick={() =>
+                props.updateDraft((draft) => ({ ...draft, typography: { fontFamily: '"Lora", serif' } }))
+              }
+            >
+              {'Pick Lora'}
+            </button>
+          )
+        },
+      },
+    ]
+    const onSave = jest.fn()
+    render(<ThemeEditor theme={{ spacing: 6 }} onSave={onSave} />)
+    expect(screen.queryByRole('combobox', { name: startsWith('Font family') })).toBeNull()
+    expect(seen[0]).toEqual({ hostId: 'host-1', draft: { spacing: 6 } })
+    fireEvent.click(screen.getByRole('button', { name: 'Pick Lora' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onSave).toHaveBeenCalledWith({ spacing: 6, typography: { fontFamily: '"Lora", serif' } })
   })
 })

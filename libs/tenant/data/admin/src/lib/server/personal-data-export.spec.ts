@@ -669,6 +669,51 @@ describe('exportOrgData', () => {
     })
   })
 
+  it('reads the shipping and tax-service rows, and never the sealed credential', async () => {
+    // Plugin collections the org erasure sweeps by `orgId` (AGL-3612,
+    // AGL-3631): a coverage row the export never reads would be a promise
+    // without a read, so each is seeded and asserted here.
+    const result = await exportOrgData('o1', {
+      firestore: fakeDb({
+        ...seed,
+        docs: {
+          ...seed.docs,
+          shippingTrackers: {
+            tr1: { orgId: 'o1', hostId: 'h1', trackingNumber: '9400' },
+            tr9: { orgId: 'other', trackingNumber: 'Theirs' },
+          },
+          shippingQuoteCache: { q1: { orgId: 'o1', hostId: 'h1', quotes: [] } },
+          taxEngineConnections: {
+            h1: {
+              orgId: 'o1',
+              provider: 'avalara',
+              sealedApiToken: 'v1.sealed-value',
+              apiTokenKeyId: 'k1',
+            },
+          },
+          taxEngineProductCodes: { h1__p1: { orgId: 'o1', taxCode: 'P0000000' } },
+          taxEngineExemptions: { h1__x: { orgId: 'o1', email: 'dana@example.com' } },
+          taxEngineTransactions: { h1__ord: { orgId: 'o1', orderId: 'ord_1' } },
+        },
+      }),
+    })
+    for (const collection of [
+      'shippingTrackers',
+      'shippingQuoteCache',
+      'taxEngineConnections',
+      'taxEngineProductCodes',
+      'taxEngineExemptions',
+      'taxEngineTransactions',
+    ]) {
+      expect([collection, result.data[collection]?.length]).toEqual([collection, 1])
+    }
+    const connection = result.data['taxEngineConnections'][0].data as any
+    expect(connection.provider).toBe('avalara')
+    expect(connection.sealedApiToken).toMatchObject({ redacted: true, present: true })
+    expect(connection.apiTokenKeyId).toMatchObject({ redacted: true })
+    expect(JSON.stringify(result.data)).not.toContain('v1.sealed-value')
+  })
+
   it('carries the coverage decisions into the file itself', async () => {
     const result = await exportOrgData('o1', { firestore: fakeDb(seed) })
     expect(result.coverage.length).toBeGreaterThan(10)

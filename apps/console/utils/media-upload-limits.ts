@@ -155,6 +155,12 @@ export const UPLOAD_TYPES: readonly UploadTypeSpec[] = [
   { contentType: 'text/plain', extensions: ['.txt'], signedMaxBytes: DOCUMENT_MAX_BYTES, directMaxBytes: 10 * MB, label: 'text' },
   { contentType: 'text/markdown', extensions: ['.md'], signedMaxBytes: DOCUMENT_MAX_BYTES, directMaxBytes: 10 * MB, label: 'Markdown' },
   { contentType: 'application/json', extensions: ['.json'], signedMaxBytes: DOCUMENT_MAX_BYTES, directMaxBytes: 10 * MB, label: 'JSON' },
+
+  // Web fonts (AGL-3656). WOFF2 only: the theme's font installer converts a
+  // .ttf, .otf or .woff to WOFF2 (and checks its license) before it reaches
+  // the library, and a published page loads nothing else. Served inline and
+  // edge-cached like an image, because a page loads it the way it loads one.
+  { contentType: 'font/woff2', extensions: ['.woff2'], signedMaxBytes: 10 * MB, directMaxBytes: 10 * MB, label: 'WOFF2 font' },
 ] as const
 
 const UPLOAD_TYPES_BY_CONTENT_TYPE = new Map(
@@ -169,6 +175,12 @@ const UPLOAD_TYPES_BY_EXTENSION = new Map(
 
 export const VIDEO_TYPES = new Set(
   UPLOAD_TYPES.filter((spec) => spec.contentType.startsWith('video/')).map(
+    (spec) => spec.contentType,
+  ),
+)
+
+export const FONT_TYPES = new Set(
+  UPLOAD_TYPES.filter((spec) => spec.contentType.startsWith('font/')).map(
     (spec) => spec.contentType,
   ),
 )
@@ -243,16 +255,25 @@ export function isAllowedUploadType(contentType: string): boolean {
   )
 }
 
-/**
- * Everything that is not an image rides the `videoMedia` entitlement —
- * AGL-162's "video & file uploads" tier gate, which documents join.
- */
-export function requiresFileUploadEntitlement(contentType: string): boolean {
-  return !isImageUploadType(contentType)
+/** Whether a (normalized) content type is a web font (AGL-3656). */
+export function isFontUploadType(contentType: string): boolean {
+  return FONT_TYPES.has(contentType)
 }
 
 /**
- * The three families a stored asset belongs to (AGL-2732).
+ * Everything that is not an image rides the `videoMedia` entitlement —
+ * AGL-162's "video & file uploads" tier gate, which documents join.
+ *
+ * A web font does not (AGL-3656): it is part of a site's theme, a page loads
+ * it the way it loads an image, and a theme's fonts are on every plan. It
+ * still counts toward the storage band like every other file.
+ */
+export function requiresFileUploadEntitlement(contentType: string): boolean {
+  return !isImageUploadType(contentType) && !isFontUploadType(contentType)
+}
+
+/**
+ * The families a stored asset belongs to (AGL-2732; fonts since AGL-3656).
  *
  * Derived from the same table above rather than from a prefix test, for the
  * reason `isImageUploadType` stopped being one: a family decides what the
@@ -267,7 +288,7 @@ export function requiresFileUploadEntitlement(contentType: string): boolean {
  * replace (a corrected PDF, a re-cut MP4, a Word file reissued as a PDF);
  * swapping ACROSS one is a new asset wearing an old id.
  */
-export type MediaUploadKind = 'image' | 'video' | 'document'
+export type MediaUploadKind = 'image' | 'video' | 'font' | 'document'
 
 /**
  * Which family an accepted content type belongs to, or `undefined` for a type
@@ -280,6 +301,7 @@ export function mediaUploadKind(
 ): MediaUploadKind | undefined {
   if (isImageUploadType(contentType)) return 'image'
   if (VIDEO_TYPES.has(contentType)) return 'video'
+  if (FONT_TYPES.has(contentType)) return 'font'
   return UPLOAD_TYPES_BY_CONTENT_TYPE.has(contentType) ? 'document' : undefined
 }
 
@@ -289,6 +311,7 @@ export const MEDIA_UPLOAD_KIND_LABELS: Readonly<
 > = {
   image: 'an image',
   video: 'a video',
+  font: 'a font',
   document: 'a document',
 }
 
@@ -449,7 +472,7 @@ export function uploadAcceptForPickerKind(
 
 /** Every family but video, as the "supported uploads" sentence names them. */
 const NON_VIDEO_UPLOADS_LABEL =
-  'PDF, ZIP, Word, Excel, PowerPoint, CSV, text, Markdown and JSON'
+  'PDF, ZIP, Word, Excel, PowerPoint, CSV, text, Markdown, JSON and WOFF2 fonts'
 
 /**
  * The "supported uploads" sentence. `video: false` stops naming video as a

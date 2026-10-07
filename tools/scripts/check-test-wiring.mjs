@@ -96,6 +96,9 @@ const projects = ls('**/project.json').map((file) => {
     `${dir}/**/*.test.tsx`,
     `${dir}/**/*.test.js`,
     `${dir}/**/*.test.jsx`,
+    // The native projects: Kotlin (JUnit / kotlin.test) and Swift (XCTest / Swift Testing).
+    `${dir}/**/*Test.kt`,
+    `${dir}/**/*Tests.swift`,
   ).length
   return {
     project: json.name ?? dir,

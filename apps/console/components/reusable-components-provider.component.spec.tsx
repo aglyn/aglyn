@@ -121,10 +121,12 @@ jest.mock('firebase/firestore', () => ({
  * free-tier org to `hasEntitlement`.
  */
 let mockOrgReady = true
+/** The plan whose `componentsPerHost` allowance the promote gate reads (AGL-3615). */
+let mockPlan = 'pro'
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({
-    org: mockOrgReady ? { plan: 'pro' } : undefined,
+    org: mockOrgReady ? { plan: mockPlan, subscription: { status: 'active' } } : undefined,
     orgId: 'org1',
     ready: mockOrgReady,
   }),
@@ -148,10 +150,6 @@ jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => ({}),
 }))
 
-let mockEntitled = true
-jest.mock('../constants/entitlements', () => ({
-  hasEntitlement: () => mockEntitled,
-}))
 
 /**
  * A layout whose chrome is about to be promoted: `nav` (the subtree that
@@ -212,7 +210,8 @@ async function promoteNav(name = 'Site nav') {
 describe('ReusableComponentsProvider — promotion swaps the source for an instance (AGL-1193)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockEntitled = true
+    mockPlan = 'pro'
+    mockComponentDocs = []
     mockOrgReady = true
     mockCreateHostResource.mockResolvedValue({ id: 'cmp-new' })
     mockCanvas.toJSON.mockImplementation(() => ({ nodes: layoutNodes() }))
@@ -280,8 +279,23 @@ describe('ReusableComponentsProvider — promotion swaps the source for an insta
     expect(mockCanvas.applyNodes).not.toHaveBeenCalled()
   })
 
-  it('refuses to promote at all without the entitlement', async () => {
-    mockEntitled = false
+  /*
+   * The allowance, not the feature (AGL-3615): Free saves one component per
+   * site, so it promotes the first and is refused the second, in the route's
+   * own words.
+   */
+  it('promotes a Free site’s first component', async () => {
+    mockPlan = 'free'
+    const { promote } = setup()
+    act(() => promote(navNode()))
+
+    expect(await screen.findByRole('button', { name: 'Save component' })).toBeTruthy()
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
+  })
+
+  it('refuses a Free site that holds its one component, before the dialog opens', async () => {
+    mockPlan = 'free'
+    mockComponentDocs = [{ $id: 'held', displayName: 'Hero' }]
     const { promote } = setup()
     act(() => promote(navNode()))
 
@@ -289,9 +303,18 @@ describe('ReusableComponentsProvider — promotion swaps the source for an insta
     expect(mockCreateHostResource).not.toHaveBeenCalled()
     expect(mockCanvas.applyNodes).not.toHaveBeenCalled()
     expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
-      expect.stringContaining('Starter plan'),
+      'Your plan includes 1 reusable component — upgrade in Billing for more',
       expect.objectContaining({ variant: 'warning' }),
     )
+  })
+
+  it('does not count a deleted component against the allowance', async () => {
+    mockPlan = 'free'
+    mockComponentDocs = [{ $id: 'gone', displayName: 'Old', deletedAt: { seconds: 1 } }]
+    const { promote } = setup()
+    act(() => promote(navNode()))
+
+    expect(await screen.findByRole('button', { name: 'Save component' })).toBeTruthy()
   })
 
   /**
@@ -303,14 +326,15 @@ describe('ReusableComponentsProvider — promotion swaps the source for an insta
    */
   it('does not claim the plan lacks the feature while the plan is still loading', () => {
     mockOrgReady = false
-    // What `hasEntitlement` really answers for the undefined `org` the hook
-    // hands out during the window — a "no" that is a guess, not an answer.
-    mockEntitled = false
+    // A Free site at its allowance: what the undefined `org` the hook hands
+    // out during the window would read as — a "no" that is a guess.
+    mockPlan = 'free'
+    mockComponentDocs = [{ $id: 'held', displayName: 'Hero' }]
     const { promote } = setup()
     act(() => promote(navNode()))
 
     expect(mockEnqueueSnackbar).not.toHaveBeenCalledWith(
-      expect.stringContaining('Starter plan'),
+      expect.stringContaining('Your plan includes'),
       expect.anything(),
     )
     expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
@@ -325,12 +349,13 @@ describe('ReusableComponentsProvider — promotion swaps the source for an insta
 
   it('makes the claim once the plan has actually answered', () => {
     mockOrgReady = true
-    mockEntitled = false
+    mockPlan = 'free'
+    mockComponentDocs = [{ $id: 'held', displayName: 'Hero' }]
     const { promote } = setup()
     act(() => promote(navNode()))
 
     expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
-      expect.stringContaining('Starter plan'),
+      expect.stringContaining('Your plan includes 1 reusable component'),
       expect.objectContaining({ variant: 'warning' }),
     )
   })
@@ -339,7 +364,7 @@ describe('ReusableComponentsProvider — promotion swaps the source for an insta
 describe('ReusableComponentsProvider — Edit component (AGL-1303)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockEntitled = true
+    mockPlan = 'pro'
     mockComponentDocs = []
     mockCanvas.toJSON.mockImplementation(() => ({ nodes: {} }))
   })
@@ -415,7 +440,7 @@ describe('ReusableComponentsProvider — Edit component (AGL-1303)', () => {
 describe('ReusableComponentsProvider — email blocks (AGL-3287)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockEntitled = true
+    mockPlan = 'pro'
     mockOrgReady = true
     mockViewType = undefined
     mockComponentDocs = []

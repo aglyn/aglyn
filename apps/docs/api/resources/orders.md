@@ -56,6 +56,7 @@ shipment) **and** a plan that includes commerce. If your plan doesn't, they answ
   },
   "refundedCents": 0,
   "disputed": false,
+  "taxMode": "manual",
   "shippingAddress": {
     "name": "Avery Chen",
     "line1": "500 Main St",
@@ -93,6 +94,7 @@ shipment) **and** a plan that includes commerce. If your plan doesn't, they answ
 | `totals` | object | See [totals](#totals). All integer **cents**. |
 | `refundedCents` | integer | Money already returned, **for any reason**. A lost chargeback lands here too, so a non-zero value doesn't by itself mean the merchant chose to refund — check `disputed`. |
 | `disputed` | boolean | Whether a card dispute has ever been recorded against this order. |
+| `taxMode` | string \| null | Who the tax was charged under: `stripe-automatic` (Stripe Tax — Aglyn collects and remits it as marketplace facilitator, so it never reaches your Stripe account), `manual` (your own rate, yours to remit) or `none`. `null` on an order placed before this was recorded. |
 | `shippingAddress` | object \| null | Present on orders that collected one. Digital and POS orders usually have none. |
 | `couponCode` | string \| null | The discount code the shopper used, if any. |
 | `fulfillments` | array | Shipments recorded against this order — see [fulfillments](#fulfillments). Always present; `[]` on an order nothing has shipped for. |

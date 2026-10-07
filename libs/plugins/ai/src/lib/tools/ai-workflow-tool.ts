@@ -96,7 +96,11 @@ import { HOSTILE_TEXT } from '../runtime/ai-node-tree'
  *    is compiled once for the whole union instead of once per variant;
  *  - a variant serves every step type that carries the same fields, named for
  *    what they hold: the six steps that name a record share `reference`, and
- *    the three that carry one line share `text`;
+ *    the three that carry one line share `text`. A step whose fields are a
+ *    subset of another's rides that variant with the rest empty: `exitFlow`
+ *    with an empty `reference`, `wait` with `waitForEvent`'s empty `event`.
+ *    Each of those saved a whole object once the order, return and funnel
+ *    triggers (AGL-3611, AGL-3605) grew the events' enum past the proof;
  *  - every field stays required and every vocabulary but one stays an enum,
  *    so the model is still decoded into the Actions editor's words. The one
  *    is the event a waitForEvent step waits for: the trigger's `event` already
@@ -107,7 +111,7 @@ import { HOSTILE_TEXT } from '../runtime/ai-node-tree'
  *  - a description is free: a compiler drops it (`aiToolSchemaCompiledBytes`),
  *    so the words a field needs go there and never into the grammar.
  *
- * Ten variants carry all seventeen step types, and the reader below maps the
+ * Eight variants carry all seventeen step types, and the reader below maps the
  * shared fields back onto the step's own key.
  */
 
@@ -262,11 +266,13 @@ function stepVariant(
 
 /** Every step type an automation may carry, grouped by the fields it needs. */
 export const AI_AUTOMATION_STEP_VARIANTS: readonly Schema[] = [
-  stepVariant([...REFERENCE_STEPS], {
+  // `exitFlow` rides here with an empty reference: a variant of its own
+  // costs the grammar a whole object for a step that carries nothing.
+  stepVariant([...REFERENCE_STEPS, 'exitFlow'], {
     reference: {
       type: 'string',
       description:
-        'The record the step acts on — the email list, campaign, workflow, dataset or outbound webhook — in the words of the description, such as "newsletter". Never an id.',
+        'The record the step acts on — the email list, campaign, workflow, dataset or outbound webhook — in the words of the description, such as "newsletter". Never an id. Empty for exitFlow.',
     },
   }),
   stepVariant([...TEXT_STEPS], {
@@ -287,13 +293,13 @@ export const AI_AUTOMATION_STEP_VARIANTS: readonly Schema[] = [
     text: { type: 'string', description: 'What the visitor reads.' },
     severity: { type: 'string', enum: [...SEVERITIES] },
   }),
-  stepVariant(['wait'], { minutes: minutes('How long to wait') }),
-  stepVariant(['waitForEvent'], {
+  // `wait` shares `waitForEvent`'s variant, its event empty: one object in
+  // the grammar instead of two.
+  stepVariant(['wait', 'waitForEvent'], {
     // A string, not the events' enum again — see the header.
-    event: { type: 'string', description: 'One of the trigger events.' },
-    minutes: minutes('When to give up'),
+    event: { type: 'string', description: 'waitForEvent: one of the trigger events. Empty for wait.' },
+    minutes: minutes('wait: how long to wait. waitForEvent: when to give up'),
   }),
-  stepVariant(['exitFlow'], {}),
   stepVariant(['setContactStage'], { stage: { type: 'string', enum: [...CONTACT_LIFECYCLE_STAGES] } }),
   stepVariant(['createCrmTask'], {
     text: { type: 'string', description: 'The task.' },
@@ -973,6 +979,47 @@ export function readAiAutomationAnswer(
     notes,
     unsupported: null,
   })
+}
+
+/**
+ * An answer already read, held as well to an org automation's narrower
+ * vocabulary (AGL-3603): its trigger one the vocabulary names, and every step
+ * a type it names. A refusal names what the vocabulary holds, so the re-ask
+ * can pick from it. An answer that says the automation cannot be built is
+ * left as it is.
+ */
+export function holdAiAutomationAnswerToVocabulary(
+  result: AiGenerationCheckResult<AiAutomationAnswer>,
+  vocabulary: { triggers: readonly HostEventType[]; steps: readonly AiAutomationStepType[] },
+): AiGenerationCheckResult<AiAutomationAnswer> {
+  const answer = result.value
+  if (!answer || answer.unsupported) return result
+  const reader: Reader = { violations: [...result.violations], offending: Object.entries(result.offending ?? {}) }
+  if (!vocabulary.triggers.includes(answer.trigger.event)) {
+    refuse(
+      reader,
+      'automation-trigger',
+      `An org automation starts only on one of: ${vocabulary.triggers.join(', ')}. Pick one of them, or answer with unsupported "no-trigger".`,
+      'trigger.event',
+      answer.trigger.event,
+    )
+  }
+  answer.steps.forEach((step, index) => {
+    if (vocabulary.steps.includes(step.type)) return
+    refuse(
+      reader,
+      'automation-step-type',
+      `An org automation uses only these steps: ${vocabulary.steps.join(', ')}. Leave "${step.type}" out, or answer with unsupported "no-step".`,
+      `steps[${index}]`,
+      step.type,
+    )
+  })
+  if (reader.violations.length === result.violations.length) return result
+  return {
+    value: null,
+    violations: reader.violations,
+    ...(reader.offending.length ? { offending: Object.fromEntries(reader.offending) } : {}),
+  }
 }
 
 // ── Reading an explanation ────────────────────────────────────────────────

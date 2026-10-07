@@ -46,6 +46,8 @@ import {
 import { posMaxDiscountPct } from '../plugin-config'
 import { offlineFeeMonthKey } from './pos-fee-month'
 import { notifyPosSaleCompleted } from './pos-sale'
+import { posSaleStamp } from './pos-sale-stamp'
+import { quoteSaleTaxWithEngine } from './tax-engine-quote'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 
 /**
@@ -84,7 +86,11 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
   // against it through `commerce/pos-payment` until the balance is zero.
   const payment = String(body.payment ?? 'cash') as 'cash' | 'link' | 'folio' | 'open'
   const cashReceivedCents = Math.round(Number(body.cashReceivedCents ?? 0))
-  const customerEmail = String(body.customerEmail ?? '').trim().toLowerCase()
+  // The customer the register's lookup attached (AGL-3609) gives the email
+  // when the cashier did not type one.
+  const customerEmail = String(body.customerEmail ?? body.customer?.email ?? '')
+    .trim()
+    .toLowerCase()
   const reservationId = String(body.reservationId ?? '')
   const registerId = String(body.registerId ?? '')
   // A code the shopper hands the cashier (AGL-305). The same field name the
@@ -205,9 +211,8 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // site, and
     // reading only the workspace's answer would refuse the sale the console
     // says is allowed.
-    const maxDiscountPct = posMaxDiscountPct(
-      await getPluginConfig(ownerOrg?.orgId, 'commerce', { hostId }),
-    )
+    const commerceConfig = await getPluginConfig(ownerOrg?.orgId, 'commerce', { hostId })
+    const maxDiscountPct = posMaxDiscountPct(commerceConfig)
     if (discountPct > maxDiscountPct) {
       return res.status(403).json({
         error:
@@ -241,6 +246,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       .map((doc) => ({
         id: doc.id,
         createdAtMs: doc.get('createdAt')?.toMillis?.() ?? 0,
+        openShiftId: doc.get('openShiftId'),
       }))
       .sort((a, b) => a.createdAtMs - b.createdAtMs || a.id.localeCompare(b.id))
     const rank = registerDocs.findIndex((r) => r.id === registerId)
@@ -256,6 +262,22 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           'registers or upgrade in Billing to use it.',
       })
     }
+    // WHO RANG IT, IN WHICH SHIFT, FOR WHOM (AGL-3609): the PIN-switched
+    // cashier, the register's open shift (refused when the site requires one
+    // and none is open) and the customer the lookup attached.
+    const stamped = await posSaleStamp({
+      hostId,
+      hostRef,
+      registerId,
+      openShiftId: registerDocs[rank]?.openShiftId,
+      signedInUid: decoded.uid,
+      body,
+      config: commerceConfig,
+    })
+    if ('error' in stamped) {
+      return res.status(stamped.status).json({ error: stamped.error })
+    }
+    const saleStamp = stamped.stamp
 
     // Server pricing per line.
     const uniqueIds: string[] = [
@@ -283,17 +305,26 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         return res.status(400).json({ error: `Set a price for ${product.name} before selling it.` })
       }
       const quantity = Math.max(1, Math.min(99, Math.round(Number(raw.quantity ?? 1))))
+      // Modifiers are priced from the product, never from the register
+      // (AGL-3607): the line names option ids and nothing else.
+      const chosen = CommerceModel.resolveLineModifiers(product, raw.modifiers)
+      if (!chosen.ok) return res.status(400).json({ error: chosen.error })
+      const variantLabel = CommerceModel.lineLabelWithModifiers(
+        Object.keys(variant.options ?? {}).length
+          ? Object.values(variant.options ?? {}).join(' / ')
+          : undefined,
+        chosen.modifiers,
+      )
       lineItems.push({
         productId: String(raw.productId),
         ...(variant.id !== 'default' ? { variantId: variant.id } : {}),
         name: product.name,
-        ...(Object.keys(variant.options ?? {}).length
-          ? { variantLabel: Object.values(variant.options ?? {}).join(' / ') }
-          : {}),
+        ...(variantLabel ? { variantLabel } : {}),
         ...(variant.sku ? { sku: variant.sku } : {}),
         productType: product.type,
         quantity,
-        unitAmountCents: Math.round(Number(variant.priceUsd) * 100),
+        unitAmountCents: Math.round(Number(variant.priceUsd) * 100) + chosen.extraCents,
+        ...(chosen.modifiers.length ? { modifiers: chosen.modifiers } : {}),
       })
     }
     if (lineItems.length === 0) {
@@ -509,10 +540,35 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       taxDecision.kind === 'manual'
         ? CommerceModel.resolveTaxRate(taxSettings, taxSettings.origin ?? {})
         : null
-    const taxCents =
+    let taxCents =
       rate && !taxSettings.pricesIncludeTax
         ? CommerceModel.computeTaxCents(itemsCents - discountCents, rate.pct)
         : 0
+    // The merchant's own tax service, where they connected one (AGL-3631):
+    // taxed at the store's ship-from address, as every in-person sale is.
+    // When it does not answer, the store's rate above stands and the order
+    // says so; the cashier is never left waiting on a vendor.
+    const engineTax =
+      taxDecision.kind === 'manual'
+        ? await quoteSaleTaxWithEngine({
+            hostId,
+            settings: taxSettings,
+            channel: 'pos',
+            lines: lineItems.map((line, index) => ({
+              id: String(index),
+              productId: line.productId,
+              ...(line.variantId ? { variantId: line.variantId } : {}),
+              ...(line.sku ? { sku: line.sku } : {}),
+              description: [line.name, line.variantLabel].filter(Boolean).join(' — '),
+              quantity: line.quantity,
+              amountCents: line.unitAmountCents * line.quantity,
+            })),
+            discountCents,
+            customerEmail: customerEmail || null,
+          })
+        : { quote: null, stamp: null }
+    if (engineTax.quote) taxCents = engineTax.quote.taxCents
+    const taxEngineFields = engineTax.stamp ? { taxEngine: engineTax.stamp } : {}
     /*==========================================
      * THE FEE ATTACHES TO THE SALE, NOT TO THE TENDER (AGL-2111).
      *
@@ -724,8 +780,9 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       // tender, and paid by the ledger. The fee on `totals` is the TAKE alone;
       // each card payment adds Stripe's processing cost to its own payout
       // fee, and `pos-sale.ts` restates `feeCents` from what actually paid
-      // when the balance reaches zero.
-      const orderRef = hostRef.collection('orders').doc()
+      // when the balance reaches zero. Named like every console resource,
+      // never by an auto-id.
+      const orderRef = hostRef.collection('orders').doc(Aglyn.createResourceUid())
       const counterRef = hostRef.collection('counters').doc('orders')
       const openTotals = CommerceModel.computeOrderTotals(lineItems, {
         discountCents,
@@ -741,8 +798,9 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           status: 'pending',
           channel: 'pos',
           registerId,
-          cashierId: decoded.uid,
-          ...(discountPct > 0 ? { discountPct, discountBy: decoded.uid } : {}),
+          cashierId: saleStamp.cashierId,
+          ...saleStamp.fields,
+          ...(discountPct > 0 ? { discountPct, discountBy: saleStamp.cashierId } : {}),
           // The slot stays HELD until the sale completes, and is settled or
           // handed back by `pos-sale.ts` (AGL-305): a sale voided half-paid
           // must not count against the merchant's cap.
@@ -752,6 +810,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           lineItems,
           totals: openTotals,
           taxMode: CommerceModel.storefrontTaxModeForDecision(taxDecision, taxCents),
+          ...taxEngineFields,
           posTakeFeeCents: takeFeeCents,
           ...(offlineFeeOrgId ? { posFeeOrgId: offlineFeeOrgId } : {}),
           payments: [],
@@ -810,7 +869,8 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           status: 'pending',
           channel: 'pos',
           registerId,
-          cashierId: decoded.uid,
+          cashierId: saleStamp.cashierId,
+          ...saleStamp.fields,
           // WHO COMPED IT (AGL-2161). `totals.discountCents` recorded that
           // a discount happened and nothing recorded who asked for it or on
           // what basis — `decoded.uid` was read once, for the role gate, and
@@ -823,7 +883,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           // (`issuedBy`, `voidedBy`), and this is the same field for the same
           // reason.
           ...(discountPct > 0
-            ? { discountPct, discountBy: decoded.uid }
+            ? { discountPct, discountBy: saleStamp.cashierId }
             : {}),
           // WHICH PROMOTION, where one applied (AGL-305). `discountPct` and
           // `discountBy` answer for the cashier's own reduction and cannot
@@ -853,6 +913,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
             taxDecision,
             taxCents,
           ),
+          ...taxEngineFields,
           ...(feeCents > 0 ? { feeCollection } : {}),
           customerEmail: customerEmail || null,
           timeline: [{ atMs: Date.now(), event: 'pos-card-pending' }],
@@ -1044,7 +1105,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         // (`issuedBy`, `voidedBy`), and this is the same field for the same
         // reason.
         ...(discountPct > 0
-          ? { discountPct, discountBy: decoded.uid }
+          ? { discountPct, discountBy: saleStamp.cashierId }
           : {}),
         // WHICH PROMOTION, where one applied (AGL-305) — see the card branch
         // above for why the cashier's two fields cannot answer for it.
@@ -1064,13 +1125,15 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           taxDecision,
           taxCents,
         ),
+        ...taxEngineFields,
         // AGL-2111: the fee is on `totals` for this tender too, and this says
         // it will arrive on the org's Aglyn invoice rather than as a short
         // payout — there is no payout, the merchant kept the cash.
         ...(feeCents > 0 ? { feeCollection } : {}),
         // THE TENDER, RECORDED (AGL-3607): one settled payment, so this sale
         // reads the same as a split one rather than by inference.
-        cashierId: decoded.uid,
+        cashierId: saleStamp.cashierId,
+        ...saleStamp.fields,
         payments: [
           {
             id: `pay_${payment}`,
@@ -1081,7 +1144,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
             settledAtMs: paidEvent.atMs,
             takeFeeCents,
             feeCents: 0,
-            cashierId: decoded.uid,
+            cashierId: saleStamp.cashierId,
             ...(payment === 'cash'
               ? {
                   cashTenderedCents: cashReceivedCents,

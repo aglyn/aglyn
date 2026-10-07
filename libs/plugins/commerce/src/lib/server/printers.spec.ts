@@ -297,9 +297,86 @@ describe('queueRegisterPrint — what a sale, a refund or a paid-out queues', ()
     expect(jobs()).toEqual([expect.objectContaining({ kind: 'drawer', reason: 'paid_out' })])
   })
 
+  it('prints a kitchen ticket only on kitchen printers, and only when one is asked for', async () => {
+    const kitchen = (
+      await call({
+        ...STAR,
+        name: 'Kitchen',
+        kickDrawer: false,
+        autoPrintReceipts: false,
+        kitchenTickets: true,
+        deviceId: '00:11:62:00:00:03',
+      })
+    ).body.printerId
+    await call({ ...STAR, kickDrawer: false, deviceId: '00:11:62:00:00:04' })
+    await queueRegisterPrint({ hostId: HOST, registerId: 'reg1', receipt, reason: 'z_report', firestore: store.current })
+    expect(jobs().map((job: any) => job.kind)).toEqual(['receipt'])
+    await queueRegisterPrint({
+      hostId: HOST,
+      registerId: 'reg1',
+      receipt,
+      kitchenTicket: receipt,
+      reason: 'sale',
+      idempotencyKey: 'o2',
+      firestore: store.current,
+    })
+    const kitchenJobs = jobs().filter((job: any) => job.kind === 'kitchen')
+    expect(kitchenJobs).toEqual([expect.objectContaining({ printerId: kitchen, reason: 'sale' })])
+  })
+
+  it('follows the customer’s choice: none prints no receipt, print prints one without auto-print', async () => {
+    await call({ ...STAR, autoPrintReceipts: false })
+    await queueRegisterPrint({
+      hostId: HOST,
+      registerId: 'reg1',
+      receipt,
+      openDrawer: true,
+      receiptChoice: 'none',
+      reason: 'sale',
+      firestore: store.current,
+    })
+    // No paper for the customer, but the cash drawer still opens.
+    expect(jobs()).toEqual([expect.objectContaining({ kind: 'drawer' })])
+    store.current = new MemoryFirestore()
+    store.current.write(`hosts/${HOST}`, { displayName: 'Corner Cafe', memberRoles: { manager: 'admin' } })
+    store.current.write(`hosts/${HOST}/registers/reg1`, { name: 'Front counter' })
+    await call({ ...STAR, autoPrintReceipts: false, kickDrawer: false })
+    await queueRegisterPrint({
+      hostId: HOST,
+      registerId: 'reg1',
+      receipt,
+      receiptChoice: 'print',
+      reason: 'sale',
+      firestore: store.current,
+    })
+    expect(jobs()).toEqual([expect.objectContaining({ kind: 'receipt' })])
+  })
+
   it('a register with no printers queues nothing', async () => {
     expect(
       await queueRegisterPrint({ hostId: HOST, registerId: 'reg9', receipt, reason: 'sale', firestore: store.current }),
     ).toEqual({ jobIds: [] })
+  })
+
+  it('prints a shift report once, on the receipt printer, keyed on its cause (AGL-3609)', async () => {
+    const { receiptPrinter } = await addTwo()
+    const report = {
+      title: 'Z REPORT',
+      storeName: 'Corner Cafe',
+      sections: [{ section: 'Sales', rows: [{ label: 'Orders', value: '3' }] }],
+    }
+    const input = {
+      hostId: HOST,
+      registerId: 'reg1',
+      report,
+      reason: 'z_report',
+      idempotencyKey: 'shift1-a',
+      firestore: store.current,
+    }
+    await queueRegisterPrint(input)
+    await queueRegisterPrint(input)
+    expect(jobs()).toEqual([
+      expect.objectContaining({ kind: 'report', printerId: receiptPrinter, reason: 'z_report', report }),
+    ])
   })
 })

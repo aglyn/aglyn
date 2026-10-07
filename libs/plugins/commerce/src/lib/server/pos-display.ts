@@ -19,9 +19,11 @@ import { createHash, randomBytes, randomInt } from 'crypto'
 import { consumeRateLimit, firebaseAdmin, getPluginConfig, getOrgForHost } from '@aglyn/tenant-data-admin'
 import type { PluginApiHandler, PluginApiRequest } from '@aglyn/aglyn/server'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import { pluginSmsAvailable } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
 import * as CommerceModel from '../model'
 import { posRegisterSettings } from '../plugin-config'
 import { authorizePosStaff, posQueryBody, posRequestBody } from './pos-auth'
+import { POS_CURRENCY } from './pos-stripe'
 
 /*==========================================
  * THE CUSTOMER DISPLAY (AGL-3608).
@@ -75,18 +77,85 @@ function stateRef(hostId: string, registerId: string) {
     .doc(posDisplayStateId(hostId, registerId))
 }
 
-/** Writes the display state whole, so nothing from the last prompt lingers. */
+/**
+ * The store's currency (`hosts/{hostId}/settings/store.currency`, lower
+ * case), which every figure on the customer's screen is formatted in. A
+ * store that never chose one is in the currency the register charges.
+ */
+export async function posDisplayCurrency(hostId: string): Promise<string> {
+  const snapshot = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(hostId)
+    .collection('settings')
+    .doc('store')
+    .get()
+    .catch(() => null)
+  const chosen = String(snapshot?.exists ? (snapshot.get('currency') ?? '') : '')
+    .trim()
+    .toLowerCase()
+  return /^[a-z]{3}$/.test(chosen) ? chosen : POS_CURRENCY
+}
+
+/**
+ * Writes the display state whole, so nothing from the last prompt lingers —
+ * a customer's typed address included. The currency is the store's, stamped
+ * here so the screen never formats a figure in one the register made up.
+ */
 export async function writePosDisplayState(
   hostId: string,
   registerId: string,
   state: CommerceModel.PosDisplayState,
 ): Promise<void> {
-  await stateRef(hostId, registerId).set({ ...state, hostId, registerId })
+  await stateRef(hostId, registerId).set({
+    ...state,
+    currency: await posDisplayCurrency(hostId),
+    hostId,
+    registerId,
+  })
 }
 
 /** The register's display returns to the thank-you screen with no customer data. */
 export async function resetPosDisplay(hostId: string, registerId: string): Promise<void> {
   await writePosDisplayState(hostId, registerId, { mode: 'thanks', updatedAtMs: Date.now() })
+}
+
+/**
+ * Ends the customer's turn once the register has acted on their receipt
+ * choice (AGL-3608): a display still on the receipt prompt says thank you,
+ * and an answer holding a typed email address or phone number is dropped
+ * from the state either way, so no contact detail outlives the sale on the
+ * server doc a public screen reads.
+ *
+ * Conditional, in a transaction, because the receipt can be sent after the
+ * cashier has started the next sale: a display already showing the next
+ * customer's basket is left alone.
+ */
+export async function finishPosDisplayReceipt(hostId: string, registerId: string): Promise<void> {
+  const firestore = firebaseAdmin.app().firestore()
+  const ref = stateRef(hostId, registerId)
+  const currency = await posDisplayCurrency(hostId)
+  await firestore.runTransaction(async (transaction: any) => {
+    const snapshot = await transaction.get(ref)
+    if (!snapshot.exists) return
+    const state = snapshot.data() as CommerceModel.PosDisplayState
+    if (state.mode === 'receipt') {
+      transaction.set(ref, {
+        mode: 'thanks',
+        updatedAtMs: Date.now(),
+        currency,
+        hostId,
+        registerId,
+      })
+      return
+    }
+    if (state.response && (state.response.email || state.response.phone)) {
+      const rest = { ...state }
+      delete rest.response
+      transaction.set(ref, rest)
+    }
+  })
 }
 
 /** Signs every display of a register out, and forgets its state. */
@@ -299,6 +368,11 @@ async function staffAction(
     }
     case 'push': {
       const state = CommerceModel.sanitizePosDisplayState(body['state'], Date.now())
+      // "Text" is never offered on a screen when the store cannot send one.
+      if (state.receipt && !pluginSmsAvailable()) {
+        const channels = state.receipt.channels.filter((channel) => channel !== 'sms')
+        state.receipt.channels = channels.length ? channels : ['print', 'none']
+      }
       await writePosDisplayState(hostId, registerId, state)
       return res.status(200).json({ ok: true, promptId: state.promptId ?? null })
     }

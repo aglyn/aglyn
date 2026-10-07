@@ -18,8 +18,12 @@
 import { resetPluginServicesForTests } from './plugin-services'
 import {
   pluginTaxProfile,
+  pluginTaxEngine,
   pluginTaxProfileOwner,
+  quotePluginTaxEngine,
+  registerPluginTaxEngine,
   registerPluginTaxProfile,
+  type PluginTaxEngine,
   type PluginTaxProfile,
 } from './plugin-tax-profile'
 
@@ -100,5 +104,76 @@ describe('the tenant’s tax rule, asked of its owner', () => {
     ).toThrow()
     expect(pluginTaxProfileOwner()).toBe('ledger')
     expect(pluginTaxProfile().flatTax({ pct: 10 }, 1_000, 'Tax').taxCents).toBe(100)
+  })
+})
+
+describe('an outside tax engine, asked within a deadline (AGL-3631)', () => {
+  const QUOTE = {
+    provider: 'ledger-engine',
+    providerLabel: 'Ledger Engine',
+    taxCents: 825,
+    lines: [{ id: 'a', taxCents: 825 }],
+    shippingTaxCents: 0,
+    sandbox: true,
+  }
+  const REQUEST = {
+    hostId: 'host-1',
+    currency: 'usd',
+    channel: 'online' as const,
+    lines: [{ id: 'a', quantity: 1, amountCents: 10_000 }],
+  }
+
+  it('answers `null`, not a refusal, when no plugin offers an engine', async () => {
+    expect(pluginTaxEngine()).toBeNull()
+    await expect(quotePluginTaxEngine(REQUEST)).resolves.toEqual({
+      ok: false,
+      reason: 'unavailable',
+      message: expect.any(String),
+    })
+  })
+
+  it('hands back the engine’s quote', async () => {
+    const engine: PluginTaxEngine = {
+      status: async () => ({ connected: true, provider: 'ledger-engine' }),
+      quote: async () => QUOTE,
+      validateAddress: async () => ({ valid: true, normalized: null, messages: [] }),
+    }
+    registerPluginTaxEngine(engine, { pluginId: 'ledger' })
+    expect(pluginTaxEngine()).toBe(engine)
+    await expect(quotePluginTaxEngine(REQUEST)).resolves.toEqual({ ok: true, quote: QUOTE })
+  })
+
+  it('names an engine that threw, without throwing itself', async () => {
+    registerPluginTaxEngine(
+      {
+        status: async () => ({ connected: true }),
+        quote: async () => {
+          throw new Error('401 from the vendor')
+        },
+        validateAddress: async () => ({ valid: false, normalized: null, messages: [] }),
+      },
+      { pluginId: 'ledger' },
+    )
+    await expect(quotePluginTaxEngine(REQUEST)).resolves.toEqual({
+      ok: false,
+      reason: 'error',
+      message: '401 from the vendor',
+    })
+  })
+
+  it('stops waiting at the deadline, so a slow vendor cannot hang a checkout', async () => {
+    registerPluginTaxEngine(
+      {
+        status: async () => ({ connected: true }),
+        quote: () => new Promise(() => undefined),
+        validateAddress: async () => ({ valid: false, normalized: null, messages: [] }),
+      },
+      { pluginId: 'ledger' },
+    )
+    await expect(quotePluginTaxEngine(REQUEST, { timeoutMs: 20 })).resolves.toEqual({
+      ok: false,
+      reason: 'timeout',
+      message: expect.stringContaining('20 ms'),
+    })
   })
 })

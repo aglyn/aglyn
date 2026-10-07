@@ -120,6 +120,11 @@ export interface PosPrinter {
   /** Open the cash drawer wired to this printer on cash sales, cash refunds and paid-outs. */
   kickDrawer: boolean
   /**
+   * Print a kitchen (or bar, or packing) ticket for every sale on this
+   * register: the order number, each item and quantity, and no prices.
+   */
+  kitchenTickets?: boolean
+  /**
    * The NV logo stored in the printer with the vendor's utility, printed at the
    * top of every receipt: Star's logo number (1-255), Epson's `key1,key2`
    * (e.g. `48,48`). Empty prints no logo.
@@ -133,7 +138,19 @@ export interface PosPrinter {
   updatedAtMs?: number
 }
 
-export type PrintJobKind = 'receipt' | 'drawer' | 'test'
+export type PrintJobKind = 'receipt' | 'kitchen' | 'drawer' | 'test' | 'report'
+
+/**
+ * A titled report printed on the receipt roll (AGL-3609): a register shift's
+ * X or Z report. Rows are already formatted, so every printer prints the
+ * figures the console shows.
+ */
+export interface PrintReport {
+  title: string
+  storeName: string
+  subtitle?: string
+  sections: Array<{ section: string; rows: Array<{ label: string; value: string; strong?: boolean }> }>
+}
 
 export type PrintJobStatus = 'queued' | 'printing' | 'done' | 'failed' | 'expired' | 'canceled'
 
@@ -156,6 +173,8 @@ export interface PrintJob {
   status: PrintJobStatus
   /** The receipt to render; the printer's brand and width decide the bytes at delivery. */
   receipt?: ReceiptData
+  /** The report a `report` job prints. */
+  report?: PrintReport
   /** Open the drawer as this job starts (a cash sale's receipt). */
   openDrawer?: boolean
   /** The store a test page names. */
@@ -194,8 +213,11 @@ export const PRINT_JOB_MAX_ATTEMPTS = 3
  */
 export const PRINT_JOB_DELIVER_WITHIN_MS: Record<PrintJobKind, number> = {
   receipt: 30 * 60 * 1000,
+  // A ticket that reaches the kitchen long after the order is a meal remade twice.
+  kitchen: 10 * 60 * 1000,
   test: 10 * 60 * 1000,
   drawer: 2 * 60 * 1000,
+  report: 30 * 60 * 1000,
 }
 
 /** Print-job rows are kept for a week, then removed by the Firestore TTL policy. */

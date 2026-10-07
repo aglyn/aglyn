@@ -137,6 +137,11 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   useConfirmationContext: () => ({ confirm }),
 }))
 
+// A register is removed on the server (AGL-3617); the route answers yes.
+jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
+  authorizedFetch: async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) }),
+}))
+
 import RegistersCard from './registers-card.component'
 
 beforeEach(() => {

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 import type { ConsolePluginOrgMount } from '@aglyn/aglyn'
+import type { ConsoleHostScreensZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { definePluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 
 /**
@@ -78,3 +79,15 @@ export interface EmailTemplateRecipientsZoneProps {
 
 export const EMAIL_TEMPLATE_RECIPIENTS_ZONE =
   definePluginZone<EmailTemplateRecipientsZoneProps>('emailTemplateRecipients')
+
+/**
+ * A site's email templates list, beside New template and in the list's empty
+ * state (AGL-3596): another way to start an email design. A widget here is
+ * handed the site and its org — the `hostScreens` contract a site's pages,
+ * templates, forms and components hand too — and opens its own way to a new
+ * design; it writes nothing through the page.
+ */
+export type HostEmailTemplatesZoneProps = ConsoleHostScreensZoneProps
+
+export const HOST_EMAIL_TEMPLATES_ZONE =
+  definePluginZone<HostEmailTemplatesZoneProps>('hostEmailTemplates')

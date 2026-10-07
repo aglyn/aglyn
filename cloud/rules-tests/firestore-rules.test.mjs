@@ -671,6 +671,11 @@ beforeEach(async () => {
       screenId: 'screen-1', nodes: { root: {} },
     })
     await setDoc(doc(db, 'hosts', HOST, 'variables', 'var-1'), { name: 'v', value: '1' })
+    // A booking service a draft writer made (AGL-3616), so activating it on
+    // the Bookings page can be told apart from creating one.
+    await setDoc(doc(db, 'hosts', HOST, 'services', 'svc-draft'), {
+      name: 'Estimate visit', durationMinutes: 60, status: 'draft',
+    })
     // An existing webhook, so the AGL-1360 create/update split can be told
     // apart: create is API-only, update (the soft delete) stays client-side.
     await setDoc(doc(db, 'hosts', HOST, 'webhooks', 'wh1'), {
@@ -1100,6 +1105,24 @@ describe('hosts', () => {
         setDoc(doc(authed(EDITOR), 'hosts', HOST, coll, 'new-doc'), { name: 'x' }),
       )
     }
+    // A draft service is activated, and sent back to draft, by an editor on
+    // the Bookings page (AGL-3616): one field on a service that exists. A
+    // viewer may do neither, and a draft still cannot be created directly —
+    // the writer that makes one runs on the Admin SDK, inside its allowance.
+    await assertSucceeds(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'services', 'svc-draft'), { status: 'active' }),
+    )
+    await assertSucceeds(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'services', 'svc-draft'), { status: 'draft' }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(VIEWER), 'hosts', HOST, 'services', 'svc-draft'), { status: 'active' }),
+    )
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'services', 'svc-new'), {
+        name: 'x', durationMinutes: 30, status: 'draft',
+      }),
+    )
     // Webhooks joined the API-only creates (AGL-1360). WEBHOOK_MAX_PER_HOST
     // was enforced ONLY by the console counting the rows its Firestore
     // listener held; with `persistentLocalCache` that count could be
@@ -1591,6 +1614,16 @@ describe('hosts', () => {
       // `/api/commerce/printers` and the printers' poll routes write either.
       'printers',
       'printJobs',
+      // A register member's PIN hash and lockout counter (AGL-3609). Only
+      // /api/commerce/pos-staff-pin reads or writes one: a read hands out a
+      // short PIN's hash to crack offline, a write plants a PIN or lifts a
+      // lockout. Named here for the `registers` reason above.
+      'posStaffPins',
+      // A site's shopping-channel feeds and connections (AGL-3637). A feed
+      // document holds the token that is the catalog feed's only lock, and a
+      // connection a sealed channel OAuth token; only the sales-channels
+      // routes read or write either.
+      'salesChannels',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -5893,6 +5926,47 @@ describe('pre-release hardening guards', () => {
   })
 
   /**
+   * AGL-3605. Funnels: every member of the site READS the definitions (the
+   * Funnels card lists them), and nobody writes them client-side — the save
+   * route checks the plan, the admin-or-editor role and every step, and
+   * switches the site's recording with it. A recorded visit and a cached
+   * result are server-only both ways: a member gets counts from the results
+   * route, never somebody's visit.
+   */
+  it('funnels are member-readable and route-written; visits and results are server-only (AGL-3605)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'hosts', HOST, 'funnels', 'f1'), {
+        name: 'Pricing to contact',
+        steps: [{ type: 'page', key: '/home', match: 'exact' }, { type: 'order', key: '' }],
+      })
+      await setDoc(doc(db, 'hosts', HOST, 'funnelJourneys', 'abcdefghijklmnopqrstuv'), {
+        steps: [{ t: 'page', k: '/home', at: 1 }],
+      })
+      await setDoc(doc(db, 'hosts', HOST, 'funnelResults', 'f1_1_2026-10-01_2026-10-06'), {
+        funnelId: 'f1',
+        result: { entered: 1 },
+      })
+    })
+    for (const uid of [OWNER, EDITOR, AUTHOR, VIEWER]) {
+      await assertSucceeds(getDoc(doc(authed(uid), 'hosts', HOST, 'funnels', 'f1')))
+      await assertFails(setDoc(doc(authed(uid), 'hosts', HOST, 'funnels', 'forged'), { name: 'x', steps: [] }))
+      await assertFails(updateDoc(doc(authed(uid), 'hosts', HOST, 'funnels', 'f1'), { name: 'Renamed' }))
+      await assertFails(deleteDoc(doc(authed(uid), 'hosts', HOST, 'funnels', 'f1')))
+      await assertFails(getDoc(doc(authed(uid), 'hosts', HOST, 'funnelJourneys', 'abcdefghijklmnopqrstuv')))
+      await assertFails(
+        setDoc(doc(authed(uid), 'hosts', HOST, 'funnelJourneys', 'abcdefghijklmnopqrstuv'), { steps: [] }),
+      )
+      await assertFails(getDoc(doc(authed(uid), 'hosts', HOST, 'funnelResults', 'f1_1_2026-10-01_2026-10-06')))
+      await assertFails(
+        setDoc(doc(authed(uid), 'hosts', HOST, 'funnelResults', 'forged'), { result: { entered: 999 } }),
+      )
+    }
+    await assertFails(getDoc(doc(authed(OUTSIDER), 'hosts', HOST, 'funnels', 'f1')))
+    await assertFails(getDoc(doc(anon(), 'hosts', HOST, 'funnels', 'f1')))
+  })
+
+  /**
    * The org library's tombstones, which are the ones that actually exist in
    * production today — the org DAM is where the 2026-08-13 pass ran. There is
    * no catch-all under `match /orgs/{orgId}`, so this is default-deny rather
@@ -6651,6 +6725,84 @@ describe('remembered export choices are their owner’s alone (AGL-3525)', () =>
 })
 
 /**
+ * The native apps' push devices (AGL-3620, AGL-3651): `users/{uid}/devices/{id}`
+ * holds one install's APNs device token or FCM registration token. The app
+ * writes it for its signed-in owner; the server fan-out reads it on the Admin
+ * SDK. Nobody else reads a token, a row carries nothing but the registry's own
+ * fields, and each transport's token is held to its own shape.
+ */
+describe('push devices are their owner’s alone, in the registry’s shape (AGL-3651)', () => {
+  const APNS_TOKEN = 'a1b2c3d4'.repeat(8)
+  const FCM_TOKEN = `dQw4w9WgXcQ:APA91b${'Fz_-0aZ'.repeat(20)}`
+  const APNS = () => ({
+    token: APNS_TOKEN,
+    transport: 'apns',
+    apnsEnvironment: 'production',
+    platform: 'ios',
+    app: 'aglyn',
+    appVersion: '1.0.0',
+    lastSeen: serverTimestamp(),
+    createdAt: serverTimestamp(),
+  })
+  const FCM = () => ({
+    token: FCM_TOKEN,
+    transport: 'fcm',
+    platform: 'android',
+    app: 'aglyn-pos',
+    lastSeen: serverTimestamp(),
+  })
+  const device = (db, uid = OWNER) => doc(db, 'users', uid, 'devices', 'install-1')
+  const put = (data) => setDoc(device(authed(OWNER)), data)
+  const without = (data, key) => Object.fromEntries(Object.entries(data).filter(([k]) => k !== key))
+
+  it('lets the owner register, refresh, read and remove an APNs or FCM device', async () => {
+    await mustAllow('the owner registering an iPhone', put(APNS()))
+    await mustAllow('the owner refreshing it', put({ ...APNS(), appVersion: '1.0.1' }))
+    await mustAllow('a Mac on the sandbox environment', put({ ...APNS(), platform: 'macos', apnsEnvironment: 'sandbox' }))
+    await mustAllow('the longest APNs token', put({ ...APNS(), token: 'f'.repeat(200) }))
+    await mustAllow('an Android device on FCM', put(FCM()))
+    await mustAllow('the longest FCM token', put({ ...FCM(), token: 'a'.repeat(4096) }))
+    await mustAllow('the owner reading it', getDoc(device(authed(OWNER))))
+    await mustAllow('the owner removing it on sign-out', deleteDoc(device(authed(OWNER))))
+  })
+
+  it('holds each transport to its own token, environment and platform', async () => {
+    await mustDeny('an Expo token', put({ ...APNS(), token: 'ExponentPushToken[abcdefgh1234]' }))
+    await mustDeny('a row with no transport', put(without(APNS(), 'transport')))
+    await mustDeny('an unknown transport', put({ ...APNS(), transport: 'expo' }))
+    await mustDeny('an APNs token that is not hex', put({ ...APNS(), token: 'z'.repeat(64) }))
+    await mustDeny('an APNs token too short', put({ ...APNS(), token: 'a'.repeat(63) }))
+    await mustDeny('an APNs token too long', put({ ...APNS(), token: 'a'.repeat(201) }))
+    await mustDeny('an APNs row without its environment', put(without(APNS(), 'apnsEnvironment')))
+    await mustDeny('an unknown APNs environment', put({ ...APNS(), apnsEnvironment: 'staging' }))
+    await mustDeny('an APNs row from Android', put({ ...APNS(), platform: 'android' }))
+    await mustDeny('an FCM token with a stray character', put({ ...FCM(), token: `${FCM_TOKEN}!` }))
+    await mustDeny('an FCM token too short', put({ ...FCM(), token: 'a'.repeat(99) }))
+    await mustDeny('an FCM token too long', put({ ...FCM(), token: 'a'.repeat(4097) }))
+    await mustDeny('an FCM row carrying an APNs environment', put({ ...FCM(), apnsEnvironment: 'production' }))
+    await mustDeny('an FCM row from an iPhone', put({ ...FCM(), platform: 'ios' }))
+  })
+
+  it('refuses an unknown platform or app, a foreign field and a client clock', async () => {
+    await mustDeny('an unknown platform', put({ ...APNS(), platform: 'web' }))
+    await mustDeny('an unknown app', put({ ...APNS(), app: 'other' }))
+    await mustDeny('a field outside the registry', put({ ...APNS(), admin: true }))
+    await mustDeny('an over-long app version', put({ ...APNS(), appVersion: 'v'.repeat(33) }))
+    await mustDeny('a client-chosen lastSeen', put({ ...APNS(), lastSeen: 1 }))
+  })
+
+  it('lets nobody else read, write or remove one', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(device(context.firestore()), { ...APNS() })
+    })
+    await mustDeny('another member reading a token', getDoc(device(authed(OUTSIDER))))
+    await mustDeny('another member overwriting it', setDoc(device(authed(OUTSIDER), OWNER), APNS()))
+    await mustDeny('another member removing it', deleteDoc(device(authed(OUTSIDER), OWNER)))
+    await mustDeny('a visitor reading it', getDoc(device(anon())))
+  })
+})
+
+/**
  * The AGL-1501 lockdown surface (AGL-1507), live in ruleset 0370ace4.
  *
  * `lockdowns/{id}` holds the platform and per-user panic records. Reads are
@@ -6671,6 +6823,54 @@ describe('remembered export choices are their owner’s alone (AGL-3525)', () =>
  * could choose its own id, and manufacture a groundswell of reports against a
  * competitor's site. The queue's entire value is that a human believes it.
  */
+describe('payment method domains are staff-read, server-written (AGL-3629)', () => {
+  const key = 'live~shop.example.com'
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'paymentMethodDomains', key), {
+        domain: 'shop.example.com', mode: 'live', stripeId: 'pmd_1',
+        enabled: true, hostId: HOST, checkedAtMs: 1,
+      })
+    })
+  })
+
+  it('staff read a registration; nobody else does', async () => {
+    await mustAllow(
+      'staff reading a payment method domain',
+      getDoc(doc(authed(STAFF, { staff: true }), 'paymentMethodDomains', key)),
+    )
+    for (const uid of [OWNER, EDITOR, VIEWER, OUTSIDER]) {
+      await mustDeny(
+        `${uid} reading a payment method domain`,
+        getDoc(doc(authed(uid), 'paymentMethodDomains', key)),
+      )
+    }
+  })
+
+  it('nobody writes — the site owner and staff included', async () => {
+    for (const [label, db] of [
+      ['an anonymous visitor', env.unauthenticatedContext().firestore()],
+      ['the site owner', authed(OWNER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]) {
+      await mustDeny(
+        `${label} marking a domain registered`,
+        setDoc(doc(db, 'paymentMethodDomains', 'live~other.example.com'), {
+          domain: 'other.example.com', enabled: true, stripeId: 'pmd_forged',
+        }),
+      )
+      await mustDeny(
+        `${label} changing a registration`,
+        updateDoc(doc(db, 'paymentMethodDomains', key), { enabled: false }),
+      )
+      await mustDeny(
+        `${label} deleting a registration`,
+        deleteDoc(doc(db, 'paymentMethodDomains', key)),
+      )
+    }
+  })
+})
+
 describe('the abuse-report queue is staff-read, nobody-write (AGL-1964)', () => {
   beforeEach(async () => {
     await env.withSecurityRulesDisabled(async (context) => {
@@ -12839,6 +13039,76 @@ describe("a site member's password hash is no client's (AGL-3308)", () => {
 })
 
 /**
+ * The register's server-only records (AGL-3609).
+ *
+ * A staff PIN's hash is no client's — not even its own member's, and not
+ * staff's: the PIN route is the only reader. Shifts and register returns
+ * live under `registers`, whose writes are the Admin SDK's (the pool is
+ * billed), so a cashier cannot rewrite a drawer count or forge a refund
+ * record; every member of the site can still read them for the history.
+ */
+describe("the register's PINs, shifts and returns are server-written (AGL-3609)", () => {
+  const HASH = `${'a'.repeat(32)}:${'b'.repeat(128)}`
+  const ROLES = [
+    ['viewer', VIEWER],
+    ['author', AUTHOR],
+    ['editor', EDITOR],
+    ['admin', OWNER],
+  ]
+  const pinDoc = (db, uid) => doc(db, 'hosts', HOST, 'posStaffPins', uid)
+  const shiftDoc = (db) => doc(db, 'hosts', HOST, 'registers', 'front', 'shifts', 's1')
+  const returnDoc = (db) => doc(db, 'hosts', HOST, 'registers', 'front', 'returns', 'r1')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'hosts', HOST, 'registers', 'front'), { name: 'Front' })
+      await setDoc(pinDoc(db, EDITOR), { pinScrypt: HASH, failedAttempts: 4, lockedUntilMs: null })
+      await setDoc(shiftDoc(db), { status: 'open', openingFloatCents: 10000, cashEvents: [] })
+      await setDoc(returnDoc(db), { refundedCents: 500, orderId: 'o1' })
+    })
+  })
+
+  it('no client reads or writes a PIN, its own member and staff included', async () => {
+    for (const [role, uid] of [...ROLES, ['staff', STAFF]]) {
+      const db = role === 'staff' ? authed(STAFF, { staff: true }) : authed(uid)
+      await mustDeny(`a ${role} reading a PIN hash`, getDoc(pinDoc(db, EDITOR)))
+      await mustDeny(
+        `a ${role} listing the PIN hashes`,
+        getDocs(query(collection(db, 'hosts', HOST, 'posStaffPins'), limit(10))),
+      )
+      await mustDeny(`a ${role} planting a PIN`, setDoc(pinDoc(db, uid), { pinScrypt: HASH }))
+      await mustDeny(
+        `a ${role} lifting a lockout`,
+        updateDoc(pinDoc(db, EDITOR), { failedAttempts: 0 }),
+      )
+      await mustDeny(`a ${role} deleting a PIN`, deleteDoc(pinDoc(db, EDITOR)))
+    }
+  })
+
+  it('no member writes a shift or a register return, and every member reads them', async () => {
+    for (const [role, uid] of ROLES) {
+      const db = authed(uid)
+      await mustDeny(
+        `a ${role} rewriting a drawer count`,
+        updateDoc(shiftDoc(db), { openingFloatCents: 0 }),
+      )
+      await mustDeny(
+        `a ${role} opening a shift client-side`,
+        setDoc(doc(db, 'hosts', HOST, 'registers', 'front', 'shifts', 's2'), { status: 'open' }),
+      )
+      await mustDeny(
+        `a ${role} forging a register return`,
+        setDoc(doc(db, 'hosts', HOST, 'registers', 'front', 'returns', 'r2'), { refundedCents: 1 }),
+      )
+      await mustDeny(`a ${role} deleting a register return`, deleteDoc(returnDoc(db)))
+      await mustAllow(`a ${role} reading a shift`, getDoc(shiftDoc(db)))
+      await mustAllow(`a ${role} reading a register return`, getDoc(returnDoc(db)))
+    }
+  })
+})
+
+/**
  * The Forms list's queries, each as a site member runs it (AGL-3330).
  *
  * The list (`libs/plugins/forms/src/lib/components/form-list-query.ts`) puts
@@ -13267,6 +13537,250 @@ describe('returns, order webhooks and the event outbox are the server’s (AGL-3
       await assertFails(getDoc(doc(db, 'pluginEventOutbox', 'e1')))
       await assertFails(setDoc(doc(db, 'pluginEventOutbox', 'e2'), { status: 'pending' }))
       await assertFails(deleteDoc(doc(db, 'pluginEventOutbox', 'e1')))
+    }
+  })
+})
+
+describe('shipping records are the server’s alone (AGL-3612)', () => {
+  // Every one is written and read through the Admin SDK by the shipping
+  // plugin's routes: an account's sealed ids and the consent a balance debit
+  // stands on, each site's label settings, the labels the usage meter
+  // invoices, the trackers a carrier's webhook resolves and the quotes a
+  // label is bought from. The org owner and staff are refused like everyone,
+  // because none of them has a client surface to break.
+  const ORG_DOCS = [
+    ['shippingAccounts', 'shippo_live'],
+    ['shippingHostSettings', HOST],
+    ['shippingLabels', 'lbl_1'],
+    ['shippingAddressChecks', `${HOST}__order-1`],
+  ]
+  const TOP_DOCS = [
+    ['shippingTrackers', 'trk_1'],
+    ['shippingQuoteCache', 'q_shp_1'],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of ORG_DOCS) {
+        await setDoc(doc(db, 'orgs', ORG, name, id), { orgId: ORG, hostId: HOST, costCents: 625 })
+      }
+      for (const [name, id] of TOP_DOCS) {
+        await setDoc(doc(db, name, id), { orgId: ORG, hostId: HOST, recordId: 'order-1' })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of ORG_DOCS) {
+        const ref = doc(db, 'orgs', ORG, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(
+          `${who} listing ${name}`,
+          getDocs(query(collection(db, 'orgs', ORG, name), limit(10))),
+        )
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { costCents: 0 }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+      for (const [name, id] of TOP_DOCS) {
+        const ref = doc(db, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, name), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, name, 'new'), { orgId: ORG }))
+      }
+    }
+  })
+})
+
+describe('tax service records are the server’s alone (AGL-3631)', () => {
+  // A site's connection holds the merchant's sealed AvaTax or TaxJar
+  // credential; the exemptions decide who pays no tax; the records say which
+  // sales the service holds. All four are written and read by the
+  // tax-engines plugin's routes and event handlers through the Admin SDK.
+  const DOCS = [
+    ['taxEngineConnections', HOST],
+    ['taxEngineProductCodes', `${HOST}__prod-1`],
+    ['taxEngineExemptions', `${HOST}__abc`],
+    ['taxEngineTransactions', `${HOST}__order-1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of DOCS) {
+        await setDoc(doc(db, name, id), {
+          orgId: ORG,
+          hostId: HOST,
+          sealedApiToken: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of DOCS) {
+        const ref = doc(db, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, name), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, name, `${HOST}__new`), { orgId: ORG, hostId: HOST }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
+describe('email platform connections are the server’s alone (AGL-3639)', () => {
+  // A connection holds the merchant's sealed Mailchimp, Klaviyo, Omnisend or
+  // Attentive credential and the cursors the sync resumes from; an owed
+  // event is an order about to reach the merchant's flows. All written and
+  // read by the marketing-platforms plugin's routes and job through the
+  // Admin SDK.
+  const DOCS = [
+    ['marketingPlatformConnections', `${HOST}_klaviyo`],
+    ['marketingPlatformConnections', `${HOST}_klaviyo`, 'log', 'run-1'],
+    ['marketingPlatformEvents', `${HOST}_klaviyo_evt-1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), {
+          orgId: ORG,
+          hostId: HOST,
+          sealedToken: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
+describe('ShipStation credentials are server-only (AGL-3613)', () => {
+  const connection = (db) => doc(db, 'commerceShipStationConnections', HOST)
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(connection(context.firestore()), {
+        hostId: HOST,
+        username: 'aglyn-abc123',
+        sealedPassword: 'sb1.tss1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        passwordKeyId: 'tss1',
+        createdAtMs: 1,
+        createdBy: OWNER,
+      })
+    })
+  })
+
+  it('no client reads a site’s connection: not its admin, not staff, not a stranger', async () => {
+    await mustDeny('the site owner reading the ShipStation connection', getDoc(connection(authed(OWNER))))
+    await mustDeny('a site editor reading the ShipStation connection', getDoc(connection(authed(EDITOR))))
+    await mustDeny('staff reading the ShipStation connection', getDoc(connection(authed(STAFF, { staff: true }))))
+    await mustDeny('a visitor reading the ShipStation connection', getDoc(connection(anon())))
+    await mustDeny(
+      'the site owner listing ShipStation connections',
+      getDocs(collection(authed(OWNER), 'commerceShipStationConnections')),
+    )
+  })
+
+  it('no client writes one: the console connects, rotates and disconnects on the Admin SDK', async () => {
+    await mustDeny(
+      'the site owner replacing the sealed password',
+      setDoc(connection(authed(OWNER)), { hostId: HOST, username: 'mine', sealedPassword: 'x' }),
+    )
+    await mustDeny(
+      'staff replacing the sealed password',
+      updateDoc(connection(authed(STAFF, { staff: true })), { sealedPassword: 'x' }),
+    )
+    await mustDeny('the site owner disconnecting from the browser', deleteDoc(connection(authed(OWNER))))
+    await mustDeny(
+      'a stranger minting a connection for another site',
+      setDoc(doc(authed('uid-stranger'), 'commerceShipStationConnections', 'other-host'), { username: 'x' }),
+    )
+  })
+})
+
+/**
+ * A site's shopping-channel state (AGL-3637).
+ *
+ * A feed document holds the token that is the only lock on the store's
+ * catalog feed, and a connection holds a sealed OAuth token for a channel's
+ * API. The sales-channels routes are the only reader and writer, so no
+ * client — no member of any role, and not staff — reads or writes one.
+ */
+describe('sales channel feeds and connections are server-only (AGL-3637)', () => {
+  const feedDoc = (db) => doc(db, 'hosts', HOST, 'salesChannels', 'feed-google')
+  const connectionDoc = (db) => doc(db, 'hosts', HOST, 'salesChannels', 'connection-meta')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(feedDoc(db), { channel: 'google', enabled: true, token: 't'.repeat(43) })
+      await setDoc(connectionDoc(db), { provider: 'meta', sealedToken: 'sealed' })
+    })
+  })
+
+  it('no member and no staff reads, lists or writes a feed token or a connection', async () => {
+    const readers = [
+      ['viewer', authed(VIEWER)],
+      ['author', authed(AUTHOR)],
+      ['editor', authed(EDITOR)],
+      ['admin', authed(OWNER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]
+    for (const [role, db] of readers) {
+      await mustDeny(`a ${role} reading a feed token`, getDoc(feedDoc(db)))
+      await mustDeny(`a ${role} reading a channel connection`, getDoc(connectionDoc(db)))
+      await mustDeny(
+        `a ${role} listing the channel state`,
+        getDocs(query(collection(db, 'hosts', HOST, 'salesChannels'), limit(10))),
+      )
+      await mustDeny(
+        `a ${role} planting a feed token`,
+        setDoc(doc(db, 'hosts', HOST, 'salesChannels', 'feed-meta'), { token: 'x', enabled: true }),
+      )
+      await mustDeny(`a ${role} rewriting a feed token`, updateDoc(feedDoc(db), { token: 'x' }))
+      await mustDeny(`a ${role} deleting a connection`, deleteDoc(connectionDoc(db)))
     }
   })
 })

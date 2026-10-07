@@ -43,6 +43,23 @@ card on the Products hub; see [Commerce](../commerce/overview.md).
 2. Configure **availability** — the windows when slots are offered.
 3. Add the **booking widget** to a page as a canvas element.
 
+### Draft services {#draft-services}
+
+A service is either **active** — it takes bookings — or a **draft**: set up, and
+offered nowhere. A draft is left out of the booking widget's list, shows no open
+times, and a booking for it is refused, even through a link that names it.
+
+- A service you add with **Add service** is active as soon as you save it.
+- A service set up for you elsewhere in Aglyn, rather than added on this page,
+  starts as a draft, so nothing goes live before you have looked at it. If no
+  price was given, it is set to **Contact for price**.
+- On the Bookings page a draft carries a **Draft** label and an **Activate**
+  button. **Activate** puts it on your site straight away.
+- **Deactivate** turns an active service back into a draft: it stops taking
+  bookings without being deleted, and the bookings it already has stay.
+
+A draft counts toward your plan's service allowance, like an active service.
+
 ### Price varies, free estimate, or contact for price {#price-labels}
 
 A service that is quoted at the job doesn't need a price. In the service's

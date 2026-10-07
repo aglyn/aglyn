@@ -29,6 +29,7 @@ import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { describePaymentRisk, type PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { type HostBookingService, isBookingReminderDue } from '../model'
+import { type BookingServiceStatus, bookingServiceStatus } from '../model/bookings'
 import {
   BOOKING_FIELD_ASKS,
   type BookingFieldAsk,
@@ -408,6 +409,38 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
     servicesFromCache,
   ])
 
+  /**
+   * A draft is activated here, and only here (AGL-3616): a service a draft
+   * writer made is set up and offered nowhere until a person looks at it and
+   * says it takes bookings. Deactivating sends a live one back to draft,
+   * which takes it off the site without deleting it; bookings it already
+   * holds stand. One field, so the seed guard the dialog's whole-document
+   * save needs has nothing to protect here.
+   */
+  const handleServiceStatus = useCallback(
+    (service: any, status: BookingServiceStatus) => async () => {
+      try {
+        await updateDoc(doc(firestore, 'hosts', hostId, 'services', service.$id), {
+          status,
+          updatedAt: Timestamp.now(),
+        })
+        enqueueSnackbar(
+          status === 'active'
+            ? `${service.name} now takes bookings`
+            : `${service.name} is a draft — it takes no bookings until activated`,
+          { variant: 'success', persist: false },
+        )
+      } catch (error: any) {
+        console.error(error)
+        enqueueSnackbar(error?.message ?? 'An error has occurred', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+    },
+    [firestore, hostId, enqueueSnackbar],
+  )
+
   const handleDeleteService = useCallback(
     (service: any) => async () => {
       const confirmed = await confirm({
@@ -549,9 +582,16 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                 sx={{ alignItems: 'center' }}
               >
                 <Stack sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="body2" noWrap>
-                    {service.name}
-                  </Typography>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+                    <Typography variant="body2" noWrap>
+                      {service.name}
+                    </Typography>
+                    {bookingServiceStatus(service.status) === 'draft' ? (
+                      <Tooltip title="Set up, and offered nowhere until you activate it">
+                        <Chip label="Draft" size="small" />
+                      </Tooltip>
+                    ) : null}
+                  </Stack>
                   <Typography variant="caption" color="text.secondary" noWrap>
                     {`${service.durationMinutes} min · ${bookingPriceText(service).replace(/^Free$/, 'free')}` +
                       ` · ${service.timezone ?? 'UTC'}`}
@@ -583,6 +623,19 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                 >
                   {'Edit'}
                 </Button>
+                {bookingServiceStatus(service.status) === 'draft' ? (
+                  <Button
+                    size="small"
+                    color="primary"
+                    onClick={handleServiceStatus(service, 'active')}
+                  >
+                    {'Activate'}
+                  </Button>
+                ) : (
+                  <Button size="small" onClick={handleServiceStatus(service, 'draft')}>
+                    {'Deactivate'}
+                  </Button>
+                )}
                 <Button
                   size="small"
                   color="error"

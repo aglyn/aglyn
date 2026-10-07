@@ -15,6 +15,12 @@
  * limitations under the License.
  */
 
+import type {
+  HostThemeFontCategory,
+  HostThemeFontFace,
+  HostThemeFontMetrics,
+} from './host-theme-fonts'
+
 /**
  * Persisted host theme document types.
  *
@@ -77,8 +83,12 @@ export interface HostThemeFont {
   /** Font family name, e.g. "Inter". */
   family: string
   weights?: Array<number>
+  italics?: Array<number>
   /** Where the tenant loads the font from; system fonts need no loading. */
-  source?: 'google' | 'system'
+  source?: 'google' | 'system' | 'custom'
+  category?: HostThemeFontCategory
+  metrics?: HostThemeFontMetrics
+  faces?: Array<HostThemeFontFace>
 }
 
 /**

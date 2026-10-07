@@ -10,8 +10,179 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — Pirate Ship and shipping spreadsheets (newest)
+## October 2026 — a font picker, your own fonts, and faster fonts on every site (newest)
 
+- **[Font picker](building-sites/theme-builder/edit-your-theme.md#fonts)** — browse every
+  Google font in the theme editor, with search, style filters, previews in your own
+  site's words, pairing suggestions for headings and body text, and the download size
+  each choice adds to your pages.
+- **[Upload your own font](building-sites/theme-builder/edit-your-theme.md#upload-your-own-font)** —
+  add WOFF2, WOFF, TTF or OTF files to your media library from the theme editor. Each
+  file's license is checked, it is converted and trimmed for the web, and uploading the
+  same weight again replaces it.
+- **[Fonts load the way your text uses them](building-sites/theme-builder/edit-your-theme.md#set-colors-and-fonts)** —
+  your published site now loads each font at the weights its headings and body text
+  use, from your own address, as the smallest set of files. Text that shows before a
+  font arrives is sized to match it, so the page no longer shifts when the font swaps
+  in.
+
+## October 2026 — sell on Google, Meta, TikTok, Pinterest, Snapchat and Microsoft
+
+- **[Sales channels](commerce-and-bookings/commerce/sales-channels.md)** — a product
+  feed for each of Google (Shopping, free listings and YouTube), Meta (Facebook and
+  Instagram), TikTok, Pinterest, Snapchat and Microsoft Shopping, in the format each
+  channel asks for, under **Products → Settings → Sales channels**. Every variant is
+  listed with its own photo, price in your store's currency, sale price, stock,
+  brand, barcode, part number, condition, Google category and shipping, with no limit
+  on catalog size. Each card has its channel's setup steps and a private address you
+  can replace, and **Check products** lists what each feed leaves out and why.
+- **[Brand, barcode and category](commerce-and-bookings/commerce/sales-channels.md#brand-barcode-and-category)** —
+  a new **Shopping channels** section in the product editor, with store-wide defaults
+  for what a product leaves blank.
+
+## October 2026 — wallets and pay later on your own domain
+
+- **[Payment methods](commerce-and-bookings/commerce/overview.md#payment-methods)** —
+  Apple Pay, Google Pay and Link now show on your own domain, because Aglyn registers
+  it with Stripe when you connect it. A new **Payment methods** card in commerce
+  settings turns Klarna, Afterpay, Affirm, Cash App Pay, Amazon Pay and the wallets
+  on or off, shows what each needs and its limits, and asks Stripe to enable them on
+  your payout account. Stablecoin payments can be turned on when the platform offers
+  them.
+
+<!--
+  AGL-3614 — Accounting is built and release-flagged OFF (`release_accounting`) until a
+  deployment has its Intuit or Xero app credentials. This entry is held unpublished, like
+  the two guides it links (`unlisted: true`): when the flag is switched on, remove this
+  comment's markers, move "(newest)" here from the heading below, and delete
+  `unlisted: true` from commerce-and-bookings/commerce/connect-quickbooks-online.md and
+  connect-xero.md.
+
+## October 2026 — accounting sync
+
+- **Accounting** — connect [QuickBooks Online](commerce-and-bookings/commerce/connect-quickbooks-online.md)
+  or [Xero](commerce-and-bookings/commerce/connect-xero.md) and every paid order, refund,
+  Aglyn fee and Stripe payout is posted to your books as it happens, to the accounts you
+  choose: a sales receipt (or invoice and payment) per order, or one summary journal a
+  day. Set a start date to bring in earlier sales; anything the ledger refuses waits
+  under **Needs attention** with its reason and a Retry button. Included with every plan
+  that sells online.
+-->
+
+<!--
+  AGL-3631 — Tax services are built and hidden until a deployment sets
+  TAX_ENGINES_TOKEN_KEY (the key merchants' credentials are sealed under; no
+  vendor account of Aglyn's is needed). This entry is held unpublished, like the
+  guide it links (`unlisted: true`): once the key is set on aglyn.com, remove this
+  comment's markers, move "(newest)" here from the top heading, and delete
+  `unlisted: true` and the "Rolling out" note from
+  commerce-and-bookings/commerce/tax-services.md.
+
+## October 2026 — your own tax service
+
+- **[Avalara AvaTax and TaxJar](commerce-and-bookings/commerce/tax-services.md)** —
+  connect your own AvaTax or TaxJar account and checkout and the register charge the
+  sales tax it calculates, with product tax codes and exempt customers. Paid orders,
+  refunds and register returns are recorded in your account. If the service does not
+  answer in time, the sale is taxed at your own rates and the order says so. You remain
+  responsible for registering, filing and paying your sales tax.
+-->
+
+<!--
+  AGL-3639 — Email platform connections are built and hidden until a deployment
+  sets MARKETING_PLATFORMS_TOKEN_KEY on the console (the key merchants' API keys
+  are sealed under; no vendor account of Aglyn's is needed). This entry is held
+  unpublished, like the guide it links (`unlisted: true`): once the key is set on
+  aglyn.com, remove this comment's markers, move "(newest)" here from the top
+  heading, and delete `unlisted: true` and the "Rolling out" note from
+  marketing-and-automation/email-campaigns/email-platforms.md.
+
+## October 2026 — your own email platform, kept in step
+
+- **[Mailchimp, Klaviyo and Omnisend](marketing-and-automation/email-campaigns/email-platforms.md)** —
+  connect your own account to a site with its API key and your contacts stay in
+  step both ways: everyone the site may market to is added with their name, tags and
+  order history, an unsubscribe on either side reaches the other, and Klaviyo and
+  Omnisend receive your started checkouts and orders for their abandoned-cart and
+  post-purchase flows. A sync log under each connection shows what ran and anything
+  that needs you.
+-->
+
+## October 2026 — the register takes every payment
+
+- **[Split payments](commerce-and-bookings/commerce/pos-and-reservations.md#taking-payment)** —
+  **Charge** opens the sale and the register takes as many payments as it needs: type
+  less than the balance to split it across cash, cards, gift cards and room charges.
+  The sale is paid, and its stock taken, when the balance reaches zero. **Void sale**
+  hands back everything taken on it.
+- **[Card readers](commerce-and-bookings/commerce/pos-and-reservations.md#card-readers)** —
+  where card readers are available for your store, register a Stripe Reader S700 or
+  BBPOS WisePOS E under **Commerce → Settings → POS devices** with the code it shows,
+  and the customer taps, inserts or swipes there. A declined card can be retried on
+  the same charge.
+- **[Tips](commerce-and-bookings/commerce/pos-and-reservations.md#tips)** — turn on
+  **Ask for tips at the register** and set your percentages; the customer picks a tip
+  on the card reader or the customer display, or the cashier picks one. Tips are not
+  counted as sales and carry no platform fee.
+- **[Typed cards](commerce-and-bookings/commerce/pos-and-reservations.md#taking-payment)** —
+  **Type card** takes a card that is not present, such as a phone order, in Stripe's
+  own card form with its normal checks, 3-D Secure included.
+- **[Gift cards at the register](commerce-and-bookings/commerce/pos-and-reservations.md#taking-payment)** —
+  check a card's balance and apply it; it pays what it can and leaves the rest open.
+- **[A register made for tablets](commerce-and-bookings/commerce/pos-and-reservations.md#the-register)** —
+  photo tiles with stock and basket counts, **★ Quick keys** for your best sellers, a
+  sheet for sizes and modifiers with the price on its **Add** button, and basket lines
+  you tap to change. The products and the register sit side by side on a wide screen,
+  and on a smaller one the register slides up from a bar that always shows the total.
+- **[Modifiers](commerce-and-bookings/commerce/pos-and-reservations.md#modifiers)** —
+  add choices such as a milk or an extra shot to a product, free or priced, required or
+  optional, picked as the item is rung up.
+- **[Customer display](commerce-and-bookings/commerce/pos-and-reservations.md#customer-display)** —
+  pair a tablet facing the customer with a one-time code from the register. It shows
+  your logo and the basket as you ring it up, and lets the customer choose their tip and
+  their receipt. The [hardware guide](commerce-and-bookings/commerce/pos-hardware.md)
+  covers readers, scanners, printers and the tablet.
+
+## October 2026 — POS hardware
+
+- **[Cloud receipt printers](commerce-and-bookings/commerce/pos-hardware.md#receipt-printers)** —
+  a Star CloudPRNT or Epson Server Direct Print printer prints the register's
+  receipts from any device, with no driver: pair it on the register's **Hardware**
+  card, paste its URL into the printer, and every sale prints. Reprint any register
+  order, and see each printer's status and recent jobs.
+- **[Kitchen tickets](commerce-and-bookings/commerce/pos-hardware.md#what-prints)** — a
+  printer in the kitchen, at the bar or on the packing bench prints each sale's items
+  and quantities, with no prices.
+- **[Cash drawer](commerce-and-bookings/commerce/pos-hardware.md#cash-drawer)** — a
+  drawer plugged into the printer opens on every cash sale, including the cash part of
+  a split payment, and when the shift records cash paid in, paid out or dropped.
+- **[Barcode scanning](commerce-and-bookings/commerce/pos-hardware.md#barcode-scanning)** —
+  scan with a tablet's or phone's camera at the register and in the product editor,
+  and a USB or Bluetooth scanner works even when the search box does not have focus.
+- **[Product labels](commerce-and-bookings/commerce/pos-hardware.md#product-labels)** —
+  print price and barcode labels on a label printer, or download ZPL for a Zebra.
+
+## October 2026 — running the register
+
+- **[Running the register](commerce-and-bookings/commerce/pos-operations.md)** — the
+  point of sale now runs a whole trading day. Open a **shift** with a starting float,
+  record cash paid in, paid out and dropped to the safe, and close with a count: the
+  **X and Z reports** show sales by tender, tips, refunds, discounts and tax, and the
+  drawer's expected cash against what you counted. Staff switch in with their own
+  **PIN** on a shared tablet, and every sale records who rang it. Look **customers** up
+  by name, email or phone and attach them to the sale. Take **returns and exchanges** at
+  the register by scanning the receipt's barcode: the money goes back the way it was
+  paid, and the items go back in stock. Receipts print on an **80 mm** roll, with a
+  gift receipt option.
+
+## October 2026 — ShipStation, Pirate Ship and shipping spreadsheets
+
+- **[Use ShipStation with Aglyn](commerce-and-bookings/commerce/use-shipstation.md)** —
+  connect your store to ShipStation as a Custom Store from the new **ShipStation** card
+  under your store's **Settings**. ShipStation imports the orders you still have to ship,
+  with weights, SKUs and options, and each label you buy there marks the order shipped
+  in Aglyn and emails your customer the tracking link, once. Canceled and refunded
+  orders follow to ShipStation on its next import.
 - **[Use Pirate Ship with Aglyn](commerce-and-bookings/commerce/use-pirate-ship.md)** —
   **Export for shipping** on the Orders card writes the orders still to ship as a
   spreadsheet Pirate Ship, Shippo or EasyPost reads, and **Import tracking** takes the
@@ -31,7 +202,26 @@ for the how-to.
 - **[Resend receipt](commerce-and-bookings/commerce/order-notifications.md#resend-receipt)**
   — from any order, to the customer or to another address.
 
+## October 2026 — shipping from a postal address
+
+- **[Shipping](commerce-and-bookings/commerce/shipping.md)** — zones, rates and local
+  pickup on a page of their own, and each inventory location now carries the postal
+  address it ships from.
+
 ## October 2026 — checkout on your own site
+
+- **[Returns](commerce-and-bookings/commerce/orders-and-returns.md#returns)** — buyers ask
+  for a return from their account or the order's status page, item by item with a reason, within the window you set.
+  Approve or decline it, mark it received with what goes back in stock and where, and
+  refund the original payment, once. Each step emails the buyer.
+- **[Ship in parts](commerce-and-bookings/commerce/orders-and-returns.md#fulfillment)** —
+  fulfill some units of an order now and the rest later, each shipment with its own
+  carrier tracking link, editable or cancelable.
+- **[Invoices](commerce-and-bookings/commerce/orders-and-returns.md#invoices)** — print an
+  order as an invoice, or save it as a PDF, beside the packing slip.
+- **[Order webhooks](commerce-and-bookings/commerce/orders-and-returns.md#order-webhooks)** —
+  send order and return events to your own systems, signed, retried for about a day, with
+  a delivery log you can resend from.
 
 - **[In-page checkout](guides/commerce-end-to-end.md#paying-without-leaving-your-site)** —
   shoppers pay on your store instead of being sent to Stripe's page. The Buy and

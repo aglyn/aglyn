@@ -1,0 +1,405 @@
+{
+  "$comment": "What tools/scripts/generate-native-contracts.mjs emits for the native apps (docs/mobile/native-architecture.md §5). Every module must be on tools/scripts/mobile-pure-modules.json. `types` become Swift/Kotlin types, `values` become contracts.generated.json entries (typed by ContractValues). `ints` narrows a number field to an integer, `json` reads a field as raw JSON, `omit` leaves a field out; each names `Type.field` and must match a field the run emits. `listQueryCases` names the list declarations whose planner cases are recorded. `functionCases` runs pure functions over listed inputs (`args`, or `argsProduct` for every combination) into function-cases.generated.json, so each platform's formatter or rule replays the console's answers.",
+  "modules": {
+    "libs/shared/util/tools/src/lib/list-query/list-query-plan.ts": {
+      "types": [
+        "ListQueryDeclaration",
+        "ListQueryRequest",
+        "ListQueryPlan",
+        "ListQueryFilter",
+        "ListQuerySort",
+        "ListQueryOp"
+      ],
+      "values": [
+        "LIST_QUERY_ID_PATH",
+        "LIST_QUERY_DISJUNCTIONS"
+      ]
+    },
+    "libs/shared/util/tools/src/lib/list-query/list-filter.ts": {
+      "types": [
+        "ListFilterField",
+        "ListFilterKind",
+        "ListFilterRequest"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/name-search.ts": {
+      "values": [
+        "NAME_TOKEN_MAX_PREFIX",
+        "NAME_TOKEN_LIMIT",
+        "SCOPED_SEARCH_JOIN"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/constants/orders-list-query.ts": {
+      "values": [
+        "ORDER_LIST_QUERY",
+        "ORDER_LIST_HEADERS",
+        "ORDER_LIST_SELECT_FIELDS",
+        "ORDER_STATUS_OPTIONS",
+        "ORDER_CHANNEL_OPTIONS",
+        "ORDER_DISPUTE_OPTIONS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/constants/product-list-query.ts": {
+      "values": [
+        "PRODUCT_LIST_QUERY",
+        "PRODUCT_LIST_BASE",
+        "PRODUCT_LIST_HEADERS",
+        "PRODUCT_LIST_OPTIONS",
+        "PRODUCT_LIST_SELECT_FIELDS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-orders.ts": {
+      "types": [
+        "OrderStatus",
+        "OrderChannel",
+        "HostOrder"
+      ],
+      "values": [
+        "ORDER_STATUS_LABELS",
+        "ORDER_CHANNEL_LABELS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/product-modifiers.ts": {
+      "types": [
+        "ProductModifierGroup",
+        "ProductModifierOption",
+        "OrderLineModifier",
+        "ModifierSelection"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-receipt.ts": {
+      "types": [
+        "ReceiptData",
+        "ReceiptLine",
+        "ReceiptTender"
+      ]
+    },
+    "libs/plugins/redirects/src/lib/model/redirects.ts": {
+      "types": [
+        "HostRedirect"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/mobile-push.ts": {
+      "types": [
+        "MobileDevice",
+        "MobilePushData",
+        "AccountPushSettings"
+      ]
+    }
+  },
+  "ints": [],
+  "json": [
+    "ListQueryFilter.value",
+    "ListQueryRefusal.clause"
+  ],
+  "omit": [],
+  "listQueryCases": {
+    "ORDER_LIST_QUERY": {},
+    "PRODUCT_LIST_QUERY": {
+      "base": "PRODUCT_LIST_BASE"
+    }
+  },
+  "functionCases": {
+    "formatOrderNumber": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
+      "args": [
+        [
+          {
+            "number": 1042
+          }
+        ],
+        [
+          {
+            "number": 7
+          },
+          "ignoredDocId"
+        ],
+        [
+          {},
+          "aBcDeF123456"
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "orderChannelLabel": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
+      "args": [
+        [
+          "online"
+        ],
+        [
+          "pos"
+        ],
+        [
+          "draft"
+        ],
+        [
+          "subscription"
+        ],
+        [
+          "kiosk"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "canTransitionOrder": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
+      "argsProduct": [
+        [
+          "pending",
+          "paid",
+          "partially_fulfilled",
+          "fulfilled",
+          "delivered",
+          "cancelled",
+          "refunded"
+        ],
+        [
+          "pending",
+          "paid",
+          "partially_fulfilled",
+          "fulfilled",
+          "delivered",
+          "cancelled",
+          "refunded"
+        ]
+      ]
+    },
+    "orderRefundState": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
+      "args": [
+        [
+          {
+            "status": "paid",
+            "totals": {
+              "totalCents": 5000
+            }
+          }
+        ],
+        [
+          {
+            "status": "paid",
+            "refundedCents": 1000,
+            "totals": {
+              "totalCents": 5000
+            }
+          }
+        ],
+        [
+          {
+            "status": "paid",
+            "refundedCents": 5000,
+            "totals": {
+              "totalCents": 5000
+            }
+          }
+        ],
+        [
+          {
+            "status": "refunded",
+            "amountCents": 1200
+          }
+        ]
+      ]
+    },
+    "orderRefundSummary": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
+      "args": [
+        [
+          {
+            "status": "paid",
+            "totals": {
+              "totalCents": 5000
+            }
+          }
+        ],
+        [
+          {
+            "status": "paid",
+            "refundedCents": 1250,
+            "totals": {
+              "totalCents": 5000
+            }
+          }
+        ],
+        [
+          {
+            "status": "refunded",
+            "refundedCents": 5000,
+            "totals": {
+              "totalCents": 5000
+            }
+          }
+        ]
+      ]
+    },
+    "orderNetCents": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
+      "args": [
+        [
+          {
+            "totals": {
+              "totalCents": 5000
+            },
+            "refundedCents": 1250
+          }
+        ],
+        [
+          {
+            "amountCents": 900
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "apportionCents": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
+      "args": [
+        [
+          [
+            1000,
+            1000,
+            1000
+          ],
+          10
+        ],
+        [
+          [
+            300,
+            700
+          ],
+          1000
+        ],
+        [
+          [
+            2500,
+            2500
+          ],
+          10
+        ],
+        [
+          [
+            100,
+            200
+          ],
+          10
+        ],
+        [
+          [
+            0,
+            0
+          ],
+          50
+        ],
+        [
+          [
+            5
+          ],
+          7
+        ],
+        [
+          [],
+          10
+        ]
+      ]
+    },
+    "formatReceiptMoney": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-receipt.ts",
+      "args": [
+        [
+          1250,
+          "usd"
+        ],
+        [
+          -300,
+          "eur"
+        ],
+        [
+          123456789,
+          "USD"
+        ],
+        [
+          1250,
+          "jpy"
+        ],
+        [
+          12345,
+          "kwd"
+        ],
+        [
+          1250,
+          ""
+        ],
+        [
+          1250,
+          "zzz"
+        ]
+      ]
+    },
+    "formatReceiptTime": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-receipt.ts",
+      "args": [
+        [
+          1791900240000
+        ],
+        [
+          1791900240000,
+          "America/Chicago"
+        ],
+        [
+          1791900240000,
+          "Asia/Kolkata"
+        ],
+        [
+          1791900240000,
+          "Not/AZone"
+        ]
+      ]
+    },
+    "formatOrderMoney": {
+      "module": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
+      "args": [
+        [
+          1250
+        ],
+        [
+          1250,
+          "eur"
+        ],
+        [
+          -99,
+          "usd"
+        ],
+        [
+          1250,
+          "zzz"
+        ]
+      ]
+    },
+    "orderPaidCents": {
+      "module": "libs/plugins/commerce/src/lib/model/order-figures.ts",
+      "args": [
+        [
+          {
+            "totals": {
+              "totalCents": 5000
+            },
+            "refundedCents": 1000
+          }
+        ],
+        [
+          {
+            "productId": "p1",
+            "amountCents": 900
+          }
+        ]
+      ]
+    }
+  }
+}

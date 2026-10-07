@@ -776,6 +776,13 @@ export type NotificationChannel = 'console' | 'email'
 export interface NotificationChannelPrefs {
   console?: boolean
   email?: boolean
+  /**
+   * The mobile apps' push channel (AGL-3620), tri-state like the others.
+   * Resolved by `notificationPushEnabled` (`notification-push.ts`), where an
+   * unanswered push follows the console feed, so it is not a
+   * {@link NotificationChannel} and no category declares a default for it.
+   */
+  push?: boolean
 }
 
 export type NotificationCategoryPrefs = Partial<

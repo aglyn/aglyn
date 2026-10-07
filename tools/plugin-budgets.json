@@ -1,58 +1,110 @@
 {
+  "_note": "Eager bytes per plugin: the static import closure of src/index.ts, minified, everything outside the plugin external (tools/scripts/check-plugin-budgets.mjs). Every entry but commerce and logic was re-baselined on 2026-10-07 (AGL-3649) when the check moved from one unsplit bundle to code splitting, so a lazy chunk stopped counting as eager and the check became a CI guard; most budgets fell for that reason, the plugins added since AGL-436 got their first entry, and the entry for contacts, no longer a plugin, was removed. commerce and logic are left as they stand, for the Commerce v3 work (P-AGL-141) to re-baseline.",
   "mui": {
-    "baseline": 62408,
-    "budget": 78848
+    "baseline": 21992,
+    "budget": 27648
   },
   "forms": {
-    "baseline": 36150,
-    "budget": 46080
+    "baseline": 20665,
+    "budget": 26624
   },
   "bookings": {
-    "baseline": 15214,
-    "budget": 19456
+    "baseline": 22576,
+    "budget": 28672
   },
   "commerce": {
-    "baseline": 182826,
-    "budget": 229376
+    "baseline": 154458,
+    "budget": 193536
   },
   "marketplace": {
-    "baseline": 36079,
-    "budget": 46080
-  },
-  "contacts": {
-    "baseline": 9401,
-    "budget": 12288
+    "baseline": 248508,
+    "budget": 311296,
+    "note": "AGL-3649: re-measured as eager bytes. Was 35 KB as one unsplit bundle (AGL-436); its barrel now reaches 243 KB, none of it lazy."
   },
   "data": {
-    "baseline": 31178,
-    "budget": 39936
+    "baseline": 69457,
+    "budget": 87040
   },
   "email": {
-    "baseline": 32688,
+    "baseline": 32515,
     "budget": 40960
   },
   "events-calendar": {
-    "baseline": 11074,
-    "budget": 14336
+    "baseline": 6350,
+    "budget": 8192
   },
   "inbox": {
-    "baseline": 7938,
-    "budget": 10240
+    "baseline": 4811,
+    "budget": 6144
   },
   "logic": {
-    "baseline": 26059,
-    "budget": 32768
+    "baseline": 31765,
+    "budget": 39936
   },
   "marketing": {
-    "baseline": 50528,
-    "budget": 63488
+    "baseline": 53813,
+    "budget": 67584
   },
   "redirects": {
-    "baseline": 11669,
-    "budget": 15360
+    "baseline": 8246,
+    "budget": 11264
   },
   "workflows": {
-    "baseline": 35643,
-    "budget": 45056
+    "baseline": 16580,
+    "budget": 21504
+  },
+  "crm": {
+    "baseline": 40641,
+    "budget": 51200
+  },
+  "outreach": {
+    "baseline": 57393,
+    "budget": 72704
+  },
+  "accounting": {
+    "baseline": 4847,
+    "budget": 6144
+  },
+  "ai": {
+    "baseline": 54894,
+    "budget": 60416,
+    "headroom": 1.1,
+    "note": "AGL-3649: 409 KB eager before, when plugin.ts imported every card and page statically and the console loads AI on every screen (it fills the dock and the top bar). Every component is now registered through lazyWidget, so what is eager is the registrations, the copy assistant's provider (it wraps the page, so it cannot load late), the provider catalog and the config schema. 10% headroom, not 25%: this plugin's eager bytes are on every console page, and a card made eager again is the regression this entry exists to catch."
+  },
+  "theme-presets": {
+    "baseline": 50022,
+    "budget": 63488
+  },
+  "sms": {
+    "baseline": 3201,
+    "budget": 4096
+  },
+  "shipping": {
+    "baseline": 8704,
+    "budget": 11264
+  },
+  "video-delivery": {
+    "baseline": 9086,
+    "budget": 12288
+  },
+  "funnels": {
+    "baseline": 22847,
+    "budget": 28672
+  },
+  "tax-engines": {
+    "baseline": 5387,
+    "budget": 7168
+  },
+  "sales-channels": {
+    "baseline": 2705,
+    "budget": 4096
+  },
+  "marketing-platforms": {
+    "baseline": 5107,
+    "budget": 7168
+  },
+  "fonts": {
+    "baseline": 4059,
+    "budget": 5120
   }
 }

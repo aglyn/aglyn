@@ -277,6 +277,19 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
       },
     ],
   },
+  'libs/native/kotlin/webview/src/commonMain/kotlin/com/aglyn/webview/ConsoleSession.kt': {
+    note: "Signs the native app's console web view in (AGL-3652): it posts the ID token to the console's session route and copies the cookies that route sets (`__session` and its companions above) into the web view's own cookie store. It mints nothing of its own.",
+    cookies: [
+      {
+        name: '__session',
+        token: '__session',
+        surface: `The mobile app's console web view, for ${CONSOLE_HOST}`,
+        purpose: 'Keeps you signed in to the console inside the mobile app',
+        duration: '14 days, as the console sets it',
+        httpOnly: true,
+      },
+    ],
+  },
   'apps/console/app/api/auth/activity/route.ts': {
     note: 'Server-authoritative last-activity stamp for idle sign-out (AGL-697).',
     cookies: [

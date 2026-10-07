@@ -93,6 +93,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
       authorization: request.headers.get('authorization') ?? undefined,
     },
   }),
+  // The release fans out to plugins after the write (AGL-3629). The real
+  // runner catches every handler's failure, so a no-subscriber answer is the
+  // faithful stand-in.
+  runPluginEventHandlers: async () => ({ handled: 0, failed: [] }),
 }))
 
 import { POST } from '../app/api/domains/detach/route'

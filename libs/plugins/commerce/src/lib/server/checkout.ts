@@ -23,8 +23,15 @@ import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
+import {
+  CARRIER_POSTAL_CODE_MESSAGE,
+  planCheckoutShippingWithCarriers,
+  type CarrierShippingPlan,
+} from './carrier-shipping'
 import { readActiveMemberSession } from './membership'
 import { resolveManualTaxRateId } from './manual-tax-rate'
+import { taxEngineSessionMetadata } from '../model/commerce-tax-engine'
+import { quoteSaleTaxWithEngine } from './tax-engine-quote'
 import {
   type PromotionSlotHold,
   holdPromotionSlot,
@@ -37,6 +44,7 @@ import {
   readCheckoutSessionPayload,
   resolveNativeCheckoutMode,
 } from './native-checkout'
+import { ensureCheckoutDomain } from './payment-method-domains'
 
 /**
  * Commerce Starter checkout (AGL-90): a site visitor buys a product. The
@@ -458,6 +466,34 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         taxPct = rate.pct
       }
     }
+    // The merchant's own tax service, where they connected one (AGL-3631),
+    // for a one-time sale. Taxed at the store's address, like the rate above:
+    // the shopper's address arrives inside Stripe Checkout, after this
+    // session exists. A subscription keeps the store's recurring rate — a
+    // quote taken today does not price next month's renewal. When the service
+    // does not answer, the rate above stands and the order says so.
+    const engineTax =
+      taxSettings.mode === 'manual' && !lifted.taxExempt && !isSubscription
+        ? await quoteSaleTaxWithEngine({
+            hostId,
+            settings: taxSettings,
+            channel: 'online',
+            lines: [
+              {
+                id: '0',
+                productId,
+                ...(variantId ? { variantId } : {}),
+                description: String(lifted.name ?? ''),
+                quantity,
+                amountCents,
+              },
+            ],
+          })
+        : { quote: null, stamp: null }
+    if (engineTax.quote) {
+      taxCents = engineTax.quote.taxCents
+      taxLabel = 'Sales tax'
+    }
 
     // Recurring manual tax (AGL-1751). The manual tax cannot ride the
     // `line_items[1]` product line on a SUBSCRIPTION session: a non-recurring
@@ -677,17 +713,35 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       | undefined
     const shipsPhysically =
       (lifted.type ?? 'physical') === 'physical' && !isSubscription
-    const shippingPlan = shipsPhysically
-      ? CommerceModel.planCheckoutShipping(
-          shippingSettings,
-          {
+    // Live carrier rates (AGL-3612) are quoted here, before the session,
+    // for the destination the shopper declared; see `carrier-shipping.ts`.
+    const shippingPlan: CarrierShippingPlan = shipsPhysically
+      ? await planCheckoutShippingWithCarriers({
+          hostId,
+          settings: shippingSettings,
+          cart: {
             subtotalCents: listUnitAmountCents * quantity,
             totalGrams:
               Math.max(0, Number(variant.weightGrams ?? 0)) * quantity,
+            ...(quantity === 1 ? { parcel: CommerceModel.productParcelDimensions(lifted) } : {}),
           },
-          body.shippingCountry,
-        )
+          destination: {
+            country: body.shippingCountry,
+            postalCode: body.shippingPostalCode,
+          },
+        })
       : { countries: CommerceModel.CHECKOUT_SHIPPING_COUNTRIES, options: [] }
+    if (shippingPlan.needsPostalCode) {
+      await releaseCouponSlot()
+      await releaseStock()
+      await claim.release()
+      return res.status(400).json({
+        error: CARRIER_POSTAL_CODE_MESSAGE,
+        needsShippingCountry: true,
+        needsShippingPostalCode: true,
+        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+      })
+    }
     if (shippingPlan.refusal === 'destination-required') {
       // A deterministic ask the shopper answers and retries under the same
       // key — released, not burned (AGL-1697). The tax rate possibly minted
@@ -970,6 +1024,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       ...(variantId ? { 'metadata[variantId]': variantId } : {}),
       'metadata[quantity]': String(quantity),
       'metadata[feeCents]': String(feeCents),
+      // The postal code live carrier rates were quoted for (AGL-3612).
+      ...(shippingPlan.quotedPostalCode
+        ? { 'metadata[shippingQuotePostalCode]': shippingPlan.quotedPostalCode }
+        : {}),
       // WHAT THE MERCHANT WAS ACTUALLY PAID, on the sales where Aglyn fixed it
       // (AGL-1956). Only a Stripe Tax sale carries this: it is the one shape
       // where `transfer.amount` is no longer `charge.amount`, so it is the one
@@ -1022,6 +1080,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       // both would double-count the tax on the recorded sale.
       'metadata[unitAmountCents]': String(listUnitAmountCents),
       'metadata[taxCents]': String(isSubscription ? 0 : taxCents),
+      ...taxEngineSessionMetadata(engineTax.stamp),
       'metadata[discountCents]': String(discountCents),
       ...(appliedCoupon ? { 'metadata[couponCode]': appliedCoupon } : {}),
       ...(appliedDiscountId
@@ -1076,6 +1135,20 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           : shippingPlan.options,
       )
     }
+    // The payment methods the merchant switched off (AGL-3629). Exclusions
+    // only: what stays on is whatever the platform's configuration offers for
+    // this order, so a store on the defaults sends what it always sent, bar
+    // the crypto opt-in. Works on the hosted page as well as the in-page one.
+    const paymentMethodControls =
+      CommerceModel.resolveStorefrontPaymentMethodControls(
+        CommerceModel.normalizeStorefrontPaymentMethodSettings(
+          storeSettings.get('paymentMethods'),
+        ),
+      )
+    CommerceModel.appendStorefrontPaymentMethodParams(
+      params,
+      paymentMethodControls,
+    )
     // The Payment Element (AGL-1944), and the LAST thing done to the params on
     // purpose. Everything above — price, coupon, tax, shipping, the Connect
     // destination, the fee, every metadata key the webhook reads — is computed
@@ -1096,6 +1169,16 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         `${backUrl}${separator}order=success&session_id={CHECKOUT_SESSION_ID}`,
       )
     }
+    // Apple Pay shows on a registered domain only (AGL-3629). Started beside
+    // the session create rather than before it, inside a fixed budget, and
+    // never throws: a sale does not wait on, or fail for, a registration.
+    const domainRegistration = nativeMode.native
+      ? ensureCheckoutDomain({
+          pageUrl: backUrl,
+          site: hostSnapshot.data?.() as SiteReturnHost | undefined,
+          hostId,
+        }).catch(() => null)
+      : Promise.resolve(null)
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',
       {
@@ -1108,7 +1191,13 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           // one — for subscription mode, instead of a second RECURRING
           // subscription — covering the window where the claim is written
           // but the response never arrives.
-          ...stripeKeyHeader('session'),
+          // A tax service's answer can differ between two tries under one
+          // key (it answered once and timed out once), so the key names the
+          // tax it carries and a changed figure opens a new session rather
+          // than a Stripe parameter mismatch (AGL-3631).
+          ...stripeKeyHeader(
+            engineTax.stamp ? `session-tax-${taxCents}-${engineTax.stamp.status}` : 'session',
+          ),
           // Empty on the hosted path, so its request is byte-identical to the
           // one this handler sent before AGL-1944 (AGL-1944).
           ...nativeCheckoutStripeHeaders(nativeMode),
@@ -1125,8 +1214,13 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // `!session.url` was the liveness check, and a `ui_mode` session HAS no
     // url — so the check moves with the mode rather than staying behind and
     // reading every successful native session as a Stripe failure (AGL-1944).
+    await domainRegistration
     const payload = response.ok
-      ? readCheckoutSessionPayload(session, nativeMode)
+      ? readCheckoutSessionPayload(
+          session,
+          nativeMode,
+          paymentMethodControls.wallets,
+        )
       : null
     if (!payload) {
       console.error('Stripe checkout error', session.error)

@@ -20,6 +20,7 @@ import type { ConsoleNavSection } from '@aglyn/aglyn'
 export type CommerceConsoleSectionId =
   | 'catalog'
   | 'orders'
+  | 'returns'
   | 'promotions'
   | 'reservations'
   | 'settings'
@@ -43,6 +44,7 @@ export type CommerceConsoleSectionId =
 export const COMMERCE_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   { id: 'catalog', label: 'Catalog' },
   { id: 'orders', label: 'Orders' },
+  { id: 'returns', label: 'Returns' },
   { id: 'promotions', label: 'Promotions' },
   { id: 'reservations', label: 'Reservations' },
   { id: 'settings', label: 'Settings' },

@@ -1,7 +1,7 @@
 ---
 sidebar_position: 6
 title: Use Pirate Ship with Aglyn
-description: Export the orders you still have to ship as a spreadsheet Pirate Ship reads, buy the labels there, then import Pirate Ship's shipment report to mark each order shipped and email your customers their tracking links. The same works for Shippo, EasyPost and other label tools.
+description: Export unshipped orders for Pirate Ship, buy the labels there, then import its shipment report to mark each order shipped and email tracking links. Works for Shippo and EasyPost too.
 ---
 
 # Use Pirate Ship with Aglyn
@@ -76,14 +76,15 @@ What each row does:
   conflict, and you decide on the **Conflicts** step. **Keep existing** (the
   default) leaves the order as it is. **Overwrite** for Tracking number
   replaces the tracking on its latest shipment.
-- **No order with that number**, or a cancelled, refunded or unpaid order: the
+- **No order with that number**, or a canceled, refunded or unpaid order: the
   row fails and the results say why. A tracking file never creates an order.
 
 You need to be an admin or editor of the site to import tracking numbers.
 **Undo** on the import's results takes back what it recorded: each shipment it
-made is cancelled, and each tracking number it replaced is put back.
+made is canceled, and each tracking number it replaced is put back.
 
 ## Related
 
+- [Use ShipStation with Aglyn](use-shipstation.md)
 - [Import and export store data](store-import-and-export.md)
 - [Commerce](overview.md#orders)

@@ -2934,6 +2934,97 @@ function placementsOf(
   )
 }
 
+/** A creation's name as a reference may spell it: letters and digits only. */
+function creationKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+/**
+ * A `new:` reference that spells a creation differently — `new:cake-order-form`
+ * for "Cake order form" (a live bakery plan, 2026-10-07) — is pointed at that
+ * creation before the rules read the plan, when exactly one creation matches
+ * it with case, spaces and punctuation ignored. Two that match, or none, are
+ * left for the rules to ask about.
+ */
+export function aiSettlePlanRefs(plan: AiBuildPlan): AiBuildPlan {
+  if (!plan.create.length) return plan
+  const resolve = (ref: string | null): string | null => {
+    if (!isAiPlanNewRef(ref) || aiPlanCreateFor(plan, ref)) return ref
+    const key = creationKey(ref.slice('new:'.length))
+    const matches = plan.create.filter((entry) => creationKey(entry.name) === key)
+    return matches.length === 1 ? `new:${matches[0].name}` : ref
+  }
+  let changed = false
+  const settle = (ref: string | null): string | null => {
+    const next = resolve(ref)
+    if (next !== ref) changed = true
+    return next
+  }
+  const screens = plan.screens.map((screen) => ({
+    ...screen,
+    layout: settle(screen.layout),
+    template: settle(screen.template),
+    sections: screen.sections.map((section) => ({
+      ...section,
+      uses: section.uses.map((ref) => settle(ref) ?? ref),
+    })),
+  }))
+  return changed ? { ...plan, screens } : plan
+}
+
+/**
+ * A page that names no layout, on a site where only one layout can frame it,
+ * is put in that layout before the rules read the plan (2026-10-07). The
+ * model sometimes leaves one page's layout empty — a live run's bookkeeper
+ * plan did, beside a layout it created — and rule 2 refused the whole plan
+ * for a choice with one answer. That answer exists only on a site with no
+ * layout whose plan creates exactly one, which is every guided start. Where
+ * the site has a layout of its own, a page that names none may mean another,
+ * so the rule still asks.
+ */
+export function aiSettlePlanLayouts(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
+): AiBuildPlan {
+  if (!inventory || inventory.layouts.length > 0 || !plan.screens.length) return plan
+  const kinds = inventoryKinds(inventory)
+  const created = plan.create.filter((entry) => entry.kind === 'layout')
+  const unlaid = plan.screens.filter((screen) => refKind(screen.layout, plan, kinds) !== 'layout')
+  if (!unlaid.length) return plan
+  if (created.length === 1) {
+    const only = `new:${created[0].name}`
+    return {
+      ...plan,
+      screens: plan.screens.map((screen) =>
+        refKind(screen.layout, plan, kinds) === 'layout' ? screen : { ...screen, layout: only },
+      ),
+    }
+  }
+  // No layout planned at all on a site with none (a live dental plan named
+  // "default" for both pages, twice): the site's one shared header and footer
+  // is planned for it, with every region a layout is built of, and every page
+  // goes in it. Only where this job may create a layout.
+  const mayCreateLayout = !capabilities || capabilities.create.layout.allowed
+  if (created.length > 0 || !mayCreateLayout) return plan
+  const taken = new Set(plan.create.map((entry) => entry.name.toLowerCase()))
+  const name = taken.has('site layout') ? 'Site header and footer' : 'Site layout'
+  return {
+    ...plan,
+    create: [
+      {
+        kind: 'layout',
+        name,
+        why: 'Every page shares one header, navigation and footer.',
+        duplicateOf: null,
+        fields: ['header', 'nav', 'main', 'footer'],
+      },
+      ...plan.create,
+    ],
+    screens: plan.screens.map((screen) => ({ ...screen, layout: `new:${name}` })),
+  }
+}
+
 /**
  * Rule 2 (plan): every screen declares a layout, no section is a copy of a
  * layout region, and no section places a layout, which frames a whole screen

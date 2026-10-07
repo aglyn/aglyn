@@ -152,4 +152,15 @@ describe('readFieldsOf ignores method calls (AGL-1719)', () => {
       'weirdShape',
     ])
   })
+
+  it('reads nothing out of a string that holds a URL', () => {
+    // `docs-index.generated.ts` carries prose like the line below. A comment
+    // stripper that does not know it is inside a string takes the `//` of the
+    // URL for a line comment, the string loses its closing quote, and
+    // `host. Default` was collected as a field of `hosts/{hostId}`.
+    const source =
+      "const text = 'the app\\'s universal-link host. Default https://app.aglyn.com. |'\n" +
+      'const real = host.cname'
+    expect(readFieldsOf([source], 'host')).toEqual(['cname'])
+  })
 })

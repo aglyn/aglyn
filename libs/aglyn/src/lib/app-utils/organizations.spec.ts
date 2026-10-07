@@ -51,6 +51,8 @@ describe('organizations (AGL-233)', () => {
     expect(isValidOrgSlug('www')).toBe(false) // host blocklist
     expect(isValidOrgSlug('staff')).toBe(false) // org-only reservation
     expect(isValidOrgSlug('workspace')).toBe(false)
+    // The console's public device route (AGL-3608) serves `/kiosk/…`.
+    expect(isValidOrgSlug('kiosk')).toBe(false)
   })
 
   it('generates slugs from org names', () => {

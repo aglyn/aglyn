@@ -430,6 +430,24 @@ jobs:
       # core export that moves or a MUI upgrade stales it, and neither marks
       # the apps holding the tables affected.
       - run: npm run generate:realm-host-exports:check
+      # Same shape (AGL-3620, AGL-3651): the native apps' Swift and Kotlin theme
+      # tokens are the console's resolved MUI theme written out as source. A
+      # palette change stales them, and the console is not the native libs'
+      # project. Their color parsing and type scale are unit-tested, and the
+      # bundled brand face is pinned by sha256 beside its license.
+      - run: npm run generate:mobile-theme-tokens:check
+      - run: npm run test:native-theme
+      - run: npm run check:native-fonts
+      # And the logo, wordmark and app icons, from the SVGs the console serves.
+      - run: npm run generate:native-brand-assets:check
+      # The native apps' shared contracts (types, list declarations, label maps
+      # and the list planner's cases) come from the pure TypeScript modules; a
+      # change to one of them stales the Swift and Kotlin it generates.
+      - run: npm run test:native-contracts
+      - run: npm run generate:native-contracts:check
+      # And the notification catalog the app's push settings list (AGL-3620):
+      # a new notification type or category stales it.
+      - run: npm run generate:mobile-notification-catalog:check
       # Fourth of the same shape (AGL-2905): the element palette a model
       # composes from is generated from the plugin bundles, and goes stale
       # when a bundle gains a component or a schema changes an attribute.
@@ -473,6 +491,13 @@ jobs:
       # nothing in the barrel's own graph. One of them, in the console's realm
       # plugin loader, cost 214.3 KB gzipped on every console route. ~1s.
       - run: npm run check:core-namespace-pin
+      # What each plugin costs the moment it loads (AGL-436, AGL-3649): the
+      # static import closure of its barrel, with lazy chunks counted apart.
+      # The console loads a plugin on every screen whose zones it fills, so
+      # one static import of a card is a download on all of them, and the
+      # same class again: only a bundler sees it. ~10s, most of it fetching
+      # the pinned esbuild.
+      - run: npm run check:plugin-budgets
       # The vendored assumption under the two `browser` resolve aliases
       # (AGL-2706). `re2js` and Next's compiled `buffer` are replaced in
       # browser bundles by modules that carry a name and no implementation,

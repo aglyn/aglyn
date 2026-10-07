@@ -56,17 +56,45 @@ export interface ShippingTier {
   amountCents: number
 }
 
+/**
+ * A live carrier rate (AGL-3612): the zone's price is what a carrier quotes
+ * for the parcel to the shopper's address, asked through core's
+ * `core.shipping-rate-quoter` seam of whichever plugin quotes carriers. With
+ * no quoter, a quoter that is not available for the site, no postal code to
+ * quote against, or a quote slower than {@link CARRIER_QUOTE_TIMEOUT_MS}, it
+ * offers nothing and its fallback rate is offered instead.
+ */
+export interface CarrierRateSettings {
+  /** Service keys (`carrier:service`) to offer; empty offers every quoted service. */
+  services?: string[]
+  /** Added to each quote, in percent. */
+  markupPct?: number
+  /** Added to each quote after the markup, in cents. */
+  handlingCents?: number
+  /**
+   * A rate of this zone offered when no live quote is: it is HIDDEN while
+   * quotes are offered, so the shopper picks between carriers, not between a
+   * carrier and the merchant's guess.
+   */
+  fallbackRateId?: string
+}
+
+/** How long checkout waits for live carrier quotes before it falls back. */
+export const CARRIER_QUOTE_TIMEOUT_MS = 3_000
+
 export interface ShippingRate {
   id: string
   zoneId: string
   name: string
-  kind: 'flat' | 'free_over' | 'price_tiers' | 'weight_tiers'
+  kind: 'flat' | 'free_over' | 'price_tiers' | 'weight_tiers' | 'carrier'
   /** flat + free_over base amount. */
   amountCents?: number
   /** free_over: order subtotal (cents) at/above which shipping is free. */
   freeOverCents?: number
   /** price_tiers (upTo = subtotal cents) / weight_tiers (upTo = grams). */
   tiers?: ShippingTier[]
+  /** carrier: the live rate's options (AGL-3612). */
+  carrier?: CarrierRateSettings
 }
 
 export interface ShippingSettings {
@@ -132,6 +160,73 @@ function tierAmount(
 }
 
 /**
+ * The zones a destination falls in (AGL-1707, factored out for AGL-3612).
+ * Specific country zones beat '*' zones: when any zone names the country
+ * outright, rest-of-world zones are ignored.
+ */
+export function matchedZoneIds(
+  settings: ShippingSettings | undefined,
+  destinationCountry: string,
+): Set<string> {
+  const country = destinationCountry.toUpperCase()
+  const zones = settings?.zones ?? []
+  // A zone is SPECIFIC when it names this country outright — not merely when
+  // it is "not wildcard-only" (AGL-2298). The old test was `!every(code ===
+  // '*')`, so a zone spelled `['*','US']` counted as specific for all six
+  // destinations (it matches every country through the `*`) and suppressed
+  // every genuine rest-of-world zone globally. Asking the narrower question
+  // makes such a zone specific for `US` and wildcard for the rest, which is
+  // what its two entries actually say.
+  const specific = zones.filter((zone) =>
+    (zone.countries ?? []).some((code) => zoneCode(code) === country),
+  )
+  const matched = specific.length
+    ? specific
+    : zones.filter((zone) => zoneMatches(zone, country))
+  return new Set(matched.map((zone) => zone.id))
+}
+
+/** The live carrier rates a destination's zones carry (AGL-3612). */
+export function carrierRatesFor(
+  settings: ShippingSettings | undefined,
+  destinationCountry: string,
+): ShippingRate[] {
+  if (!settings) return []
+  const zoneIds = matchedZoneIds(settings, destinationCountry)
+  return (settings.rates ?? []).filter(
+    (rate) => rate.kind === 'carrier' && zoneIds.has(rate.zoneId),
+  )
+}
+
+/** Whether any zone carries a live carrier rate (AGL-3612). */
+export function hasCarrierRates(settings: ShippingSettings | undefined): boolean {
+  return (settings?.rates ?? []).some((rate) => rate.kind === 'carrier')
+}
+
+/** The rate id a quoted service is offered under: stable per rate and service. */
+export function carrierOptionRateId(rateId: string, serviceKey: string): string {
+  return `carrier:${rateId}:${serviceKey}`
+}
+
+/**
+ * What a shopper pays for a carrier's quote under one carrier rate: the
+ * quote, plus the markup, plus the handling fee, in whole cents.
+ */
+export function carrierOptionAmountCents(
+  quotedCents: number,
+  settings: CarrierRateSettings | undefined,
+): number {
+  const quote = Math.max(0, Math.round(Number(quotedCents) || 0))
+  const pct = Number(settings?.markupPct)
+  const handling = Number(settings?.handlingCents)
+  return (
+    quote +
+    (Number.isFinite(pct) && pct > 0 ? Math.round((quote * Math.min(pct, 500)) / 100) : 0) +
+    (Number.isFinite(handling) && handling > 0 ? Math.round(handling) : 0)
+  )
+}
+
+/**
  * Rates available for a destination + cart, cheapest first. Specific
  * country zones beat '*' zones: when any specific zone matches, '*'
  * zones are ignored (rest-of-world semantics).
@@ -149,8 +244,7 @@ export function resolveShippingRates(
   cart: { subtotalCents: number; totalGrams?: number },
 ): ResolvedShippingRate[] {
   if (!settings || !destinationCountry) return []
-  const country = destinationCountry.toUpperCase()
-  const zones = settings.zones ?? []
+  const zoneIds = matchedZoneIds(settings, destinationCountry)
   // A zone is SPECIFIC when it names this country outright — not merely when
   // it is "not wildcard-only" (AGL-2298). The old test was `!every(code ===
   // '*')`, so a zone spelled `['*','US']` counted as specific for all six
@@ -158,13 +252,6 @@ export function resolveShippingRates(
   // every genuine rest-of-world zone globally. Asking the narrower question
   // makes such a zone specific for `US` and wildcard for the rest, which is
   // what its two entries actually say.
-  const specific = zones.filter((zone) =>
-    (zone.countries ?? []).some((code) => zoneCode(code) === country),
-  )
-  const matched = specific.length
-    ? specific
-    : zones.filter((zone) => zoneMatches(zone, country))
-  const zoneIds = new Set(matched.map((zone) => zone.id))
   const resolved: ResolvedShippingRate[] = []
   for (const rate of settings.rates ?? []) {
     if (!zoneIds.has(rate.zoneId)) continue
@@ -185,6 +272,12 @@ export function resolveShippingRates(
         break
       case 'weight_tiers':
         amountCents = tierAmount(rate.tiers, cart.totalGrams ?? 0)
+        break
+      // A carrier's price exists only once a carrier quoted it for an
+      // address (AGL-3612), so a table read offers nothing for it and its
+      // fallback rate is what resolves here. `carrier-shipping.ts` adds the
+      // quotes where one can be had.
+      case 'carrier':
         break
     }
     if (amountCents == null) continue

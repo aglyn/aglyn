@@ -143,6 +143,23 @@ describe('asking', () => {
     })
   })
 
+  it('opens on the question the page that opened it starts from, on the Marketing surface (AGL-3603)', async () => {
+    mockFetch.mockResolvedValueOnce(json({ error: 'nope' }, 403))
+    render(
+      <AiInsightDialog
+        {...props({ surface: 'marketing', question: 'Which campaigns brought in the most conversions?' })}
+      />,
+    )
+    const box = screen.getByLabelText('What do you want to know?') as HTMLTextAreaElement
+    expect(box.value).toBe('Which campaigns brought in the most conversions?')
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    await screen.findByText('nope')
+    expect(JSON.parse(String((mockFetch.mock.calls[0][1] as RequestInit).body))).toMatchObject({
+      brief: 'Which campaigns brought in the most conversions?',
+      inputs: { surface: 'marketing' },
+    })
+  })
+
   it('turns weekly insights on for this workspace in the person’s own document', async () => {
     render(<AiInsightDialog {...props()} />)
     const toggle = await screen.findByLabelText(/weekly insights/)

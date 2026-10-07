@@ -170,7 +170,10 @@ const RECIPES: Partial<Record<DuplicableHostResourceKind, KindRecipe>> = {
     // and turns up in page editors where its email blocks cannot render.
     fields: ['description', 'icon', 'rootId', 'nodes', 'props', 'kind'],
     versionParentField: 'componentId',
-    entitlement: 'reusableComponents',
+    // Counted only: a reusable component is not behind
+    // `reusableComponents`, the same as its create at `/api/hosts/resources`
+    // (AGL-3615). Free 1, every paid plan unlimited.
+    quotaKey: 'componentsPerHost',
   },
   layout: {
     collection: 'layouts',

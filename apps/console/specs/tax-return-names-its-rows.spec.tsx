@@ -235,6 +235,15 @@ async function rendered(body: TaxReturnPayload, entry: unknown = null) {
   await waitFor(() =>
     expect(screen.getByText('Jurisdiction US-TX')).toBeTruthy(),
   )
+  // The findings grid is a SECOND request (`view=findings`), issued once the
+  // return has rendered, so the heading above says nothing about whether its
+  // rows have arrived. Wait for every row the route will answer with, from
+  // the same function the route serves, or a slow machine snapshots the page
+  // between the two answers and reads a named row as missing.
+  const named = taxFindingListRows(body).slice(0, 25)
+  for (const row of named) {
+    await waitFor(() => expect(screen.getByText(row.invoiceId)).toBeTruthy())
+  }
   return document.body.textContent ?? ''
 }
 

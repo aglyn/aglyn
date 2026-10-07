@@ -315,6 +315,15 @@ export function mediaCdnVersionIsCurrent(options: {
   )
 }
 
+/**
+ * Whether an asset of this type is only ever served as its own bytes — no
+ * `?w=` variant, display copy, poster or rendition (AGL-3656). A web font is
+ * the case: a versioned URL that names its hash names everything served.
+ */
+export function mediaCdnHasNoDerivedForms(contentType: unknown): boolean {
+  return String(contentType ?? '').split(';')[0].trim().toLowerCase() === 'font/woff2'
+}
+
 /** The immutable content-hashed URL's policy for edge-cacheable (image) types. */
 export const MEDIA_CDN_IMMUTABLE_CACHE_CONTROL =
   'public, max-age=31536000, immutable'
@@ -347,11 +356,15 @@ export const MEDIA_CDN_IMMUTABLE_EDGE_BYPASS_CACHE_CONTROL =
  * Unknown or absent types return false: correctness over cache.
  */
 export function mediaCdnEdgeCacheable(contentType: unknown): boolean {
-  return String(contentType ?? '')
+  const type = String(contentType ?? '')
     .split(';')[0]
     .trim()
     .toLowerCase()
-    .startsWith('image/')
+  // A web font (AGL-3656) is fetched the way an image is — one plain GET
+  // from an `@font-face` rule, never a range — and it is part of the page
+  // weight the band already measures, so it takes the image policy: the
+  // edge holds it, and a versioned URL a page names is kept for a year.
+  return type.startsWith('image/') || type === 'font/woff2'
 }
 
 /**
@@ -461,7 +474,10 @@ function servesInline(contentType: string): boolean {
     type.startsWith('image/') ||
     type.startsWith('video/') ||
     type.startsWith('audio/') ||
-    type === 'application/pdf'
+    type === 'application/pdf' ||
+    // A web font (AGL-3656): an `@font-face` rule loads it, and a font is
+    // inert outside a stylesheet, so a top-level open has nothing to run.
+    type === 'font/woff2'
   )
 }
 
@@ -1656,9 +1672,12 @@ export async function serveMediaCdn(
         widthRequested: Boolean(width),
         variantServed: exactVariant,
         otherRepresentation: usePoster || Boolean(rendition),
-        documentEncoderVersion: snapshot.get(
-          MEDIA_VARIANT_ENCODER_VERSION_FIELD,
-        ),
+        // A web font has no derived form for an encoder to have made, so no
+        // generation can be behind (AGL-3656): only its bytes are named, and
+        // a library on a plan without generated variants records none.
+        documentEncoderVersion: mediaCdnHasNoDerivedForms(snapshot.get('contentType'))
+          ? MEDIA_VARIANT_ENCODER_VERSION
+          : snapshot.get(MEDIA_VARIANT_ENCODER_VERSION_FIELD),
       })
     const stableCacheControlFor = (type: unknown) =>
       mediaCdnEdgeCacheable(type)

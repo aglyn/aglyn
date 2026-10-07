@@ -752,7 +752,7 @@ describe('AGL-2495 · every background job that writes for a host asks the lock'
     // plausible and would pass every assertion below.
     expect(JOB_SITES.length).toBeGreaterThanOrEqual(7)
     expect(new Set(JOB_SITES.map((job) => job.file)).size).toBeGreaterThan(1)
-    // And it must find the file that holds FOUR of them as four, not one —
+    // And it must find the file that holds FIVE of them as five, not one —
     // the per-file/per-registration confusion the first pass shipped.
     expect(
       JOB_SITES.filter(
@@ -761,6 +761,7 @@ describe('AGL-2495 · every background job that writes for a host asks the lock'
     ).toEqual([
       'abandoned-checkout-recovery',
       'back-in-stock-alerts',
+      'payment-method-domains',
       'stock-decrement-reconciliation',
       'supplier-webhook-delivery',
     ])

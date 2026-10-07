@@ -1,0 +1,21 @@
+// A release build's configuration. Copy to Production.xcconfig (git ignores
+// it), fill in the production project's PUBLIC Firebase web config (the
+// same values the console's NEXT_PUBLIC_FIREBASE_* carry; none is a
+// secret), and select it as the base configuration for Release.
+//
+// No emulator hosts: AglynConfig refuses an emulator on a non-local console.
+
+AGLYN_CONSOLE_URL = https:/$()/app.aglyn.com
+AGLYN_FIREBASE_API_KEY = <production web API key>
+AGLYN_FIREBASE_AUTH_DOMAIN = <project>.firebaseapp.com
+AGLYN_FIREBASE_PROJECT_ID = <project id>
+AGLYN_FIREBASE_APP_ID = <the iOS app id from the Firebase console, per bundle>
+AGLYN_FIREBASE_MESSAGING_SENDER_ID = <sender id>
+AGLYN_FIREBASE_STORAGE_BUCKET = <bucket>
+AGLYN_AUTH_EMULATOR_HOST =
+AGLYN_FIRESTORE_EMULATOR_HOST =
+AGLYN_GOOGLE_IOS_CLIENT_ID =
+AGLYN_GOOGLE_WEB_CLIENT_ID =
+AGLYN_BRAND_NAME = Aglyn
+AGLYN_DEBUG_EMAIL =
+AGLYN_DEBUG_PASSWORD =

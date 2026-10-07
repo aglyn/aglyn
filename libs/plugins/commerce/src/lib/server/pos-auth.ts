@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import type { PluginApiRequest } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /** Who is working the register, once the gate has admitted them. */
 export interface PosStaff {
@@ -56,7 +57,8 @@ export async function authorizePosStaff(
   let uid: string
   try {
     uid = (await firebaseAdmin.app().auth().verifyIdToken(idToken)).uid
-  } catch {
+  } catch (error) {
+    if (!isRefusedIdToken(error)) throw error
     return { ok: false, status: 401, error: 'Unauthenticated' }
   }
   const hostSnapshot = await firebaseAdmin

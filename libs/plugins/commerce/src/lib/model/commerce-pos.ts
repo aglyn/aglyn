@@ -396,6 +396,11 @@ export interface PosDisplayResponse {
 export interface PosDisplayState {
   mode: PosDisplayMode
   updatedAtMs: number
+  /**
+   * The ISO currency every amount on the screen is in (`usd`). Stamped by
+   * the server from the store's own currency, never taken from the register.
+   */
+  currency?: string
   /** Changes every time the register asks something new. */
   promptId?: string
   cart?: PosDisplayCart

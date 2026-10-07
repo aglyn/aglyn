@@ -62,6 +62,18 @@
       "@aglyn/tenant-runtime/*": [
         "../../libs/tenant/runtime/src/lib/*"
       ],
+      "@aglyn/plugins-accounting": [
+        "../../libs/plugins/accounting/src/index.ts"
+      ],
+      "@aglyn/plugins-accounting/*": [
+        "../../libs/plugins/accounting/src/lib/*"
+      ],
+      "@aglyn/plugins-sales-channels": [
+        "../../libs/plugins/sales-channels/src/index.ts"
+      ],
+      "@aglyn/plugins-sales-channels/*": [
+        "../../libs/plugins/sales-channels/src/lib/*"
+      ],
       "@aglyn/plugins-email": [
         "../../libs/plugins/email/src/index.ts"
       ],
@@ -86,11 +98,23 @@
       "@aglyn/plugins-events-calendar/*": [
         "../../libs/plugins/events-calendar/src/lib/*"
       ],
+      "@aglyn/plugins-fonts": [
+        "../../libs/plugins/fonts/src/index.ts"
+      ],
+      "@aglyn/plugins-fonts/*": [
+        "../../libs/plugins/fonts/src/lib/*"
+      ],
       "@aglyn/plugins-forms": [
         "../../libs/plugins/forms/src/index.ts"
       ],
       "@aglyn/plugins-forms/*": [
         "../../libs/plugins/forms/src/lib/*"
+      ],
+      "@aglyn/plugins-funnels": [
+        "../../libs/plugins/funnels/src/index.ts"
+      ],
+      "@aglyn/plugins-funnels/*": [
+        "../../libs/plugins/funnels/src/lib/*"
       ],
       "@aglyn/plugins-inbox": [
         "../../libs/plugins/inbox/src/index.ts"
@@ -128,6 +152,12 @@
       "@aglyn/plugins-marketplace/*": [
         "../../libs/plugins/marketplace/src/lib/*"
       ],
+      "@aglyn/plugins-marketing-platforms": [
+        "../../libs/plugins/marketing-platforms/src/index.ts"
+      ],
+      "@aglyn/plugins-marketing-platforms/*": [
+        "../../libs/plugins/marketing-platforms/src/lib/*"
+      ],
       "@aglyn/plugins-crm": [
         "../../libs/plugins/crm/src/index.ts"
       ],
@@ -164,6 +194,12 @@
       "@aglyn/plugins-redirects/*": [
         "../../libs/plugins/redirects/src/lib/*"
       ],
+      "@aglyn/plugins-shipping": [
+        "../../libs/plugins/shipping/src/index.ts"
+      ],
+      "@aglyn/plugins-shipping/*": [
+        "../../libs/plugins/shipping/src/lib/*"
+      ],
       "@aglyn/plugins-themes": [
         "../../libs/plugins/themes/src/index.ts"
       ],
@@ -175,6 +211,12 @@
       ],
       "@aglyn/plugins-sms/*": [
         "../../libs/plugins/sms/src/lib/*"
+      ],
+      "@aglyn/plugins-tax-engines": [
+        "../../libs/plugins/tax-engines/src/index.ts"
+      ],
+      "@aglyn/plugins-tax-engines/*": [
+        "../../libs/plugins/tax-engines/src/lib/*"
       ],
       "@aglyn/plugins-video-delivery": [
         "../../libs/plugins/video-delivery/src/index.ts"

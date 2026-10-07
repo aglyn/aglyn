@@ -161,6 +161,10 @@ Inside a step, an expression can use:
 There are no loops and no way to add a built-in, which is what keeps the evaluator safe
 to run on a page.
 
+**Create with AI** on the Functions and Variables cards writes one from a description, and
+a saved function's editor can explain, change or fix it — each opens unsaved in the editor.
+See [Functions and variables with AI](../../ai/logic-with-ai.md).
+
 ### Parameters a visitor can answer
 
 When a function is placed on a page in a

@@ -168,6 +168,8 @@ describe('a workspace with no widget for either zone', () => {
         name="Subject line"
         target="email"
         goal="formSubmission"
+        screenId=""
+        nodeId=""
         variants={[]}
         proposeVariants={jest.fn()}
       />,
@@ -213,6 +215,9 @@ describe('a workspace that has a widget', () => {
       name: '',
       target: 'screen',
       goal: 'formSubmission',
+      // The page and the section under test, empty until picked (AGL-3603).
+      screenId: '',
+      nodeId: '',
       variants: [
         { id: 'a', name: 'A (control)', subject: '', body: '' },
         { id: 'b', name: 'B', subject: '', body: '' },
@@ -279,5 +284,34 @@ describe('the pieces', () => {
       { id: 'b', name: '', subject: '', body: '' },
     ])
     expect(marketingExperimentVariantDrafts(undefined)).toEqual([])
+  })
+})
+
+/**
+ * A widget that made a draft version for a page variant (AGL-3603) hands its
+ * id back through `proposeVariants`, and the editor pins it unsaved.
+ */
+describe('a draft version a widget made', () => {
+  it('is pinned to its variant in the editor, unsaved', async () => {
+    render(withShell(Loud, <HostExperimentsCard hostId="host-1" org={ORG} />))
+    fireEvent.click(screen.getByRole('button', { name: 'New experiment' }))
+    await screen.findByRole('dialog')
+    const zone = zoneProps[EXPERIMENT_VARIANTS_ZONE.id] as unknown as MarketingExperimentVariantsZoneProps
+    zone.proposeVariants(
+      [
+        { id: 'a', name: 'A (control)', subject: '', body: '' },
+        { id: 'b', name: 'B — speed', subject: '', body: '', versionId: 'ab-job-1-1' },
+      ],
+      'job-1',
+    )
+    await waitFor(() =>
+      expect((screen.getByLabelText('Variant B') as HTMLInputElement).value).toBe('B — speed'),
+    )
+    // The select's own value, on its native input beside the combobox.
+    const pinned = (screen.getAllByLabelText('Version') as HTMLElement[]).map(
+      (combobox) =>
+        (combobox.parentElement?.querySelector('input') as HTMLInputElement | null)?.value,
+    )
+    expect(pinned).toEqual(['', 'ab-job-1-1'])
   })
 })

@@ -17,7 +17,10 @@
 
 import {
   checkEntitlement,
+  listPluginSeatAddons,
+  orgSubscriptionState,
   planGrantingFeature,
+  resolveEffectivePlan,
   planLabelGrantingFeature,
   type ConsoleUpgradeNotice,
   type OrgFeatureFlags,
@@ -82,6 +85,42 @@ export function composeExtensionEntitlements(
   if (verdicts.includes('blocked')) return 'blocked'
   if (verdicts.includes('pending')) return 'pending'
   return 'entitled'
+}
+
+/**
+ * Whether a workspace could BUY every one of the entitlements it lacks among
+ * `featureFlags`, self-serve, today (AGL-3601) — the question that decides
+ * whether a widget declaring `showWhenNotEntitled` is mounted as its own
+ * upsell or stays absent.
+ *
+ * Yes only when each missing flag is one a declared plugin add-on switches on
+ * (`seatAddons[].features`) and that add-on is sold on the workspace's plan:
+ * its quota names a figure above zero for the plan, the declaration's own
+ * statement of "not sold here" being 0. And only on a live subscription,
+ * because add-ons ride the plan's subscription: a staff comp, a lapsed plan or
+ * Free has nothing to add the item to, and an upsell there would send the
+ * reader to a Billing page that cannot sell it.
+ *
+ * A flag no add-on grants answers no: a plan upgrade is not this upsell.
+ */
+export function entitlementPurchasable(
+  featureFlags: readonly (string | undefined)[],
+  org: unknown,
+): boolean {
+  const billing = org as Parameters<typeof checkEntitlement>[0]
+  if (orgSubscriptionState(billing) !== 'live') return false
+  const missing = featureFlags.filter(
+    (flag): flag is string =>
+      typeof flag === 'string' && !checkEntitlement(billing, flag),
+  )
+  if (missing.length === 0) return false
+  const plan = resolveEffectivePlan(billing)
+  const sold = listPluginSeatAddons().filter(
+    (addon) => !addon.quota || (addon.quota.perUnitByPlan[plan] ?? 0) > 0,
+  )
+  return missing.every((flag) =>
+    sold.some((addon) => addon.features?.includes(flag)),
+  )
 }
 
 /**

@@ -37,8 +37,8 @@ sitting on top of it:
 - **Images from your media library**, each with alt text, or an empty slot for you to
   fill. Never an image linked from another site.
 - **A repeat built once.** A block that appears three or more times becomes one
-  reusable component placed as instances — or, on a plan without reusable components,
-  is built into the page each time.
+  reusable component placed as instances — or, on Free, whose one component per site
+  is yours to spend, is built into the page each time.
 
 ## Tips
 

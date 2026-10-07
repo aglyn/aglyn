@@ -17,7 +17,11 @@
 
 import { lightBlue } from '@mui/material/colors'
 import type { PaletteOptions, Theme, ThemeOptions } from '../vendor/mui'
-import { buildFontFamilyList } from './constants'
+import {
+  buildFontFamilyList,
+  FontFamily,
+  ROBOTO_FLEX_FALLBACK,
+} from './constants'
 import {
   accentHoverFillColor,
   accentHoverTextColor,
@@ -534,7 +538,13 @@ const baseOptions: ThemeOptions = {
   },
   spacing: 8,
   typography: {
-    fontFamily: buildFontFamilyList().join(','),
+    // Roboto Flex, then the size-matched stand-in the console declares with
+    // it (`util/roboto-flex.ts`), then the system faces.
+    fontFamily: [
+      FontFamily.ROBOTO_FLEX,
+      ROBOTO_FLEX_FALLBACK,
+      ...buildFontFamilyList().slice(1),
+    ].join(','),
     // The brand's named weights, beyond MUI's four.
     //
     // MUI ships Light 300 / Regular 400 / Medium 500 / Bold 700, and the

@@ -20,7 +20,8 @@ entitlement are **Pro+**.
 
 A lightweight **pageview beacon** records visits into daily counters. The site dashboard
 shows a **traffic panel** summarizing your site's activity. Tracking is **cookieless** —
-no visitor IDs, no fingerprinting.
+no visitor IDs, no fingerprinting. ([Funnels](funnels.md) are the one exception, and only
+with the visitor's analytics consent: they tie one browser tab's steps together.)
 
 ## Visitors (approximate)
 

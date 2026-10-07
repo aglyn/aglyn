@@ -241,6 +241,11 @@ export interface AssistTokenUsage {
   outputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
+  /**
+   * Pictures a door delivered (AGL-3602), priced per picture by the image
+   * catalog. Absent on every text exchange.
+   */
+  images?: number
 }
 
 /**
@@ -1199,6 +1204,11 @@ function writeSignalAndRollup(
     feedback: null,
     ...(record.editOps && record.editOps > 0
       ? { editOps: Math.floor(record.editOps) }
+      : {}),
+    // Pictures delivered (AGL-3602), on a turn that made any: what the
+    // per-picture rate was multiplied by.
+    ...(record.usage.images && record.usage.images > 0
+      ? { images: Math.floor(record.usage.images) }
       : {}),
     createdAt: serverTimestamp(),
   })

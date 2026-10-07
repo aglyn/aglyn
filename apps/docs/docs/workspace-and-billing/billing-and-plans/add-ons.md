@@ -133,6 +133,13 @@ under [Aglyn AI](../../ai/overview.md).
   credits, and credits past them are sold at the same rate as Pro — so the stop switch
   and the ceiling are on its billing page with or without the add-on. Adding Aglyn AI
   increases the band and opens generative building.
+- **You can see where it is used before you buy it.** On a paid plan without it,
+  **Create with AI** still shows on the Pages, Templates, Layouts, Forms, Components,
+  Automation, Functions & Variables and email Templates pages, on Products, and on
+  Marketing's Campaigns and Overlays — and **Ask AI about these numbers** on your
+  dashboards and Marketing reports. Each opens a short note on what it would do there
+  with a link to **Billing → Add-ons** — or, for a member without the **Manage billing**
+  permission, a note to ask a workspace owner or admin.
 - **Free workspaces** do not buy it. They generate against the
   [monthly taste](overview.md#free-ai-credits) instead, which stops at its band and
   never bills.

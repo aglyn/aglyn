@@ -1103,3 +1103,18 @@ describe('an availability check that must not be crowded out (AGL-2159)', () => 
     expect(result.status).toBe(200)
   })
 })
+
+describe('a stay honors the merchant’s payment methods (AGL-3629)', () => {
+  it('excludes the methods switched off on the deposit session', async () => {
+    docs.set('hosts/host-1/settings/store', {
+      paymentMethods: { afterpay_clearpay: false, crypto: true },
+    })
+    const result = await post()
+    expect(result.status).toBe(200)
+    const session = stripeCalls.find((call) => call.url.includes('/checkout/sessions'))
+    const excluded = [...(session?.params.keys() ?? [])]
+      .filter((key) => key.startsWith('excluded_payment_method_types['))
+      .map((key) => session?.params.get(key))
+    expect(excluded).toEqual(['afterpay_clearpay'])
+  })
+})

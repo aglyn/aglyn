@@ -17,6 +17,7 @@
 
 import type { PluginConfigSchema } from '@aglyn/aglyn'
 import { posTipPercentages } from './model/commerce-pos'
+import { POS_OPS_CONFIG_DEFAULTS, POS_OPS_CONFIG_FIELDS } from './pos-ops-config'
 
 /**
  * The ceiling a register may discount to, when the merchant has not set one
@@ -117,6 +118,9 @@ export const COMMERCE_CONFIG_SCHEMA: PluginConfigSchema = {
         'asks for an email receipt. Only a ticked box adds them to your ' +
         'marketing audience.',
     },
+    // RUNNING THE REGISTER (AGL-3609): shifts, refund limits, the idle lock
+    // and what a printed receipt carries.
+    ...POS_OPS_CONFIG_FIELDS,
   ],
   defaults: {
     posMaxDiscountPct: POS_MAX_DISCOUNT_PCT_DEFAULT,
@@ -125,6 +129,7 @@ export const COMMERCE_CONFIG_SCHEMA: PluginConfigSchema = {
     posReceiptDefault: 'ask',
     posDisplayMessage: '',
     posDisplayMarketingOptIn: true,
+    ...POS_OPS_CONFIG_DEFAULTS,
   },
 }
 

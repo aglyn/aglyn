@@ -186,6 +186,62 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Where each short tracking link in a sent Outreach sequence email points (AGL-3297): the enrollment, the step, the link’s index and the destination the step wrote. The organization’s own record of what it sent; the id is random and derived from no secret.',
   },
   {
+    collection: 'shippingTrackers',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'One row per tracking number a label was bought for (AGL-3612): the site, the order record, the carrier, the tracking number and its latest status. The organization’s own record of what it shipped; the order it points at is already disclosed under its site. Org-only, for the reason `supplierDeliveries` gives: a tracking number locates a shopper’s parcel.',
+  },
+  {
+    collection: 'shippingQuoteCache',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Carrier quotes for a site’s checkout, kept ten minutes (AGL-3612): the site, each service’s price and transit estimate, and when the row expires. No address is stored; the document id is a SHA-256 of the quoted request, an identifier rather than a verifier of any credential. Disclosed while it exists so the export does not omit a collection the erasure destroys.',
+  },
+  {
+    collection: 'taxEngineConnections',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'EXISTENCE ONLY for the credential — each site’s connection to the merchant’s own Avalara AvaTax or TaxJar account (AGL-3631): provider, environment, account id and company code, ship-from address, default tax code, last test result and the member who connected it. The sealed API token and the id of the key that sealed it both carry `token` in their names and are redacted (see redactSecrets); the document id is the site id.',
+  },
+  {
+    collection: 'taxEngineProductCodes',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'The tax code the merchant assigned each product at their tax service (AGL-3631). Catalog configuration the customer set, so it is theirs to take.',
+  },
+  {
+    collection: 'taxEngineExemptions',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Customers the merchant recorded as tax-exempt (AGL-3631): email, name, exemption type, certificate number and the regions it covers. A SHOPPER’s data held for the merchant as controller, so disclosed to the ORG only, for the reason `supplierDeliveries` gives. The document id carries a truncated SHA-256 of the email — a lookup key, not a credential.',
+  },
+  {
+    collection: 'taxEngineTransactions',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each paid order as recorded with the merchant’s tax service, and the refunds reversed against it (AGL-3631): the sale sent (lines, ship-to address, the customer code, which is the shopper’s email), its status and last error. The merchant’s own tax record and a shopper’s address, so disclosed to the ORG only.',
+  },
+  {
+    collection: 'marketingPlatformConnections',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'EXISTENCE ONLY for the credential — each site’s connection to the merchant’s own Mailchimp, Klaviyo, Omnisend or Attentive account (AGL-3639): provider, status, account name, the chosen list and tag, the sync switches, cursors and run timing. The sealed access and refresh tokens and the id of the key that sealed them carry `token` in their names and are redacted (see redactSecrets); the document id is the site id and the provider.',
+  },
+  {
+    collection: 'marketingPlatformEvents',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Commerce events still owed to a connected marketing platform (AGL-3639): checkout started, order paid, fulfilled, refunded or cancelled, with the shopper’s email, the order, its items and value, and the tracking number. A SHOPPER’s data held for the merchant as controller, so disclosed to the ORG only, for the reason `supplierDeliveries` gives; a row is deleted once delivered.',
+  },
+  {
     collection: 'ssoDomains',
     keyedBy: 'field',
     subjects: ['org'],
@@ -970,6 +1026,23 @@ export async function exportOrgData(
 
   // Where each short tracking link the org's sequences sent points (AGL-3297).
   data['outreachLinks'] = await readByField(db, 'outreachLinks', 'orgId', orgId)
+
+  // Shipping (AGL-3612), tax services (AGL-3631) and marketing platforms
+  // (AGL-3639): top-level and keyed by `orgId`, the bound their
+  // `orgKeyedCollections` erasure sweeps by. The sealed credentials are
+  // withheld by `redactSecrets` on their names.
+  for (const collection of [
+    'shippingTrackers',
+    'shippingQuoteCache',
+    'taxEngineConnections',
+    'taxEngineProductCodes',
+    'taxEngineExemptions',
+    'taxEngineTransactions',
+    'marketingPlatformConnections',
+    'marketingPlatformEvents',
+  ]) {
+    data[collection] = await readByField(db, collection, 'orgId', orgId)
+  }
 
   data['publisherProfiles'] = await readDoc(db, 'publisherProfiles', orgId)
   data['marketplaceListings'] = await readByField(

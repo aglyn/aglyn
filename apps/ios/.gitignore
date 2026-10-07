@@ -1,0 +1,7 @@
+# Build outputs (xcodebuild -derivedDataPath build/…), per-user Xcode state, local config
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+Config/Local.xcconfig
+Config/Production.xcconfig

@@ -41,6 +41,8 @@
  */
 
 import { escapeHtml } from '../../utils/escape-html'
+import { buildPosReceipt } from '../../model/commerce-pos-ops'
+import { posReceiptHtml } from './pos-ops/pos-receipt'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
@@ -94,7 +96,6 @@ describe('the document.write call sites (AGL-2283)', () => {
   }
 
   const SLIP = 'order-detail-dialog.component.tsx'
-  const RECEIPT = 'pos-page.component.tsx'
 
   it('the packing slip escapes every value it interpolates', () => {
     // The rows are built above the `write` call, so they are checked on the
@@ -119,12 +120,37 @@ describe('the document.write call sites (AGL-2283)', () => {
     expect(written).not.toContain(".filter(Boolean).join('<br/>')")
   })
 
-  it('the POS receipt escapes the product text it interpolates', () => {
-    const written = writeArgument(RECEIPT)
-    expect(written).toMatch(/escapeHtml\(line\.name,?\)/)
-    expect(written).toMatch(/escapeHtml\(line\.variantLabel,?\)/)
-    expect(written).not.toContain('${line.name}')
-    expect(written).not.toContain('${line.variantLabel}')
+  /**
+   * The register's receipt (AGL-3609) is no longer a `document.write` in the
+   * page: it is `posReceiptHtml`, so it is checked by what it RENDERS for
+   * hostile text in every merchant- and shopper-typed field it prints.
+   */
+  it('the POS receipt escapes every text it prints', () => {
+    const hostile = '<img src=x onerror=alert(1)>'
+    const html = posReceiptHtml(
+      buildPosReceipt({
+        orderId: 'o1',
+        order: {
+          number: 7,
+          status: 'paid',
+          channel: 'pos',
+          createdAtMs: 0,
+          customerName: hostile,
+          lineItems: [{ name: hostile, variantLabel: hostile, unitAmountCents: 100, quantity: 1 }],
+          totals: { totalCents: 100 },
+        },
+        store: { name: hostile, address: hostile, footer: hostile, returnPolicy: hostile },
+        cashierName: hostile,
+        registerName: hostile,
+      }),
+    )
+    expect(html).not.toContain('<img src=x')
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;')
+  })
+
+  it('the register page writes no receipt markup of its own', () => {
+    const source = readFileSync(join(__dirname, 'pos-page.component.tsx'), 'utf8')
+    expect(source).not.toContain('document.write(')
   })
 
   /**
@@ -132,10 +158,8 @@ describe('the document.write call sites (AGL-2283)', () => {
    * empty, every `not.toContain` above would pass vacuously — that is what a
    * check which cannot fail looks like.
    */
-  it('POSITIVE CONTROL: it is really reading those two write calls', () => {
+  it('POSITIVE CONTROL: it is really reading the slip\'s write call', () => {
     expect(writeArgument(SLIP)).toContain('Packingslip')
     expect(writeArgument(SLIP).length).toBeGreaterThan(200)
-    expect(writeArgument(RECEIPT)).toContain('TOTAL')
-    expect(writeArgument(RECEIPT).length).toBeGreaterThan(200)
   })
 })

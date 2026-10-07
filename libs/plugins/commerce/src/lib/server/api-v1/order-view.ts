@@ -18,6 +18,7 @@
 import { serialize } from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import { fulfillmentLineQuantities } from '../../model/order-fulfillment'
 import { fulfillmentTrackingUrl } from '../../model/tracking-url'
+import { orderTaxEngineView } from '../../model/commerce-tax-engine'
 
 /**
  * The public order shape from an order's data (AGL-3611): the same object the
@@ -61,6 +62,17 @@ export function orderViewFromData(id: string, data: Record<string, any>) {
     // Money already handed back, for any reason. A chargeback lands here too,
     // so `refundedCents > 0` does not by itself mean the merchant chose it.
     refundedCents: Number(data.refundedCents ?? 0),
+    // Who the tax was charged under (AGL-3614): `stripe-automatic` tax is
+    // Aglyn's to remit as marketplace facilitator and never reaches the
+    // merchant's account, which a ledger posting the sale has to know. An
+    // order from before the regime was recorded says `null`, never a guess.
+    taxMode: typeof data.taxMode === 'string' && data.taxMode ? data.taxMode : null,
+    // The merchant's own tax service (AGL-3631): which one priced the sale, or
+    // that it was asked and the store's own rates were charged instead
+    // (`status: 'fallback'`). `null` when no service was asked. The regime is
+    // still `taxMode` — a service the merchant connected answers for tax the
+    // merchant remits.
+    taxEngine: orderTaxEngineView(data.taxEngine),
     disputed: Boolean(data.dispute),
     shippingAddress: serialize(data.shippingAddress) ?? null,
     couponCode: data.couponCode ?? null,

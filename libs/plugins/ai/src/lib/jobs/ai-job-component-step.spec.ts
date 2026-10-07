@@ -106,7 +106,6 @@ import {
   AI_JOB_COMPONENT_STEP_BUDGET,
   AI_JOB_COMPONENT_STEP_MINIMUM_MS,
 } from './ai-job-component-step'
-import { AI_DRAFT_ENTITLEMENT_REFUSAL } from './ai-job-drafts'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import { registerAiJobStep } from './ai-jobs'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
@@ -315,7 +314,13 @@ describe('the component step', () => {
       error: 'Open the site the component is for before starting the job',
     })
     expect(await ask('host-1', STARTER_ORG)).toBeNull()
-    expect(await ask('host-1', FREE_ORG)).toEqual({ status: 403, error: AI_DRAFT_ENTITLEMENT_REFUSAL })
+    // A Free site saves one component (AGL-3615): admitted while it has none, refused once it has.
+    expect(await ask('host-1', FREE_ORG)).toBeNull()
+    mockDocs.set('hosts/host-1/components/cmp-only', { displayName: 'Hero' })
+    expect(await ask('host-1', FREE_ORG)).toEqual({
+      status: 403,
+      error: 'Your plan includes 1 reusable components — upgrade in Billing for more',
+    })
   })
 
   it('builds the issue’s testimonial card under the doctrine: typed properties, bound in the tree, as a draft nothing places', async () => {
@@ -550,8 +555,9 @@ describe('the component step', () => {
     expect(commits).toEqual([])
   })
 
-  it('stops for the member, spending nothing, when the plan does not include reusable components', async () => {
+  it('stops for the member, spending nothing, when the site already holds the components its plan includes', async () => {
     mockDocs.set('orgs/org-1', FREE_ORG)
+    mockDocs.set('hosts/host-1/components/cmp-only', { displayName: 'Hero' })
     const outcome = await createAiJobComponentStep()(context())
     expect(mockRunAiRequest).not.toHaveBeenCalled()
     expect(outcome).toEqual({
@@ -560,7 +566,11 @@ describe('the component step', () => {
       estCostUsd: 0,
       model: 'routed-model',
       stopReason: null,
-      review: { reason: 'limit', message: AI_DRAFT_ENTITLEMENT_REFUSAL, findings: [] },
+      review: {
+        reason: 'limit',
+        message: 'Your plan includes 1 reusable components — upgrade in Billing for more',
+        findings: [],
+      },
     })
   })
 

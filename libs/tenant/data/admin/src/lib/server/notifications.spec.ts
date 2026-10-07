@@ -161,6 +161,9 @@ function fakeFirestore(): any {
   }
 }
 
+const mockPushed: Array<{ uids: readonly string[]; type: string }> = []
+
+import { registerMobilePushSender } from './mobile-push-switch'
 import {
   notifyHostManagers,
   notifyOrgAdmins,
@@ -674,5 +677,98 @@ describe('notifyOrgAdmins for a caller that sends its own email (AGL-3431)', () 
     ])
     expect(written[0].data).toMatchObject({ orgId: 'org-1', title: USAGE.title })
     expect(sends).toHaveLength(0)
+  })
+})
+
+describe('the mobile push channel (AGL-3620)', () => {
+  const ORDER = {
+    type: 'content.order' as const,
+    title: 'New order',
+    body: 'Order #1001 was placed.',
+    link: '/org/hosts/site/orders',
+    orgId: 'org-1',
+    hostId: 'host-1',
+  }
+
+  beforeEach(() => {
+    written.length = 0
+    userDocs.clear()
+    mockPushed.length = 0
+    emailConfigured = false
+    delete process.env['MOBILE_PUSH_ENABLED']
+  })
+
+  let unregister: () => void = () => undefined
+  beforeAll(() => {
+    unregister = registerMobilePushSender(async (uids, payload) => {
+      mockPushed.push({ uids, type: payload.type })
+    })
+  })
+
+  afterAll(() => {
+    unregister()
+    delete process.env['MOBILE_PUSH_ENABLED']
+  })
+
+  it('pushes what the feed shows to somebody who never answered for push', async () => {
+    await notifyUsers(['uid-a'], ORDER)
+    expect(mockPushed).toEqual([{ uids: ['uid-a'], type: 'content.order' }])
+  })
+
+  it('follows a feed mute when push itself was never answered', async () => {
+    userDocs.set('uid-a', {
+      notificationSettings: { account: { content: { console: false } } },
+    })
+    await notifyUsers(['uid-a'], ORDER)
+    expect(mockPushed).toHaveLength(0)
+  })
+
+  it('honours a per-type push answer over the feed', async () => {
+    userDocs.set('uid-a', {
+      notificationSettings: { accountTypes: { 'content.order': { push: false } } },
+    })
+    userDocs.set('uid-b', {
+      notificationSettings: {
+        account: { content: { console: false } },
+        accountTypes: { 'content.order': { push: true } },
+      },
+    })
+    await notifyUsers(['uid-a', 'uid-b'], ORDER)
+    expect(mockPushed).toEqual([{ uids: ['uid-b'], type: 'content.order' }])
+  })
+
+  it('pushes nothing, and still writes the feed, with no transport registered', async () => {
+    unregister()
+    try {
+      await notifyUsers(['uid-a'], ORDER)
+      expect(mockPushed).toHaveLength(0)
+      expect(written).toHaveLength(1)
+    } finally {
+      unregister = registerMobilePushSender(async (uids, payload) => {
+        mockPushed.push({ uids, type: payload.type })
+      })
+    }
+  })
+
+  it('a failing transport stops neither the feed nor another transport', async () => {
+    const off = registerMobilePushSender(async () => {
+      throw new Error('transport down')
+    })
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      await notifyUsers(['uid-a'], ORDER)
+      expect(mockPushed).toEqual([{ uids: ['uid-a'], type: 'content.order' }])
+      expect(written).toHaveLength(1)
+    } finally {
+      off()
+      errors.mockRestore()
+    }
+  })
+
+  it('pushes nothing while the deployment has pulled the kill switch', async () => {
+    process.env['MOBILE_PUSH_ENABLED'] = '0'
+    await notifyUsers(['uid-a'], ORDER)
+    expect(mockPushed).toHaveLength(0)
+    expect(written).toHaveLength(1)
   })
 })

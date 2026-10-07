@@ -52,6 +52,8 @@ export interface OrderEventOrder {
     feeCents: number
   }
   refundedCents: number
+  /** The tax regime: `stripe-automatic`, `manual`, `none`, or `null` when not recorded. */
+  taxMode: string | null
   [key: string]: unknown
 }
 
@@ -83,6 +85,8 @@ export interface OrderEventReturn {
   status: string
   lines: Array<{ lineItemId: number; quantity: number; reason: string }>
   refundCents: number | null
+  /** What went back in stock when the parcel arrived; `null` before then. */
+  restock?: Array<{ lineItemId: number; quantity: number }> | null
 }
 
 export interface OrderEventPayload {
@@ -104,7 +108,50 @@ export const ORDER_DELIVERED_EVENT = definePluginDomainEvent<OrderEventPayload>(
 export const ORDER_REFUNDED_EVENT = definePluginDomainEvent<OrderRefundedEventPayload>('order.refunded')
 export const ORDER_CANCELLED_EVENT = definePluginDomainEvent<OrderEventPayload>('order.cancelled')
 export const RETURN_REQUESTED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.requested')
+export const RETURN_APPROVED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.approved')
+export const RETURN_DECLINED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.declined')
+export const RETURN_RECEIVED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.received')
 export const RETURN_REFUNDED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.refunded')
+
+/**
+ * A checkout a shopper reached with an address (AGL-3639): the fact an
+ * abandoned-cart flow in a merchant's own email platform starts from. Not an
+ * order event — nothing was bought — so it is raised beside them rather than
+ * among them: it is not a workflow trigger and not offered to the merchant's
+ * outbound webhooks, whose events are about orders.
+ */
+export interface CheckoutStartedEventPayload {
+  checkout: {
+    /** The checkout session's id: one event per checkout. */
+    id: string
+    email: string
+    /** Whether the shopper ticked the store's marketing box at checkout. */
+    marketingOptIn: boolean
+    currency: string
+    /** The basket's list value, integer cents, before discounts and shipping. */
+    itemsCents: number
+    /** Where the shopper can pick the checkout up again. */
+    resumeUrl: string | null
+    items: Array<{
+      productId: string
+      variantId: string | null
+      name: string
+      sku: string | null
+      quantity: number
+      unitCents: number
+    }>
+  }
+}
+
+export const CHECKOUT_STARTED_EVENT = definePluginDomainEvent<CheckoutStartedEventPayload>('checkout.started')
+
+export const CHECKOUT_STARTED_EVENT_DECLARATION: PluginDomainEventDeclaration = {
+  event: CHECKOUT_STARTED_EVENT as PluginDomainEvent<unknown>,
+  label: 'Checkout started',
+  description:
+    'A shopper reached checkout with an email address: the basket, its value and the link back to it. Raised once per checkout, whether or not it is paid.',
+  payloadKeys: ['checkout'],
+}
 
 /** Every event commerce raises, by name. */
 export type CommerceEventName =
@@ -114,6 +161,9 @@ export type CommerceEventName =
   | 'order.refunded'
   | 'order.cancelled'
   | 'return.requested'
+  | 'return.approved'
+  | 'return.declined'
+  | 'return.received'
   | 'return.refunded'
 
 /** The events, in the order pickers list them, with their words. */
@@ -164,6 +214,27 @@ export const COMMERCE_EVENT_DECLARATIONS: ReadonlyArray<
     payloadKeys: ['order', 'return'],
   },
   {
+    event: RETURN_APPROVED_EVENT,
+    hostEvent: 'returnApproved',
+    label: 'Return approved',
+    description: 'The store approved a return, or opened one itself.',
+    payloadKeys: ['order', 'return'],
+  },
+  {
+    event: RETURN_DECLINED_EVENT,
+    hostEvent: 'returnDeclined',
+    label: 'Return declined',
+    description: 'The store declined a return request.',
+    payloadKeys: ['order', 'return'],
+  },
+  {
+    event: RETURN_RECEIVED_EVENT,
+    hostEvent: 'returnReceived',
+    label: 'Return received',
+    description: 'The returned items arrived, with what went back in stock.',
+    payloadKeys: ['order', 'return'],
+  },
+  {
     event: RETURN_REFUNDED_EVENT,
     hostEvent: 'returnRefunded',
     label: 'Return refunded',
@@ -185,5 +256,8 @@ export const COMMERCE_EVENT_NAMES: readonly CommerceEventName[] = [
   'order.refunded',
   'order.cancelled',
   'return.requested',
+  'return.approved',
+  'return.declined',
+  'return.received',
   'return.refunded',
 ]

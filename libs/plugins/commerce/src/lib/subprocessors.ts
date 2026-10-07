@@ -20,13 +20,15 @@ import type {
   PluginSubprocessorsAnswer,
 } from '@aglyn/aglyn/plugin-manager/plugin-subprocessors'
 import { TRACKING_CARRIERS } from './model/tracking-url'
+import { EPOS_PRINT_NAMESPACE } from './printing/render-epson'
 
 /**
  * Hosts commerce's code names that are no recipient of anything (AGL-3610):
  * the carriers' public tracking pages, which `model/tracking-url.ts` turns a
  * tracking number into a link to. No server here requests them — the link is
  * printed in a buyer email and on the order status page, and only the buyer's
- * own browser opens it, when they click.
+ * own browser opens it, when they click. The Epson ePOS-Print namespace is
+ * the same: an identifier inside the XML a receipt printer is handed.
  */
 export function commerceSubprocessors(): PluginSubprocessorsAnswer {
   const hosts: PluginEgressHostDeclaration[] = TRACKING_CARRIERS.map(
@@ -41,5 +43,12 @@ export function commerceSubprocessors(): PluginSubprocessorsAnswer {
         'Nothing from the platform. When the buyer clicks the link, their own browser sends the carrier the tracking number in the URL; no customer record, email or order detail goes with it.',
     }),
   )
+  hosts.push({
+    host: new URL(EPOS_PRINT_NAMESPACE).host,
+    disposition: 'no-request',
+    reason:
+      'The ePOS-Print XML namespace (`libs/plugins/commerce/src/lib/printing/render-epson.ts`) on the print job an Epson receipt printer receives when it polls. A namespace is an identifier that happens to look like a URL; neither the platform nor the printer requests it.',
+    dataReceived: 'Nothing. No request is made.',
+  })
   return { hosts }
 }

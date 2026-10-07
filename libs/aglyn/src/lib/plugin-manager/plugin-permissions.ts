@@ -35,7 +35,34 @@ export interface PluginPermission {
   defaults: { admin: boolean; editor: boolean; viewer: boolean }
 }
 
-const pluginPermissions = new Map<string, PluginPermission>()
+/*
+ * One registry per process, keyed on `globalThis` under `Symbol.for`, like
+ * `plugin-services.ts`. Next compiles the boot file and the route handlers
+ * apart, so each can hold its own copy of this module: with the map at module
+ * scope, a plugin's keys registered by one copy were absent from the copy
+ * `resolveOrgPermissions` read, an absent key reads as refused, and the
+ * register's `managePos` gate answered 403 to the site's own owner.
+ */
+const REGISTRY_KEY = Symbol.for('@aglyn/aglyn:plugin-permissions')
+
+interface PluginPermissionTables {
+  permissions: Map<string, PluginPermission>
+  listeners: Set<() => void>
+  version: { value: number }
+}
+
+const globalScope = globalThis as typeof globalThis & {
+  [REGISTRY_KEY]?: PluginPermissionTables
+}
+
+const tables: PluginPermissionTables =
+  globalScope[REGISTRY_KEY] ??
+  (globalScope[REGISTRY_KEY] = {
+    permissions: new Map(),
+    listeners: new Set(),
+    version: { value: 0 },
+  })
+const pluginPermissions = tables.permissions
 
 /*
  * Whoever resolved a permission map before a plugin registered holds a map
@@ -47,8 +74,7 @@ const pluginPermissions = new Map<string, PluginPermission>()
  * observable, the way `subscribePluginEntitlements` makes the org catalog's
  * registrations observable, and the provider re-reads on every change.
  */
-let registrationVersion = 0
-const listeners = new Set<() => void>()
+const listeners = tables.listeners
 
 /** Calls `listener` after every registration; answers the unsubscribe. */
 export function subscribePluginPermissions(listener: () => void): () => void {
@@ -63,11 +89,11 @@ export function subscribePluginPermissions(listener: () => void): () => void {
  * `useSyncExternalStore` over `subscribePluginPermissions`.
  */
 export function pluginPermissionsVersion(): number {
-  return registrationVersion
+  return tables.version.value
 }
 
 function notifyListeners(): void {
-  registrationVersion += 1
+  tables.version.value += 1
   for (const listener of [...listeners]) listener()
 }
 
