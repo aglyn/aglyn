@@ -120,6 +120,8 @@ const MUI_DECLARED_CONTAINERS: readonly string[] = [
   'muiTabPanel',
   'muiTabs',
   'muiToolbar',
+  // Its own text, then the elements dropped into it (AGL-3672).
+  'muiTypography',
   'section',
 ]
 
