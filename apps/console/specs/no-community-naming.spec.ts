@@ -249,6 +249,23 @@ const ALLOWED = new Map<string, string>([
   ['package-lock.json', '@eslint-community/*, ansi-html-community.'],
   ['apps/docs/package-lock.json', 'Same third-party packages.'],
   ['cloud/functions/package-lock.json', '@eslint-community/* via eslint.'],
+  // The Aglyn app (AGL-3620) reads connectivity through React Native's own
+  // community-maintained package, so its scope appears wherever the app
+  // declares, resolves, imports or transforms it.
+  [
+    'apps/mobile/package-lock.json',
+    '@react-native-community/* and @react-native/community-cli-plugin.',
+  ],
+  ['apps/mobile/package.json', 'Declares @react-native-community/netinfo.'],
+  [
+    'apps/mobile/jest.config.js',
+    'The transformIgnorePatterns entry that lets jest compile @react-native-community/*.',
+  ],
+  ['libs/mobile/core/package.json', 'Declares @react-native-community/netinfo.'],
+  [
+    'libs/mobile/core/src/lib/query.tsx',
+    'Imports NetInfo from @react-native-community/netinfo.',
+  ],
 
   // ---- Frozen legal text (AGL-1497) — NO LONGER IN THIS REPO. ----
   //
