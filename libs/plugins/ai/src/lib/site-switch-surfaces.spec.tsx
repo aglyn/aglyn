@@ -81,6 +81,11 @@ const SITE_ZONES: readonly string[] = [
   'hostForms',
   // And on its Components page (AGL-3051).
   CONSOLE_WIDGET_SLOTS.hostComponents,
+  // Create with AI in the media library (AGL-3602). On a site's Media page,
+  // and in a picker opened for a site, it is listed from the site's set; on
+  // the organization's Media page, which names no site, from the
+  // workspace's, the way the CRM's zones below are.
+  CONSOLE_WIDGET_SLOTS.mediaLibrary,
   CONSOLE_WIDGET_SLOTS.hostSeo,
   CONSOLE_WIDGET_SLOTS.seoFields,
   CONSOLE_WIDGET_SLOTS.hostTheme,
