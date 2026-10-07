@@ -38,7 +38,7 @@ import type { StoredLabel } from './labels'
  * total label charges, every method) onto the rollup.
  */
 
-export const SHIPPING_USAGE_METER_ID = 'shipping-labels'
+export { SHIPPING_USAGE_METER_ID } from '../constants/bundle-common'
 
 export async function measureShippingMonth(context: PluginUsageMeterContext): Promise<PluginUsageMeterReading> {
   const snapshot = await orgRef(context.orgId)

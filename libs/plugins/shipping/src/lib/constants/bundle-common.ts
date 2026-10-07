@@ -18,6 +18,9 @@
 /** The plugin id: `plugins.config.json`, `org.enabledPlugins`, every registry. */
 export const SHIPPING_PLUGIN_ID = 'shipping'
 
+/** The usage meter the monthly sweep bills deferred label charges through. */
+export const SHIPPING_USAGE_METER_ID = 'shipping-labels'
+
 /**
  * The plugin whose orders and checkouts this one ships, by id only — a
  * plugin never imports another. Shipping runs only on a site where it is on.

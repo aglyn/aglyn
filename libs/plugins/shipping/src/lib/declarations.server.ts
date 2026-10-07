@@ -17,13 +17,13 @@
 
 import { subscribePluginDomainEvent } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
 import { registerPluginShipmentListener } from '@aglyn/aglyn/plugin-manager/plugin-shipment-records'
-import { registerPluginShippingRateQuoter } from '@aglyn/aglyn/plugin-manager/plugin-shipping-rates'
+import {
+  registerPluginShippingRateQuoter,
+  type PluginShippingRateQuoter,
+} from '@aglyn/aglyn/plugin-manager/plugin-shipping-rates'
 import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
-import { SHIPPING_PLUGIN_ID } from './constants/bundle-common'
+import { SHIPPING_PLUGIN_ID, SHIPPING_USAGE_METER_ID } from './constants/bundle-common'
 import type { PaidOrderEnvelope } from './server/address-checks'
-import { shippingRateQuoter } from './server/rate-quoter'
-import { onShipmentAnnounced } from './server/trackers'
-import { SHIPPING_USAGE_METER_ID } from './server/usage-meter'
 
 /**
  * Shipping's SERVER declarations (AGL-3612), loaded by both apps' servers
@@ -39,11 +39,38 @@ import { SHIPPING_USAGE_METER_ID } from './server/usage-meter'
  * Each is registered whether or not the deployment is configured, and each
  * answers as though it were absent when it is not: the quoter is not
  * available, the listener does nothing, the meter measures zero.
+ *
+ * Every handler reaches its server module through a dynamic import. Those
+ * modules read Firestore through the tenant data layer, whose barrel pulls
+ * in the render cache and with it `next/cache`; imported here at the top,
+ * that chain would load in every app's boot (and every spec that boots the
+ * declarations) before a single quote is asked for.
  */
+const lazyRateQuoter: PluginShippingRateQuoter = {
+  async available(hostId) {
+    const { shippingRateQuoter } = await import('./server/rate-quoter')
+    return shippingRateQuoter.available(hostId)
+  },
+  async quote(request) {
+    const { shippingRateQuoter } = await import('./server/rate-quoter')
+    return shippingRateQuoter.quote(request)
+  },
+  async listServices(hostId) {
+    const { shippingRateQuoter } = await import('./server/rate-quoter')
+    return shippingRateQuoter.listServices(hostId)
+  },
+  async validateAddress(hostId, address) {
+    const { shippingRateQuoter } = await import('./server/rate-quoter')
+    if (!shippingRateQuoter.validateAddress) return { verdict: 'unknown', messages: [] }
+    return shippingRateQuoter.validateAddress(hostId, address)
+  },
+}
+
 export function registerShippingServerDeclarations(): void {
-  registerPluginShippingRateQuoter(shippingRateQuoter, { pluginId: SHIPPING_PLUGIN_ID })
+  registerPluginShippingRateQuoter(lazyRateQuoter, { pluginId: SHIPPING_PLUGIN_ID })
   registerPluginShipmentListener(
     async (announcement) => {
+      const { onShipmentAnnounced } = await import('./server/trackers')
       await onShipmentAnnounced(announcement)
     },
     { pluginId: SHIPPING_PLUGIN_ID },
