@@ -536,32 +536,6 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       "A visitor's IP address and user-agent. No account or order data.",
   },
 
-  // MARK – Apple
-
-  // The APNs sender (AGL-3651) posts each push straight to Apple's gateway;
-  // a development build's token belongs to the sandbox one. The published row
-  // is the 'Apple Push Notification service' entry in SDK_EGRESS below.
-  'api.push.apple.com': {
-    disposition: 'subprocessor',
-    entity: 'Apple Inc.',
-    region: 'United States',
-    purpose: 'Delivery of push notifications to the native apps on Apple devices',
-    publishedOn: '2026-10-07',
-    reason:
-      '`push-apns.ts` in the tenant admin lib sends each push to a registered iPhone, iPad or Mac over HTTP/2, authenticated with the operator\'s APNs key; it is reached only from the notification fan-out, only for devices whose owner allows push.',
-    dataReceived: "The notification's title and body, its tap data (type, console link, workspace and site ids), and the device push token.",
-  },
-  'api.sandbox.push.apple.com': {
-    disposition: 'subprocessor',
-    entity: 'Apple Inc.',
-    region: 'United States',
-    purpose: 'Delivery of push notifications to the native apps on Apple devices',
-    publishedOn: '2026-10-07',
-    reason:
-      "APNs' development gateway, used by the same sender for a device whose token a development build registered (`apnsEnvironment: 'sandbox'`).",
-    dataReceived: "The notification's title and body, its tap data (type, console link, workspace and site ids), and the device push token.",
-  },
-
   // MARK – Meta
 
   'connect.facebook.net': {
