@@ -116,6 +116,10 @@ const SITE_ZONES: readonly string[] = [
   // on a site's Overlays section and declared by it, so plain ids again.
   'hostOverlays',
   'overlayEditor',
+  // The Campaigns section's zone (AGL-3603). On the organization's hub it is
+  // listed from the workspace's set, and the job it starts still names the
+  // site it is placed on, which the jobs route refuses when AI is off there.
+  'hostCampaigns',
 ]
 
 /** Zones drawn on the WORKSPACE's pages, where no site's switch reaches. */

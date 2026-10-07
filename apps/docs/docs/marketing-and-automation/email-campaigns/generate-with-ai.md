@@ -29,6 +29,13 @@ alternatives. Change which one leads at any time, or write your own.
 email, with the subject and preheader already filled in. Open it from
 **Marketing → Campaigns**.
 
+## Where to start it {#where-to-start-it}
+
+On **Marketing → Campaigns**, press **Create with AI** beside **Create campaign** — on a
+site's Marketing page, or on your organization's, where it asks which site the campaign
+is placed on. When your plan sends no campaign email, the same button writes the email
+design on its own. See [Marketing with AI](../../ai/marketing-with-ai.md#create-a-campaign).
+
 ## Write the brief
 
 Say what the email is for, who it speaks to, and what you want the reader to

@@ -2388,6 +2388,7 @@
             "experimentResult",
             "experimentVariants",
             "hostAutomations",
+            "hostCampaigns",
             "hostComponents",
             "hostFirstRun",
             "hostForms",

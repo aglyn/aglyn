@@ -34,6 +34,7 @@ import {
   EXPERIMENT_VARIANTS_ZONE,
 } from './components/experiment-zones'
 import { HOST_OVERLAYS_ZONE, OVERLAY_EDITOR_ZONE } from './components/overlay-zones'
+import { HOST_CAMPAIGNS_ZONE } from './components/campaign-list-zones'
 import {
   MARKETING_CONSOLE_SECTIONS,
   MARKETING_ORG_CONSOLE_SECTIONS,
@@ -186,6 +187,11 @@ export function registerMarketingConsole(): void {
     OVERLAY_EDITOR_ZONE,
     'An overlay’s copy',
     'Among the overlay editor’s fields. A widget is handed the copy as the editor holds it, the field limits and the popup triggers, and proposes copy through `proposeValues`, which fills the fields unsaved; the editor’s Save is the write.',
+  )
+  bareZone(
+    HOST_CAMPAIGNS_ZONE,
+    'Start a campaign',
+    'On the Campaigns section, a site’s or the organization’s, beside Create campaign and again in the empty list: another way to start a campaign. A widget is handed the site, the organization and, on the organization’s hub, the sites a campaign could be placed on; it writes nothing through the list.',
   )
   registerMarketingRecordRoutes()
   // The site's overlays, for another plugin's picker to list (AGL-3080).

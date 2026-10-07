@@ -44,17 +44,44 @@ AI** turns a brief into a new overlay.
 A fact the brief did not give — a discount, a date, a price — arrives in square brackets
 for you to fill rather than invented.
 
+## Create a campaign {#create-a-campaign}
+
+On **Marketing → Campaigns**, beside **Create campaign** and on the list while it is
+empty, **Create with AI** turns a brief into a campaign.
+
+1. On your organization's **Marketing** page, pick the site the campaign is placed on
+   and sent as. On a site's own page it is that site.
+2. Give it a name if you like, and say what the campaign is for.
+3. **Write the campaign.** The job writes an email design — with three subject lines
+   and three preheaders — and a **draft campaign** holding that email. Follow it in the
+   dialog or in **AI jobs**, then open the draft campaign.
+4. Pick who receives it, check the email and schedule it. Until you do, nothing is sent,
+   scheduled or queued, and the campaign is aimed at nobody.
+
+When your brief names one of your lists, the campaign's note says which one, and when
+that list's past campaigns were opened most — see
+[who receives it](../marketing-and-automation/email-campaigns/generate-with-ai.md#who-receives-it).
+
+**A plan that sends no campaign email** gets **Write a campaign email with AI** instead:
+the same dialog writes the email design on its own, which you can use once your plan
+sends campaigns. Upgrading is done in **Billing**.
+
 ## What is sent {#what-is-sent}
 
 For overlay copy: your brief, whether it is a bar or a popup, the triggers the editor
 offers, and the overlay's current copy when there is some. Nothing about your visitors,
 your figures or your other overlays is sent.
 
+For a campaign: your brief, the name you gave it and what your site already has — the
+same as [generating an email](../marketing-and-automation/email-campaigns/generate-with-ai.md).
+Your lists, contacts and past send figures are read on the server and are not sent.
+
 ## Who can use it {#who-can-use-it}
 
 The doors appear for a member who may generate with AI, on a workspace whose plan
-includes AI generation, on a site with AI switched on and with marketing overlays
-included in its plan. Each request is metered in AI credits like any other — see
+includes AI generation and on a site with AI switched on. The overlay doors also need
+marketing overlays in the plan. A campaign also needs the **Email** plugin on for the
+site. Each request is metered in AI credits like any other — see
 [credits and caps](overview.md#credits-and-caps).
 
 ## Related {#related}

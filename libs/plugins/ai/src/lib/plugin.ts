@@ -82,6 +82,7 @@ import {
   AiExplainAutomation,
   AiExplainRunFailure,
 } from './components/ai-explain-automation.component'
+import AiCreateCampaignButton from './components/ai-campaign-create.component'
 import {
   AiCreateOverlayButton,
   AiOverlayEditorCard,
@@ -595,6 +596,19 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiOverlayEditorCard,
+      },
+      // A campaign from a brief (AGL-3603), beside Create campaign on the
+      // Campaigns section the marketing plugin hosts: the `campaign` job's
+      // first console door, or the `email` job's where the plan sends no
+      // campaign email. Both write drafts that are aimed at nobody and sent
+      // by nobody until a member does.
+      {
+        slot: 'hostCampaigns',
+        widgetId: 'ai-create-campaign',
+        title: 'Create a campaign with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiCreateCampaignButton,
       },
     ],
   })

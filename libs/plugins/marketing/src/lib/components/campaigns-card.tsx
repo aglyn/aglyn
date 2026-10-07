@@ -103,6 +103,7 @@ import {
   type MarketingOrgMount,
 } from './marketing-org-mount'
 import { useCampaignManageApi } from './use-campaign-send-api'
+import { HostCampaignsZone } from './campaign-list-zones'
 import { useCampaignTopicOptions } from './use-campaign-topic-options'
 
 /**
@@ -883,6 +884,24 @@ export function HostCampaignsCard(props: {
   const none =
     page.status !== 'loading' && !rows.length && !filtering && page.page === 0
 
+  /*
+   * Other ways to start a campaign, from plugins (AGL-3603): the
+   * `hostCampaigns` zone this plugin declares, drawn through the shell's own
+   * gated slot. On the organization's hub it is handed the sites a campaign
+   * could be placed on, since there is no one site to take.
+   */
+  const campaignsZone = (
+    <HostCampaignsZone
+      hostId={hostId}
+      orgId={orgId}
+      sites={
+        hostId
+          ? []
+          : (orgMount?.hosts ?? []).map((host) => ({ id: host.id, name: host.name }))
+      }
+    />
+  )
+
   return (
     <CardDisplay
       header={'Campaigns'}
@@ -894,17 +913,20 @@ export function HostCampaignsCard(props: {
       })}
       HeaderProps={{
         action: (
-          <Button
-            size="small"
-            variant="contained"
-            disabled={creating}
-            onClick={() => {
-              setCreateError(null)
-              setCreateOpen(true)
-            }}
-          >
-            {creating ? 'Creating…' : 'Create campaign'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {campaignsZone}
+            <Button
+              size="small"
+              variant="contained"
+              disabled={creating}
+              onClick={() => {
+                setCreateError(null)
+                setCreateOpen(true)
+              }}
+            >
+              {creating ? 'Creating…' : 'Create campaign'}
+            </Button>
+          </Stack>
         ),
       }}
       contentGutterX
@@ -990,9 +1012,13 @@ export function HostCampaignsCard(props: {
           }
           noRowsAction={
             none && kind === 'campaign' ? (
-              <Button variant="contained" onClick={() => setCreateOpen(true)}>
-                {'Create campaign'}
-              </Button>
+              <Stack direction="row" spacing={1}>
+                {/* Other ways to start a campaign, the header's zone again. */}
+                {campaignsZone}
+                <Button variant="contained" onClick={() => setCreateOpen(true)}>
+                  {'Create campaign'}
+                </Button>
+              </Stack>
             ) : undefined
           }
         />
