@@ -20,7 +20,7 @@ import InputAdornment from '@mui/material/InputAdornment'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import type { Theme } from '@mui/material/styles'
+import type { CSSObject, Theme } from '@mui/material/styles'
 import { type FormEvent, useState } from 'react'
 import * as CommerceModel from '../../../model'
 import { displayMoney, dollarsToCents, type PosDisplayAnswer } from './pos-display-api'
@@ -28,7 +28,7 @@ import { displayMoney, dollarsToCents, type PosDisplayAnswer } from './pos-displ
 type TipPrompt = NonNullable<CommerceModel.PosDisplayState['tip']>
 
 /** A tall, full-width touch target. */
-export const posDisplayTouchSx = (theme: Theme) => ({
+export const posDisplayTouchSx = (theme: Theme): CSSObject => ({
   minHeight: theme.spacing(10),
   ...theme.typography.h5,
 })
