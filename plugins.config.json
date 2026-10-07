@@ -2470,7 +2470,8 @@
       "register": {
         "console": "registerFunnelsConsole",
         "consoleApi": "registerFunnelsConsoleApi",
-        "serverDeclarations": "registerFunnelsServerDeclarations"
+        "serverDeclarations": "registerFunnelsServerDeclarations",
+        "consoleServerDeclarations": "registerFunnelsConsoleServerDeclarations"
       },
       "apiPrefixes": [
         "funnels"
@@ -2487,6 +2488,15 @@
         },
         "publishedSiteImpact": "console-only"
       },
+      "hostEvents": [
+        {
+          "$comment": "Raised by the funnels plugin's drop-off sweep (AGL-3605) once per person, funnel step and wait: a person who identified themselves by submitting a form reached `step` and had not reached the next step `afterHours` later, in this visit or any other of theirs. Never for an anonymous visit. Not the person's own action, so an email on it is a mailing with its unsubscribe link.",
+          "type": "funnelLeft",
+          "order": 150,
+          "label": "Left a funnel",
+          "payloadKeys": ["funnelId", "funnelName", "step", "stepLabel", "nextStepLabel", "afterHours", "email"]
+        }
+      ],
       "hostCollections": [
         {
           "name": "funnels",

@@ -32,6 +32,7 @@ import {
   SITE_JOURNEY_BEACON_FIELD,
   SITE_JOURNEY_ID_PATTERN,
   SITE_JOURNEY_MAX_STEPS,
+  siteJourneyField,
 } from './site-journey'
 
 const sent = () => mockSend.mock.calls.map(([payload]) => payload)
@@ -133,5 +134,23 @@ describe('hostRecordsJourneys', () => {
     expect(hostRecordsJourneys({ funnelRecording: true })).toBe(true)
     expect(hostRecordsJourneys({ funnelRecording: 'true' })).toBe(false)
     expect(hostRecordsJourneys(null)).toBe(false)
+  })
+})
+
+describe('a door that identifies the visitor (AGL-3605)', () => {
+  it('hands the visit id only while the page records, and once a visit has started', () => {
+    expect(siteJourneyField()).toEqual({})
+    configureSiteJourney({ hostId: 'h1', enabled: true, path: '/pricing' })
+    const id = sent()[0][SITE_JOURNEY_BEACON_FIELD]
+    expect(siteJourneyField()).toEqual({ journey: id })
+    configureSiteJourney({ hostId: 'h1', enabled: false, path: '/pricing' })
+    expect(siteJourneyField()).toEqual({})
+  })
+
+  it('never sends an email step from a page: those are the delivery log’s to record', () => {
+    configureSiteJourney({ hostId: 'h1', enabled: true, path: '/pricing' })
+    mockSend.mockClear()
+    recordSiteJourneyStep('email', 'opened')
+    expect(sent()).toEqual([])
   })
 })

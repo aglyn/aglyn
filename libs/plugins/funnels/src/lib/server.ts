@@ -19,6 +19,7 @@ import { registerPluginApiRoute } from '@aglyn/aglyn/app-utils/api-plugins'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { registerFunnelFigureReaders } from './server/funnel-figures'
 import {
+  funnelsActHandler,
   funnelsDeleteHandler,
   funnelsInventoryHandler,
   funnelsProposeHandler,
@@ -27,7 +28,7 @@ import {
 } from './server/funnels-api'
 
 /**
- * The funnels plugin's console API (AGL-3605): its five doors under
+ * The funnels plugin's console API (AGL-3605): its six doors under
  * `/api/funnels/*`, and the `funnels.*` figure readers the AI insight job
  * reads from the same process.
  */
@@ -37,5 +38,12 @@ export function registerFunnelsConsoleApi(): void {
   registerPluginApiRoute('funnels/save', funnelsSaveHandler)
   registerPluginApiRoute('funnels/delete', funnelsDeleteHandler)
   registerPluginApiRoute('funnels/propose', funnelsProposeHandler)
+  registerPluginApiRoute('funnels/act', funnelsActHandler)
   registerFunnelFigureReaders(() => firebaseAdmin.app().firestore())
 }
+
+/**
+ * The automation "Act on this drop-off" drafts, for the app spec that holds it
+ * to the real automation writer: one plugin's spec may not import another.
+ */
+export { dropOffAutomationContent } from './model/drop-off'

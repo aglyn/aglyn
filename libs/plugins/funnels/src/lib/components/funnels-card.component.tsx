@@ -38,7 +38,9 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { collection, doc, limit, query } from 'firebase/firestore'
+import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeFunnelDefinition } from '../model/funnel-definition'
 import type { FunnelInventory } from '../model/funnel-inventory'
@@ -50,11 +52,14 @@ import {
   type FunnelResult,
   type StoredFunnel,
 } from '../model/funnels.types'
+import { funnelStepTitle } from '../model/funnel-definition'
+import { FunnelDropOffDialog } from './funnel-drop-off.dialog'
 import { FunnelEditorDialog } from './funnel-editor.dialog'
 import { FunnelResults } from './funnel-results.component'
 import { FUNNEL_INSIGHT_ZONE, FUNNELS_CREATE_ZONE } from './funnel-zones'
 import {
   deleteFunnel,
+  draftDropOffAutomation,
   fetchFunnelInventory,
   fetchFunnelResult,
   proposeFunnel,
@@ -130,6 +135,14 @@ export function FunnelsCard({ hostId, orgId }: FunnelsCardProps) {
   const [editor, setEditor] = useState<EditorState | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [dropOffStep, setDropOffStep] = useState<number | null>(null)
+  const params = useParams<{ orgSlug?: string; host?: string }>()
+  // Where a drafted automation is edited, from whichever plugin publishes the
+  // `action` record kind: text instead of a link where none does.
+  const automationHref = (automationId: string) =>
+    params?.orgSlug && params?.host
+      ? pluginRecordHref('action', { orgSlug: params.orgSlug, host: params.host }, automationId)
+      : null
 
   const selectedKey = selected ? `${selected.$id}` : null
   useEffect(() => {
@@ -362,7 +375,12 @@ export function FunnelsCard({ hostId, orgId }: FunnelsCardProps) {
           </Stack>
           {loading && !result ? <LinearProgress /> : null}
           {resultError ? <Alert severity="error">{resultError}</Alert> : null}
-          {result ? <FunnelResults result={result} /> : null}
+          {result ? (
+            <FunnelResults
+              result={result}
+              onActOnDropOff={canManage ? (reached) => setDropOffStep(reached) : undefined}
+            />
+          ) : null}
           {result && Zone && selected ? (
             <Zone
               slot={FUNNEL_INSIGHT_ZONE.id}
@@ -377,6 +395,19 @@ export function FunnelsCard({ hostId, orgId }: FunnelsCardProps) {
           </Typography>
         </Stack>
       )}
+      {selected && dropOffStep !== null ? (
+        <FunnelDropOffDialog
+          open
+          step={dropOffStep}
+          stepLabel={selected.steps[dropOffStep - 1] ? funnelStepTitle(selected.steps[dropOffStep - 1]) : ''}
+          nextStepLabel={selected.steps[dropOffStep] ? funnelStepTitle(selected.steps[dropOffStep]) : ''}
+          onClose={() => setDropOffStep(null)}
+          onDraft={async (afterHours, action) => {
+            const drafted = await draftDropOffAutomation(user, hostId, selected.$id, dropOffStep, afterHours, action)
+            return { name: drafted.name, href: automationHref(drafted.automationId) }
+          }}
+        />
+      ) : null}
       <FunnelEditorDialog
         open={editor !== null}
         initial={editor?.initial ?? null}

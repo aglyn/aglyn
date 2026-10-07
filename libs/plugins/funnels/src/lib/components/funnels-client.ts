@@ -72,6 +72,22 @@ export const fetchFunnelResult = (
 export const proposeFunnel = (user: User, hostId: string, brief: string) =>
   post<{ draft: FunnelDefinition; dropped: string[] }>(user, 'propose', { hostId, brief })
 
+export const draftDropOffAutomation = (
+  user: User,
+  hostId: string,
+  funnelId: string,
+  step: number,
+  afterHours: number,
+  action: 'email' | 'task',
+) =>
+  post<{ automationId: string; name: string; replayed: boolean }>(user, 'act', {
+    hostId,
+    funnelId,
+    step,
+    afterHours,
+    action,
+  })
+
 /** The last `days` UTC days, ending today, as the results door reads a range. */
 export function recentRange(days: number, now: number = Date.now()): { from: string; to: string } {
   const day = (ms: number) => new Date(ms).toISOString().slice(0, 10)

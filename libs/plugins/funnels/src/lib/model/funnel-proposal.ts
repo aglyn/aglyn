@@ -56,6 +56,7 @@ export const FUNNEL_PROPOSAL_SYSTEM = [
   '- order: key is "" (an order was placed and paid).',
   '- overlay: key is an id from OVERLAYS (a bar or popup was clicked), or "" for any.',
   '- event: key is a custom event name in snake_case, only if the description names one.',
+  '- email: key is "opened" or "clicked" (an email from the site), only if the description is about a follow-up email.',
   'Use ONLY paths and ids that appear in the lists. Never invent one.',
   'Answer with JSON only, no prose: {"name": string, "steps": [{"type": string, "key": string, "match"?: string, "label": string}]}',
   'Each label is a few plain words a site owner would recognize.',

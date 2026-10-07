@@ -17,7 +17,7 @@
 
 import { sendAnalyticsBeacon } from '@aglyn/aglyn/app-utils/analytics-beacon'
 import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
-import { recordSiteJourneyStep } from '@aglyn/aglyn/app-utils/site-journey'
+import { recordSiteJourneyStep, siteJourneyField } from '@aglyn/aglyn/app-utils/site-journey'
 import { utmTouchField } from '@aglyn/aglyn/app-utils/utm-touch'
 import * as Aglyn from '@aglyn/aglyn'
 import {
@@ -446,6 +446,11 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
             // the server can tell "arrived from nowhere" from "this door does
             // not report".
             ...utmTouchField(),
+            // The visit this submission ends, when the site records visits
+            // for its funnels and the visitor's consent allows it (AGL-3605):
+            // the server ties it to the address submitted, so a funnel's
+            // drop-off follow-up can reach this person.
+            ...siteJourneyField(),
           }),
         })
         if (response.ok) {

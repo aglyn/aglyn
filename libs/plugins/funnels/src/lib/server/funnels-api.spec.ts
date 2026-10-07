@@ -22,7 +22,7 @@ const mockVerify = jest.fn()
 const mockOrg = jest.fn()
 
 jest.mock('firebase-admin/firestore', () => ({
-  FieldValue: { serverTimestamp: () => 'SERVER_TIME' },
+  FieldValue: jest.requireActual('../testing/fake-firestore').FAKE_FIELD_VALUE,
   Timestamp: { fromMillis: (ms: number) => ({ toMillis: () => ms }) },
 }))
 jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => {
@@ -37,8 +37,14 @@ jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
   getOrgForHost: (hostId: string) => mockOrg(hostId),
 }))
 
+import {
+  registerPluginResourceDraftWriter,
+  type PluginResourceDraftWriter,
+} from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { registerPluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import {
+  funnelsActHandler,
   funnelsDeleteHandler,
   funnelsProposeHandler,
   funnelsResultsHandler,
@@ -217,5 +223,82 @@ describe('Create with AI (AGL-3605)', () => {
     )
     const response = await call(funnelsProposeHandler, { hostId: 'h1', brief: 'x' })
     expect(response).toMatchObject({ code: 402, body: { error: 'Out of credits', reason: 'quota' } })
+  })
+})
+
+describe('Act on this drop-off (AGL-3605)', () => {
+  const NOW = Date.now()
+  let writer: jest.Mocked<PluginResourceDraftWriter>
+
+  function withFunnel(extra: Record<string, unknown> = {}) {
+    mockDb.seed('hosts/h1/funnels/fx', { ...FUNNEL, ...extra })
+  }
+
+  beforeEach(() => {
+    resetPluginServicesForTests()
+    writer = {
+      refusal: jest.fn().mockResolvedValue(null),
+      check: jest.fn().mockReturnValue({ ok: true, facts: {} }),
+      read: jest.fn().mockResolvedValue(null),
+      write: jest.fn().mockImplementation(async (request) => ({
+        ok: true,
+        replayed: false,
+        id: request.id,
+        name: request.name,
+        versionId: null,
+        facts: {},
+      })),
+    }
+    registerPluginResourceDraftWriter('automation', writer, { pluginId: 'workflows' })
+    withFunnel()
+  })
+
+  const act = (body: Record<string, unknown> = {}) =>
+    call(funnelsActHandler, { hostId: 'h1', funnelId: 'fx', step: 1, afterHours: 24, action: 'email', ...body })
+
+  it('drafts the automation switched off through the automation writer, and watches the step', async () => {
+    mockDb.seed('hosts/h1/funnelJourneys/recent', { personEmail: 'ada@example.com', identifiedAt: NOW - 60_000 })
+    const response = await act()
+    expect(response.code).toBe(200)
+    expect(writer.write).toHaveBeenCalledTimes(1)
+    const request = writer.write.mock.calls[0][0]
+    expect(request).toMatchObject({ orgId: 'o1', hostId: 'h1', uid: 'u1' })
+    expect((request.content['action'] as any).trigger.event).toBe('funnelLeft')
+    expect(response.body).toMatchObject({ automationId: request.id, replayed: false })
+    expect(mockDb.docs.get('hosts/h1/funnels/fx')?.['dropOffWatches']).toEqual([{ step: 1, afterHours: 24 }])
+    // A person identified within the wait is looked at on the next tick.
+    expect(mockDb.docs.get('hosts/h1/funnelJourneys/recent')?.['dropOffCheckAt']).toEqual(expect.any(Number))
+  })
+
+  it('keeps one watch per step and wait however many automations start on it', async () => {
+    withFunnel({ dropOffWatches: [{ step: 1, afterHours: 24 }] })
+    expect((await act({ action: 'task' })).code).toBe(200)
+    expect(mockDb.docs.get('hosts/h1/funnels/fx')?.['dropOffWatches']).toEqual([{ step: 1, afterHours: 24 }])
+  })
+
+  it('passes the writer’s refusal through, and writes nothing', async () => {
+    writer.refusal.mockResolvedValue({ status: 403, error: 'Automations are not included on this workspace’s plan.' })
+    const response = await act()
+    expect(response).toMatchObject({ code: 403, body: { error: 'Automations are not included on this workspace’s plan.' } })
+    expect(writer.write).not.toHaveBeenCalled()
+    expect(mockDb.docs.get('hosts/h1/funnels/fx')).not.toHaveProperty('dropOffWatches')
+  })
+
+  it('refuses a step with no step after it, a wait out of range and an unknown action', async () => {
+    expect((await act({ step: 2 })).code).toBe(400)
+    expect((await act({ afterHours: 0 })).code).toBe(400)
+    expect((await act({ action: 'sms' })).code).toBe(400)
+    expect(writer.write).not.toHaveBeenCalled()
+  })
+
+  it('answers that automations are unavailable when no plugin writes them', async () => {
+    resetPluginServicesForTests()
+    expect((await act()).code).toBe(404)
+  })
+
+  it.each(['author', 'viewer'])('is not for an %s', async (role) => {
+    site(role)
+    withFunnel()
+    expect((await act()).code).toBe(403)
   })
 })

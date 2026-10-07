@@ -16,6 +16,7 @@
  */
 
 import {
+  SITE_JOURNEY_EMAIL_KEYS,
   SITE_JOURNEY_STEP_TYPES,
   type SiteJourneyStepType,
 } from '@aglyn/aglyn/app-utils/site-journey'
@@ -70,6 +71,7 @@ const ANY = ''
 
 function blankStep(type: SiteJourneyStepType = 'page', inventory?: FunnelInventory | null): FunnelStep {
   if (type === 'page') return { type, key: inventory?.pages[0] ?? '/', match: 'exact' }
+  if (type === 'email') return { type, key: 'opened' }
   return { type, key: ANY }
 }
 
@@ -81,6 +83,26 @@ function StepKeyField(props: {
 }) {
   const { step, inventory, index, onChange } = props
   if (step.type === 'order') return null
+  if (step.type === 'email') {
+    return (
+      <TextField
+        select
+        size="small"
+        label="What they did"
+        value={step.key}
+        sx={{ minWidth: 220 }}
+        slotProps={{ htmlInput: { 'aria-label': `Step ${index + 1} email outcome` } }}
+        helperText="Counted only for people who submitted a form on this site"
+        onChange={(event) => onChange({ ...step, key: event.target.value })}
+      >
+        {SITE_JOURNEY_EMAIL_KEYS.map((key) => (
+          <MenuItem key={key} value={key}>
+            {key === 'opened' ? 'Opened an email from the site' : 'Clicked a link in one'}
+          </MenuItem>
+        ))}
+      </TextField>
+    )
+  }
   if (step.type === 'event') {
     return (
       <TextField

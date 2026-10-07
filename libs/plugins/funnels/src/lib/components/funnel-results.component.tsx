@@ -16,11 +16,21 @@
  */
 
 import ScrollTable from '@aglyn/shared-ui-jsx/components/scroll-table.component'
-import { Box, LinearProgress, Stack, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material'
+import {
+  Box,
+  Button,
+  LinearProgress,
+  Stack,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Typography,
+} from '@mui/material'
 import type { FunnelResult } from '../model/funnels.types'
 
 /**
- * A funnel's result (AGL-3605): one bar per step with its visits and share,
+ * A funnel's result (AGL-3605): one bar per step with its visitors and share,
  * the drop-off before it and the median time from the step before, then the
  * same entered/completed split by where visits came from.
  */
@@ -41,7 +51,16 @@ export function formatDuration(ms: number | null): string {
   return `${Math.floor(hours / 24)}d ${hours % 24}h`
 }
 
-export function FunnelResults({ result }: { result: FunnelResult }) {
+export interface FunnelResultsProps {
+  result: FunnelResult
+  /**
+   * "Act on this drop-off" on each step after the first, handed the step
+   * people reached (1-based) — the one before the row. Absent hides it.
+   */
+  onActOnDropOff?: (reachedStep: number) => void
+}
+
+export function FunnelResults({ result, onActOnDropOff }: FunnelResultsProps) {
   const top = Math.max(1, result.entered)
   if (result.entered === 0) {
     return (
@@ -55,7 +74,7 @@ export function FunnelResults({ result }: { result: FunnelResult }) {
   return (
     <Stack spacing={2}>
       <Typography variant="body2">
-        {`${result.completed.toLocaleString()} of ${result.entered.toLocaleString()} visits completed every step (${formatShare(result.overall)}).`}
+        {`${result.completed.toLocaleString()} of ${result.entered.toLocaleString()} visitors completed every step (${formatShare(result.overall)}).`}
       </Typography>
       <Stack spacing={1.5} component="ol" sx={{ m: 0, pl: 0, listStyle: 'none' }}>
         {result.steps.map((step) => (
@@ -75,9 +94,25 @@ export function FunnelResults({ result }: { result: FunnelResult }) {
               aria-hidden
             />
             {step.index > 0 ? (
-              <Typography variant="caption" color="text.secondary">
-                {`${formatShare(step.fromPrevious)} of the previous step · ${step.dropOff.toLocaleString()} dropped off · median ${formatDuration(step.medianMsFromPrevious)} from the previous step`}
-              </Typography>
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1}
+                sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}
+              >
+                <Typography variant="caption" color="text.secondary">
+                  {`${formatShare(step.fromPrevious)} of the previous step · ${step.dropOff.toLocaleString()} dropped off · median ${formatDuration(step.medianMsFromPrevious)} from the previous step`}
+                </Typography>
+                {onActOnDropOff ? (
+                  <Button
+                    size="small"
+                    sx={{ alignSelf: 'flex-start', flexShrink: 0 }}
+                    aria-label={`Act on the drop-off before step ${step.index + 1}`}
+                    onClick={() => onActOnDropOff(step.index)}
+                  >
+                    {'Act on this drop-off'}
+                  </Button>
+                ) : null}
+              </Stack>
             ) : null}
           </Box>
         ))}
