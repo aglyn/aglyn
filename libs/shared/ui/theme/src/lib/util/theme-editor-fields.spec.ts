@@ -252,7 +252,9 @@ describe('the editor writes (AGL-2938)', () => {
 
   it('loads a curated font, and the system value clears it', () => {
     const inter = writeFontFamily({ typography: { variants: { h1: { fontWeight: 700 } } } }, 'Inter')
-    expect(inter.fonts).toEqual([{ family: 'Inter', weights: [400, 500, 700], source: 'google' }])
+    expect(inter.fonts).toEqual([
+      { family: 'Inter', weights: [400, 500, 700], source: 'google', category: 'sans-serif' },
+    ])
     expect(inter.typography?.fontFamily).toBe('"Inter", sans-serif')
     expect(readFontFamily(inter)).toBe('Inter')
     const system = writeFontFamily(inter, SYSTEM_FONT_VALUE)
@@ -261,6 +263,26 @@ describe('the editor writes (AGL-2938)', () => {
     expect(readFontFamily(system)).toBe(SYSTEM_FONT_VALUE)
     // A family outside the curated list changes nothing.
     expect(writeFontFamily(inter, 'Comic Sans MS')).toBe(inter)
+  })
+
+  it('keeps the heading font and the site’s own fonts when the body font changes (AGL-3656)', () => {
+    const theme = {
+      fonts: [
+        { family: 'Inter', weights: [400], source: 'google' as const, category: 'sans-serif' as const },
+        { family: 'Lora', weights: [700], source: 'google' as const, category: 'serif' as const },
+        { family: 'Acme Sans', source: 'custom' as const, faces: [] },
+      ],
+      typography: {
+        fontFamily: '"Inter", sans-serif',
+        variants: { h1: { fontFamily: '"Lora", serif' } },
+      },
+    }
+    const next = writeFontFamily(theme, 'Roboto')
+    expect(readFontFamily(next)).toBe('Roboto')
+    expect(next.fonts?.map((font) => font.family)).toEqual(['Roboto', 'Lora', 'Acme Sans'])
+    expect(next.typography?.variants?.h1?.fontFamily).toContain('Lora')
+    const system = writeFontFamily(next, SYSTEM_FONT_VALUE)
+    expect(system.fonts?.map((font) => font.family)).toEqual(['Lora', 'Acme Sans'])
   })
 
   it('sets and clears the radius, the spacing and the nav heights', () => {

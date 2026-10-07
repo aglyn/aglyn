@@ -564,7 +564,7 @@ export function writeDarkScheme(
 
 /** The font select's value: the site's font, or {@link SYSTEM_FONT_VALUE}. */
 export function readFontFamily(theme: HostTheme | undefined): string {
-  return theme?.fonts?.[0]?.family ?? SYSTEM_FONT_VALUE
+  return readThemeFonts(theme).body?.family ?? SYSTEM_FONT_VALUE
 }
 
 /**
@@ -573,31 +573,24 @@ export function readFontFamily(theme: HostTheme | undefined): string {
  * theme default. A family outside the curated list changes nothing.
  */
 export function writeFontFamily(theme: HostTheme, value: string): HostTheme {
+  // Through writeThemeFonts (AGL-3656), so a heading font and the site's own
+  // uploaded fonts survive a body font picked from the short list or by the
+  // AI theme step; replacing `fonts` wholesale dropped both.
+  const current = readThemeFonts(theme)
   if (value === SYSTEM_FONT_VALUE) {
-    const next = { ...theme }
-    delete next.fonts
-    const typography = { ...next.typography }
-    delete typography.fontFamily
-    if (Object.keys(typography).length) next.typography = typography
-    else delete next.typography
-    return next
+    return writeThemeFonts(theme, { body: null, heading: current.heading })
   }
   const option = GOOGLE_FONT_OPTIONS.find((entry) => entry.family === value)
   if (!option) return theme
-  return {
-    ...theme,
-    fonts: [
-      {
-        family: option.family,
-        weights: option.weights,
-        source: 'google',
-      },
-    ],
-    typography: {
-      ...theme.typography,
-      fontFamily: fontFamilyStack(option.family, option.category),
+  return writeThemeFonts(theme, {
+    body: {
+      family: option.family,
+      category: option.category,
+      weights: option.weights,
+      source: 'google',
     },
-  }
+    heading: current.heading,
+  })
 }
 
 /**
