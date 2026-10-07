@@ -38,7 +38,8 @@ import com.aglyn.ui.currentWidthClass
 
 /**
  * The "Aglyn" app: sign-in, then the workspace with Home, plugin screens,
- * Notifications, the console and Settings in an adaptive navigation suite.
+ * Notifications and Settings in an adaptive navigation suite. Every area is
+ * native; only the Besigner opens in the in-app web view.
  */
 @Composable
 fun AglynShell(
@@ -94,7 +95,6 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
       add(NavDestination(ShellNavigator.MORE, "Apps", AglynIcons.named("apps")))
     }
     add(NavDestination(ShellNavigator.NOTIFICATIONS, "Notifications", AglynIcons.named("notifications")))
-    add(NavDestination(ShellNavigator.CONSOLE, "Console", AglynIcons.named("language")))
     add(NavDestination(ShellNavigator.SETTINGS, "Settings", AglynIcons.named("settings")))
   }
   // A top-level key that is not a destination at this width moves to its equivalent.
@@ -123,7 +123,8 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     val route = navigator.current
     val title = when (route) {
       is Route.Screen -> services.registry.screen(route.screenId)?.title ?: "Not found"
-      is Route.Console -> "Console"
+      is Route.Besigner -> "Besigner"
+      Route.Pages -> "Pages"
       Route.Switcher -> "Switch site"
       Route.NotificationSettings -> "Notifications"
       null -> destinations.firstOrNull { it.key == navigator.top }?.label ?: ""
@@ -158,16 +159,14 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
       Box(Modifier.padding(padding).fillMaxSize()) {
         when (route) {
           is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, workspace.site != null) { navigator.back() }
-          is Route.Console -> services.console(route.path) { navigator.back() }
+          is Route.Besigner -> services.besigner(route.path, { navigator.back() }) { link -> navigator.back(); context.openLink(link) }
+          Route.Pages -> PagesScreen(services, context, workspace)
           Route.Switcher -> SwitcherScreen(services.workspace, workspace) { navigator.back() }
           Route.NotificationSettings -> NotificationSettingsScreen(services, uid)
           null -> when {
             navigator.top == ShellNavigator.HOME -> HomeScreen(services, context, workspace, widthClass, navigator)
             navigator.top == ShellNavigator.MORE -> MoreScreen(services, context)
             navigator.top == ShellNavigator.NOTIFICATIONS -> NotificationsScreen(services, uid, context)
-            navigator.top == ShellNavigator.CONSOLE -> services.console(
-              com.aglyn.pluginhost.scopedConsolePath("/", com.aglyn.pluginhost.ConsoleScope.SITE, context.orgSlug, context.hostSlug),
-            ) { navigator.select(ShellNavigator.HOME) }
             navigator.top == ShellNavigator.SETTINGS -> SettingsScreen(services) { navigator.push(Route.NotificationSettings) }
             navigator.top.startsWith("screen:") ->
               PluginScreenHost(services, context, navigator.top.removePrefix("screen:"), emptyMap(), workspace.site != null) {

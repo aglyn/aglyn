@@ -26,9 +26,9 @@ const val COMMERCE_CARD_READERS_SCREEN = "commerce.card-readers"
  * Aglyn: the site's orders natively (list beside the picked order, ship,
  * deliver, refund, cancel, resend the receipt), an Orders tab, the
  * orders-to-ship Home card and its quick action. Products, scan and sales
- * are served by the console's own pages until their native versions land;
- * their tabs, Home cards and quick actions stay out of the app (no `apps`)
- * rather than lead to a page that only opens the console.
+ * are declared and show a native "coming to the app" state until their
+ * native screens land; their tabs, Home cards and quick actions stay out of
+ * the app (no `apps`) until then.
  */
 fun registerCommerceNative(r: NativePluginRegistrar) {
   r.screen(
@@ -54,10 +54,10 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
   r.screen(COMMERCE_ORDER_SCREEN, title = "Order", requiresSite = true, icon = "receipt", layout = ScreenLayout.LIST_DETAIL) { context, params ->
     OrdersScreen(context, initialOrderId = params["order"] ?: params["orderId"])
   }
-  r.consoleScreen("commerce.products", "Products", "/products")
-  r.consoleScreen("commerce.product", "Product", "/products")
-  r.consoleScreen("commerce.scan", "Scan", "/products")
-  r.consoleScreen("commerce.sales", "Sales", "/products/orders")
+  r.upcomingScreen("commerce.products", "Products", icon = "inventory")
+  r.upcomingScreen("commerce.product", "Product", icon = "inventory")
+  r.upcomingScreen("commerce.scan", "Scan stock", icon = "qr_code_scanner")
+  r.upcomingScreen("commerce.sales", "Sales", icon = "insights")
   r.deepLink("commerce.orders-page", path = "/products/orders", screen = "commerce.orders")
   r.deepLink("commerce.products-page", path = "/products", screen = "commerce.products")
 

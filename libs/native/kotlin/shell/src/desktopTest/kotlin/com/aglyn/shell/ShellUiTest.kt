@@ -99,7 +99,7 @@ class ShellUiTest {
       workspace = WorkspaceStore(CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), auth, firestore, prefs),
       prefs = prefs,
       registry = NativePluginRegistry(),
-      console = { _, _ -> },
+      besigner = { _, _, _ -> },
       writer = writer,
     )
   }

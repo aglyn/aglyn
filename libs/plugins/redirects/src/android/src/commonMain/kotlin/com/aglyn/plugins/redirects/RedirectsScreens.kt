@@ -19,7 +19,6 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.aglyn.core.Live
-import com.aglyn.pluginhost.ConsoleScope
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
@@ -35,9 +34,7 @@ import com.aglyn.ui.space
 private fun matchLabel(kind: String?) = "${kind ?: "exact"} match"
 
 /**
- * The site's redirect rules. Read-only here; the rule beside the list on
- * wide windows. Editing opens the console's own Redirects page, which owns
- * the validation and the publish role a rule needs.
+ * The site's redirect rules, the rule beside the list on wide windows.
  */
 @Composable
 fun RedirectsListScreen(context: NativePluginContext) {
@@ -54,7 +51,7 @@ fun RedirectsListScreen(context: NativePluginContext) {
         is Live.Ready -> LazyColumn(Modifier.fillMaxSize().testTag("redirects-list")) {
           if (live.value.isEmpty()) {
             item {
-              EmptyState("No redirects yet", body = "Rules you add in the console show up here.", icon = AglynIcons.named("alt_route"))
+              EmptyState("No redirects yet", body = "Rules that send one address to another show up here.", icon = AglynIcons.named("alt_route"))
             }
           }
           items(live.value, key = { it.id }) { row ->
@@ -67,13 +64,6 @@ fun RedirectsListScreen(context: NativePluginContext) {
               onClick = { onSelect(row.id) },
               modifier = Modifier.testTag("redirect-${row.id}"),
             )
-          }
-          item {
-            Column(Modifier.padding(space(2f))) {
-              OutlinedButton(onClick = { context.openConsolePath("/redirects", ConsoleScope.SITE) }, Modifier.fillMaxWidth()) {
-                Text("Manage in the console")
-              }
-            }
           }
         }
       }

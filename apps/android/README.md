@@ -76,12 +76,13 @@ minted ID token and re-opened before that token's hour is up; a stream that
 cannot be held three times in a row falls back to re-reading every 30
 seconds. The refresh token is kept in Windows Credential Manager (through
 JNA), so the next launch signs straight back in; a macOS or Linux run keeps it
-in memory and signs in each launch. The console opens in the system browser,
-and desktop has no push in v1 (Settings → Notifications still edits which
+in memory and signs in each launch. Every area is a native screen; the
+Besigner, the only web content, opens inside the app window (WebView2 on
+Windows) and never in the system browser. Desktop has no push in v1 (Settings → Notifications still edits which
 types reach the person's phones and tablets).
 
 To watch `Listen` work against the emulator stack:
-`AGLYN_LISTEN_EMULATOR=127.0.0.1:8289 AGLYN_LISTEN_AUTH=127.0.0.1:9299 AGLYN_LISTEN_PROJECT=demo-aglyn-native ./gradlew :native-core:desktopTest --tests '*ListenTest*'`. Menus: Go (⌘/Ctrl 1–3, ⌘/Ctrl ,),
+`AGLYN_LISTEN_EMULATOR=127.0.0.1:8289 AGLYN_LISTEN_AUTH=127.0.0.1:9299 AGLYN_LISTEN_PROJECT=demo-aglyn-native ./gradlew :native-core:desktopTest --tests '*ListenTest*'`. Menus: Go (⌘/Ctrl 1 Home, 2 Notifications, 3 Pages, 4 Orders, ⌘/Ctrl , Settings),
 Workspace (⌘/Ctrl K switches site) and Account (⌘/Ctrl ⇧Q signs out).
 
 The desktop register takes cards on smart readers only. A keyboard-wedge

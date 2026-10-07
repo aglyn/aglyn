@@ -27,6 +27,7 @@ enum class ContributionKind(val wire: String) {
   DEEP_LINKS("deepLinks"),
 }
 
+/** Where a console path sits: under the picked site, under the workspace, or whole. */
 enum class ConsoleScope { SITE, ORG, ABSOLUTE }
 
 /**
@@ -62,11 +63,13 @@ interface NativePluginContext {
   fun navigate(screenId: String, params: NativeParams = emptyMap())
 
   /**
-   * Opens a console path in the authenticated console view (the long tail).
-   * [ConsoleScope.SITE] and [ConsoleScope.ORG] put the picked site's or
-   * workspace's prefix in front, so a plugin names its own page (`/redirects`).
+   * Opens the Besigner, the apps' only web content, in the authenticated web
+   * view inside the app. [path] must be a Besigner page ([BesignerPaths]):
+   * any other console page is a native screen, so this refuses it and
+   * returns false. [ConsoleScope.SITE] puts the picked site's prefix in front
+   * (`/screens/{id}/versions/{v}/besigner`).
    */
-  fun openConsolePath(path: String, scope: ConsoleScope = ConsoleScope.ABSOLUTE)
+  fun openBesigner(path: String, scope: ConsoleScope = ConsoleScope.SITE): Boolean
 }
 
 /** How a screen lays out on wide windows. */
@@ -93,11 +96,11 @@ class NativeScreen(
   val layout: ScreenLayout = ScreenLayout.SINGLE,
   val placement: PosPlacement? = null,
   /**
-   * A declared screen the console still serves on this platform: the shell
-   * shows this console page (under [consoleScope]) in place of [content].
+   * A declared screen whose native version has not landed on this platform:
+   * the shell shows a native "coming to the app" state in place of [content],
+   * never a console page.
    */
-  val consolePath: String? = null,
-  val consoleScope: ConsoleScope = ConsoleScope.SITE,
+  val upcoming: Boolean = false,
   val content: @Composable (context: NativePluginContext, params: NativeParams) -> Unit,
 ) : Contribution
 
@@ -131,11 +134,9 @@ class NativeQuickAction(
   val icon: String,
   val order: Int,
   val requiresSite: Boolean = false,
-  /** Opens this screen... */
-  val screen: String? = null,
+  /** The native screen it opens. */
+  val screen: String,
   val params: NativeParams = emptyMap(),
-  /** ...or this console path. Exactly one of the two. */
-  val consolePath: String? = null,
   override val apps: Set<NativeApp> = setOf(NativeApp.AGLYN),
 ) : Contribution
 
