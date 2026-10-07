@@ -194,4 +194,12 @@ export const TTL_POLICIES = Object.freeze([
     // body it posted (`ORDER_WEBHOOK_LOG_RETENTION_MS`).
     why: 'order webhook delivery logs (order payloads), 30 days',
   },
+  {
+    collection: 'printJobs',
+    field: 'expiresAt',
+    // AGL-3619 — a cloud receipt printer's job under
+    // `hosts/{hostId}/printJobs/{jobId}`, with the receipt or report it
+    // prints (`PRINT_JOB_RETENTION_MS`).
+    why: 'register print jobs (receipt content), 7 days',
+  },
 ])

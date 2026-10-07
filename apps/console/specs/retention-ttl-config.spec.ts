@@ -238,6 +238,12 @@ const POLICIES: Array<{
     writers: ['libs/plugins/commerce/src/lib/server/order-webhooks.ts'],
     stamp: 'expiresAt: expiresAt(now)',
   },
+  // AGL-3619: a cloud receipt printer's job queue, receipt content included.
+  {
+    collectionGroup: 'printJobs',
+    writers: ['libs/plugins/commerce/src/lib/server/print-queue.ts'],
+    stamp: 'expiresAt: new Date(nowMs + PRINT_JOB_RETENTION_MS)',
+  },
 ]
 
 describe('Firestore TTL policies are declared, documented and written', () => {
