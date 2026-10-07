@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import type { PluginApiHandler, PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
 import {
   findUserByUidAcrossPools,
@@ -28,7 +29,13 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import * as CommerceModel from '../model'
-import { RETURN_REFUNDED_EVENT, RETURN_REQUESTED_EVENT } from '../model/order-events'
+import {
+  RETURN_APPROVED_EVENT,
+  RETURN_DECLINED_EVENT,
+  RETURN_RECEIVED_EVENT,
+  RETURN_REFUNDED_EVENT,
+  RETURN_REQUESTED_EVENT,
+} from '../model/order-events'
 import { raiseOrderEvent, stageOrderEvent } from './order-events'
 import { orderStatusUrl, verifyOrderStatusToken } from './order-status-token'
 import { readActiveMemberSession } from './membership'
@@ -95,6 +102,7 @@ function returnEventView(id: string, entry: CommerceModel.HostReturn) {
     status: entry.status,
     lines: entry.lines.map((line) => ({ ...line })),
     refundCents: entry.refundCents ?? null,
+    restock: entry.restock ? entry.restock.lines.map((line) => ({ ...line })) : null,
   }
 }
 
@@ -157,7 +165,10 @@ export async function openReturn(request: {
       orderNumber: CommerceModel.returnOrderNumber(order, request.orderId),
       customerEmail: order.customerEmail ?? null,
       customerName: order.customerName ?? null,
-      lines: verdict.lines,
+      lines: verdict.lines.map((line) => ({
+        ...line,
+        name: String(order.lineItems?.[line.lineItemId]?.name ?? '').slice(0, 200),
+      })),
       status,
       requestedBy: request.by,
       ...(note ? (request.by === 'buyer' ? { customerNote: note } : { merchantNote: note }) : {}),
@@ -171,7 +182,7 @@ export async function openReturn(request: {
       createdAtMs: now,
       updatedAtMs: now,
     }
-    const returnRef = hostRef.collection('returns').doc()
+    const returnRef = hostRef.collection('returns').doc(createResourceUid())
     transaction.create(returnRef, entry)
     const orderPatch = {
       timeline: CommerceModel.appendOrderEvent(
@@ -189,6 +200,16 @@ export async function openReturn(request: {
       order: { ...orderSnapshot.data(), ...orderPatch },
       extra: { return: returnEventView(returnRef.id, entry) },
     })
+    // The store opening a return is its approval.
+    if (status === 'approved') {
+      stageOrderEvent(transaction, RETURN_APPROVED_EVENT, {
+        hostId: request.hostId,
+        orderId: request.orderId,
+        key: `return-approved:${returnRef.id}`,
+        order: { ...orderSnapshot.data(), ...orderPatch },
+        extra: { return: returnEventView(returnRef.id, entry) },
+      })
+    }
     return { outcome: 'created', returnId: returnRef.id, entry, order }
   })
 }
@@ -275,7 +296,18 @@ export async function changeReturn(request: {
       }
     }
     transaction.update(returnRef, { ...patch, updatedAtMs: now })
-    return { outcome: 'changed', entry: { ...entry, ...patch, updatedAtMs: now }, order }
+    const changed = { ...entry, ...patch, updatedAtMs: now }
+    const event = target === 'approved' ? RETURN_APPROVED_EVENT : target === 'declined' ? RETURN_DECLINED_EVENT : null
+    if (event && orderSnapshot.exists) {
+      stageOrderEvent(transaction, event, {
+        hostId: request.hostId,
+        orderId: entry.orderId,
+        key: `return-${target}:${request.returnId}`,
+        order: orderSnapshot.data() ?? {},
+        extra: { return: returnEventView(request.returnId, changed) },
+      })
+    }
+    return { outcome: 'changed', entry: changed, order }
   })
 }
 
@@ -359,7 +391,7 @@ export async function receiveReturn(request: {
       })
       for (const line of lines) {
         units += line.quantity
-        transaction.create(hostRef.collection('inventoryAdjustments').doc(), {
+        transaction.create(hostRef.collection('inventoryAdjustments').doc(createResourceUid()), {
           productId,
           variantId: line.variantId,
           delta: line.quantity,
@@ -387,12 +419,21 @@ export async function receiveReturn(request: {
       updatedAtMs: now,
     }
     transaction.update(returnRef, patch)
+    const received = { ...entry, ...patch }
     if (order) {
-      transaction.update(orderRef, {
+      const orderPatch = {
         timeline: CommerceModel.appendOrderEvent(order, 'return-received', units > 0 ? `${units} restocked` : undefined, now),
+      }
+      transaction.update(orderRef, orderPatch)
+      stageOrderEvent(transaction, RETURN_RECEIVED_EVENT, {
+        hostId: request.hostId,
+        orderId: entry.orderId,
+        key: `return-received:${request.returnId}`,
+        order: { ...orderSnapshot.data(), ...orderPatch },
+        extra: { return: returnEventView(request.returnId, received) },
       })
     }
-    return { outcome: 'changed' as const, entry: { ...entry, ...patch }, order, units }
+    return { outcome: 'changed' as const, entry: received, order, units }
   })
 }
 
@@ -823,6 +864,11 @@ export const returnsHandler: PluginApiHandler = async (req, res) => {
     if (outcome.outcome === 'changed' && body.notify !== false) {
       if (action === 'approve') await tellBuyer(hostId, 'return-approved', outcome.entry, outcome.order)
       if (action === 'decline') await tellBuyer(hostId, 'return-declined', outcome.entry, outcome.order)
+      // A label attached after the approval reaches the buyer the same way,
+      // in the approval email, which carries it.
+      if (action === 'attach-label' && outcome.entry.status === 'approved') {
+        await tellBuyer(hostId, 'return-approved', outcome.entry, outcome.order)
+      }
     }
     return res.status(200).json({
       ok: true,

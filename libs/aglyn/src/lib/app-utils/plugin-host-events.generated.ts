@@ -29,6 +29,9 @@ export type PluginHostEventType =
   | 'orderRefunded'
   | 'orderCancelled'
   | 'returnRequested'
+  | 'returnApproved'
+  | 'returnDeclined'
+  | 'returnReceived'
   | 'returnRefunded'
 
 export const PLUGIN_HOST_EVENTS: readonly HostEventDeclaration[] = [
@@ -293,8 +296,50 @@ export const PLUGIN_HOST_EVENTS: readonly HostEventDeclaration[] = [
   },
   {
     "pluginId": "commerce",
-    "type": "returnRefunded",
+    "type": "returnApproved",
     "order": 146,
+    "label": "Return approved",
+    "payloadKeys": [
+      "orderId",
+      "orderNumber",
+      "email",
+      "name",
+      "returnId",
+      "returnStatus"
+    ]
+  },
+  {
+    "pluginId": "commerce",
+    "type": "returnDeclined",
+    "order": 147,
+    "label": "Return declined",
+    "payloadKeys": [
+      "orderId",
+      "orderNumber",
+      "email",
+      "name",
+      "returnId",
+      "returnStatus"
+    ]
+  },
+  {
+    "pluginId": "commerce",
+    "type": "returnReceived",
+    "order": 148,
+    "label": "Return received",
+    "payloadKeys": [
+      "orderId",
+      "orderNumber",
+      "email",
+      "name",
+      "returnId",
+      "returnStatus"
+    ]
+  },
+  {
+    "pluginId": "commerce",
+    "type": "returnRefunded",
+    "order": 149,
     "label": "Return refunded",
     "payloadKeys": [
       "orderId",

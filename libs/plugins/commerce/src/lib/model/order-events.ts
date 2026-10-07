@@ -83,6 +83,8 @@ export interface OrderEventReturn {
   status: string
   lines: Array<{ lineItemId: number; quantity: number; reason: string }>
   refundCents: number | null
+  /** What went back in stock when the parcel arrived; `null` before then. */
+  restock?: Array<{ lineItemId: number; quantity: number }> | null
 }
 
 export interface OrderEventPayload {
@@ -104,6 +106,9 @@ export const ORDER_DELIVERED_EVENT = definePluginDomainEvent<OrderEventPayload>(
 export const ORDER_REFUNDED_EVENT = definePluginDomainEvent<OrderRefundedEventPayload>('order.refunded')
 export const ORDER_CANCELLED_EVENT = definePluginDomainEvent<OrderEventPayload>('order.cancelled')
 export const RETURN_REQUESTED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.requested')
+export const RETURN_APPROVED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.approved')
+export const RETURN_DECLINED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.declined')
+export const RETURN_RECEIVED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.received')
 export const RETURN_REFUNDED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.refunded')
 
 /** Every event commerce raises, by name. */
@@ -114,6 +119,9 @@ export type CommerceEventName =
   | 'order.refunded'
   | 'order.cancelled'
   | 'return.requested'
+  | 'return.approved'
+  | 'return.declined'
+  | 'return.received'
   | 'return.refunded'
 
 /** The events, in the order pickers list them, with their words. */
@@ -164,6 +172,27 @@ export const COMMERCE_EVENT_DECLARATIONS: ReadonlyArray<
     payloadKeys: ['order', 'return'],
   },
   {
+    event: RETURN_APPROVED_EVENT,
+    hostEvent: 'returnApproved',
+    label: 'Return approved',
+    description: 'The store approved a return, or opened one itself.',
+    payloadKeys: ['order', 'return'],
+  },
+  {
+    event: RETURN_DECLINED_EVENT,
+    hostEvent: 'returnDeclined',
+    label: 'Return declined',
+    description: 'The store declined a return request.',
+    payloadKeys: ['order', 'return'],
+  },
+  {
+    event: RETURN_RECEIVED_EVENT,
+    hostEvent: 'returnReceived',
+    label: 'Return received',
+    description: 'The returned items arrived, with what went back in stock.',
+    payloadKeys: ['order', 'return'],
+  },
+  {
     event: RETURN_REFUNDED_EVENT,
     hostEvent: 'returnRefunded',
     label: 'Return refunded',
@@ -185,5 +214,8 @@ export const COMMERCE_EVENT_NAMES: readonly CommerceEventName[] = [
   'order.refunded',
   'order.cancelled',
   'return.requested',
+  'return.approved',
+  'return.declined',
+  'return.received',
   'return.refunded',
 ]

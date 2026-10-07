@@ -91,6 +91,8 @@ export interface ReturnLine {
   lineItemId: number
   quantity: number
   reason: ReturnReason
+  /** The line's name when the return was opened, for lists that read no order. */
+  name?: string
 }
 
 /** A return label a shipping plugin bought for the buyer to send the parcel with. */
@@ -279,7 +281,7 @@ export type ReturnRequestProblem =
   | { problem: 'too_many'; lineItemId: number; returnable: number }
 
 /** Order statuses a return may be opened against. */
-const RETURNABLE_ORDER_STATUSES = ['paid', 'partially_fulfilled', 'fulfilled', 'delivered']
+export const RETURNABLE_ORDER_STATUSES: readonly string[] = ['paid', 'partially_fulfilled', 'fulfilled', 'delivered']
 
 /**
  * Checks a return request against the order and the returns already open on

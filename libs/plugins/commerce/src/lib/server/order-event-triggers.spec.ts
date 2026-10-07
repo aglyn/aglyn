@@ -29,6 +29,8 @@ import { hostEventPayloadFor, registerCommerceEventTriggers } from './order-even
 
 const mockEmit = jest.fn(async () => ({ alerts: [] }))
 jest.mock('@aglyn/tenant-runtime', () => ({ emitHostEvent: (...args: unknown[]) => mockEmit(...(args as [])) }))
+const mockDeliver = jest.fn(async () => ({ delivered: 0, failed: 0 }))
+jest.mock('./order-webhooks', () => ({ deliverOrderEventToWebhooks: (...args: unknown[]) => mockDeliver(...(args as [])) }))
 
 const order = {
   id: 'o1',
@@ -45,6 +47,7 @@ const order = {
 beforeEach(() => {
   resetPluginDomainEventsForTests()
   mockEmit.mockClear()
+  mockDeliver.mockClear()
 })
 
 it('declares every event and subscribes one named bridge to each', () => {
@@ -55,10 +58,13 @@ it('declares every event and subscribes one named bridge to each', () => {
     'order.fulfilled',
     'order.paid',
     'order.refunded',
+    'return.approved',
+    'return.declined',
+    'return.received',
     'return.refunded',
     'return.requested',
   ])
-  expect(listPluginDomainEventSubscribers('order.paid')).toEqual(['commerce:workflow-triggers'])
+  expect(listPluginDomainEventSubscribers('order.paid')).toEqual(['commerce:workflow-triggers', 'commerce:webhooks'])
 })
 
 it('raises the host event its declaration names, with a flat scope', async () => {
@@ -89,6 +95,8 @@ it('raises the host event its declaration names, with a flat scope', async () =>
     },
     { actor: { kind: 'platform' } },
   )
+  // The merchant's webhooks take the same envelope, under their own name.
+  expect(mockDeliver).toHaveBeenCalledWith(expect.objectContaining({ id: 'e1', event: 'order.fulfilled', attempt: 1 }))
 })
 
 it('flattens a refund and a return', () => {
@@ -104,7 +112,7 @@ it('every host event it raises is declared in plugins.config.json', () => {
   const config = JSON.parse(readFileSync(join(__dirname, '../../../../../../plugins.config.json'), 'utf8'))
   const commerce = config.plugins.find((entry: { id: string }) => entry.id === 'commerce')
   const declared = new Set((commerce.hostEvents ?? []).map((entry: { type: string }) => entry.type))
-  for (const type of ['orderPaid', 'orderFulfilled', 'orderDelivered', 'orderRefunded', 'orderCancelled', 'returnRequested', 'returnRefunded']) {
+  for (const type of ['orderPaid', 'orderFulfilled', 'orderDelivered', 'orderRefunded', 'orderCancelled', 'returnRequested', 'returnApproved', 'returnDeclined', 'returnReceived', 'returnRefunded']) {
     expect(declared.has(type)).toBe(true)
   }
 })

@@ -93,5 +93,15 @@ export function registerCommerceEventTriggers(): void {
       // this plugin also registers.
       { pluginId: BUNDLE_ID, name: 'workflow-triggers' },
     )
+    // The merchant's own webhooks (AGL-3611). Its own subscriber name, so a
+    // failing endpoint is retried without raising the workflow trigger again.
+    subscribePluginDomainEvent(
+      declaration.event,
+      async (envelope) => {
+        const { deliverOrderEventToWebhooks } = await import('./order-webhooks')
+        await deliverOrderEventToWebhooks(envelope)
+      },
+      { pluginId: BUNDLE_ID, name: 'webhooks' },
+    )
   }
 }

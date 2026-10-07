@@ -85,7 +85,8 @@ import { collectionMembershipHandler } from './server/collection-membership'
 import { draftOrderHandler } from './server/draft-order'
 import { fulfillOrderHandler } from './server/fulfill-order'
 import { orderReceiptSendHandler } from './server/order-receipt-send'
-import { orderStatusHandler } from './server/order-status'
+import { orderStatusHandler, registerOrderStatusActions } from './server/order-status'
+import { returnRequestStatusAction } from './server/return-status-action'
 import { giftCardsHandler } from './server/gift-cards'
 import { memberPostHandler } from './server/member-post'
 import { orderAnalyticsHandler } from './server/order-analytics'
@@ -102,6 +103,7 @@ import {
 import { processRestockHandler, scanRestockAlerts } from './server/process-restock'
 import { scanStockDecrements } from './server/reconcile-stock'
 import { refundHandler } from './server/refund'
+import { orderWebhooksHandler } from './server/order-webhooks'
 import { returnRequestHandler, returnsHandler } from './server/returns'
 import { scanSupplierDeliveries } from './server/supplier-outbox'
 import { supplierUpdateHandler } from './server/supplier-update'
@@ -275,6 +277,9 @@ export function registerCommerceApi(): void {
   // The guest order-status page's data (AGL-3610), behind the signed link in
   // every buyer email — a recipient link, so it outlives the site's gates.
   registerPluginApiRoute('commerce/order-status', orderStatusHandler, { recipientLink: true })
+  // …and its "Request a return" button (AGL-3611), on an order that can
+  // still send something back.
+  registerOrderStatusActions(returnRequestStatusAction)
   // What became of a session the shopper was returned from (AGL-3606).
   registerPluginApiRoute('commerce/checkout-status', checkoutStatusHandler)
   registerPluginApiRoute('commerce/product', productHandler)
@@ -410,6 +415,9 @@ export function registerCommerceConsoleApi(): void {
   // Returns (AGL-3611): approve, decline, receive with restock, refund
   // through the route above, a label from a shipping plugin.
   registerPluginApiRoute('commerce/returns', returnsHandler)
+  // The merchant's outbound order webhooks (AGL-3611): endpoints, secrets,
+  // a test ping and a resend from the delivery log.
+  registerPluginApiRoute('commerce/order-webhooks', orderWebhooksHandler)
   registerPluginApiRoute('commerce/supplier-update', supplierUpdateHandler)
   // Stamps the open orders that predate the shipping fields, before an
   // export for shipping (AGL-3613).
