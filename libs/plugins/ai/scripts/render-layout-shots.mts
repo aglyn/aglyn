@@ -27,7 +27,10 @@
  * stores it (the root `_@_`, a `layoutSlot` somewhere under it), the site's
  * name (what `{{host.businessName}}` resolves to), and the site's theme
  * (the starter site's `DEFAULT_SITE_THEME` when absent). A layout job's
- * draft, read back with `readAiDraftNodes`, is exactly that node map.
+ * draft, read back with `readAiDraftNodes`, is exactly that node map. An
+ * optional `"page"` is a page's node map (an AI-built Home, say) to render
+ * inside the layout in place of the starter home page; with one, the whole
+ * page is shot too.
  *
  * HOW IT RENDERS. No emulator and no tenant server: the layout is composed
  * around a page with the platform's own `composeLayoutAndScreenNodes`, its
@@ -51,6 +54,8 @@
  *   <key>-phone-light-header.png     375 wide
  *   <key>-phone-light-footer.png
  *   <key>-phone-menu-open.png        375 wide, the Drawer open over the page
+ *   <key>-page-desktop-light.png     with a `page`: header, that page and footer, whole, 1440 wide
+ *   <key>-page-phone-light.png       the same, 375 wide
  *   <key>-short-desktop-light.png    a one-heading page, whole: the footer must sit at the window's bottom
  *   <key>-short-phone-light.png
  *
@@ -234,7 +239,7 @@ async function main(): Promise<void> {
 
     for (const input of inputs) {
       const key = basename(input).replace(/\.json$/, '')
-      const data = JSON.parse(readFileSync(input, 'utf8')) as { name: string; nodes: Dict; theme?: Dict }
+      const data = JSON.parse(readFileSync(input, 'utf8')) as { name: string; nodes: Dict; page?: Dict; theme?: Dict }
       const theme = data.theme ?? defaults.DEFAULT_SITE_THEME
       const fonts = ((theme.fonts ?? []) as Dict[])
         .filter((font) => font.source === 'google')
@@ -271,8 +276,12 @@ async function main(): Promise<void> {
           }
         }
       }
-      const home = defaults.buildDefaultHomeScreen(data.name).nodes
+      const home = data.page ?? defaults.buildDefaultHomeScreen(data.name).nodes
       const light = render(home, 'light', false)
+      if (data.page) {
+        await shoot(light, 1440, 900, 'page-desktop-light', ['full'])
+        await shoot(light, 375, 812, 'page-phone-light', ['full'])
+      }
       await shoot(light, 1440, 900, 'desktop-light', ['header', 'footer'])
       await shoot(render(home, 'dark', false), 1440, 900, 'desktop-dark', ['header', 'footer'])
       await shoot(light, 375, 812, 'phone-light', ['header', 'footer'])
