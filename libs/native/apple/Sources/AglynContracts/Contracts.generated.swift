@@ -72,6 +72,18 @@ public struct AccountPushSettingsAccountValue: Codable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum ApnsEnvironment: String, Codable, CaseIterable, Hashable, Sendable {
+  case production = "production"
+  case sandbox = "sandbox"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct HostOrder: Codable, Hashable, Sendable {
   public var amountCents: Double?
   public var billingAddress: OrderAddress?
@@ -507,18 +519,22 @@ public enum ListQuerySortDirection: String, Codable, CaseIterable, Hashable, Sen
 }
 
 public struct MobileDevice: Codable, Hashable, Sendable {
+  public var apnsEnvironment: ApnsEnvironment?
   public var app: MobileDeviceApp
   public var appVersion: String?
   public var lastSeen: ContractJSON?
   public var platform: MobileDevicePlatform
   public var token: String
+  public var transport: MobilePushTransport
 
-  public init(app: MobileDeviceApp, appVersion: String? = nil, lastSeen: ContractJSON? = nil, platform: MobileDevicePlatform, token: String) {
+  public init(apnsEnvironment: ApnsEnvironment? = nil, app: MobileDeviceApp, appVersion: String? = nil, lastSeen: ContractJSON? = nil, platform: MobileDevicePlatform, token: String, transport: MobilePushTransport) {
+    self.apnsEnvironment = apnsEnvironment
     self.app = app
     self.appVersion = appVersion
     self.lastSeen = lastSeen
     self.platform = platform
     self.token = token
+    self.transport = transport
   }
 }
 
@@ -538,6 +554,7 @@ public enum MobileDeviceApp: String, Codable, CaseIterable, Hashable, Sendable {
 public enum MobileDevicePlatform: String, Codable, CaseIterable, Hashable, Sendable {
   case android = "android"
   case ios = "ios"
+  case macos = "macos"
   case unknown = ""
 
   public init(from decoder: Decoder) throws {
@@ -557,6 +574,18 @@ public struct MobilePushData: Codable, Hashable, Sendable {
     self.link = link
     self.orgId = orgId
     self.type = type
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum MobilePushTransport: String, Codable, CaseIterable, Hashable, Sendable {
+  case apns = "apns"
+  case fcm = "fcm"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
   }
 }
 

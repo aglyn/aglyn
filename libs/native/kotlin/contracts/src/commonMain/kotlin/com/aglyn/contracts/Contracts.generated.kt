@@ -46,6 +46,17 @@ data class AccountPushSettingsAccountValue(
     val push: Boolean? = null,
 )
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = ApnsEnvironmentSerializer::class)
+enum class ApnsEnvironment(val raw: String) {
+    PRODUCTION("production"),
+    SANDBOX("sandbox"),
+    UNKNOWN(""),
+}
+
+internal object ApnsEnvironmentSerializer :
+    RawEnumSerializer<ApnsEnvironment>("com.aglyn.contracts.ApnsEnvironment", ApnsEnvironment.entries, ApnsEnvironment.UNKNOWN, { it.raw })
+
 @Serializable
 data class HostOrder(
     val amountCents: Double? = null,
@@ -338,11 +349,13 @@ internal object ListQuerySortDirectionSerializer :
 
 @Serializable
 data class MobileDevice(
+    val apnsEnvironment: ApnsEnvironment? = null,
     val app: MobileDeviceApp,
     val appVersion: String? = null,
     val lastSeen: JsonElement? = null,
     val platform: MobileDevicePlatform,
     val token: String,
+    val transport: MobilePushTransport,
 )
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
@@ -361,6 +374,7 @@ internal object MobileDeviceAppSerializer :
 enum class MobileDevicePlatform(val raw: String) {
     ANDROID("android"),
     IOS("ios"),
+    MACOS("macos"),
     UNKNOWN(""),
 }
 
@@ -374,6 +388,17 @@ data class MobilePushData(
     val orgId: String? = null,
     val type: String,
 )
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = MobilePushTransportSerializer::class)
+enum class MobilePushTransport(val raw: String) {
+    APNS("apns"),
+    FCM("fcm"),
+    UNKNOWN(""),
+}
+
+internal object MobilePushTransportSerializer :
+    RawEnumSerializer<MobilePushTransport>("com.aglyn.contracts.MobilePushTransport", MobilePushTransport.entries, MobilePushTransport.UNKNOWN, { it.raw })
 
 @Serializable
 data class ModifierSelection(
