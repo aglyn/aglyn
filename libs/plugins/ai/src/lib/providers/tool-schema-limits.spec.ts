@@ -263,11 +263,13 @@ describe('what each adapter declares', () => {
     // request settles it. AGL-3538 carried a task's priority and a logged
     // call's direction inside it by compiling the host events' enum once
     // rather than twice, which left the draft 38 bytes under the proof. The
-    // funnels plugin's "Left a funnel" trigger (AGL-3605) adds 13, which
-    // leaves it 25 under.
+    // funnels plugin's "Left a funnel" trigger (AGL-3605) adds 13, and the
+    // order and return triggers (AGL-3611) took it 140 past the proof. Folding
+    // exitFlow into the reference variant and wait into waitForEvent's,
+    // every trigger kept, leaves it 131 under.
     const draft = [aiAutomationTool()]
     expect(ANTHROPIC_TOOL_SCHEMA_LIMITS.compiledSchemaBytes).toBe(3_807)
-    expect(aiToolSchemaCompiledBytes(draft)).toBe(3_782)
+    expect(aiToolSchemaCompiledBytes(draft)).toBe(3_676)
     expect(aiToolSchemaBreaches(draft, ANTHROPIC_TOOL_SCHEMA_LIMITS)).toEqual([])
   })
 
@@ -404,7 +406,8 @@ describe('the second control: the automation tool with a variant per step type',
     expect(variants(VARIANT_PER_STEP_AUTOMATION_TOOL)).toHaveLength(17)
     expect(keys(VARIANT_PER_STEP_AUTOMATION_TOOL).size).toBe(21)
     // The guard lifted out of the union, and one variant per set of fields.
-    expect(variants(aiAutomationTool())).toHaveLength(10)
+    // 8 since exitFlow and wait ride the reference and waitForEvent variants.
+    expect(variants(aiAutomationTool())).toHaveLength(8)
     // 13 before AGL-3538 gave a task its priority and a logged call its direction.
     expect(keys(aiAutomationTool()).size).toBe(15)
   })
