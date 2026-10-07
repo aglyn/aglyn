@@ -13,3 +13,6 @@ fun startOfLocalDay(atMs: Long, timeZone: String? = null): Long = localDayStarts
 
 /** [atMs] as a local date in a `java.time` pattern (`EEE` a short weekday, `MMM d` a date), in the device's language. */
 expect fun formatLocalDay(atMs: Long, pattern: String, timeZone: String? = null): String
+
+/** [text] in Unicode compatibility decomposition (NFKD), as `String.normalize('NFKD')`. */
+expect fun normalizeNfkd(text: String): String

@@ -52,6 +52,7 @@ fun main() = runBlocking {
       shoot(dir, "aglyn-desktop-order$suffix", dark, before = { navigator.push(Route.Screen("commerce.order", mapOf("order" to "o-1043"))) }) { AglynShell(aglyn, navigator, dark = it) }
     }
     shoot(dir, "aglyn-desktop-sales", false, before = { navigator.select(ShellNavigator.HOME); navigator.push(Route.Screen("commerce.sales")) }) { AglynShell(aglyn, navigator, dark = it) }
+    shoot(dir, "aglyn-desktop-products", false, before = { navigator.select(ShellNavigator.HOME); navigator.push(Route.Screen("commerce.product", mapOf("product" to (System.getProperty("aglyn.snapshotProduct") ?: "")))) }) { AglynShell(aglyn, navigator, dark = it) }
     shoot(dir, "aglyn-desktop-pages", false, before = { navigator.select(ShellNavigator.HOME); navigator.push(Route.Pages) }) { AglynShell(aglyn, navigator, dark = it) }
     shoot(dir, "aglyn-desktop-orders-narrow", false, width = 420, height = 860, before = { navigator.select(ShellNavigator.screenKey("commerce.orders")) }) { AglynShell(aglyn, navigator, dark = it) }
     shoot(dir, "aglyn-desktop-home-store", false, before = { navigator.select(ShellNavigator.HOME) }) { AglynShell(aglyn, navigator, dark = it) }

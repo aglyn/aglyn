@@ -34,7 +34,7 @@ class FunctionCasesTest {
   @Test
   fun everyFunctionHasCases() {
     assertEquals("UTC", root.getValue("timeZone").jsonPrimitive.content)
-    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund", "liftLegacyOrder", "orderIsTestMode", "orderCountsAsSale", "orderWindowFigures", "productSales")))
+    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund", "liftLegacyOrder", "orderIsTestMode", "orderCountsAsSale", "orderWindowFigures", "productSales", "productPriceRange", "productInventory", "isLowStock", "liftLegacyProduct")))
   }
 
   @Test
@@ -156,6 +156,25 @@ class FunctionCasesTest {
         ProductSales(row.getValue("productId").jsonPrimitive.content, row.getValue("name").jsonPrimitive.content, row.getValue("units").jsonPrimitive.double, row.getValue("cents").jsonPrimitive.double)
       }
       assertEquals(expected, productSales(args[0].jsonArray.map(::figure)), args.toString())
+    }
+  }
+
+  private fun product(json: JsonElement): HostProduct = ContractJsonFormat.decodeFromJsonElement(HostProduct.serializer(), json)
+
+  @Test
+  fun productFigureCases() {
+    cases("productPriceRange").forEach { (args, result) ->
+      val (low, high) = result.jsonArray.map { it.jsonPrimitive.double }
+      assertEquals(low to high, productPriceRange(product(args[0])), args.toString())
+    }
+    cases("productInventory").forEach { (args, result) ->
+      assertEquals((result as? JsonPrimitive)?.takeIf { it !is JsonNull }?.double, productInventory(product(args[0])), args.toString())
+    }
+    cases("isLowStock").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.boolean, isLowStock(product(args[0])), args.toString())
+    }
+    cases("liftLegacyProduct").forEach { (args, result) ->
+      assertEquals(product(result), liftLegacyProduct(product(args[0])), args.toString())
     }
   }
 

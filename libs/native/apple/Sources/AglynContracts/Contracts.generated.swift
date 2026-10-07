@@ -245,6 +245,144 @@ public enum HostOrderTaxMode: String, Codable, CaseIterable, Hashable, Sendable 
   }
 }
 
+public struct HostProduct: Codable, Hashable, Sendable {
+  public var categoryIds: [String]?
+  public var channel: ProductChannelFacts?
+  public var collectionIds: [String]?
+  public var createdAtMs: Double?
+  public var description: String?
+  public var digitalFiles: [HostProductDigitalFilesItem]?
+  public var downloadLimit: Double?
+  public var gatedVideos: [HostProductGatedVideosItem]?
+  public var giftCard: Bool?
+  public var imageUrl: String?
+  public var inventory: Double?
+  public var lowStockThreshold: Double?
+  public var mediaUrls: [String]?
+  public var modifierGroups: [ProductModifierGroup]?
+  public var name: String?
+  public var options: [ProductOption]?
+  public var oversellPolicy: HostProductOversellPolicy?
+  public var posQuickKey: Bool?
+  public var priceUsd: Double?
+  public var relatedProductIds: [String]?
+  public var seo: HostProductSeo?
+  public var shipping: ProductShippingFacts?
+  public var slug: String?
+  public var status: ProductStatus?
+  public var subscription: HostProductSubscription?
+  public var subscriptionOptional: Bool?
+  public var supplierId: String?
+  public var tags: [String]?
+  public var taxExempt: Bool?
+  public var type: ProductType?
+  public var updatedAtMs: Double?
+  public var variants: [ProductVariant]?
+
+  public init(categoryIds: [String]? = nil, channel: ProductChannelFacts? = nil, collectionIds: [String]? = nil, createdAtMs: Double? = nil, description: String? = nil, digitalFiles: [HostProductDigitalFilesItem]? = nil, downloadLimit: Double? = nil, gatedVideos: [HostProductGatedVideosItem]? = nil, giftCard: Bool? = nil, imageUrl: String? = nil, inventory: Double? = nil, lowStockThreshold: Double? = nil, mediaUrls: [String]? = nil, modifierGroups: [ProductModifierGroup]? = nil, name: String? = nil, options: [ProductOption]? = nil, oversellPolicy: HostProductOversellPolicy? = nil, posQuickKey: Bool? = nil, priceUsd: Double? = nil, relatedProductIds: [String]? = nil, seo: HostProductSeo? = nil, shipping: ProductShippingFacts? = nil, slug: String? = nil, status: ProductStatus? = nil, subscription: HostProductSubscription? = nil, subscriptionOptional: Bool? = nil, supplierId: String? = nil, tags: [String]? = nil, taxExempt: Bool? = nil, type: ProductType? = nil, updatedAtMs: Double? = nil, variants: [ProductVariant]? = nil) {
+    self.categoryIds = categoryIds
+    self.channel = channel
+    self.collectionIds = collectionIds
+    self.createdAtMs = createdAtMs
+    self.description = description
+    self.digitalFiles = digitalFiles
+    self.downloadLimit = downloadLimit
+    self.gatedVideos = gatedVideos
+    self.giftCard = giftCard
+    self.imageUrl = imageUrl
+    self.inventory = inventory
+    self.lowStockThreshold = lowStockThreshold
+    self.mediaUrls = mediaUrls
+    self.modifierGroups = modifierGroups
+    self.name = name
+    self.options = options
+    self.oversellPolicy = oversellPolicy
+    self.posQuickKey = posQuickKey
+    self.priceUsd = priceUsd
+    self.relatedProductIds = relatedProductIds
+    self.seo = seo
+    self.shipping = shipping
+    self.slug = slug
+    self.status = status
+    self.subscription = subscription
+    self.subscriptionOptional = subscriptionOptional
+    self.supplierId = supplierId
+    self.tags = tags
+    self.taxExempt = taxExempt
+    self.type = type
+    self.updatedAtMs = updatedAtMs
+    self.variants = variants
+  }
+}
+
+public struct HostProductDigitalFilesItem: Codable, Hashable, Sendable {
+  public var fileName: String
+  public var url: String
+  public var version: String?
+
+  public init(fileName: String, url: String, version: String? = nil) {
+    self.fileName = fileName
+    self.url = url
+    self.version = version
+  }
+}
+
+public struct HostProductGatedVideosItem: Codable, Hashable, Sendable {
+  public var title: String?
+  public var url: String
+
+  public init(title: String? = nil, url: String) {
+    self.title = title
+    self.url = url
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum HostProductOversellPolicy: String, Codable, CaseIterable, Hashable, Sendable {
+  case backorder = "backorder"
+  case deny = "deny"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct HostProductSeo: Codable, Hashable, Sendable {
+  public var description: String?
+  public var imageUrl: String?
+  public var title: String?
+
+  public init(description: String? = nil, imageUrl: String? = nil, title: String? = nil) {
+    self.description = description
+    self.imageUrl = imageUrl
+    self.title = title
+  }
+}
+
+public struct HostProductSubscription: Codable, Hashable, Sendable {
+  public var interval: HostProductSubscriptionInterval
+  public var trialDays: Double?
+
+  public init(interval: HostProductSubscriptionInterval, trialDays: Double? = nil) {
+    self.interval = interval
+    self.trialDays = trialDays
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum HostProductSubscriptionInterval: String, Codable, CaseIterable, Hashable, Sendable {
+  case month = "month"
+  case year = "year"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct HostRedirect: Codable, Hashable, Sendable {
   public var destination: String
   public var enabled: Bool?
@@ -1079,6 +1217,35 @@ public enum PosReceiptChannel: String, Codable, CaseIterable, Hashable, Sendable
   }
 }
 
+public struct ProductChannelFacts: Codable, Hashable, Sendable {
+  public var brand: String?
+  public var condition: ProductChannelFactsCondition?
+  public var googleProductCategory: String?
+  public var gtin: String?
+  public var mpn: String?
+
+  public init(brand: String? = nil, condition: ProductChannelFactsCondition? = nil, googleProductCategory: String? = nil, gtin: String? = nil, mpn: String? = nil) {
+    self.brand = brand
+    self.condition = condition
+    self.googleProductCategory = googleProductCategory
+    self.gtin = gtin
+    self.mpn = mpn
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum ProductChannelFactsCondition: String, Codable, CaseIterable, Hashable, Sendable {
+  case new = "new"
+  case refurbished = "refurbished"
+  case used = "used"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct ProductModifierGroup: Codable, Hashable, Sendable {
   public var id: String
   public var max: Double
@@ -1107,6 +1274,45 @@ public struct ProductModifierOption: Codable, Hashable, Sendable {
   }
 }
 
+public struct ProductOption: Codable, Hashable, Sendable {
+  public var name: String
+  public var values: [String]
+
+  public init(name: String, values: [String]) {
+    self.name = name
+    self.values = values
+  }
+}
+
+public struct ProductShippingFacts: Codable, Hashable, Sendable {
+  public var heightCm: Double?
+  public var hsCode: String?
+  public var lengthCm: Double?
+  public var originCountry: String?
+  public var widthCm: Double?
+
+  public init(heightCm: Double? = nil, hsCode: String? = nil, lengthCm: Double? = nil, originCountry: String? = nil, widthCm: Double? = nil) {
+    self.heightCm = heightCm
+    self.hsCode = hsCode
+    self.lengthCm = lengthCm
+    self.originCountry = originCountry
+    self.widthCm = widthCm
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum ProductStatus: String, Codable, CaseIterable, Hashable, Sendable {
+  case active = "active"
+  case archived = "archived"
+  case draft = "draft"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum ProductType: String, Codable, CaseIterable, Hashable, Sendable {
   case digital = "digital"
@@ -1117,6 +1323,32 @@ public enum ProductType: String, Codable, CaseIterable, Hashable, Sendable {
   public init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct ProductVariant: Codable, Hashable, Sendable {
+  public var barcode: String?
+  public var compareAtPriceUsd: Double?
+  public var id: String?
+  public var imageUrl: String?
+  public var inventory: Double?
+  public var inventoryByLocation: [String: Double]?
+  public var options: [String: String]?
+  public var priceUsd: Double?
+  public var sku: String?
+  public var weightGrams: Double?
+
+  public init(barcode: String? = nil, compareAtPriceUsd: Double? = nil, id: String? = nil, imageUrl: String? = nil, inventory: Double? = nil, inventoryByLocation: [String: Double]? = nil, options: [String: String]? = nil, priceUsd: Double? = nil, sku: String? = nil, weightGrams: Double? = nil) {
+    self.barcode = barcode
+    self.compareAtPriceUsd = compareAtPriceUsd
+    self.id = id
+    self.imageUrl = imageUrl
+    self.inventory = inventory
+    self.inventoryByLocation = inventoryByLocation
+    self.options = options
+    self.priceUsd = priceUsd
+    self.sku = sku
+    self.weightGrams = weightGrams
   }
 }
 

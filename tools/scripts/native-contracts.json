@@ -87,6 +87,12 @@
         "MobilePushData",
         "AccountPushSettings"
       ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce.ts": {
+      "types": [
+        "HostProduct",
+        "ProductVariant"
+      ]
     }
   },
   "ints": [],
@@ -94,10 +100,14 @@
     "ListQueryFilter.value",
     "ListQueryRefusal.clause"
   ],
-  "omit": [],
+  "omit": [
+    "HostProduct.deletedAt"
+  ],
   "optional": [
     "HostOrder",
-    "OrderTotals"
+    "OrderTotals",
+    "HostProduct",
+    "ProductVariant"
   ],
   "listQueryCases": {
     "ORDER_LIST_QUERY": {},
@@ -1596,6 +1606,208 @@
         ],
         [
           []
+        ]
+      ]
+    },
+    "productPriceRange": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
+      "args": [
+        [
+          {
+            "variants": []
+          }
+        ],
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "priceUsd": 5
+              },
+              {
+                "id": "b",
+                "priceUsd": 12.5
+              },
+              {
+                "id": "c",
+                "priceUsd": -1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "priceUsd": 3
+              }
+            ]
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "productInventory": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
+      "args": [
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "priceUsd": 1
+              },
+              {
+                "id": "b",
+                "priceUsd": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "priceUsd": 1,
+                "inventory": 3
+              },
+              {
+                "id": "b",
+                "priceUsd": 1,
+                "inventory": null
+              },
+              {
+                "id": "c",
+                "priceUsd": 1,
+                "inventory": 4
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "priceUsd": 1,
+                "inventory": 0
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "isLowStock": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
+      "args": [
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "priceUsd": 1,
+                "inventory": 3
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "priceUsd": 1,
+                "inventory": 3
+              }
+            ],
+            "lowStockThreshold": 5
+          }
+        ],
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "priceUsd": 1,
+                "inventory": 6
+              }
+            ],
+            "lowStockThreshold": 5
+          }
+        ],
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "priceUsd": 1
+              }
+            ],
+            "lowStockThreshold": 5
+          }
+        ],
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "priceUsd": 1,
+                "inventory": 0
+              }
+            ],
+            "lowStockThreshold": 0
+          }
+        ],
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "priceUsd": 1,
+                "inventory": 2
+              }
+            ],
+            "lowStockThreshold": -1
+          }
+        ]
+      ]
+    },
+    "liftLegacyProduct": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
+      "args": [
+        [
+          {
+            "name": "Mug",
+            "slug": "mug",
+            "type": "physical",
+            "status": "draft",
+            "variants": [
+              {
+                "id": "v1",
+                "priceUsd": 9,
+                "inventory": 2
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Old Mug",
+            "priceUsd": 12,
+            "inventory": 4
+          }
+        ],
+        [
+          {
+            "name": "Tee",
+            "status": "archived",
+            "type": "digital",
+            "priceUsd": 5
+          }
         ]
       ]
     }
