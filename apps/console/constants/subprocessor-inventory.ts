@@ -520,7 +520,7 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     purpose: 'Serving web fonts to site visitors and to the editor',
     publishedOn: '2026-08-18',
     reason:
-      'The stylesheet host for the font families a site owner picks in the theme, and for the blog-cover generator.',
+      "The stylesheet host for the font families a site owner picks in the theme: the besigner editor links it, and a published site's server reads it to rebuild the rules on the site's own origin, so a visitor's browser no longer asks it for a theme font (AGL-3656). A visitor's browser still reaches it from the in-page checkout, whose payment fields fetch their face through Stripe.js. Also the blog-cover generator.",
     dataReceived:
       "A visitor's IP address and user-agent, as an unavoidable property of the browser fetching the stylesheet. No account or order data.",
   },
@@ -531,7 +531,7 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     purpose: 'Serving web fonts to site visitors and to the editor',
     publishedOn: '2026-08-18',
     reason:
-      'The font-file host preconnected from the besigner editor pages and from a published site layout.',
+      "The font-file host preconnected from the besigner editor pages. A published site no longer sends visitors to it (AGL-3656): its server fetches each theme font file once and serves it from the site's own `/api/fonts` route.",
     dataReceived:
       "A visitor's IP address and user-agent. No account or order data.",
   },
