@@ -627,10 +627,34 @@ export async function listAiJobs(
   if (options.status) query = query.where('status', '==', options.status)
   else if (options.statuses?.length) query = query.where('status', 'in', [...options.statuses])
   else if (options.hostId) query = query.where('hostId', '==', options.hostId)
-  const snapshot = await query.orderBy('createdAt', 'desc').limit(limit).get()
-  return snapshot.docs
-    .map((doc) => jobFrom(doc))
-    .filter((job): job is AiJob => job !== null)
+  const read = async (from: FirebaseFirestore.Query, count: number) =>
+    (await from.orderBy('createdAt', 'desc').limit(count).get()).docs
+      .map((doc) => jobFrom(doc))
+      .filter((job): job is AiJob => job !== null)
+  try {
+    return await read(query, limit)
+  } catch (error) {
+    // A site's list while its (hostId, createdAt) index is still building
+    // (AGL-3596): Firestore refuses the query with FAILED_PRECONDITION until
+    // the index is ready, which answered the site's AI jobs page with a 500.
+    // The org's own newest jobs — the index every org list already uses —
+    // filtered to the site in memory stand in, bounded to
+    // `AI_JOBS_HOST_FALLBACK_SCAN` jobs, so a site whose jobs are older than
+    // that lists fewer until the index is ready rather than none.
+    if (!options.hostId || options.status || options.statuses?.length || !isFailedPrecondition(error)) throw error
+    console.warn('ai jobs: host index not ready; listing from the org', { orgId, hostId: options.hostId })
+    const recent = await read(jobsCollection(firestore, orgId), AI_JOBS_HOST_FALLBACK_SCAN)
+    return recent.filter((job) => job.hostId === options.hostId).slice(0, limit)
+  }
+}
+
+/** The most of an org's newest jobs a site's list scans while its index builds (AGL-3596). */
+export const AI_JOBS_HOST_FALLBACK_SCAN = 300
+
+/** Firestore's "this query needs an index that is not ready" (gRPC 9). */
+function isFailedPrecondition(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code
+  return code === 9 || code === 'failed-precondition' || code === 'FAILED_PRECONDITION'
 }
 
 /** The wire form. `running` is the lease, read against `now`. */

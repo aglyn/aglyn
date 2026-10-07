@@ -29,6 +29,8 @@
 
 let mockDocs = new Map<string, Record<string, unknown>>()
 let mockAutoId = 0
+/** The (hostId, createdAt) index still building (AGL-3596): a host query is refused. */
+let mockHostIndexBuilding = false
 const mockRunAiRequest = jest.fn()
 
 function applyData(
@@ -76,6 +78,9 @@ function mockMakeFirestore() {
         makeQuery(matches, filters, { field, direction }, limit),
       limit: (count: number) => makeQuery(matches, filters, order, count),
       get: async () => {
+        if (mockHostIndexBuilding && filters.some((filter) => filter.field === 'hostId')) {
+          throw Object.assign(new Error('9 FAILED_PRECONDITION: The query requires an index.'), { code: 9 })
+        }
         const millis = (value: unknown) =>
           value instanceof Date ? value.getTime() : Number(value)
         let docs = [...mockDocs.keys()].filter(matches).filter((path) => {
@@ -1430,6 +1435,20 @@ describe('listAiJobs and the summary', () => {
     })
     expect(summary).not.toHaveProperty('lease')
     expect(summary.steps[0].startedAt).toBe(NOW.toISOString())
+  })
+})
+
+describe('a site’s list while its index builds (AGL-3596)', () => {
+  afterEach(() => {
+    mockHostIndexBuilding = false
+  })
+
+  it('lists the site’s jobs from the org’s newest instead of failing', async () => {
+    const mine = await createAiJob(firestore, { orgId: ORG, hostId: 'host-1', kind: 'text', brief: 'mine', createdBy: 'u' }, NOW)
+    await createAiJob(firestore, { orgId: ORG, hostId: 'host-2', kind: 'text', brief: 'theirs', createdBy: 'u' }, NOW)
+    mockHostIndexBuilding = true
+    const listed = await listAiJobs(firestore, ORG, { hostId: 'host-1' })
+    expect(listed.map((job) => job.$id)).toEqual([mine.$id])
   })
 })
 
