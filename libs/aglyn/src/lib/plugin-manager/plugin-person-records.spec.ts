@@ -19,6 +19,7 @@ import { setRegisteringPluginId } from '../app-utils/registering-plugin'
 import {
   filePluginPersonUnder,
   findPluginPerson,
+  pluginPeopleChangedSince,
   pluginPeopleInView,
   pluginPeopleWroteIn,
   pluginPersonRecords,
@@ -26,6 +27,8 @@ import {
   recordPluginPersonRefund,
   registerPluginPersonRecords,
   searchPluginPeople,
+  type PluginPersonChangesPage,
+  type PluginPersonChangesRequest,
   type PluginPersonRecords,
 } from './plugin-person-records'
 import { resetPluginServicesForTests } from './plugin-services'
@@ -270,5 +273,33 @@ describe('searching people by what was typed (AGL-3609)', () => {
       { pluginId: 'records' },
     )
     await expect(searchPluginPeople(SEARCH)).rejects.toThrow('index down')
+  })
+})
+
+describe('the people a site holds, walked by change (AGL-3639)', () => {
+  const REQUEST: PluginPersonChangesRequest = { hostId: 'h', after: null, limit: 50 }
+
+  it('answers null while no plugin keeps people, or the one that does cannot walk them', async () => {
+    expect(await pluginPeopleChangedSince(REQUEST)).toBeNull()
+    registerPluginPersonRecords(owner(), { pluginId: 'records' })
+    expect(await pluginPeopleChangedSince(REQUEST)).toBeNull()
+  })
+
+  it('hands the owner the request with its limit clamped, and its page back', async () => {
+    const page: PluginPersonChangesPage = { people: [], next: 'cursor-2' }
+    const changedSince = jest.fn(async () => page)
+    registerPluginPersonRecords({ ...owner(), changedSince }, { pluginId: 'records' })
+    expect(await pluginPeopleChangedSince({ ...REQUEST, limit: 10_000 })).toBe(page)
+    expect(changedSince).toHaveBeenCalledWith({ ...REQUEST, limit: 500 })
+    await pluginPeopleChangedSince({ ...REQUEST, limit: 0 })
+    expect(changedSince).toHaveBeenLastCalledWith({ ...REQUEST, limit: 1 })
+  })
+
+  it('lets a failed read throw, so a walk never advances past what it did not read', async () => {
+    registerPluginPersonRecords(
+      { ...owner(), changedSince: async () => Promise.reject(new Error('quota')) },
+      { pluginId: 'records' },
+    )
+    await expect(pluginPeopleChangedSince(REQUEST)).rejects.toThrow('quota')
   })
 })

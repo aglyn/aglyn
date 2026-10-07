@@ -20,7 +20,7 @@ import {
   contactContainerFieldPath,
   normalizeContainerIds,
 } from '@aglyn/aglyn/app-utils/container-membership'
-import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
+import { normalizeContactEmail, readContactFacet } from '@aglyn/aglyn/app-utils/contacts'
 import {
   CRM_COLLECTIONS,
   CRM_SCOPED_SEARCH_JOIN,
@@ -39,6 +39,9 @@ import {
   visibleToHost,
 } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type {
+  PluginPersonChange,
+  PluginPersonChangesPage,
+  PluginPersonChangesRequest,
   PluginPersonFileRequest,
   PluginPersonFindRequest,
   PluginPersonReadRequest,
@@ -60,7 +63,7 @@ import {
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { restampCrmListFieldsAt } from '@aglyn/tenant-data-admin/server/crm-records'
 import { collectDynamicListCandidates } from '@aglyn/tenant-data-admin/server/dynamic-list-materialize'
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { recordPersonRefund } from './person-refund'
 
 /**
@@ -178,6 +181,36 @@ export function crmPersonSearchWord(text: unknown): string {
   const longest = words.reduce((best, word) => (word.length > best.length ? word : best), '')
   return longest.slice(0, NAME_TOKEN_MAX_PREFIX)
 }
+
+/**
+ * A contacts walk's cursor (AGL-3639): the last contact's `updatedAt` to the
+ * nanosecond, and its id for the tie. Opaque to every caller; a millisecond
+ * alone would answer a contact written later in the same millisecond twice.
+ */
+export function encodeContactChangesCursor(updatedAt: unknown, id: string): string | null {
+  const stamp = updatedAt as { seconds?: unknown; nanoseconds?: unknown } | null
+  const seconds = Number(stamp?.seconds)
+  const nanoseconds = Number(stamp?.nanoseconds ?? 0)
+  if (!Number.isFinite(seconds) || !Number.isFinite(nanoseconds) || !id) return null
+  return `${Math.trunc(seconds)}.${Math.trunc(nanoseconds)}.${id}`
+}
+
+/** Reads a cursor this module handed out, or `null` for anything else. */
+export function decodeContactChangesCursor(
+  cursor: string | null | undefined,
+): { seconds: number; nanoseconds: number; id: string } | null {
+  const match = /^(\d{1,12})\.(\d{1,9})\.([A-Za-z0-9_-]{1,200})$/.exec(String(cursor ?? ''))
+  if (!match) return null
+  return { seconds: Number(match[1]), nanoseconds: Number(match[2]), id: match[3] }
+}
+
+const millisOf = (value: unknown): number => {
+  const stamp = value as { toMillis?: () => number } | null
+  return typeof stamp?.toMillis === 'function' ? stamp.toMillis() : 0
+}
+
+const integerOrNull = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : null
 
 export function createCrmPersonRecords(deps: CrmPersonRecordsDeps): PluginPersonRecords {
   return {
@@ -364,6 +397,60 @@ export function createCrmPersonRecords(deps: CrmPersonRecordsDeps): PluginPerson
     },
 
     /**
+     * The contacts a site may see, oldest change first (AGL-3639): the walk a
+     * connector copies people out by. On the Contacts list's own index
+     * (`visibleTo` array-contains-any, `updatedAt` ascending), with the id as
+     * the tie-break. A contact the site sees only through a sharing grant is
+     * read and stepped over — another holder's person is not this site's to
+     * export — and the cursor still moves past it. The profile is the site's
+     * consent group's facet, never another holder's.
+     */
+    async changedSince(request: PluginPersonChangesRequest): Promise<PluginPersonChangesPage> {
+      const hostId = String(request.hostId ?? '').trim()
+      if (!hostId) return { people: [], next: null }
+      const orgId = await orgOf(deps, request)
+      const groupId = await deps.groupIdForHost(hostId)
+      const after = decodeContactChangesCursor(request.after)
+      let query = deps
+        .firestore()
+        .collection('orgs')
+        .doc(orgId)
+        .collection(STORED_IN[CRM_PERSON_KINDS.contact])
+        .where('visibleTo', 'array-contains-any', scopeTokensForHost(hostId))
+        .orderBy('updatedAt', 'asc')
+        .orderBy(FieldPath.documentId(), 'asc')
+      if (after) {
+        query = query.startAfter(new Timestamp(after.seconds, after.nanoseconds), after.id)
+      }
+      const snapshot = await query.limit(Math.max(1, Math.min(500, request.limit))).get()
+      const people: PluginPersonChange[] = []
+      let next: string | null = null
+      for (const doc of snapshot.docs) {
+        const data = (doc.data() ?? {}) as Record<string, unknown>
+        next = encodeContactChangesCursor(data['updatedAt'], doc.id) ?? next
+        if (seenOnlyThroughGrant(data, hostId)) continue
+        const email = normalizeContactEmail(data['email'])
+        if (!email) continue
+        const facet = readContactFacet(data, groupId)
+        people.push({
+          kind: CRM_PERSON_KINDS.contact,
+          id: doc.id,
+          email,
+          data,
+          changedAtMs: millisOf(data['updatedAt']),
+          profile: {
+            name: typeof facet.name === 'string' && facet.name.trim() ? facet.name.trim() : null,
+            phone: typeof facet.phone === 'string' && facet.phone.trim() ? facet.phone.trim() : null,
+            tags: Array.isArray(facet.tags) ? facet.tags.filter((tag) => typeof tag === 'string') : [],
+            lifetimeValueCents: integerOrNull(facet.ltvCents),
+            ordersCount: integerOrNull(facet.ordersCount),
+          },
+        })
+      }
+      return { people, next }
+    },
+
+    /**
      * Whether each person has ever written in: an inbound email on their
      * timeline, filed on the contact, or on the lead while they were one
      * (AGL-3234). One keyed query each; a failed one is unknown.
@@ -436,4 +523,5 @@ export const crmPersonRecords: Required<PluginPersonRecords> = {
   peopleInView: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).peopleInView!(request),
   wroteIn: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).wroteIn!(request),
   search: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).search!(request),
+  changedSince: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).changedSince!(request),
 }
