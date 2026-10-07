@@ -410,6 +410,10 @@ describe('AGL-2320 — every stock writer is transactional', () => {
     'reserve-stock.ts',
     // Transactional since AGL-1808.
     'cancel-order.ts',
+    // Receiving a return restocks inside the transaction that reads the
+    // product (AGL-3611): `transaction.get`, then `transaction.update`, as
+    // the cancellation's restore does.
+    'returns.ts',
   ])
 
   const sources = fs
