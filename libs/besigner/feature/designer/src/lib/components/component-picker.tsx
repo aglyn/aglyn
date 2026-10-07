@@ -27,6 +27,7 @@ import {
   Button,
   Collapse,
   Dialog,
+  DialogActions,
   DialogContent,
   Divider,
   DialogProps,
@@ -357,7 +358,14 @@ export const ComponentPicker = observer(
             </Box>
             {/* Anchored to the pane rather than the dialog: Confirm belongs
                 with the thing being confirmed. */}
-            <Box sx={{ p: 1.5, borderTop: 1, borderColor: 'divider' }}>
+            <Box
+              sx={{
+                p: 1.5,
+                borderTop: 1,
+                borderColor: 'divider',
+                display: { xs: 'none', md: 'block' },
+              }}
+            >
               <Button
                 fullWidth
                 variant="contained"
@@ -369,6 +377,30 @@ export const ComponentPicker = observer(
             </Box>
           </Box>
         </DialogContent>
+        {/* Stacked below `md`, the pane above sits under the whole catalog,
+            so Confirm moves to the dialog's own action bar — outside the
+            scroll, on screen whichever tile was tapped — and names the
+            choice, since its preview is out of sight. */}
+        <DialogActions
+          sx={{
+            display: { xs: 'flex', md: 'none' },
+            gap: 1,
+            borderTop: 1,
+            borderColor: 'divider',
+          }}
+        >
+          <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0 }}>
+            {selected ? describeElement(selected).name : 'Choose an element'}
+          </Typography>
+          <Button
+            variant="contained"
+            disabled={!selected}
+            onClick={handleConfirm}
+            sx={{ flexShrink: 0 }}
+          >
+            {'Confirm'}
+          </Button>
+        </DialogActions>
       </Dialog>
     )
   }),

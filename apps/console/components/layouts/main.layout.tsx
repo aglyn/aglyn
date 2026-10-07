@@ -232,7 +232,9 @@ const TopAppBar = (props: TopAppBarProps) => {
                 sx={{
                   minWidth: 'unset',
                   // position: 'absolute',
-                  marginLeft: { xs: -2, sm: -2 },
+                  // Cancels the Toolbar's left gutter so the arrow sits on it rather
+                  // than inset by it — the gutter is 8px on a phone, 16px above.
+                  marginLeft: { xs: -1, sm: -2 },
                   paddingRight: { xs: 1, sm: 0.75 },
                   paddingLeft: { xs: 0.5, sm: 0.25 },
                   py: { xs: 0, sm: 0 },
@@ -375,7 +377,11 @@ const TopAppBar = (props: TopAppBarProps) => {
                 // and every `text-overflow: ellipsis` further down silently
                 // did nothing, because nothing ever constrained the box.
                 minWidth: 0,
-                paddingLeft: { xs: 0.5, sm: 1.5 }
+                paddingLeft: { xs: 0.5, sm: 1.5 },
+                // A squeezed center truncates its document name instead of
+                // painting over the actions beside it. Its menus portal out,
+                // so nothing they open is clipped.
+                ...(compact && { overflow: 'hidden' }),
               }}>
               {!customCenter &&
               !centerPrefix &&

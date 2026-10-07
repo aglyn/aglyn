@@ -406,7 +406,7 @@ const renderCompact = (entries: AppBarMenubarEntryProps[]) => {
     <Menu.Root>
       <Menu.Trigger
         nativeButton
-        render={<IconButton color="inherit" aria-label="Menu" />}
+        render={<IconButton color="inherit" aria-label="Menu" sx={{ mx: 0.5 }} />}
       >
         <MdiIcon path={mdiMenu.path} />
       </Menu.Trigger>
