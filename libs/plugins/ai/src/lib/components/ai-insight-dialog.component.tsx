@@ -69,6 +69,9 @@ const PLACEHOLDERS: Record<Exclude<AiInsightSurface, 'digest'>, string> = {
   analytics: 'Which pages brought in the most visitors, and did anything change?',
   datasets: 'What is the average order total by state?',
   'crm-reports': 'Which campaign or form brought in the most people this month?',
+  automations: 'Which automations failed most this month?',
+  bookings: 'Which services were booked most, and how many were canceled?',
+  workspace: 'How much is in the pipeline, and what closed this month?',
 }
 
 export interface AiInsightDialogProps {

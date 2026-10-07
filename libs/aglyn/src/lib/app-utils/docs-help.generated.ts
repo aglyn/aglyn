@@ -62,6 +62,11 @@ export const PLUGIN_DOCS = {
     title: 'A/B tests by AI: write variants, read the result',
     excerpt: 'Have Aglyn AI write two to four variants for a page, section or email experiment, and put a finished test into plain language — with the verdict decided from the counts before the model is asked anything.',
   },
+  aiInsights: {
+    path: '/marketing-and-automation/analytics/insights',
+    title: 'Insights',
+    excerpt: 'Ask Aglyn AI a question about your site\'s figures in plain words, and get answers where every number is traced to the figure it comes from — plus weekly insights by email.',
+  },
   aiLogic: {
     path: '/ai/logic-with-ai',
     title: 'Functions and variables with AI',
@@ -308,6 +313,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   aiAutomations: ['#draft', '#change', '#explain', '#why-a-run-failed', '#what-is-sent', '#who-can-use-it', '#related'],
   aiCrm: ['#summarize-a-record', '#summaries-are-reused-until-the-record-changes', '#draft-an-email', '#match-columns', '#what-is-sent', '#who-can-use-it', '#related'],
   aiExperiments: ['#it-proposes-you-write', '#write-variants', '#putting-them-in', '#what-it-will-not-write', '#read-a-result', '#the-verdict', '#the-words', '#undecided', '#what-is-sent', '#who-can-use-it', '#related'],
+  aiInsights: ['#asking-a-question', '#how-an-answer-is-made', '#asking-about-datasets', '#weekly-insights', '#privacy'],
   aiLogic: ['#function', '#variable', '#change', '#broken-references', '#what-is-sent', '#who-can-use-it', '#related'],
   aiMonitoring: ['#the-ai-card', '#compensating-credits', '#where-else', '#one-account', '#the-spend-leaderboard', '#alerts', '#related'],
   aiProducts: ['#write-a-products-copy', '#write-copy-for-many-products', '#when-you-import-products', '#propose-a-first-catalog', '#propose-categories-and-discounts', '#what-the-copy-never-says', '#what-is-sent-to-the-ai-provider', '#who-can-use-it', '#related'],

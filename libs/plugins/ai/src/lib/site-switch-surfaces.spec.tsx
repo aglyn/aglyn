@@ -117,6 +117,9 @@ const SITE_ZONES: readonly string[] = [
   // about is that site's.
   'experimentVariants',
   'experimentResult',
+  // "Ask AI about these numbers" on a site's dashboard and Analytics page
+  // (AGL-3603).
+  CONSOLE_WIDGET_SLOTS.hostDashboard,
 ]
 
 /** Zones drawn on the WORKSPACE's pages, where no site's switch reaches. */
@@ -125,6 +128,8 @@ const WORKSPACE_ZONES: readonly string[] = [
   CONSOLE_WIDGET_SLOTS.orgMember,
   CONSOLE_WIDGET_SLOTS.orgMembersListColumn,
   CONSOLE_WIDGET_SLOTS.orgSites,
+  // "Ask AI about these numbers" on the workspace's sites page (AGL-3603).
+  CONSOLE_WIDGET_SLOTS.orgDashboard,
 ]
 
 /** A workspace that never listed AI, and one of its sites that switched it off. */

@@ -65,6 +65,7 @@ import AiSiteStartCard from './components/ai-site-start-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
 import AiDescribeAutomationButton from './components/ai-describe-automation.component'
 import AiReviseAutomation from './components/ai-revise-automation.component'
+import { AiInsightHostCard, AiInsightOrgCard } from './components/ai-insight-card.component'
 import {
   AiLogicCreateButton,
   AiLogicFixReference,
@@ -455,6 +456,26 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiReviseAutomation,
+      },
+      // "Ask AI about these numbers" (AGL-3603): a tile on a site's
+      // dashboard and Analytics page, which both draw `hostDashboard`, and on
+      // the workspace's sites page. It opens the insight dialog the Assist
+      // panel opens, gated as every generative widget is.
+      {
+        slot: 'hostDashboard',
+        widgetId: 'ai-insight-ask',
+        title: 'Ask AI about these numbers',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiInsightHostCard,
+      },
+      {
+        slot: 'orgDashboard',
+        widgetId: 'ai-insight-ask',
+        title: 'Ask AI about these numbers',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiInsightOrgCard,
       },
       // Logic by AI (AGL-3603), in the zones the logic plugin hosts on its
       // Functions & Variables page: Create with AI in the Functions and
