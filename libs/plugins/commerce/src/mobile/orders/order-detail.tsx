@@ -129,13 +129,13 @@ export function OrderDetailPanel({
     }
   }
   const share = async () => {
-    await Share.share({ title: `Order #${detail.label}`, message: receiptText(await receipt()) }).catch(() => undefined)
+    await Share.share({ title: `Order ${detail.label}`, message: receiptText(await receipt()) }).catch(() => undefined)
   }
 
   return (
     <Screen>
       <Card
-        title={`Order #${detail.label}`}
+        title={`Order ${detail.label}`}
         actions={
           <View style={{ flexDirection: 'row', gap: theme.space(1) }}>
             <IconAction testID="order-print" icon="print-outline" label="Print receipt" onPress={() => void print()} />
@@ -301,7 +301,7 @@ export function OrderDetailPanel({
             icon="close-circle-outline"
             onPress={async () => {
               const yes = await confirmAction({
-                title: `Cancel order #${detail.label}?`,
+                title: `Cancel order ${detail.label}?`,
                 body: 'Its stock goes back on the shelf. This cannot be undone.',
                 confirm: 'Cancel order',
                 destructive: true,

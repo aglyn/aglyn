@@ -55,6 +55,11 @@ import { registerBookingFigureReader } from './server/booking-figures'
 import { registerBookingServiceAiCapability } from './server/booking-service-ai-capability'
 import { registerBookingServiceDraftWriter } from './server/booking-service-drafts'
 import { bookingRefundHandler } from './server/refund'
+import {
+  bookingManageDeps,
+  createBookingCheckInHandler,
+  createBookingRescheduleHandler,
+} from './server/booking-manage'
 // The booking's way back to the record it was booked from (AGL-2660): the
 // reference a booking link carried, and the meeting a free booking files on
 // landing.
@@ -1177,6 +1182,10 @@ export function registerBookingsConsoleApi(): void {
   // Refunding a paid booking (AGL-2315). Console-side, because it is
   // site-admin-gated and moves money — never a site-facing route.
   registerPluginApiRoute('bookings/refund', bookingRefundHandler)
+  // Checking a guest in and moving a booking (AGL-3621), for the site's
+  // team in the Aglyn app: member routes, one transaction each.
+  registerPluginApiRoute('bookings/check-in', createBookingCheckInHandler(bookingManageDeps()))
+  registerPluginApiRoute('bookings/reschedule', createBookingRescheduleHandler(bookingManageDeps()))
   // The merchant-side `purchase` lookup (AGL-2481). A public, unauthenticated
   // read like `bookings/slots`, authorised by the unguessable Stripe session
   // id and answering with a projection that carries no guest identity.

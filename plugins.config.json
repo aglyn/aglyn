@@ -263,6 +263,17 @@
         "consoleServerDeclarations": "registerBookingsConsoleServerDeclarations",
         "tenantEmails": "bookingsTenantEmails"
       },
+      "mobile": {
+        "$comment": "AGL-3621: the Aglyn app's bookings calendar (day, week and agenda in the site's time zone; a split view on tablets), a booking's detail with check-in, move and cancel, today's bookings on the home screen, and the console's Bookings page opening natively.",
+        "register": "registerBookingsMobile",
+        "contributes": {
+          "screens": ["bookings.calendar", "bookings.booking"],
+          "tabs": ["bookings.calendar-tab"],
+          "widgets": ["bookings.today"],
+          "quickActions": ["bookings.today-action"],
+          "deepLinks": ["bookings.page"]
+        }
+      },
       "requiredPersonEraser": true,
       "modules": {
         "site": "site"

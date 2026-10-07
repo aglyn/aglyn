@@ -2,6 +2,14 @@
   "$comment": "Workspace modules outside the mobile trees that mobile code may import (AGL-3620). check-mobile-isolation admits each one only while its own imports are pure: listed modules, platform-neutral packages, no DOM, no Node built-in, nothing web- or server-only. The list grows only with that proof; a module that mixes pure and web code is split, never listed.",
   "modules": [
     {
+      "path": "libs/aglyn/src/lib/app-utils/collection-entry-date.ts",
+      "why": "The site's time zone chain (site, then workspace, then UTC), so the app's bookings calendar reads days as the console does (AGL-3621)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/host-naming.ts",
+      "why": "Reached by the bookings model: a site's public origin from its custom domain or subdomain, no I/O."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/mobile-push.ts",
       "why": "The push device registry shape, Expo token check, tap data and the account-scope push switch (AGL-3620); no imports at all."
     },
@@ -16,6 +24,34 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/stripe-deployment-mode.ts",
       "why": "Reached by the commerce model: test or live mode from a plain value, no Stripe SDK."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/tenant-apex.ts",
+      "why": "Reached by host naming: the published-site apex domain constant."
+    },
+    {
+      "path": "libs/aglyn/src/lib/foundation/definitions/contact.types.ts",
+      "why": "Reached by the booking contact fields: contact shapes and phone normalizing, no imports."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-contact-fields.ts",
+      "why": "Reached by the booking record model: the phone and address asks, pure validation."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "why": "What may be done to a booking (check in, move, cancel), the rule the Bookings app screens share with the check-in and reschedule routes (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-record.ts",
+      "why": "Reached by the bookings model: the booking link's record reference, string parsing only."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-time.ts",
+      "why": "The zone a booking is told in and its wall-clock wording, so the app states a booking's time as the guest's email does (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/bookings.ts",
+      "why": "Service hours and the open-slot walk, so the app offers the same times to move a booking to as the booking route accepts (AGL-3621)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/constants/orders-list-query.ts",
@@ -46,16 +82,16 @@
       "why": "The product, collection and store shapes, read by the Commerce app product screens (AGL-3621)."
     },
     {
-      "path": "libs/plugins/commerce/src/lib/model/product-modifiers.ts",
-      "why": "A product's register modifiers and their validation, imports nothing; commerce.ts checks them when a product is stored (AGL-3607)."
-    },
-    {
       "path": "libs/plugins/commerce/src/lib/model/order-figures.ts",
       "why": "Integer-cent order totals, so the app's sales figures match the console's to the cent (AGL-3621)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
       "why": "Fulfillment state of an order line, reached by the app's order screens (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/product-modifiers.ts",
+      "why": "A product's register modifiers and their validation, imports nothing; commerce.ts checks them when a product is stored (AGL-3607)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/smart-collection-reads.ts",
@@ -88,6 +124,10 @@
     {
       "path": "libs/shared/util/email/src/lib/outbound-phishing-screen.ts",
       "why": "Reached by the redirects model: pattern tables and pure functions over text."
+    },
+    {
+      "path": "libs/shared/util/timestamp/src/lib/zoned-time.ts",
+      "why": "Calendar arithmetic in a named time zone over Intl, for the app's day and week views (AGL-3621)."
     },
     {
       "path": "libs/shared/util/tools/src/lib/linear-regex.ts",

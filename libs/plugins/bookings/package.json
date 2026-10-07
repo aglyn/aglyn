@@ -18,6 +18,10 @@
       "types": "./src/index.d.ts",
       "default": "./src/index.js"
     },
+    "./mobile": {
+      "types": "./src/mobile/index.d.ts",
+      "default": "./src/mobile/index.js"
+    },
     "./*": {
       "types": "./src/lib/*.d.ts",
       "default": "./src/lib/*.js"
@@ -38,11 +42,37 @@
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
+    "@aglyn/mobile-plugin-host": "1.0.0-beta.230",
+    "@aglyn/mobile-ui": "1.0.0-beta.230",
     "@mui/material": "^9.3.1",
+    "@tanstack/react-query": "^5.104.1",
+    "@testing-library/react-native": "^14.0.1",
     "firebase": "^12.18.0",
     "firebase-admin": "^14.3.0",
     "next": "^16.3.3",
-    "react": "^19.2.8"
+    "react": "^19.2.8",
+    "react-native": "^0.86.0",
+    "react-native-safe-area-context": "~5.7.0"
+  },
+  "peerDependenciesMeta": {
+    "@aglyn/mobile-plugin-host": {
+      "optional": true
+    },
+    "@aglyn/mobile-ui": {
+      "optional": true
+    },
+    "@tanstack/react-query": {
+      "optional": true
+    },
+    "@testing-library/react-native": {
+      "optional": true
+    },
+    "react-native": {
+      "optional": true
+    },
+    "react-native-safe-area-context": {
+      "optional": true
+    }
   },
   "sideEffects": [
     "./src/lib/server.*"

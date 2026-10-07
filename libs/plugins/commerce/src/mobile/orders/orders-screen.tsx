@@ -111,7 +111,7 @@ export function OrdersList({
         <ListRow
           testID={`order-${row.id}`}
           icon={row.disputeOpen ? 'alert-circle-outline' : 'receipt-outline'}
-          title={`#${row.label} · ${row.customer}`}
+          title={`${row.label} · ${row.customer}`}
           subtitle={orderSubtitle(row, currency)}
           selected={row.id === selectedId}
           onPress={() => onOpen(row.id)}

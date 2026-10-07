@@ -110,6 +110,22 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'expo-notifications',
       { color: light.primary.main, defaultChannel: 'default' },
     ],
+    // Commerce (AGL-3621): scan product and tracking barcodes, photograph products.
+    [
+      'expo-camera',
+      {
+        cameraPermission: `${BRAND} uses the camera to scan barcodes and take product photos.`,
+        recordAudioAndroid: false,
+      },
+    ],
+    [
+      'expo-image-picker',
+      {
+        photosPermission: `${BRAND} opens your photos so you can add them to products.`,
+        cameraPermission: `${BRAND} uses the camera to scan barcodes and take product photos.`,
+        microphonePermission: false,
+      },
+    ],
   ],
   // Runtime settings are EXPO_PUBLIC_* variables inlined at bundle time and
   // read by src/config.ts; only the EAS project id lives here.
