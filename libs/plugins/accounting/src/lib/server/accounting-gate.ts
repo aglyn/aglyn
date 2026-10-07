@@ -36,7 +36,7 @@
 
 import { checkEntitlement } from '@aglyn/aglyn/server'
 import { isEmailVerified, isImpersonationSession } from '@aglyn/tenant-data-admin/server/firebase-admin'
-import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import type { DecodedIdToken } from 'firebase-admin/auth'
 import { ACCOUNTING_ENTITLEMENT, ACCOUNTING_MANAGE_PERMISSION } from '../constants/bundle-common'
 import type { AccountingRefusalReason } from '../model/accounting.types'
@@ -100,7 +100,7 @@ export async function accountingMemberGate(
   try {
     decoded = await deps.verifyIdToken(token)
   } catch (error) {
-    if (invalidIdTokenResponse(error)) {
+    if (isRefusedIdToken(error)) {
       return refusal(401, 'unauthenticated', 'Your sign-in could not be confirmed. Sign in again.')
     }
     throw error
