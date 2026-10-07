@@ -15,19 +15,36 @@
  * limitations under the License.
  */
 
-import { registerConsoleExtension } from '@aglyn/aglyn'
+import { type ConsoleWidget, registerConsoleExtension } from '@aglyn/aglyn'
+import { lazy } from 'react'
 import { FONTS_PLUGIN_ID } from './constants'
 import { FONT_PICKER_WIDGETS } from './picker'
 
 /**
- * The fonts plugin's console surface (AGL-3656): its controls in the theme
- * editor's Typography card, through the `themeEditorFonts` zone — the font
- * picker first.
+ * The fonts plugin's console surface (AGL-3656), loaded from
+ * `@aglyn/plugins-fonts/console`: its controls in the theme editor's
+ * Typography card, through the `themeEditorFonts` zone — the font picker,
+ * then the installer for the site's own font files.
  */
+
+const FontInstallerPanel = lazy(
+  () => import('./installer/components/font-installer-panel.component'),
+)
+
+/** The installer's widgets, in the order the card draws them. */
+export const FONT_INSTALLER_WIDGETS: ConsoleWidget[] = [
+  {
+    slot: 'themeEditorFonts',
+    widgetId: 'fonts-installer',
+    title: 'Your own fonts',
+    Component: FontInstallerPanel,
+  },
+]
+
 export function registerFontsConsole(): void {
   registerConsoleExtension({
     pluginId: FONTS_PLUGIN_ID,
     displayName: 'Fonts',
-    widgets: [...FONT_PICKER_WIDGETS],
+    widgets: [...FONT_PICKER_WIDGETS, ...FONT_INSTALLER_WIDGETS],
   })
 }

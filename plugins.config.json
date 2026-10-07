@@ -2641,15 +2641,15 @@
     },
     {
       "id": "fonts",
-      "$comment": "AGL-3656: the platform's fonts. serverDeclarations registers the Google Fonts catalog (families, weights, italics and the metrics of each regular face) as core's theme font catalog, which a published page loads its theme fonts by: only the faces a family offers, and a local fallback sized to the family's metrics. console fills the theme editor's themeEditorFonts zone with the font picker (the whole Google Fonts catalog, previews in the site's own words, pairings), and consoleApi serves /api/fonts/cost, what a theme's fonts cost a visitor, worked out as the published page loads them. Always on, with no switch: a published page's fonts are part of its theme.",
+      "$comment": "AGL-3656: the platform's fonts. serverDeclarations registers the Google Fonts catalog (families, weights, italics and the metrics of each regular face) as core's theme font catalog, which a published page loads its theme fonts by: only the faces a family offers, and a local fallback sized to the family's metrics. console fills the theme editor's Typography card (`themeEditorFonts`) with the font picker (the whole Google Fonts catalog, previews in the site's own words, pairings, cost) and the font installer, which uploads a site's own font files. consoleApi serves /api/fonts/cost, what a theme's fonts cost a visitor worked out as the published page loads them, and /api/fonts/prepare, which checks an uploaded file's embedding license and converts and subsets it to WOFF2 with harfbuzz; the file is then stored through the media library's own upload and replace routes. Always on: a published page's fonts are part of its theme, so there is no switch to turn them off.",
       "package": "@aglyn/plugins-fonts",
+      "modules": {
+        "console": "console"
+      },
       "register": {
         "console": "registerFontsConsole",
         "consoleApi": "registerFontsConsoleApi",
         "serverDeclarations": "registerFontsServerDeclarations"
-      },
-      "modules": {
-        "console": "console"
       },
       "apiPrefixes": [
         "fonts"

@@ -40,6 +40,8 @@ import dynamic from 'next/dynamic'
 import { stableStringify } from '@aglyn/aglyn/app-utils/artifact-provenance'
 import { useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
+import { useHostId } from '../host-id-provider'
+import PluginWidgetSlot from '../plugin-widget-slot.component'
 import ColorField from './color-field.component'
 import {
   BORDER_RADIUS_FIELD,
@@ -142,6 +144,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
   // Every "Default" and the preview beside them resolve the base from it,
   // which is the base the published page builds on (AGL-3068).
   const siteKey = useHostSiteKey()
+  const hostId = useHostId()
 
   /**
    * Re-seed the draft when the saved theme changes underneath us (AGL-1021).

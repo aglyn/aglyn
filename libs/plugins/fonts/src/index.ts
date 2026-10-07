@@ -16,3 +16,4 @@
  */
 
 export * from './lib/constants'
+export * from './lib/installer/theme-fonts'
