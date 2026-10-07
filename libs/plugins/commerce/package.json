@@ -18,10 +18,6 @@
       "types": "./src/index.d.ts",
       "default": "./src/index.js"
     },
-    "./mobile": {
-      "types": "./src/mobile/index.d.ts",
-      "default": "./src/mobile/index.js"
-    },
     "./*": {
       "types": "./src/lib/*.d.ts",
       "default": "./src/lib/*.js"
@@ -47,54 +43,12 @@
     "qrcode.react": "^4.2.0"
   },
   "peerDependencies": {
-    "@aglyn/mobile-core": "1.0.0-beta.230",
-    "@aglyn/mobile-plugin-host": "1.0.0-beta.230",
-    "@aglyn/mobile-ui": "1.0.0-beta.230",
     "@mui/material": "^9.3.1",
     "@mui/x-data-grid": "^9.12.0",
-    "@react-navigation/native": "^7.5.0",
-    "@tanstack/react-query": "^5.104.1",
-    "expo-camera": "~57.0.6",
-    "expo-image-picker": "~57.0.20",
-    "expo-print": "~57.0.2",
     "firebase": "^12.18.0",
     "firebase-admin": "^14.3.0",
     "next": "^16.3.3",
-    "react": "^19.2.8",
-    "react-native": "^0.86.0",
-    "react-native-safe-area-context": "~5.7.0"
-  },
-  "peerDependenciesMeta": {
-    "@aglyn/mobile-core": {
-      "optional": true
-    },
-    "@aglyn/mobile-plugin-host": {
-      "optional": true
-    },
-    "@aglyn/mobile-ui": {
-      "optional": true
-    },
-    "@react-navigation/native": {
-      "optional": true
-    },
-    "@tanstack/react-query": {
-      "optional": true
-    },
-    "expo-camera": {
-      "optional": true
-    },
-    "expo-image-picker": {
-      "optional": true
-    },
-    "expo-print": {
-      "optional": true
-    },
-    "react-native": {
-      "optional": true
-    },
-    "react-native-safe-area-context": {
-      "optional": true
-    }
+    "react": "^19.2.8"
   },
   "sideEffects": [
     "./src/lib/server.*"

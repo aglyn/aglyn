@@ -402,11 +402,6 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "The printable product and shelf labels (AGL-3619), opened from the console's product labels dialog for the store's label printer. The marker is the page's `<style>`: literal CSS whose only interpolations are the width and height of a size from the LABEL_SIZES table in this file. The labels carry text and an inline SVG barcode, no image URL.",
   },
-  'libs/plugins/commerce/src/mobile/data/receipts.ts': {
-    markers: 1,
-    guard: 'off-tenant',
-    why: "The receipt the Aglyn app prints from an order's detail screen (AGL-3621) through the phone's own print service. The marker is its `<style>`, literal CSS whose one interpolation is PRINTED_RECEIPT_COLUMNS, the print layout's column count. Every receipt line is escaped and the page carries no image. A native app screen, never a tenant page.",
-  },
   'libs/plugins/sales-channels/src/lib/model/feed-columns.ts': {
     markers: 9,
     guard: 'projection',
