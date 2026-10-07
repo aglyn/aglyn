@@ -19,6 +19,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { createEasypostProvider, EASYPOST_API_BASE, readCarrierTypes } from './easypost'
 import { createEasyshipProvider, EASYSHIP_API_BASE, easyshipServiceKey } from './easyship'
 import type { ProviderFetch } from './http'
@@ -454,7 +455,7 @@ describe('ShipperHQ, the merchant’s checkout rate rules', () => {
       cart: { declaredValue: 30, freeShipping: false, items: [{ itemId: '1', qty: 1, type: 'SIMPLE', weight: 1.76, storePrice: 30 }] },
       destination: { country: 'US', region: 'MA', city: 'Boston', zipcode: '02108' },
       cartType: 'STD',
-      siteDetails: { ecommerceCart: 'Aglyn' },
+      siteDetails: { ecommerceCart: PLATFORM_BRAND_NAME },
     })
     expect(result.quotes).toEqual([
       { serviceKey: 'flat:free', carrier: 'Free Shipping', service: 'Free', label: 'Free Shipping Free', amountCents: 0, currency: 'usd' },

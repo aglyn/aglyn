@@ -20,6 +20,7 @@ import type {
   PluginShippingParcel,
   PluginShippingQuote,
 } from '@aglyn/aglyn/plugin-manager/plugin-shipping-rates'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { randomUUID } from 'node:crypto'
 import { decimalToCents, providerErrorDetail, type ProviderFetch } from './http'
 import { ShippingProviderError } from './types'
@@ -282,7 +283,7 @@ export function ratingInfoFor(credentials: ShipperHqCredentials, input: ShipperH
     cartType: 'STD',
     siteDetails: {
       appVersion: '1.0.0',
-      ecommerceCart: 'Aglyn',
+      ecommerceCart: PLATFORM_BRAND_NAME,
       ecommerceVersion: '1',
       websiteUrl: input.websiteUrl ?? '',
       ipAddress: '',
