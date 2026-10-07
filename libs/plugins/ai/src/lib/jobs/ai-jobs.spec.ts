@@ -2024,7 +2024,9 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
     expect(parked?.status).toBe('needs_review')
     expect(parked?.review).toEqual({
       reason: 'doctrine',
-      message: expect.stringContaining('Rule 12'),
+      // The rule's own words are staff reading; the customer reads the plain refusal (AGL-3596).
+      message: 'Aglyn AI couldn’t build this cleanly, so we stopped rather than give you something broken.',
+      detail: expect.stringContaining('Rule 12'),
       findings: [
         {
           rule: 12,
@@ -2848,5 +2850,41 @@ describe('a guided site start settles page by page, as a build does (AGL-3616)',
     expect(job.orchestration).toEqual({ creditsSpent: 6, settled: 'refunded' })
     // Not tried item by item: its Try again reopens the guided start.
     expect((await retryAiBuildJob(firestore, ORG, job.$id, NOW)).changed).toBe(false)
+  })
+})
+
+/*
+ * A job written before its steps kept a building rule's own words apart
+ * (AGL-3596) still reaches the console without them: every surface reads the
+ * summary.
+ */
+describe('a building rule never reaches the wire (AGL-3596)', () => {
+  const RULE = "This could not be built within the building rules. Rule 12 (Responsive by the theme's breakpoints): Every child of a Grid container is a Grid item."
+
+  it('sends the plain refusal, the rule as the review’s staff detail, and no item detail', () => {
+    const summary = aiJobSummary(
+      {
+        $id: 'job-old',
+        orgId: 'org-1',
+        kind: 'page',
+        status: 'needs_review',
+        brief: 'A page',
+        inputs: {},
+        steps: [],
+        createdBy: 'uid-1',
+        error: RULE,
+        review: { reason: 'doctrine', message: RULE, findings: [] },
+        items: [
+          {
+            slot: 'p0', op: 'page', label: 'Home', status: 'failed', attempt: 1, creditsSpent: 9, creditsRefunded: 9, outputs: [],
+            failure: { ours: true, reason: 'doctrine-refused', message: RULE, detail: RULE },
+          },
+        ],
+      } as never,
+      NOW,
+    )
+    expect(summary.error).toBe("Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page.")
+    expect(summary.review).toMatchObject({ message: "Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page.", detail: RULE })
+    expect(summary.items?.[0].failure).toEqual({ ours: true, reason: 'doctrine-refused', message: "Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page." })
   })
 })

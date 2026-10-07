@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { aiCustomerSafeItem } from './ai-job-failure-copy'
 import { AI_JOB_PLAN_STEP, type AiJobItemLedger, type AiJobSummary } from './ai-jobs.types'
 
 /**
@@ -130,7 +131,9 @@ export function aiBuildItemRows(
   job: Pick<AiJobSummary, 'items'> & Partial<Pick<AiJobSummary, 'status' | 'steps'>>,
 ): AiBuildItemRow[] {
   const active = aiBuildActiveSlot(job)
-  return (job.items ?? []).map((row) => {
+  return (job.items ?? []).map((ledger) => {
+    // A building rule's own words never reach a customer (AGL-3596).
+    const row = aiCustomerSafeItem(ledger)
     const parts: string[] = []
     if (row.status === 'failed' && row.failure?.message) parts.push(row.failure.message)
     if (row.note) parts.push(row.note)

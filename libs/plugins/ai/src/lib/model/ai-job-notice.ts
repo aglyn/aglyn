@@ -18,7 +18,7 @@
 import type { AglynNotification } from '@aglyn/aglyn/app-utils/notifications'
 import { aiBuildOutcomeLine, aiSitePartialCopy } from './ai-build-progress'
 import { aiJobKindNoun } from './ai-job-activity'
-import { aiJobRefundCopy } from './ai-job-failure-copy'
+import { aiCustomerSafeCopy, aiJobRefundCopy } from './ai-job-failure-copy'
 import type { AiJobItemLedger, AiJobKind, AiJobOutput, AiJobReviewReason, AiJobSitePublish } from './ai-jobs.types'
 
 /** The besigner segment each versioned resource lives under. */
@@ -131,7 +131,12 @@ export function aiJobNotice(job: AiJobNoticeSource, to: AiJobNoticeTransition): 
       type: 'content.aiJobNeedsYou',
       level: 'warning',
       title: `Your ${noun === 'AI job' ? 'AI job' : `${noun} job`} needs you`,
-      body: withRefund(job, job.review?.message || job.error || 'It stopped for your decision. It waits in AI jobs.', 'needs_review'),
+      // The doctrine's own words never reach a customer (AGL-3596).
+      body: withRefund(
+        job,
+        aiCustomerSafeCopy(job.review?.message || job.error || 'It stopped for your decision. It waits in AI jobs.', { page: job.kind === 'page' }),
+        'needs_review',
+      ),
       link,
       ...scope,
     }
@@ -193,7 +198,7 @@ export function aiJobNotice(job: AiJobNoticeSource, to: AiJobNoticeTransition): 
     type: 'content.aiJobFailed',
     level: 'warning',
     title: `Your ${noun === 'AI job' ? 'AI job' : `${noun} job`} stopped`,
-    body: withRefund(job, job.error || 'It stopped before it finished.', 'failed'),
+    body: withRefund(job, aiCustomerSafeCopy(job.error || 'It stopped before it finished.', { page: job.kind === 'page' }), 'failed'),
     link,
     ...scope,
   }

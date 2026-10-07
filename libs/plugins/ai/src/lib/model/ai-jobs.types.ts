@@ -451,6 +451,12 @@ export interface AiJobItemFailure {
   reason: AiJobItemFailureReason
   /** Customer-safe. */
   message: string
+  /**
+   * The checks' own sentence behind a `doctrine-refused` failure (AGL-3596),
+   * rule numbers and all: kept on the job for staff and debugging, never on
+   * the wire a customer reads.
+   */
+  detail?: string
 }
 
 export interface AiJobItemLedger {

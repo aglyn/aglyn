@@ -186,3 +186,14 @@ describe('a job that stopped', () => {
     expect(aiJobNotice(source({ error: 'It stopped.', creditsSpent: 6 }), 'failed').body).toBe('It stopped.')
   })
 })
+
+describe('a building rule never reaches the notification (AGL-3596)', () => {
+  const RULE = "This could not be built within the building rules. Rule 16 (Third-party players are named in the plan): The page embeds a player the plan does not list."
+
+  it('says the plain refusal for a job parked on a rule, and for one that stopped on one', () => {
+    const parked = aiJobNotice(source({ kind: 'page', review: { reason: 'doctrine', message: RULE }, error: RULE }), 'needs-review')
+    expect(parked.body).toBe("Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page.")
+    const stopped = aiJobNotice(source({ kind: 'form', error: RULE }), 'failed')
+    expect(stopped.body).toBe("Aglyn AI couldn’t build this cleanly, so we stopped rather than give you something broken.")
+  })
+})

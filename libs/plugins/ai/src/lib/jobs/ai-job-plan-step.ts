@@ -739,7 +739,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
             codes: result.violations.map((violation) => violation.code),
             refunded: false,
           }),
-          detail: review.message,
+          detail: review.detail ?? review.message,
           ...(retryRefusal ? { retryRefusal } : {}),
         },
       }

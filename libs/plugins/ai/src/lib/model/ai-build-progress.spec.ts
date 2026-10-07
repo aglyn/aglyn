@@ -123,3 +123,27 @@ describe('the item a build is on (AGL-3596)', () => {
     expect(aiBuildItemRows({ items: ledger() }).map((one) => one.state)).toEqual(['done', 'done', 'waiting', 'waiting'])
   })
 })
+
+/*
+ * The 2026-10-07 production Home page failed on rule 12, and its row read the
+ * rule's own words to the customer (AGL-3596). A ledger written before the
+ * runner kept those words apart reads the same as one written after.
+ */
+describe('a page a building rule stopped, as the customer reads it (AGL-3596)', () => {
+  const RULE = "This could not be built within the building rules. Rule 12 (Responsive by the theme's breakpoints): Every child of a Grid container is a Grid item whose size is full width on a phone."
+  const failure = { ours: true, reason: 'doctrine-refused' as const, message: RULE, detail: RULE }
+
+  it('reads the plain refusal, then what became of its credits; never the rule', () => {
+    const rows = aiBuildItemRows({
+      items: [
+        row({ slot: 'p0', op: 'page', label: 'Home', status: 'failed', creditsSpent: 99, creditsRefunded: 99, failure }),
+        row({ slot: 'f', op: 'form', label: 'Contact', status: 'failed', failure: { ours: true, reason: 'doctrine-refused', message: RULE } }),
+      ],
+    })
+    expect(rows[0].detail).toBe(
+      'Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page. This one’s on us — you weren’t charged. The 99 credits it used are back in your AI credits.',
+    )
+    expect(rows[1].detail).toBe('Aglyn AI couldn’t build this cleanly, so we stopped rather than give you something broken. This one’s on us — you weren’t charged.')
+    expect(rows.map((one) => one.detail).join(' ')).not.toMatch(/Rule \d|building rules/)
+  })
+})
