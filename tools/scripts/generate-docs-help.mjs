@@ -194,6 +194,7 @@ const PLUGIN_TOPICS = {
   pos: '/commerce-and-bookings/commerce/pos-and-reservations',
   // Shifts, staff PINs and register returns (AGL-3609).
   posOperations: '/commerce-and-bookings/commerce/pos-operations',
+  posHardware: '/commerce-and-bookings/commerce/pos-hardware',
   publishAPlugin: '/developers/plugins/publish-a-plugin',
   /*
    * The marketplace's REVIEW QUEUE moved into the plugin with its staff page

@@ -30,6 +30,7 @@ import {
   DialogTitle,
   Divider,
   IconButton,
+  InputAdornment,
   MenuItem,
   Stack,
   TableBody,
@@ -40,6 +41,9 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, getDoc } from 'firebase/firestore'
+import SvgIcon from '@mui/material/SvgIcon'
+import { mdiBarcodeScan } from '@aglyn/shared-data-mdi'
+import { BarcodeScanner } from '../../barcode/barcode-scanner.component'
 import { productCollectionFields } from './smart-collections'
 import { memo, useCallback, useMemo, useRef, useState } from 'react'
 import {
@@ -276,6 +280,7 @@ const VERSION_FIELD = { width: 100 } as const
 const OPTION_FIELD = { width: 160 } as const
 const PRICE_CELL = { width: 88 } as const
 const CODE_CELL = { width: 110 } as const
+const BARCODE_CELL = { width: 150 } as const
 const STOCK_CELL = { width: 72 } as const
 const DECIMAL_INPUT = { htmlInput: { inputMode: 'decimal' } } as const
 const NUMERIC_INPUT = { htmlInput: { inputMode: 'numeric' } } as const
@@ -601,6 +606,38 @@ const ProductVariantRow = memo(function ProductVariantRow(props: {
     }),
     [label],
   )
+  // A camera scan fills the barcode the same way typing it does (AGL-3619).
+  const [scanning, setScanning] = useState(false)
+  const barcodeInput = useMemo(
+    () => ({
+      htmlInput: { 'aria-label': `Barcode — ${label}` },
+      input: {
+        endAdornment: (
+          <InputAdornment position="end">
+            <IconButton
+              size="small"
+              edge="end"
+              aria-label={`Scan the barcode for ${label}`}
+              onClick={() => setScanning(true)}
+            >
+              <SvgIcon fontSize="small">
+                <path d={mdiBarcodeScan.path} />
+              </SvgIcon>
+            </IconButton>
+          </InputAdornment>
+        ),
+      },
+    }),
+    [label],
+  )
+  const handleScanned = useCallback(
+    (code: string) => {
+      setScanning(false)
+      onField(index, 'barcode', code)
+    },
+    [index, onField],
+  )
+  const closeScanner = useCallback(() => setScanning(false), [])
   return (
     <TableRow>
       <TableCell sx={{ whiteSpace: 'nowrap' }}>{label}</TableCell>
@@ -639,8 +676,17 @@ const ProductVariantRow = memo(function ProductVariantRow(props: {
           value={variant.barcode ?? ''}
           onChange={set.barcode}
           size="small"
-          sx={CODE_CELL}
+          sx={BARCODE_CELL}
+          slotProps={barcodeInput}
         />
+        {scanning ? (
+          <BarcodeScanner
+            open
+            title={`Scan the barcode for ${label}`}
+            onClose={closeScanner}
+            onDetected={handleScanned}
+          />
+        ) : null}
       </TableCell>
       <TableCell>
         <MemoTextField

@@ -161,6 +161,7 @@ export const DOCS_HELP_EXCERPTS = {
   pluginManagerApi: 'Every public registration and loading API a plugin can use, from `@aglyn/aglyn` and `@aglyn/aglyn/server`.',
   plugins: 'Extend Aglyn with sandboxed plugins — install from the marketplace, configure them, and publish your own.',
   pos: 'Sell in person from the console register and take date-range reservations with deposits.',
+  posHardware: 'Receipt printers that print from any device with no driver, a cash drawer that opens on cash sales, camera and USB barcode scanning, and 4x6 label printers.',
   posOperations: 'Shifts and the cash drawer with X and Z reports, staff PINs, customers at the register, returns and exchanges, and printed thermal receipts.',
   productsWithAi: 'An AI product description generator for your catalog: write copy for one product or a whole import, propose a first catalog, and propose categories and discounts — all as proposals you review.',
   publishAPlugin: 'Ship your own plugin to the marketplace with version pinning.',
