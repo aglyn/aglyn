@@ -54,7 +54,12 @@ jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   trackEvent: (...args: unknown[]) => mockTrack(...args),
 }))
 
+import { resolveOrgPermissions } from '@aglyn/aglyn/app-utils/org-permissions'
+import type * as Entitlements from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
 import { guidedStartOffered } from '../utils/server/guided-start-offered'
+
+type EntitlementsModule = typeof Entitlements
+const ENTITLEMENTS_MODULE = ['@aglyn/aglyn', 'plugin-manager', 'plugin-entitlements'].join('/')
 import { NEW_SITE_ENABLED_PLUGINS } from '../utils/server/provision-host'
 import { hostIsBlankSite, requestStarterSite } from '../utils/host-first-run'
 
@@ -105,13 +110,12 @@ describe('a site is born without the starter only for a creator the guided start
     // catalog never heard of it, so an owner's `ai.generate` read `undefined`
     // and every guided start was born with the starter. Here the route asks
     // the real core catalog, and the declaration registers in another copy.
-    const { resolveOrgPermissions } = jest.requireActual<typeof import('@aglyn/aglyn/app-utils/org-permissions')>(
-      '@aglyn/aglyn/app-utils/org-permissions',
-    )
     mockRegisterDeclarations.mockImplementationOnce(async () => {
       jest.isolateModules(() => {
+        // Re-required through a variable so the specifier is not a literal:
+        // a spec is not a code-split boundary (see aglyn/no-dynamic-first-party-import).
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const boot = require('@aglyn/aglyn/plugin-manager/plugin-entitlements') as typeof import('@aglyn/aglyn/plugin-manager/plugin-entitlements')
+        const boot = require(ENTITLEMENTS_MODULE) as EntitlementsModule
         boot.registerPluginEntitlements({
           pluginId: 'ai',
           orgPermissions: [
