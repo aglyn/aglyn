@@ -32,6 +32,7 @@ import { receiptDataFromOrder, type ReceiptData } from '../model/commerce-receip
 import type { HostOrder } from '../model/commerce-orders'
 import { enqueuePrintJob, printJobsRef, printersRef } from './print-queue'
 import { printerPollUrl } from './printer-secret'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /**
  * `POST /api/commerce/printers` (AGL-3619): a register's cloud receipt
@@ -66,7 +67,8 @@ export async function authorizePrinterManager(
   let uid: string
   try {
     uid = (await firebaseAdmin.app().auth().verifyIdToken(idToken)).uid
-  } catch {
+  } catch (error) {
+    if (!isRefusedIdToken(error)) throw error
     return { ok: false, status: 401, error: 'Unauthenticated' }
   }
   const host = await firebaseAdmin.app().firestore().collection('hosts').doc(hostId).get()
