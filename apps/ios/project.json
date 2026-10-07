@@ -29,7 +29,7 @@
         "parallel": false
       }
     },
-    "test": {
+    "test-native": {
       "executor": "nx:run-commands",
       "cache": false,
       "options": {

@@ -15,7 +15,7 @@
         "command": "./gradlew :native-core:assemble :native-ui:assemble :native-plugin-host:assemble :native-webview:assemble :native-shell:assemble"
       }
     },
-    "test": {
+    "test-native": {
       "executor": "nx:run-commands",
       "cache": false,
       "options": {

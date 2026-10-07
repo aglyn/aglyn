@@ -21,7 +21,7 @@
         "command": "xcodebuild build -scheme AglynKit-Package -destination 'platform=macOS' -derivedDataPath ../../../apps/ios/build/DerivedData-kit -clonedSourcePackagesDirPath ../../../apps/ios/build/SourcePackages"
       }
     },
-    "test": {
+    "test-native": {
       "executor": "nx:run-commands",
       "cache": false,
       "options": {
