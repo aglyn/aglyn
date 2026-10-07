@@ -160,6 +160,22 @@ module.exports = withAglyn({
       },
     ]
   },
+  // The brand face's files (AGL-3655). Their names carry the font's version,
+  // so a recut ships under a new URL and these never change under one: cache
+  // them for a year instead of revalidating on every page load.
+  async headers() {
+    return [
+      {
+        source: '/_static/fonts/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+    ]
+  },
   // Manage → Org section move (AGL-236): old bookmarks keep working.
   async redirects() {
     return [

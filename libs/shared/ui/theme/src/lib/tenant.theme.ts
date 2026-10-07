@@ -21,6 +21,7 @@ import {
   consoleThemeDark,
   consoleThemeLight,
 } from './console.theme'
+import { buildFontFamilyList } from './constants'
 import createResponsiveTheme from './util/create-responsive-theme'
 
 /**
@@ -204,8 +205,20 @@ const tenantColorScheme = {
   },
 }
 
+/**
+ * A customer site's default stack: the brand stack WITHOUT the console's
+ * Roboto Flex stand-in (AGL-3655). The console serves Roboto Flex and the
+ * metric-matched fallback that holds its place while it loads; a published
+ * site serves neither, so it keeps the plain stack it always had.
+ */
+const tenantTypography = (base: ThemeOptions): ThemeOptions['typography'] => ({
+  ...(base.typography as object),
+  fontFamily: buildFontFamilyList().join(','),
+})
+
 export const tenantOptions: ThemeOptions = {
   ...consoleOptions,
+  typography: tenantTypography(consoleOptions),
   palette: {
     mode: 'light',
     ...tenantColorScheme.light,
@@ -213,6 +226,7 @@ export const tenantOptions: ThemeOptions = {
 }
 export const tenantOptionsDark: ThemeOptions = {
   ...consoleOptionsDark,
+  typography: tenantTypography(consoleOptionsDark),
   palette: {
     mode: 'dark',
     ...tenantColorScheme.dark,

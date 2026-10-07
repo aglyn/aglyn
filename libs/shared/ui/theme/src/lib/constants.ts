@@ -71,6 +71,9 @@ export enum FontFamily {
   VERDANA = 'Verdana',
 }
 
+/** Roboto Flex's size-matched stand-in; declared in `util/roboto-flex.ts`. */
+export const ROBOTO_FLEX_FALLBACK = '"Roboto Flex Fallback"'
+
 export const buildFontFamilyList = (fontFamily = FontFamily.ROBOTO_FLEX) =>
   [
     fontFamily,

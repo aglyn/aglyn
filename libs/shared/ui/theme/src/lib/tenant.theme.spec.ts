@@ -105,8 +105,12 @@ describe('the tenant default palette is accessible by construction', () => {
   it('shares every NON-palette option with the console theme', () => {
     // The tenant default changes the palette and nothing else: component
     // behaviour, type ramp, spacing and shadows stay platform-wide.
+    //
+    // The one typography difference is the font stack: the console's carries
+    // the Roboto Flex stand-in it serves, a site's does not (AGL-3655). The
+    // rest of the ramp is held equal in `util/roboto-flex.spec.ts`.
     for (const key of Object.keys(consoleOptions)) {
-      if (key === 'palette') continue
+      if (key === 'palette' || key === 'typography') continue
       expect((tenantOptions as any)[key]).toBe((consoleOptions as any)[key])
     }
   })
