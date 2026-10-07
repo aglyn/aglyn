@@ -262,10 +262,12 @@ describe('what each adapter declares', () => {
     // past it is unknown, not safe, so the guard turns red and the next live
     // request settles it. AGL-3538 carried a task's priority and a logged
     // call's direction inside it by compiling the host events' enum once
-    // rather than twice, which left the draft 38 bytes under the proof.
+    // rather than twice, which left the draft 38 bytes under the proof. The
+    // funnels plugin's "Left a funnel" trigger (AGL-3605) adds 13, which
+    // leaves it 25 under.
     const draft = [aiAutomationTool()]
     expect(ANTHROPIC_TOOL_SCHEMA_LIMITS.compiledSchemaBytes).toBe(3_807)
-    expect(aiToolSchemaCompiledBytes(draft)).toBe(3_769)
+    expect(aiToolSchemaCompiledBytes(draft)).toBe(3_782)
     expect(aiToolSchemaBreaches(draft, ANTHROPIC_TOOL_SCHEMA_LIMITS)).toEqual([])
   })
 

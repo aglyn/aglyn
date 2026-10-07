@@ -743,7 +743,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // the steps' field lists. Up 9 more at AGL-3458, which named the
       // `lead` event's keys — the form, the site, the name, the campaigns —
       // which the tool lists for the conditions it may write.
-      'workflow-draft': { prefixTokens: 4_713, minimum: 1_024, caches: true, toolsStable: true },
+      // The automation draft is up 31 at AGL-3605: the funnels plugin's "Left a
+      // funnel" trigger joins the host events the draft may start on.
+      'workflow-draft': { prefixTokens: 4_744, minimum: 1_024, caches: true, toolsStable: true },
       'workflow-explain': { prefixTokens: 2_215, minimum: 1_024, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
       'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },
