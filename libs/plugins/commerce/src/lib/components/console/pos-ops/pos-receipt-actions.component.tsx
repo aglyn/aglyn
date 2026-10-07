@@ -32,7 +32,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useCallback, useMemo, useState } from 'react'
 import { buildPosReceipt, type PosReceiptOrder } from '../../../model/commerce-pos-ops'
 import { posOpsSettings, type PosOpsSettings } from '../../../pos-ops-config'
-import { printPosReceipt } from './pos-receipt'
+import { posReceiptLogoUrl, printPosReceipt } from './pos-receipt'
 
 /** The register settings (AGL-3609) for one site, as the console reads them. */
 export function usePosOpsSettings(hostId: string): PosOpsSettings {
@@ -93,14 +93,19 @@ export function usePosReceiptStore(hostId: string): PosReceiptStore {
   )
   return useMemo(() => {
     const settings = posOpsSettings(config)
+    const logoUrl = posReceiptLogoUrl(
+      host?.['logoUrl'],
+      hostId,
+      typeof window === 'undefined' ? null : window.location.origin,
+    )
     return {
       name: String(host?.['displayName'] ?? '') || 'Receipt',
-      ...(host?.['logoUrl'] ? { logoUrl: String(host['logoUrl']) } : {}),
+      ...(logoUrl ? { logoUrl } : {}),
       ...(settings.receiptAddress ? { address: settings.receiptAddress } : {}),
       ...(store?.['receiptFooter'] ? { footer: String(store['receiptFooter']) } : {}),
       ...(settings.returnPolicy ? { returnPolicy: settings.returnPolicy } : {}),
     }
-  }, [config, host, store])
+  }, [config, host, hostId, store])
 }
 
 export interface PosReceiptActionsProps {

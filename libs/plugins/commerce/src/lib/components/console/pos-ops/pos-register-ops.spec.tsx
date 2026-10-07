@@ -51,7 +51,10 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: (...args: unknown[]) => mockFetch(...args),
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({ useSnackbar: () => ({ enqueueSnackbar: mockSnack }) }))
-jest.mock('./pos-receipt', () => ({ printPosReceipt: (...args: unknown[]) => mockPrint(...args) }))
+jest.mock('./pos-receipt', () => ({
+  ...jest.requireActual('./pos-receipt'),
+  printPosReceipt: (...args: unknown[]) => mockPrint(...args),
+}))
 
 import { PosCustomerLookup } from './pos-customer-lookup.component'
 import { PosPinPad } from './pos-pin-pad.component'

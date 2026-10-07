@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { absoluteMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { posMoney, type PosReceipt } from '../../../model/commerce-pos-ops'
 import { code128Svg } from '../../../utils/code128'
 import { escapeHtml } from '../../../utils/escape-html'
@@ -58,6 +59,26 @@ body { width: 80mm; padding: 4mm; font: 12px/1.35 ui-monospace, 'SFMono-Regular'
 
 const row = (left: string, right: string, className = 'row') =>
   `<div class="${className}"><span>${escapeHtml(left)}</span><span>${escapeHtml(right)}</span></div>`
+
+/**
+ * The logo a receipt prints, from the site's stored `logoUrl`.
+ *
+ * A logo picked from the media library is stored as a `media:` reference,
+ * which the customer display resolves through `resolveMediaSrc`. The receipt
+ * resolves it the same way and makes it absolute against the console's
+ * origin, because the print window is not the page the reference was read on.
+ * Only an `https:` URL is printed: anything else is a stored value no resolver
+ * recognized, or a page served over plain HTTP.
+ */
+export function posReceiptLogoUrl(
+  stored: unknown,
+  hostId: string,
+  origin: string | null | undefined,
+): string | undefined {
+  if (typeof stored !== 'string' || !stored) return undefined
+  const url = absoluteMediaSrc(stored, { hostId, origin: origin ?? null })
+  return url && /^https:\/\//.test(url) ? url : undefined
+}
 
 /** The receipt's body as HTML, every value escaped. */
 export function posReceiptHtml(receipt: PosReceipt): string {
