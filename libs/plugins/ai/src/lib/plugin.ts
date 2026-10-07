@@ -428,8 +428,8 @@ export function registerAiConsole(): void {
       // had none in the console.
       // Pictures from a description (AGL-3602): "Create with AI" beside Upload
       // media in the media library, and in its empty state. Gated as the
-      // other generative widgets are; it asks its own door whether this
-      // deployment has an image provider before it shows anything.
+      // other generative widgets are, by the shell alone: it asks nothing of
+      // a server until someone creates a picture, and the door decides then.
       {
         slot: 'mediaLibrary',
         widgetId: 'ai-media-create',
