@@ -19,9 +19,10 @@
  * Settings (AGL-3620): appearance, and the device's own preferences.
  */
 
-import { Card, ListRow, Screen, useSchemePreference, type SchemePreference } from '@aglyn/mobile-ui'
+import { Card, ListRow, Screen, SwitchRow, useSchemePreference, type SchemePreference } from '@aglyn/mobile-ui'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { useAppLockPreference } from '../shell/app-lock'
 import type { RootStackParams } from '../shell/navigation-ref'
 
 const SCHEMES: { value: SchemePreference; label: string; icon: string }[] = [
@@ -33,8 +34,22 @@ const SCHEMES: { value: SchemePreference; label: string; icon: string }[] = [
 export function SettingsScreen() {
   const { preference, setPreference } = useSchemePreference()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParams>>()
+  const lock = useAppLockPreference()
   return (
     <Screen>
+      {lock.available ? (
+        <Card title="Security">
+          <SwitchRow
+            testID="app-lock"
+            icon="lock-closed-outline"
+            title="Unlock with biometrics"
+            subtitle="Ask for Face ID, Touch ID or your fingerprint when the app opens"
+            value={lock.enabled}
+            disabled={!lock.ready}
+            onValueChange={(next) => void lock.setEnabled(next)}
+          />
+        </Card>
+      ) : null}
       <Card title="Notifications">
         <ListRow
           icon="notifications-outline"

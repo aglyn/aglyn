@@ -39,6 +39,7 @@ import { APP_VERSION, configureFromEnv } from './config'
 import { AppNavigation } from './navigation'
 import { MOBILE_PLUGIN_MANIFEST } from './plugins.mobile.generated'
 import { SignInScreen } from './screens/sign-in'
+import { AppLockGate } from './shell/app-lock'
 import { PluginContextProvider } from './shell/plugin-context'
 import { usePushNotifications } from './shell/push'
 
@@ -86,14 +87,16 @@ function Gate() {
   }
   if (!user) return <SignInScreen />
   return (
-    <MobileQueryProvider uid={user.uid} buster={APP_VERSION}>
-      <WorkspaceProvider>
-        <PluginContextProvider>
-          <PushNotifications uid={user.uid} />
-          <AppNavigation />
-        </PluginContextProvider>
-      </WorkspaceProvider>
-    </MobileQueryProvider>
+    <AppLockGate>
+      <MobileQueryProvider uid={user.uid} buster={APP_VERSION}>
+        <WorkspaceProvider>
+          <PluginContextProvider>
+            <PushNotifications uid={user.uid} />
+            <AppNavigation />
+          </PluginContextProvider>
+        </WorkspaceProvider>
+      </MobileQueryProvider>
+    </AppLockGate>
   )
 }
 
