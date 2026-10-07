@@ -56,6 +56,7 @@
  *   <key>-phone-menu-open.png        375 wide, the Drawer open over the page
  *   <key>-page-desktop-light.png     with a `page`: header, that page and footer, whole, 1440 wide
  *   <key>-page-phone-light.png       the same, 375 wide
+ *   <key>-page.txt                   with a `page`: the words that page shows, as a visitor reads them
  *   <key>-short-desktop-light.png    a one-heading page, whole: the footer must sit at the window's bottom
  *   <key>-short-phone-light.png
  *
@@ -70,7 +71,7 @@
  * Chrome is found the way the e2e tools find it: `E2E_CHROME_PATH`, else the
  * first of Chrome, Chrome Beta or Chromium installed.
  */
-import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { basename, dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -280,6 +281,8 @@ async function main(): Promise<void> {
       const light = render(home, 'light', false)
       if (data.page) {
         await shoot(light, 1440, 900, 'page-desktop-light', ['full'])
+        // The words the page shows, for a grep that proves what a visitor reads.
+        writeFileSync(join(out, `${key}-page.txt`), await tab.evaluate(() => document.body.innerText))
         await shoot(light, 375, 812, 'page-phone-light', ['full'])
       }
       await shoot(light, 1440, 900, 'desktop-light', ['header', 'footer'])
