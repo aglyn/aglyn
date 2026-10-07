@@ -304,6 +304,9 @@ async function handler(request: Request): Promise<Response> {
         subdomain,
         orgId: orgMembership.orgId,
         orgSlug: org?.['slug'] ?? null,
+        // Born without the starter, for the guided start (AGL-3594): the
+        // client lands on the site with `?start=site` to offer it (AGL-3596).
+        guidedStart,
         // The third org-creation door reports itself (AGL-2587). This route
         // auto-provisions a workspace for an account that holds none, and
         // nothing counted those: `org_created` is a browser event and the

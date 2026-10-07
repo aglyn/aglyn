@@ -287,7 +287,7 @@ export async function aiPublishGuidedSite(
   }
   // The announce, written down in the publish's own batch (AGL-2575): a
   // layout change reaches every page, so it asks for the whole site.
-  const outboxRef = firestore.collection('publishOutbox').doc()
+  const outboxRef = firestore.collection('publishOutbox').doc(createResourceUid())
   batch.set(outboxRef, {
     hostId,
     paths: paths.length ? paths : [SCREEN_ROOT_PATH],

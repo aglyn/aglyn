@@ -730,6 +730,11 @@ function Layouts(props) {
                       'Layouts are the chrome your pages render inside — headers, footers, sidebars. Create one, or start from a template.',
                     noRowsAction: (
                       <Stack direction="row" spacing={1}>
+                        <PluginWidgetSlot
+                          slot="hostLayouts"
+                          hostId={hostId}
+                          orgId={org?.$id}
+                        />
                         <Button variant="contained" onClick={handleFormOpen}>
                           {'Create your first layout'}
                         </Button>

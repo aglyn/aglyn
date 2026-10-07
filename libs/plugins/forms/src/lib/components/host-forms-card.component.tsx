@@ -792,9 +792,15 @@ export function HostFormsCard(props: HostFormsCardProps) {
                 noRowsDescription:
                   'A form collects submissions, dedupes the people who send them, and can route them to a lead. Its design is drawn in the besigner and published like any other artifact.',
                 noRowsAction: (
-                  <Button variant="contained" onClick={() => setCreateOpen(true)}>
-                    {'Create your first form'}
-                  </Button>
+                  <Stack direction="row" spacing={1}>
+                    {/* Other ways to start a form, the header's zone again. */}
+                    {CreateZone ? (
+                      <CreateZone slot={HOST_FORMS_ZONE.id} hostId={hostId} orgId={org?.$id} />
+                    ) : null}
+                    <Button variant="contained" onClick={() => setCreateOpen(true)}>
+                      {'Create your first form'}
+                    </Button>
+                  </Stack>
                 ),
               })}
           rows={forms}

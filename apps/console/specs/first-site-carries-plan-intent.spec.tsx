@@ -123,9 +123,11 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
       subdomain: 'smoke-site-0831',
       orgId: 'org-new',
       orgSlug: 'smoke-test-0831',
+      guidedStart: mockGuidedStart,
     }),
   }),
 }))
+let mockGuidedStart = false
 jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   trackEvent: jest.fn(),
   // Emitting `org_created` before a navigation needs the awaitable spelling
@@ -260,12 +262,21 @@ describe('AGL-1117 · the create-site dialog obeys the destination', () => {
     )
   })
 
-  it('still lands on the new site Setup page with no destination given', async () => {
+  it('lands on the new site, never Setup, with no destination given (AGL-3596)', async () => {
     // The sites list and the host switcher pass none and must be unaffected.
+    mockGuidedStart = false
+    render(<CreateHostDialog open onClose={() => undefined} />)
+    await createSite()
+    expect(mockPush).toHaveBeenCalledWith('/smoke-test-0831/hosts/smoke-site-0831')
+  })
+
+  it('asks a site born for the guided start to offer it, once, where it lands', async () => {
+    mockGuidedStart = true
     render(<CreateHostDialog open onClose={() => undefined} />)
     await createSite()
     expect(mockPush).toHaveBeenCalledWith(
-      '/smoke-test-0831/hosts/smoke-site-0831/setup',
+      '/smoke-test-0831/hosts/smoke-site-0831?start=site',
     )
+    mockGuidedStart = false
   })
 })
