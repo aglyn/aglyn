@@ -92,8 +92,8 @@ lists each job with where it stands.
    page sits in your layout and never carries its own copy of them.
 3. **Forms are built on the Forms page, then placed.** A form is created with its
    fields, validation, consent and routing on the Forms page, and a page places it
-   by reference, so you edit it in one place. On a plan without saved forms, such as
-   Free, the page carries the form itself, with its fields, and its submissions reach
+   by reference, so you edit it in one place. On a plan without reusable components,
+   such as Free, the page carries the form itself, with its fields, and its submissions reach
    your inbox like any form's. A search is never built as a form,
    because a form collects submissions: the AI places a
    [Search Box](../building-sites/site-search/overview.md) for your site search, or a

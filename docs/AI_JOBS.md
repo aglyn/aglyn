@@ -523,7 +523,7 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
 - **The workspace.** `readAiPlanCapabilities` in `src/lib/jobs/ai-job-drafts.ts`
   answers every creation kind from the resolved entitlements and the site's counts,
   in the draft writer's own band arithmetic: `reusableComponents` for a component,
-  that feature then `formsPerHost` for a saved form, `sharedLayoutsPerHost` and
+  `formsPerHost` alone for a saved form (Free 1 and up since AGL-3597), `sharedLayoutsPerHost` and
   `templatesPerHost` with the room each has left, and the plan's datasets. It reads
   only the collections a finite allowance counts. A theme change counts against
   nothing, and an email design is the email plugin's to refuse.
@@ -565,7 +565,8 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   the cached prefix is the same bytes. A plan confirmed before these rules still stops
   at the page and scaffold doors, which name such a reference as a component to create.
 - **Inline, where the workspace keeps no reusable components.** A workspace whose plan
-  lacks `reusableComponents` can place no component and save no form, so there — and
+  lacks `reusableComponents` can place no component (it may save one form since
+  AGL-3597, but the page doctrine still keys on the component feature), so there — and
   only there — the doctrine builds inline: a form is a Form element the page carries,
   with its Form Fields inside it, and a list's repeated items are drawn in one section.
   Rules 1 and 3 state that exception, the plan rules accept it on those capabilities,
@@ -1048,7 +1049,7 @@ the submit route reads, agreeing with each other. It is a planned kind, like
   record or form submission; the step spec seeds each and asserts none is read
   or sent.
 - **The draft.** `writeAiDraft` with kind `form`: the resources route's
-  allow-list, its entitlement (`reusableComponents`) before `formsPerHost`, the
+  allow-list, the `formsPerHost` allowance (no feature gate since AGL-3597), the
   canvas-shaped design in msgpack, a `slug` from the unique name, and no
   version — the form's page mints the first when a member opens it. Nothing is
   promoted and no page places it.
