@@ -121,5 +121,56 @@ export function bookingsTenantEmails(): readonly TenantEmailEntry[] {
       footerReason:
         'You’re receiving this because you have a booking with {{host.businessName}}.',
     },
+    {
+      key: 'booking-rescheduled',
+      name: 'Booking rescheduled',
+      description: 'Tells the customer their booking moved to a new time.',
+      pluginId: 'bookings',
+      plugin: 'Bookings',
+      control: 'besigner',
+      defaultSubject: 'New time for {{service.name}}',
+      mergeTokens: [
+        { name: 'name', description: "The customer's name", sample: 'Alex' },
+        {
+          name: 'service.name',
+          description: 'The booked service',
+          sample: 'Consultation',
+        },
+        {
+          name: 'when',
+          description: 'The new date and time of the booking',
+          sample: 'Wednesday, June 3, 2026 at 10:30 AM',
+        },
+        {
+          name: 'previousWhen',
+          description: 'The date and time the booking moved from',
+          sample: 'Monday, June 1, 2026 at 9:00 AM',
+        },
+        {
+          name: 'timezone',
+          description: 'Timezone the times are shown in',
+          sample: 'America/Chicago',
+        },
+        {
+          name: 'booking.ref',
+          description: 'Booking reference id',
+          sample: 'bk_123',
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: 'Your booking has a new time', variant: 'heading' },
+        {
+          block: 'text',
+          text:
+            'Hi {{name}}, your booking with {{host.businessName}} for ' +
+            '"{{service.name}}" is now on {{when}} ({{timezone}}). It was ' +
+            'on {{previousWhen}}.',
+          variant: 'body',
+        },
+        { block: 'text', text: 'Reference: {{booking.ref}}', variant: 'caption' },
+      ],
+      footerReason:
+        'You’re receiving this because you have a booking with {{host.businessName}}.',
+    },
   ]
 }
