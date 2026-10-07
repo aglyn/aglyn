@@ -134,10 +134,13 @@ const areas = [
   ['store', 'seedCommerce'],
   ['pos', 'seedPos'],
   ['notifications', 'seedNotifications'],
+  ['account', 'seedAccount'],
 ]
+let staff = null
 for (const [file, name] of areas) {
   const area = await import(`./seed-native/${file}.mjs`)
-  await area[name]({ put, uid, orgId, hostId, now, nameSearchFields })
+  const seeded = await area[name]({ put, uid, orgId, hostId, now, nameSearchFields, auth: AUTH, project: PROJECT })
+  if (file === 'account') staff = seeded
 }
 
 console.log(
@@ -145,3 +148,4 @@ console.log(
     `${areas.map(([file]) => file).join(', ')}).`,
 )
 console.log(`  sign in as ${EMAIL} / ${PASSWORD}`)
+if (staff) console.log(`  staff (super) as mobile-staff@example.test / ${staff.password}`)

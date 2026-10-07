@@ -4,6 +4,7 @@
 import AglynCore
 import AglynPluginHost
 import AglynPluginManifest
+import AglynScreens
 import Foundation
 import Observation
 
@@ -23,6 +24,8 @@ final class AppModel {
   let push: PushCenter
   private(set) var pluginFailures: [NativePluginLoadFailure] = []
   private(set) var workspace: WorkspaceStore?
+  /// The signed-in token's claims: the staff section shows only when they say staff.
+  private(set) var claims = TokenClaims()
   /// Bumped by Refresh (⌘R); live lists re-subscribe on it.
   private(set) var refreshToken = 0
 
@@ -63,7 +66,8 @@ final class AppModel {
       self.reader = nil
       self.api = nil
     }
-    let result = NativePluginLoader.load(NativePluginManifest.entries, into: registry)
+    // Core's own console areas load first, as the plugin "core" (libs/native/screens).
+    let result = NativePluginLoader.load([CoreScreens.manifestEntry] + NativePluginManifest.entries, into: registry)
     pluginFailures = result.failed
     for failure in result.failed {
       print("Aglyn: plugin \(failure.pluginID) did not load: \(failure.error)")
@@ -78,6 +82,8 @@ final class AppModel {
     workspace?.stop()
     workspace = nil
     push.signedIn(uid: user?.uid, reader: reader)
+    claims = TokenClaims()
+    Task { await refreshClaims(force: false) }
     guard let user, let reader else { return }
     let store = WorkspaceStore(uid: user.uid, reader: reader)
     store.start()
@@ -86,6 +92,25 @@ final class AppModel {
 
   func refresh() {
     refreshToken += 1
+  }
+
+  /// Re-reads the claims from the ID token (forced after a re-auth).
+  func refreshClaims(force: Bool) async {
+    claims = TokenClaims(idToken: try? await auth?.idToken(forceRefresh: force))
+  }
+
+  /// What every spec screen reads about who is signed in and where.
+  var screenSession: ScreenSession {
+    let auth = auth
+    return ScreenSession(
+      email: auth?.user?.email, displayName: auth?.user?.displayName, orgName: workspace?.org?.name,
+      orgRole: workspace?.org?.role, siteName: workspace?.site?.name, claims: claims,
+      origin: config?.consoleOrigin ?? "",
+      reauthenticate: { [weak self] password in
+        guard let email = await self?.auth?.user?.email else { throw ConsoleAPIError(status: 401, message: "Sign in again.") }
+        try await self?.auth?.signIn(email: email, password: password)
+      },
+      refreshClaims: { [weak self] in await self?.refreshClaims(force: true) })
   }
 
   func signOut() async {

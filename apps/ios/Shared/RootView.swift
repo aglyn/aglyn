@@ -62,11 +62,21 @@ enum DebugLaunch {
   static func autoSignIn(_ model: AppModel) async {
     #if DEBUG
       guard UserDefaults.standard.bool(forKey: "AglynAutoSignIn"),
-        model.config?.authEmulatorHost != nil, model.auth?.user == nil,
-        let email = Bundle.main.object(forInfoDictionaryKey: "AGLYN_DEBUG_EMAIL") as? String,
-        let password = Bundle.main.object(forInfoDictionaryKey: "AGLYN_DEBUG_PASSWORD") as? String,
+        let config = model.config, config.authEmulatorHost != nil,
+        var email = Bundle.main.object(forInfoDictionaryKey: "AGLYN_DEBUG_EMAIL") as? String,
+        var password = Bundle.main.object(forInfoDictionaryKey: "AGLYN_DEBUG_PASSWORD") as? String,
         !email.isEmpty, !password.isEmpty
       else { return }
+      // `-AglynDebugAccount staff`: the seeded staff account
+      // (tools/scripts/seed-native/account.mjs), to see the staff section.
+      if UserDefaults.standard.string(forKey: "AglynDebugAccount") == "staff" {
+        email = "mobile-staff@example.test"
+        password = "seed-\(config.firebase.projectID)-staff"
+      }
+      if let current = model.auth?.user {
+        guard current.email != email else { return }
+        await model.signOut()
+      }
       do {
         try await model.auth?.signIn(email: email, password: password)
       } catch {
@@ -88,7 +98,13 @@ enum DebugLaunch {
       default: break
       }
       if let screen = defaults.string(forKey: "AglynDemoRoute"), !screen.isEmpty {
-        navigation.push(.screen(screen, [:]))
+        // `-AglynDemoParams uid=abc,tab=x`: the pushed screen's params.
+        var params: NativeParams = [:]
+        for pair in (defaults.string(forKey: "AglynDemoParams") ?? "").split(separator: ",") {
+          let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
+          if parts.count == 2 { params[parts[0]] = parts[1] }
+        }
+        navigation.push(.screen(screen, params))
       }
       if defaults.bool(forKey: "AglynShowSwitcher") { navigation.showSwitcher = true }
     #endif

@@ -44,7 +44,7 @@ object AndroidShell {
     val api = ConsoleApiClient(config.consoleOrigin, defaultHttpClient(), auth::idToken, config.brandName)
     val prefs = SharedPreferencesStore(context)
     val registry = NativePluginRegistry()
-    registry.load(manifest).failed.forEach { android.util.Log.e("Aglyn", "plugin ${it.pluginId}: ${it.error}") }
+    registry.load(listOf(com.aglyn.screens.CoreScreens.manifestEntry) + manifest).failed.forEach { android.util.Log.e("Aglyn", "plugin ${it.pluginId}: ${it.error}") }
     return ShellServices(
       app = app,
       config = config,
@@ -59,6 +59,11 @@ object AndroidShell {
       peripherals = peripherals,
       push = com.aglyn.core.FcmPushRegistrar(firebase, prefs, config.app, appVersion),
       writer = com.aglyn.core.FirebaseFirestoreWriter(firebase.firestore),
+      openHostedPage = { url ->
+        val intent = androidx.browser.customtabs.CustomTabsIntent.Builder().setShowTitle(true).build()
+        intent.intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        intent.launchUrl(context, android.net.Uri.parse(url))
+      },
     )
   }
 }

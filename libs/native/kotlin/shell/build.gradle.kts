@@ -23,12 +23,14 @@ kotlin {
       api(project(":native-core"))
       api(project(":native-ui"))
       api(project(":native-plugin-host"))
+      api(project(":native-screens"))
       implementation(project(":native-webview"))
       implementation(libs.compose.ui.backhandler)
     }
     androidMain.dependencies {
       implementation(libs.androidx.activity.compose)
       implementation(libs.androidx.core.ktx)
+      implementation(libs.androidx.browser)
     }
     named("desktopMain") {
       dependencies {

@@ -2552,6 +2552,36 @@
     },
     {
       "id": "ai",
+      "mobile": {
+        "$comment": "AGL-3671: AI jobs and their status, credits and the AI caps, per-member use, and the staffOrg and staffUser zones, natively from the spec in src/android/screens/ai.screens.json.",
+        "ios": {
+          "module": "AglynAiPlugin",
+          "register": "registerAINative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.ai",
+          "register": "registerAINative"
+        },
+        "contributes": {
+          "screens": [
+            "ai.jobs",
+            "ai.job",
+            "ai.credits",
+            "ai.member",
+            "ai.staffOrg",
+            "ai.staffUser",
+            "ai.signals"
+          ],
+          "quickActions": [
+            "ai.open"
+          ],
+          "deepLinks": [
+            "ai.jobs.link",
+            "ai.job.link",
+            "ai.signals.link"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-ai",
       "register": {
         "console": "registerAiConsole",

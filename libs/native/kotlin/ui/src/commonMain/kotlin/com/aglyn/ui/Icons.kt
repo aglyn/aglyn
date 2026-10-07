@@ -1,6 +1,104 @@
 package com.aglyn.ui
 
+import androidx.compose.material.icons.automirrored.outlined.Article
+import androidx.compose.material.icons.automirrored.outlined.Assignment
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.automirrored.outlined.Login
+import androidx.compose.material.icons.automirrored.outlined.Notes
+import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.automirrored.outlined.TrendingUp
+import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.AdminPanelSettings
+import androidx.compose.material.icons.outlined.AlternateEmail
+import androidx.compose.material.icons.outlined.Analytics
+import androidx.compose.material.icons.outlined.Apartment
+import androidx.compose.material.icons.outlined.Api
+import androidx.compose.material.icons.outlined.Autorenew
+import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.Badge
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Business
+import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.Construction
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DataUsage
+import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Domain
+import androidx.compose.material.icons.outlined.DomainVerification
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Drafts
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FactCheck
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Forum
+import androidx.compose.material.icons.outlined.Gavel
+import androidx.compose.material.icons.outlined.HealthAndSafety
+import androidx.compose.material.icons.outlined.HourglassEmpty
+import androidx.compose.material.icons.outlined.Hub
+import androidx.compose.material.icons.outlined.ImageNotSupported
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.LinkOff
+import androidx.compose.material.icons.outlined.LocalOffer
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.MailLock
+import androidx.compose.material.icons.outlined.ManageAccounts
+import androidx.compose.material.icons.outlined.MarkEmailRead
+import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.MoneyOff
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Password
+import androidx.compose.material.icons.outlined.Payment
+import androidx.compose.material.icons.outlined.Pending
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.PersonRemove
+import androidx.compose.material.icons.outlined.PersonSearch
+import androidx.compose.material.icons.outlined.Policy
+import androidx.compose.material.icons.outlined.PriceChange
+import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.QueryStats
+import androidx.compose.material.icons.outlined.Quiz
+import androidx.compose.material.icons.outlined.Report
+import androidx.compose.material.icons.outlined.RequestQuote
+import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.RocketLaunch
+import androidx.compose.material.icons.outlined.Savings
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.SupervisorAccount
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Tag
+import androidx.compose.material.icons.outlined.ToggleOn
+import androidx.compose.material.icons.outlined.TravelExplore
+import androidx.compose.material.icons.outlined.Unsubscribe
+import androidx.compose.material.icons.outlined.Upload
+import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.material.icons.outlined.Webhook
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.LocalPolice
+import androidx.compose.material.icons.outlined.MonitorHeart
+import androidx.compose.material.icons.outlined.PersonOff
+import androidx.compose.material.icons.outlined.ContactMail
+import androidx.compose.material.icons.outlined.Upgrade
+import androidx.compose.material.icons.outlined.WorkspacePremium
+import androidx.compose.material.icons.outlined.AddCard
+import androidx.compose.material.icons.outlined.CreditScore
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AltRoute
@@ -161,7 +259,111 @@ object AglynIcons {
     "done_all" to Icons.Outlined.DoneAll,
     "location_on" to Icons.Outlined.LocationOn,
     "undo" to Icons.AutoMirrored.Outlined.Undo,
+    "privacy_tip" to Icons.Outlined.PrivacyTip,
+    "receipt_long" to Icons.Outlined.ReceiptLong,
+    "text_fields" to Icons.Outlined.TextFields,
+    "lock_open" to Icons.Outlined.LockOpen,
+    "credit_score" to Icons.Outlined.CreditScore,
+    "add_card" to Icons.Outlined.AddCard,
+    "workspace_premium" to Icons.Outlined.WorkspacePremium,
+    "upgrade" to Icons.Outlined.Upgrade,
+    "contact_mail" to Icons.Outlined.ContactMail,
+    "person_off" to Icons.Outlined.PersonOff,
+    "error_outline" to Icons.Outlined.ErrorOutline,
+    "local_police" to Icons.Outlined.LocalPolice,
+    "inventory_2" to Icons.Outlined.Inventory2,
+    "monitor_heart" to Icons.Outlined.MonitorHeart,
+    "person_add" to Icons.Outlined.PersonAdd,
+    "person_remove" to Icons.Outlined.PersonRemove,
+    "admin_panel_settings" to Icons.Outlined.AdminPanelSettings,
+    "drafts" to Icons.Outlined.Drafts,
+    "domain" to Icons.Outlined.Domain,
+    "account_circle" to Icons.Outlined.AccountCircle,
+    "lock" to Icons.Outlined.Lock,
+    "key" to Icons.Outlined.Key,
+    "vpn_key" to Icons.Outlined.VpnKey,
+    "business" to Icons.Outlined.Business,
+    "palette" to Icons.Outlined.Palette,
+    "download" to Icons.Outlined.Download,
+    "upload" to Icons.Outlined.Upload,
+    "gavel" to Icons.Outlined.Gavel,
+    "block" to Icons.Outlined.Block,
+    "verified" to Icons.Outlined.Verified,
+    "dns" to Icons.Outlined.Dns,
+    "link" to Icons.Outlined.Link,
+    "sync" to Icons.Outlined.Sync,
+    "policy" to Icons.Outlined.Policy,
+    "badge" to Icons.Outlined.Badge,
+    "forum" to Icons.Outlined.Forum,
+    "bug_report" to Icons.Outlined.BugReport,
+    "mark_email_read" to Icons.Outlined.MarkEmailRead,
+    "alternate_email" to Icons.Outlined.AlternateEmail,
+    "devices" to Icons.Outlined.Devices,
+    "security" to Icons.Outlined.Security,
+    "password" to Icons.Outlined.Password,
+    "storage" to Icons.Outlined.Storage,
+    "data_usage" to Icons.Outlined.DataUsage,
+    "bar_chart" to Icons.Outlined.BarChart,
+    "smart_toy" to Icons.Outlined.SmartToy,
+    "savings" to Icons.Outlined.Savings,
+    "local_offer" to Icons.Outlined.LocalOffer,
+    "flag" to Icons.Outlined.Flag,
+    "report" to Icons.Outlined.Report,
+    "health_and_safety" to Icons.Outlined.HealthAndSafety,
+    "construction" to Icons.Outlined.Construction,
+    "money_off" to Icons.Outlined.MoneyOff,
+    "visibility" to Icons.Outlined.Visibility,
+    "edit" to Icons.Outlined.Edit,
+    "content_copy" to Icons.Outlined.ContentCopy,
+    "backup" to Icons.Outlined.Backup,
+    "restore" to Icons.Outlined.Restore,
+    "delete_forever" to Icons.Outlined.DeleteForever,
+    "manage_accounts" to Icons.Outlined.ManageAccounts,
+    "supervisor_account" to Icons.Outlined.SupervisorAccount,
+    "apartment" to Icons.Outlined.Apartment,
+    "request_quote" to Icons.Outlined.RequestQuote,
+    "account_balance" to Icons.Outlined.AccountBalance,
+    "webhook" to Icons.Outlined.Webhook,
+    "api" to Icons.Outlined.Api,
+    "code" to Icons.Outlined.Code,
+    "category" to Icons.Outlined.Category,
+    "rocket_launch" to Icons.Outlined.RocketLaunch,
+    "hourglass_empty" to Icons.Outlined.HourglassEmpty,
+    "autorenew" to Icons.Outlined.Autorenew,
+    "pending" to Icons.Outlined.Pending,
+    "price_change" to Icons.Outlined.PriceChange,
+    "analytics" to Icons.Outlined.Analytics,
+    "query_stats" to Icons.Outlined.QueryStats,
+    "fact_check" to Icons.Outlined.FactCheck,
+    "cloud_off" to Icons.Outlined.CloudOff,
+    "cloud" to Icons.Outlined.Cloud,
+    "link_off" to Icons.Outlined.LinkOff,
+    "hub" to Icons.Outlined.Hub,
+    "mail_lock" to Icons.Outlined.MailLock,
+    "domain_verification" to Icons.Outlined.DomainVerification,
+    "travel_explore" to Icons.Outlined.TravelExplore,
+    "speed" to Icons.Outlined.Speed,
+    "unsubscribe" to Icons.Outlined.Unsubscribe,
+    "image_not_supported" to Icons.Outlined.ImageNotSupported,
+    "quiz" to Icons.Outlined.Quiz,
+    "payment" to Icons.Outlined.Payment,
+    "tag" to Icons.Outlined.Tag,
+    "person_search" to Icons.Outlined.PersonSearch,
+    "psychology" to Icons.Outlined.Psychology,
+    "memory" to Icons.Outlined.Memory,
+    "toggle_on" to Icons.Outlined.ToggleOn,
+    "send" to Icons.AutoMirrored.Outlined.Send,
+    "trending_up" to Icons.AutoMirrored.Outlined.TrendingUp,
+    "login" to Icons.AutoMirrored.Outlined.Login,
+    "article" to Icons.AutoMirrored.Outlined.Article,
+    "assignment" to Icons.AutoMirrored.Outlined.Assignment,
+    "label" to Icons.AutoMirrored.Outlined.Label,
+    "notes" to Icons.AutoMirrored.Outlined.Notes,
+    "help_outline" to Icons.AutoMirrored.Outlined.HelpOutline,
   )
 
   fun named(name: String?): ImageVector = byName[name] ?: Icons.Outlined.Extension
+
+  /** Whether a name has its own icon (a spec naming one that does not would draw the fallback). */
+  fun has(name: String): Boolean = name in byName
 }

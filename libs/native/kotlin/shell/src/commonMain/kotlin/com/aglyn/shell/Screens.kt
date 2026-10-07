@@ -201,17 +201,48 @@ internal fun NotificationsScreen(services: ShellServices, uid: String, context: 
 }
 
 @Composable
-internal fun SettingsScreen(services: ShellServices, onNotificationSettings: () -> Unit = {}) {
+internal fun SettingsScreen(
+  services: ShellServices,
+  context: NativePluginContext? = null,
+  staff: Boolean = false,
+  onNotificationSettings: () -> Unit = {},
+) {
   val auth by services.auth.state.collectAsState()
   val user = (auth as? com.aglyn.core.AuthState.SignedIn)?.user
   val scope = rememberCoroutineScope()
+  val workspace by services.workspace.state.collectAsState()
   Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
     SectionHeader("Account")
     AglynListItem(
       title = user?.displayName ?: user?.email ?: "Signed in",
       supporting = user?.email,
-      icon = AglynIcons.named("settings"),
+      icon = AglynIcons.named("account_circle"),
     )
+    // The console's own areas, as core screens (libs/native/screens), by group.
+    if (context != null) {
+      val groups = buildList {
+        add("workspace" to (workspace.org?.name ?: "Workspace"))
+        if (workspace.site != null) add("site" to "Site · ${workspace.site?.name}")
+        add("account" to "Your account")
+        if (staff) add("staff" to "Staff")
+      }
+      for ((group, heading) in groups) {
+        val screens = com.aglyn.screens.ScreenCatalog.group(group)
+        if (screens.isEmpty()) continue
+        HorizontalDivider()
+        SectionHeader(heading)
+        for (screen in screens) {
+          AglynListItem(
+            title = screen.label,
+            supporting = screen.subtitle,
+            icon = AglynIcons.named(screen.icon),
+            trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
+            onClick = { context.navigate(screen.id) },
+            modifier = Modifier.testTag("settings-${screen.id}"),
+          )
+        }
+      }
+    }
     HorizontalDivider()
     SectionHeader("Preferences")
     AglynListItem(

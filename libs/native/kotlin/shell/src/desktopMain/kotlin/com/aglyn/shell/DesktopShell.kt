@@ -92,7 +92,7 @@ object DesktopShell {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Swing)
     scope.launch { auth.restore() }
     val registry = NativePluginRegistry()
-    registry.load(manifest).failed.forEach { System.err.println("Aglyn: plugin ${it.pluginId}: ${it.error}") }
+    registry.load(listOf(com.aglyn.screens.CoreScreens.manifestEntry) + manifest).failed.forEach { System.err.println("Aglyn: plugin ${it.pluginId}: ${it.error}") }
     // The seeded emulator member (tools/scripts/seed-native-emulator.mjs) fills the
     // sign-in form only against a local emulator on a demo- project.
     val project = config.firebase.projectId
@@ -114,6 +114,11 @@ object DesktopShell {
       debugSignIn = debugSignIn,
       peripherals = peripherals,
       writer = firestore,
+      // A JVM has no in-app browser sheet; Stripe's pages open in the system browser, as the console opens them in a tab.
+      openHostedPage = { url ->
+        runCatching { java.awt.Desktop.getDesktop().browse(java.net.URI(url)) }
+          .onFailure { System.err.println("Aglyn: could not open $url: ${it.message}") }
+      },
     )
   }
 }

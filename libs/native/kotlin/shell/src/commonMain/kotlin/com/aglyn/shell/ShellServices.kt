@@ -46,6 +46,12 @@ class ShellServices(
   val push: com.aglyn.core.PushRegistrar = com.aglyn.core.NoPush,
   /** Writes as the signed-in person, under the same rules as the console's own writes. */
   val writer: com.aglyn.core.FirestoreWriter = com.aglyn.core.NoFirestoreWrites,
+  /**
+   * Opens a page someone else hosts (Stripe Checkout, the Customer Portal)
+   * in the platform's secure in-app browser: Custom Tabs on Android, the
+   * system browser on desktop. Never a web view of ours.
+   */
+  val openHostedPage: (url: String) -> Unit = {},
 ) {
   /** Removes this install's device row, then signs out, so no push follows the person out. */
   suspend fun signOut() {
