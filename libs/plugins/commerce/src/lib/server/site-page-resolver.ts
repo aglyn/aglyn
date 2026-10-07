@@ -17,7 +17,13 @@
 
 import type { SitePageResolver } from '@aglyn/aglyn/server'
 import { hostCollectionKind } from '@aglyn/aglyn/server'
-import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
+import composeScreenNodes, {
+  composeNodesWithChrome,
+} from '@aglyn/tenant-runtime/compose-screen-nodes'
+import { resolveBuiltInPageLayoutId } from '@aglyn/tenant-runtime/built-in-page-layout'
+import * as Aglyn from '@aglyn/aglyn/server'
+import { ORDER_STATUS_PATH } from './order-status-token'
+import { ORDER_STATUS_COMPONENT_ID } from '../constants/order-status'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import { collectSocialImageFacts } from '@aglyn/tenant-runtime/social-image-facts'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -45,6 +51,14 @@ export const commerceSitePageResolver: SitePageResolver = async ({
   // block hydrates variants client-side from the same slug. Same
   // mechanism as entry-template screens below.
   const pdpSegments = path.split('/').filter(Boolean)
+  // The guest order-status page (AGL-3610), at /order-status — reached only
+  // when the site has no page of its own there. The site's header and footer
+  // around the order-status block, which reads the signed `?o=&t=` link after
+  // hydration, so this page holds no order and is safe to cache. UNLISTED, so
+  // the head says noindex: it is a private page, not a landing page.
+  if (pdpSegments.length === 1 && pdpSegments[0] === ORDER_STATUS_PATH) {
+    return composeOrderStatusPage(hostId, host)
+  }
   if (pdpSegments.length === 2 && pdpSegments[0] === 'products') {
     const adminFirestore = firebaseAdmin.app().firestore()
     const hostDocRef = adminFirestore.collection('hosts').doc(hostId)
@@ -275,4 +289,65 @@ export const commerceSitePageResolver: SitePageResolver = async ({
     }
   }
   return undefined
+}
+
+const ORDER_STATUS_NODE = 'order-status__block'
+
+/** The order-status page's node tree, root first, for the layout's slot. */
+export function buildOrderStatusNodes(): Record<string, Aglyn.AglynNodeSchema> {
+  return {
+    [Aglyn.NODE_ROOT_ID]: {
+      $id: Aglyn.NODE_ROOT_ID,
+      componentId: 'div',
+      nodes: ['order-status__container'],
+    } as Aglyn.AglynNodeSchema,
+    'order-status__container': {
+      $id: 'order-status__container',
+      parentId: Aglyn.NODE_ROOT_ID,
+      componentId: 'muiContainer',
+      pluginId: 'mui',
+      props: { maxWidth: 'md', sx: { paddingTop: 6, paddingBottom: 8 } },
+      nodes: [ORDER_STATUS_NODE],
+    } as Aglyn.AglynNodeSchema,
+    [ORDER_STATUS_NODE]: {
+      $id: ORDER_STATUS_NODE,
+      parentId: 'order-status__container',
+      componentId: ORDER_STATUS_COMPONENT_ID,
+      pluginId: 'commerce',
+      props: {},
+    } as Aglyn.AglynNodeSchema,
+  }
+}
+
+async function composeOrderStatusPage(hostId: string, host: unknown) {
+  try {
+    const layoutId = await resolveBuiltInPageLayoutId({ hostId, host: host as never })
+    const nodes = await composeNodesWithChrome({
+      hostId,
+      layoutId,
+      screenNodes: buildOrderStatusNodes(),
+      host: host as Aglyn.HostTokenSource,
+    })
+    if (!nodes) return undefined
+    return {
+      props: JSON.parse(
+        JSON.stringify({
+          data: {
+            host,
+            screen: {
+              data: {
+                displayName: 'Order status',
+                visibility: Aglyn.HostScreenVisibility.UNLISTED,
+              },
+            },
+          },
+          nodes,
+        }),
+      ),
+      revalidate: 3600,
+    }
+  } catch (error) {
+    console.error('order status page composition failed', error)
+    return undefined
+  }
 }

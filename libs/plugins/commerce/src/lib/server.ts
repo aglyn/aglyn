@@ -85,6 +85,7 @@ import { collectionMembershipHandler } from './server/collection-membership'
 import { draftOrderHandler } from './server/draft-order'
 import { fulfillOrderHandler } from './server/fulfill-order'
 import { orderReceiptSendHandler } from './server/order-receipt-send'
+import { orderStatusHandler } from './server/order-status'
 import { giftCardsHandler } from './server/gift-cards'
 import { memberPostHandler } from './server/member-post'
 import { orderAnalyticsHandler } from './server/order-analytics'
@@ -271,6 +272,9 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('commerce/notify-restock', notifyRestockHandler)
   // GA-safe order projection for the storefront `purchase` (AGL-1641).
   registerPluginApiRoute('commerce/order-analytics', orderAnalyticsHandler)
+  // The guest order-status page's data (AGL-3610), behind the signed link in
+  // every buyer email — a recipient link, so it outlives the site's gates.
+  registerPluginApiRoute('commerce/order-status', orderStatusHandler, { recipientLink: true })
   // What became of a session the shopper was returned from (AGL-3606).
   registerPluginApiRoute('commerce/checkout-status', checkoutStatusHandler)
   registerPluginApiRoute('commerce/product', productHandler)
