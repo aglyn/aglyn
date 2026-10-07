@@ -154,6 +154,6 @@ async function registerLocation(staff: PosStaff, body: Record<string, unknown>, 
     displayName: await hostName(staff.hostId),
     ...(address ? { address } : {}),
   })
-  if (!location.ok) return res.status(location.status).json({ error: location.error })
+  if ('error' in location) return res.status(location.status).json({ error: location.error })
   return res.status(200).json({ locationId: location.locationId })
 }
