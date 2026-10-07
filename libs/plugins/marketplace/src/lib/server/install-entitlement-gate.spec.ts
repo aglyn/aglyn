@@ -154,6 +154,7 @@ const state = (
       org: Record<string, unknown>
       componentWrites: Array<Record<string, unknown>>
       held: number
+      deleted: number
     }
   }
 ).__state
