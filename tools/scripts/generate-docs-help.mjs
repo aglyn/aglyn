@@ -200,6 +200,9 @@ const PLUGIN_TOPICS = {
   // The Shipping labels and Carrier accounts cards under the store's
   // Settings (AGL-3612).
   shipping: '/commerce-and-bookings/commerce/shipping',
+  // The Tax service card under the store's Settings (AGL-3631). The guide is
+  // unlisted while the service is rolling out; see PLUGIN_UNLISTED_TOPICS.
+  taxServices: '/commerce-and-bookings/commerce/tax-services',
   // Shifts, staff PINs and register returns (AGL-3609).
   posOperations: '/commerce-and-bookings/commerce/pos-operations',
   posHardware: '/commerce-and-bookings/commerce/pos-hardware',
@@ -234,6 +237,10 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // two guides wait on (AGL-3614).
   'connectQuickbooksOnline',
   'connectXero',
+  // The Tax service card draws nothing until the server reports a tax
+  // service configured for the deployment, which aglyn.com is not while the
+  // guide is unlisted (AGL-3631).
+  'taxServices',
 ])
 
 // ── Docs parsing ──────────────────────────────────────────────────────────

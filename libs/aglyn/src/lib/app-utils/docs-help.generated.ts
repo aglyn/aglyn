@@ -347,6 +347,11 @@ export const PLUGIN_DOCS = {
     title: 'Staff Console (internal)',
     excerpt: 'Aglyn-staff tools for managing organizations, entitlements, users, and audits.',
   },
+  taxServices: {
+    path: '/commerce-and-bookings/commerce/tax-services',
+    title: 'Tax services (Avalara AvaTax and TaxJar)',
+    excerpt: 'Connect your own Avalara AvaTax or TaxJar account so checkout and the register charge the sales tax it calculates, and your paid orders and refunds are recorded there. Rolling out.',
+  },
   webhooks: {
     path: '/marketing-and-automation/workflows-and-actions/webhooks',
     title: 'Webhooks',
@@ -420,6 +425,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   shipping: ['#zones-and-rates', '#where-parcels-ship-from'],
   shipStation: ['#connect', '#what-imports', '#ship', '#manage', '#troubleshooting', '#related'],
   staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#support-queue', '#plugin-reviews', '#organizations-admin', '#filter-the-directory', '#organization-detail', '#staff-org-email', '#free-workspace-limit', '#first-party-hosts', '#entitlement-editor', '#plan-comps', '#build-for-a-client', '#sites-admin', '#filter-the-site-list', '#site-detail', '#site-ownership', '#site-transfer', '#site-content', '#staff-automations', '#emails-sent', '#users-admin', '#acquisition', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#refunds', '#impersonation', '#system-emails', '#platform-send-rate', '#platform-suppressions', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#operator-alerts', '#ai-monitoring', '#sales-tax-return', '#audit-log', '#coupons', '#discount-floors', '#existing-coupons', '#contact-suppressions', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
+  taxServices: ['#before-you-start', '#connect', '#how-sales-are-taxed', '#product-tax-codes', '#exempt-customers', '#recording-orders-and-refunds', '#disconnect', '#what-is-sent-to-the-vendor'],
   webhooks: ['#outbound-webhooks', '#inbound-webhooks', '#tips', '#related'],
 } as const satisfies Partial<Record<PluginDocsKey, readonly `#${string}`[]>>
 

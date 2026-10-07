@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -134,6 +135,7 @@ function ConnectCard(props: {
       variant="outlined"
       header="Tax service"
       subheader="Calculate tax with your own Avalara AvaTax or TaxJar account."
+      help={pluginDocsHelp('taxServices', { anchor: '#connect' })}
       contentGutterX
       contentGutterY
     >
@@ -286,6 +288,7 @@ function ConnectedCard(props: {
       variant="outlined"
       header={connection.providerLabel}
       subheader={connection.environment === 'sandbox' ? 'Sandbox account' : 'Production account'}
+      help={pluginDocsHelp('taxServices', { anchor: '#how-sales-are-taxed' })}
       HeaderProps={{
         action: (
           <Stack direction="row" spacing={1}>
