@@ -404,6 +404,156 @@
           }
         ]
       ]
+    },
+    "accountPushSwitch": {
+      "module": "libs/aglyn/src/lib/app-utils/mobile-push.ts",
+      "args": [
+        [
+          null,
+          "content.order",
+          "content",
+          true
+        ],
+        [
+          null,
+          "content.order",
+          "content",
+          false
+        ],
+        [
+          {},
+          "content.order",
+          "content",
+          true,
+          {
+            "content": false
+          }
+        ],
+        [
+          {
+            "accountTypes": {
+              "content.order": {
+                "push": false
+              }
+            }
+          },
+          "content.order",
+          "content",
+          true
+        ],
+        [
+          {
+            "accountTypes": {
+              "content.order": {
+                "push": true
+              }
+            },
+            "account": {
+              "content": {
+                "push": false
+              }
+            }
+          },
+          "content.order",
+          "content",
+          true
+        ],
+        [
+          {
+            "account": {
+              "content": {
+                "push": false
+              }
+            }
+          },
+          "content.order",
+          "content",
+          true
+        ],
+        [
+          {
+            "account": {
+              "content": {
+                "push": true
+              }
+            }
+          },
+          "content.order",
+          "content",
+          false,
+          {
+            "content": false
+          }
+        ],
+        [
+          {
+            "accountTypes": {
+              "content.order": {
+                "console": false
+              }
+            }
+          },
+          "content.order",
+          "content",
+          true
+        ],
+        [
+          {
+            "accountTypes": {
+              "content.order": {
+                "console": true
+              }
+            },
+            "account": {
+              "content": {
+                "console": false
+              }
+            }
+          },
+          "content.order",
+          "content",
+          false
+        ],
+        [
+          {
+            "account": {
+              "content": {
+                "console": false
+              }
+            }
+          },
+          "content.order",
+          "content",
+          true
+        ],
+        [
+          {
+            "accountTypes": {
+              "content.booking": {
+                "push": false
+              }
+            }
+          },
+          "content.order",
+          "content",
+          true
+        ],
+        [
+          {
+            "account": {
+              "content": {
+                "email": true
+              }
+            }
+          },
+          "content.order",
+          "content",
+          true,
+          {
+            "content": true
+          }
+        ]
+      ]
     }
   }
 }

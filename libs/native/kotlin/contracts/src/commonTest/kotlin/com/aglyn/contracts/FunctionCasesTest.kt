@@ -3,6 +3,8 @@ package com.aglyn.contracts
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.double
@@ -32,7 +34,7 @@ class FunctionCasesTest {
   @Test
   fun everyFunctionHasCases() {
     assertEquals("UTC", root.getValue("timeZone").jsonPrimitive.content)
-    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents")))
+    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch")))
   }
 
   @Test
@@ -97,5 +99,16 @@ class FunctionCasesTest {
   fun contractValuesDecode() {
     assertEquals("Online", Contracts.orderChannelLabels["online"])
     assertTrue(Contracts.orderListQuery.fields.isNotEmpty())
+  }
+
+  @Test
+  fun accountPushSwitchCases() = cases("accountPushSwitch").forEach { (args, result) ->
+    val settings = (args[0] as? JsonObject)?.let { ContractJsonFormat.decodeFromJsonElement(AccountPushSettings.serializer(), it) }
+    val legacy = (args.getOrNull(4) as? JsonObject)?.mapValues { it.value.jsonPrimitive.boolean }
+    assertEquals(
+      result.jsonPrimitive.boolean,
+      accountPushSwitch(settings, args[1].jsonPrimitive.content, args[2].jsonPrimitive.content, args[3].jsonPrimitive.boolean, legacy),
+      args.toString(),
+    )
   }
 }

@@ -45,6 +45,15 @@ kotlin {
     named("desktopMain") {
       dependencies {
         implementation(libs.ktor.client.java)
+        // Windows Credential Manager (CredentialStore.kt); Advapi32 is declared there, so jna-platform is not needed.
+        implementation(libs.jna)
+        // Firestore `Listen` over gRPC (GrpcFirestoreListen.kt): the message classes only, no generated stub.
+        implementation(libs.grpc.okhttp)
+        implementation(libs.grpc.stub)
+        // Its marshaller takes the full protobuf runtime the protos bring; the lite runtime would duplicate it.
+        implementation(libs.grpc.protobuf.lite) { exclude(group = "com.google.protobuf", module = "protobuf-javalite") }
+        implementation(libs.firestore.protos)
+        implementation(libs.protobuf.java.util)
       }
     }
   }

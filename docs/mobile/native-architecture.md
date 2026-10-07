@@ -278,7 +278,7 @@ repositories on 2026-10-07, and one was chosen per platform.
 | **iOS / iPadOS** | firebase-ios-sdk (SPM) + GoogleSignIn-iOS | Official GA, with full coverage: offline Firestore, FCM/APNs, App Attest. |
 | **macOS** (native, not Catalyst) | firebase-ios-sdk (SPM) + GoogleSignIn-iOS | The same Swift code as iOS. "Official beta", but Firestore, Storage, Functions, Messaging and App Check are all supported. The "partial" Auth cell is tested against the methods we use (email/password, Google, custom token). |
 | **Android** | Firebase Android SDK (BoM) | Official GA, full coverage. |
-| **Windows** (Compose Desktop / JVM) | **Identity Toolkit REST for Auth, Firestore REST for reads, grpc-java `Listen` for realtime, all with the user's ID token. Writes and uploads stay on our console API routes.** | It is the only option built on official, production Google APIs with the rules enforced. The C++ desktop SDK is officially not for shipping. GitLive's JVM SDK is alpha, untouched since 2025-10, and lacks Google sign-in and Storage. |
+| **Windows** (Compose Desktop / JVM) | **Identity Toolkit REST for Auth, Firestore REST for reads, grpc-java `Listen` for realtime, all with the user's ID token. Writes and uploads stay on our console API routes, except where the console itself writes Firestore as the owner (the notification settings map), which desktop writes the same way, a REST merge under the same rule.** | It is the only option built on official, production Google APIs with the rules enforced. The C++ desktop SDK is officially not for shipping. GitLive's JVM SDK is alpha, untouched since 2025-10, and lacks Google sign-in and Storage. |
 
 How this shapes the code:
 
@@ -291,20 +291,36 @@ How this shapes the code:
 - **`desktopMain` paging.** It pages with `runQuery` `structuredQuery`
   cursors, translated from the same generated declarations (§5).
 - **Desktop realtime.** `Listen` runs over gRPC with
-  `Authorization: Bearer <ID token>`, and the stream is re-opened when the
-  token refreshes. Firestore's docs confirm the rules for ID-token REST
-  calls. That `Listen` accepts a Firebase ID token is how the client SDKs
-  work, but the docs do not state it, so a spike proves it before the
-  Windows build depends on it.
-- **If the spike fails,** desktop falls back to REST with refresh on focus,
-  on pull, and every 30 seconds while a list is visible. It never falls back
-  to the C++ SDK. Desktop starts online-only with an in-memory cache.
+  `Authorization: Bearer <ID token>` (`GrpcFirestoreListen`, grpc-java over
+  OkHttp with the published `proto-google-cloud-firestore-v1` messages and a
+  hand-built method descriptor, so no protoc or generated stub). Each stream
+  opens with a freshly minted token and is re-opened after 50 minutes, before
+  that token expires; the new stream resends every row.
+- **What the spike proved (2026-10-07), and what it did not.** Against the
+  Firestore emulator (`demo-aglyn-native`), a `Listen` carrying the seeded
+  member's ID token streamed their own `users/{uid}` document to CURRENT; the
+  same token on another user's document, and no token at all, had the target
+  removed with `PERMISSION_DENIED` from the `users/{userId}` rule; a token
+  that is not a JWT was refused as `invalid jwt`. So the emulator evaluates
+  the rules with the token's claims. The emulator does not check a token's
+  signature or expiry the way production does, and nothing here has run
+  against production Firestore: that production `Listen` accepts a Firebase
+  ID token is still how the client SDKs work rather than something observed.
+- **The fallback is built in.** An observation whose stream fails three
+  times in a row without a snapshot (a refused or unreachable call) falls
+  back to REST, re-reading every 30 seconds while it is collected, so a
+  production refusal degrades to the polling desktop had before. A target the
+  rules remove is shown as a failure, not a fallback, since REST would be
+  refused the same way. It never falls back to the C++ SDK. Desktop is
+  online-only with an in-memory cache.
 - **Desktop Google sign-in** follows Google's recommended flow for desktop
   apps. The app opens the system browser and the redirect comes back to a
   loopback address, using PKCE. The resulting Google ID token goes to
   `accounts:signInWithIdp`. The refresh token is kept in the OS credential
-  store: Windows Credential Manager through JNA, and Keychain on macOS for
-  development runs of the JVM build.
+  store: Windows Credential Manager through JNA (`CredWriteW`/`CredReadW`/
+  `CredDeleteW` on `Advapi32`, a generic credential per app and Firebase
+  project), restored with `securetoken` and `accounts:lookup` at launch. A
+  macOS or Linux development run of the JVM build keeps it in memory.
 - **App Check enforcement on Firestore must wait** until a desktop custom
   provider exists, because Windows has no built-in attestation. Turning it
   on earlier would lock Windows out.

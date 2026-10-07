@@ -10,6 +10,10 @@ compose-material-icons = "1.7.3"
 coroutines = "1.11.0"
 serialization = "1.11.0"
 ktor = "3.6.0"
+jna = "5.19.1"
+grpc = "1.62.2"
+protobuf = "3.25.5"
+firestore-protos = "3.21.0"
 androidx-activity = "1.13.0"
 androidx-core = "1.19.1"
 androidx-splashscreen = "1.2.0"
@@ -34,6 +38,12 @@ ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-java = { module = "io.ktor:ktor-client-java", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+grpc-okhttp = { module = "io.grpc:grpc-okhttp", version.ref = "grpc" }
+grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
+grpc-protobuf-lite = { module = "io.grpc:grpc-protobuf-lite", version.ref = "grpc" }
+protobuf-java-util = { module = "com.google.protobuf:protobuf-java-util", version.ref = "protobuf" }
+firestore-protos = { module = "com.google.api.grpc:proto-google-cloud-firestore-v1", version.ref = "firestore-protos" }
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose-multiplatform" }
 compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose-multiplatform" }
 compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-multiplatform" }

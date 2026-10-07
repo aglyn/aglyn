@@ -39,6 +39,8 @@ class ShellServices(
   val peripherals: com.aglyn.hardware.Peripherals = com.aglyn.hardware.NoPeripherals,
   /** This install's push registration; desktop has none in v1. */
   val push: com.aglyn.core.PushRegistrar = com.aglyn.core.NoPush,
+  /** Writes as the signed-in person, under the same rules as the console's own writes. */
+  val writer: com.aglyn.core.FirestoreWriter = com.aglyn.core.NoFirestoreWrites,
 ) {
   /** Removes this install's device row, then signs out, so no push follows the person out. */
   suspend fun signOut() {
@@ -52,6 +54,7 @@ sealed interface Route {
   data class Screen(val screenId: String, val params: NativeParams = emptyMap()) : Route
   data class Console(val path: String) : Route
   data object Switcher : Route
+  data object NotificationSettings : Route
 }
 
 class ShellNavigator(initialTop: String = HOME) {
