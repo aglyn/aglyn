@@ -191,6 +191,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "The same shape as `auth-action-url.ts` above, and modelled on it by name: `DEFAULT_CONSOLE_ORIGIN` is the `??` default of NEXT_PUBLIC_CONSOLE_URL and nothing else reads the literal, so an operator who sets that variable never evaluates it. It matters more here than for an auth email, because a mailbox's OAuth callback must be an address the operator REGISTERED with the provider — a self-hoster who left the variable unset would send Google to a console that is not theirs, and Google would refuse it as an unregistered redirect_uri rather than leak anything. That is the right failure: loud, at connect time, on a deployment that has not been configured. AGL-3228 added the fallback; this row is the decision it implies.",
   },
   {
+    file: 'libs/plugins/accounting/src/lib/server/oauth-redirect.ts',
+    count: 1,
+    reason:
+      "AGL-3614, the outreach mailbox row above in the accounting plugin: `DEFAULT_CONSOLE_ORIGIN` is the `||` default of NEXT_PUBLIC_CONSOLE_URL, read only when the variable is unset. Intuit and Xero refuse a redirect_uri the operator never registered, so an unconfigured self-host fails loudly at Connect rather than sending a ledger grant to Aglyn's console.",
+  },
+  {
     file: 'libs/shared/util/email/src/lib/outbound-phishing-screen.ts',
     count: 3,
     reason:

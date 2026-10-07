@@ -808,6 +808,29 @@ Point the Messaging Service's incoming-message webhook at
 the platform's own suppression list, which is checked before every send, and
 START lifts it.
 
+### Accounting: QuickBooks Online and Xero {#accounting}
+
+The Accounting plugin posts sales, refunds, fees and payouts to a workspace's
+QuickBooks Online company or Xero organization. A provider is offered only
+when its client id, its client secret and the token key are all set; with
+neither provider configured the Accounting page says nothing can be
+connected. Set these on the **console only**. Together they can write into
+every connected business's books, so the tenant runtime, which serves the
+public internet, must never have them.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `INTUIT_CLIENT_ID` | Feature | Runtime, console | The Intuit developer app's client id. |
+| `INTUIT_CLIENT_SECRET` | Feature | Runtime, console | The Intuit developer app's client secret. |
+| `INTUIT_ENVIRONMENT` | Optional | Runtime, console | `sandbox` (the default) or `production`: which QuickBooks API host the keys open. A development app's keys only open sandbox companies. Any other value leaves QuickBooks unconfigured. |
+| `XERO_CLIENT_ID` | Feature | Runtime, console | The Xero app's client id. |
+| `XERO_CLIENT_SECRET` | Feature | Runtime, console | The Xero app's client secret. |
+| `XERO_SCOPES` | Optional | Runtime, console | Space-separated scopes that replace the default request, for a Xero app made before Xero's granular scopes. |
+| `ACCOUNTING_TOKEN_KEY` | Feature | Runtime, console | 32 random bytes, base64. Seals every stored token. A comma-separated list rotates: the first key seals, the rest only open, and a token opened under an older key is sealed again under the first. |
+
+Register `https://<console>/api/accounting/oauth/callback` as the redirect URI
+in both developer apps. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
+
 ---
 
 ## Analytics and advertising {#analytics}
