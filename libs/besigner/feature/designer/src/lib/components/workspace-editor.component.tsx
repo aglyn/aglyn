@@ -33,10 +33,18 @@ import { Stack, useMediaQuery, useTheme } from '@mui/material'
 import clsx from 'clsx'
 import dynamic from 'next/dynamic'
 import type { ComponentProps } from 'react'
-import { ChangeEvent, forwardRef, useCallback, useEffect, useRef } from 'react'
+import {
+  ChangeEvent,
+  forwardRef,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import useAglynBesignerPanelValue from '../hooks/use-aglyn-besigner-panel-value'
 import AppBarBreadcrumbsComponent from './app-bar-breadcrumbs.component'
 import type { AsidePanelComponentProps } from './aside-panel.component'
+import { WorkspacePanelDragContext } from './workspace-panel.component'
 import ViewportZoomControls from './viewport-zoom-controls'
 
 const classKeys = generateComponentClassKeys('AglynViewport', [
@@ -167,6 +175,8 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [compact, leftToggled, rightToggled])
 
+    const [dragging, setDragging] = useState(false)
+
     const pannerRef = useRef<any>(null)
 
     const handleZoomReset = useCallback((e: ChangeEvent<unknown>) => {
@@ -224,9 +234,20 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
         if (start) pointer.current = start
         const node = active?.data.current.node
         Besigner.dnd.setDragNode(node)
+        setDragging(true)
+      },
+      onDragCancel() {
+        setDragging(false)
       },
       onDragEnd(e: DragEndEvent) {
         e.activatorEvent.stopPropagation()
+        setDragging(false)
+        // Below `md` the panel a drag started in overlays the canvas; after
+        // a drop the canvas is what the author wants to see.
+        if (compact && e.over) {
+          setLeftToggled(false)
+          setRightToggled(false)
+        }
         // Compute before completing the drag — onDragEnd clears dnd state.
         const rejection = Besigner.dnd.describeDropRejection()
         Besigner.dnd.onDragEnd()
@@ -255,7 +276,9 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
             overflow: 'hidden',
             zIndex: 0
           }}>
-          <PanelLeftComponent panel={'panelLeft'} />
+          <WorkspacePanelDragContext.Provider value={dragging}>
+            <PanelLeftComponent panel={'panelLeft'} />
+          </WorkspacePanelDragContext.Provider>
           <Stack
             direction="column"
             id="aglyn:besigner-viewport"
@@ -276,7 +299,9 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
             />
             <AppBarBreadcrumbsComponent />
           </Stack>
-          <PanelLeftComponent panel={'panelRight'} />
+          <WorkspacePanelDragContext.Provider value={dragging}>
+            <PanelLeftComponent panel={'panelRight'} />
+          </WorkspacePanelDragContext.Provider>
         </Stack>
       </WorkspaceEditor>
     );

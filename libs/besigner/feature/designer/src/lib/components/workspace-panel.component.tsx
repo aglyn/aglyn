@@ -23,7 +23,7 @@ import MuiDrawer, {
 } from '@mui/material/Drawer'
 import MuiSwipeableDrawer from '@mui/material/SwipeableDrawer'
 import clsx from 'clsx'
-import { forwardRef } from 'react'
+import { createContext, forwardRef, useContext } from 'react'
 import { DEFAULT_LEFT_DRAWER_WIDTH } from '../constants/shared'
 
 const classKeys = generateComponentClassKeys('AglynWorkspacePanel', [
@@ -134,6 +134,12 @@ export interface WorkspacePanelComponentProps extends WorkspacePanelProps {
   onOpen?: () => void
 }
 
+/**
+ * True while a drag is in flight. A temporary (overlay) panel hides for the
+ * length of it: the drop targets are on the canvas it covers.
+ */
+export const WorkspacePanelDragContext = createContext(false)
+
 export const WorkspacePanelComponent = forwardRef<
   any,
   WorkspacePanelComponentProps
@@ -152,6 +158,7 @@ export const WorkspacePanelComponent = forwardRef<
     onOpen,
     ...rest
   } = props
+  const dragging = useContext(WorkspacePanelDragContext)
   const open = Boolean(openProp)
   const {
     className: drawerClassName,
@@ -188,6 +195,9 @@ export const WorkspacePanelComponent = forwardRef<
         // scrolling under the same finger. Swiping one closed still works.
         disableSwipeToOpen
         className={clsx(classKeys.drawer, drawerClassName)}
+        // Hidden, not closed: closing would unmount the card being dragged
+        // and end the drag with it.
+        sx={dragging ? { visibility: 'hidden' } : undefined}
         slotProps={{
           paper: {
             ref,
