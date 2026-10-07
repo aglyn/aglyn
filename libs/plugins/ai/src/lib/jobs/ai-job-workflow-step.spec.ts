@@ -72,6 +72,8 @@ import {
   AI_WORKFLOW_GONE_COPY,
   AI_WORKFLOW_NO_SITE_COPY,
   AI_WORKFLOW_RUN_GONE_COPY,
+  AI_WORKFLOW_REVISE_BLOCKER_COPY,
+  AI_WORKFLOW_REVISE_WORKFLOW_COPY,
   AI_WORKFLOW_RUN_NOT_FAILED_COPY,
   AI_WORKFLOW_UNAVAILABLE_COPY,
 } from '../model/ai-workflow-job'
@@ -612,6 +614,107 @@ describe('explaining an automation', () => {
   })
 })
 
+/** A saved action every part of which the drafting vocabulary writes. */
+const REVISABLE: AiAutomation = {
+  name: 'Welcome newsletter sign-ups',
+  trigger: {
+    event: 'formSubmission',
+    conditions: [{ field: 'formName', op: 'equals', value: 'Newsletter sign-up' }],
+    combinator: 'and',
+  },
+  steps: [
+    { type: 'enrollList', listId: 'list-news', listName: 'Newsletter zzlist' },
+    { type: 'setContactStage', lifecycleStage: 'lead' },
+  ],
+  enabled: true,
+}
+
+const REVISED = {
+  ...EXAMPLE,
+  steps: [
+    step('enrollList', { list: 'newsletter' }),
+    step('setContactStage', { stage: 'lead' }),
+    step('addContactTag', { tag: 'newsletter' }),
+  ],
+}
+
+describe('revising an action (AGL-3603)', () => {
+  const revise = { inputs: { mode: 'revise', targetType: 'action', targetId: 'act-1' }, brief: 'Also tag them newsletter' }
+
+  it('writes the changed action as a NEW draft, OFF, under the job’s id, and never writes the saved one', async () => {
+    target = { type: 'action', id: 'act-1', name: REVISABLE.name, action: REVISABLE }
+    mockRunAiRequest.mockResolvedValueOnce(completion(REVISED))
+    const outcome = await runStep(revise)
+    expect(outcome.failure).toBeUndefined()
+    expect(drafts).toHaveLength(1)
+    expect(drafts[0].id).toBe(WORKFLOW_ID)
+    // The same name as the saved action is never reused: two rows by one name.
+    expect(drafts[0].name).toBe('Welcome newsletter sign-ups (revised)')
+    expect(drafts[0].action.enabled).toBe(false)
+    expect(drafts[0].action.steps).toEqual([
+      { type: 'enrollList', listId: 'list-news', listName: 'Newsletter zzlist' },
+      { type: 'setContactStage', lifecycleStage: 'lead' },
+      { type: 'addContactTag', tag: 'newsletter' },
+    ])
+    expect(validateStoredInteraction(drafts[0].action)).toBeNull()
+    // The saved action is the reader's and stays as it was.
+    expect(REVISABLE.enabled).toBe(true)
+    expect(REVISABLE.steps).toHaveLength(2)
+    expect(outcome.outputs).toEqual([
+      expect.objectContaining({ resource: 'workflow', id: WORKFLOW_ID, label: 'Welcome newsletter sign-ups (revised)' }),
+    ])
+    const note = String(outcome.outputs[0].note)
+    expect(note).toContain('A changed copy of “Welcome newsletter sign-ups”, which is left as it is.')
+    expect(note).toContain('Added: Tag the contact.')
+    expect(note).toContain('It is off until you switch it on.')
+  })
+
+  it('sends the drafting request with the saved action’s outline and the change, on the same cached prefix', async () => {
+    target = { type: 'action', id: 'act-1', name: REVISABLE.name, action: REVISABLE }
+    mockRunAiRequest.mockResolvedValueOnce(completion(REVISED))
+    await runStep(revise)
+    const request = mockRunAiRequest.mock.calls[0][0]
+    expect(JSON.stringify(request.system ?? request.instructions ?? '')).toContain(
+      JSON.stringify(AI_JOB_WORKFLOW_DRAFT_INSTRUCTIONS[0].text).slice(1, 200),
+    )
+    const user = request.messages[0].content
+    expect(user).toContain('The automation to change, as it is set up now:')
+    expect(user).toContain('Automation: "Welcome newsletter sign-ups" — an action, switched on.')
+    expect(user).toContain('Change: Also tag them newsletter')
+    expect(user).not.toContain('Brief:')
+  })
+
+  it('refuses, before the model is asked, an action holding what AI does not write', async () => {
+    target = { type: 'action', id: 'act-1', name: SAVED_ACTION.name, action: SAVED_ACTION }
+    expect((await runStep(revise)).failure).toBe(AI_WORKFLOW_REVISE_BLOCKER_COPY['page-step'])
+    target = {
+      type: 'action',
+      id: 'act-1',
+      name: 'Filtered',
+      action: { ...REVISABLE, trigger: { ...REVISABLE.trigger, filter: 'total > 100' } },
+    }
+    expect((await runStep(revise)).failure).toBe(AI_WORKFLOW_REVISE_BLOCKER_COPY.filter)
+    target = { type: 'action', id: 'act-1', name: 'Clicks', action: { ...REVISABLE, trigger: { event: 'click' } } }
+    expect((await runStep(revise)).failure).toBe(AI_WORKFLOW_REVISE_BLOCKER_COPY['page-event'])
+    target = null
+    expect((await runStep(revise)).failure).toBe(AI_WORKFLOW_GONE_COPY)
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(drafts).toEqual([])
+  })
+
+  it('keeps the name a change asks for, and finds the copy an earlier run wrote without spending', async () => {
+    target = { type: 'action', id: 'act-1', name: REVISABLE.name, action: REVISABLE }
+    mockRunAiRequest.mockResolvedValueOnce(completion({ ...REVISED, name: 'Tag newsletter sign-ups' }))
+    await runStep(revise)
+    expect(drafts[0].name).toBe('Tag newsletter sign-ups')
+    mockRunAiRequest.mockClear()
+    const again = await runStep(revise)
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(again.usage).toEqual(AI_JOB_ZERO_USAGE)
+    expect(drafts).toHaveLength(1)
+  })
+})
+
 describe('what a workflow job needs before it exists', () => {
   const ask = (inputs: Record<string, unknown>, patch: Record<string, unknown> = {}) =>
     createAiWorkflowJobAdmission({ readTarget, readRun })({
@@ -638,7 +741,7 @@ describe('what a workflow job needs before it exists', () => {
     ).toBeNull()
     expect(await ask({ mode: 'publish' })).toEqual({
       status: 400,
-      error: 'inputs.mode must be draft, explain or diagnose',
+      error: 'inputs.mode must be draft, explain, diagnose or revise',
     })
     expect(await ask({ mode: 'explain' })).toEqual({ status: 400, error: 'Pick the automation to explain' })
   })
@@ -665,6 +768,18 @@ describe('what a workflow job needs before it exists', () => {
     expect(await ask(diagnose)).toEqual({ status: 400, error: AI_WORKFLOW_RUN_NOT_FAILED_COPY })
     runRead = { ok: true, run: { result: 'failed' } }
     expect(await ask(diagnose)).toBeNull()
+  })
+
+  it('admits a revision only of an action the site has that holds only what AI writes, and never of a workflow', async () => {
+    const revise = { mode: 'revise', targetType: 'action', targetId: 'act-1' }
+    expect(await ask(revise)).toEqual({ status: 404, error: AI_WORKFLOW_GONE_COPY })
+    target = { type: 'action', id: 'act-1', name: SAVED_ACTION.name, action: SAVED_ACTION }
+    expect(await ask(revise)).toEqual({ status: 400, error: AI_WORKFLOW_REVISE_BLOCKER_COPY['page-step'] })
+    target = { type: 'action', id: 'act-1', name: REVISABLE.name, action: REVISABLE }
+    expect(await ask(revise)).toBeNull()
+    expect(await ask({ ...revise, targetType: 'workflow' })).toEqual({ status: 400, error: AI_WORKFLOW_REVISE_WORKFLOW_COPY })
+    refusal = { status: 403, error: 'interactions and actions are capped at 500 per site' }
+    expect(await ask(revise)).toEqual({ status: 403, error: 'interactions and actions are capped at 500 per site' })
   })
 
   it('refuses to explain on a site of another org, or where the Automation plugin is off', async () => {

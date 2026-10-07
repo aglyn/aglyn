@@ -47,8 +47,10 @@ the editor, from the organization's
 Beside **Recipes**, **Create with AI** drafts an automation from a sentence, using only the
 triggers and steps your plan includes. The draft arrives in the list switched off, with
 anything your site is missing left in square brackets for you to fill in. A saved
-automation's editor also has **Explain it**, and a failed run has **Why did this fail?**.
-See [Draft and explain automations with AI](../../ai/automations-with-ai.md).
+automation's editor also has **Explain it**, a saved action's has **Change with AI** and
+**Fix with AI** — each drafts a changed copy, switched off, and leaves the action as it is —
+and a failed run has **Why did this fail?**.
+See [Automations with AI](../../ai/automations-with-ai.md) to draft, change, fix or explain one.
 
 ## Triggers
 

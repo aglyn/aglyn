@@ -28,6 +28,8 @@ import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizatio
 import {
   aiAutomationDraft,
   aiAutomationDraftNote,
+  aiAutomationRevisionChanges,
+  aiAutomationRevisionNote,
   type AiAutomationRecords,
 } from '../model/ai-automation-draft'
 import {
@@ -59,7 +61,10 @@ import {
   AI_WORKFLOW_RUN_GONE_COPY,
   AI_WORKFLOW_RUN_NOT_FAILED_COPY,
   AI_WORKFLOW_SAVE_FAILURE_COPY,
+  AI_WORKFLOW_REVISE_BLOCKER_COPY,
+  AI_WORKFLOW_REVISE_WORKFLOW_COPY,
   AI_WORKFLOW_UNAVAILABLE_COPY,
+  aiActionReviseBlocker,
   aiAutomationCapabilities,
   aiAutomationTriggerLabel,
   parseAiWorkflowJobInputs,
@@ -136,6 +141,19 @@ import {
  * never the stored documents, never an email address, never a run's event
  * payload. It answers through `submit_explanation`, which becomes a `text`
  * output. Nothing is changed.
+ *
+ * ## Revising (AGL-3603)
+ *
+ * A saved ACTION and a change asked of it. The model is sent the drafting
+ * request — the same cached vocabulary, the same tool, the same reach, forms
+ * and datasets — with the action's outline in the user turn and the change as
+ * the brief, and answers the whole action as it would be after the change.
+ * That answer is held to the vocabulary and matched to the site's records as
+ * a draft is, and written as a NEW draft, OFF, under the job's draft id: the
+ * saved action is read and never written. What changed is worked out in code
+ * from the two stored shapes. An action holding what the vocabulary cannot
+ * write is refused before the model is asked, so a revision never drops an
+ * on-page step the person did not ask to lose.
  */
 
 /** The longest an explanation or a draft's generation may take reading the site first. */
@@ -270,11 +288,17 @@ function yesNo(value: boolean): string {
   return value ? 'yes' : 'no'
 }
 
-/** What a draft is asked from: the workspace's reach, the site's forms and datasets, and the brief. */
+/**
+ * What a draft is asked from: the workspace's reach, the site's forms and
+ * datasets, and the brief. A revision adds the saved action's outline, and its
+ * brief is the change asked for.
+ */
 export function aiJobWorkflowDraftPrompt(input: {
   brief: string
   capabilities: AiAutomationCapabilities
   records: Pick<AiAutomationRecords, 'forms' | 'datasets'>
+  /** The saved action a revision starts from, as its outline. */
+  revising?: { outline: string } | null
 }): string {
   const { crm, webhooks, bookings } = input.capabilities
   const forms = input.records.forms.slice(0, AI_WORKFLOW_FORMS_LISTED)
@@ -290,7 +314,14 @@ export function aiJobWorkflowDraftPrompt(input: {
       : ['- none']),
     'Datasets on this site (name):',
     ...(datasets.length ? datasets.map((dataset) => `- ${dataset.name}`) : ['- none']),
-    `Brief: ${input.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)}`,
+    ...(input.revising
+      ? [
+          'The automation to change, as it is set up now:',
+          input.revising.outline,
+          'Answer with the whole automation as it should be after the change below. Keep every condition and step the change does not touch as it is, with the same records named in the same words, and keep its name unless the change asks for another. A detail shown as [email address] or a named teammate is written as a placeholder in square brackets.',
+          `Change: ${input.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)}`,
+        ]
+      : [`Brief: ${input.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)}`]),
   ].join('\n')
 }
 
@@ -325,6 +356,7 @@ export function aiJobWorkflowDraftGeneration(request: {
   brief: string
   capabilities: AiAutomationCapabilities
   records: Pick<AiAutomationRecords, 'forms' | 'datasets'>
+  revising?: { outline: string } | null
   model: string
   signal?: AbortSignal
 }): AiCustomGenerationInput<AiAutomationAnswer> {
@@ -463,6 +495,74 @@ export function createAiJobWorkflowStep(deps: AiJobWorkflowStepDeps = {}): AiJob
       }
     }
 
+    if (inputs.mode === 'revise') {
+      const writer = writerFor(AI_AUTOMATION_RESOURCE)
+      if (!writer) return unspent(AI_WORKFLOW_UNAVAILABLE_COPY)
+      const place = { hostId, hostSubdomain }
+      const draftId = aiJobDraftId(job, 'workflow')
+      const written = await writer.read({ hostId, id: draftId })
+      if (written) {
+        return aiUnspentOutcome(model, {
+          outputs: [draftOutput(written.id, written.name, place, 'It is off until you switch it on.')],
+        })
+      }
+      const saved = await readTarget({ hostId, type: 'action', id: inputs.targetId })
+      if (!saved) return unspent(AI_WORKFLOW_GONE_COPY)
+      if (saved.type !== 'action') return unspent(AI_WORKFLOW_REVISE_WORKFLOW_COPY)
+      const blocker = aiActionReviseBlocker(saved.action)
+      if (blocker) return unspent(AI_WORKFLOW_REVISE_BLOCKER_COPY[blocker])
+      const context = { orgId: job.orgId, hostId, uid: job.createdBy, org: orgData, now }
+      const refusal = await writer.refusal(context)
+      if (refusal) {
+        return refusal.status === 403
+          ? aiUnspentOutcome(model, { review: aiLimitReview(refusal.error) })
+          : unspent(refusal.error)
+      }
+      const records = await readRecords(firestore, { orgId: job.orgId, hostId, crm: capabilities.crm })
+      const generation = await runValidatedGeneration(
+        'workflow',
+        aiJobWorkflowDraftGeneration({
+          brief: job.brief,
+          capabilities,
+          records,
+          revising: { outline: aiActionOutline(saved.action, records) },
+          model,
+          ...(signal ? { signal } : {}),
+        }),
+      )
+      const spent = { ...aiGenerationSpent(generation), ...(generation.effort ? { effort: generation.effort } : {}) }
+      if (generation.status === 'refused') return { ...spent, refused: true }
+      if (generation.status === 'needs_input') return { ...spent, review: aiDoctrineReview(generation) }
+      const answer = generation.value
+      if (answer.unsupported) return { ...spent, failure: AI_AUTOMATION_UNSUPPORTED_COPY[answer.unsupported] }
+      if (!answer.steps.length) return { ...spent, failure: AI_WORKFLOW_NO_DRAFT_COPY }
+      const draft = aiAutomationDraft(answer, records)
+      // The copy never takes the saved action's name: two rows by one name
+      // in the list are two rows nobody can tell apart.
+      const name =
+        draft.action.name.trim() && draft.action.name.trim() !== saved.name.trim()
+          ? draft.action.name
+          : aiRevisedName(saved.name)
+      const write = await writer.write({ ...context, id: draftId, name, content: { action: { ...draft.action, name } } })
+      if (write.ok === false) {
+        return write.status === 403
+          ? { ...spent, review: aiLimitReview(write.error) }
+          : { ...spent, failure: AI_WORKFLOW_SAVE_FAILURE_COPY }
+      }
+      const changes = aiAutomationRevisionChanges(saved.action, draft.action, aiStepLabel)
+      return {
+        ...spent,
+        outputs: [
+          draftOutput(
+            write.id,
+            write.name,
+            place,
+            aiAutomationRevisionNote({ fromName: saved.name, changes, draft, notes: answer.notes }),
+          ),
+        ],
+      }
+    }
+
     const target = await readTarget({ hostId, type: inputs.targetType, id: inputs.targetId })
     if (!target) return unspent(AI_WORKFLOW_GONE_COPY)
     let run: AiRunRecord | null = null
@@ -516,6 +616,12 @@ export function createAiJobWorkflowStep(deps: AiJobWorkflowStepDeps = {}): AiJob
     }
     return { ...spent, outputs: [output] }
   }
+}
+
+/** The name a revised copy is saved under when the change asked for no other. */
+export function aiRevisedName(name: string): string {
+  const clean = name.replace(/\s+/g, ' ').trim() || 'Automation'
+  return `${clean.length > 80 ? clean.slice(0, 80) : clean} (revised)`
 }
 
 function draftOutput(
@@ -584,6 +690,21 @@ export function createAiWorkflowJobAdmission(deps: AiWorkflowJobAdmissionDeps = 
         kind: 'workflow',
         drafts: [{ resource: AI_AUTOMATION_RESOURCE, label: 'Automation' }],
         ...(deps.writerFor ? { writerFor: deps.writerFor } : {}),
+      })
+    }
+    if (inputs.mode === 'revise') {
+      // A revision writes a draft as a description does, and also needs the
+      // action it starts from to exist and to hold only what AI writes.
+      return aiPluginDraftAdmissionRefusal(context, {
+        kind: 'workflow',
+        drafts: [{ resource: AI_AUTOMATION_RESOURCE, label: 'Automation' }],
+        ...(deps.writerFor ? { writerFor: deps.writerFor } : {}),
+        ownCheck: async (hostId) => {
+          const saved = await readTarget({ hostId, type: 'action', id: inputs.targetId })
+          if (!saved || saved.type !== 'action') return { status: 404, error: AI_WORKFLOW_GONE_COPY }
+          const blocker = aiActionReviseBlocker(saved.action)
+          return blocker ? { status: 400, error: AI_WORKFLOW_REVISE_BLOCKER_COPY[blocker] } : null
+        },
       })
     }
     const hostId = context.hostId

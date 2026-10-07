@@ -92,8 +92,8 @@ importing the host's package:
 | Zone | Where it renders | Props your widget receives |
 | --- | --- | --- |
 | `hostForms` | A site's Forms page, the forms plugin's, beside Create Form: another way to start a form | `hostId`, `orgId` |
-| `hostAutomations` | The workflows plugin's Automation page, its Actions, beside **Add action** and **Recipes**: another way to start an automation | `hostId`, `orgId`, `openAction(actionId)` — opens a listed action in the Actions editor, and answers `false` for one the list has not read yet |
-| `automationEditor` | Inside the editor of one saved automation, an action or a workflow, on the Automation page | `hostId`, `orgId`, `target` (`{ type: 'action' \| 'workflow', id, name }`, the automation as it is stored) |
+| `hostAutomations` | The workflows plugin's Automation page: on Actions, beside **Add action** and **Recipes**; on Workflows, in the card's header, or its empty state while it has none. Another way to start an automation | `hostId`, `orgId`, `openAction(actionId)` — opens a listed action in the Actions editor (from Workflows, by going to Actions with the action named), and answers `false` for one the list has not read yet |
+| `automationEditor` | Inside the editor of one saved automation, an action or a workflow, on the Automation page | `hostId`, `orgId`, `target` (`{ type: 'action' \| 'workflow', id, name }`, the automation as it is stored), and in an action's editor `openAction(actionId)` — opens another listed action, such as a copy the widget drafted, in its place |
 | `automationRun` | On each failed run in an automation's run history | `hostId`, `orgId`, `target` (as above), `runId` (the run's entry in the site's activity log) |
 | `productEditor` | The commerce product editor, under a product's description, tags and categories: copy proposed for the fields, which Save product writes | `hostId`, `orgId`, `product` (as the editor holds it), `categories`, `proposeValues(values, key)` — stages copy in the editor as unsaved edits |
 | `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
@@ -115,8 +115,8 @@ page spaces it there:
 - `hostScreens`, `hostTemplates`, `hostLayouts`, `hostForms`,
   `hostComponents` and `besignerToolbar`: a control in a row.
 - `hostAutomations`, `automationEditor` and `automationRun`: a control the
-  workflows plugin places beside its Actions buttons, in an automation's
-  editor, and on a failed run.
+  workflows plugin places beside its Actions buttons and in its Workflows
+  card's header, in an automation's editor, and on a failed run.
 - `siteMember`: a section of a site user's drawer.
 - `besignerInspector` and `seoFields`: a section among a panel's own fields.
 - `besignerPageProperties`: a section of the Page Properties drawer's column.

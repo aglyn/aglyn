@@ -64,6 +64,7 @@ import AiSiteSeoStartCard from './components/ai-site-seo-start-card.component'
 import AiSiteStartCard from './components/ai-site-start-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
 import AiDescribeAutomationButton from './components/ai-describe-automation.component'
+import AiReviseAutomation from './components/ai-revise-automation.component'
 import AiCrmEmailDraft from './components/ai-crm-email-draft.component'
 import AiCrmImportMapping from './components/ai-crm-import-mapping.component'
 import AiCrmRecordCard from './components/ai-crm-record-card.component'
@@ -438,6 +439,17 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiExplainAutomation,
+      },
+      // "Change with AI" and "Fix with AI" in a saved action's editor
+      // (AGL-3603): a changed copy drafted OFF beside it, never the saved
+      // action written in place.
+      {
+        slot: 'automationEditor',
+        widgetId: 'ai-revise-automation',
+        title: 'Change this automation with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiReviseAutomation,
       },
       {
         slot: 'automationRun',
