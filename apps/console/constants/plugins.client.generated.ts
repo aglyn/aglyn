@@ -135,7 +135,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'ai',
     apiPrefixes: ["ai","assist"],
     register: {"console":"registerAiConsole","staff":"registerAiConsole"},
-    contributes: {"console":{"shell":true,"routes":["/ai-jobs"],"slots":["consoleDock","consoleTopBar","automationEditor","automationRun","besignerInspector","besignerToolbar","experimentResult","experimentVariants","hostAutomations","hostCampaigns","hostComponents","hostEmailTemplates","hostDashboard","hostFirstRun","hostForms","hostLayouts","hostLogic","hostMembers","hostOverlays","hostScreens","hostSeo","hostTemplates","hostTheme","importMapping","marketingInsights","logicFunctionEditor","logicReferenceIssue","orgAutomations","orgBillingUsage","orgDashboard","orgMember","orgMembersListColumn","orgSites","overlayEditor","productEditor","productImport","productsCreate","productsHub","recordEmail","recordInsights","seoFields","staffOrg","staffOrgUsageColumn","staffOrgsListColumn","staffUser"]}},
+    contributes: {"console":{"shell":true,"routes":["/ai-jobs"],"slots":["consoleDock","consoleTopBar","automationEditor","automationRun","besignerInspector","besignerToolbar","experimentResult","experimentVariants","funnelInsight","funnelsCreate","hostAutomations","hostCampaigns","hostComponents","hostEmailTemplates","hostDashboard","hostFirstRun","hostForms","hostLayouts","hostLogic","hostMembers","hostOverlays","hostScreens","hostSeo","hostTemplates","hostTheme","importMapping","marketingInsights","logicFunctionEditor","logicReferenceIssue","orgAutomations","orgBillingUsage","orgDashboard","orgMember","orgMembersListColumn","orgSites","overlayEditor","productEditor","productImport","productsCreate","productsHub","recordEmail","recordInsights","seoFields","staffOrg","staffOrgUsageColumn","staffOrgsListColumn","staffUser"]}},
     load: () => import('@aglyn/plugins-ai'),
   },
   {
@@ -143,5 +143,12 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     register: {"console":"registerThemesConsole"},
     contributes: {"console":{"slots":["hostThemePresets"]}},
     load: () => import('@aglyn/plugins-themes'),
+  },
+  {
+    id: 'funnels',
+    apiPrefixes: ["funnels"],
+    register: {"console":"registerFunnelsConsole"},
+    contributes: {"console":{"slots":["hostAnalytics"]}},
+    load: () => import('@aglyn/plugins-funnels'),
   },
 ]
