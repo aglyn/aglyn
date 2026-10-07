@@ -63,19 +63,6 @@ final class RegistryTests: XCTestCase {
     XCTAssertTrue(result.failed.first?.error.contains("already registered") == true)
   }
 
-  func testHoldsAQuickActionToExactlyOneTarget() {
-    for (screen, path) in [(nil, nil), ("a.list", "/x/hosts/y/besigner")] as [(String?, String?)] {
-      let registry = NativePluginRegistry()
-      let result = NativePluginLoader.load(
-        [
-          entry(contributes: ["quickActions": ["a.go"]], register: {
-            $0.quickAction("a.go", title: "Go", icon: "plus", order: 1, screen: screen, besignerPath: path)
-          })
-        ], into: registry)
-      XCTAssertTrue(result.failed.first?.error.contains("exactly one") == true)
-    }
-  }
-
   func testRefusesADeepLinkThatIsNotAConsolePath() {
     let registry = NativePluginRegistry()
     let result = NativePluginLoader.load(
@@ -94,7 +81,7 @@ final class RegistryTests: XCTestCase {
             $0.screen("a.list", title: "A") { _, _ in EmptyView() }
             $0.screen("a.register", title: "Register", apps: [.pos], placement: .register) { _, _ in EmptyView() }
             $0.quickAction("a.two", title: "Two", icon: "x", order: 2, screen: "a.list")
-            $0.quickAction("a.one", title: "One", icon: "x", order: 1, besignerPath: "/screens/s1/versions/v1/besigner")
+            $0.quickAction("a.one", title: "One", icon: "x", order: 1, screen: "a.list")
           })
       ], into: registry)
     XCTAssertEqual(registry.quickActions(for: .aglyn).map(\.id), ["a.one", "a.two"])
@@ -105,15 +92,6 @@ final class RegistryTests: XCTestCase {
 
 @MainActor
 final class BesignerOnlyTests: XCTestCase {
-  func testAQuickActionOpensOnlyABesignerPage() {
-    let registry = NativePluginRegistry()
-    let registrar = NativePluginRegistrar(
-      pluginID: "shop", declared: NativeContributionDeclaration(quickActions: ["shop.media"]), registry: registry)
-    registrar.quickAction("shop.media", title: "Media", icon: "photo", order: 1, besignerPath: "/media")
-    XCTAssertEqual(registrar.errors.count, 1)
-    XCTAssertTrue(registry.quickActions(for: .aglyn).isEmpty)
-  }
-
   func testTheContextOpensOnlyBesignerPathsUnderTheSite() {
     var opened: [String] = []
     let context = NativePluginContext(

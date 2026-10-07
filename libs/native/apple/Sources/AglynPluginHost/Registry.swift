@@ -57,12 +57,6 @@ public final class NativePluginRegistry {
   }
 
   func add(_ action: NativeQuickAction) throws {
-    if (action.screen == nil) == (action.besignerPath == nil) {
-      throw RegistryError("quick action \"\(action.id)\" opens a screen or a Besigner page — exactly one")
-    }
-    if let path = action.besignerPath, !DeepLinks.isBesignerPath(path) {
-      throw RegistryError("quick action \"\(action.id)\" path \"\(path)\" is not a Besigner page")
-    }
     try checkFree(.quickActions, action.id)
     quickActionList[action.id] = action
   }
@@ -197,15 +191,15 @@ public final class NativePluginRegistrar {
   }
 
   public func quickAction(
-    _ id: String, title: String, icon: String, order: Int, screen: String? = nil,
-    params: NativeParams = [:], besignerPath: String? = nil, requiresSite: Bool = false,
+    _ id: String, title: String, icon: String, order: Int, screen: String,
+    params: NativeParams = [:], requiresSite: Bool = false,
     apps: Set<AglynAppKind> = [.aglyn]
   ) {
     admit(.quickActions, id) {
       try registry.add(
         NativeQuickAction(
           pluginID: pluginID, id: id, title: title, icon: icon, order: order, requiresSite: requiresSite,
-          screen: screen, params: params, besignerPath: besignerPath, apps: apps))
+          screen: screen, params: params, apps: apps))
     }
   }
 

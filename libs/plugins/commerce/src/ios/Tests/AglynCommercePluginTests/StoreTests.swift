@@ -90,7 +90,7 @@ final class CommerceRegistrationTests: XCTestCase {
       [NativePluginManifestEntry(id: "commerce", contributes: declared, register: registerCommerceNative)],
       into: registry)
     XCTAssertEqual(result.loaded, ["commerce"])
-    XCTAssertTrue(registry.quickActions(for: .aglyn).allSatisfy { $0.besignerPath == nil })
+    XCTAssertTrue(registry.quickActions(for: .aglyn).allSatisfy { registry.screen($0.screen) != nil })
     XCTAssertEqual(registry.tabs(for: .aglyn).map(\.id), ["commerce.orders-tab", "commerce.products-tab"])
     XCTAssertEqual(registry.resolve("/acme/hosts/shop/products/orders"), .screen("commerce.orders", ["orgSlug": "acme", "hostSlug": "shop"]))
     XCTAssertEqual(registry.screens(for: .pos).map(\.id), ["commerce.card-readers", "commerce.register"])

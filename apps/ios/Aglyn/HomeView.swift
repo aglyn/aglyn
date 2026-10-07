@@ -95,11 +95,7 @@ struct HomeView: View {
           AglynGrid(minimum: 76) {
             ForEach(actions) { action in
               QuickActionTile(action.title, systemImage: action.icon) {
-                if let screen = action.screen {
-                  navigation.push(.screen(screen, action.params))
-                } else if let path = action.besignerPath, let context = model.context(for: navigation) {
-                  context.openBesigner(path)
-                }
+                navigation.push(.screen(action.screen, action.params))
               }
               .accessibilityIdentifier("quick-action-\(action.id)")
             }

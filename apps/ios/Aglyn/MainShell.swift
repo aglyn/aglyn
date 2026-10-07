@@ -25,7 +25,8 @@ struct SidebarScreen: Identifiable, Hashable {
           requiresSite: model.registry.screen(tab.screen)?.requiresSite ?? false))
     }
     for action in model.registry.quickActions(for: .aglyn) {
-      guard let screen = action.screen, seen.insert(screen).inserted else { continue }
+      let screen = action.screen
+      guard seen.insert(screen).inserted else { continue }
       items.append(
         SidebarScreen(
           id: action.id, title: action.title, icon: action.icon, screen: screen, requiresSite: action.requiresSite))

@@ -56,15 +56,41 @@ public enum DeepLinks {
     return Scope(orgSlug: first, rest: "/" + segments.dropFirst().joined(separator: "/"))
   }
 
-  /// Whether `path` is a Besigner page: its last segment (before any query)
-  /// is `besigner`, as every editor route in the console is
-  /// (`…/screens/:id/versions/:versionId/besigner`, layouts, components,
-  /// templates, emails, records).
+  /// The Besigner's pages under `/{orgSlug}/hosts/{hostSlug}`: the console's
+  /// `(editor)` route group, and nothing else (the Kotlin kit's `BesignerPaths`).
+  static let besignerSitePatterns = [
+    "^/theme$",
+    "^/templates/[^/]+/(besigner|preview)$",
+    "^/emails/[^/]+/versions/[^/]+/besigner$",
+    "^/screens/[^/]+/versions/[^/]+(/(besigner|preview|view))?$",
+    // Components, layouts and every plugin's declared Besigner document.
+    "^/[^/]+/[^/]+/versions/[^/]+/(besigner|preview)$",
+  ]
+
+  /// The staff console's editor pages.
+  static let besignerStaffPatterns = [
+    "^/admin/emails/[^/]+/versions/[^/]+/besigner$",
+    "^/admin/sites/[^/]+/preview/[^/]+/[^/]+$",
+  ]
+
+  /// Whether `path`, a whole console path (its query and fragment ignored),
+  /// is a Besigner page: the only web content the apps show.
   public static func isBesignerPath(_ path: String) -> Bool {
-    guard path.hasPrefix("/"), !path.hasPrefix("//") else { return false }
-    let bare = path.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
-    let segments = bare.split(separator: "/", omittingEmptySubsequences: true)
-    return segments.count >= 2 && segments.last == "besigner" && !segments.contains("..")
+    let bare = String(path.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")
+      .split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
+    guard bare.hasPrefix("/"), !bare.contains("//"),
+      !bare.split(separator: "/").contains(where: { $0 == ".." || $0 == "." })
+    else { return false }
+    let matches = { (pattern: String, text: String) in text.range(of: pattern, options: .regularExpression) != nil }
+    if besignerStaffPatterns.contains(where: { matches($0, bare) }) { return true }
+    let scope = splitConsoleScope(bare)
+    guard let host = scope.hostSlug, !host.isEmpty else { return false }
+    return besignerSitePatterns.contains { matches($0, scope.rest) }
+  }
+
+  /// The Besigner on one page's working version, under the picked site.
+  public static func besignerScreen(_ screenID: String, versionID: String) -> String {
+    "/screens/\(screenID)/versions/\(versionID)/besigner"
   }
 
   /// The path part of a console URL, an `aglyn://` URL, or a bare path.

@@ -21,8 +21,9 @@ public enum WidgetSize: String, Sendable {
   case full
 }
 
-/// How a Besigner path is scoped when a plugin opens it.
-public enum BesignerScope: Sendable {
+/// How a console path is scoped when a plugin names it: under the picked
+/// site, under the workspace, or whole (the Kotlin kit's `ConsoleScope`).
+public enum ConsoleScope: Sendable {
   /// Prefixed with the picked site: `/{org}/hosts/{site}{path}`.
   case site
   /// Prefixed with the picked workspace: `/{org}{path}`.
@@ -74,7 +75,7 @@ public struct NativePluginContext {
   /// Besigner path opens (`DeepLinks.isBesignerPath`); anything else is
   /// refused, because console areas are native screens. Returns whether it opened.
   @MainActor @discardableResult
-  public func openBesigner(_ path: String, scope: BesignerScope = .site) -> Bool {
+  public func openBesigner(_ path: String, scope: ConsoleScope = .site) -> Bool {
     let scoped = besignerPath(path, scope: scope)
     guard DeepLinks.isBesignerPath(scoped) else { return false }
     openBesignerAction(scoped)
@@ -82,7 +83,7 @@ public struct NativePluginContext {
   }
 
   /// A Besigner path under the picked scope.
-  public func besignerPath(_ path: String, scope: BesignerScope) -> String {
+  public func besignerPath(_ path: String, scope: ConsoleScope) -> String {
     let rest = path.hasPrefix("/") ? path : "/\(path)"
     switch scope {
     case .absolute: return rest
@@ -140,11 +141,9 @@ public struct NativeQuickAction: Identifiable {
   public let icon: String
   public let order: Int
   public let requiresSite: Bool
-  /// Opens this screen...
-  public let screen: String?
+  /// The native screen it opens.
+  public let screen: String
   public let params: NativeParams
-  /// ...or this Besigner page (site-scoped). Exactly one of the two.
-  public let besignerPath: String?
   public let apps: Set<AglynAppKind>
 }
 

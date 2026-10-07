@@ -26,7 +26,7 @@ final class DeepLinkTests: XCTestCase {
   }
 
   func testOpensEveryOtherConsolePathInTheWebViewAndRefusesWhatIsNotAConsoleLink() {
-    XCTAssertEqual(DeepLinks.resolve("/acme/hosts/shop/besigner", routes: routes), .besigner("/acme/hosts/shop/besigner"))
+    XCTAssertEqual(DeepLinks.resolve("/acme/hosts/shop/besigner", routes: routes), .unavailable("/acme/hosts/shop/besigner"))
     XCTAssertEqual(
       DeepLinks.resolve("/acme/hosts/shop/screens/s1/versions/v1/besigner?x=1", routes: routes),
       .besigner("/acme/hosts/shop/screens/s1/versions/v1/besigner?x=1"))
@@ -53,12 +53,25 @@ final class DeepLinkTests: XCTestCase {
   }
 
   func testOnlyBesignerPathsAreBesigner() {
-    XCTAssertTrue(DeepLinks.isBesignerPath("/acme/hosts/shop/layouts/l1/versions/v2/besigner"))
-    XCTAssertTrue(DeepLinks.isBesignerPath("/admin/emails/welcome/versions/v1/besigner?tab=2"))
-    XCTAssertFalse(DeepLinks.isBesignerPath("/acme/hosts/shop/besigner-help"))
-    XCTAssertFalse(DeepLinks.isBesignerPath("/acme/hosts/shop/media"))
-    XCTAssertFalse(DeepLinks.isBesignerPath("/besigner/../media"))
-    XCTAssertFalse(DeepLinks.isBesignerPath("//evil.example/besigner"))
-    XCTAssertFalse(DeepLinks.isBesignerPath("besigner"))
+    // The same answers the Kotlin kit's BesignerPaths gives.
+    for path in [
+      "/acme/hosts/shop/theme",
+      "/acme/hosts/shop/templates/t1/preview",
+      "/acme/hosts/shop/emails/welcome/versions/v1/besigner",
+      "/acme/hosts/shop/screens/s1/versions/v1",
+      "/acme/hosts/shop/screens/s1/versions/v1/besigner?tab=2#x",
+      "/acme/hosts/shop/layouts/l1/versions/v2/besigner",
+      "/admin/emails/welcome/versions/v1/besigner",
+      "/admin/sites/h1/preview/screens/s1",
+    ] {
+      XCTAssertTrue(DeepLinks.isBesignerPath(path), path)
+    }
+    for path in [
+      "/acme/hosts/shop/besigner", "/acme/hosts/shop/media", "/acme/hosts/shop/products/orders",
+      "/acme/screens/s1/versions/v1/besigner", "/acme/hosts/shop/screens/../media/versions/v/besigner",
+      "//evil.example/acme/hosts/shop/theme", "besigner", "",
+    ] {
+      XCTAssertFalse(DeepLinks.isBesignerPath(path), path)
+    }
   }
 }
