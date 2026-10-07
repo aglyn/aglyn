@@ -17,13 +17,13 @@
 import { consoleOptions, consoleThemeLight } from './console.theme'
 import {
   PLATFORM_BRAND_HOSTS,
-  TENANT_SYSTEM_FONT_STACK,
   tenantOptions,
   tenantOptionsDark,
   tenantThemeDark,
   tenantThemeLight,
   wearsPlatformBrand,
 } from './tenant.theme'
+import { TENANT_SYSTEM_FONT_STACK } from './platform-brand'
 import { auditPaletteContrast } from './util/accent-text'
 import { AA_TEXT_CONTRAST, contrastRatio } from './util/accessible-shade'
 

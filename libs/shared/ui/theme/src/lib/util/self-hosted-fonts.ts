@@ -21,6 +21,9 @@ import type {
   HostThemeFontCategory,
   HostThemeFontMetrics,
 } from '@aglyn/shared-data-types'
+import { metricFallbackFamily, stackFamilies } from './font-stack'
+
+export { metricFallbackFamily, themeWebFontFamilies, withMetricFallbacks } from './font-stack'
 
 /**
  * A theme's Google fonts, served from the site's own origin (AGL-3485).
@@ -323,16 +326,6 @@ export function isSiteFontUrl(url: string): boolean {
   return /^\/api\/(fonts|media\/cdn)\/[A-Za-z0-9_\-./:%]{1,600}(\?v=[A-Za-z0-9_.-]{1,128})?$/.test(url)
 }
 
-/**
- * The name a theme family's metric-matched fallback face is declared under.
- * The theme's stacks name it right after the family ({@link withMetricFallbacks}),
- * so the text drawn before the web font arrives is the fallback face sized to
- * the web font's box.
- */
-export function metricFallbackFamily(family: string): string {
-  return `${family.replace(/['"\\\n\r]/g, '').trim()} Fallback`
-}
-
 /** A local face a fallback is drawn from, measured the way a theme font is. */
 interface LocalFallbackFace {
   /** `local()` names, in order. */
@@ -420,43 +413,6 @@ export function metricFallbackFontFaceCss(
     `line-gap-override:${over(metrics.lineGap)};`,
     '}',
   ].join('')
-}
-
-/** The families in a CSS `font-family` stack, unquoted. */
-function stackFamilies(stack: string): string[] {
-  return stack
-    .split(',')
-    .map((entry) => entry.trim().replace(/^['"]|['"]$/g, '').trim())
-    .filter(Boolean)
-}
-
-/**
- * A stack with each loaded family's metric fallback named right after it:
- * `"Inter", system-ui` becomes `"Inter", "Inter Fallback", system-ui`. A
- * fallback already named is left where it is, so this is idempotent.
- */
-export function withMetricFallbacks(stack: string, families: readonly string[]): string {
-  if (!families.length) return stack
-  const loaded = new Set(families.map((family) => family.toLowerCase()))
-  const present = new Set(stackFamilies(stack).map((family) => family.toLowerCase()))
-  const parts = stack.split(',')
-  const out: string[] = []
-  for (const part of parts) {
-    out.push(part)
-    const name = part.trim().replace(/^['"]|['"]$/g, '').trim()
-    const fallback = metricFallbackFamily(name)
-    if (loaded.has(name.toLowerCase()) && !present.has(fallback.toLowerCase())) {
-      out.push(` "${fallback}"`)
-    }
-  }
-  return out.join(',')
-}
-
-/** The families a theme loads as web fonts: Google families and its uploads. */
-export function themeWebFontFamilies(fonts: readonly HostThemeFont[] | undefined): string[] {
-  return (fonts ?? [])
-    .filter((font) => font.family && (font.source ?? 'google') !== 'system')
-    .map((font) => font.family.trim())
 }
 
 /** What one family of a theme needs loaded: the weights, and which as italics. */

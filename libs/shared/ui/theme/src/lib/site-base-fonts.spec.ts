@@ -21,8 +21,8 @@ import {
   PLATFORM_TYPE_RAMP_WEIGHTS,
   siteBaseFonts,
   siteBaseTypography,
-  TENANT_SYSTEM_FONT_STACK,
-} from './platform-brand'
+} from './site-base-fonts'
+import { TENANT_SYSTEM_FONT_STACK } from './platform-brand'
 
 describe('the platform brand as data (AGL-3656)', () => {
   it('holds the weights the built console theme draws each text style with', () => {

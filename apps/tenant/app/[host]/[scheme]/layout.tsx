@@ -23,8 +23,8 @@ import { searchEngineVerificationMeta } from '@aglyn/aglyn/app-utils/search-engi
 import {
   siteBaseFonts,
   siteBaseTypography,
-} from '@aglyn/shared-ui-theme/platform-brand'
-import { withMetricFallbacks } from '@aglyn/shared-ui-theme/util/self-hosted-fonts'
+} from '@aglyn/shared-ui-theme/site-base-fonts'
+import { withThemeMetricFallbacks } from '@aglyn/shared-ui-theme/util/font-stack'
 import { selfHostedThemeFonts } from '@aglyn/tenant-runtime/self-hosted-fonts'
 import { preload } from 'react-dom'
 import { parseSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
@@ -91,18 +91,14 @@ export default async function HostLayout({
    * brand's, which its stack has always named first.
    */
   const baseFonts = siteBaseFonts(host, siteTheme)
-  const hostTheme = baseFonts.length
-    ? {
-        ...siteTheme,
-        typography: {
-          ...siteTheme?.typography,
-          fontFamily: withMetricFallbacks(
-            String(siteBaseTypography(host)['fontFamily']),
-            baseFonts.map((font) => font.family),
-          ),
-        },
-      }
-    : siteTheme
+  // Each web font's sized fallback named right after it in the theme's
+  // stacks, here on the server: the page declares the fallbacks, and the
+  // editor, which does not, never carries the names.
+  const hostTheme = withThemeMetricFallbacks(
+    siteTheme,
+    String(siteBaseTypography(host)['fontFamily']),
+    baseFonts,
+  )
   const selfHostedFonts = await selfHostedThemeFonts(siteTheme, {
     hostId: hostRes.host?.$id,
     baseTypography: siteBaseTypography(host),

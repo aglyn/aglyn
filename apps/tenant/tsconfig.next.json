@@ -98,6 +98,12 @@
       "@aglyn/plugins-events-calendar/*": [
         "../../libs/plugins/events-calendar/src/lib/*"
       ],
+      "@aglyn/plugins-fonts": [
+        "../../libs/plugins/fonts/src/index.ts"
+      ],
+      "@aglyn/plugins-fonts/*": [
+        "../../libs/plugins/fonts/src/lib/*"
+      ],
       "@aglyn/plugins-forms": [
         "../../libs/plugins/forms/src/index.ts"
       ],

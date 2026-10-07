@@ -15,6 +15,12 @@
  * limitations under the License.
  */
 
+import type {
+  HostThemeFontCategory,
+  HostThemeFontFace,
+  HostThemeFontMetrics,
+} from './host-theme-fonts'
+
 /**
  * Persisted host theme document types.
  *
@@ -73,67 +79,15 @@ export interface HostThemeSchemeColors {
   divider?: string
 }
 
-/**
- * The generic family a font belongs to, which picks the local face its
- * metric-matched fallback is drawn from (Arial, Times New Roman or Courier
- * New) and the generic keyword its stack ends on.
- */
-export type HostThemeFontCategory =
-  | 'sans-serif'
-  | 'serif'
-  | 'monospace'
-  | 'display'
-  | 'handwriting'
-
-/**
- * A font's vertical metrics and average character width, in font units, read
- * from the font file itself. A published page sizes a local fallback face to
- * these (`size-adjust` and the ascent, descent and line-gap overrides), so the
- * text the visitor reads before the web font arrives occupies the same box and
- * nothing moves when it swaps in.
- */
-export interface HostThemeFontMetrics {
-  unitsPerEm: number
-  /** Positive, above the baseline. */
-  ascent: number
-  /** Negative, below the baseline. */
-  descent: number
-  lineGap: number
-  /** Advance width averaged over English text, weighted by letter frequency. */
-  xWidthAvg: number
-}
-
-/**
- * One face of a font a site uploaded to its media library (`source:
- * 'custom'`): a WOFF2 file the installer converted and subset, addressed as a
- * media reference so the page serves it from the site's own origin.
- */
-export interface HostThemeFontFace {
-  weight: number
-  style: 'normal' | 'italic'
-  /** A `media:` reference to the WOFF2 file. */
-  src: string
-  /** The file's content hash, which versions its URL so caches keep it a year. */
-  version?: string
-  /** The code points the file covers, as a CSS `unicode-range`. */
-  unicodeRange?: string
-}
-
 export interface HostThemeFont {
   /** Font family name, e.g. "Inter". */
   family: string
   weights?: Array<number>
-  /** Italic weights to load as true italics rather than a slanted upright. */
   italics?: Array<number>
-  /**
-   * Where the tenant loads the font from; system fonts need no loading, and
-   * `custom` faces are files in the site's own media library.
-   */
+  /** Where the tenant loads the font from; system fonts need no loading. */
   source?: 'google' | 'system' | 'custom'
   category?: HostThemeFontCategory
-  /** Read from the file; absent for a Google family, whose metrics are catalogued. */
   metrics?: HostThemeFontMetrics
-  /** The uploaded faces of a `custom` font. */
   faces?: Array<HostThemeFontFace>
 }
 

@@ -205,14 +205,7 @@ const tenantColorScheme = {
   },
 }
 
-export { TENANT_SYSTEM_FONT_STACK } from './platform-brand'
-
-/**
- * A customer site's default stack: the system faces (AGL-3655, AGL-3656).
- * The console serves Roboto Flex and its metric-matched stand-in; a published
- * site serves neither, so naming Roboto Flex here drew the editor's preview
- * in Roboto Flex and the live site in the system font.
- */
+// A site serves no Roboto Flex, so its default stack names none (AGL-3656).
 const tenantTypography = (base: ThemeOptions): ThemeOptions['typography'] => ({
   ...(base.typography as object),
   fontFamily: TENANT_SYSTEM_FONT_STACK,

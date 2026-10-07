@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { HostTheme } from '@aglyn/shared-data-types'
 import {
   googleFontSheetUrl,
   isSelfHostedFontPath,
@@ -29,6 +30,7 @@ import {
   themeFontNeeds,
   withMetricFallbacks,
 } from './self-hosted-fonts'
+import { withThemeMetricFallbacks } from './font-stack'
 
 /** Google's CSS2 answer to a WOFF2 browser, trimmed to three subsets. */
 const GOOGLE_CSS = `
@@ -334,5 +336,36 @@ describe('the font loader (AGL-3656)', () => {
   it('accepts the long file ids of a many-axis variable family', () => {
     expect(isSelfHostedFontPath(`robotoflex/v30/${'N'.repeat(250)}.woff2`)).toBe(true)
     expect(isSelfHostedFontPath(`robotoflex/v30/${'N'.repeat(401)}.woff2`)).toBe(false)
+  })
+})
+
+describe('withThemeMetricFallbacks (AGL-3656)', () => {
+  it('names each web font’s fallback in the base stack and the text styles', () => {
+    const theme = withThemeMetricFallbacks({
+      fonts: [
+        { family: 'Inter', source: 'google' as const },
+        { family: 'Lora', source: 'google' as const },
+      ],
+      typography: {
+        fontFamily: 'Inter, sans-serif',
+        variants: { h1: { fontFamily: 'Lora, serif' }, body2: {} },
+      },
+    })
+    expect(theme?.typography?.fontFamily).toBe('Inter, "Inter Fallback", sans-serif')
+    expect(theme?.typography?.variants?.h1?.fontFamily).toBe('Lora, "Lora Fallback", serif')
+    expect(theme?.typography?.variants?.body2).toEqual({})
+  })
+
+  it('writes the base stack for a theme with no face whose base loads one', () => {
+    const theme = withThemeMetricFallbacks({} as HostTheme, '"Roboto Flex",-apple-system', [
+      { family: 'Roboto Flex', source: 'google' },
+    ])
+    expect(theme?.typography?.fontFamily).toBe('"Roboto Flex", "Roboto Flex Fallback",-apple-system')
+  })
+
+  it('returns a theme with no web font as it is', () => {
+    const theme = { fonts: [{ family: 'Georgia', source: 'system' as const }] }
+    expect(withThemeMetricFallbacks(theme)).toBe(theme)
+    expect(withThemeMetricFallbacks(undefined)).toBeUndefined()
   })
 })
