@@ -282,13 +282,108 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     plain: [
       'A workflow is a trigger plus the actions that follow it, such as sending an email when a form is submitted.',
       'Build the trigger first, then add the actions it should run.',
-      'Workflows, Actions and Webhooks are the three tabs of this section.',
+      'Workflows, Actions and Webhooks are the three sections of this page, in the rail beside it.',
+      'Create with AI, beside Add action and at the top of Workflows, drafts an automation from a description; it arrives switched off for you to review.',
+      'In a saved action’s editor, Explain it says what it does, and Change with AI or Fix with AI writes a changed copy, switched off, beside the original. A failed run in the Runs log has Why did this fail?.',
     ],
     technical: [
-      'Route: /[orgSlug]/hosts/[host]/automation, with ?tab=workflows, ?tab=actions or ?tab=webhooks.',
+      'Route: /[orgSlug]/hosts/[host]/automation/workflows, /automation/actions or /automation/webhooks.',
       'Webhook actions let a workflow call an external endpoint; see the automation docs for the payload shape.',
+      'Actions are documents at hosts/[host]/actions/[actionId]; every run is a row in the site’s activity log.',
     ],
-    actions: [],
+    actions: [
+      orgAction(
+        'open.host.automation.actions',
+        'Open Actions',
+        'this site’s actions, where Create with AI drafts a new one',
+        '/[orgSlug]/hosts/[host]/automation/actions',
+      ),
+      orgAction(
+        'open.host.automation.workflows',
+        'Open Workflows',
+        'this site’s workflows',
+        '/[orgSlug]/hosts/[host]/automation/workflows',
+      ),
+    ],
+  },
+  // CRM, Logic, Forms and Emails (AGL-3603), each ahead of the site
+  // dashboard that would otherwise take them.
+  {
+    key: 'host-crm',
+    match: /^\/[^/]+\/hosts\/[^/]+\/crm(\/|$)/,
+    screen: 'CRM — the contacts, leads, companies, deals and tasks this site works with.',
+    plain: [
+      'The sections are Contacts, Leads, Companies, Deals, Tasks, Reports, Fields and Settings, in the rail beside the page.',
+      'Records belong to the workspace; a site lists the ones shared with it.',
+      'On a contact’s, company’s, deal’s or lead’s page, Aglyn AI can summarize where things stand and suggest a next step; nothing is saved until you save it.',
+      'In the email composer on a record, Draft the message writes a one-to-one email from what you describe. AI never sends it: you do.',
+      'Reports shows the pipeline and where people came from; Ask about your numbers in the Assist panel answers questions about those figures.',
+    ],
+    technical: [
+      'Route: /[orgSlug]/hosts/[host]/crm/[section], with sections contacts, leads, companies, deals, tasks, reports, fields and settings.',
+      'Records live under the organization (orgs/[orgId]/contacts, …/deals and so on) and are shared with a site through their visibleTo scope.',
+      'The CRM is included from the Starter plan; on a plan without it every section shows the upgrade notice.',
+    ],
+    actions: [
+      orgAction('open.host.crm.contacts', 'Open Contacts', 'the contacts shared with this site', '/[orgSlug]/hosts/[host]/crm/contacts'),
+      orgAction('open.host.crm.deals', 'Open Deals', 'the deals shared with this site, by stage', '/[orgSlug]/hosts/[host]/crm/deals'),
+      orgAction('open.host.crm.reports', 'Open CRM reports', 'this site’s pipeline and lead source figures', '/[orgSlug]/hosts/[host]/crm/reports'),
+    ],
+  },
+  {
+    key: 'host-logic',
+    match: /^\/[^/]+\/hosts\/[^/]+\/logic(\/|$)/,
+    screen: 'Logic — the site’s functions and variables, and the health of the references that use them.',
+    plain: [
+      'A variable holds a value pages and functions read by name; a function works something out from what it is given.',
+      'Create with AI at the top of the Functions or Variables card writes one from a description and opens it in the editor, unsaved.',
+      'In a saved function’s editor, Explain it, Change with AI and Fix with AI work on the function as it is saved; a change is put in the editor, unsaved.',
+      'Reference health lists references that point at something the site no longer has; one an automation holds offers Fix with AI, which writes a fixed copy of the automation, switched off.',
+    ],
+    technical: [
+      'Route: /[orgSlug]/hosts/[host]/logic.',
+      'Functions run in the editor’s own evaluator: arithmetic, the listed built-ins, the function’s parameters and locals, and the site’s variables by name.',
+    ],
+    actions: [
+      orgAction('open.host.logic', 'Open Logic', 'this site’s functions and variables', '/[orgSlug]/hosts/[host]/logic'),
+    ],
+  },
+  {
+    key: 'host-forms',
+    match: /^\/[^/]+\/hosts\/[^/]+\/forms(\/|$)/,
+    screen: 'Forms — the saved forms on this site and what visitors sent through them.',
+    plain: [
+      'Create Form starts an empty form; Create with AI, beside it, plans a form from a description and builds it as a draft once you confirm the plan.',
+      'Open a form to see its submissions. Every submission also lands in the Inbox.',
+      'A form shows on the live site only once a page places it.',
+    ],
+    technical: [
+      'Route: /[orgSlug]/hosts/[host]/forms; one form is /[orgSlug]/hosts/[host]/forms/[formId].',
+      'Forms are documents at hosts/[host]/forms/[formId], counted against the plan’s saved forms per site.',
+    ],
+    actions: [
+      orgAction('open.host.forms', 'Open Forms', 'the saved forms on this site', '/[orgSlug]/hosts/[host]/forms'),
+    ],
+  },
+  {
+    key: 'host-emails',
+    match: /^\/[^/]+\/hosts\/[^/]+\/emails(\/|$)/,
+    screen: 'Emails — the messages this site sends, the templates they are built from, and who they reach.',
+    plain: [
+      'The sections are Messages, Templates, Audiences, Topics, Sending, Consent groups and Suppressions, in the rail beside the page.',
+      'Messages lists every email sent or scheduled, each with its own report. A campaign that groups messages lives under Marketing.',
+      'Audiences are the lists you send to; Suppressions are the addresses a send skips; Topics are the streams a recipient can leave one at a time.',
+      'Sending sets the name and address the mail comes from.',
+    ],
+    technical: [
+      'Route: /[orgSlug]/hosts/[host]/emails/[section], with sections messages, templates, audiences, topics, sending, consent-groups and suppressions.',
+      'Templates are Besigner documents, edited at .../emails/[templateKey]/versions/[versionId]/besigner.',
+      'The workspace-wide view is /[orgSlug]/emails.',
+    ],
+    actions: [
+      orgAction('open.host.emails.messages', 'Open Messages', 'the emails this site sent or scheduled', '/[orgSlug]/hosts/[host]/emails/messages'),
+      orgAction('open.host.emails.audiences', 'Open Audiences', 'the lists this site sends to', '/[orgSlug]/hosts/[host]/emails/audiences'),
+    ],
   },
   {
     key: 'host-products',
@@ -466,6 +561,56 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
         'the datasets shared across this workspace',
         '/[orgSlug]/data',
       ),
+    ],
+  },
+  {
+    key: 'org-automation',
+    match: /^\/[^/]+\/automation(\/|$)/,
+    screen: 'Automation — org automations, written once and placed on the sites you choose, and every site’s workflows, actions and webhooks.',
+    plain: [
+      'An org automation starts on something the server sees — a form, a lead, a booking, a member or a CRM event — and runs on each site it is placed on, as that site.',
+      'Each site can pause an org automation for itself without changing it for the others.',
+      'A site’s own actions, workflows and webhooks are built on that site’s Automation page.',
+    ],
+    technical: [
+      'Route: /[orgSlug]/automation/automations, with /workflows, /actions and /webhooks beside it.',
+      'Org automations are documents at orgs/[orgId]/automations/[automationId], written only through the plugin’s save route and gated by the actions plan entitlement.',
+    ],
+    actions: [
+      orgAction('open.org.automation', 'Open org automations', 'the automations this workspace places on its sites', '/[orgSlug]/automation/automations'),
+    ],
+  },
+  {
+    key: 'org-crm',
+    match: /^\/[^/]+\/crm(\/|$)/,
+    screen: 'CRM — the contacts, leads, companies, deals and tasks of every site in this workspace.',
+    plain: [
+      'The same sections as a site’s CRM, each answering for every site at once.',
+      'Reports totals the pipeline across every site; Ask about your numbers in the Assist panel answers questions about the pipeline and the deals closed.',
+      'Record summaries and Draft the message work here as they do on a site.',
+    ],
+    technical: [
+      'Route: /[orgSlug]/crm/[section]. A site’s own hub is /[orgSlug]/hosts/[host]/crm.',
+      'Records live under orgs/[orgId]; the workspace view reads every one, a site’s view only those shared with it.',
+    ],
+    actions: [
+      orgAction('open.org.crm.contacts', 'Open Contacts', 'every contact in this workspace', '/[orgSlug]/crm/contacts'),
+      orgAction('open.org.crm.reports', 'Open CRM reports', 'the pipeline across every site', '/[orgSlug]/crm/reports'),
+    ],
+  },
+  {
+    key: 'org-emails',
+    match: /^\/[^/]+\/emails(\/|$)/,
+    screen: 'Emails — the messages, templates and audiences of every site in this workspace.',
+    plain: [
+      'The same sections as a site’s Emails page, each answering for every site; audiences and topics belong to the workspace.',
+      'Consent groups decide which sites share a signup, an unsubscribe and a CRM record.',
+    ],
+    technical: [
+      'Route: /[orgSlug]/emails/[section]. A site’s own page is /[orgSlug]/hosts/[host]/emails.',
+    ],
+    actions: [
+      orgAction('open.org.emails.messages', 'Open Messages', 'every email this workspace sent or scheduled', '/[orgSlug]/emails/messages'),
     ],
   },
   {
