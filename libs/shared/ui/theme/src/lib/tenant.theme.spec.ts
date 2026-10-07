@@ -17,6 +17,7 @@
 import { consoleOptions, consoleThemeLight } from './console.theme'
 import {
   PLATFORM_BRAND_HOSTS,
+  TENANT_SYSTEM_FONT_STACK,
   tenantOptions,
   tenantOptionsDark,
   tenantThemeDark,
@@ -103,16 +104,28 @@ describe('the tenant default palette is accessible by construction', () => {
   })
 
   it('shares every NON-palette option with the console theme', () => {
-    // The tenant default changes the palette and nothing else: component
-    // behaviour, type ramp, spacing and shadows stay platform-wide.
-    //
-    // The one typography difference is the font stack: the console's carries
-    // the Roboto Flex stand-in it serves, a site's does not (AGL-3655). The
-    // rest of the ramp is held equal in `util/roboto-flex.spec.ts`.
+    // The tenant default changes the palette and its face and nothing else:
+    // component behaviour, type ramp, spacing and shadows stay platform-wide.
+    // The console's stack carries the Roboto Flex it serves (AGL-3655); a
+    // site's is the system stack (AGL-3656).
     for (const key of Object.keys(consoleOptions)) {
       if (key === 'palette' || key === 'typography') continue
       expect((tenantOptions as any)[key]).toBe((consoleOptions as any)[key])
     }
+    const ramp = (typography: unknown) => ({ ...(typography as object), fontFamily: undefined })
+    expect(ramp(tenantOptions.typography)).toEqual(ramp(consoleOptions.typography))
+  })
+
+  it('draws a customer site in the system font, never the unloaded brand face (AGL-3656)', () => {
+    for (const options of [tenantOptions, tenantOptionsDark]) {
+      const stack = (options.typography as any).fontFamily as string
+      expect(stack).toBe(TENANT_SYSTEM_FONT_STACK)
+      expect(stack).not.toMatch(/roboto flex/i)
+      expect(stack.split(',')[0]).toBe('-apple-system')
+    }
+    expect(tenantThemeLight.typography.fontFamily).toBe(TENANT_SYSTEM_FONT_STACK)
+    // The operator's own hosts keep the brand's face, which they load.
+    expect(String((consoleOptions.typography as any).fontFamily)).toMatch(/Roboto Flex/)
   })
 
   it('the dark accent-text shades point LIGHTER than their own main', () => {

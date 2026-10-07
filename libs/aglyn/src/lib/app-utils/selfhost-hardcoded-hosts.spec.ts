@@ -107,7 +107,7 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "AGL-3370. The email twin of the tenant.theme.ts row below: which hosts' mail wears the OPERATOR's own palette rather than the site's. The two literals are the `??` default of `NEXT_PUBLIC_PLATFORM_BRAND_HOSTS` and nothing else reads them; a self-host operator points that variable at their own domain, and on a self-hosted instance no sending host ever equals the defaults, so every site's mail correctly takes its own palette.",
   },
   {
-    file: 'libs/shared/ui/theme/src/lib/tenant.theme.ts',
+    file: 'libs/shared/ui/theme/src/lib/platform-brand.ts',
     count: 2,
     reason:
       "AGL-2703. Which hosts wear the OPERATOR's own brand rather than the neutral tenant palette. The two literals are the `??` default of `NEXT_PUBLIC_PLATFORM_BRAND_HOSTS` and nothing else reads them: a self-host operator points that variable at their own marketing domain, and their customers keep resolving the tenant default either way. Left as the default so the platform's own deployment needs no variable to keep its brand. On a self-hosted instance the literals are inert — no host there ever equals them, so every site correctly gets the tenant palette.",

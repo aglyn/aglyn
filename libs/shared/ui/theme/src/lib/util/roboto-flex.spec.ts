@@ -73,10 +73,10 @@ describe('Roboto Flex', () => {
     }
   })
 
-  it('leaves a published site on the plain stack it always had', () => {
+  it('leaves a published site on the system stack, naming no face it does not load (AGL-3656)', () => {
     for (const options of [tenantOptions, tenantOptionsDark]) {
-      expect(familyOf(options)).toBe(buildFontFamilyList().join(','))
-      expect(familyOf(options)).not.toContain('Fallback')
+      expect(familyOf(options)).toBe(buildFontFamilyList().slice(1).join(','))
+      expect(familyOf(options)).not.toContain('Roboto Flex')
     }
   })
 
