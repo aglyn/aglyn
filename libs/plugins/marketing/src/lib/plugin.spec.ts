@@ -156,7 +156,7 @@ describe('marketing plugin', () => {
 })
 
 describe('the zones its marketing pages host for other plugins (AGL-3603)', () => {
-  it.each(['hostOverlays', 'overlayEditor', 'hostCampaigns'])(
+  it.each(['hostOverlays', 'overlayEditor', 'hostCampaigns', 'marketingInsights'])(
     'declares `%s` under the id widgets register for, owned here and laid out bare',
     (id) => {
       registerMarketingConsole()

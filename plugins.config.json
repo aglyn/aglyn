@@ -2400,6 +2400,7 @@
             "hostTemplates",
             "hostTheme",
             "importMapping",
+            "marketingInsights",
             "orgBillingUsage",
             "orgMember",
             "orgMembersListColumn",

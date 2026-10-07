@@ -47,20 +47,27 @@ import type { AiJob, AiJobOutput } from './ai-jobs.types'
  */
 
 /**
- * Where an insight was asked: the console page whose Assist panel asked it,
- * or the weekly digest, which no person asked.
+ * Where an insight was asked: the console page whose Assist panel asked it —
+ * or, on a site's Marketing page (AGL-3603), the page's own "Ask AI about
+ * these numbers" — or the weekly digest, which no person asked.
  */
-export type AiInsightSurface = 'analytics' | 'datasets' | 'crm-reports' | 'digest'
+export type AiInsightSurface = 'analytics' | 'datasets' | 'crm-reports' | 'marketing' | 'digest'
 
 export const AI_INSIGHT_SURFACES: readonly AiInsightSurface[] = [
   'analytics',
   'datasets',
   'crm-reports',
+  'marketing',
   'digest',
 ]
 
 /** The surfaces a person asks from. */
-export const AI_INSIGHT_ASK_SURFACES: readonly AiInsightSurface[] = ['analytics', 'datasets', 'crm-reports']
+export const AI_INSIGHT_ASK_SURFACES: readonly AiInsightSurface[] = [
+  'analytics',
+  'datasets',
+  'crm-reports',
+  'marketing',
+]
 
 /** The surface an insight job's inputs name, or `null` for one no insight job is asked from. */
 export function aiInsightSurface(inputs: Readonly<Record<string, unknown>> | null | undefined): AiInsightSurface | null {
@@ -74,12 +81,15 @@ export function aiInsightSurface(inputs: Readonly<Record<string, unknown>> | nul
  * The readers a surface may offer, by the first word of a reader's id. The
  * Analytics page answers about the site's traffic and what it sold, took and
  * collected; a Data page about its datasets; CRM Reports about where people
- * came from and what they did.
+ * came from and what they did; the Marketing page about what its campaigns,
+ * overlays and tests caused and earned, beside the traffic and the forms they
+ * drove.
  */
 export const AI_INSIGHT_SURFACE_READERS: Readonly<Record<AiInsightSurface, readonly string[]>> = {
   analytics: ['bookings', 'commerce', 'forms', 'marketing', 'traffic'],
   datasets: ['datasets'],
   'crm-reports': ['bookings', 'commerce', 'forms', 'marketing', 'traffic'],
+  marketing: ['commerce', 'forms', 'marketing', 'traffic'],
   digest: ['bookings', 'commerce', 'forms', 'marketing', 'traffic'],
 }
 
@@ -233,8 +243,10 @@ export type AiInsightAnswerWire = AiInsightRecord
 
 /**
  * The Assist panel's insight surface for a console path, or `null` off one.
- * A site's Analytics, Data and CRM Reports pages, and the workspace's Data
- * page; the workspace's CRM Reports reads site figures, so it is not one.
+ * A site's Analytics, Data, CRM Reports and Marketing pages, and the
+ * workspace's Data page; the workspace's CRM Reports and Marketing read site
+ * figures, so neither is one — the organization's Marketing page asks about
+ * the site it is showing, through its own in-page entry.
  */
 export function aiInsightSurfaceForPath(
   pathname: string | null | undefined,
@@ -250,6 +262,7 @@ export function aiInsightSurfaceForPath(
     if (rest[0] === 'analytics') return { surface: 'analytics', host }
     if (rest[0] === 'data') return { surface: 'datasets', host }
     if (rest[0] === 'crm' && rest[1] === 'reports') return { surface: 'crm-reports', host }
+    if (rest[0] === 'marketing') return { surface: 'marketing', host }
     return null
   }
   if (segments.length >= 2 && segments[1] === 'data') return { surface: 'datasets', host: null }

@@ -92,6 +92,18 @@ describe('which readers are offered', () => {
     ).toEqual(['commerce.sales', 'traffic.summary'])
   })
 
+  it('offers the Marketing page its campaigns’ figures beside the traffic and sales they drove, never bookings or datasets (AGL-3603)', async () => {
+    registerPluginFigureReader(reader('marketing.conversions'), { pluginId: 'marketing' })
+    registerPluginFigureReader(reader('marketing.revenue'), { pluginId: 'marketing' })
+    const org = { plan: 'pro', billingStatus: 'active', enabledPlugins: ['bookings', 'commerce', 'marketing', 'data'] }
+    expect(await ids({ orgId: 'org-1', hostId: 'host-1', org, host: {}, surface: 'marketing' })).toEqual([
+      'commerce.sales',
+      'marketing.conversions',
+      'marketing.revenue',
+      'traffic.summary',
+    ])
+  })
+
   it('offers no site reader without a site, and a workspace reader with or without one', async () => {
     const org = { plan: 'pro', billingStatus: 'active', enabledPlugins: ['data'] }
     expect(await ids({ orgId: 'org-1', hostId: null, org, host: null, surface: 'datasets' })).toEqual(['datasets.summary'])
