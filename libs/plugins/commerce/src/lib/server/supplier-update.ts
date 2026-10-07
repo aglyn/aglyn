@@ -21,6 +21,7 @@ import { firebaseAdmin, notifyHostManagers } from '@aglyn/tenant-data-admin'
 import { escapeHtml } from '../utils/escape-html'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { tokenSigningSecret } from './download'
+import { notifyOrderBuyer } from './order-notifications'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 
 /**
@@ -304,6 +305,7 @@ export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
           nextStatus,
           remaining,
           supplierId: postingSupplier,
+          fulfillmentId: fulfillment.id,
         }
       })
     if (outcome.status !== 200) {
@@ -346,6 +348,8 @@ export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
           : ''),
       link: `/${hostId}/products`,
     })
+    // …and the buyer hears their parcel is on its way (AGL-3610).
+    await notifyOrderBuyer({ hostId, orderId }, 'shipped', { fulfillmentId: (outcome as any).fulfillmentId })
     return res.status(200).json(outcome.body)
   } catch (error) {
     console.error(error)

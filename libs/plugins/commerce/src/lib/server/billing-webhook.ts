@@ -77,6 +77,7 @@ import { flagOrderRestock } from './restock-flag'
 import { storefrontTaxModeOf } from './storefront-tax'
 import { recordStorefrontTax } from './storefront-tax-record'
 import { enqueueSupplierDelivery } from './supplier-outbox'
+import { notifyOrderBuyer, onlineReceiptExtras } from './order-notifications'
 
 /**
  * Assigns unassigned license keys for a digital product (AGL-308):
@@ -3694,7 +3695,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
         // Branded receipt (AGL-296): env-gated like every outbound email.
         const buyerEmailForReceipt = object?.customer_details?.email
-        if (isEmailConfigured() && buyerEmailForReceipt) {
+        // The store's receipt switch and the status link (AGL-3610).
+        const receiptExtras = await onlineReceiptExtras(String(hostId), String(object.id))
+        if (isEmailConfigured() && buyerEmailForReceipt && receiptExtras.enabled) {
           const receiptSettings = await hostRef
             .collection('settings')
             .doc('store')
@@ -3763,6 +3766,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               // built-in copy always renders (AGL-3370), so a footer that is
               // only in the fallback text above never reaches a buyer.
               'store.receiptFooter': receiptFooter,
+              ...receiptExtras.tokens,
             },
           )
           await sendEmail({
@@ -4436,6 +4440,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               },
             })
           }
+          // The receipt a payment link or a POS card sale never sent (AGL-3610).
+          await notifyOrderBuyer({ hostId: String(hostId), orderId: String(orderId) }, 'receipt', { email: draftEmail })
           if (productId) {
             const productRef = hostRef
               .collection('products')
@@ -4965,7 +4971,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const amount = (Number(object?.amount_total ?? 0) / 100).toFixed(2)
           const buyerEmail = object?.customer_details?.email
           const orderTotal = `$${amount}`
-          if (buyerEmail) {
+          // The store's receipt switch and the status link (AGL-3610).
+          const receiptExtras = await onlineReceiptExtras(String(hostId), String(object.id))
+          if (buyerEmail && receiptExtras.enabled) {
             // The store's own Receipt footer, as the cart receipt carries it
             // (AGL-3432).
             const receiptFooter = String(
@@ -4993,6 +5001,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 'order.total': orderTotal,
                 'order.ref': String(object.id),
                 'store.receiptFooter': receiptFooter,
+                ...receiptExtras.tokens,
               },
             )
             await sendEmail({

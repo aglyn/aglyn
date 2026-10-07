@@ -326,6 +326,22 @@ export interface HostOrder {
   taxMode?: StorefrontTaxMode
   customerEmail?: string | null
   customerName?: string | null
+  /**
+   * The buyer's phone for order texts (AGL-3610), written only by a flow that
+   * asked for it for that purpose — never copied from a shipping address,
+   * which a buyer gives the carrier, not the store.
+   */
+  customerPhone?: string | null
+  /**
+   * Which buyer messages this order has sent (AGL-3610), keyed by
+   * `buyerNotificationMarker` — the idempotency record `notifyOrderBuyer`
+   * claims in a transaction before it sends, so a retried webhook or a second
+   * click never mails the buyer twice.
+   */
+  buyerNotifications?: Record<
+    string,
+    { state: 'sending' | 'sent'; channel: 'email' | 'sms'; atMs: number }
+  >
   /** Storefront customer id once accounts exist (AGL-294). */
   customerId?: string
   shippingAddress?: OrderAddress

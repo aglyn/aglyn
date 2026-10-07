@@ -18,6 +18,7 @@
 import * as CommerceModel from '../model'
 import { createResourceUid, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { notifyOrderBuyer } from './order-notifications'
 
 /**
  * The two fulfilment-side transitions, and ONLY those.
@@ -101,7 +102,7 @@ export async function recordOrderShipment({
     .collection('orders')
     .doc(orderId)
 
-  return firestore.runTransaction(
+  const result = await firestore.runTransaction(
     async (transaction): Promise<RecordShipmentOutcome> => {
       const snapshot = await transaction.get(orderRef)
       if (!snapshot.exists) return { outcome: 'no_such_order' }
@@ -155,6 +156,14 @@ export async function recordOrderShipment({
       return { outcome: 'recorded' }
     },
   )
+  // The BUYER hears about it (AGL-3610): shipped with the tracking link, or
+  // delivered. Once per shipment, after the write, and never fails the
+  // shipment — see `order-notifications.ts`. A retry returns `already` above
+  // and never reaches here.
+  if (result.outcome === 'recorded') {
+    await notifyOrderBuyer({ hostId, orderId }, to === 'fulfilled' ? 'shipped' : 'delivered')
+  }
+  return result
 }
 
 /**
@@ -185,10 +194,11 @@ export async function recordOrderShipment({
  * is an `update()` naming only status, fulfillments and timeline, and the
  * question is still the merchant's to answer.
  *
- * NO NOTIFICATION EITHER, matching the client write this replaces: the
+ * NO MANAGER NOTIFICATION, matching the client write this replaces: the
  * merchant fulfilled the order themselves, and `notifyHostManagers` would
  * tell them what they just did. (`supplier-update.ts` notifies because there
- * the SUPPLIER acted and the merchant is the one who needs to hear it.)
+ * the SUPPLIER acted and the merchant is the one who needs to hear it.) The
+ * BUYER is told, through `recordOrderShipment` (AGL-3610).
  *
  * ONCE. A retried request — a lost response, a second click — finds the order
  * already in the target status and returns success WITHOUT writing: appending

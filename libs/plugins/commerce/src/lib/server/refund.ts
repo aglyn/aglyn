@@ -24,6 +24,7 @@ import { createHash } from 'crypto'
 import { recordPluginPersonRefund } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { applyGiftCardRiskToOrder } from './gift-card-risk'
 import { flagOrderRestock } from './restock-flag'
+import { notifyOrderBuyer } from './order-notifications'
 import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 
 /**
@@ -711,6 +712,9 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     // contract as the contact write above, for the same reason: the money has
     // moved and the order records it, so nothing here may fail the refund.
     await flagOrderRestock({ hostId, orderId, kind: 'refund', closedTheOrder })
+    // The buyer is told what came back (AGL-3610), once per Stripe refund id —
+    // a keyed retry replays at the claim above and never reaches here.
+    await notifyOrderBuyer({ hostId, orderId }, 'refunded', { refundId: String(refund?.id ?? ''), refundCents, refundLineIndexes: requestedLineIds, fullyRefunded })
     return res.status(200).json(payload)
   } catch (error) {
     console.error(error)

@@ -33,6 +33,7 @@ import {
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import { alertLowStockCrossing } from './low-stock'
+import { notifyOrderBuyer } from './order-notifications'
 import { decrementVariantStock } from './reserve-stock'
 import {
   type PromotionSlotHold,
@@ -1232,6 +1233,8 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       ...(stockWarnings.length > 0 ? { stockWarnings } : {}),
     }
     await claim.record(200, cashPayload)
+    // The receipt, when the customer gave an email (AGL-3610).
+    await notifyOrderBuyer({ hostId, orderId: orderRef.id }, 'receipt', { email: contactEmail })
     return res.status(200).json(cashPayload)
   } catch (error) {
     console.error(error)
