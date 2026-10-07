@@ -56,11 +56,7 @@ export async function readSmartCollections(
       where('mode', '==', 'smart'),
     ),
   )
-  return snapshot.docs.map((entry) => ({
-    id: entry.id,
-    rules: entry.get('rules') ?? [],
-    matchAll: entry.get('matchAll'),
-  }))
+  return snapshot.docs.map((entry) => CommerceModel.smartCollectionRulesOf(entry.id, entry.data()))
 }
 
 /**

@@ -70,6 +70,29 @@ document reuses it:
    routes the console calls, with the Firebase ID token as the bearer. Reads go
    through Firestore under the same security rules the console runs under. A
    route or rule refuses the app exactly when it would refuse the console.
+
+   A write the console makes client-side **with derived state** (fields it
+   computes in the browser before the Firestore write) is never re-ported to
+   Swift or Kotlin. The computation moves into a pure module in the plugin,
+   the console imports it unchanged, and a plugin route runs the same module
+   on the server under the same gate the Firestore rules put on that write.
+   The first case is commerce's products:
+   - `model/product-write.ts` holds the code, and the console product editor
+     and Adjust stock dialog import it.
+   - `POST /api/commerce/products/save` takes `{ hostId, productId, create,
+     product }`. An edit is the console's full replace, and keeps live stock
+     holds and stored timestamps. A create is keyed by a client-minted id,
+     so a retry answers `replayed`, and it meets the `commerce` entitlement
+     and the `productsPerHost` quota.
+   - `POST /api/commerce/products/stock` takes `{ hostId, productId,
+     variantId, delta, reason }` and requires an `Idempotency-Key`. The key
+     names the `inventoryAdjustments` row, so a retry moves nothing twice.
+   - Both routes admit a verified member with a write role, or staff, while
+     the site is not frozen: `canWriteHostContent` and `hostWritesFrozen`.
+     Both drop the site's cache through the publish outbox.
+
+   A read-only check the console runs before a client write works the same
+   way: `POST /api/redirects/check` runs the Redirects page's save checks.
 5. **Linear moves with the work.** A commit cites a real `AGL-nnnn` (3651
    iOS, 3652 Android, 3653 desktop).
 
