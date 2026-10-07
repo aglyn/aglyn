@@ -23,9 +23,23 @@ import {
 } from '@aglyn/aglyn/app-utils/screen-seo-fields'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import {
+  NODE_MAX_INTERACTIONS,
+  nodeInteractionSelector,
+  type NodeInteraction,
+} from '@aglyn/aglyn/app-utils/node-interactions'
+import {
+  ACTION_MAX_STEPS,
+  CLIENT_INTERACTION_STEP_LABELS,
+  validateInteraction,
+  type InteractionStepBase,
+  type SiteInteraction,
+} from '@aglyn/aglyn/app-utils/site-interactions'
+import {
   ASSIST_EDIT_ACTION_ID,
   ASSIST_EDIT_CONTEXT_MAX_NODES,
   ASSIST_EDIT_CONTEXT_MAX_PROPS,
+  ASSIST_EDIT_INTERACTION_EVENTS,
+  ASSIST_EDIT_INTERACTION_STEPS,
   ASSIST_EDIT_MAX_DROPPED_REASONS,
   ASSIST_EDIT_OP_KINDS,
   ASSIST_EDIT_OUTLINE_TEXT_CHARS,
@@ -35,6 +49,8 @@ import {
   type AssistEditCanvasContext,
   type AssistEditCanvasNode,
   type AssistEditDocumentKind,
+  type AssistEditInteractionStep,
+  type AssistEditInteractionSummary,
   type AssistEditNode,
   type AssistEditOp,
   type AssistEditOpKind,
@@ -185,6 +201,19 @@ export function assistEditTool(kind: AssistEditDocumentKind): AiTool {
     field: { type: 'string', enum: [...SCREEN_SEO_TEXT_FIELDS] },
     value: STRING,
   })
+  const step = strictObject({
+    type: { type: 'string', enum: [...ASSIST_EDIT_INTERACTION_STEPS] },
+    targetId: STRING,
+    className: STRING,
+    url: STRING,
+    message: STRING,
+    delayMs: { type: 'integer' },
+  })
+  const interaction = strictObject({
+    event: { type: 'string', enum: ['', ...ASSIST_EDIT_INTERACTION_EVENTS] },
+    everyTime: { type: 'boolean' },
+    steps: { type: 'array', items: step },
+  })
   const op = strictObject({
     op: { type: 'string', enum: ops },
     nodeId: STRING,
@@ -195,6 +224,7 @@ export function assistEditTool(kind: AssistEditDocumentKind): AiTool {
     nodes: { type: 'array', items: node },
     name: STRING,
     seo: { type: 'array', items: seo },
+    interaction,
   })
   return {
     name: ASSIST_EDIT_TOOL_NAME,
@@ -244,6 +274,7 @@ export function editCanvasBlock(kind: AssistEditDocumentKind): string {
     '- move: nodeId, parentId and index — the position the element takes among the parent’s children once moved (-1 appends).',
     '- remove: nodeId — the element and everything inside it.',
     '- rename: nodeId and name, the layer name shown in the hierarchy.',
+    `- addInteraction: nodeId, name and interaction — what the element does when a visitor acts on it, added beside any it already has. event: ${ASSIST_EDIT_INTERACTION_EVENTS.join(', ')}. everyTime: true for anything a visitor repeats, such as opening a menu; false to run once a page view. steps, in order, each a type with only its own fields filled: ${ASSIST_EDIT_INTERACTION_STEPS.join(', ')}. targetId is the element a step acts on (an id listed below; "" for the page's first drawer or menu, and for redirect and siteAlert); className for the class steps; url for redirect (a path such as /contact, or an https address); message for siteAlert; delayMs for show and hide (-1 for none). An element's "interactions" lists what it already does, for explaining it.`,
   ]
   if (kind === 'screen') {
     lines.push(
@@ -315,6 +346,33 @@ function describeSx(raw: unknown): Record<string, unknown> | undefined {
   return Object.keys(sx).length ? sx : undefined
 }
 
+const STEP_NAME = /^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/
+
+/**
+ * The selected element's interactions as an outline may carry them: a name,
+ * an event and the kinds of its steps, each to its own alphabet — never a
+ * selector, a script or HTML.
+ */
+function describeInteractions(raw: unknown): AssistEditInteractionSummary[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const out: AssistEditInteractionSummary[] = []
+  for (const entry of raw.slice(0, NODE_MAX_INTERACTIONS)) {
+    if (!isRecord(entry)) continue
+    const event = String(entry['event'] ?? '')
+    if (!STEP_NAME.test(event)) continue
+    out.push({
+      name: cleanText(entry['name'], LAYER_NAME_CHARS).replace(/[<>]/g, ''),
+      event,
+      steps: (Array.isArray(entry['steps']) ? entry['steps'] : [])
+        .map(String)
+        .filter((type) => STEP_NAME.test(type))
+        .slice(0, ACTION_MAX_STEPS),
+      enabled: entry['enabled'] !== false,
+    })
+  }
+  return out.length ? out : undefined
+}
+
 /**
  * The canvas outline a request carried, held to what may enter a prompt.
  *
@@ -354,6 +412,7 @@ export function parseAssistEditContext(raw: unknown): AssistEditCanvasContext | 
           selected ? ASSIST_EDIT_SELECTED_TEXT_CHARS : ASSIST_EDIT_OUTLINE_TEXT_CHARS,
         )
     const sx = selected ? describeSx(entry['sx']) : undefined
+    const interactions = selected ? describeInteractions(entry['interactions']) : undefined
     // Alike only an element described before this one.
     const like = entry['like']
     const alike = isNodeId(like) && seen.has(like)
@@ -369,6 +428,7 @@ export function parseAssistEditContext(raw: unknown): AssistEditCanvasContext | 
       ...(sx ? { sx } : {}),
       ...(brief ? { brief: true } : {}),
       ...(alike ? { like } : {}),
+      ...(interactions ? { interactions } : {}),
     })
   }
   if (!nodes.some((node) => node.id === CANVAS_ROOT_ELEMENT_ID)) return null
@@ -530,6 +590,7 @@ export function editSelectionBlock(context: AssistEditCanvasContext): string {
         ...(node.name ? { name: node.name } : {}),
         ...(node.props ? { props: node.props } : {}),
         ...(node.sx ? { sx: node.sx } : {}),
+        ...(node.interactions?.length ? { interactions: node.interactions } : {}),
       }),
     )
   }
@@ -626,6 +687,13 @@ type PendingEditOp =
   | { op: 'remove'; nodeId: string; componentId: string }
   | { op: 'rename'; nodeId: string; componentId: string; name: string }
   | { op: 'setSeo'; fields: Partial<Record<ScreenSeoTextField, string>> }
+  | {
+      op: 'addInteraction'
+      nodeId: string
+      componentId: string
+      interaction: NodeInteraction
+      targets: Array<{ nodeId: string; componentId: string }>
+    }
 
 const indexOf = (value: unknown): number | null => {
   const parsed = Number(value)
@@ -684,6 +752,112 @@ function chainTo(
   }
   // An ancestor the outline does not describe: the chain cannot be checked.
   return null
+}
+
+/** A class name a class step may toggle: one plain CSS identifier. */
+const CLASS_NAME = /^-?[A-Za-z_][A-Za-z0-9_-]{0,40}$/
+/** Where a redirect may go: a path on the site, or an https address. */
+const REDIRECT_URL = /^(\/[^\s<>"']{0,200}|https:\/\/[^\s<>"']{1,200})$/
+const ELEMENT_STEPS: ReadonlySet<AssistEditInteractionStep> = new Set([
+  'showElement',
+  'hideElement',
+  'toggleElement',
+  'addClass',
+  'removeClass',
+  'toggleClass',
+  'scrollTo',
+  'playVideo',
+])
+const DELAYED_STEPS: ReadonlySet<AssistEditInteractionStep> = new Set(['showElement', 'hideElement', 'toggleElement'])
+
+/** A short id for an interaction Assist adds; the element keeps it. */
+function interactionId(): string {
+  return `ai${Math.random().toString(36).slice(2, 10)}`
+}
+
+/**
+ * An `addInteraction` op's interaction, in the shape the element stores it,
+ * or why it was left out. Every element a step acts on is one the request
+ * described; a step's selector is DERIVED from that element's id, as the
+ * Besigner's target picker writes it, never taken from the model.
+ */
+function interactionOf(
+  raw: Record<string, unknown>,
+  label: string,
+  target: (id: unknown) => AssistEditCanvasNode | null,
+): { interaction: NodeInteraction; targets: Array<{ nodeId: string; componentId: string }> } | string {
+  const spec = isRecord(raw['interaction']) ? raw['interaction'] : {}
+  const event = spec['event']
+  if (!(ASSIST_EDIT_INTERACTION_EVENTS as readonly unknown[]).includes(event)) {
+    return `${label}: the interaction listens for nothing an element does`
+  }
+  const rawSteps = (Array.isArray(spec['steps']) ? spec['steps'] : []).filter(isRecord)
+  if (!rawSteps.length) return `${label}: the interaction does nothing`
+  if (rawSteps.length > ACTION_MAX_STEPS) return `${label}: more than ${ACTION_MAX_STEPS} steps`
+  const targets: Array<{ nodeId: string; componentId: string }> = []
+  const steps: InteractionStepBase[] = []
+  for (const [index, rawStep] of rawSteps.entries()) {
+    const where = `${label}, step ${index + 1}`
+    const type = rawStep['type'] as AssistEditInteractionStep
+    if (!(ASSIST_EDIT_INTERACTION_STEPS as readonly unknown[]).includes(type)) {
+      return `${where}: not a step an interaction may take here`
+    }
+    const targetId = String(rawStep['targetId'] ?? '')
+    let step: InteractionStepBase
+    if (ELEMENT_STEPS.has(type)) {
+      const node = target(targetId)
+      if (!node) return `${where}: acts on an element that is not on the canvas described`
+      targets.push({ nodeId: node.id, componentId: node.componentId })
+      step = { type, selector: nodeInteractionSelector(node.id) }
+      if (type === 'addClass' || type === 'removeClass' || type === 'toggleClass') {
+        const className = String(rawStep['className'] ?? '').trim()
+        if (!CLASS_NAME.test(className)) return `${where}: names no class`
+        step = { ...step, className }
+      }
+      const delay = Number(rawStep['delayMs'])
+      if (DELAYED_STEPS.has(type) && Number.isInteger(delay) && delay > 0) step = { ...step, delayMs: delay }
+    } else if (type === 'redirect') {
+      const url = String(rawStep['url'] ?? '').trim()
+      if (!REDIRECT_URL.test(url)) return `${where}: redirects nowhere a visitor can go`
+      step = { type, url }
+    } else if (type === 'siteAlert') {
+      const message = cleanText(rawStep['message'], 200)
+      if (!message || MARKUP.test(message)) return `${where}: the message is empty or carries markup`
+      step = { type, message }
+    } else {
+      // A drawer or a menu: the element named, or the page's first one.
+      const field = type.endsWith('Drawer') ? 'drawerNodeId' : 'menuNodeId'
+      if (targetId) {
+        const node = target(targetId)
+        if (!node) return `${where}: acts on an element that is not on the canvas described`
+        targets.push({ nodeId: node.id, componentId: node.componentId })
+        step = { type, [field]: node.id }
+      } else {
+        step = { type }
+      }
+    }
+    steps.push(step)
+  }
+  const name =
+    cleanText(raw['name'], LAYER_NAME_CHARS).replace(/[<>]/g, '') ||
+    CLIENT_INTERACTION_STEP_LABELS[steps[0].type as keyof typeof CLIENT_INTERACTION_STEP_LABELS] ||
+    'Interaction'
+  const trigger = { event: event as string, ...(spec['everyTime'] === true ? { everyTime: true } : {}) }
+  const interaction: NodeInteraction = {
+    id: interactionId(),
+    name,
+    trigger,
+    steps: steps as NodeInteraction['steps'],
+    enabled: true,
+  }
+  // The platform's own check, as the Interactions builder saves one: the
+  // element's derived selector stands in for the trigger's.
+  const problem = validateInteraction({
+    ...(interaction as unknown as SiteInteraction<InteractionStepBase>),
+    trigger: { ...trigger, selector: nodeInteractionSelector('selected') },
+  })
+  if (problem) return `${label}: ${problem}`
+  return { interaction, targets }
 }
 
 interface ParsedEdit {
@@ -866,6 +1040,21 @@ function parseEditInput(
           return
         }
         pending.push({ op, fields })
+        return
+      }
+      case 'addInteraction': {
+        const node = described(raw['nodeId'], label)
+        if (!node) return
+        const built = interactionOf(raw, label, (id) =>
+          typeof id === 'string' && byId.has(id) && id !== CANVAS_ROOT_ELEMENT_ID && !insideRemoved(id)
+            ? (byId.get(id) as AssistEditCanvasNode)
+            : null,
+        )
+        if (typeof built === 'string') {
+          dropped.push(built)
+          return
+        }
+        pending.push({ op, nodeId: node.id, componentId: node.componentId, ...built })
         return
       }
       default:

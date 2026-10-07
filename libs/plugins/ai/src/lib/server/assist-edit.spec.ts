@@ -658,6 +658,7 @@ describe('proposals — the validators', () => {
       // A chat turn is never offered the component save (AGL-2908).
       componentProps: 0,
       componentsSaved: 0,
+      interactionsAdded: 0,
     })
   })
 })
@@ -701,5 +702,92 @@ describe('the check, in the doctrine runtime’s custom-kind shape', () => {
       status: 'needs_input',
       violations: [expect.objectContaining({ rule: null, code: 'edit' })],
     })
+  })
+})
+
+describe('adding an interaction to an element (AGL-3603)', () => {
+  const interaction = (fields: Record<string, unknown>) => ({
+    event: 'elementClick',
+    everyTime: true,
+    steps: [],
+    ...fields,
+  })
+  const step = (fields: Record<string, unknown>) => ({
+    type: 'toggleElement',
+    targetId: '',
+    className: '',
+    url: '',
+    message: '',
+    delayMs: -1,
+    ...fields,
+  })
+  const add = (fields: Record<string, unknown>) =>
+    op({ op: 'addInteraction', nodeId: 'cta', name: 'Show the footer', interaction: interaction(fields) })
+
+  it('offers the interaction on every op, strict, with only the Besigner’s element events and basic steps', () => {
+    const item = ((assistEditTool('component').inputSchema['properties'] as Record<string, any>)['ops']).items
+    expect(item.properties.op.enum).toContain('addInteraction')
+    const shape = item.properties.interaction
+    expect(shape.additionalProperties).toBe(false)
+    expect([...shape.required].sort()).toEqual(Object.keys(shape.properties).sort())
+    const steps: string[] = shape.properties.steps.items.properties.type.enum
+    expect(steps).not.toContain('runJs')
+    expect(steps).not.toContain('showHtml')
+    expect(steps).not.toContain('sendEmail')
+    expect(editCanvasBlock('screen')).toContain('- addInteraction:')
+  })
+
+  it('adds a validated interaction whose step selector is derived from a described element', () => {
+    const { proposal, dropped } = resolve([add({ steps: [step({ targetId: 'footer' })] })])
+    expect(dropped).toEqual([])
+    const added = proposal?.ops[0]
+    expect(added).toEqual({
+      op: 'addInteraction',
+      nodeId: 'cta',
+      componentId: 'muiButton',
+      targets: [{ nodeId: 'footer', componentId: 'muiBox' }],
+      interaction: {
+        id: expect.stringMatching(/^ai[a-z0-9]+$/),
+        name: 'Show the footer',
+        trigger: { event: 'elementClick', everyTime: true },
+        steps: [{ type: 'toggleElement', selector: '[data-aglyn="leaf:footer"]' }],
+        enabled: true,
+      },
+    })
+    expect(proposal?.diff.interactionsAdded).toBe(1)
+  })
+
+  it('drops an interaction on a page event, a step on an element it was not shown, a script, and a bad redirect', () => {
+    const { proposal, dropped } = resolve([
+      add({ event: 'pageVisit', steps: [step({ targetId: 'footer' })] }),
+      add({ steps: [step({ targetId: 'invented' })] }),
+      add({ steps: [step({ type: 'runJs' })] }),
+      add({ steps: [step({ type: 'redirect', url: 'javascript:alert(1)' })] }),
+      add({ steps: [] }),
+    ])
+    expect(proposal).toBeNull()
+    expect(dropped).toHaveLength(5)
+    expect(dropped.join(' ')).toContain('not on the canvas described')
+  })
+
+  it('carries the selected element’s interactions into the outline as names, events and step kinds only', () => {
+    const parsed = parseAssistEditContext({
+      ...CANVAS,
+      nodes: CANVAS.nodes.map((node) =>
+        node.id === 'hero'
+          ? {
+              ...node,
+              interactions: [
+                { name: 'Open <b>menu</b>', event: 'elementHoverEnter', steps: ['openMenu', 'run js!'], enabled: true },
+              ],
+            }
+          : node,
+      ),
+    })
+    const hero = parsed?.nodes.find((node) => node.id === 'hero')
+    expect(hero?.interactions).toEqual([
+      { name: 'Open bmenu/b', event: 'elementHoverEnter', steps: ['openMenu'], enabled: true },
+    ])
+    expect(editSelectionBlock(parsed as never)).toContain('"interactions":[{"name":"Open bmenu/b"')
   })
 })
