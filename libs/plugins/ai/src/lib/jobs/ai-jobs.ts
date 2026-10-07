@@ -93,6 +93,7 @@ import {
 } from '../usage/assist-job-refund'
 import { freeAssistAccount, type FreeAssistAccount } from '../usage/assist-free-taste'
 import { aiJobAutoConfirms } from './ai-job-auto-confirm'
+import { AI_SITE_GUIDED_BUILD_FAILED_COPY } from '../model/ai-job-failure-copy'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
@@ -846,6 +847,12 @@ export interface RecordStepInput {
   tokens?: AiJobStepTokenRun
   /** What a guided site start put live (AGL-3596), kept on the job. */
   sitePublish?: AiJobSitePublish
+  /**
+   * A park the caller announces itself (AGL-3596): after the give-back it
+   * owes is recorded, so the notice can say it, or never, for a park the
+   * caller resolves at once.
+   */
+  quiet?: boolean
 }
 
 /** One run of a step's runner, as the machine measured it (AGL-2937). */
@@ -910,6 +917,8 @@ export interface RecordedStep {
   job: AiJob
   /** Steps still to run after this one. */
   remaining: number
+  /** The job entered `needs_review` in this write. */
+  parked?: boolean
 }
 
 /**
@@ -1005,8 +1014,8 @@ export async function recordStep(
       parked: parksForReview && job.status !== 'needs_review',
     }
   })
-  if (recorded.parked) await announceAiJobTransition(recorded.job, 'needs-review')
-  return { job: recorded.job, remaining: recorded.remaining }
+  if (recorded.parked && !input.quiet) await announceAiJobTransition(recorded.job, 'needs-review')
+  return { job: recorded.job, remaining: recorded.remaining, parked: recorded.parked }
 }
 
 async function transition(
@@ -1221,6 +1230,29 @@ async function refundOurFailure(
     console.error('ai job refund failed', { orgId, jobId: job.$id, error })
     return job
   }
+}
+
+/**
+ * A failure on our side, given back BEFORE the job is failed (AGL-3596): the
+ * failed state is the last one a follower of the job reads and the one its
+ * notice is written from, so it already carries `refundedCredits`. A job that
+ * ended meanwhile — a person's cancel, which pays for what ran — is left as it
+ * ended and given nothing back.
+ */
+async function failOurFailure(
+  firestore: Firestore,
+  orgId: string,
+  jobId: string,
+  message: string,
+  detail: { stepIndex?: number; error?: unknown },
+  refund: { reason: AiJobRefundReason; stepCredits: number; free?: FreeAssistAccount | null },
+  now: Date,
+): Promise<AiJob> {
+  const current = await getAiJob(firestore, orgId, jobId)
+  if (current && !isAiJobTerminal(current.status)) {
+    await refundOurFailure(firestore, orgId, current, { ...refund, now })
+  }
+  return failAiJob(firestore, orgId, jobId, message, detail, now)
 }
 
 /**
@@ -1516,24 +1548,22 @@ export async function runAiJobStep(
   const runner = aiJobRunnerForStep(job.kind, step.name)
   if (!runner) {
     await releaseHeld()
-    const failed = await failAiJob(firestore, orgId, jobId, AI_JOB_NOT_AVAILABLE_COPY, {
-      stepIndex,
-      error: `no runner registered for kind ${job.kind}`,
-    }, now)
     return {
       outcome: 'failed',
-      job: await refundOurFailure(firestore, orgId, failed, { reason: 'unavailable', stepCredits: 0, now }),
+      job: await failOurFailure(firestore, orgId, jobId, AI_JOB_NOT_AVAILABLE_COPY, {
+        stepIndex,
+        error: `no runner registered for kind ${job.kind}`,
+      }, { reason: 'unavailable', stepCredits: 0 }, now),
     }
   }
   if ((step.attempts ?? 0) > AI_JOB_STEP_MAX_ATTEMPTS) {
     await releaseHeld()
-    const failed = await failAiJob(firestore, orgId, jobId, AI_UPSTREAM_FAILURE_COPY, {
-      stepIndex,
-      error: `step ${step.name} exhausted ${AI_JOB_STEP_MAX_ATTEMPTS} attempts`,
-    }, now)
     return {
       outcome: 'failed',
-      job: await refundOurFailure(firestore, orgId, failed, { reason: 'timeout', stepCredits: 0, now }),
+      job: await failOurFailure(firestore, orgId, jobId, AI_UPSTREAM_FAILURE_COPY, {
+        stepIndex,
+        error: `step ${step.name} exhausted ${AI_JOB_STEP_MAX_ATTEMPTS} attempts`,
+      }, { reason: 'timeout', stepCredits: 0 }, now),
     }
   }
 
@@ -1644,15 +1674,12 @@ export async function runAiJobStep(
       )
       return { outcome: 'requeued', job: requeued }
     }
-    const failed = await failAiJob(firestore, orgId, jobId, AI_UPSTREAM_FAILURE_COPY, {
-      stepIndex,
-      error,
-    }, now)
     return {
       outcome: 'failed',
-      job: await refundOurFailure(firestore, orgId, failed, {
-        reason: 'provider', stepCredits: 0, free: reservation.free ?? null, now,
-      }),
+      job: await failOurFailure(firestore, orgId, jobId, AI_UPSTREAM_FAILURE_COPY, {
+        stepIndex,
+        error,
+      }, { reason: 'provider', stepCredits: 0, free: reservation.free ?? null }, now),
     }
   }
 
@@ -1671,15 +1698,12 @@ export async function runAiJobStep(
       { status: 'failed', creditsSpent: 0, error: outcome.failure },
       now,
     )
-    const failed = await failAiJob(firestore, orgId, jobId, outcome.failure, {
-      stepIndex,
-      error: `step failure before the provider: ${outcome.failure}`,
-    }, now)
     return {
       outcome: 'failed',
-      job: await refundOurFailure(firestore, orgId, failed, {
-        reason: 'step-failure', stepCredits: 0, free: reservation.free ?? null, now,
-      }),
+      job: await failOurFailure(firestore, orgId, jobId, outcome.failure, {
+        stepIndex,
+        error: `step failure before the provider: ${outcome.failure}`,
+      }, { reason: 'step-failure', stepCredits: 0, free: reservation.free ?? null }, now),
     }
   }
 
@@ -1742,18 +1766,44 @@ export async function runAiJobStep(
       { status: 'failed', creditsSpent: credits, error: message, tokens },
       now,
     )
-    const failed = await failAiJob(firestore, orgId, jobId, message, {
+    const detail = {
       stepIndex,
       error: outcome.refused ? 'stop_reason refusal' : `step failure: ${message}`,
-    }, now)
+    }
     // A model declining the brief is not our failure; a step's own is (AGL-3594).
     return {
       outcome: 'failed',
       job: outcome.refused
-        ? failed
-        : await refundOurFailure(firestore, orgId, failed, {
-            reason: 'step-failure', stepCredits: credits, free: reservation.free ?? null, now,
-          }),
+        ? await failAiJob(firestore, orgId, jobId, message, detail, now)
+        : await failOurFailure(firestore, orgId, jobId, message, detail, {
+            reason: 'step-failure', stepCredits: credits, free: reservation.free ?? null,
+          }, now),
+    }
+  }
+
+  // A guided site start whose step broke a building rule after its re-ask
+  // fails, given back whole (AGL-3596): the person never saw the plan, so a
+  // review asking them to look at it again is a review of nothing. The rule
+  // and its findings go to the log for staff; the person reads one sentence,
+  // and Try again starts a fresh job.
+  if (outcome.review?.reason === 'doctrine' && aiJobAutoConfirms(job) && step.name !== AI_JOB_PLAN_STEP) {
+    await recordStep(
+      firestore, orgId, jobId, options.owner, stepIndex,
+      {
+        status: 'failed',
+        creditsSpent: credits,
+        error: AI_SITE_GUIDED_BUILD_FAILED_COPY,
+        outputs: outcome.outputs,
+        ...(spentNothing ? {} : { tokens }),
+      },
+      now,
+    )
+    return {
+      outcome: 'failed',
+      job: await failOurFailure(firestore, orgId, jobId, AI_SITE_GUIDED_BUILD_FAILED_COPY, {
+        stepIndex,
+        error: `doctrine refusal after the re-ask: ${JSON.stringify(outcome.review.findings ?? [])} ${outcome.review.message ?? ''}`,
+      }, { reason: 'doctrine-refused', stepCredits: credits, free: reservation.free ?? null }, now),
     }
   }
 
@@ -1788,6 +1838,9 @@ export async function runAiJobStep(
       ...(outcome.plan ? { plan: outcome.plan } : {}),
       ...(review ? { review } : {}),
       ...(outcome.sitePublish ? { sitePublish: outcome.sitePublish } : {}),
+      // A park this call resolves at once (an auto-confirmed plan) or gives
+      // back before it is told (a refusal on our side) is announced below.
+      ...(review ? { quiet: true } : {}),
     },
     now,
   )
@@ -1841,15 +1894,19 @@ export async function runAiJobStep(
       kind: job.kind,
       reason: review.reason,
     })
-    // A plan the plan rules still refused is our failure (AGL-3594).
-    return {
-      outcome: 'needs_review',
-      job: outcome.uncredited
-        ? await refundOurFailure(firestore, orgId, recorded.job, {
-            reason: 'plan-refused', stepCredits: credits, free: reservation.free ?? null, now,
-          })
-        : recorded.job,
-    }
+    // A plan the plan rules still refused, and a step that still broke a
+    // building rule after its re-ask, are our failures (AGL-3594, AGL-3596):
+    // given back before the person is told, so the notice can say so. Trying
+    // again spends anew, and a second refusal gives back again, within the
+    // day's bound.
+    const ours = outcome.uncredited ? 'plan-refused' : review.reason === 'doctrine' ? 'doctrine-refused' : null
+    const parked = ours
+      ? await refundOurFailure(firestore, orgId, recorded.job, {
+          reason: ours, stepCredits: credits, free: reservation.free ?? null, now,
+        })
+      : recorded.job
+    if (recorded.parked) await announceAiJobTransition(parked, 'needs-review')
+    return { outcome: 'needs_review', job: parked }
   }
   if (recorded.remaining > 0 || isAiJobTerminal(recorded.job.status)) {
     return { outcome: 'done', job: recorded.job }
