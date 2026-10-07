@@ -11,6 +11,13 @@ Each site in your workspace sees the people it captured. A site in a
 sites. Every other record is hidden from it, which is what keeps one agency
 client's CRM apart from another's.
 
+To start every new record on **All sites** instead, a workspace owner or
+admin can change **Default sharing for new records** in the CRM's
+**Settings**. It covers new contacts, companies, deals and tasks, and changes
+nothing that already exists. It is separate from the defaults for new
+datasets and media files, which are set on the organization **Data** and
+**Media** pages.
+
 When you run several brands and want one brand's team to work records
 another brand captured, a workspace **owner or admin** can share them. You
 can share a **lead**, a **contact**, a **company** or a **deal**:

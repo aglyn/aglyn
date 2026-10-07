@@ -23,9 +23,11 @@ import {
   CRM_ASSIGNMENT_RULES_MAX,
   CRM_ASSIGNMENT_RULES_PATH,
   CRM_AUTO_CREATE_COMPANIES_PATH,
+  CRM_DEFAULT_RECORD_SCOPE_PATH,
   CRM_ROUND_ROBIN_POOL_MAX,
   CRM_ROUND_ROBIN_POOL_PATH,
   type CrmAssignmentRule,
+  crmDefaultScopeOf,
   crmHostDefaultOwnerSegments,
   describeAssignmentRule,
   orgAutoCreatesCompanies,
@@ -214,6 +216,93 @@ export function AutoCreateCompaniesCard(props: AutoCreateCompaniesCardProps) {
   )
 }
 AutoCreateCompaniesCard.displayName = 'AutoCreateCompaniesCard'
+
+/**
+ * "Default sharing for new records" (AGL-3662) — what a new contact,
+ * company, deal or task starts shared with, set apart from the org's
+ * defaults for new datasets and media.
+ *
+ * Changes nothing that already exists: narrowing an address book from a
+ * select would hide records from sites already working them, with no
+ * confirmation. Each record's own sharing is where that is decided.
+ *
+ * Reads `crmDefaultScopeOf`, the same reader the capture door and every CRM
+ * creator stamp from, so the control cannot show one thing while records
+ * get another — including for an org that has never set it, which inherits
+ * the dataset default it shared before the split.
+ */
+export function DefaultRecordSharingCard(props: AutoCreateCompaniesCardProps) {
+  const { hostId, org } = props
+  const firestore = useFirestore()
+  const { enqueueSnackbar } = useSnackbar()
+  const { orgId, ready: scopeReady } = useCrmScope({ hostId, org })
+  const { canManage, ready: roleReady } = useCanManageCrmSettings(orgId)
+
+  const stored =
+    crmDefaultScopeOf(org as Record<string, unknown> | undefined) ?? 'host'
+  const [value, setValue] = useState<'org' | 'host'>(stored)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => setValue(stored), [stored])
+
+  const handleChange = async (next: 'org' | 'host') => {
+    if (!orgId || !canManage) return
+    setValue(next)
+    setBusy(true)
+    try {
+      await updateDoc(doc(firestore, 'orgs', orgId), {
+        [CRM_DEFAULT_RECORD_SCOPE_PATH]: next,
+      })
+      enqueueSnackbar('Default sharing updated', {
+        variant: 'success',
+        persist: false,
+      })
+    } catch (error) {
+      console.error(error)
+      setValue(stored)
+      enqueueSnackbar('The setting could not be saved', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const ready = scopeReady && roleReady
+  return (
+    <CardDisplay
+      header={'Default sharing for new records'}
+      help={pluginDocsHelp('crmSettings')}
+      contentGutterX
+      contentGutterY
+    >
+      <Stack spacing={1} sx={{ maxWidth: 480 }}>
+        <TextField
+          select
+          size="small"
+          label="New contacts, companies, deals and tasks are shared with"
+          value={value}
+          disabled={!ready || !canManage || busy}
+          onChange={(event) =>
+            void handleChange(event.target.value as 'org' | 'host')
+          }
+          helperText={
+            'Only affects records created from now on. Datasets and media ' +
+            'have defaults of their own, on the organization Data and ' +
+            'Media pages.'
+          }
+        >
+          <MenuItem value="org">{'All sites'}</MenuItem>
+          <MenuItem value="host">
+            {'The site they came in on, and its consent group'}
+          </MenuItem>
+        </TextField>
+        <ManagersOnlyNote ready={ready} canManage={canManage} />
+      </Stack>
+    </CardDisplay>
+  )
+}
+DefaultRecordSharingCard.displayName = 'DefaultRecordSharingCard'
 
 /** The caption every card shows a member who may read but not change it. */
 function ManagersOnlyNote(props: { ready: boolean; canManage: boolean }) {
@@ -752,6 +841,7 @@ export function CrmSettingsSection(props: CrmSettingsSectionProps) {
   const { canManage, ready: roleReady } = useCanManageCrmSettings(orgId)
   return (
     <Stack spacing={3}>
+      <DefaultRecordSharingCard hostId={hostId} org={org} />
       <AutoCreateCompaniesCard hostId={hostId} org={org} />
       <DefaultOwnerCard hostId={hostId} org={org} />
       <AssignmentRulesCard hostId={hostId} org={org} />

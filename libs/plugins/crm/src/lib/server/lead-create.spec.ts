@@ -170,6 +170,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/contacts'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/consent-groups'),
+  crmDefaultScopeOf: jest.requireActual('@aglyn/aglyn/app-utils/crm').crmDefaultScopeOf,
   // The custom-field reader the route judges a lead's map with (AGL-3272).
   ...jest.requireActual('@aglyn/aglyn/app-utils/contact-custom-fields'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm'),
