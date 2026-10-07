@@ -103,7 +103,11 @@ fun QuantityStepper(
       onClick = { onChange(value - 1) },
       enabled = value > range.first,
       modifier = Modifier.size(36.dp).testTag("stepper-minus"),
-    ) { Icon(AglynIcons.named(if (value - 1 <= 0) "delete" else "remove"), contentDescription = if (value - 1 <= 0) "Remove" else "One fewer") }
+    ) {
+      // At one, with zero allowed, the next press removes the line: say so.
+      val removes = range.first <= 0 && value - 1 <= 0
+      Icon(AglynIcons.named(if (removes) "delete" else "remove"), contentDescription = if (removes) "Remove" else "One fewer")
+    }
     Text(
       value.toString(),
       Modifier.widthIn(min = 28.dp).semantics { contentDescription = "$label $value" },
