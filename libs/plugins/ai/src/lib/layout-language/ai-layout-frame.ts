@@ -401,19 +401,36 @@ function compileFooter(
   const tree = page.tree
   const band = footer?.band ?? 'soft'
   const scope = frameScope(page, 'footer', band, footer?.align === 'center')
-  const blocks = (footer?.blocks ?? []).filter((block) => {
-    const keep = !FOOTER_LEAVES_OUT.has(block.kind)
-    if (!keep)
+  // The footer's page links are the site's pages, every one, as the header's
+  // are (AGL-3660): a list the model wrote of page links is drawn with them
+  // in its place, and a footer with none gets one. The model places the list;
+  // it never chooses which pages it holds.
+  const navItems = plan.navPages.map((entry) => ({
+    title: entry.label,
+    text: '',
+    to: `page:${entry.id}`,
+  }))
+  let linksPages = false
+  const blocks = (footer?.blocks ?? []).flatMap((block): AiLayoutBlock[] => {
+    if (FOOTER_LEAVES_OUT.has(block.kind)) {
       page.settled.push({
         at: 'footer',
         what: `a ${block.kind} in the footer; left out`,
       })
-    return keep
+      return []
+    }
+    const pageLinks =
+      block.kind === 'list' &&
+      (block.items ?? []).some((item) => /^page:/.test(item.to ?? ''))
+    if (!pageLinks) return [block]
+    if (linksPages || !navItems.length) {
+      page.settled.push({ at: 'footer', what: 'a second list of page links; left out' })
+      return []
+    }
+    linksPages = true
+    return [{ ...block, items: navItems }]
   })
   const cols = footer?.cols && footer.cols.length >= 2 ? footer.cols : null
-  const linksPages = blocks.some((block) =>
-    block.items?.some((item) => item.to),
-  )
   const columns: AiLayoutBlock[][] = cols ? cols.map(() => []) : [[]]
   for (const block of blocks)
     columns[

@@ -46,6 +46,7 @@ import { aiJobStepBudget } from './ai-job-budget'
 import { aiJobBriefLine } from './ai-job-generation'
 import {
   AI_LAYOUT_SITE_PAGES_MAX,
+  aiLayoutIsHomeSlug,
   aiLayoutSitePages,
 } from './ai-job-layout-site-pages'
 import { aiLayoutPageTargets } from './ai-job-page-language'
@@ -101,12 +102,19 @@ export function aiLayoutNavPages(
   job: Pick<AiJob, 'inputs'>,
   inventory: AiSiteInventory | null,
 ): AiLayoutPage[] {
+  // The header and the footer link every page (AGL-3660): the planned pages,
+  // then the site's own the plan does not name, the home page first and
+  // labelled Home. The model draws neither list, so it cannot drop a page.
   const planned = aiLayoutSitePages(job.inputs)
-  if (planned.length) return planned
-  return (inventory?.screens ?? [])
-    .filter((row) => !row.template)
-    .slice(0, AI_LAYOUT_SITE_PAGES_MAX)
+  const built = (inventory?.screens ?? [])
+    .filter((row) => !row.template && !planned.some((page) => page.id === row.id))
     .map((row) => ({ id: row.id, label: row.name, slug: row.slug }))
+  const pages = [...planned, ...built].filter((page) => page.label.trim())
+  const home = pages.find((page) => aiLayoutIsHomeSlug(page.slug))
+  return [
+    ...(home ? [{ ...home, label: 'Home' }] : []),
+    ...pages.filter((page) => page !== home && !aiLayoutIsHomeSlug(page.slug)),
+  ].slice(0, AI_LAYOUT_SITE_PAGES_MAX)
 }
 
 /** The home page the brand links: the planned home, else the site's. */
@@ -114,9 +122,7 @@ export function aiLayoutHomeId(
   pages: readonly AiLayoutPage[],
   inventory: AiSiteInventory | null,
 ): string | null {
-  const planned = pages.find(
-    (page) => page.slug.replace(/^\/+|\/+$/g, '') === '',
-  )
+  const planned = pages.find((page) => aiLayoutIsHomeSlug(page.slug))
   return planned?.id ?? aiHomeScreenIds(inventory)[0] ?? null
 }
 

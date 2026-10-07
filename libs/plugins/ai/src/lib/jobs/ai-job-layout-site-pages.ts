@@ -52,13 +52,27 @@ export interface AiLayoutSitePage {
   slug: string
 }
 
-/** The pages a scaffold's plan puts in the navigation, in plan order: ids minted, entries asked for, no record templates. */
+/** Whether a slug is the site's root, the home page. */
+export function aiLayoutIsHomeSlug(slug: string): boolean {
+  return slug.replace(/^\/+|\/+$/g, '') === ''
+}
+
+/**
+ * The pages a scaffold's plan puts in the navigation: every page it builds
+ * with a minted id, record templates aside, the home page first and the rest
+ * in plan order (AGL-3660). A plan's `nav` flag does not drop one: a guided
+ * start's plan marked its Home `nav: false`, and the header linked only
+ * Contact, so a published site had no way back to its home page.
+ */
 export function aiLayoutSitePagesOfPlan(screens: readonly AiBuildPlanScreen[]): AiLayoutSitePage[] {
-  return screens
-    .filter((screen) => screen.nav && !screen.record && typeof screen.id === 'string' && screen.id)
-    .slice(0, AI_LAYOUT_SITE_PAGES_MAX)
+  const pages = screens
+    .filter((screen) => !screen.record && typeof screen.id === 'string' && screen.id)
     .map((screen) => ({ id: screen.id as string, label: screen.title.trim(), slug: screen.slug }))
     .filter((page) => page.label)
+  return [...pages.filter((page) => aiLayoutIsHomeSlug(page.slug)), ...pages.filter((page) => !aiLayoutIsHomeSlug(page.slug))].slice(
+    0,
+    AI_LAYOUT_SITE_PAGES_MAX,
+  )
 }
 
 /** The planned pages a layout unit's inputs carry; none for any other layout. */
