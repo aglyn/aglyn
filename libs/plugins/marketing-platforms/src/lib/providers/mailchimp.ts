@@ -45,6 +45,8 @@ import {
  */
 
 const PROVIDER = 'Mailchimp'
+/** The Marketing API, served from the account's data-center subdomain of this host. */
+const MARKETING_API = 'https://api.mailchimp.com/3.0'
 const PAGE = 500
 const MAX_PAGES = 10
 
@@ -63,7 +65,9 @@ function apiBase(credential: ProviderCredential): string {
   if (credential.apiBase) return credential.apiBase.replace(/\/+$/, '')
   const dc = mailchimpDataCenter(credential.token)
   if (!dc) throw new ProviderError('auth', 'That is not a Mailchimp API key: it should end in your data center, like -us21')
-  return `https://${dc}.api.mailchimp.com/3.0`
+  const url = new URL(MARKETING_API)
+  url.hostname = `${dc}.${url.hostname}`
+  return url.toString()
 }
 
 function headers(credential: ProviderCredential): Record<string, string> {
