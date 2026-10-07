@@ -23,7 +23,11 @@ import { join } from 'node:path'
 import { FONT_UPLOAD_MAX_BYTES, type PrepareFontResponse } from '../installer/constants'
 import { prepareFontRoute } from './prepare-route'
 
-const mockAuth: { token: Record<string, unknown> | null; host: Record<string, unknown> | null } = {
+const mockAuth: {
+  token: Record<string, unknown> | null
+  host: Record<string, unknown> | null
+  outage?: boolean
+} = {
   token: null,
   host: null,
 }
@@ -33,7 +37,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     app: () => ({
       auth: () => ({
         verifyIdToken: async () => {
-          if (!mockAuth.token) throw new Error('bad token')
+          if (mockAuth.outage) throw new Error('verifier unreachable')
+          if (!mockAuth.token) throw Object.assign(new Error('bad token'), { code: 'auth/argument-error' })
           return mockAuth.token
         },
       }),
@@ -87,6 +92,16 @@ describe('POST /api/fonts/prepare (AGL-3656)', () => {
     expect((await post(INTER)).status).toBe(401)
     mockAuth.token = { uid: 'u1', email_verified: false }
     expect((await post(INTER)).status).toBe(403)
+  })
+
+  it('answers 500, not 401, when the token could not be checked at all', async () => {
+    mockAuth.outage = true
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      expect((await post(INTER)).status).toBe(500)
+    } finally {
+      mockAuth.outage = false
+    }
   })
 
   it('refuses anyone but a site admin or editor, and lets staff through', async () => {
