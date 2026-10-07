@@ -3962,7 +3962,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     category: 'Commerce',
     displayName: 'Return request',
     summary:
-      'The buyer’s return form for one order, opened from the orders in their account.',
+      'The buyer’s return form for one order, opened from their account or the order’s status page.',
     acceptsChildren: false,
     propsSchema: {
       type: 'object',
