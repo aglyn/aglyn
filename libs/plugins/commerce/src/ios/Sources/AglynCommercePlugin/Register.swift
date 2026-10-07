@@ -24,7 +24,8 @@ public let commerceSalesScreen = "commerce.sales"
 ///
 /// Aglyn: the store, natively: orders (list, detail, fulfill, deliver,
 /// cancel), products (list, detail), a barcode scan that finds a product,
-/// and sales (today, the week); Home's sales cards and quick actions.
+/// and sales (today, the week); Home's to-ship and sales cards, and the
+/// ship-orders and scan quick actions.
 @MainActor
 public func registerCommerceNative(_ r: NativePluginRegistrar) {
   r.screen(
@@ -41,7 +42,7 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   }
 
   r.screen(commerceOrdersScreen, title: "Orders", requiresSite: true, icon: "bag") { context, params in
-    OrdersScreen(context: context, initialStatus: params["status"].flatMap { OrderStatus(rawValue: $0) })
+    OrdersScreen(context: context, initialFilter: params["filter"].flatMap(OrderFilter.init(rawValue:)) ?? .all)
   }
   r.screen(commerceOrderScreen, title: "Order", requiresSite: true, icon: "bag") { context, params in
     OrderScreen(context: context, orderID: params["orderId"] ?? "")
@@ -63,6 +64,9 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
 
   r.tab("commerce.orders-tab", title: "Orders", icon: "bag", screen: commerceOrdersScreen, order: 100)
   r.tab("commerce.products-tab", title: "Products", icon: "shippingbox", screen: commerceProductsScreen, order: 110)
+  r.widget("commerce.to-ship", title: "To ship", order: 90, size: .half, requiresSite: true) { context in
+    OrdersToShipWidget(context: context)
+  }
   r.widget("commerce.today", title: "Today", order: 100, size: .half, requiresSite: true) { context in
     SalesTodayWidget(context: context)
   }
@@ -71,10 +75,11 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   }
   r.quickAction(
     "commerce.orders-to-ship", title: "Ship orders", icon: "shippingbox", order: 100, screen: commerceOrdersScreen,
-    params: ["status": OrderStatus.paid.rawValue], requiresSite: true)
+    params: ["filter": OrderFilter.unfulfilled.rawValue], requiresSite: true)
+  // Hidden until product creation lands natively; the list has no create form above it.
   r.quickAction(
-    "commerce.new-product", title: "Products", icon: "plus.square", order: 110, screen: commerceProductsScreen,
-    requiresSite: true)
+    "commerce.new-product", title: "New product", icon: "plus.square", order: 110, screen: commerceProductScreen,
+    requiresSite: true, apps: [])
   r.quickAction(
     "commerce.scan", title: "Scan stock", icon: "barcode.viewfinder", order: 120, screen: commerceScanScreen,
     requiresSite: true)

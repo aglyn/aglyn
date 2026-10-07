@@ -40,10 +40,12 @@ final class StoreOrdersTests: XCTestCase {
     XCTAssertEqual(OrderRow(id: "o2", order: order).customer, "a@b.co")
   }
 
-  func testTheStatusChipIsTheOrdersPagesClause() {
-    let plan = ordersPlan(status: .paid, search: "")
-    XCTAssertTrue(plan.refused.isEmpty)
-    XCTAssertTrue(plan.constraints.contains { $0.path == "status" && $0.value as? String == "paid" })
+  func testEachChipIsAPlanTheOrdersPageServes() {
+    for filter in OrderFilter.allCases {
+      XCTAssertTrue(ordersPlan(filter, search: "").refused.isEmpty, filter.rawValue)
+    }
+    let plan = ordersPlan(.unfulfilled, search: "")
+    XCTAssertTrue(plan.constraints.contains { $0.path == "status" && ($0.value as? [Any])?.count == 2 })
     XCTAssertEqual(plan.orderBy.path, "createdAtMs")
   }
 
@@ -83,7 +85,7 @@ final class CommerceRegistrationTests: XCTestCase {
         "commerce.register", "commerce.sales", "commerce.scan",
       ],
       tabs: ["commerce.orders-tab", "commerce.products-tab"],
-      widgets: ["commerce.sales-trend", "commerce.today"],
+      widgets: ["commerce.sales-trend", "commerce.to-ship", "commerce.today"],
       quickActions: ["commerce.new-product", "commerce.orders-to-ship", "commerce.scan"],
       deepLinks: ["commerce.orders-page", "commerce.products-page"])
     let result = NativePluginLoader.load(

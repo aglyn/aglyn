@@ -80,14 +80,42 @@ func decodeOrder(_ doc: FirestoreDocument) -> HostOrder {
     number: doc.double("number"), status: doc.string("status").map { OrderStatus(rawValue: $0) ?? .unknown })
 }
 
-/// The orders page's plan: a status (or none), a typed word, newest first.
-func ordersPlan(status: OrderStatus?, search: String) -> ListQueryPlan {
+/// The chips above the list, each a set of clauses on the one query (the
+/// Kotlin kit's `OrderFilter`, chip for chip).
+enum OrderFilter: String, CaseIterable, Identifiable {
+  case all, unfulfilled, fulfilled, pending, returns, disputes
+  var id: String { rawValue }
+
+  var label: String {
+    switch self {
+    case .all: "All"
+    case .unfulfilled: "Unfulfilled"
+    case .fulfilled: "Fulfilled"
+    case .pending: "Unpaid"
+    case .returns: "Canceled & refunded"
+    case .disputes: "Disputes"
+    }
+  }
+
+  var clauses: [ListFilterRequest] {
+    switch self {
+    case .all: []
+    case .unfulfilled: [ListFilterRequest(field: "statusKey", op: "isAnyOf", value: "paid,partially_fulfilled")]
+    case .fulfilled: [ListFilterRequest(field: "statusKey", op: "isAnyOf", value: "fulfilled,delivered")]
+    case .pending: [ListFilterRequest(field: "statusKey", op: "equals", value: "pending")]
+    case .returns: [ListFilterRequest(field: "statusKey", op: "isAnyOf", value: "cancelled,refunded")]
+    case .disputes:
+      [ContractValues.shared.openDisputeClause].map { ListFilterRequest(field: $0.field, op: $0.op, value: $0.value) }
+    }
+  }
+}
+
+/// The orders page's plan: a chip's clauses, a typed word, newest first.
+func ordersPlan(_ filter: OrderFilter, search: String) -> ListQueryPlan {
   let words = search.trimmingCharacters(in: .whitespacesAndNewlines)
   return planListQuery(
     ContractValues.shared.orderListQuery,
-    ListQueryRequest(
-      clauses: status.map { [ListFilterRequest(field: "statusKey", op: "equals", value: $0.rawValue)] } ?? [],
-      search: words.isEmpty ? nil : [words]))
+    ListQueryRequest(clauses: filter.clauses, search: words.isEmpty ? nil : [words]))
 }
 
 @MainActor
@@ -98,7 +126,7 @@ final class OrdersModel {
   private(set) var failed = false
   private(set) var notice: String?
   private(set) var hasMore = false
-  var status: OrderStatus? { didSet { if oldValue != status { restart() } } }
+  var filter: OrderFilter = .all { didSet { if oldValue != filter { restart() } } }
   var search = "" { didSet { if oldValue != search { restart() } } }
 
   @ObservationIgnored private var reader: FirestoreReader?
@@ -134,7 +162,7 @@ final class OrdersModel {
     listener?.remove()
     failed = false
     guard let reader, let hostID else { return }
-    let plan = ordersPlan(status: status, search: search)
+    let plan = ordersPlan(filter, search: search)
     notice = plan.refused.isEmpty ? plan.notices.first : "This search cannot run with that filter. Clear one of them."
     // One probe row past the page tells whether another page exists.
     let window = limit

@@ -22,7 +22,7 @@ extension OrderTone {
 /// window the list sits beside the selected order.
 struct OrdersScreen: View {
   let context: NativePluginContext
-  var initialStatus: OrderStatus? = nil
+  var initialFilter: OrderFilter = .all
   @State private var model = OrdersModel()
   @State private var selection: OrderRow.ID?
   @State private var searchText = ""
@@ -52,7 +52,7 @@ struct OrdersScreen: View {
     .onSubmit(of: .search) { model.search = searchText }
     .onChange(of: searchText) { _, text in if text.isEmpty { model.search = "" } }
     .task(id: context.hostID) {
-      if let initialStatus, model.status == nil { model.status = initialStatus }
+      if model.filter == .all { model.filter = initialFilter }
       model.start(context.firestore, hostID: context.hostID)
     }
     .onDisappear { model.stop() }
@@ -61,10 +61,8 @@ struct OrdersScreen: View {
   private var chips: some View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: AglynSpace.one) {
-        AglynChoiceChip("All", selected: model.status == nil) { model.status = nil }
-        ForEach(ContractValues.shared.orderStatusOptions, id: \.value) { option in
-          let status = OrderStatus(rawValue: option.value) ?? .unknown
-          AglynChoiceChip(option.label, selected: model.status == status) { model.status = status }
+        ForEach(OrderFilter.allCases) { filter in
+          AglynChoiceChip(filter.label, selected: model.filter == filter) { model.filter = filter }
         }
       }
       .padding(.horizontal, AglynSpace.two)
@@ -95,9 +93,9 @@ struct OrdersScreen: View {
       }
     } else if model.rows.isEmpty {
       AglynEmptyState(
-        model.status == nil && model.search.isEmpty ? "No orders yet" : "No matching orders", systemImage: "bag",
-        message: model.status == nil && model.search.isEmpty
-          ? "Orders from your store and register show up here." : "Try another status or search.")
+        model.filter == .all && model.search.isEmpty ? "No orders yet" : "No matching orders", systemImage: "bag",
+        message: model.filter == .all && model.search.isEmpty
+          ? "Orders from your store and register show up here." : "Try another filter or search.")
     } else if selectable {
       List(selection: $selection) {
         rows(selectable: true)
@@ -168,5 +166,28 @@ struct OrderScreen: View {
 
   var body: some View {
     OrderDetailView(context: context, orderID: orderID, titled: true)
+  }
+}
+
+/// Home's "To ship" card: paid orders not yet fully shipped.
+struct OrdersToShipWidget: View {
+  let context: NativePluginContext
+  @State private var model = OrdersModel()
+
+  var body: some View {
+    let count = model.ready && !model.failed ? model.rows.count : nil
+    MetricCard(
+      "To ship", systemImage: "shippingbox",
+      value: count.map { model.hasMore ? "\($0)+" : "\($0)" },
+      caption: count == 1 ? "order is waiting to ship" : "orders are waiting to ship",
+      actionLabel: "Open orders", failed: model.failed ? "Could not load orders." : nil
+    ) {
+      context.navigate(commerceOrdersScreen, ["filter": OrderFilter.unfulfilled.rawValue])
+    }
+    .task(id: context.hostID) {
+      model.filter = .unfulfilled
+      model.start(context.firestore, hostID: context.hostID)
+    }
+    .onDisappear { model.stop() }
   }
 }
