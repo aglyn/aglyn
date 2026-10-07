@@ -102,14 +102,17 @@ export function aiLayoutNavPages(
   job: Pick<AiJob, 'inputs'>,
   inventory: AiSiteInventory | null,
 ): AiLayoutPage[] {
-  // The header and the footer link every page (AGL-3660): the planned pages,
-  // then the site's own the plan does not name, the home page first and
-  // labelled Home. The model draws neither list, so it cannot drop a page.
+  // The header and the footer link the pages the job was told (AGL-3660),
+  // else the site's own, the home page always and first, labelled Home. The
+  // model draws neither list, so it cannot drop a page.
   const planned = aiLayoutSitePages(job.inputs)
-  const built = (inventory?.screens ?? [])
-    .filter((row) => !row.template && !planned.some((page) => page.id === row.id))
+  const own = (inventory?.screens ?? [])
+    .filter((row) => !row.template)
     .map((row) => ({ id: row.id, label: row.name, slug: row.slug }))
-  const pages = [...planned, ...built].filter((page) => page.label.trim())
+  const siteHome = planned.some((page) => aiLayoutIsHomeSlug(page.slug))
+    ? []
+    : own.filter((page) => aiLayoutIsHomeSlug(page.slug)).slice(0, 1)
+  const pages = [...siteHome, ...(planned.length ? planned : own)].filter((page) => page.label.trim())
   const home = pages.find((page) => aiLayoutIsHomeSlug(page.slug))
   return [
     ...(home ? [{ ...home, label: 'Home' }] : []),

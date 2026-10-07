@@ -36,7 +36,7 @@ const SCREENS = [
 const job = {
   $id: 'job-frame',
   brief: 'A 2-page website for a dog groomer in Austin.',
-  inputs: { businessName: 'Hillside Dog Grooming', [AI_LAYOUT_SITE_PAGES_INPUT]: aiLayoutSitePagesOfPlan(SCREENS) },
+  inputs: { businessName: 'Hillside Dog Grooming', [AI_LAYOUT_SITE_PAGES_INPUT]: aiLayoutSitePagesOfPlan(SCREENS, { guided: true }) },
 } as unknown as AiJob
 
 /** Every string a node map holds, as the e2e's `linksTo` reads a layout for a page's id. */
@@ -52,8 +52,31 @@ function linked(nodes: unknown, id: string): boolean {
 }
 
 describe('a frame links every page the site builds, whatever its answer says (AGL-3660)', () => {
+  /** A plan with pages kept out of the navigation, Home among them, listed after the others. */
+  const MIXED = [
+    { id: 'svc', title: 'Services', slug: '/services', nav: true, record: null },
+    { id: 'faq', title: 'FAQ', slug: '/faq', nav: false, record: null },
+    { id: 'thanks', title: 'Thank you', slug: '/thank-you', nav: false, record: null },
+    { id: 'done', title: 'Request received', slug: '/submitted', nav: true, record: null },
+    { id: 'home', title: 'Welcome', slug: '/', nav: false, record: null },
+  ] as unknown as AiBuildPlanScreen[]
+  const ids = (pages: Array<{ id: string }>) => pages.map((page) => page.id)
+
+  it('links Home first on every path, whatever its nav flag', () => {
+    expect(ids(aiLayoutSitePagesOfPlan(MIXED))[0]).toBe('home')
+    expect(ids(aiLayoutSitePagesOfPlan(MIXED, { guided: true }))[0]).toBe('home')
+  })
+
+  it('links every page a guided start asked for, nav flag or not, but no confirmation page', () => {
+    expect(ids(aiLayoutSitePagesOfPlan(MIXED, { guided: true }))).toEqual(['home', 'svc', 'faq'])
+  })
+
+  it('keeps every other page’s nav flag on any other path', () => {
+    expect(ids(aiLayoutSitePagesOfPlan(MIXED))).toEqual(['home', 'svc', 'done'])
+  })
+
   it('puts every planned page in the navigation, the home page first, record templates aside', () => {
-    expect(aiLayoutSitePagesOfPlan(SCREENS).map((page) => page.id)).toEqual(['rlv3yk2I46', 'Fw0B612Zew'])
+    expect(aiLayoutSitePagesOfPlan(SCREENS, { guided: true }).map((page) => page.id)).toEqual(['rlv3yk2I46', 'Fw0B612Zew'])
     const pages = aiLayoutNavPages(job, emptyAiSiteInventory('host-1'))
     expect(pages.map((page) => [page.label, page.slug])).toEqual([
       ['Home', '/'],

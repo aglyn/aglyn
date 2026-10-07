@@ -57,16 +57,26 @@ export function aiLayoutIsHomeSlug(slug: string): boolean {
   return slug.replace(/^\/+|\/+$/g, '') === ''
 }
 
+/** A page that confirms what a visitor just did, which no navigation links. */
+const CONFIRMATION = /thank|confirm|success|submitted/i
+
 /**
- * The pages a scaffold's plan puts in the navigation: every page it builds
- * with a minted id, record templates aside, the home page first and the rest
- * in plan order (AGL-3660). A plan's `nav` flag does not drop one: a guided
- * start's plan marked its Home `nav: false`, and the header linked only
- * Contact, so a published site had no way back to its home page.
+ * The pages a plan puts in the navigation, record templates aside, the home
+ * page first whatever its `nav` flag says (AGL-3660): a guided start's plan
+ * marked its Home `nav: false`, and the header linked only Contact. Every
+ * other page keeps its `nav` flag, except in a guided start (`guided`), whose
+ * pages are the ones the person asked for: each is linked, but a
+ * confirmation page — a thank-you, a "submitted" — stays out.
  */
-export function aiLayoutSitePagesOfPlan(screens: readonly AiBuildPlanScreen[]): AiLayoutSitePage[] {
+export function aiLayoutSitePagesOfPlan(
+  screens: readonly AiBuildPlanScreen[],
+  options: { guided?: boolean } = {},
+): AiLayoutSitePage[] {
+  const linked = (screen: AiBuildPlanScreen) =>
+    aiLayoutIsHomeSlug(screen.slug) ||
+    (options.guided ? !CONFIRMATION.test(`${screen.slug} ${screen.title}`) : !!screen.nav)
   const pages = screens
-    .filter((screen) => !screen.record && typeof screen.id === 'string' && screen.id)
+    .filter((screen) => !screen.record && typeof screen.id === 'string' && screen.id && linked(screen))
     .map((screen) => ({ id: screen.id as string, label: screen.title.trim(), slug: screen.slug }))
     .filter((page) => page.label)
   return [...pages.filter((page) => aiLayoutIsHomeSlug(page.slug)), ...pages.filter((page) => !aiLayoutIsHomeSlug(page.slug))].slice(

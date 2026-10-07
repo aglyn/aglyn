@@ -557,7 +557,8 @@ export function aiSiteUnitJob(
   // ids are minted on the plan, and the platform writes the header's links.
   // A page is told them too, so its buttons may go to a page built after it.
   if (job.kind === 'site' && (unit.kind === 'layout' || unit.kind === 'page')) {
-    const pages = aiLayoutSitePagesOfPlan(plan.screens)
+    // A guided start links every page the person asked for (AGL-3660).
+    const pages = aiLayoutSitePagesOfPlan(plan.screens, { guided: true })
     if (pages.length) unitInputs[AI_LAYOUT_SITE_PAGES_INPUT] = pages
   }
   // A site's pages and its layout are designed in the layout language and
