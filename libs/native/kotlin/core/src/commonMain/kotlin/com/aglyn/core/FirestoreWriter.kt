@@ -10,6 +10,15 @@ interface FirestoreWriter {
   suspend fun merge(path: String, data: Map<String, Any?>)
 }
 
+/**
+ * A merge value that removes its field: the web SDK's `deleteField()`. A
+ * [FirestoreTimestamp] value writes a Firestore timestamp.
+ */
+data object FirestoreDelete
+
+/** Now, as a Firestore timestamp a merge writes. */
+fun firestoreNow(): FirestoreTimestamp = nowMillis().let { FirestoreTimestamp(it.floorDiv(1000L), (it.mod(1000L) * 1_000_000).toInt()) }
+
 /** A shell with nothing to write through; every write fails with words for the screen. */
 object NoFirestoreWrites : FirestoreWriter {
   override suspend fun merge(path: String, data: Map<String, Any?>) =

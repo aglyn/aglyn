@@ -11,6 +11,8 @@ import com.aglyn.contracts.OrderStatus
 import com.aglyn.contracts.canTransitionOrder
 import com.aglyn.contracts.formatOrderNumber
 import com.aglyn.contracts.fulfillmentIsActive
+import com.aglyn.contracts.liftLegacyOrder
+import com.aglyn.contracts.orderIsTestMode
 import com.aglyn.contracts.orderChannelLabel
 import com.aglyn.contracts.orderDisputeBlocksRefund
 import com.aglyn.contracts.orderLineFulfillmentStates
@@ -72,11 +74,11 @@ fun ordersQuery(hostId: String, filter: OrderFilter, search: String = "", startA
   planListQuery(Contracts.orderListQuery, ordersListRequest(filter, search))
     .toFirestoreQuery(ordersPath(hostId), ORDERS_PAGE_SIZE, startAfter)
 
-/** An order as stored, decoded; a document that is not an order decodes to an empty one. */
-fun hostOrderFrom(doc: FirestoreDoc): HostOrder = doc.decode(HostOrder.serializer()) ?: HostOrder()
+/** An order as the console reads it ([liftLegacyOrder]); a document that is not an order reads as an empty one. */
+fun hostOrderFrom(doc: FirestoreDoc): HostOrder = liftLegacyOrder(doc.decode(HostOrder.serializer()) ?: HostOrder())
 
-/** A test-mode order: Stripe's `livemode: false`, as the console badges it. */
-fun orderIsTestMode(doc: FirestoreDoc): Boolean = doc.data["livemode"] == false
+/** A test-mode order, as the console badges it: `livemode`, else a test checkout session id. */
+fun docIsTestMode(doc: FirestoreDoc, order: HostOrder): Boolean = orderIsTestMode(order, doc.id, doc.data["livemode"] as? Boolean)
 
 fun statusLabel(status: OrderStatus?): String =
   status?.let { Contracts.orderStatusLabels[it.raw] } ?: "Pending"
@@ -108,7 +110,7 @@ fun orderRow(doc: FirestoreDoc): OrderRow {
     itemCount = order.lineItems.orEmpty().sumOf { max(0L, it.quantity.toLong()) },
     netCents = orderNetCents(order),
     createdAtMs = order.createdAtMs?.toLong() ?: 0L,
-    testMode = orderIsTestMode(doc),
+    testMode = docIsTestMode(doc, order),
     disputeOpen = doc.data["disputeKey"] == "open",
   )
 }
@@ -182,7 +184,7 @@ fun orderDetail(doc: FirestoreDoc): OrderDetail {
     label = formatOrderNumber(order, doc.id),
     order = order,
     status = order.status ?: OrderStatus.PENDING,
-    testMode = orderIsTestMode(doc),
+    testMode = docIsTestMode(doc, order),
     lines = orderLineFulfillmentStates(order),
     shipments = shipments,
     refundState = orderRefundState(order),

@@ -34,7 +34,7 @@ class FunctionCasesTest {
   @Test
   fun everyFunctionHasCases() {
     assertEquals("UTC", root.getValue("timeZone").jsonPrimitive.content)
-    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund")))
+    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund", "liftLegacyOrder", "orderIsTestMode", "orderCountsAsSale", "orderWindowFigures", "productSales")))
   }
 
   @Test
@@ -113,6 +113,50 @@ class FunctionCasesTest {
   @Test
   fun orderDisputeBlocksRefundCases() = cases("orderDisputeBlocksRefund").forEach { (args, result) ->
     assertEquals(result.jsonPrimitive.boolean, orderDisputeBlocksRefund(order(args[0])), args.toString())
+  }
+
+  /** A stored order as the figures take it: `$id` and `livemode` beside the order's own fields. */
+  private fun figure(json: JsonElement): FigureOrder {
+    val fields = json.jsonObject
+    return FigureOrder(
+      id = str(fields["\$id"]),
+      livemode = (fields["livemode"] as? JsonPrimitive)?.booleanOrNull,
+      order = order(JsonObject(fields - "\$id" - "livemode")),
+    )
+  }
+
+  @Test
+  fun liftLegacyOrderCases() = cases("liftLegacyOrder").forEach { (args, result) ->
+    assertEquals(order(result), liftLegacyOrder(order(args[0])), args.toString())
+  }
+
+  @Test
+  fun orderIsTestModeCases() = cases("orderIsTestMode").forEach { (args, result) ->
+    val source = figure(args[0])
+    assertEquals(result.jsonPrimitive.boolean, orderIsTestMode(source.order, source.id, source.livemode), args.toString())
+  }
+
+  @Test
+  fun salesFigureCases() {
+    cases("orderCountsAsSale").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.boolean, orderCountsAsSale(figure(args[0])), args.toString())
+    }
+    cases("orderWindowFigures").forEach { (args, result) ->
+      val expected = result.jsonObject
+      val figures = orderWindowFigures(args[0].jsonArray.map(::figure), args[1].jsonPrimitive.double, args[2].jsonPrimitive.double)
+      assertEquals(
+        OrderWindowFigures(expected.getValue("orders").jsonPrimitive.long, expected.getValue("revenueCents").jsonPrimitive.double, expected.getValue("averageCents").jsonPrimitive.double),
+        figures,
+        args.toString(),
+      )
+    }
+    cases("productSales").forEach { (args, result) ->
+      val expected = result.jsonArray.map {
+        val row = it.jsonObject
+        ProductSales(row.getValue("productId").jsonPrimitive.content, row.getValue("name").jsonPrimitive.content, row.getValue("units").jsonPrimitive.double, row.getValue("cents").jsonPrimitive.double)
+      }
+      assertEquals(expected, productSales(args[0].jsonArray.map(::figure)), args.toString())
+    }
   }
 
   @Test

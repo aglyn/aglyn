@@ -127,6 +127,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   },
   {
     id: 'redirects',
+    apiPrefixes: ["redirects"],
     register: {"console":"registerRedirectsConsole"},
     contributes: {"console":{"shell":true,"routes":["/redirects"],"slots":["consoleSearch","transferResources"]}},
     load: () => import('@aglyn/plugins-redirects'),
