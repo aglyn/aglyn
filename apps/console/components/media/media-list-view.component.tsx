@@ -32,7 +32,7 @@ import { Box, Chip, Stack, Tooltip, Typography } from '@mui/material'
 import type { GridColDef, GridSortModel } from '@mui/x-data-grid'
 import type { ReactNode } from 'react'
 import { mediaFileTypeIcon } from '../../utils/media-file-icon'
-import { MEDIA_SORT_ORDER, type MediaSort } from './media-filter'
+import { MEDIA_SORT_ORDER, type MediaSort } from '@aglyn/aglyn/app-utils/media-filter'
 
 /**
  * The List view of the media library (AGL-3327): the same files the

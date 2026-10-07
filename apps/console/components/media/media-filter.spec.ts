@@ -23,7 +23,7 @@ import {
   mediaQuery,
   type MediaQueryInput,
   mediaSortOf,
-} from './media-filter'
+} from '@aglyn/aglyn/app-utils/media-filter'
 
 /*
  * The media library's query (AGL-3327): every filter and the search on it,

@@ -216,7 +216,7 @@ import {
   mediaQuery,
   type MediaSort,
   mediaSortOf,
-} from './media-filter'
+} from '@aglyn/aglyn/app-utils/media-filter'
 import {
   mediaListColumns,
   mediaSortFromModel,

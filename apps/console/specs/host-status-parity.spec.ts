@@ -25,7 +25,7 @@ import { hostIsBlankSite } from '../utils/host-first-run'
 import {
   describeHostStatus,
   describeSiteAllowance,
-} from '../utils/host-status'
+} from '@aglyn/aglyn/app-utils/host-status'
 
 describe('the placeholder home page a new site is created with (AGL-3408)', () => {
   const newSite = { screens: { ph: '/' }, defaultHomeScreenId: 'ph' }

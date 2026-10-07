@@ -23,7 +23,7 @@
 /**
  * The Sites page stays a grid of site CARDS (AGL-3321), and its search box
  * and Filters panel are served by ONE query over the reader's membership
- * rows (`utils/site-list-query.ts`), whose page is what the cards draw — each
+ * rows (`@aglyn/aglyn/app-utils/site-list-query`), whose page is what the cards draw — each
  * row joined by id to the host document the page already holds.
  *
  * The query is stood in for by its plan: `useListQuery` is replaced with the
