@@ -19,7 +19,9 @@
 // registry, not the whole server surface.
 import { registerApiV1SiteResource } from '@aglyn/tenant-data-admin/server/api-v1-resources'
 import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
+import { registerPluginService } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { ORDER_HISTORY_CONTRACT } from './model/order-history'
 import { registerCommerceTransferResources } from './transfer/register-transfer-resources'
 
 /**
@@ -49,6 +51,13 @@ export function registerCommerceConsoleServerDeclarations(): void {
   // and loaded with the first erasure.
   registerPluginPersonEraser(
     async (request) => (await import('./server/person-eraser')).commercePersonEraser(request),
+    { pluginId: BUNDLE_ID },
+  )
+  // A site's earlier orders, for a plugin that reads history behind the
+  // order events (AGL-3614); the reader is loaded with the first page asked.
+  registerPluginService(
+    ORDER_HISTORY_CONTRACT,
+    { listOrders: async (request) => (await import('./server/order-history')).listOrderHistory(request) },
     { pluginId: BUNDLE_ID },
   )
   registerApiV1SiteResource(
