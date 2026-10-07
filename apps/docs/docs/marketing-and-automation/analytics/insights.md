@@ -18,16 +18,27 @@ your workspace. Asking a question uses AI credits, like any AI job.
 
 ## Asking a question
 
-Open the **Assist** panel on one of these pages and choose **Ask about your numbers** under
-**AI jobs**:
+Choose **Ask a question** on the **Ask AI about these numbers** card — on a site's dashboard,
+its **Analytics** page, and your organization's **Sites** page — or open the **Assist** panel
+on one of these pages and choose **Ask about your numbers** under **AI jobs**:
 
-- a site's **Analytics** page — traffic, top pages, where visits came from, forms, bookings,
-  campaigns, A/B tests and store sales;
+- a site's dashboard or **Analytics** page — traffic, top pages, where visits came from, forms,
+  bookings, campaigns, A/B tests, store sales, automation runs, and the CRM pipeline and deals
+  closed;
 - a site's **CRM → Reports** page — the same figures, for questions about where people came
   from and what they did;
 - a site's **Marketing** page — campaigns, the conversions they were credited with and the
   revenue they earned, beside the traffic, forms and store sales they drove;
-- a site's **Data** page, or your organization's **Data** page — your datasets.
+- a site's **Automation** page — its automations' runs: how many succeeded and failed, and
+  which failed most;
+- a site's **Bookings** page — bookings by service, and how many were canceled;
+- a site's **Data** page, or your organization's **Data** page — your datasets;
+- your organization's **Sites** page or **CRM → Reports** — the pipeline across every site, the
+  deals won and lost, and your datasets.
+
+Pipeline figures count only the deals the site can see: on a site, the deals shared with it;
+on your organization's pages, every deal. Automation runs are counted from the site's run
+history, never from what a run was about.
 
 The **Conversions** section and a campaign's report on the **Marketing** page also carry
 **Ask AI about these numbers** in their header, which opens the same dialog with a question

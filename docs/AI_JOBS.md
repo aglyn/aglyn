@@ -2765,7 +2765,23 @@ sees a record, and every insight a person reads is traced to the numbers it cite
   and the data plugin's `datasets.summary` and `datasets.breakdown` (`server/dataset-figures.ts`,
   from its console-only server declarations). This plugin registers the readers for records the
   platform keeps (`src/lib/insights/ai-figure-readers.ts`): `traffic.summary`, `traffic.pages`,
-  `traffic.sources`, `traffic.daily` and `forms.performance`. A reader answers one compact
+  `traffic.sources`, `traffic.daily` and `forms.performance`. AGL-3603 adds the workflows
+  plugin's `automations.runs` (`libs/plugins/workflows/src/lib/server/automation-run-figures.ts`:
+  exact succeeded/failed totals as COUNT aggregates over the `activity` composite on `result` +
+  `createdAt`, and a per-automation split from at most 500 runs of each result projected to
+  `target`) and the CRM plugin's org-scoped `crm.pipeline` (open deals by pipeline and stage,
+  value and weighted value through `pipelineTotals`, at most 1,000 open deals on `status` +
+  `updatedAt`) and `crm.closed` (won and lost in the window on `status` + `closedAtMs`, at most
+  1,000 of each) (`libs/plugins/crm/src/lib/server/deal-figures.ts`), each scoped to a site's
+  shared deals by `scopedToHost` when a site is named; every query is served by an index the
+  file already carries. The surfaces widen with them: `analytics` (also a site's dashboard)
+  offers `automations` and `crm` too, `crm-reports` offers `crm`, and three surfaces join —
+  `automations` (a site's Automation page), `bookings` (its Bookings page) and `workspace` (the
+  workspace's sites page and CRM Reports; no site needed; `crm` and `datasets`). The digest's
+  readers are unchanged. The "Ask AI about these numbers" tile
+  (`src/lib/components/ai-insight-card.component.tsx`) opens the same insight dialog from the
+  `hostDashboard` slot — which the dashboard and the Analytics page both draw — and from
+  `orgDashboard`, gated by `aiGenerative` and `ai.generate`. A reader answers one compact
   table — counts, sums and rates with a `source` label and the console page they come from —
   held to the contract by `normalizePluginFigureTable`: at most 25 rows and 8 typed columns, every
   text cell stripped of email addresses and phone numbers. A dataset breakdown reads at most 2,000

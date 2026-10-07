@@ -20,31 +20,44 @@ import {
   AI_INSIGHT_SURFACE_READERS,
   aiInsightSurface,
   aiInsightSurfaceForPath,
+  aiInsightSurfaceNeedsSite,
 } from './ai-insight'
 
 /**
- * Where an insight is asked from (AGL-2915, AGL-3603): the console paths whose
- * Assist panel offers "Ask about your numbers", and the Marketing page's own
- * surface, which reads its campaigns' figures beside the traffic and sales.
+ * Where an insight may be asked (AGL-2915, widened at AGL-3603), and which
+ * readers each place offers by the first word of a reader's id. The
+ * Marketing page's own surface reads its campaigns' figures beside the
+ * traffic and sales.
  */
-describe('the surface a console path asks from', () => {
+
+describe('the insight surface for a console path', () => {
   it.each([
     ['/acme/hosts/shop/analytics', { surface: 'analytics', host: 'shop' }],
+    ['/acme/hosts/shop', { surface: 'analytics', host: 'shop' }],
+    ['/acme/hosts/shop/data/orders', { surface: 'datasets', host: 'shop' }],
     ['/acme/hosts/shop/crm/reports', { surface: 'crm-reports', host: 'shop' }],
     ['/acme/hosts/shop/marketing', { surface: 'marketing', host: 'shop' }],
     ['/acme/hosts/shop/marketing/conversions', { surface: 'marketing', host: 'shop' }],
     ['/acme/hosts/shop/marketing/campaigns/send-1?tab=report', { surface: 'marketing', host: 'shop' }],
+    ['/acme/hosts/shop/automation/actions', { surface: 'automations', host: 'shop' }],
+    ['/acme/hosts/shop/bookings?tab=services', { surface: 'bookings', host: 'shop' }],
     ['/acme/data', { surface: 'datasets', host: null }],
+    ['/acme/hosts', { surface: 'workspace', host: null }],
+    ['/acme/crm/reports', { surface: 'workspace', host: null }],
   ])('%s', (path, expected) => {
     expect(aiInsightSurfaceForPath(path)).toEqual(expected)
   })
 
-  it.each(['/acme/marketing', '/acme/marketing/conversions', '/acme/hosts/shop/screens', '/acme'])(
+  it.each(['/acme/marketing', '/acme/marketing/conversions', '/acme/hosts/shop/screens', '/acme', '/acme/billing'])(
     'offers none on %s, whose figures are no one site’s or no figures at all',
     (path) => {
       expect(aiInsightSurfaceForPath(path)).toBeNull()
     },
   )
+
+  it('offers none for no path', () => {
+    expect(aiInsightSurfaceForPath(null)).toBeNull()
+  })
 })
 
 describe('the Marketing surface', () => {
@@ -55,5 +68,25 @@ describe('the Marketing surface', () => {
 
   it('reads its campaigns’ figures and what they drove, and nothing about bookings or datasets', () => {
     expect([...AI_INSIGHT_SURFACE_READERS.marketing].sort()).toEqual(['commerce', 'forms', 'marketing', 'traffic'])
+  })
+})
+
+describe('the readers each surface offers', () => {
+  it('reads automation runs and the pipeline on a site’s Analytics, runs alone on Automation, and the pipeline at the workspace', () => {
+    expect(AI_INSIGHT_SURFACE_READERS.analytics).toEqual(expect.arrayContaining(['automations', 'crm', 'bookings']))
+    expect(AI_INSIGHT_SURFACE_READERS['crm-reports']).toContain('crm')
+    expect(AI_INSIGHT_SURFACE_READERS.automations).toEqual(['automations'])
+    expect(AI_INSIGHT_SURFACE_READERS.bookings).toEqual(['bookings'])
+    expect(AI_INSIGHT_SURFACE_READERS.workspace).toEqual(['crm', 'datasets'])
+    // The weekly digest reads what it always read.
+    expect(AI_INSIGHT_SURFACE_READERS.digest).not.toContain('crm')
+  })
+
+  it('is asked from every surface but the digest, and needs a site except at the workspace', () => {
+    expect(AI_INSIGHT_ASK_SURFACES).not.toContain('digest')
+    for (const surface of AI_INSIGHT_ASK_SURFACES) expect(aiInsightSurface({ surface })).toBe(surface)
+    expect(aiInsightSurfaceNeedsSite('workspace')).toBe(false)
+    expect(aiInsightSurfaceNeedsSite('automations')).toBe(true)
+    expect(aiInsightSurfaceNeedsSite('marketing')).toBe(true)
   })
 })

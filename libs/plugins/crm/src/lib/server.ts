@@ -54,6 +54,7 @@
  * write could not be trusted to do.
  */
 
+import { registerDealFigureReaders } from './server/deal-figures'
 import {
   CONTACT_ERASED_MESSAGE,
   contactFacetPath,
@@ -636,6 +637,9 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
 
 /** Console API registration, named in `plugins.config.json` as `consoleApi`. */
 export function registerCrmConsoleApi(): void {
+  // The pipeline and the deals closed, as figure tables (AGL-3603), for the
+  // AI plugin's insights to read by id; the console runs insight jobs.
+  registerDealFigureReaders(() => firebaseAdmin.app().firestore())
   /*
    * The contact-capture writer, again (AGL-3080). Both apps run it at boot
    * from their generated server-declarations manifest, and this is the

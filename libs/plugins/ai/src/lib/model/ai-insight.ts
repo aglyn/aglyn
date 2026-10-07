@@ -47,17 +47,29 @@ import type { AiJob, AiJobOutput } from './ai-jobs.types'
  */
 
 /**
- * Where an insight was asked: the console page whose Assist panel asked it —
- * or, on a site's Marketing page (AGL-3603), the page's own "Ask AI about
- * these numbers" — or the weekly digest, which no person asked.
+ * Where an insight was asked: the console page whose Assist panel — or
+ * whose "Ask AI about these numbers" card — asked it, or the weekly digest,
+ * which no person asked. A site's Marketing, Automation and Bookings pages
+ * and the workspace's own pages joined at AGL-3603.
  */
-export type AiInsightSurface = 'analytics' | 'datasets' | 'crm-reports' | 'marketing' | 'digest'
+export type AiInsightSurface =
+  | 'analytics'
+  | 'datasets'
+  | 'crm-reports'
+  | 'marketing'
+  | 'automations'
+  | 'bookings'
+  | 'workspace'
+  | 'digest'
 
 export const AI_INSIGHT_SURFACES: readonly AiInsightSurface[] = [
   'analytics',
   'datasets',
   'crm-reports',
   'marketing',
+  'automations',
+  'bookings',
+  'workspace',
   'digest',
 ]
 
@@ -67,6 +79,9 @@ export const AI_INSIGHT_ASK_SURFACES: readonly AiInsightSurface[] = [
   'datasets',
   'crm-reports',
   'marketing',
+  'automations',
+  'bookings',
+  'workspace',
 ]
 
 /** The surface an insight job's inputs name, or `null` for one no insight job is asked from. */
@@ -79,23 +94,29 @@ export function aiInsightSurface(inputs: Readonly<Record<string, unknown>> | nul
 
 /**
  * The readers a surface may offer, by the first word of a reader's id. The
- * Analytics page answers about the site's traffic and what it sold, took and
- * collected; a Data page about its datasets; CRM Reports about where people
- * came from and what they did; the Marketing page about what its campaigns,
- * overlays and tests caused and earned, beside the traffic and the forms they
- * drove.
+ * Analytics page — and a site's dashboard — answers about the site's traffic,
+ * what it sold, took and collected, its automations' runs and its CRM
+ * pipeline; a Data page about its datasets; CRM Reports about where people
+ * came from, what they did and the pipeline; the Marketing page about what
+ * its campaigns, overlays and tests caused and earned, beside the traffic and
+ * the forms they drove; the Automation page about its runs; the Bookings page
+ * about its bookings; and the workspace's own pages about its pipeline and
+ * its datasets.
  */
 export const AI_INSIGHT_SURFACE_READERS: Readonly<Record<AiInsightSurface, readonly string[]>> = {
-  analytics: ['bookings', 'commerce', 'forms', 'marketing', 'traffic'],
+  analytics: ['automations', 'bookings', 'commerce', 'crm', 'forms', 'marketing', 'traffic'],
   datasets: ['datasets'],
-  'crm-reports': ['bookings', 'commerce', 'forms', 'marketing', 'traffic'],
+  'crm-reports': ['bookings', 'commerce', 'crm', 'forms', 'marketing', 'traffic'],
   marketing: ['commerce', 'forms', 'marketing', 'traffic'],
+  automations: ['automations'],
+  bookings: ['bookings'],
+  workspace: ['crm', 'datasets'],
   digest: ['bookings', 'commerce', 'forms', 'marketing', 'traffic'],
 }
 
-/** Whether a surface answers about one site; the Data page may answer about the whole workspace. */
+/** Whether a surface answers about one site; the Data page and the workspace's pages may answer about the whole workspace. */
 export function aiInsightSurfaceNeedsSite(surface: AiInsightSurface): boolean {
-  return surface !== 'datasets'
+  return surface !== 'datasets' && surface !== 'workspace'
 }
 
 /**
@@ -242,11 +263,12 @@ export function aiInsightOutput(
 export type AiInsightAnswerWire = AiInsightRecord
 
 /**
- * The Assist panel's insight surface for a console path, or `null` off one.
- * A site's Analytics, Data, CRM Reports and Marketing pages, and the
- * workspace's Data page; the workspace's CRM Reports and Marketing read site
- * figures, so neither is one — the organization's Marketing page asks about
- * the site it is showing, through its own in-page entry.
+ * The Assist panel's insight surface for a console path, or `null` off one:
+ * a site's dashboard, Analytics, Data, CRM Reports, Marketing, Automation and
+ * Bookings pages; the workspace's Data page; and the workspace's sites page
+ * and CRM Reports, which read the workspace's pipeline and datasets. The
+ * organization's Marketing page reads site figures, so it is not one — it
+ * asks about the site it is showing, through its own in-page entry.
  */
 export function aiInsightSurfaceForPath(
   pathname: string | null | undefined,
@@ -263,9 +285,16 @@ export function aiInsightSurfaceForPath(
     if (rest[0] === 'data') return { surface: 'datasets', host }
     if (rest[0] === 'crm' && rest[1] === 'reports') return { surface: 'crm-reports', host }
     if (rest[0] === 'marketing') return { surface: 'marketing', host }
+    if (rest[0] === 'automation') return { surface: 'automations', host }
+    if (rest[0] === 'bookings') return { surface: 'bookings', host }
     return null
   }
+  // The site's dashboard is `/{org}/hosts/{host}`.
+  if (segments[1] === 'hosts' && segments.length === 3) return { surface: 'analytics', host: segments[2] }
   if (segments.length >= 2 && segments[1] === 'data') return { surface: 'datasets', host: null }
+  // The workspace's sites page, `/{org}/hosts`, which carries its dashboard row.
+  if (segments.length === 2 && segments[1] === 'hosts') return { surface: 'workspace', host: null }
+  if (segments[1] === 'crm' && segments[2] === 'reports') return { surface: 'workspace', host: null }
   return null
 }
 
