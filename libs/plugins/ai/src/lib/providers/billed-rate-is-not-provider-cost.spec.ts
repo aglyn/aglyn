@@ -24,6 +24,7 @@ import { join } from 'node:path'
 import {
   AI_FALLBACK_RATES,
   AI_IMAGE_BILLED_MARKUP,
+  AI_IMAGE_DEFAULT_MODEL,
   AI_IMAGE_FALLBACK_RATES,
   AI_IMAGE_MODEL_CATALOG,
   AI_METER_SENTINELS,
@@ -418,25 +419,38 @@ describe('a picture is billed above what it costs (AGL-3602)', () => {
         row.id,
         Math.round(row.providerUsdPerImage * AI_IMAGE_BILLED_MARKUP * 1_000_000) / 1_000_000,
       ])
+      for (const column of ['inputPerToken', 'outputPerToken'] as const) {
+        expect([row.id, column, row.billedRates[column]]).toEqual([
+          row.id,
+          column,
+          expect.closeTo(row.providerRates[column] * AI_IMAGE_BILLED_MARKUP, 15),
+        ])
+      }
     }
   })
 
-  it('pins the default model’s figures: $0.04 to Google, 60 credits to the customer', () => {
-    expect(aiImageProviderUsdPerImage('imagen-4.0-generate-001')).toBe(0.04)
-    expect(aiImageBilledUsdPerImage('imagen-4.0-generate-001')).toBe(0.06)
-    expect(assistCreditsFromUsd(aiImageBilledUsdPerImage('imagen-4.0-generate-001'))).toBe(60)
+  it('pins the default model to Google’s list: $0.0672 a 1K picture, $0.50 / $3 per million tokens', () => {
+    expect(AI_IMAGE_DEFAULT_MODEL).toBe('gemini-3.1-flash-image')
+    expect(aiImageProviderUsdPerImage(AI_IMAGE_DEFAULT_MODEL)).toBe(0.0672)
+    expect(aiImageBilledUsdPerImage(AI_IMAGE_DEFAULT_MODEL)).toBe(0.1008)
+    expect(assistCreditsFromUsd(aiImageBilledUsdPerImage(AI_IMAGE_DEFAULT_MODEL))).toBe(101)
+    expect(perMTok(aiProviderRatesForModel(AI_IMAGE_DEFAULT_MODEL))).toEqual({ input: 0.5, output: 3 })
+    expect(perMTok(aiBilledRatesForModel(AI_IMAGE_DEFAULT_MODEL))).toEqual({ input: 0.75, output: 4.5 })
   })
 
-  it('prices pictures on the meter’s own estimators, and leaves a text exchange as it was', () => {
+  it('prices pictures and their tokens on the meter’s own estimators, and leaves a text exchange as it was', () => {
     const none = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
-    expect(estimateAiBilledUsd({ ...none, images: 3 }, 'imagen-4.0-generate-001')).toBe(0.18)
-    expect(estimateAiProviderCostUsd({ ...none, images: 3 }, 'imagen-4.0-generate-001')).toBe(0.12)
+    expect(estimateAiBilledUsd({ ...none, images: 3 }, AI_IMAGE_DEFAULT_MODEL)).toBe(0.3024)
+    expect(estimateAiProviderCostUsd({ ...none, images: 3 }, AI_IMAGE_DEFAULT_MODEL)).toBe(0.2016)
+    // A picture's thinking at the image row's own text-output rate, not the
+    // dearest-tier fallback an unknown id would draw.
+    expect(estimateAiBilledUsd({ ...none, outputTokens: 1_000_000 }, AI_IMAGE_DEFAULT_MODEL)).toBe(4.5)
     expect(estimateAiBilledUsd(USAGE, 'claude-sonnet-5')).toBe(
       estimateAiBilledUsd({ ...USAGE, images: 0 }, 'claude-sonnet-5'),
     )
   })
 
-  it('prices an unknown image model at the dearest row, on both rates', () => {
+  it('prices an unknown image model at the dearest row', () => {
     expect(aiImageProviderUsdPerImage('imagen-99')).toBe(AI_IMAGE_FALLBACK_RATES.providerUsdPerImage)
     expect(aiImageBilledUsdPerImage('imagen-99')).toBe(AI_IMAGE_FALLBACK_RATES.billedUsdPerImage)
     expect(AI_IMAGE_FALLBACK_RATES.billedUsdPerImage).toBe(

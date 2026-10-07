@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { AiUsage } from './contract'
+
 /**
  * The image-generation contract (AGL-3602): the one shape a door that makes
  * pictures speaks, beside the text contract in `contract.ts` rather than
@@ -36,6 +38,32 @@ export const AI_IMAGE_MAX_COUNT = 4
 
 /** The longest description a request carries, in characters. */
 export const AI_IMAGE_PROMPT_MAX_CHARS = 1_000
+
+/**
+ * The two ways the Media dialog makes a picture (AGL-3602): a `photo` from
+ * the image provider, and an `illustration` drawn as SVG by the text
+ * provider every other AI door already uses.
+ */
+export const AI_IMAGE_MODES = ['photo', 'illustration'] as const
+export type AiImageMode = (typeof AI_IMAGE_MODES)[number]
+
+/** What an illustration is: a scene, an icon, a tileable pattern or a simple mark. */
+export const AI_SVG_STYLES = ['illustration', 'icon', 'pattern', 'logo'] as const
+export type AiSvgStyle = (typeof AI_SVG_STYLES)[number]
+
+/** The most colors a person may name for an illustration. */
+export const AI_SVG_MAX_COLORS = 6
+
+/**
+ * Whether this deployment offers the photo mode, as its build says: a
+ * deployment that configured an image provider sets
+ * `NEXT_PUBLIC_AI_IMAGE_PHOTOS=on` beside it. Read where the dialog renders,
+ * so no request is made to decide what to draw; the door still refuses a
+ * photo on a deployment with no provider.
+ */
+export function aiImagePhotosOffered(): boolean {
+  return process.env.NEXT_PUBLIC_AI_IMAGE_PHOTOS === 'on'
+}
 
 export function isAiImageAspectRatio(value: unknown): value is AiImageAspectRatio {
   return (AI_IMAGE_ASPECT_RATIOS as readonly unknown[]).includes(value)
@@ -63,6 +91,12 @@ export interface AiGeneratedImage {
 export interface AiImageResult {
   model: string
   images: AiGeneratedImage[]
+  /**
+   * The tokens the requests spent beside the pictures themselves — the
+   * prompt, and any thinking — which the meter prices at the image row's
+   * token rates. The pictures are priced per picture, never as tokens here.
+   */
+  usage: AiUsage
   /**
    * How many of the requested pictures the provider's safety filter held
    * back. A picture held back is not returned and is never billed.
