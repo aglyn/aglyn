@@ -938,6 +938,9 @@
             "hostDashboard",
             "siteMember",
             "transferResources"
+          ],
+          "publicRoutes": [
+            "/pos-display"
           ]
         }
       }

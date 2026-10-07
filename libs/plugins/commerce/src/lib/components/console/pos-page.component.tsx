@@ -431,13 +431,24 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
 
   // The customer display mirrors the basket while nothing else is on it.
   const mirrored = sale ? saleLines : lines
+  // Whether the display was last left showing a basket. A paid sale leaves it
+  // on the thank-you the server wrote, which an empty new basket must not
+  // cut short with the idle screen; the next item added takes it over.
+  // True at first, so a register that opens empty clears whatever a previous
+  // session left on the screen.
+  const displayShowsBasket = useRef(true)
+  useEffect(() => {
+    if (sale?.status === 'paid') displayShowsBasket.current = false
+  }, [sale?.status])
   useEffect(() => {
     if (!display.connected || display.asking) return
     if (sale?.payments.some((payment) => payment.status === 'pending' && payment.method === 'card_present')) {
       return
     }
     if (sale?.status === 'paid') return
+    if (!mirrored.length && !displayShowsBasket.current) return
     const timer = setTimeout(() => {
+      displayShowsBasket.current = mirrored.length > 0
       void display.show(
         mirrored.length
           ? {

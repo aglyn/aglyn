@@ -19,6 +19,8 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 const PosConsolePage = lazy(() => import('./components/console/pos-page.component'))
+/** The customer display (AGL-3608): loads only on the public page that shows it. */
+const PosDisplayPage = lazy(() => import('./components/console/pos-display-page.component'))
 const CommerceGlanceCard = lazy(
   () => import('./components/console/commerce-glance-card.component'),
 )
@@ -83,6 +85,13 @@ export function registerCommerceConsole(): void {
     pluginId: BUNDLE_ID,
     displayName: 'Commerce',
     searchSources: COMMERCE_SEARCH_SOURCES,
+    // The screen a register turns toward its customer (AGL-3608), at
+    // `/kiosk/commerce/pos-display`. No staff session: the device proves
+    // itself with the display token it got by pairing, and
+    // `server/pos-display.ts` refuses every read without one.
+    publicPages: [
+      { path: '/pos-display', title: 'Customer display', Component: PosDisplayPage },
+    ],
     // Dashboard/analytics glance card (AGL-419): rendered through the
     // shell's 'commerceGlance' widget slot.
     widgets: [

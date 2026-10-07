@@ -24,6 +24,7 @@ import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import { pluginSmsAvailable } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
 import { notifyOrderBuyer } from './order-notifications'
+import { finishPosDisplayReceipt } from './pos-display'
 import * as CommerceModel from '../model'
 import { posRegisterSettings } from '../plugin-config'
 import {
@@ -45,6 +46,7 @@ import {
 import { posPaymentCashierId } from './pos-sale-stamp'
 import { printPosSaleReceipt } from './pos-print'
 import {
+  POS_CURRENCY,
   posStripe,
   posStripeErrorMessage,
   posStripeTestMode,
@@ -778,6 +780,13 @@ async function recordReceiptChoice(
     // printer, under the sale's own key so it never prints twice (AGL-3609).
     await printPosSaleReceipt(staff.hostId, orderId)
   }
+  if (order.status === 'paid' && order.registerId) {
+    // The customer has answered (or the cashier for them): the display says
+    // thank you and drops the address they typed (AGL-3608).
+    await finishPosDisplayReceipt(staff.hostId, order.registerId).catch((error: unknown) =>
+      console.error('[pos-payment] display finish failed', error),
+    )
+  }
   if (order.status === 'paid' && (channel === 'email' || channel === 'sms')) {
     // Chosen after the sale completed: sent now, through the same door.
     const sent = await notifyOrderBuyer({ hostId: staff.hostId, orderId }, 'receipt', {
@@ -794,7 +803,10 @@ async function recordReceiptChoice(
         interaction: {
           source: 'order',
           refId: orderId,
-          summary: `In-store purchase ($${(Number(order.totals?.totalCents ?? 0) / 100).toFixed(2)})`,
+          summary: `In-store purchase (${CommerceModel.formatReceiptMoney(
+            Number(order.totals?.totalCents ?? 0),
+            POS_CURRENCY,
+          )})`,
         },
       }).catch((error: unknown) => console.error('[pos-payment] contact capture failed', error))
     }

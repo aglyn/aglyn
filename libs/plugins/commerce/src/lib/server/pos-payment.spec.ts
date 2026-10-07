@@ -25,6 +25,7 @@
 
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
 import { fakeDocs, resetFakeFirestore } from '../testing/fake-firestore'
+import { registerPluginSmsMessaging } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
 import { posCardProcessingCostCents } from './pos-stripe'
 
 const mockDecrement = jest.fn(async (options: any) => ({
@@ -485,6 +486,55 @@ describe('receipts', () => {
 
   it('refuses a text receipt when no SMS provider is on', async () => {
     expect((await act({ action: 'receipt', channel: 'sms', to: '+1 555 010 0199' })).status).toBe(409)
+  })
+
+  describe('with an SMS provider registered (AGL-3610)', () => {
+    let configured = true
+    beforeAll(() => {
+      registerPluginSmsMessaging(
+        { isConfigured: () => configured, send: async () => ({ outcome: 'sent', id: 'SM1' }) as any },
+        { pluginId: 'sms-spec' },
+      )
+    })
+    afterAll(() => {
+      configured = false
+    })
+
+    it('texts the receipt of a paid sale to the number the customer typed', async () => {
+      await act({ action: 'cash', tenderedCents: 10_000 }, 'paid')
+      mockNotified.length = 0
+      const sent = await act({ action: 'receipt', channel: 'sms', to: '+1 (555) 010-0199' })
+      expect(sent.status).toBe(200)
+      expect(sale()).toMatchObject({
+        customerPhone: '+15550100199',
+        receiptRequest: { channel: 'sms', to: '+15550100199' },
+      })
+      expect(mockNotified).toEqual([
+        { ref: { hostId: 'host-1', orderId: 'sale-1' }, event: 'receipt', options: {} },
+      ])
+    })
+  })
+
+  it('ends the customer display turn and drops the typed address once handled (AGL-3608)', async () => {
+    const STATE = 'posDisplayStates/host-1__register-1'
+    await act({ action: 'cash', tenderedCents: 10_000 }, 'paid')
+    fakeDocs.set(STATE, {
+      mode: 'receipt',
+      promptId: 'r1',
+      updatedAtMs: Date.now(),
+      receipt: { channels: ['email', 'none'], offerMarketing: false },
+      response: { promptId: 'r1', receiptChannel: 'email', email: 'ann@example.com', atMs: 1 },
+    })
+    expect((await act({ action: 'receipt', channel: 'email', to: 'ann@example.com' })).status).toBe(200)
+    expect(fakeDocs.get(STATE)).toMatchObject({ mode: 'thanks', currency: 'usd' })
+    expect(JSON.stringify(fakeDocs.get(STATE))).not.toContain('ann@example.com')
+  })
+
+  it('leaves the display alone for a receipt chosen before the sale is paid', async () => {
+    const STATE = 'posDisplayStates/host-1__register-1'
+    fakeDocs.set(STATE, { mode: 'cart', updatedAtMs: Date.now() })
+    await act({ action: 'receipt', channel: 'none' })
+    expect(fakeDocs.get(STATE)).toMatchObject({ mode: 'cart' })
   })
 })
 

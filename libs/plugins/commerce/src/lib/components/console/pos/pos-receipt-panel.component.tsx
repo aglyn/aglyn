@@ -83,20 +83,38 @@ export interface PosReceiptPanelProps {
 export function PosReceiptPanel(props: PosReceiptPanelProps) {
   const { user, hostId, sale, display, notify } = props
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [sent, setSent] = useState('')
   const asked = useRef(false)
   const settings = props.context?.settings
   const change = sale.payments.reduce((sum, payment) => sum + (payment.changeCents ?? 0), 0)
 
-  const sendEmail = useCallback(
-    async (to: string, marketingOptIn = false) => {
+  // A text receipt is offered only when the store can send one (AGL-3610).
+  const smsReceipts = props.context?.smsReceipts === true
+
+  /**
+   * Sends (email, text) or records (print, none) the receipt choice. The
+   * server also ends the customer's turn on the display: it says thank you
+   * and forgets the address or number they typed (AGL-3608).
+   */
+  const sendReceipt = useCallback(
+    async (channel: CommerceModel.PosReceiptChannel, to = '', marketingOptIn = false) => {
       try {
-        await posTender(user, hostId, sale.orderId, 'receipt', { channel: 'email', to, marketingOptIn })
-        setSent(to)
-        setEmail('')
-        notify('Receipt sent', 'success')
+        await posTender(user, hostId, sale.orderId, 'receipt', {
+          channel,
+          ...(to ? { to } : {}),
+          ...(marketingOptIn ? { marketingOptIn: true } : {}),
+        })
+        if (channel === 'email' || channel === 'sms') {
+          setSent(channel === 'sms' ? `Receipt texted to ${to}` : `Receipt emailed to ${to}`)
+          if (channel === 'sms') setPhone('')
+          else setEmail('')
+          notify('Receipt sent', 'success')
+        }
       } catch (error) {
-        notify(error instanceof PosRequestError ? error.message : 'The receipt was not sent', 'error')
+        if (channel === 'email' || channel === 'sms') {
+          notify(error instanceof PosRequestError ? error.message : 'The receipt was not sent', 'error')
+        }
       }
     },
     [user, hostId, sale.orderId, notify],
@@ -116,21 +134,24 @@ export function PosReceiptPanel(props: PosReceiptPanelProps) {
         const answer = await display.ask({
           mode: 'receipt',
           receipt: {
-            channels: ['email', ...(props.context?.smsReceipts ? (['sms'] as const) : []), 'print', 'none'],
+            channels: ['email', ...(smsReceipts ? (['sms'] as const) : []), 'print', 'none'],
             offerMarketing: settings.displayMarketingOptIn,
           },
         })
         if (!answer) return
         if (answer.receiptChannel === 'email' && answer.email) {
-          await sendEmail(answer.email, answer.marketingOptIn === true)
+          await sendReceipt('email', answer.email, answer.marketingOptIn === true)
+        } else if (answer.receiptChannel === 'sms' && answer.phone) {
+          await sendReceipt('sms', answer.phone)
         } else if (answer.receiptChannel === 'print') {
           printPosReceipt({ lines: props.lines, sale })
-        } else if (answer.receiptChannel === 'none') {
-          await posTender(user, hostId, sale.orderId, 'receipt', { channel: 'none' }).catch(() => undefined)
+          await sendReceipt('print')
+        } else {
+          await sendReceipt('none')
         }
       })()
     }
-  }, [settings, display, props.lines, sale, sendEmail, props.context, user, hostId])
+  }, [settings, display, props.lines, sale, sendReceipt, smsReceipts])
 
   return (
     <Stack spacing={1.5}>
@@ -149,7 +170,7 @@ export function PosReceiptPanel(props: PosReceiptPanelProps) {
       ) : null}
       {sent ? (
         <Typography variant="body2" color="text.secondary">
-          {`Receipt emailed to ${sent}`}
+          {sent}
         </Typography>
       ) : null}
       <Stack direction="row" spacing={1}>
@@ -163,16 +184,49 @@ export function PosReceiptPanel(props: PosReceiptPanelProps) {
         <Button
           variant="outlined"
           disabled={!CommerceModel.posDisplayEmail(email)}
-          onClick={() => void sendEmail(email.trim())}
+          onClick={() => {
+            display.cancelAsk()
+            void sendReceipt('email', email.trim())
+          }}
           sx={{ minHeight: POS_TOUCH_PX }}
         >
           {'Send'}
         </Button>
       </Stack>
+      {smsReceipts ? (
+        <Stack direction="row" spacing={1}>
+          <TextField
+            label="Text receipt to"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            sx={{ flex: 1 }}
+            slotProps={{ htmlInput: { inputMode: 'tel', autoComplete: 'off' } }}
+          />
+          <Button
+            variant="outlined"
+            disabled={!CommerceModel.posDisplayPhone(phone)}
+            onClick={() => {
+              display.cancelAsk()
+              void sendReceipt('sms', phone.trim())
+            }}
+            sx={{ minHeight: POS_TOUCH_PX }}
+          >
+            {'Text'}
+          </Button>
+        </Stack>
+      ) : null}
       <Stack direction="row" spacing={1}>
         <Button
           variant="outlined"
-          onClick={() => printPosReceipt({ lines: props.lines, sale })}
+          onClick={() => {
+            printPosReceipt({ lines: props.lines, sale })
+            // The cashier answered for the customer: the display's receipt
+            // prompt ends with a thank-you rather than waiting it out.
+            if (display.asking === 'receipt') {
+              display.cancelAsk()
+              void sendReceipt('print')
+            }
+          }}
           sx={{ minHeight: POS_TOUCH_PX, flex: 1 }}
         >
           {'Print receipt'}
