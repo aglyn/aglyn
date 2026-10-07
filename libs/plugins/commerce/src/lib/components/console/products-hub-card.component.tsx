@@ -82,6 +82,7 @@ import {
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
+import { ProductLabelsDialog } from './product-labels-dialog.component'
 import ProductEditorDialog from './product-editor-dialog.component'
 import { productSlugLedger } from './product-slugs'
 import { productCollectionFields } from './smart-collections'
@@ -155,6 +156,8 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     locationId: string
   } | null>(null)
   const [keysFor, setKeysFor] = useState<ProductRow | null>(null)
+  // Product labels for a label printer (AGL-3619).
+  const [labelsFor, setLabelsFor] = useState<ProductRow | null>(null)
   const [keysText, setKeysText] = useState('')
   /**
    * What the last import created, with the options its After import step
@@ -743,6 +746,11 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             <Button size="small" onClick={handleDuplicate(product)}>
               {'Duplicate'}
             </Button>
+            {product.type === 'physical' ? (
+              <Button size="small" onClick={() => setLabelsFor(product)}>
+                {'Labels'}
+              </Button>
+            ) : null}
             {product.type === 'digital' ? (
               <Button size="small" onClick={() => setKeysFor(product)}>
                 {'Keys'}
@@ -965,6 +973,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           />
         )}
       </Stack>
+      <ProductLabelsDialog product={labelsFor} onClose={() => setLabelsFor(null)} />
       <Dialog
         open={Boolean(keysFor)}
         onClose={() => setKeysFor(null)}

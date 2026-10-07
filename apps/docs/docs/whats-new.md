@@ -29,7 +29,26 @@ for the how-to.
   that sells online.
 -->
 
-## October 2026 — running the register (newest)
+## October 2026 — POS hardware (newest)
+
+- **[Cloud receipt printers](commerce-and-bookings/commerce/pos-hardware.md#receipt-printers)** —
+  a Star CloudPRNT or Epson Server Direct Print printer prints the register's
+  receipts from any device, with no driver: pair it on the register's **Hardware**
+  card, paste its URL into the printer, and every sale prints. Reprint any register
+  order, and see each printer's status and recent jobs.
+- **[Kitchen tickets](commerce-and-bookings/commerce/pos-hardware.md#what-prints)** — a
+  printer in the kitchen, at the bar or on the packing bench prints each sale's items
+  and quantities, with no prices.
+- **[Cash drawer](commerce-and-bookings/commerce/pos-hardware.md#cash-drawer)** — a
+  drawer plugged into the printer opens on every cash sale, including the cash part of
+  a split payment.
+- **[Barcode scanning](commerce-and-bookings/commerce/pos-hardware.md#barcode-scanning)** —
+  scan with a tablet's or phone's camera at the register and in the product editor,
+  and a USB or Bluetooth scanner works even when the search box does not have focus.
+- **[Product labels](commerce-and-bookings/commerce/pos-hardware.md#product-labels)** —
+  print price and barcode labels on a label printer, or download ZPL for a Zebra.
+
+## October 2026 — running the register
 
 - **[Running the register](commerce-and-bookings/commerce/pos-operations.md)** — the
   point of sale now runs a whole trading day. Open a **shift** with a starting float,

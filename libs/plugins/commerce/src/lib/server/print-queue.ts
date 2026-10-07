@@ -29,6 +29,7 @@ import {
 import type { ReceiptData } from '../model/commerce-receipt'
 import {
   layoutDrawerKick,
+  layoutKitchenTicket,
   layoutReceipt,
   layoutReport,
   layoutTestPage,
@@ -348,6 +349,9 @@ export function printJobDocument(
   if (job.kind === 'report' && job.report) {
     return layoutReport(job.report, { columns, logo })
   }
+  if (job.kind === 'kitchen' && job.receipt) {
+    return layoutKitchenTicket(job.receipt, { columns })
+  }
   if (job.kind === 'test') {
     return layoutTestPage({
       columns,
@@ -359,5 +363,8 @@ export function printJobDocument(
       openDrawer: job.openDrawer,
     })
   }
-  return layoutDrawerKick(columns)
+  if (job.kind === 'drawer') return layoutDrawerKick(columns)
+  // A receipt or ticket with nothing to print prints nothing: falling through
+  // to the drawer kick would open a till nobody asked to open.
+  return { columns, ops: [] }
 }

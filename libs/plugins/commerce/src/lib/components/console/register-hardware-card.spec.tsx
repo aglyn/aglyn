@@ -57,7 +57,9 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 import { printerSetupSteps, RegisterHardwareCard, RegisterHardwareCards, seenAgo } from './register-hardware-card.component'
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, json: () => Promise.resolve(body) })
-const sent = () => authorizedFetch.mock.calls.map((call) => JSON.parse(call[2].body))
+const PRINTERS = '/api/commerce/printers'
+const printerCalls = () => authorizedFetch.mock.calls.filter((call) => call[1] === PRINTERS)
+const sent = () => printerCalls().map((call) => JSON.parse(call[2].body))
 
 beforeEach(() => {
   authorizedFetch.mockReset()
@@ -102,8 +104,7 @@ describe('the register Hardware card (AGL-3619)', () => {
     render(<RegisterHardwareCard hostId="h1" registerId="r1" registerName="Front" />)
     fireEvent.click(screen.getByRole('button', { name: 'Test print' }))
     fireEvent.click(screen.getByRole('button', { name: 'Open drawer' }))
-    await waitFor(() => expect(authorizedFetch).toHaveBeenCalledTimes(2))
-    expect(authorizedFetch.mock.calls[0][1]).toBe('/api/commerce/printers')
+    await waitFor(() => expect(printerCalls()).toHaveLength(2))
     expect(sent()).toEqual([
       { hostId: 'h1', action: 'test', printerId: 'p1' },
       { hostId: 'h1', action: 'drawer', printerId: 'p1' },

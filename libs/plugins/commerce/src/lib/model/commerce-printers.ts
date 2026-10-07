@@ -120,6 +120,11 @@ export interface PosPrinter {
   /** Open the cash drawer wired to this printer on cash sales, cash refunds and paid-outs. */
   kickDrawer: boolean
   /**
+   * Print a kitchen (or bar, or packing) ticket for every sale on this
+   * register: the order number, each item and quantity, and no prices.
+   */
+  kitchenTickets?: boolean
+  /**
    * The NV logo stored in the printer with the vendor's utility, printed at the
    * top of every receipt: Star's logo number (1-255), Epson's `key1,key2`
    * (e.g. `48,48`). Empty prints no logo.
@@ -133,7 +138,7 @@ export interface PosPrinter {
   updatedAtMs?: number
 }
 
-export type PrintJobKind = 'receipt' | 'drawer' | 'test' | 'report'
+export type PrintJobKind = 'receipt' | 'kitchen' | 'drawer' | 'test' | 'report'
 
 /**
  * A titled report printed on the receipt roll (AGL-3609): a register shift's
@@ -208,6 +213,8 @@ export const PRINT_JOB_MAX_ATTEMPTS = 3
  */
 export const PRINT_JOB_DELIVER_WITHIN_MS: Record<PrintJobKind, number> = {
   receipt: 30 * 60 * 1000,
+  // A ticket that reaches the kitchen long after the order is a meal remade twice.
+  kitchen: 10 * 60 * 1000,
   test: 10 * 60 * 1000,
   drawer: 2 * 60 * 1000,
   report: 30 * 60 * 1000,

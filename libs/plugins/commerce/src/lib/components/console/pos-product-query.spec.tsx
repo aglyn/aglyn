@@ -203,6 +203,20 @@ describe('the till asks the products query (AGL-3321)', () => {
     await waitFor(() => expect((search() as HTMLInputElement).value).toBe(''))
   })
 
+  it('takes a keyboard-mode scanner’s code with focus off the search box (AGL-3619)', async () => {
+    render(<PosConsolePage hostId="host-1" {...({} as any)} />)
+    expect(screen.queryByText(/Zebra Latte/)).toBeNull()
+    const button = screen.getAllByRole('button')[0]
+    for (const key of [...'0123456789012', 'Enter']) fireEvent.keyDown(button, { key })
+    // Past the grid's window, so on screen only once it is in the basket.
+    expect(await screen.findByText(/1× Zebra Latte/)).toBeTruthy()
+  })
+
+  it('offers the camera beside the search box (AGL-3619)', () => {
+    render(<PosConsolePage hostId="host-1" {...({} as any)} />)
+    expect(screen.getByRole('button', { name: 'Scan a barcode with the camera' })).toBeTruthy()
+  })
+
   it('asks the hub’s scope, status and search in one plan', () => {
     expect(posProductPlan({ search: 'zebra' }).filters).toEqual([
       { path: 'deletedAt', op: '==', value: null },

@@ -1,14 +1,15 @@
 ---
 sidebar_position: 3.5
 title: POS hardware
-description: Receipt printers that print from any device with no driver, a cash drawer that opens on cash sales, camera and USB barcode scanning, and 4x6 label printers.
+description: Receipt and kitchen printers that print from any device with no driver, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels on a label printer.
 ---
 
 # POS hardware
 
 The register runs in a browser, so it works on an iPad, an Android tablet, a
 laptop or a desktop at the counter. This page covers the hardware around it:
-a receipt printer, the cash drawer, barcode scanners and a label printer.
+a receipt printer, a kitchen printer, the cash drawer, barcode scanners and a
+label printer.
 
 :::info Plan availability
 POS hardware comes with POS, on **Pro** and above. There is no extra charge for
@@ -23,7 +24,7 @@ printers or scanners.
 | Receipt printer | **Star mC-Print3** or **Star TSP143IV** (CloudPRNT), or **Epson TM-m30III** (Server Direct Print) | Prints from any device over the internet: no driver, no pairing, no app |
 | Cash drawer | Any 24 V drawer with an RJ12 cable, such as the Star CD3-1616 or the APG Vasario | Plugs into the printer's drawer port and opens when the printer tells it to |
 | Barcode scanner | Any USB or Bluetooth scanner in keyboard mode, or the tablet's camera | A scanner types the code like a keyboard, so it needs no setup |
-| Label printer | Rollo, Zebra ZD421/ZD621 or GK420d, DYMO LabelWriter 4XL or 5XL, Brother QL-1100 | Prints 4x6 shipping labels on thermal stock |
+| Label printer | Rollo, Zebra ZD421/ZD621 or GK420d, DYMO LabelWriter 4XL or 5XL, Brother QL-1100 | Prints product labels and 4x6 shipping labels on thermal stock |
 
 ## Receipt printers
 
@@ -46,7 +47,8 @@ Both come built into the models above.
    - **Epson:** any **ID** you choose, such as `counter-1`. You enter the same ID
      in the printer in step 5.
 4. Choose the paper width, whether the printer prints a receipt for every sale,
-   and whether a cash drawer is plugged into it. Select **Add printer**. The card
+   whether it prints kitchen tickets, and whether a cash drawer is plugged into
+   it. Select **Add printer**. The card
    shows the printer's **URL**. Copy it.
 5. Enter the URL in the printer's own settings page (open the printer's IP
    address, from the self-test, in a browser on the same network):
@@ -72,11 +74,19 @@ working at once.
 - **Every sale**, when the printer is set to print a receipt for every sale: the
   store name and address, the order number, each item with its price, the
   subtotal, discount, tax, tip and total, how it was paid and the change, and a
-  barcode of the order number that a scanner can read back.
-- **Reprints** of any register order.
+  barcode of the order number that a scanner can read back. When the customer
+  asks for an emailed or texted receipt, or no receipt, no paper prints. When
+  they ask for a printed one and no printer prints every sale, the register's
+  first printer prints it.
+- **Kitchen tickets**, on a printer set to print them: the order number in large
+  type, the time and the register, and each item with its quantity and options,
+  with no prices. Put one in the kitchen, at the bar or on the packing bench.
+- **Reprints**: select **Reprint on receipt printer** under the register's last
+  sale, or **Reprint receipt** on any register order under **Commerce → Orders**.
+  A reprint is marked *REPRINT*.
 - A **test page** from the Hardware card.
 
-A receipt waits up to 30 minutes for its printer. If the printer is off or out of
+A receipt waits up to 30 minutes for its printer, and a kitchen ticket up to 10. If the printer is off or out of
 paper for longer, the job is marked **Expired** and you can reprint it.
 
 ### Your logo on the receipt
@@ -102,7 +112,9 @@ Plug the drawer's RJ12 cable into the **DK** (drawer kick) port on the back of t
 printer, and turn on **A cash drawer is plugged into this printer** in the
 printer's settings. The drawer then opens:
 
-- on every **cash sale**, as the receipt starts printing,
+- on every sale paid **in cash**, including a sale paid partly in cash and partly
+  by card, as the receipt starts printing (or on its own when that printer does
+  not print receipts),
 - from **Open drawer** on the Hardware card.
 
 A drawer only opens within two minutes of the sale that asked for it. If the
@@ -112,8 +124,11 @@ later at an unattended counter.
 ## Barcode scanning
 
 - **USB or Bluetooth scanners** work with no setup: the scanner types the code
-  into the register's search box and presses Enter, and the register adds the
-  product whose SKU or barcode matches.
+  and presses Enter, and the register adds the product whose barcode or SKU
+  matches. It works whether or not the search box has focus, so you can scan
+  straight after tapping a product or a button. A scan made while a payment
+  window is open is ignored. Set the scanner to send **Enter** after each code;
+  most do out of the box.
 - **The camera** works on a tablet or phone: select the scan button beside the
   register's search box, or beside a variant's **Barcode** field in the product
   editor, and hold the barcode inside the frame. The camera reads EAN-13, UPC-A,
@@ -123,6 +138,27 @@ later at an unattended counter.
 For a busy counter, a handheld scanner is faster than the camera.
 
 ## Label printers
+
+### Product labels
+
+Print price and barcode labels for your shelves and stock:
+
+1. Go to **Commerce → Catalog** and select **Labels** on a physical product.
+2. Choose the label size, **2.25 x 1.25 in** or **2 x 1 in**, and how many copies
+   of each variant to print. Each label carries the product name, the variant's
+   options, its price, and a barcode of the variant's barcode, or of its SKU when
+   it has no barcode. A variant with neither cannot print a label; add one in the
+   product editor first.
+3. Select **Print**, choose the label printer and the same label size in the
+   print dialog, and print at **100%** scale. Or select **Download ZPL** and send
+   the file to a Zebra printer (with Zebra Setup Utilities, for example), which
+   prints it without a print dialog.
+
+A valid EAN-13, UPC-A or EAN-8 prints as that symbology; any other code prints
+as Code 128. Every label scans back at the register, with a handheld scanner or
+the camera.
+
+### Shipping labels
 
 Shipping labels are 4x6 inch PDFs, which any thermal label printer prints from
 the browser:
@@ -134,10 +170,6 @@ the browser:
    scale, never *Fit to page*.
 3. Print one label to check the barcode is sharp and nothing is cut off. The
    browser remembers these settings for the next label.
-
-Zebra printers can also print **ZPL** labels directly, which is faster and
-sharper than a PDF; use ZPL when your carrier offers it and the printer is a
-Zebra.
 
 ## Related
 

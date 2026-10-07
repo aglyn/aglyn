@@ -30,7 +30,6 @@ import {
   DialogTitle,
   Divider,
   IconButton,
-  InputAdornment,
   MenuItem,
   Stack,
   TableBody,
@@ -41,9 +40,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, getDoc } from 'firebase/firestore'
-import SvgIcon from '@mui/material/SvgIcon'
-import { mdiBarcodeScan } from '@aglyn/shared-data-mdi'
-import { BarcodeScanner } from '../../barcode/barcode-scanner.component'
+import { ScanAdornment } from '../../barcode/scan-button.component'
 import { productCollectionFields } from './smart-collections'
 import { memo, useCallback, useMemo, useRef, useState } from 'react'
 import {
@@ -607,37 +604,20 @@ const ProductVariantRow = memo(function ProductVariantRow(props: {
     [label],
   )
   // A camera scan fills the barcode the same way typing it does (AGL-3619).
-  const [scanning, setScanning] = useState(false)
   const barcodeInput = useMemo(
     () => ({
       htmlInput: { 'aria-label': `Barcode — ${label}` },
       input: {
         endAdornment: (
-          <InputAdornment position="end">
-            <IconButton
-              size="small"
-              edge="end"
-              aria-label={`Scan the barcode for ${label}`}
-              onClick={() => setScanning(true)}
-            >
-              <SvgIcon fontSize="small">
-                <path d={mdiBarcodeScan.path} />
-              </SvgIcon>
-            </IconButton>
-          </InputAdornment>
+          <ScanAdornment
+            label={`Scan the barcode for ${label}`}
+            onScan={(code) => onField(index, 'barcode', code)}
+          />
         ),
       },
     }),
-    [label],
+    [label, index, onField],
   )
-  const handleScanned = useCallback(
-    (code: string) => {
-      setScanning(false)
-      onField(index, 'barcode', code)
-    },
-    [index, onField],
-  )
-  const closeScanner = useCallback(() => setScanning(false), [])
   return (
     <TableRow>
       <TableCell sx={{ whiteSpace: 'nowrap' }}>{label}</TableCell>
@@ -679,14 +659,6 @@ const ProductVariantRow = memo(function ProductVariantRow(props: {
           sx={BARCODE_CELL}
           slotProps={barcodeInput}
         />
-        {scanning ? (
-          <BarcodeScanner
-            open
-            title={`Scan the barcode for ${label}`}
-            onClose={closeScanner}
-            onDetected={handleScanned}
-          />
-        ) : null}
       </TableCell>
       <TableCell>
         <MemoTextField

@@ -285,7 +285,7 @@ export const PLUGIN_DOCS = {
   posHardware: {
     path: '/commerce-and-bookings/commerce/pos-hardware',
     title: 'POS hardware',
-    excerpt: 'Receipt printers that print from any device with no driver, a cash drawer that opens on cash sales, camera and USB barcode scanning, and 4x6 label printers.',
+    excerpt: 'Receipt and kitchen printers that print from any device with no driver, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels on a label printer.',
   },
   posOperations: {
     path: '/commerce-and-bookings/commerce/pos-operations',
@@ -387,7 +387,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   orgAutomations: ['#what-an-org-automation-is', '#create-one', '#triggers', '#steps', '#pause-it-on-one-site', '#waiting-switching-off-and-deleting', '#every-sites-own-automations', '#related'],
   plugins: ['#install--upgrade', '#browse-card', '#whats-included', '#what-the-badges-on-a-listing-mean', '#how-plugins-run', '#when-one-plugin-depends-on-another', '#a-dependency-that-is-off-for-one-site', '#configure', '#configure-site', '#publish-your-own', '#related'],
   pos: ['#registers', '#the-register', '#platform-fees-at-the-register', '#selling-past-the-count', '#when-something-disconnects', '#reservations', '#related'],
-  posHardware: ['#recommended-kit', '#receipt-printers', '#add-a-printer', '#what-prints', '#your-logo-on-the-receipt', '#status', '#cash-drawer', '#barcode-scanning', '#label-printers', '#related'],
+  posHardware: ['#recommended-kit', '#receipt-printers', '#add-a-printer', '#what-prints', '#your-logo-on-the-receipt', '#status', '#cash-drawer', '#barcode-scanning', '#label-printers', '#product-labels', '#shipping-labels', '#related'],
   posOperations: ['#shifts-and-the-cash-drawer', '#what-the-reports-show', '#shift-history', '#requiring-a-shift', '#who-rang-it', '#staff-pins', '#customers-at-the-register', '#returns-and-exchanges', '#refund-limits-and-manager-approval', '#printed-receipts', '#related'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#tips', '#related'],
   publisherHandbook: ['#before-your-first-publish', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#rules-an-email-starter-has-to-meet', '#publishing-a-version', '#before-you-publish', '#review-what-happens-after-you-publish', '#the-two-badges-and-what-each-one-promises', '#asking-to-be-verified', '#testing-a-version-before-it-is-approved', '#watching-your-own-submission', '#disabled-versions', '#private-plugins', '#authoring-your-listing', '#what-your-listing-can-say-about-aglyn', '#versioning--updates', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#getting-paid', '#low-prices-and-processing'],

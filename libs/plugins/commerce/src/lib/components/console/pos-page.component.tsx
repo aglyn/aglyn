@@ -31,6 +31,8 @@ import {
   usePosOpsSettings,
   type PosSelectedCustomer,
 } from './pos-ops/register-ops'
+import { ScanAdornment } from '../../barcode/scan-button.component'
+import { useScannerWedge } from '../../barcode/scanner-wedge'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { ListQueryNotices } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
@@ -402,8 +404,8 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
    * and a code outside the window were indistinguishable from a scanner that
    * had not fired — the cashier's only signal was that nothing happened.
    */
-  const handleSearchEnter = useCallback(async () => {
-    const needle = search.trim().toLowerCase()
+  const lookupCode = useCallback(async (scanned: string) => {
+    const needle = scanned.trim().toLowerCase()
     if (!needle) return
     const lookup = async (field: 'barcodes' | 'skus') => {
       const found = await getDocs(
@@ -426,7 +428,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
       })
     }
     if (!hit) {
-      return void enqueueSnackbar(`No product matches “${search.trim()}”`, {
+      return void enqueueSnackbar(`No product matches “${scanned.trim()}”`, {
         variant: 'warning',
         persist: false,
       })
@@ -443,7 +445,21 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
       ) ?? product.variants[0]
     addProduct(product, variant)
     setSearch('')
-  }, [search, firestore, hostId, addProduct, enqueueSnackbar])
+  }, [firestore, hostId, addProduct, enqueueSnackbar])
+  const handleSearchEnter = useCallback(() => lookupCode(search), [lookupCode, search])
+  // A scanner fired while focus is on a product or a button (AGL-3619), and
+  // the camera; neither while a tender dialog is taking input.
+  useScannerWedge((code) => void lookupCode(code), paying === null)
+  const scanSlotProps = useMemo(
+    () => ({
+      input: {
+        endAdornment: (
+          <ScanAdornment label="Scan a barcode with the camera" onScan={(code) => void lookupCode(code)} />
+        ),
+      },
+    }),
+    [lookupCode],
+  )
 
   /**
    * Take payment. The tender is an ARGUMENT, never read back out of state
@@ -561,6 +577,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
             onKeyDown={(event) => {
               if (event.key === 'Enter') void handleSearchEnter()
             }}
+            slotProps={scanSlotProps}
             size="small"
             fullWidth
             autoFocus

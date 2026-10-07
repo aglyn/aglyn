@@ -191,6 +191,45 @@ export function layoutReceipt(receipt: ReceiptData, options: LayoutOptions): Pri
 }
 
 /**
+ * The ticket the kitchen, the bar or the packing bench works from: the order
+ * number large enough to call out, when it was rung and on which register,
+ * then each item with its quantity and options. No prices, no tenders and no
+ * barcode: the people reading it are making the order, not paying for it.
+ */
+export function layoutKitchenTicket(receipt: ReceiptData, options: { columns: number }): PrintDocument {
+  const { columns } = options
+  const half = Math.floor(columns / 2)
+  const ops: PrintOp[] = []
+  if (receipt.banner) {
+    ops.push({ op: 'text', text: toPrintable(receipt.banner).slice(0, half), align: 'center', bold: true, size: 2 })
+  }
+  ops.push({ op: 'text', text: toPrintable(`#${receipt.orderNumber}`).slice(0, half), align: 'center', bold: true, size: 2 })
+  for (const text of twoColumnLines(
+    receipt.registerName ?? '',
+    formatReceiptTime(receipt.createdAtMs, receipt.timeZone),
+    columns,
+  )) {
+    ops.push({ op: 'text', text })
+  }
+  ops.push(rule(columns))
+  for (const item of receipt.lines) {
+    // Quantity first and large: "2 x Latte" read across a kitchen.
+    for (const text of wrapText(`${item.quantity} x ${item.name}`, half)) {
+      ops.push({ op: 'text', text, bold: true, size: 2 })
+    }
+    if (item.detail) {
+      for (const text of wrapText(item.detail, columns - 2)) ops.push({ op: 'text', text: `  ${text}` })
+    }
+  }
+  ops.push(rule(columns))
+  const count = receipt.lines.reduce((sum, item) => sum + item.quantity, 0)
+  ops.push({ op: 'text', text: `${count} ${count === 1 ? 'item' : 'items'}`, align: 'right' })
+  ops.push({ op: 'feed', lines: 2 })
+  ops.push({ op: 'cut' })
+  return { columns, ops }
+}
+
+/**
  * Code128 code set B carries printable ASCII, and a scanner reads a short
  * symbol more reliably than a long one, so the data is the order number
  * reduced to those characters and capped well under a receipt's width.
