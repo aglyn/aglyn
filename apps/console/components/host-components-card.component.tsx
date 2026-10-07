@@ -76,7 +76,7 @@ import ArtifactDeleteConfirmDescription, {
 import { buildRoute, Route } from '../constants/route-links'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import { useHostSubdomain } from './host-id-provider'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   DUPLICATE_MENU_LABEL,
   useDuplicateResource,
@@ -172,6 +172,8 @@ export interface HostComponentsCardProps {
    */
   onCreate?: () => void
   onBrowseTemplates?: () => void
+  /** Other ways to start a component, from plugins, beside the create button. */
+  emptyActions?: ReactNode
 }
 
 /**
@@ -183,7 +185,7 @@ export interface HostComponentsCardProps {
  * with the marketplace component editor.
  */
 export function HostComponentsCard(props: HostComponentsCardProps) {
-  const { hostId, onQuota, onCreate, onBrowseTemplates } = props
+  const { hostId, onQuota, onCreate, onBrowseTemplates, emptyActions } = props
   const firestore = useFirestore()
   const createHostVersion = useHostVersionApi()
   const { enqueueSnackbar } = useSnackbar()
@@ -789,8 +791,9 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
               noRowsDescription:
                 'A reusable component is a block you build once and drop onto any page — a hero, a pricing table, a footer. Create one, or save one from the Besigner.',
               noRowsAction:
-                onCreate || onBrowseTemplates ? (
+                onCreate || onBrowseTemplates || emptyActions ? (
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                    {emptyActions}
                     {onCreate ? (
                       <Button variant="contained" onClick={onCreate}>
                         {'Create your first component'}

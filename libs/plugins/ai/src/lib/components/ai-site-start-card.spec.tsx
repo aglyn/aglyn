@@ -703,3 +703,36 @@ describe('after "Plan my site": where the next step is (AGL-3594)', () => {
     expect(screen.queryByText(/Your site is being planned/)).toBeNull()
   })
 })
+
+/**
+ * The takeover's surface (AGL-3596). A full-screen Dialog's paper is an
+ * elevated paper, and in dark mode MUI lightens one with a white overlay — a
+ * `background-image` over the paper color — which turned the guided start a
+ * washed-out gray beside the console it covers. It is the console page's own
+ * background in both modes.
+ */
+describe('the guided start is drawn on the console’s own surface', () => {
+  it.each(['light', 'dark'] as const)('in %s mode: the page background, with no elevation overlay', async (mode) => {
+    const { ThemeProvider, createTheme } = jest.requireActual('@mui/material') as typeof import('@mui/material')
+    const theme = createTheme({ palette: { mode } })
+    const Widget = widget()
+    mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
+    render(
+      <ThemeProvider theme={theme}>
+        <Widget {...zoneProps()} />
+      </ThemeProvider>,
+    )
+    await screen.findByText('How do you want to start?')
+    const paper = document.querySelector('.MuiDialog-paper') as HTMLElement
+    const style = getComputedStyle(paper)
+    // Flat paper: MUI draws its dark-mode overlay through --Paper-overlay,
+    // and at elevation 0 every color in it is fully transparent.
+    expect(paper.className).toContain('MuiPaper-elevation0')
+    const overlay = style.getPropertyValue('--Paper-overlay')
+    const alphas = [...overlay.matchAll(/rgba\([^)]*,\s*([\d.]+)\)/g)].map((match) => Number(match[1]))
+    expect(alphas.filter((alpha) => alpha !== 0)).toEqual([])
+    const expected = document.createElement('div')
+    expected.style.backgroundColor = theme.palette.background.default
+    expect(style.backgroundColor).toBe(expected.style.backgroundColor)
+  })
+})

@@ -1037,8 +1037,8 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
       ],
       footerReason:
-        'You’re receiving this because you turned on email for these ' +
-        'notifications in {{brand.productName}}.',
+        'You’re receiving this because email is on for these ' +
+        'notifications in your {{brand.productName}} settings.',
       source: 'libs/tenant/data/admin/src/lib/server/notifications.ts',
     },
     {

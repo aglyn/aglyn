@@ -39,6 +39,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   isServerReleaseFlagOnForOrg: (...args: unknown[]) => mockFlag(...(args as [])),
   memberHasOrgPermission: (...args: unknown[]) => mockPermission(...(args as [])),
 }))
+const mockRegisterDeclarations = jest.fn(async () => undefined)
+jest.mock('../constants/plugins.declarations.server.generated', () => ({
+  __esModule: true,
+  registerPluginServerDeclarations: () => mockRegisterDeclarations(),
+}))
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   __esModule: true,
   authorizedFetch: (...args: unknown[]) => mockFetch(...args),
@@ -49,7 +54,12 @@ jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   trackEvent: (...args: unknown[]) => mockTrack(...args),
 }))
 
+import { resolveOrgPermissions } from '@aglyn/aglyn/app-utils/org-permissions'
+import type * as Entitlements from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
 import { guidedStartOffered } from '../utils/server/guided-start-offered'
+
+type EntitlementsModule = typeof Entitlements
+const ENTITLEMENTS_MODULE = ['@aglyn/aglyn', 'plugin-manager', 'plugin-entitlements'].join('/')
 import { NEW_SITE_ENABLED_PLUGINS } from '../utils/server/provision-host'
 import { hostIsBlankSite, requestStarterSite } from '../utils/host-first-run'
 
@@ -71,6 +81,8 @@ beforeEach(() => {
   mockPermission.mockResolvedValue(true)
   mockFetch.mockReset()
   mockTrack.mockReset()
+  mockRegisterDeclarations.mockReset()
+  mockRegisterDeclarations.mockResolvedValue(undefined)
 })
 
 describe('a site is born without the starter only for a creator the guided start will be offered to', () => {
@@ -90,6 +102,40 @@ describe('a site is born without the starter only for a creator the guided start
     // A read that throws is a "no", never an empty site.
     mockFlag.mockRejectedValueOnce(new Error('down'))
     await expect(ask()).resolves.toBe(false)
+  })
+
+  it('decides ai.generate from a core-only context: an owner is offered it (AGL-3596)', async () => {
+    // The production failure: the AI plugin's catalog key was registered in
+    // the boot step's module graph and the create route's own copy of the
+    // catalog never heard of it, so an owner's `ai.generate` read `undefined`
+    // and every guided start was born with the starter. Here the route asks
+    // the real core catalog, and the declaration registers in another copy.
+    mockRegisterDeclarations.mockImplementationOnce(async () => {
+      jest.isolateModules(() => {
+        // Re-required through a variable so the specifier is not a literal:
+        // a spec is not a code-split boundary (see aglyn/no-dynamic-first-party-import).
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const boot = require(ENTITLEMENTS_MODULE) as EntitlementsModule
+        boot.registerPluginEntitlements({
+          pluginId: 'ai',
+          orgPermissions: [
+            {
+              key: 'ai.generate',
+              label: 'Generate with AI',
+              description: 'Run AI generation jobs.',
+              roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
+            },
+          ],
+        })
+      })
+    })
+    mockPermission.mockImplementation(async (...args: unknown[]) => {
+      const [, member, permission] = args as [string, never, string]
+      return resolveOrgPermissions(member)[permission] === true
+    })
+    const member = { role: 'owner', allHosts: true, consoleUserType: 'manager' } as never
+    await expect(ask({ member })).resolves.toBe(true)
+    expect(mockRegisterDeclarations).toHaveBeenCalled()
   })
 
   it('lets staff through the flag and the permission, as the jobs route does', async () => {

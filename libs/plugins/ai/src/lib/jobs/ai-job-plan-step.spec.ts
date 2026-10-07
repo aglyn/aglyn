@@ -78,6 +78,7 @@ import {
 } from './ai-job-budget'
 import type { AiJob } from '../model/ai-jobs.types'
 import {
+  AI_PLAN_NO_FORM_SENTENCE,
   aiPlanCapabilitiesForJob,
   aiPlanCapabilityLines,
   aiUnrestrictedPlanCapabilities,
@@ -493,7 +494,17 @@ describe('the plan step — what the job may create (AGL-3030)', () => {
     expect(readCapabilities).toHaveBeenCalledWith({ job: job(), org: { plan: 'free' }, firestore })
     const [request] = mockRunAiRequest.mock.calls[0]
     const told = aiPlanCapabilitiesForJob(FREE, AI_JOB_PLAN_SCOPES.page)
-    expect(request.messages[0].content).toBe(aiJobPlanPrompt(job(), told))
+    expect(request.messages[0].content).toBe(aiJobPlanPrompt(job(), told, INVENTORY))
+    // The site has no saved form and a page job here may create none, so
+    // the plan is told to place none — never to draw one (AGL-3596).
+    expect(INVENTORY.forms).toEqual([])
+    expect(request.messages[0].content).toContain(AI_PLAN_NO_FORM_SENTENCE)
+    // Once the plan's formsPerHost leaves room (Free 1, AGL-3597), the same
+    // site is told it may create a saved form, and never to plan none.
+    const withRoom = { ...told, create: { ...told.create, form: { allowed: true, left: 1, reason: null } } }
+    const roomy = aiJobPlanPrompt(job(), withRoom, INVENTORY)
+    expect(roomy).toContain('- form: yes, 1 more')
+    expect(roomy).not.toContain(AI_PLAN_NO_FORM_SENTENCE)
     expect(request.messages[0].content).toContain('- component: no, because this workspace\'s plan does not include reusable components')
     expect(request.messages[0].content).toContain('- template: no, because a page job does not build one')
     // The cached prefix is the platform's: nothing of this workspace rides in it.
@@ -536,7 +547,7 @@ describe('the plan step — what the job may create (AGL-3030)', () => {
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
     const [first] = mockRunAiRequest.mock.calls[0]
     expect(first.messages[0].content).toContain(
-      "This workspace keeps no reusable components or saved forms: draw a list's repeated items in one section, and a form as a Form element holding its Form Fields.",
+      "This workspace keeps no reusable components: draw a list's repeated items in one section.",
     )
     const reask = mockRunAiRequest.mock.calls[1][0].messages.at(-1).content as string
     expect(reask).toContain(

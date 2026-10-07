@@ -23,10 +23,11 @@
 /**
  * A Free workspace builds its first page (AGL-3030).
  *
- * The Free plan keeps no reusable components and no saved forms, and its AI
- * allowance is a 300-credit wall. A page it describes has to be buildable the
- * one way it can build — the repeated items drawn where they repeat, the form
- * carried by the page — and has to fit that wall end to end: the plan, every
+ * The Free plan keeps no reusable components and its AI allowance is a
+ * 300-credit wall. It saves one form per site since AGL-3597, and a page it
+ * describes places that saved form by its id. A page it describes has to be
+ * buildable the one way it can build — the repeated items drawn where they
+ * repeat, the form placed by reference — and has to fit that wall end to end: the plan, every
  * section pass, and the listing.
  *
  * What is held here:
@@ -34,7 +35,7 @@
  *  - the Free golden page (`AI_FREE_PAGE_FIXTURE`) replays through the REAL
  *    plan step and page step on a Free org: the plan is kept under the Free
  *    workspace's capabilities, every pass is kept by the page's own checks,
- *    and the draft carries its inline form and cards — while the whole
+ *    and the draft carries its cards and places its saved form — while the whole
  *    doctrine, which a paid workspace keeps, refuses the same plan and page;
  *  - THE ARITHMETIC: the plan at the tokens measured live on a Free workspace,
  *    grown with the prompt as it grows now, plus every section pass at its
@@ -292,10 +293,11 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks())
 
 describe('a Free workspace builds its first page', () => {
-  it('is told it keeps no reusable components or saved forms, and what it may still create', () => {
+  it('is told it keeps no reusable components, the one saved form its site has room for, and what else it may create', () => {
     expect(FREE.reusableComponents).toBe(false)
     expect(FREE.create.component).toMatchObject({ allowed: false, reason: expect.stringContaining('reusable components') })
-    expect(FREE.create.form).toMatchObject({ allowed: false, reason: expect.stringContaining('saved forms') })
+    // A Free site saves one form (AGL-3597); it is not behind the component feature.
+    expect(FREE.create.form).toMatchObject({ allowed: true })
     // The one shared layout the Free plan includes is already the site's.
     expect(FREE.create.layout).toMatchObject({ allowed: false, left: 0 })
     expect(FREE.create.template).toMatchObject({ allowed: true, left: 10 })
@@ -303,10 +305,10 @@ describe('a Free workspace builds its first page', () => {
 
   it('keeps the Free plan under the Free workspace’s capabilities, which the whole doctrine refuses', async () => {
     expect(validateAiBuildPlan(FIXTURE.plan, FIXTURE.inventory, null, FREE)).toEqual([])
-    // A paid workspace keeps the component and saved-form doctrine.
+    // A paid workspace keeps the component doctrine. The form is placed by
+    // its id on both: a form is a saved form on every plan (AGL-3596).
     expect(validateAiBuildPlan(FIXTURE.plan, FIXTURE.inventory).map((violation) => violation.code)).toEqual([
       'plan-repeated-items',
-      'plan-form-not-placed',
     ])
 
     const { planOutcome, planRequest } = await replay()
@@ -320,7 +322,7 @@ describe('a Free workspace builds its first page', () => {
     }
   })
 
-  it('builds the page inline: every pass kept by the page’s own checks, the cards drawn where they repeat, the form carried with its fields', async () => {
+  it('builds the page inline: every pass kept by the page’s own checks, the cards drawn where they repeat, the saved form placed by its id', async () => {
     const { outcomes, passRequests, page } = await replay()
     expect(outcomes.slice(0, -1).map((outcome) => [outcome.continue, outcome.review, outcome.failure])).toEqual(
       FIXTURE.answers.map(() => [true, undefined, undefined]),
@@ -338,22 +340,15 @@ describe('a Free workspace builds its first page', () => {
       validateAiDoctrineTree(tree, 'page', aiPageCheckContext(FIXTURE.inventory)).violations.map(
         (violation) => [violation.rule, violation.code],
       ),
-    ).toEqual([
-      [1, 'repeated-subtree'],
-      [3, 'inline-form'],
-    ])
+    ).toEqual([[1, 'repeated-subtree']])
 
-    // The form a Free site's submit route collects: no formId, a name, and a field for each answer.
+    // The site's saved form, placed by its id (AGL-3596): no inputs on the
+    // page, and no field drawn inside the placed form.
     const forms = Object.values(page).filter((node) => node.componentId === 'form')
     expect(forms).toHaveLength(1)
-    expect(forms[0].props).toEqual({ formName: 'Consultation request', submitLabel: 'Request a consultation' })
-    const fields = (forms[0].nodes ?? []).map((id) => page[id])
-    expect(fields.map((node) => [node.componentId, node.props?.['fieldName']])).toEqual([
-      ['formField', 'name'],
-      ['formField', 'email'],
-      ['formField', 'phone'],
-      ['formField', 'matter'],
-    ])
+    expect(forms[0].props).toEqual({ formId: 'frm-consultation' })
+    expect(forms[0].nodes ?? []).toEqual([])
+    expect(Object.values(page).filter((node) => node.componentId === 'formField')).toEqual([])
     expect(Object.values(page).filter((node) => node.componentId === 'reusableInstance')).toEqual([])
 
     // The practice areas were answered written once (AGL-3053), and the draft holds
@@ -743,12 +738,13 @@ describe('one Free page fits the Free taste, end to end', () => {
       validateAiBuildPlan(plan, inventory, null, capabilities).map((violation) => violation.code)
     expect(codes(six, bare, FREE_NO_LAYOUT)).toEqual([])
     expect(codes(seven, bare, FREE_NO_LAYOUT)).toEqual(['plan-over-free-wall'])
-    expect(codes(AI_FREE_PAGE_BUILT_PLAN, bare, FREE_NO_LAYOUT)).toEqual(['plan-split-list', 'plan-over-free-wall'])
+    // The live plan placed no form beside a site that has a saved one (AGL-3596).
+    expect(codes(AI_FREE_PAGE_BUILT_PLAN, bare, FREE_NO_LAYOUT)).toEqual(['plan-split-list', 'plan-over-free-wall', 'plan-form-not-placed'])
     // A site with its layout already fits nine, and a paid workspace is held to no wall.
     const nine = { ...FIXTURE.plan, screens: [{ ...FIXTURE.plan.screens[0], sections: [...seven.screens[0].sections.slice(0, 6), { name: 'our team', uses: [], items: 0 }, { name: 'questions', uses: [], items: 0 }, form] }] }
     const ten = { ...nine, screens: [{ ...nine.screens[0], sections: [...nine.screens[0].sections.slice(0, 8), { name: 'offices', uses: [], items: 0 }, form] }] }
     expect([codes(nine, FIXTURE.inventory, FREE), codes(ten, FIXTURE.inventory, FREE)]).toEqual([[], ['plan-over-free-wall']])
-    expect(validateAiBuildPlan(AI_FREE_PAGE_BUILT_PLAN, bare, null, { ...FREE_NO_LAYOUT, freeTaste: undefined }).map((violation) => violation.code)).toEqual(['plan-split-list'])
+    expect(validateAiBuildPlan(AI_FREE_PAGE_BUILT_PLAN, bare, null, { ...FREE_NO_LAYOUT, freeTaste: undefined }).map((violation) => violation.code)).toEqual(['plan-split-list', 'plan-form-not-placed'])
 
     mockRunAiRequest.mockReset()
     mockRunAiRequest

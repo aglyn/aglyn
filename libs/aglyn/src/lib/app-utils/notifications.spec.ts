@@ -32,6 +32,7 @@ import {
   notificationOverriddenScopes,
   notificationScopePref,
   notificationScopeTypePref,
+  notificationTypeChannelDefault,
   notificationTypesInCategory,
   type AglynNotificationType,
   type NotificationSettings,
@@ -145,10 +146,37 @@ describe('a task falling due is work arriving (AGL-2659)', () => {
 describe('per-scope, per-channel notification settings (AGL-3223)', () => {
   const FORM = 'content.formSubmission'
 
-  it('defaults to the console and not the inbox', () => {
+  it('defaults to the console and not the inbox, except a site\'s transactions', () => {
     expect(notificationChannelEnabled(undefined, 'console', FORM)).toBe(true)
-    expect(notificationChannelEnabled(undefined, 'email', FORM)).toBe(false)
     expect(notificationChannelEnabled({}, 'email', 'billing.invoice')).toBe(false)
+    expect(notificationChannelEnabled(undefined, 'email', 'content.taskAssigned')).toBe(false)
+  })
+
+  it('emails a site\'s transactions to everyone who never said otherwise', () => {
+    for (const type of ['content.formSubmission', 'content.booking', 'content.order']) {
+      expect(notificationChannelEnabled(undefined, 'email', type)).toBe(true)
+      expect(notificationChannelEnabled({}, 'email', type, { orgId: 'o', hostId: 'h' })).toBe(true)
+      expect(notificationTypeChannelDefault(type, 'email')).toBe(true)
+    }
+    expect(notificationTypeChannelDefault('content.aiJobDone', 'email')).toBe(false)
+  })
+
+  it('keeps a stored no, the category\'s or the type\'s, over that default', () => {
+    expect(
+      notificationChannelEnabled({ account: { content: { email: false } } }, 'email', FORM),
+    ).toBe(false)
+    expect(
+      notificationChannelEnabled(
+        { accountTypes: { 'content.order': { email: false } } },
+        'email',
+        'content.order',
+      ),
+    ).toBe(false)
+    expect(
+      notificationChannelEnabled({ hosts: { h: { content: { email: false } } } }, 'email', FORM, {
+        hostId: 'h',
+      }),
+    ).toBe(false)
   })
 
   it('lets the narrowest scope that answered decide', () => {
@@ -200,9 +228,13 @@ describe('per-scope, per-channel notification settings (AGL-3223)', () => {
       notificationChannelEnabled(undefined, 'console', FORM, undefined, muted),
     ).toBe(false)
     // Console-only: the old map predates the email channel and never said
-    // anything about it, so it must not be read as an opt-in or an opt-out.
+    // anything about it, so it must not be read as an opt-in or an opt-out —
+    // email falls to the type's own default either way.
     expect(
       notificationChannelEnabled(undefined, 'email', FORM, undefined, muted),
+    ).toBe(true)
+    expect(
+      notificationChannelEnabled(undefined, 'email', 'content.taskAssigned', undefined, muted),
     ).toBe(false)
     expect(
       notificationChannelEnabled(

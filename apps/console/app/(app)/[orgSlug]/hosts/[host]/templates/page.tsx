@@ -193,6 +193,13 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
         <HostTemplatesCard
           hostId={hostId}
           onQuota={setQuota}
+          emptyActions={
+            <PluginWidgetSlot
+              slot="hostTemplates"
+              hostId={hostId}
+              orgId={currentOrg?.$id}
+            />
+          }
           // The header's own create action, so the empty state opens the
           // page's drawer rather than a second one.
           onCreate={() => setCreateOpen(true)}

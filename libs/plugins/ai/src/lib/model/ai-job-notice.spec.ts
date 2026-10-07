@@ -80,6 +80,33 @@ describe('a finished job', () => {
     expect(normalizeNotificationLink(notice.link, context)).toBe('/acme/hosts/roofers/ai-jobs/job-1')
   })
 
+  it('says a guided start’s site is live once its pages are published (AGL-3596)', () => {
+    const published = [{ id: 'home', label: 'Home', path: '/' }]
+    const notice = aiJobNotice(
+      source({ outputs: [screen('home')], sitePublish: { published, drafts: [] } }),
+      'done',
+    )
+    expect(notice.title).toBe('Your site is live')
+    expect(notice.body).toBe('Your pages are published. Open it to view your site or edit your pages.')
+    expect(notificationLevel(notice)).toBe('success')
+    expect(normalizeNotificationLink(notice.link, context)).toBe('/acme/hosts/roofers/ai-jobs/job-1')
+    const someDrafts = aiJobNotice(
+      source({
+        sitePublish: {
+          published,
+          drafts: [{ id: 'about', label: 'About', reason: 'Its address is already used by another page.' }],
+        },
+      }),
+      'done',
+    )
+    expect(someDrafts.body).toBe('Your pages are published, except one that stayed a draft. Open it to see why.')
+  })
+
+  it('keeps the drafts wording when nothing was published', () => {
+    const notice = aiJobNotice(source({ outputs: [screen('home')], sitePublish: { published: [], drafts: [] } }), 'done')
+    expect(notice.title).toBe('Your site’s draft pages are ready')
+  })
+
   it('opens the one draft it built in the editor, on the version it wrote', () => {
     const notice = aiJobNotice(source({ kind: 'page', outputs: [screen('pricing')] }), 'done')
     expect(notice.title).toBe('Your draft page is ready')

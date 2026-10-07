@@ -18,6 +18,7 @@
 import { buildPageMarkdown } from '@aglyn/aglyn/app-utils/page-markdown'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { SCREEN_SEO_TEXT_GUIDANCE } from '@aglyn/aglyn/app-utils/screen-seo-fields'
+import { SCREEN_ROOT_PATH, screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
@@ -37,9 +38,10 @@ import { validateAiDoctrineTree, type AiDoctrineTree } from '../runtime/ai-doctr
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fields'
 import { readSiteInventory } from '../runtime/site-inventory'
+import type { AiSiteInventory } from '../model/ai-site-inventory'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiGenerationWorstCaseMs } from './ai-job-budget'
-import { aiJobDraftId } from './ai-job-draft-ids'
+import { aiJobDraftId, aiOriginJobId } from './ai-job-draft-ids'
 import {
   aiDraftAdmissionRefusal,
   aiDraftAllowanceRefusal,
@@ -267,10 +269,51 @@ export function aiPageJobRunMinimumMs(job: AiJob): number {
   return aiJobStepRunMinimumMs(aiSiteUnitJob(job, unit, aiSiteBuiltRefs(units, outputs)))
 }
 
-/** The one-segment address a draft asks for, from the plan's slug. */
+/**
+ * The one-segment address a draft asks for, from the plan's slug; `/` for a
+ * planned home page, which asks for the root rather than for an address made
+ * from its name (AGL-3596).
+ */
 export function aiPageDraftSlug(screen: Pick<AiBuildPlanScreen, 'slug'>): string {
   const segments = screen.slug.split('/').map((part) => part.trim()).filter(Boolean)
+  if (!segments.length && screen.slug.trim() === SCREEN_ROOT_PATH) return SCREEN_ROOT_PATH
   return segments[segments.length - 1] ?? ''
+}
+
+/**
+ * The layout a site's pages render inside (AGL-3596): the one its home page
+ * uses, else the one the most pages use, else the site's only layout. `null`
+ * for a site with no layout, or several and no page to choose between them.
+ */
+export function aiSiteDefaultLayoutId(
+  inventory: Pick<AiSiteInventory, 'layouts' | 'screens'>,
+): string | null {
+  const layouts = new Set(inventory.layouts.map((row) => row.id))
+  if (!layouts.size) return null
+  const pages = inventory.screens.filter(
+    (row) => !row.template && row.layoutId && layouts.has(row.layoutId),
+  )
+  const home = pages.find((row) => row.slug.trim() === SCREEN_ROOT_PATH)
+  if (home?.layoutId) return home.layoutId
+  const counts = new Map<string, number>()
+  for (const row of pages) counts.set(row.layoutId as string, (counts.get(row.layoutId as string) ?? 0) + 1)
+  const [mostUsed] = [...counts.entries()].sort((a, b) => b[1] - a[1])
+  if (mostUsed) return mostUsed[0]
+  return layouts.size === 1 ? [...layouts][0] : null
+}
+
+/**
+ * The layout a page draft renders inside: the plan's, where the site has it,
+ * else the site's own (AGL-3596). A page the plan named no layout for used to
+ * be written with none, and so with no header and no footer, beside pages
+ * that had them.
+ */
+export function aiPageDraftLayoutId(
+  screen: Pick<AiBuildPlanScreen, 'layout'>,
+  inventory: Pick<AiSiteInventory, 'layouts' | 'screens'>,
+): string | null {
+  if (screen.layout && inventory.layouts.some((row) => row.id === screen.layout)) return screen.layout
+  return aiSiteDefaultLayoutId(inventory)
 }
 
 /** A plan's listing value held to the length the SEO editor guides it to, cut at a word. */
@@ -477,14 +520,22 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     // Only a source we could READ and found short diverts: one we cannot read
     // is one we cannot judge, and the review after the copy still answers for
     // that. A short source carries findings; an unreadable one carries none.
+    // A copy of the starter home page is never a page the job built
+    // (AGL-3596): the site's own placeholder is replaced by a page generated
+    // from the plan, so a plan that names it as a start builds instead.
+    const copiesStarter = Boolean(
+      screen.duplicateOf &&
+        inventory.screens.some((row) => row.id === screen.duplicateOf && row.replaceable),
+    )
     const sourceReview =
-      !written && screen.duplicateOf
+      !written && screen.duplicateOf && !copiesStarter
         ? await aiCopiedPageReview(firestore, { hostId, id: screen.duplicateOf, name, screen })
         : null
     const sourceShort = Boolean(sourceReview?.findings.length)
     if (
       !written &&
       !sourceShort &&
+      !copiesStarter &&
       screen.duplicateOf &&
       inventory.screens.some((row) => row.id === screen.duplicateOf && !row.template)
     ) {
@@ -524,8 +575,9 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     if (written && !stored) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_DELETED_COPY }
     const page = stored?.nodes ?? aiEmptyPage()
     const index = sectionIds.findIndex((id) => !(id in page))
-    // A workspace that keeps no reusable components or saved forms builds its
-    // page inline, and every pass is held to the rules that way (AGL-3030).
+    // A workspace that keeps no reusable components draws its repeats inline,
+    // and every pass is held to the rules that way (AGL-3030). A form is a
+    // saved one placed by id on every plan, or none (AGL-3596).
     const reusableComponents = checkEntitlement(org, 'reusableComponents')
     // A link may take a visitor to a section of this page, by its name in the plan (AGL-3097).
     const sections = screen.sections.map((section) => section.name)
@@ -603,7 +655,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         ) {
           const host = await firestore.collection('hosts').doc(hostId).get()
           const result = await seoFields({
-            subject: { kind: 'screen', name, path: `/${slug}` },
+            subject: { kind: 'screen', name, path: screenRoutePathToUrl(slug || SCREEN_ROOT_PATH) },
             brand: siteNameOf(host),
             // What the site is and who it is for (AGL-2918). The page's own
             // Markdown says what the page is about and cannot say who it was
@@ -679,8 +731,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         name,
         nodes: aiPageWithSection(aiEmptyPage(), result.value, sectionIds),
         slug,
-        layoutId:
-          screen.layout && inventory.layouts.some((row) => row.id === screen.layout) ? screen.layout : null,
+        layoutId: aiPageDraftLayoutId(screen, inventory),
+        aiJobId: aiOriginJobId(job),
         now,
       })
       if (draft.ok === false) {

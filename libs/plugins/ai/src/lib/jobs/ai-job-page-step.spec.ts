@@ -135,7 +135,10 @@ import {
   aiJobPageSectionMaxTokens,
   aiPageJobAdmission,
   aiPageJobRunMinimumMs,
+  aiPageDraftLayoutId,
+  aiPageDraftSlug,
   aiPageJobUnits,
+  aiSiteDefaultLayoutId,
   createAiJobPageStep,
   runAiJobPageStep,
   registerAiPageJob,
@@ -1183,5 +1186,66 @@ describe('what the plan creates comes first (AGL-3031)', () => {
       usage: AI_JOB_ZERO_USAGE,
     })
     expect(mockRunAiRequest).not.toHaveBeenCalled()
+  })
+})
+
+describe('a page is generated over the starter, inside the site’s layout (AGL-3596)', () => {
+  const page = (id: string, slug: string, layoutId: string | null, extra: Record<string, unknown> = {}) => ({
+    id,
+    name: id,
+    slug,
+    layoutId,
+    template: false,
+    ...extra,
+  })
+
+  it('asks for the root for a planned home page', () => {
+    expect(aiPageDraftSlug({ slug: '/' })).toBe('/')
+    expect(aiPageDraftSlug({ slug: '/book-now' })).toBe('book-now')
+  })
+
+  it('finds the site’s layout: the home page’s, else the most used, else the only one', () => {
+    const layouts = [
+      { id: 'lay-a', name: 'A', parentId: null },
+      { id: 'lay-b', name: 'B', parentId: null },
+    ]
+    expect(aiSiteDefaultLayoutId({ layouts, screens: [page('h', '/', 'lay-b'), page('x', 'x', 'lay-a'), page('y', 'y', 'lay-a')] })).toBe('lay-b')
+    expect(aiSiteDefaultLayoutId({ layouts, screens: [page('x', 'x', 'lay-a'), page('y', 'y', 'lay-a'), page('z', 'z', 'lay-b')] })).toBe('lay-a')
+    expect(aiSiteDefaultLayoutId({ layouts: [layouts[0]], screens: [] })).toBe('lay-a')
+    expect(aiSiteDefaultLayoutId({ layouts, screens: [] })).toBeNull()
+    expect(aiSiteDefaultLayoutId({ layouts: [], screens: [page('h', '/', 'lay-gone')] })).toBeNull()
+  })
+
+  it('gives a page the plan named no layout for the site’s, and keeps a layout the plan named', () => {
+    const inventory = { layouts: [{ id: 'lay-site', name: 'Site header and footer', parentId: null }], screens: [page('h', '/', 'lay-site')] }
+    expect(aiPageDraftLayoutId({ layout: null }, inventory)).toBe('lay-site')
+    expect(aiPageDraftLayoutId({ layout: 'lay-gone' }, inventory)).toBe('lay-site')
+    expect(
+      aiPageDraftLayoutId({ layout: 'lay-other' }, { ...inventory, layouts: [...inventory.layouts, { id: 'lay-other', name: 'O', parentId: null }] }),
+    ).toBe('lay-other')
+  })
+
+  it('writes a page the plan named no layout for inside the site’s layout, stamped with its job', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(sectionAnswer(FIXTURE.answers[0]))
+    await step()(context({ plan: { ...PLAN, screens: [{ ...SCREEN, layout: null }] } }))
+    const versionId = mockDocs.get(DRAFT)?.['versionId']
+    expect(mockDocs.get(`${DRAFT}/versions/${versionId}`)).toMatchObject({ layoutId: aiSiteDefaultLayoutId(FIXTURE.inventory), aiJobId: 'job-1' })
+    expect(mockDocs.get(DRAFT)?.['aiJobId']).toBe('job-1')
+  })
+
+  it('never copies the starter home page: it builds the planned sections instead', async () => {
+    mockReadInventory.mockResolvedValue({
+      ...FIXTURE.inventory,
+      screens: [
+        ...FIXTURE.inventory.screens.filter((row) => row.id !== 'scr-starter'),
+        { id: 'scr-starter', name: 'Home', slug: '/', layoutId: 'lay-site', template: false, replaceable: true },
+      ],
+    })
+    mockRunAiRequest.mockResolvedValueOnce(sectionAnswer(FIXTURE.answers[0]))
+    const outcome = await step()(context({ plan: { ...PLAN, screens: [{ ...SCREEN, duplicateOf: 'scr-starter' }] } }))
+    expect(duplicate).not.toHaveBeenCalled()
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect(outcome).toMatchObject({ continue: true })
+    expect(storedPage()[CANVAS_ROOT_ELEMENT_ID].nodes).toEqual([SECTION_IDS[0]])
   })
 })

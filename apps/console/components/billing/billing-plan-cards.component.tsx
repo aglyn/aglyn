@@ -1570,14 +1570,15 @@ function PlanCardBody({
           ? ` (+$${pricing.extraEmailSendsUsdPer1k.toFixed(2)}/1k over)`
           : ''}
       </Typography>
-      {/* Submissions only. These cards exist to be compared, and
-          the saved-form ceiling is the same number on every plan
-          that has forms at all — printed here it would read as a
-          difference and send a buyer looking for one. What a
-          plan actually buys on this axis is the submissions
-          band, which is tiered and metered. The ceiling is shown
-          where it means something: beside the site's own count,
-          on the usage meters. */}
+      {/* The saved-form allowance, then the submissions band: two
+          axes, both tiered since AGL-3597. A site's saved forms are
+          the catalog it can bind a Form element to; submissions are
+          what visitors send, org-wide and monthly. */}
+      <Typography variant="body2">
+        {`${quotaLabel(entitlements.formsPerHost)} form${
+          entitlements.formsPerHost === 1 ? '' : 's'
+        } per site`}
+      </Typography>
       <Typography variant="body2">
         {`${quotaCount(entitlements.formSubmissionsPerMonth)} form submissions/mo`}
       </Typography>

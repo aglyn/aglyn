@@ -76,6 +76,7 @@ import {
   ORG_BILLING_SUBCOLLECTION,
 } from '@aglyn/aglyn/app-utils/org-billing-doc'
 import { MEMBER_EMAIL_ALIASES_COLLECTION } from '@aglyn/aglyn/app-utils/member-email-aliases'
+import { runPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/plugin-declarations-repair'
 import { FieldValue } from 'firebase-admin/firestore'
 import { cache } from 'react'
 import { findUserByUidAcrossPools } from './auth-pools'
@@ -899,7 +900,42 @@ export async function memberHasOrgPermission(
   permission: OrgPermission,
 ): Promise<boolean> {
   if (!member) return false
-  return (await resolveMemberOrgPermissions(orgId, member))[permission]
+  return verdictFor(permission, await resolveMemberOrgPermissions(orgId, member), () =>
+    resolveMemberOrgPermissions(orgId, member),
+  )
+}
+
+/**
+ * A key the catalog does not hold is never a silent "no" (AGL-3596).
+ *
+ * A plugin's catalog key reaches this process only through its declarations,
+ * and a route that never loaded the plugin depends on the app's boot step
+ * having registered them. A resolver that answered `undefined` for such a key
+ * read as a refusal indistinguishable from a real one: the site create door
+ * asked an owner for `ai.generate` that way and refused every guided start.
+ * So a missing key runs the app's boot step once (`plugin-declarations-repair`)
+ * and asks again, and a key still missing after that is logged as the
+ * deployment fault it is before it answers "no".
+ */
+async function verdictFor(
+  permission: string,
+  granted: Record<string, boolean>,
+  again: () => Promise<Record<string, boolean>>,
+): Promise<boolean> {
+  if (permission in granted) return granted[permission] === true
+  const repaired = await runPluginDeclarationsRepair().catch((error: unknown) => {
+    console.error('[permissions] plugin declarations repair failed', { permission, error })
+    return false
+  })
+  if (repaired) {
+    const retried = await again()
+    if (permission in retried) return retried[permission] === true
+  }
+  console.error(
+    `[permissions] "${permission}" is not in this process's permission catalog: ` +
+      'the plugin that declares it never registered here, so it is refused',
+  )
+  return false
 }
 
 /**
@@ -927,7 +963,9 @@ export async function memberHasPermissionOnHost(
 ): Promise<boolean> {
   if (!member) return false
   if (isOrgWideMember(member)) {
-    return (await resolveMemberOrgPermissions(orgId, member))[permission] === true
+    return verdictFor(permission, await resolveMemberOrgPermissions(orgId, member), () =>
+      resolveMemberOrgPermissions(orgId, member),
+    )
   }
   const site = typeof hostId === 'string' ? hostId.trim() : ''
   return resolveCollaboratorHostPermissions(member, site)?.[permission] ?? false

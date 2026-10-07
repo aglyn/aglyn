@@ -16,22 +16,10 @@
  */
 'use client'
 
-import { useUser } from '@aglyn/tenant-feature-instance'
-import { useCallback, useEffect, useRef, useState } from 'react'
 import BusinessDetailsCard from '../../../../../../../../components/business-details-card.component'
 import BuiltInPageLayoutCard from '../../../../../../../../components/built-in-page-layout-card.component'
-import { useHostSubdomain } from '../../../../../../../../components/host-id-provider'
 import LanguagesCard from '../../../../../../../../components/languages-card.component'
 import LogoCard from '../../../../../../../../components/logo-card.component'
-import PluginWidgetSlot from '../../../../../../../../components/plugin-widget-slot.component'
-import useCurrentOrg from '../../../../../../../../hooks/use-current-org'
-import { useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
-import {
-  hostIsBlankSite,
-  hostStartedBlank,
-  rememberHostStartedBlank,
-  requestStarterSite,
-} from '../../../../../../../../utils/host-first-run'
 import { useHostSettingsScope } from '../../../host-settings-scope'
 
 /**
@@ -58,84 +46,15 @@ import { useHostSettingsScope } from '../../../host-settings-scope'
  * squarely in the tier this page is not. It lives in the Admin hub's Error
  * pages section, beside Security.
  *
- * It is also where a site created a minute ago LANDS, which is why the
- * `hostFirstRun` zone is drawn at the top of it (AGL-2918). A widget there
- * offers to start the site from a few questions; taking `startBlank` leaves
- * this page exactly as it is below, which is the blank site the person
- * already has.
- *
- * ⚠️ LANDING HERE IS NOT THE SAME AS BELONGING HERE. A new site lands on this
- * page, but this page is the setup page of EVERY site, and for a while the
- * zone read the first fact as if it were the second: its only condition was
- * whether this browser had dismissed the offer, so opening Basic details on a
- * long-established site drew the guided start over the top of it. The zone
- * therefore asks two things now, and needs both — `hostIsBlankSite`, which is
- * about the SITE and is true for as long as it publishes nothing, and
- * `hostStartedBlank`, which is about this BROWSER and is true once somebody
- * here has said no. Neither one implies the other, and a condition on the
- * reader is never a condition on the site.
+ * A site created a minute ago no longer lands here: creation goes to the
+ * site with `?start=site`, and the guided start is drawn by the host layout
+ * (`HostFirstRunGate`, AGL-3596). Setup is every site's setup page, and an
+ * offer gated on "nothing published" here came back on every visit.
  */
 export default function HostSetupDetailsSection() {
-  const { hostId, data, hostHasEmitted } = useHostSettingsScope()
-  const { orgId } = useCurrentOrg()
-  const orgSlug = useOrgSlug()
-  const host = useHostSubdomain()
-  /*
-   * Starts closed and opens once the browser has been asked, so a reader who
-   * skipped never sees the offer flash back on a reload. `localStorage` is not
-   * readable while the page renders on the server.
-   */
-  const [unasked, setUnasked] = useState(false)
-  useEffect(() => {
-    setUnasked(Boolean(hostId) && !hostStartedBlank(hostId))
-  }, [hostId])
-  const { data: user } = useUser()
-  // Held in a ref so the request reads who is signed in, never the identity
-  // of the object that says so.
-  const userRef = useRef(user)
-  userRef.current = user
-  /*
-   * Leaving the guided start for a blank site (AGL-3594). A site born for the
-   * guided start has no page yet, so "blank" means the starter every other new
-   * site is born with: the route writes it — and is a no-op on a site that has
-   * a page already — and the layout's host snapshot draws it here.
-   */
-  const startBlank = useCallback(() => {
-    rememberHostStartedBlank(hostId)
-    setUnasked(false)
-    void requestStarterSite(userRef.current, hostId)
-  }, [hostId])
-  // The guided start began a job: the zone closes, and no starter is written.
-  const leave = useCallback(() => {
-    rememberHostStartedBlank(hostId)
-    setUnasked(false)
-  }, [hostId])
-  /*
-   * `hostHasEmitted` before `hostIsBlankSite`, because an unread document has
-   * no `screens` either and would read as blank. Waiting for the snapshot the
-   * layout is already subscribed to is what keeps an established site from
-   * mounting the zone for the moment before its document lands — which on a
-   * widget that takes the whole screen is the difference between not offering
-   * and offering-then-snatching-away.
-   */
-  const offerStart = unasked && hostHasEmitted && hostIsBlankSite(data)
+  const { hostId } = useHostSettingsScope()
   return (
     <>
-      {offerStart && (
-        /* The zone carries its own gap from the cards below and takes no room
-           at all when its widget drew nothing here — a widget that draws in a
-           portal, or none at all. A wrapper with a margin of its own would
-           leave that gap behind as a band above the first card. */
-        <PluginWidgetSlot
-          slot="hostFirstRun"
-          hostId={hostId}
-          orgId={orgId}
-          orgSlug={orgSlug}
-          host={host ?? null}
-          startBlank={startBlank}
-          leave={leave}
-        />
-      )}
       {/* Site brand mark (AGL-594): shown by the tenant's navigation loader. */}
       <div>
         <LogoCard hostId={hostId} />

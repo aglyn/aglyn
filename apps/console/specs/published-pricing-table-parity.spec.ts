@@ -443,6 +443,16 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * the band. Re-transcribed 2026-10-02 from version `qE5PwfZM-K`
      * (AGL-3469).
      */
+    /**
+     * Added above form submissions on 2026-10-06 (AGL-3597), version
+     * `oKpP7e6UeG`: a saved form per site was a 500 ceiling on every paid
+     * plan and none on Free, sold as a feature it never was.
+     */
+    it('Saved forms per site — 1 · 5 · 25 · 100 · 500 · 500 · 500', () => {
+      const PUBLISHED: Row = [1, 5, 25, 100, 500, 500, 500]
+      expect(quotaColumn('formsPerHost')).toEqual(PUBLISHED)
+    })
+
     it('Form submissions / mo, per site — 20 · 200 · 1k · 5k · 10k · 10k · 10k', () => {
       const PUBLISHED: Row = [20, 200, 1000, 5000, 10000, 10000, 10000]
       expect(quotaColumn('formSubmissionsPerMonth')).toEqual(PUBLISHED)

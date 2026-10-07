@@ -333,11 +333,26 @@ describe('the notification email channel (AGL-3224)', () => {
     process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://app.example.com'
   })
 
-  it('sends nothing to somebody who never asked', async () => {
+  it('sends nothing to somebody who never asked, outside a site\'s transactions', async () => {
     directory.set('uid-a', 'a@example.com')
-    await notifyUsers(['uid-a'], FORM)
+    await notifyUsers(['uid-a'], { ...FORM, type: 'content.taskAssigned' })
     expect(written).toHaveLength(1)
     expect(sends).toHaveLength(0)
+  })
+
+  it('emails a form submission to somebody who never said otherwise', async () => {
+    directory.set('uid-a', 'a@example.com')
+    await notifyUsers(['uid-a'], FORM)
+    expect(sends).toHaveLength(1)
+    expect(sends[0]['to']).toEqual(['a@example.com'])
+  })
+
+  it('skips only the people the caller mails itself', async () => {
+    directory.set('uid-a', 'a@example.com')
+    directory.set('uid-b', 'b@example.com')
+    await notifyUsers(['uid-a', 'uid-b'], FORM, { skipEmailFor: ['uid-a'] })
+    expect(written).toHaveLength(2)
+    expect(sends.flatMap((send) => send['to'] as string[])).toEqual(['b@example.com'])
   })
 
   it('sends one message to somebody who did, and meters it to the org', async () => {
@@ -490,7 +505,7 @@ describe('the notification email is a system email (AGL-3367)', () => {
     expect(html).toContain('New form submission')
     expect(html).toContain('Someone filled in Contact us.')
     expect(html).toContain('href="https://app.example.com/manage/notifications"')
-    expect(html).toContain('You’re receiving this because you turned on email')
+    expect(html).toContain('You’re receiving this because email is on for these')
     // The text part carries the same copy, and the way out.
     expect(sends[0]['text']).toContain('https://app.example.com/manage/notifications/settings')
   })

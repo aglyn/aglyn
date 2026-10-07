@@ -30,6 +30,7 @@ import {
   aiSiteSeoProposal,
   aiSiteSeoProposalForInputs,
   aiSiteSeoProposalOf,
+  aiSiteSeoTitle,
 } from './ai-site-start-seo'
 
 const ANSWERS = {
@@ -108,6 +109,41 @@ describe('the answers become the site’s own listing', () => {
 
   it('keeps a capital the person typed', () => {
     expect(values({ about: 'a McKinney plumber' })?.['seo.title']).toBe('McKinney plumber')
+  })
+})
+
+describe('a title is never cut mid-phrase (AGL-3596)', () => {
+  // The first production guided start's answer, whose title was published as
+  // "Neighborhood dog groomer in Austin that takes bookings for".
+  const PRODUCTION = {
+    about: 'a neighborhood dog groomer in Austin that takes bookings for baths, trims and nail care',
+    audience: 'local dog owners',
+  }
+  const DANGLING_END = /\b(?:a|an|and|at|by|for|from|in|of|on|or|that|the|to|with|who|which)$/i
+
+  it('keeps the subject and its place, and leaves the sentence about it to the description', () => {
+    const title = values(PRODUCTION)?.['seo.title'] ?? ''
+    expect(title).toBe('Neighborhood dog groomer in Austin')
+    expect(title).not.toMatch(DANGLING_END)
+  })
+
+  it('leads with the name and adds the city the person gave', () => {
+    expect(
+      aiSiteSeoProposalForInputs({
+        businessType: 'a neighborhood dog groomer that takes bookings for baths, trims and nail care',
+        businessName: 'Hillside Dog Grooming',
+        city: 'Austin',
+      })?.values['seo.title'],
+    ).toBe('Hillside Dog Grooming — Neighborhood dog groomer in Austin')
+  })
+
+  it('drops the place, then the subject, before it ever cuts', () => {
+    expect(aiSiteSeoTitle({ name: 'Hillside Dog Grooming and Spa', subject: 'Neighborhood dog groomer in Austin, Texas' })).toBe(
+      'Hillside Dog Grooming and Spa — Neighborhood dog groomer',
+    )
+    const cut = aiSiteSeoTitle({ subject: 'Bespoke architectural sheet metal fabricator of standing seam roofing for' })
+    expect(cut.length).toBeLessThanOrEqual(AI_SITE_SEO_LIMITS.title)
+    expect(cut).not.toMatch(DANGLING_END)
   })
 })
 

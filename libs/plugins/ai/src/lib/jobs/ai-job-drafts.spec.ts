@@ -599,14 +599,19 @@ describe('writeAiDraft — a form', () => {
     expect(decodeStoredNodes<Record<string, any>>(form['nodes'])?.['quote'].props.formName).toBe('Quote request 2')
   })
 
-  it('meets the forms band as the route does: the plan’s feature first, then every form document', async () => {
+  it('meets the forms band as the route does: every form document, against the plan’s allowance alone', async () => {
     mockOwners.set('host-1', 'org-1')
     mockDocs.set('hosts/host-1', {})
-    expect(await writeAiDraft(firestore, formInput({ org: FREE_ORG }))).toEqual({
+    // A Free site saves its one form, not behind the component feature (AGL-3597)…
+    expect((await writeAiDraft(firestore, formInput({ org: FREE_ORG, id: 'job-free' }))).ok).toBe(true)
+    // …and is refused the second on the allowance, with the upgrade path.
+    expect(await writeAiDraft(firestore, formInput({ org: FREE_ORG, id: 'job-free-2' }))).toEqual({
       ok: false,
       status: 403,
-      error: AI_DRAFT_ENTITLEMENT_REFUSAL,
+      error: 'Your plan includes 1 forms — upgrade in Billing for more',
     })
+    mockDocs.delete('hosts/host-1/forms/job-free')
+    commits.length = 0
     // A retired form keeps its slot: the route counts every form document.
     mockDocs.set('hosts/host-1/forms/frm-retired', { displayName: 'Old', archivedAt: 5 })
     const capped = { ...STARTER_ORG, entitlements: { formsPerHost: 1 } } as unknown as Partial<AglynOrgBilling>
@@ -809,7 +814,7 @@ describe('readAiPlanCapabilities — what a plan may create on the site (AGL-303
     return { handle: handle as unknown as FirebaseFirestore.Firestore, read }
   }
 
-  it('tells a Free workspace it keeps no reusable components, saved forms or datasets, and what room its site has', async () => {
+  it('tells a Free workspace it keeps no reusable components or datasets, one saved form, and what room its site has', async () => {
     seedLiveSite()
     const { handle, read } = recording()
     const capabilities = await readAiPlanCapabilities(handle, { hostId: 'host-1', org: FREE_ORG })
@@ -821,11 +826,8 @@ describe('readAiPlanCapabilities — what a plan may create on the site (AGL-303
       left: 0,
       reason: "this workspace's plan does not include reusable components",
     })
-    expect(capabilities.create.form).toEqual({
-      allowed: false,
-      left: 0,
-      reason: "this workspace's plan does not include saved forms",
-    })
+    // One saved form per Free site (AGL-3597), and the live site holds none.
+    expect(capabilities.create.form).toEqual({ allowed: true, left: 1, reason: null })
     // The live site holds two layouts against the one the Free plan includes,
     // and its starter template counts against nothing.
     expect(capabilities.create.layout).toEqual({
@@ -840,8 +842,8 @@ describe('readAiPlanCapabilities — what a plan may create on the site (AGL-303
       reason: "this workspace's plan does not include datasets",
     })
     expect(capabilities.create['theme-change']).toEqual({ allowed: true, left: null, reason: null })
-    // Only the kinds a Free plan counts are read; a component or a form is refused on the feature.
-    expect(read.sort()).toEqual(['layouts', 'templates'])
+    // Only the kinds a Free plan counts are read; a component is refused on the feature.
+    expect(read.sort()).toEqual(['forms', 'layouts', 'templates'])
     expect(commits).toEqual([])
   })
 

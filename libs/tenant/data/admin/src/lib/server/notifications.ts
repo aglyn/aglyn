@@ -75,6 +75,13 @@ export interface NotifyUsersOptions {
    * email on would otherwise get it twice.
    */
   skipEmail?: boolean
+  /**
+   * People not to mail through the email channel for this one notification,
+   * because the caller emails them the same event itself — the seller's
+   * designed sale email beside a Buy Now order's notification. Everyone else
+   * the fan-out reaches is mailed as their preferences say.
+   */
+  skipEmailFor?: readonly string[]
 }
 
 /** The console's absolute origin for an email link, or `''` when unset. */
@@ -87,7 +94,8 @@ function consoleOrigin(): string {
  * notification emails.
  *
  * Both ceilings only ever bite on a fan-out where many recipients have
- * OPTED IN — the email channel defaults off, so the ordinary notification
+ * OPTED IN — the email channel defaults off outside a site's transactions
+ * (`NOTIFICATION_TYPE_CHANNEL_DEFAULTS`), so the ordinary notification
  * costs exactly what it cost before this existed. They are here because a
  * fan-out takes up to 400 uids and `notifyUsers` runs inside the mutation
  * that emitted it: a notification must not be able to turn one write into
@@ -308,7 +316,8 @@ export async function notifyUsers(
         count += 1
       }
       if (
-        notificationChannelEnabled(settings, 'email', payload.type, scope, legacy)
+        notificationChannelEnabled(settings, 'email', payload.type, scope, legacy) &&
+        !options.skipEmailFor?.includes(userDoc.id)
       ) {
         mailTo.push(userDoc.id)
       }
@@ -506,6 +515,13 @@ export function withSiteName(text: string, site: string): string {
 export async function notifyHostManagers(
   hostId: string,
   payload: NotificationPayload,
+  options: {
+    /**
+     * Mail the workspace owner nothing through the email channel, because
+     * the caller sends them their own email about the same event.
+     */
+    skipOwnerEmail?: boolean
+  } = {},
 ): Promise<void> {
   try {
     const host = await firestore().collection('hosts').doc(hostId).get()
@@ -516,15 +532,25 @@ export async function notifyHostManagers(
       .map(([uid]) => uid)
     const orgId = payload.orgId ?? (host.get('orgId') as string | undefined)
     const site = hostDisplayName(host.data(), hostId)
-    await notifyUsers(managers, {
-      ...payload,
-      title: withSiteName(payload.title, site),
-      ...(payload.body !== undefined
-        ? { body: withSiteName(payload.body, site) }
-        : {}),
-      hostId,
-      ...(orgId ? { orgId } : {}),
-    })
+    const ownerUid =
+      options.skipOwnerEmail && orgId
+        ? ((await firestore().collection('orgs').doc(orgId).get()).get('ownerUid') as
+            | string
+            | undefined)
+        : undefined
+    await notifyUsers(
+      managers,
+      {
+        ...payload,
+        title: withSiteName(payload.title, site),
+        ...(payload.body !== undefined
+          ? { body: withSiteName(payload.body, site) }
+          : {}),
+        hostId,
+        ...(orgId ? { orgId } : {}),
+      },
+      ownerUid ? { skipEmailFor: [ownerUid] } : {},
+    )
   } catch (error) {
     console.error('host manager notification failed', error)
   }

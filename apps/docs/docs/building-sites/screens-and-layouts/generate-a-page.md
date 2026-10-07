@@ -18,7 +18,7 @@ workspace.
 
 ## Describe the page
 
-Open **Pages** for the site and choose **Describe it**, beside **Templates** and **Create
+Open **Pages** for the site and choose **Create with AI**, beside **Templates** and **Create
 New Page**. You can also start one from **AI jobs** in the Assist panel, with **Describe a
 page**.
 
@@ -44,7 +44,7 @@ create: what your plan includes and what your site has room for. Something a pag
 build, such as a page template or a dataset, is not offered for confirmation: the job stops
 before you confirm anything and tells you what to create first and where.
 
-On a plan without reusable components or saved forms, such as Free, the page is built from
+On a plan without reusable components, such as Free, the page is built from
 what that plan can make: a block that repeats, such as a row of service cards, is built into
 the page each time, in one section, and a form is part of the page, with its fields,
 collecting submissions into your inbox like any form.

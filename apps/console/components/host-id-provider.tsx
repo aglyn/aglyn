@@ -16,10 +16,17 @@
  */
 'use client'
 
-import { collection, getDocs, limit, query, where } from 'firebase/firestore'
+import {
+  collection,
+  getDocsFromServer,
+  limit,
+  query,
+  where,
+} from 'firebase/firestore'
 import { useParams, usePathname, useRouter } from 'next/navigation'
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -126,21 +133,39 @@ export const useHostAuthError = () => useContext(HostAuthErrorContext)
  * is a site admin. Mounted only once a hostId exists — `useHost` needs a
  * real doc path, and off host routes the contexts' defaults ([] / false)
  * are already the right answer.
+ *
+ * It is also the one listener open on the host doc for as long as the site is
+ * on screen, so it is what notices the site going away underneath the page
+ * (AGL-3596): the server saying the doc does not exist, or refusing it — which
+ * is how the rules answer for a deleted host, since they read the doc's own
+ * `memberRoles`. Either way it reports `onGone`, and the provider asks the
+ * server to resolve the subdomain again rather than trusting this listener's
+ * verdict alone; a refusal can also be a session fault, and re-resolving is
+ * what tells the two apart.
  */
 function HostPluginPolicyBridge({
   hostId,
   uid,
   subdomain,
+  onGone,
   children,
 }: {
   hostId: string
   uid?: string
   subdomain: string | null
+  onGone: (hostId: string) => void
   children: ReactNode
 }) {
   const {
-    doc: { data: host },
+    doc: { data: host, status, fromCache, serverDenied },
   } = useHost({ hostId })
+  const gone =
+    (status === 'success' && fromCache === false && !host) ||
+    status === 'error' ||
+    Boolean(serverDenied)
+  useEffect(() => {
+    if (gone) onGone(hostId)
+  }, [gone, hostId, onGone])
   const disabledPlugins = useMemo(
     () =>
       Array.isArray(host?.disabledPlugins)
@@ -232,6 +257,21 @@ export function HostIdProvider({ children }) {
   // so the auth flag has to follow the same fork (AGL-1260's shape).
   const authFailed = orgFailed ? orgAuthError : hostFailed && authError
 
+  // The open site went away (AGL-3596): re-resolve from the server, which
+  // either lands on the site's current id or settles a miss the guard turns
+  // into "this site doesn't exist anymore". Once per host id, so a refusal
+  // that re-resolving cannot explain (the subdomain still maps to the same
+  // id) is left to the listeners' own recovery instead of looping here.
+  const recheckedRef = useRef<string | null>(null)
+  const recheckGoneHost = useCallback(
+    (goneHostId: string) => {
+      if (recheckedRef.current === goneHostId) return
+      recheckedRef.current = goneHostId
+      retry()
+    },
+    [retry],
+  )
+
   // Cross-org deep links (AGL-628). A subdomain belonging to ANOTHER org the
   // user is a member of resolves to nothing above — the org-scoped resolution
   // is all the rules allow — and the guard 404s a site they can actually open.
@@ -246,7 +286,9 @@ export function HostIdProvider({ children }) {
     if (!hostSubdomain || !ready || hostId || !currentOrg) return
     if (redirectedRef.current === hostSubdomain) return
     let active = true
-    void getDocs(
+    // From the server, like resolution itself (AGL-3596): a cached index row
+    // can outlive the site it names.
+    void getDocsFromServer(
       query(
         collection(firestore, 'hostIndex'),
         where('subdomain', '==', hostSubdomain),
@@ -292,6 +334,7 @@ export function HostIdProvider({ children }) {
                       hostId={hostId}
                       uid={user?.uid}
                       subdomain={hostSubdomain}
+                      onGone={recheckGoneHost}
                     >
                       {children}
                     </HostPluginPolicyBridge>

@@ -3154,7 +3154,6 @@ allow delete: if isStaff() ||
 
 
 
-
 match /forms/{formId} {
 allow read: if isStaff() || isHostMember(hostId);
 allow create: if isStaff();

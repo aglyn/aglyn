@@ -196,12 +196,9 @@ export interface AiDraftBand {
 export const AI_DRAFT_BANDS: Readonly<Record<AiDraftKind, AiDraftBand>> = {
   layout: { collection: 'layouts', quotaKey: 'sharedLayoutsPerHost', label: 'shared layouts' },
   template: { collection: 'templates', quotaKey: 'templatesPerHost', label: 'templates' },
-  form: {
-    collection: 'forms',
-    quotaKey: 'formsPerHost',
-    entitlement: 'reusableComponents',
-    label: 'forms',
-  },
+  // A saved form is counted against `formsPerHost` alone — Free 1 through
+  // the ceiling — and is not behind `reusableComponents` (AGL-3597).
+  form: { collection: 'forms', quotaKey: 'formsPerHost', label: 'forms' },
   component: {
     collection: 'components',
     entitlement: 'reusableComponents',
@@ -562,6 +559,13 @@ export interface AiDraftInput {
   props?: readonly ReusableComponentProp[]
   /** A screen's layout, for its first version to render inside; a layout the site has. */
   layoutId?: string | null
+  /**
+   * The job the member started that wrote this draft (AGL-3596), stamped as
+   * `aiJobId` on a page's or a layout's document and first version, so staff
+   * can tell a generated page from a copy someone made. A scaffold's unit
+   * names the site job, not the unit's derived id.
+   */
+  aiJobId?: string | null
   now: Date
 }
 
@@ -627,11 +631,25 @@ export async function writeAiDraft(firestore: Firestore, input: AiDraftInput): P
     const routingMap = host.get('screens') as RoutingMap
     const refusal = aiDraftBandRefusal(input.kind, rows, input.org, routingMap)
     if (refusal) return { ok: false, status: 403, error: refusal }
+    const defaultHomeScreenId = host.get('defaultHomeScreenId') as string | null | undefined
+    // A screen draft that takes the root the placeholder home page holds
+    // replaces that page when it is published (AGL-3408), so it is named as
+    // the page it replaces, "Home", rather than as a copy of it (AGL-3596).
+    const slug =
+      input.kind === 'screen'
+        ? aiDraftScreenSlug(input.slug, input.name, rows, routingMap, defaultHomeScreenId)
+        : null
+    const replacesPlaceholder = (row: SiblingRow) =>
+      slug === SCREEN_ROOT_PATH &&
+      Boolean(defaultHomeScreenId) &&
+      row.id === defaultHomeScreenId &&
+      (routingMap ?? {})[row.id] === SCREEN_ROOT_PATH
     const name = uniqueDuplicateName(
       input.name,
-      rows.filter((row) => !row.deleted).map((row) => row.name),
+      rows.filter((row) => !row.deleted && !replacesPlaceholder(row)).map((row) => row.name),
     )
     const stamps = { createdAt: input.now, updatedAt: input.now, createdBy: input.uid }
+    const marker = input.aiJobId ? { aiJobId: input.aiJobId } : {}
     const nodes = Buffer.from(packed)
     let versionId: string | null = null
     if (input.kind === 'layout') {
@@ -640,6 +658,7 @@ export async function writeAiDraft(firestore: Firestore, input: AiDraftInput): P
         ...allowListed('layout', { displayName: name, versionId }),
         ...artifactCreateListKeys('layouts', { displayName: name }),
         ...stamps,
+        ...marker,
       })
       tx.create(draftRef.collection('versions').doc(versionId), {
         layoutId: input.id,
@@ -647,20 +666,15 @@ export async function writeAiDraft(firestore: Firestore, input: AiDraftInput): P
         displayName: AI_DRAFT_VERSION_NAME,
         nodes,
         ...stamps,
+        ...marker,
       })
     } else if (input.kind === 'screen') {
       versionId = createResourceUid()
-      const slug = aiDraftScreenSlug(
-        input.slug,
-        name,
-        rows,
-        routingMap,
-        host.get('defaultHomeScreenId'),
-      )
       tx.create(draftRef, {
         ...allowListed('screen', { displayName: name, slug, versionId }),
         ...artifactCreateListKeys('screens', { displayName: name }),
         ...stamps,
+        ...marker,
       })
       tx.create(draftRef.collection('versions').doc(versionId), {
         screenId: input.id,
@@ -669,6 +683,7 @@ export async function writeAiDraft(firestore: Firestore, input: AiDraftInput): P
         nodes,
         ...(input.layoutId ? { layoutId: input.layoutId } : {}),
         ...stamps,
+        ...marker,
       })
     } else if (input.kind === 'template') {
       tx.create(draftRef, {

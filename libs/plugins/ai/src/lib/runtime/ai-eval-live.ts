@@ -898,7 +898,7 @@ export const AI_EVAL_INLINE_GRADER_NOTE =
  *
  * A section's `uses` names what the section PLACES, and the only things it
  * can name are an inventory id and a `new:<name>` creation. A workspace that
- * keeps no reusable components or saved forms has neither to name, and the
+ * keeps no reusable components has none to name for a repeat, and the
  * capability lines above have already refused the job the creations — so
  * every inline section leaves `uses` empty because it is the only answer it
  * can give. A grader that does not know it reads the empty list as a section

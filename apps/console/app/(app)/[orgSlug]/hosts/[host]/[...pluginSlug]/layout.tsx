@@ -18,6 +18,7 @@
 import { entityPageTitle } from '../../../../../entity-page-title'
 import {
   pluginPageTitle,
+  pluginRecordTitle,
   pluginSectionTitle,
 } from '../../../../../plugin-page-title'
 import type { Metadata } from 'next'
@@ -47,6 +48,16 @@ export async function generateMetadata({
    * has rather than gaining a mangled id.
    */
   const [surfaceSlug = '', sectionSlug = ''] = pluginSlug ?? []
+  const sectionTitle = pluginSectionTitle(surfaceSlug, sectionSlug)
+  /*
+   * A RECORD beneath a surface that owns its subtree — a segment that names
+   * no section — is titled by the noun the surface declares for its records
+   * (AGL-3596), where it declares one: `/ai-jobs` is `AI jobs`, and one job's
+   * page is `Building your site`. Without a declaration the surface's own
+   * name stands, as it always has.
+   */
+  const recordNoun =
+    sectionSlug && !sectionTitle ? pluginRecordTitle(surfaceSlug) : ''
   /*
    * `subject · noun · scope` (AGL-2184/AGL-2486), the console's own title
    * vocabulary: most specific first, because a browser tab is about twenty
@@ -61,8 +72,8 @@ export async function generateMetadata({
    */
   return {
     title: entityPageTitle({
-      subject: pluginSectionTitle(surfaceSlug, sectionSlug),
-      noun: pluginPageTitle(surfaceSlug),
+      subject: sectionTitle,
+      noun: recordNoun || pluginPageTitle(surfaceSlug),
       scope: host,
     }),
   }

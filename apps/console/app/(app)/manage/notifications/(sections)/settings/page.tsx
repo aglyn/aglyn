@@ -29,6 +29,7 @@ import {
   notificationCategory,
   notificationOverriddenScopes,
   notificationScopePref,
+  notificationTypeChannelDefault,
   notificationScopeTypePref,
   PLATFORM_BRAND_NAME,
   STAFF_NOTIFICATION_CATEGORIES,
@@ -464,7 +465,17 @@ const ManageNotificationSettings: NextPageWithLayout<
   ): boolean => {
     const own = notificationAccountTypePref(settings, type, channel)
     if (typeof own === 'boolean') return own
-    return accountValue(notificationCategory(type), channel)
+    const category = notificationCategory(type)
+    const categoryOwn = notificationScopePref(
+      settings,
+      { kind: 'account' },
+      category,
+      channel,
+    )
+    if (typeof categoryOwn === 'boolean') return categoryOwn
+    if (channel === 'console' && legacyPrefs[category] === false) return false
+    // A site's transactions email by default where their category does not.
+    return notificationTypeChannelDefault(type, channel)
   }
 
   return (
@@ -475,7 +486,8 @@ const ManageNotificationSettings: NextPageWithLayout<
           anchor: '#notification-settings',
           excerpt:
             'Choose which notifications reach the console and which ' +
-            'reach your inbox. Email is off until you switch it on.',
+            'reach your inbox. Form submissions, bookings and orders are ' +
+            'emailed until you switch them off; everything else is not.',
         })}
         contentGutterX
         contentGutterY

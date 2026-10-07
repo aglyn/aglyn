@@ -4695,7 +4695,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               ? `, from ${object.customer_details.email}.`
               : '.'),
           link: `/${hostId}/products`,
-        })
+        },
+        // The owner is sent the designed sale email below; the notification
+        // would mail them the same sale a second time.
+        { skipOwnerEmail: true })
         // Dropship routing (AGL-289): paid lines with a supplier notify
         // it (signed webhook and/or email) and stash a callback token so
         // the supplier can post tracking back. Plan-gated; failures never

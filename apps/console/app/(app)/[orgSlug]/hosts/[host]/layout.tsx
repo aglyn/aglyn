@@ -18,6 +18,8 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { segmentTitle } from '../../../../page-title'
+import { Suspense } from 'react'
+import HostFirstRunGate from '../../../../../components/host-first-run-gate.component'
 import HostGuard from '../../../../../components/host-guard.component'
 
 // Titles the site dashboard, and stands in for any host page that adds no
@@ -34,9 +36,20 @@ export async function generateMetadata({
 
 /**
  * Host shell (AGL-622): resolves the `[host]` subdomain to a doc id (spinner
- * while pending) and 404s an unknown subdomain, inside the route tree so the
- * designed not-found boundary catches it.
+ * while pending, server-confirmed only — AGL-3596) and renders the site
+ * not-found state for a subdomain that is not an openable site. Nothing below
+ * mounts until then, plugin pages included.
+ *
+ * A site created a moment ago lands with `?start=site`, and the start it is
+ * offered is drawn here, over whichever page it landed on (AGL-3596).
  */
 export default function HostLayout({ children }: { children: ReactNode }) {
-  return <HostGuard>{children}</HostGuard>
+  return (
+    <HostGuard>
+      <Suspense fallback={null}>
+        <HostFirstRunGate />
+      </Suspense>
+      {children}
+    </HostGuard>
+  )
 }

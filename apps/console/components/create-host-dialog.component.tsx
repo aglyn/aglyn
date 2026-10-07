@@ -38,6 +38,7 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { buildRoute, Route } from '../constants/route-links'
 import { useOrgScope } from '../hooks/use-org-scope'
+import { SITE_START_PARAM, SITE_START_VALUE } from './host-first-run-gate.component'
 
 export interface CreateHostDialogProps {
   open: boolean
@@ -120,15 +121,19 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
       // so trust the response's orgSlug over the (possibly null) current org.
       const orgSlug = payload.orgSlug ?? currentOrg?.slug
       if (orgSlug) {
-        // HOST_SETUP is keyed by the subdomain (AGL-622), not the doc id —
-        // passing `hostId` missed the `host` param entirely and buildRoute
-        // emitted a literal `<host?>` segment into the URL.
+        // The site's dashboard, keyed by the subdomain (AGL-622), not the doc
+        // id. A site born for the guided start lands with `?start=site`, which
+        // the host layout answers with the start choice (AGL-3596) — never
+        // Setup, where nobody does anything on a new site.
+        const dashboard = buildRoute(Route.HOST_DASHBOARD, {
+          orgSlug,
+          host: payload.subdomain ?? subdomain,
+        })
         void router.push(
           destination?.(orgSlug) ??
-            buildRoute(Route.HOST_SETUP, {
-              orgSlug,
-              host: payload.subdomain ?? subdomain,
-            }),
+            (payload.guidedStart === true
+              ? `${dashboard}?${SITE_START_PARAM}=${SITE_START_VALUE}`
+              : dashboard),
         )
       }
     } catch (error) {

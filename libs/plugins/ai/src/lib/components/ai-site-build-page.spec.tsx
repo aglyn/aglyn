@@ -29,10 +29,11 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: mockUser }),
   useFirestore: () => ({ name: 'firestore' }),
 }))
+const mockGetDoc = jest.fn()
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
   doc: (_firestore: unknown, ...path: string[]) => ({ path: path.join('/') }),
-  getDoc: async () => ({ data: () => ({ orgId: 'org-1', displayName: 'Dog Groomer' }) }),
+  getDoc: (...args: unknown[]) => mockGetDoc(...args),
 }))
 jest.mock('./ai-job-events', () => ({
   __esModule: true,
@@ -40,10 +41,15 @@ jest.mock('./ai-job-events', () => ({
 }))
 jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({ __esModule: true, trackEvent: jest.fn() }))
 
-import { render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import { aiSiteBuildCreditsLine, aiSiteBuildRows } from '../model/ai-site-build-progress'
-import { AiSiteBuildPage } from './ai-site-build-page.component'
+import { aiJobPageCopy, aiSiteBuildCreditsLine, aiSiteBuildRows } from '../model/ai-site-build-progress'
+import { AI_JOB_FIRST_STATE_TIMEOUT_MS, AiSiteBuildPage } from './ai-site-build-page.component'
+
+beforeEach(() => {
+  mockGetDoc.mockReset()
+  mockGetDoc.mockResolvedValue({ data: () => ({ orgId: 'org-1', displayName: 'Dog Groomer' }) })
+})
 
 const PLAN = {
   reuse: [],
@@ -173,5 +179,139 @@ describe('Building your site (AGL-3594)', () => {
     }))
     expect(await screen.findByText(reason)).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Try again' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
+const SITE_PUBLISH = {
+  liveUrl: 'https://groomer.aglyn.app/',
+  published: [
+    { id: 'home', label: 'Home', path: '/' },
+    { id: 'book', label: 'Book', path: '/book' },
+  ],
+  drafts: [],
+}
+
+describe('a guided start that put the site live (AGL-3596)', () => {
+  const done = (sitePublish: unknown) =>
+    job({
+      status: 'done',
+      running: false,
+      outputs: [screenOutput('home'), screenOutput('book')] as never,
+      creditsSpent: 180,
+      sitePublish,
+    } as never)
+
+  it('says the site is live, opens the live site in a new tab, and keeps Edit your pages', async () => {
+    await open(done(SITE_PUBLISH))
+    expect(await screen.findByRole('heading', { name: 'Your site is live' })).toBeTruthy()
+    expect(screen.queryByText(/drafts/)).toBeNull()
+    const view = screen.getByRole('link', { name: 'View your site' })
+    expect(view.getAttribute('href')).toBe('https://groomer.aglyn.app/')
+    expect(view.getAttribute('target')).toBe('_blank')
+    expect(view.getAttribute('rel')).toContain('noopener')
+    expect(screen.getByRole('link', { name: 'Edit your pages' }).getAttribute('href')).toBe('/acme/hosts/groomer/screens')
+  })
+
+  it('names each page that stayed a draft, with its reason', async () => {
+    await open(done({
+      ...SITE_PUBLISH,
+      published: [SITE_PUBLISH.published[0]],
+      drafts: [{ id: 'book', label: 'Book', reason: 'Its address is already used by another page.' }],
+    }))
+    expect(await screen.findByRole('heading', { name: 'Your site is live' })).toBeTruthy()
+    expect(screen.getByText('This page stayed a draft:')).toBeTruthy()
+    expect(screen.getByText('Book: Its address is already used by another page.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Edit your pages' })).toBeTruthy()
+  })
+
+  it('says the pages are drafts when none could be published, and leads with the preview', async () => {
+    await open(done({
+      liveUrl: 'https://groomer.aglyn.app/',
+      published: [],
+      drafts: [{ id: 'home', label: 'Home', reason: 'The site has reached its page limit.' }],
+    }))
+    expect(await screen.findByRole('heading', { name: 'Your site is ready' })).toBeTruthy()
+    expect(screen.getByText('Home: The site has reached its page limit.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'View your site' }).getAttribute('href')).toBe(
+      '/acme/hosts/groomer/screens/home/versions/home-v1/view',
+    )
+  })
+})
+
+describe('every wait ends (AGL-3596)', () => {
+  const ends = async (end: 'not-found' | 'error') => {
+    mockFollow.mockReset()
+    mockFollow.mockResolvedValue(end)
+    render(<AiSiteBuildPage hostId="host-1" segments={['job-1']} basePath="/acme/hosts/groomer/ai-jobs" entitled />)
+  }
+
+  it('says a job the route does not know could not be found, with the way to the site’s jobs', async () => {
+    await ends('not-found')
+    expect(await screen.findByRole('heading', { name: 'This job could not be found' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'See this site’s AI jobs' }).getAttribute('href')).toBe('/acme/hosts/groomer/ai-jobs')
+  })
+
+  it('says a failed read could not be loaded, and Try again follows the job again', async () => {
+    await ends('error')
+    expect(await screen.findByRole('heading', { name: 'This job could not be loaded' })).toBeTruthy()
+    mockFollow.mockImplementation(async (_u: unknown, _o: string, _i: string, _s: AbortSignal, onJob: (j: AiJobSummary) => void) => {
+      onJob(job())
+      return 'ok'
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByRole('heading', { name: 'Building your site' })).toBeTruthy()
+    expect(await screen.findByText('Writing page 1 of 2: Home')).toBeTruthy()
+  })
+
+  it('says the site could not be read, rather than waiting for a workspace that never comes', async () => {
+    mockGetDoc.mockRejectedValue(new Error('offline'))
+    mockFollow.mockReset()
+    render(<AiSiteBuildPage hostId="host-1" segments={['job-1']} basePath="/acme/hosts/groomer/ai-jobs" entitled />)
+    expect(await screen.findByRole('heading', { name: 'This site could not be read' })).toBeTruthy()
+    expect(mockFollow).not.toHaveBeenCalled()
+  })
+
+  it('treats a site with no workspace as unreadable', async () => {
+    mockGetDoc.mockResolvedValue({ data: () => undefined })
+    mockFollow.mockReset()
+    render(<AiSiteBuildPage hostId="host-1" segments={['job-1']} basePath="/acme/hosts/groomer/ai-jobs" entitled />)
+    expect(await screen.findByRole('heading', { name: 'This site could not be read' })).toBeTruthy()
+  })
+
+  it('stops waiting when no state arrives in time', async () => {
+    jest.useFakeTimers()
+    try {
+      mockFollow.mockReset()
+      mockFollow.mockImplementation(() => new Promise(() => undefined))
+      render(<AiSiteBuildPage hostId="host-1" segments={['job-1']} basePath="/acme/hosts/groomer/ai-jobs" entitled />)
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(screen.getByLabelText('Loading the job')).toBeTruthy()
+      await act(async () => {
+        jest.advanceTimersByTime(AI_JOB_FIRST_STATE_TIMEOUT_MS)
+      })
+      expect(screen.getByRole('heading', { name: 'This job could not be loaded' })).toBeTruthy()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+})
+
+describe('a job that is not a site names what it makes (AGL-3596)', () => {
+  it('reads as building a page, and a finished page as ready', async () => {
+    expect(aiJobPageCopy(job({ kind: 'page' }), 'Aglyn').heading).toBe('Building your page')
+    expect(aiJobPageCopy(job({ kind: 'page', status: 'done' }), 'Aglyn').heading).toBe('Your page is ready')
+    expect(aiJobPageCopy(job({ kind: 'products', status: 'done' }), 'Aglyn').heading).toBe('Your products are ready')
+    expect(aiJobPageCopy(job({ kind: 'crm', status: 'failed' }), 'Aglyn').heading).toBe('Your AI job stopped')
+    await open(job({ kind: 'form', plan: null, steps: [{ name: 'generate', status: 'running' }] as never }))
+    expect(await screen.findByRole('heading', { name: 'Building your form' })).toBeTruthy()
+  })
+
+  it('keeps the drafts wording on a finished site job that published nothing', () => {
+    expect(aiJobPageCopy(job({ status: 'done' }), 'Aglyn')).toEqual({
+      heading: 'Your site is ready',
+      lede: 'Your new pages are drafts. Publish them when you’re happy.',
+    })
   })
 })

@@ -161,15 +161,45 @@ export interface PluginEntitlementRegistration {
   orgPermissions?: readonly PluginOrgPermissionDeclaration[]
 }
 
-const registrations = new Map<string, PluginEntitlementRegistration>()
-
 /**
- * Readers of the registrations that keep a derived view in step with them —
- * the org permission catalog rebuilds itself on every registration and
- * reset, because a plugin's declarations can register after a module that
- * imported the catalog was evaluated.
+ * The registrations and their listeners, held on `globalThis` rather than in
+ * module `const`s (AGL-3596), as the custom field registry and the
+ * declarations repair hook are (AGL-3412).
+ *
+ * An app registers the plugins' declarations from `instrumentation.ts`, which
+ * Next compiles into a different module graph from the routes. A module-scoped
+ * map was filled in the instrumentation's copy and read empty in a route's, so
+ * a core route that never loaded a plugin knew none of its keys: the site
+ * create door asked for `ai.generate`, read `undefined` from a catalog that
+ * had never heard of it, and every guided AI start was born with the starter.
+ * One map per process, under a `Symbol.for` key, is the same map in every
+ * copy.
  */
-const listeners = new Set<() => void>()
+const REGISTRY_KEY = Symbol.for('@aglyn/aglyn:plugin-entitlements')
+
+interface PluginEntitlementsRegistry {
+  registrations: Map<string, PluginEntitlementRegistration>
+  /**
+   * Readers of the registrations that keep a derived view in step with them —
+   * every copy of the org permission catalog rebuilds itself on every
+   * registration and reset, because a plugin's declarations can register
+   * after a module that imported the catalog was evaluated, and in another
+   * module graph's copy of this file.
+   */
+  listeners: Set<() => void>
+}
+
+const globalScope = globalThis as typeof globalThis & {
+  [REGISTRY_KEY]?: PluginEntitlementsRegistry
+}
+
+const registry: PluginEntitlementsRegistry = (globalScope[REGISTRY_KEY] ??= {
+  registrations: new Map(),
+  listeners: new Set(),
+})
+
+const registrations = registry.registrations
+const listeners = registry.listeners
 
 /** Calls `listener` after every registration and reset; answers the unsubscribe. */
 export function subscribePluginEntitlements(listener: () => void): () => void {

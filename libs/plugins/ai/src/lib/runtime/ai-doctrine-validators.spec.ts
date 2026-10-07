@@ -32,6 +32,7 @@ import {
 import type { AiBuildPlan, AiBuildPlanScreen } from '../model/ai-build-plan'
 import { AI_PAGE_CREATE_KINDS } from '../model/ai-page-job'
 import {
+  aiPlanCanPlaceForm,
   aiPlanCapabilitiesForJob,
   aiUnrestrictedPlanCapabilities,
   type AiPlanCapabilities,
@@ -492,43 +493,54 @@ describe('rule 3 — forms are built on the Forms page, then placed', () => {
     expect(detectPlanInlineForms(placed, INVENTORY)).toEqual([])
   })
 
-  describe('on a workspace that keeps no saved forms (AGL-3030)', () => {
-    const inline = { reusableComponents: false }
-
-    it('passes a form the page carries itself, with its fields inside it', () => {
-      const carried = tree(page(section({ componentId: 'form', props: { formName: 'Quote' }, children: [field('email'), field('name')] })))
-      expect(detectInlineForms(carried, 'page', inline)).toEqual([])
-      // The same form on a workspace that keeps saved forms is drawn inline.
-      expect(codes(detectInlineForms(carried, 'page'))).toEqual(['inline-form'])
-    })
-
-    it('still refuses loose fields, and a form with no field to send', () => {
-      const loose = detectInlineForms(tree(page(section(field('email')))), 'page', inline)
-      expect(loose).toMatchObject([{ rule: 3, code: 'loose-form-field', nodeIds: ['n2'] }])
-      const empty = detectInlineForms(
-        tree(page(section({ componentId: 'form', children: [text('body1', 'Tell us more.')] }))),
-        'page',
-        inline,
-      )
-      expect(empty).toMatchObject([{ rule: 3, code: 'form-without-fields', nodeIds: ['n2'] }])
-    })
-
-    it('in a plan: a section that collects answers is not refused for placing no saved form', () => {
-      const collects = planOf({ screens: [screen({ sections: [{ name: 'Contact form', uses: [], items: 0 }] })] })
-      expect(detectPlanInlineForms(collects, INVENTORY, FREE)).toEqual([])
-    })
-
-    it('holds the whole tree check to the same rules', () => {
+  /**
+   * A form is a saved form or none, on every plan (AGL-3596). A workspace
+   * that kept no saved forms once drew an unbound Form holding its fields
+   * (AGL-3030): inputs with no saved form behind them, which a guided start
+   * shipped on its first production run.
+   */
+  describe('where the site has no saved form and may create none (AGL-3596)', () => {
+    it('refuses a form the page carries itself, whatever the workspace keeps', () => {
       const carried = tree(
         page(
-          section(
-            text('h1', 'Get a quote', 'h1'),
-            { componentId: 'form', props: { formName: 'Quote request' }, children: [field('email'), field('name')] },
-          ),
+          section(text('h1', 'Get a quote', 'h1'), {
+            componentId: 'form',
+            props: { formName: 'Quote' },
+            children: [field('email'), field('name')],
+          }),
         ),
       )
-      expect(validateAiDoctrineTree(carried, 'page', { reusableComponents: false }).violations).toEqual([])
-      expect(codes(validateAiDoctrineTree(carried, 'page').violations)).toEqual(['inline-form'])
+      expect(codes(detectInlineForms(carried, 'page'))).toEqual(['inline-form'])
+      expect(
+        codes(validateAiDoctrineTree(carried, 'page', { reusableComponents: false }).violations),
+      ).toEqual(['inline-form'])
+    })
+
+    it('refuses loose fields the same way', () => {
+      const loose = detectInlineForms(tree(page(section(field('email')))), 'page')
+      expect(loose).toMatchObject([{ rule: 3, code: 'inline-form', nodeIds: ['n2'] }])
+    })
+
+    it('passes a page that places no form at all', () => {
+      const plain = tree(page(section(text('h1', 'Get a quote', 'h1'), text('body1', 'Call us at [phone].'))))
+      expect(validateAiDoctrineTree(plain, 'page', { reusableComponents: false }).violations).toEqual([])
+    })
+
+    it('in a plan: a section named for a form is not refused when no saved form can be placed', () => {
+      const collects = planOf({ screens: [screen({ sections: [{ name: 'Contact form', uses: [], items: 0 }] })] })
+      const formless = { ...INVENTORY, forms: [] }
+      expect(detectPlanInlineForms(collects, formless, FREE)).toEqual([])
+      // A site that HAS a saved form places it, Free or not.
+      expect(codes(detectPlanInlineForms(collects, INVENTORY, FREE))).toEqual(['plan-form-not-placed'])
+      // And one that may create a form plans one on the Forms page.
+      const creates = { ...FREE, create: { ...FREE.create, form: { allowed: true, left: 1, reason: null } } }
+      expect(codes(detectPlanInlineForms(collects, formless, creates))).toEqual(['plan-form-not-placed'])
+    })
+
+    it('tells the plan to place no form, and never to draw one, when no saved form can be placed', () => {
+      expect(aiPlanCanPlaceForm({ forms: [] }, FREE)).toBe(false)
+      expect(aiPlanCanPlaceForm(INVENTORY, FREE)).toBe(true)
+      expect(aiPlanCanPlaceForm({ forms: [] }, null)).toBe(true)
     })
   })
 })
@@ -876,7 +888,7 @@ describe('rule 7 — a plan creates only what the job may create on its site (AG
     expect(found[0].message).toBe(
       'The plan creates a component named "Service card", and this workspace\'s plan does not include reusable components. Draw a list\'s repeated items in one section instead.',
     )
-    expect(found[1].message).toContain('Draw the form on the page instead')
+    expect(found[1].message).toContain('or leave the form off the page')
     // Narrowed to what a job builds, a creation outside it says so.
     const pageJob = aiPlanCapabilitiesForJob(aiUnrestrictedPlanCapabilities(), { noun: 'a page job', creates: [] })
     expect(detectPlanUncreatable(planOf({ create: [creation('component', 'Service card')] }), pageJob)).toMatchObject([
@@ -2148,7 +2160,7 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
     expect(
       detectPlanUndeclaredCreations(plan, INVENTORY, aiPlanCapabilitiesForJob(FREE, PAGE_JOB)).map((found) => found.message),
     ).toEqual([
-      'The "quote request" section places a creation named "Quote form", but the plan never creates it, and this workspace\'s plan does not include saved forms. Draw the form on the page instead, as a Form element holding its Form Fields. Take it out of the section\'s uses.',
+      'The "quote request" section places a creation named "Quote form", but the plan never creates it, and this workspace\'s plan does not include saved forms. Place a form the site already has, or leave the form off the page. Take it out of the section\'s uses.',
       'The "services grid" section places a creation named "Service tile", but the plan never creates it, and this workspace\'s plan does not include reusable components. Draw a list\'s repeated items in one section instead. Take it out of the section\'s uses.',
     ])
   })
@@ -2174,7 +2186,7 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
         rule: 7,
         code: 'plan-creation-undeclared',
         message:
-          'The "contact form" section places a creation named "Contact", but the plan never creates it, and this site has room for 1 more. Place a form the site already has. Take it out of the section\'s uses.',
+          'The "contact form" section places a creation named "Contact", but the plan never creates it, and this site has room for 1 more. Place a form the site already has, or leave the form off the page. Take it out of the section\'s uses.',
         paths: ['screens[0].sections[1].uses[0]'],
       },
     ])
@@ -2235,7 +2247,7 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
       screens: [{ id: 'scr-home', name: 'Home', slug: '/', layoutId: null, template: false }],
     }
 
-    it('is refused on the Free workspace it was recorded for: the layout off the hero section, the form drawn on the page', () => {
+    it('is refused on the Free workspace it was recorded for: the layout off the hero section, the form it never created', () => {
       expect(validateAiBuildPlan(AI_FREE_PAGE_RECORDED_PLAN, SITE, null, FREE_BRIEF)).toEqual([
         {
           rule: 2,
@@ -2248,7 +2260,7 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
           rule: 7,
           code: 'plan-creation-undeclared',
           message:
-            'The "consultation request form" section places a creation named "consultation-form", but the plan never creates it, and this workspace\'s plan does not include saved forms. Draw the form on the page instead, as a Form element holding its Form Fields. Take it out of the section\'s uses.',
+            'The "consultation request form" section places a creation named "consultation-form", but the plan never creates it, and this workspace\'s plan does not include saved forms. Place a form the site already has, or leave the form off the page. Take it out of the section\'s uses.',
           paths: ['screens[0].sections[4].uses[0]'],
         },
       ])
@@ -2304,9 +2316,15 @@ describe('validateAiBuildPlan', () => {
         }),
       ],
     })
+    // The site has a saved form, so even a Free plan places it rather than
+    // collecting answers with none (AGL-3596).
     expect(validateAiBuildPlan(free, INVENTORY, null, FREE).map((violation) => violation.code)).toEqual([
+      'plan-form-not-placed',
       'plan-create-not-allowed',
     ])
+    expect(
+      validateAiBuildPlan(free, { ...INVENTORY, forms: [] }, null, FREE).map((violation) => violation.code),
+    ).toEqual(['plan-create-not-allowed'])
     expect(validateAiBuildPlan(free, INVENTORY).map((violation) => violation.code)).toEqual([
       'plan-repeated-items',
       'plan-form-not-placed',

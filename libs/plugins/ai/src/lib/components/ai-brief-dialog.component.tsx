@@ -44,7 +44,7 @@ import { publishAiJob } from './ai-jobs-store'
 import { AiTemplateCollectionField } from './ai-template-collection-field.component'
 
 /**
- * The brief dialog every "Describe it" opens (AGL-2907, AGL-3043, AGL-3051):
+ * The brief dialog every "Create with AI" opens (AGL-2907, AGL-3043, AGL-3051):
  * a page from the Screens page and from the Assist panel's AI jobs, a page
  * template from Templates, a layout from Layouts, a form from Forms and a
  * reusable component from Components.

@@ -518,4 +518,17 @@ describe('the launcher and the open action (AGL-3593)', () => {
     })
     expect(row.getAttribute('aria-current')).toBe('true')
   })
+
+  it('a request already answered never reopens a panel mounted later', async () => {
+    activeJobs = []
+    const first = render(<AssistPanelComponent {...dockProps()} />)
+    await waitFor(() => expect(posts.length).toBe(1))
+    openAiJobs({ jobId: 'job-plan' })
+    expect(await screen.findByLabelText('Hide AI jobs')).toBeTruthy()
+    // Another layout's page mounts a fresh panel; the old request stays put.
+    first.unmount()
+    render(<AssistPanelComponent {...dockProps()} />)
+    expect(await screen.findByLabelText('Open Aglyn Assist')).toBeTruthy()
+    expect(screen.queryByLabelText('Hide AI jobs')).toBeNull()
+  })
 })

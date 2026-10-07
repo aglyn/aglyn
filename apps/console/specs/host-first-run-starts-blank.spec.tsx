@@ -18,24 +18,15 @@
  */
 
 /**
- * The blank path is what a new site gets (AGL-2918).
+ * The guided start is offered where a new site LANDS, once (AGL-3596).
  *
- * The page a newly created site lands on draws the `hostFirstRun` zone above
- * its own cards, where a widget may offer to start the site from a few
- * questions. This spec is the CONTROL on the way out of that offer, from the
- * console's side:
+ * Creation adds `?start=site`; the host layout's gate draws the `hostFirstRun`
+ * zone over the page only then, and only while the site is still empty. It
+ * used to sit on Setup gated on "nothing published", and every visit to Setup
+ * of a site with drafts and no live page drew it again.
  *
- * - the page below the zone is the ordinary one, drawn whether a widget is
- *   there or not — so a workspace the feature is not released to loses
- *   nothing and gains no empty band;
- * - the zone is handed a `startBlank`, and taking it puts the person on that
- *   ordinary page with nothing created;
- * - the choice is remembered, so a reload does not ask again;
- * - and it is offered to a NEW site only, which is the condition that was
- *   missing (see `an established site` below).
- *
- * Reverting the skip — dropping `startBlank` from the zone's props, or
- * leaving the card up after it is taken — must turn this file red.
+ * Reverting either condition — the parameter or the empty site — must turn
+ * this file red.
  */
 
 import { fireEvent, render, screen } from '@testing-library/react'
@@ -77,6 +68,19 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: mockUser }),
 }))
+jest.mock('../hooks/use-host', () => ({
+  __esModule: true,
+  useHost: () => ({ doc: { data: mockHost, status: mockHostStatus } }),
+}))
+jest.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(mockSearch),
+  usePathname: () => '/acme/hosts/shop',
+  useRouter: () => ({ replace: mockReplace, push: jest.fn() }),
+}))
+jest.mock('../utils/host-first-run', () => ({
+  ...jest.requireActual('../utils/host-first-run'),
+  requestStarterSite: (...args: unknown[]) => mockRequestStarter(...args),
+}))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { $id: 'org-1', plan: 'pro' }, orgId: 'org-1', ready: true }),
@@ -100,220 +104,70 @@ jest.mock('../components/host-id-provider', () => ({
   useHostId: () => 'host-1',
   useHostSubdomain: () => 'shop',
 }))
-/**
- * The site the page is looking at, as the settings layout hands it down.
- *
- * `screens` is the routing map publishing writes, and it is what says whether
- * this site is still blank — so it is a fixture here rather than a constant.
- * `hostHasEmitted` rides with it because "the document has not arrived" and
- * "the document says nothing is published" are the same shape and must not be
- * the same answer.
- */
 let mockHost: Record<string, unknown> = {}
-let mockHostHasEmitted = true
+let mockHostStatus = 'success'
+let mockSearch = 'start=site'
+const mockReplace = jest.fn()
+const mockRequestStarter = jest.fn(async (..._args: unknown[]) => true)
 
-/** A site with pages a visitor can reach — what `aglyn-marketing` is. */
-const ESTABLISHED_SITE = {
-  screens: { 's1': 'home', 's2': 'about', 's3': 'contact' },
-}
-
-jest.mock('../app/(app)/[orgSlug]/hosts/[host]/host-settings-scope', () => ({
-  __esModule: true,
-  useHostSettingsScope: () => ({
-    hostId: 'host-1',
-    data: mockHost,
-    hostHasEmitted: mockHostHasEmitted,
-  }),
-}))
-
-// The page's own cards, which read the host document and are not what this
-// spec is about. Each renders its name, so "the ordinary page is still here"
-// is an assertion about the real list rather than about an empty container.
-jest.mock('../components/logo-card.component', () => ({
-  __esModule: true,
-  default: () => <div>{'Logo card'}</div>,
-}))
-jest.mock('../components/business-details-card.component', () => ({
-  __esModule: true,
-  default: () => <div>{'Business details card'}</div>,
-}))
-jest.mock('../components/built-in-page-layout-card.component', () => ({
-  __esModule: true,
-  default: () => <div>{'Built-in page layout card'}</div>,
-}))
-jest.mock('../components/languages-card.component', () => ({
-  __esModule: true,
-  default: () => <div>{'Languages card'}</div>,
-}))
-
-import HostSetupDetailsSection from '../app/(app)/[orgSlug]/hosts/[host]/setup/(sections)/details/page'
-import { hostStartedBlank } from '../utils/host-first-run'
-
-/** Every card the page draws for itself, regardless of any widget above them. */
-const ORDINARY_PAGE = [
-  'Logo card',
-  'Business details card',
-  'Built-in page layout card',
-  'Languages card',
-]
-
-const expectOrdinaryPage = () => {
-  for (const card of ORDINARY_PAGE) expect(screen.getByText(card)).toBeTruthy()
-}
+import HostFirstRunGate from '../components/host-first-run-gate.component'
 
 beforeEach(() => {
-  window.localStorage.clear()
   lastZoneProps = undefined
-  // A site created a minute ago: its document has arrived and publishes
-  // nothing. `/api/hosts/create` writes exactly `screens: {}` and seeds no
-  // starter (AGL-687), so this is what a new site really looks like.
   mockHost = {}
-  mockHostHasEmitted = true
+  mockHostStatus = 'success'
+  mockSearch = 'start=site'
+  mockReplace.mockClear()
+  mockRequestStarter.mockClear()
   mockWidgets = [
     { slot: 'hostFirstRun', widgetId: 'demo-start', Component: MockFirstRunWidget },
   ]
 })
 
-describe('the page a new site lands on', () => {
-  it('is the ordinary page, with the first-run zone above it', async () => {
-    render(<HostSetupDetailsSection />)
+describe('the start a new site is offered', () => {
+  it('is drawn when creation asked for it on an empty site, with the site, org and ways out', async () => {
+    render(<HostFirstRunGate />)
     expect(await screen.findByText('guided start')).toBeTruthy()
-    expectOrdinaryPage()
+    expect(lastZoneProps).toMatchObject({ hostId: 'host-1', orgId: 'org-1', orgSlug: 'acme', host: 'shop' })
+    expect(typeof lastZoneProps?.['startBlank']).toBe('function')
+    expect(typeof lastZoneProps?.['leave']).toBe('function')
   })
 
-  it('is the whole page when no widget offers a start', async () => {
-    mockWidgets = []
-    render(<HostSetupDetailsSection />)
-    expectOrdinaryPage()
+  it('is never drawn without the parameter creation adds', () => {
+    mockSearch = ''
+    render(<HostFirstRunGate />)
     expect(screen.queryByText('guided start')).toBeNull()
   })
 
-  it('hands the zone the site, its org and the way back to the blank path', async () => {
-    render(<HostSetupDetailsSection />)
-    await screen.findByText('guided start')
-    expect(lastZoneProps).toEqual(
-      expect.objectContaining({
-        hostId: 'host-1',
-        orgId: 'org-1',
-        orgSlug: 'acme',
-        host: 'shop',
-        startBlank: expect.any(Function),
-      }),
-    )
-  })
-})
-
-/**
- * The condition that was missing (AGL-2918).
- *
- * Setup → Basic details is where a new site lands, and the zone was drawn on
- * it for that reason — but it is also the setup page of every site that has
- * ever existed, and the only thing gating the zone was `hostStartedBlank`,
- * which asks whether THIS BROWSER dismissed the offer. An established site
- * opened in a browser that had never dismissed anything got the guided start
- * over the top of it: reported on `aglyn-marketing`, 26 screens, where the
- * full screen dialog opened on a site years into its life.
- *
- * Each test here fails on the code that shipped, because on that code the
- * site's own state was not consulted at all. The blast radius was staff-only
- * while `release_ai_generative` was off — the widget is absent without it —
- * so these are written against the ZONE rather than against any widget: the
- * console's job is not to offer, and it must not be offering when the flag
- * moves.
- */
-describe('an established site', () => {
-  it('is not offered a start it is years past', async () => {
-    mockHost = ESTABLISHED_SITE
-    render(<HostSetupDetailsSection />)
-    expectOrdinaryPage()
+  it('is never drawn on a site with a published page, or one that took the starter', () => {
+    mockHost = { screens: { s1: '/', s2: '/about' } }
+    const { unmount } = render(<HostFirstRunGate />)
+    expect(screen.queryByText('guided start')).toBeNull()
+    unmount()
+    mockHost = { starterProvisionedAt: { seconds: 1 } }
+    render(<HostFirstRunGate />)
     expect(screen.queryByText('guided start')).toBeNull()
   })
 
-  /**
-   * The dismissal is not what is doing the work here.
-   *
-   * Every other path out of the offer runs through `hostStartedBlank`, so a
-   * fix that only ever tightened THAT would pass a test written on a fresh
-   * browser by accident. This one states the property on its own: nothing has
-   * been dismissed, the browser is clean, and the site is still not asked.
-   */
-  it('is not offered one in a browser that has dismissed nothing', async () => {
-    mockHost = ESTABLISHED_SITE
-    expect(hostStartedBlank('host-1')).toBe(false)
-    render(<HostSetupDetailsSection />)
+  it('waits for the site document rather than reading an unread one as empty', () => {
+    mockHostStatus = 'loading'
+    render(<HostFirstRunGate />)
     expect(screen.queryByText('guided start')).toBeNull()
   })
 
-  /**
-   * One published page is enough, because the question is whether a visitor
-   * can reach anything — not how much there is. A site with a single live
-   * page is a site somebody has started.
-   */
-  it('is past the offer from its first published page', async () => {
-    mockHost = { screens: { 's1': 'home' } }
-    render(<HostSetupDetailsSection />)
+  it('asks for the starter on the blank path, closes, and drops the parameter', async () => {
+    render(<HostFirstRunGate />)
+    fireEvent.click(await screen.findByText('Skip and start blank'))
+    expect(mockRequestStarter).toHaveBeenCalledWith(mockUser, 'host-1')
+    expect(mockReplace).toHaveBeenCalledWith('/acme/hosts/shop')
     expect(screen.queryByText('guided start')).toBeNull()
   })
-})
 
-/**
- * An unread document is not a blank site.
- *
- * `screens` is absent both before the host document arrives and on a site
- * that publishes nothing, so a gate that read the map without waiting would
- * mount the zone for every site for as long as the snapshot took — and the
- * widget on this zone takes the WHOLE SCREEN, so that is not a flicker in a
- * card, it is a dialog over somebody's settings page that then vanishes.
- */
-describe('before the site has been read', () => {
-  it('offers nothing until the document has arrived', async () => {
-    mockHostHasEmitted = false
-    render(<HostSetupDetailsSection />)
-    expectOrdinaryPage()
+  it('closes after a guided start began without asking for the starter', async () => {
+    render(<HostFirstRunGate />)
+    fireEvent.click(await screen.findByText('Close after starting'))
+    expect(mockRequestStarter).not.toHaveBeenCalled()
+    expect(mockReplace).toHaveBeenCalledWith('/acme/hosts/shop')
     expect(screen.queryByText('guided start')).toBeNull()
-  })
-})
-
-describe('starting blank', () => {
-  it('asks for the starter site, and closing after a guided start began does not (AGL-3594)', async () => {
-    const original = global.fetch
-    const fetchSpy = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ provisioned: false }) }) as unknown as Response)
-    global.fetch = fetchSpy as unknown as typeof fetch
-    const view = render(<HostSetupDetailsSection />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Close after starting' }))
-    expect(fetchSpy).not.toHaveBeenCalled()
-    view.unmount()
-    window.localStorage.clear()
-    render(<HostSetupDetailsSection />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Skip and start blank' }))
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    const starter = (fetchSpy.mock.calls as unknown as Array<[unknown, RequestInit]>).find(([url]) => String(url).includes('/api/hosts/starter'))
-    expect(starter).toBeTruthy()
-    expect(JSON.parse(String(starter?.[1].body))).toEqual({ hostId: 'host-1' })
-    global.fetch = original
-  })
-
-  it('leaves the person on the ordinary page with nothing created', async () => {
-    render(<HostSetupDetailsSection />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Skip and start blank' }))
-    expect(screen.queryByText('guided start')).toBeNull()
-    expectOrdinaryPage()
-  })
-
-  it('is remembered, so the site does not ask again', async () => {
-    const view = render(<HostSetupDetailsSection />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Skip and start blank' }))
-    expect(hostStartedBlank('host-1')).toBe(true)
-    view.unmount()
-    render(<HostSetupDetailsSection />)
-    expect(screen.queryByText('guided start')).toBeNull()
-    expectOrdinaryPage()
-  })
-
-  it('is remembered per site, not for every site the person makes next', () => {
-    expect(hostStartedBlank('host-1')).toBe(false)
-    render(<HostSetupDetailsSection />)
-    fireEvent.click(screen.getByRole('button', { name: 'Skip and start blank' }))
-    expect(hostStartedBlank('host-2')).toBe(false)
   })
 })
