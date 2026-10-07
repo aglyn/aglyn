@@ -663,6 +663,23 @@ export interface LegalDocumentManifestEntry {
  * pin (44131 bytes / `c48915…`) byte for byte before and after publication,
  * and keeps that pin.
  *
+ * v11 corrected the same day (2026-10-07, AGL-3636), without a new version:
+ * Avalara and TaxJar act in a merchant's own account with the merchant's own
+ * credentials, so they left the Subprocessors list for its sentence on
+ * services a merchant connects. Privacy §3 no longer names sales tax among
+ * what subprocessors do and says sales tax services a merchant connects, such
+ * as Avalara or TaxJar, act for that merchant; §10's example names a sales tax
+ * service beside a shipping service. A wording correction inside v11, so
+ * `LEGAL_DOCUMENT_VERSION` stays `v11` and nobody is asked to accept again.
+ * The wording is recorded in
+ * `Platform Docs/Legal/Proposed/2026-10-07-tax-engines-merchant-connected/PROPOSAL.md`.
+ * Masters first, then the pages; privacy re-captured from the live page:
+ * 25496 bytes (`dbe5c9…`), identical across two requests and a cache-busting
+ * query, with terms again the control (its `v9` pin reproduced). The first
+ * v11 capture (25423 bytes / `006fe7…`), what members who accepted v11 before
+ * the correction were shown, stays in the archive beside it as
+ * `v11/privacy.superseded-2026-10-07-006fe7.txt`.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -729,7 +746,7 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '006fe7f39723451976eac3a94d634e3a339a0c7ceb47c50421298a0a515e78f9',
-    bytes: 25423,
+      'dbe5c9d7628db353cc2a756372cf7cb7cbebdf8cedc2cc6887bc6219ccabd7bf',
+    bytes: 25496,
   },
 ]

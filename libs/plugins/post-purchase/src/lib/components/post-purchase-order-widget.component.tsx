@@ -17,6 +17,7 @@
 
 'use client'
 
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { StatusChip, type StatusTone } from '@aglyn/shared-ui-jsx/components/status-chip.component'
 import { Alert, Stack, Typography } from '@mui/material'
@@ -66,7 +67,15 @@ export function PostPurchaseOrderWidget(props: PostPurchaseOrderWidgetProps) {
   if (!view.protection && !view.trackedParcels.length && !view.narvar) return null
   const protection = view.protection
   return (
-    <CardDisplay header="Tracking and protection" contentGutterX contentGutterY>
+    <CardDisplay
+      header="Tracking and protection"
+      help={pluginDocsHelp('postPurchase', {
+        anchor: '#on-the-order',
+        excerpt: 'Package protection on this order, the parcels a service follows, and what was sent to Narvar.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1.5}>
         {protection ? (
           <Stack spacing={0.5}>

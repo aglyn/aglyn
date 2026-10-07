@@ -25,6 +25,14 @@ struct SettingsView: View {
           LabeledContent("Role", value: workspace.org?.role.capitalized ?? "—")
         }
       }
+      Section {
+        NavigationLink {
+          NotificationSettingsView()
+        } label: {
+          Label("Notifications", systemImage: "bell.badge")
+        }
+        .accessibilityIdentifier("settings-notifications")
+      }
       Section("About") {
         LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")
         if let origin = model.config?.consoleOrigin {

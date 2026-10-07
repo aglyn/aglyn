@@ -312,6 +312,11 @@ export const PLUGIN_DOCS = {
     title: 'Running the register',
     excerpt: 'Shifts and the cash drawer with X and Z reports, staff PINs, customers at the register, returns and exchanges, and printed thermal receipts.',
   },
+  postPurchase: {
+    path: '/commerce-and-bookings/commerce/tracking-and-protection',
+    title: 'Tracking and protection (AfterShip, Route and Narvar)',
+    excerpt: 'Connect your own AfterShip, Route or Narvar account so parcels are followed, buyers land on your branded tracking page, and shipped orders can carry Route package protection. Rolling out.',
+  },
   publishAPlugin: {
     path: '/developers/plugins/publish-a-plugin',
     title: 'Publish a plugin',
@@ -433,6 +438,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   pos: ['#registers', '#the-register', '#modifiers', '#selling-past-the-count', '#taking-payment', '#platform-fees-at-the-register', '#when-something-disconnects', '#tips', '#receipts', '#card-readers', '#customer-display', '#reservations', '#related'],
   posHardware: ['#recommended-kit', '#card-readers', '#receipt-printers', '#add-a-printer', '#what-prints', '#your-logo-on-the-receipt', '#status', '#cash-drawer', '#barcode-scanning', '#label-printers', '#product-labels', '#shipping-labels', '#customer-display-tablet', '#related'],
   posOperations: ['#shifts-and-the-cash-drawer', '#what-the-reports-show', '#shift-history', '#requiring-a-shift', '#who-rang-it', '#staff-pins', '#customers-at-the-register', '#returns-and-exchanges', '#refund-limits-and-manager-approval', '#printed-receipts', '#related'],
+  postPurchase: ['#connect-a-service', '#afterships-webhook', '#package-protection-at-checkout', '#branded-tracking-pages', '#on-the-order', '#switching-it-off-for-a-site'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#tips', '#related'],
   publisherHandbook: ['#before-your-first-publish', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#rules-an-email-starter-has-to-meet', '#publishing-a-version', '#before-you-publish', '#review-what-happens-after-you-publish', '#the-two-badges-and-what-each-one-promises', '#asking-to-be-verified', '#testing-a-version-before-it-is-approved', '#watching-your-own-submission', '#disabled-versions', '#private-plugins', '#authoring-your-listing', '#what-your-listing-can-say-about-aglyn', '#versioning--updates', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#getting-paid', '#low-prices-and-processing'],
   redirects: ['#manage-redirects', '#sending-visitors-to-another-site', '#import-and-export', '#columns', '#how-a-row-finds-an-existing-rule', '#conflicts-the-dry-run-and-undo', '#metrics', '#match-modes-v2', '#related'],

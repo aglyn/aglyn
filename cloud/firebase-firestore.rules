@@ -679,6 +679,14 @@ service cloud.firestore {
              // /api/orgs/settings, Admin SDK, and denying the direct client
              // write therefore costs the product nothing.
              'timeZone',
+             // AGL-3662. What a new dataset (`defaultResourceScope`) and a new
+             // upload or media folder (`defaultMediaScope`) start shared with.
+             // `defaultMediaScopeOf` reads both in
+             // `libs/aglyn/src/lib/app-utils`, so they are resolver inputs and
+             // server-owned by the AGL-3237 argument: the console sets them
+             // through /api/orgs/settings, Admin SDK, so denying the direct
+             // client write costs the product nothing.
+             'defaultResourceScope', 'defaultMediaScope',
              // AGL-2501. The SEARCH KEYS behind the staff organization list.
              // Derived from `name` by `nameSearchFields` on every writer, so
              // there is no state in which a client should set one — and a

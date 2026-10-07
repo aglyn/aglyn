@@ -13,15 +13,43 @@ struct FeedNotification: Identifiable, Equatable {
   let link: String?
   let read: Bool
   let level: String?
+  /// The catalog type (`content.order`, `billing.invoice`, …), which picks the row's glyph.
+  let type: String?
   let createdAt: Date?
 
-  /// The notification levels as theme tones; unknown or absent reads as info.
+  /// The row's level as a theme tone: the level its emitter stamped, else
+  /// its type's level from the catalog, as the console's bell reads it.
+  var tone: AglynTone { Self.tone(NotificationCatalog.shared.level(stamped: level, type: type)) }
+
   static func tone(_ level: String?) -> AglynTone {
     switch level {
     case "critical", "error": .error
     case "warning": .warning
     case "success": .success
+    case "neutral": .neutral
     default: .info
+    }
+  }
+
+  /// A notification type's glyph, by the catalog's type families (the
+  /// Android shell's `notificationIcon` draws the same families).
+  static func symbol(_ type: String?) -> String {
+    guard let type else { return "bell" }
+    switch type {
+    case _ where type.hasPrefix("billing."): return "creditcard"
+    case _ where type.hasPrefix("team."): return "person.2"
+    case "content.formSubmission": return "tray"
+    case "content.booking": return "calendar"
+    case "content.order": return "bag"
+    case "content.lowStock": return "shippingbox"
+    case _ where type.hasPrefix("content.task"): return "checklist"
+    case "content.contactAssigned", "content.leadAssigned": return "person.crop.circle.badge.plus"
+    case _ where type.hasSuffix("Digest"): return "chart.bar.xaxis"
+    case _ where type.hasPrefix("content.aiJob"): return "sparkles"
+    case _ where type.hasPrefix("marketplace."): return "star"
+    case _ where type.hasPrefix("support."): return "lifepreserver"
+    case _ where type.hasPrefix("system."): return "shield"
+    default: return "bell"
     }
   }
 }
@@ -47,7 +75,7 @@ final class NotificationFeed {
         self?.rows = docs.map {
           FeedNotification(
             id: $0.id, title: $0.string("title") ?? "", body: $0.string("body"), link: $0.string("link"),
-            read: $0.bool("read") == true, level: $0.string("level"), createdAt: $0.date("createdAt"))
+            read: $0.bool("read") == true, level: $0.string("level"), type: $0.string("type"), createdAt: $0.date("createdAt"))
         }
       case .failure:
         self?.failed = true
@@ -79,19 +107,10 @@ func openNotification(_ row: FeedNotification, model: AppModel, navigation: Shel
 struct NotificationRow: View {
   let row: FeedNotification
 
-  private var icon: String {
-    switch row.level {
-    case "critical", "error": "xmark.octagon"
-    case "warning": "exclamationmark.triangle"
-    case "success": "checkmark.circle"
-    default: "bell"
-    }
-  }
-
   var body: some View {
     ActivityRow(
-      row.title, subtitle: row.body, time: row.createdAt.map { relativeTime($0) }, systemImage: icon,
-      tone: FeedNotification.tone(row.level), unread: !row.read)
+      row.title, subtitle: row.body, time: row.createdAt.map { relativeTime($0) }, systemImage: FeedNotification.symbol(row.type),
+      tone: row.tone, unread: !row.read)
   }
 }
 

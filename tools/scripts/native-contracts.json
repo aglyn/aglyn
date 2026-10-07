@@ -1810,6 +1810,54 @@
           }
         ]
       ]
+    },
+    "readMobilePushData": {
+      "module": "libs/aglyn/src/lib/app-utils/mobile-push.ts",
+      "args": [
+        [
+          {
+            "type": "content.order",
+            "link": "/h1/orders",
+            "orgId": "o1",
+            "hostId": "h1"
+          }
+        ],
+        [
+          {
+            "type": "content.order",
+            "link": "https://app.aglyn.com/x"
+          }
+        ],
+        [
+          {
+            "type": "content.order",
+            "link": "javascript:alert(1)"
+          }
+        ],
+        [
+          {
+            "type": "content.order",
+            "link": "aglyn://x",
+            "orgId": ""
+          }
+        ],
+        [
+          {
+            "type": ""
+          }
+        ],
+        [
+          {
+            "link": "/x"
+          }
+        ],
+        [
+          null
+        ],
+        [
+          "text"
+        ]
+      ]
     }
   }
 }

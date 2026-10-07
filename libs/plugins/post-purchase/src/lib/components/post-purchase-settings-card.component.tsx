@@ -17,6 +17,7 @@
 
 'use client'
 
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { StatusChip } from '@aglyn/shared-ui-jsx/components/status-chip.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -142,7 +143,7 @@ function VendorCard(props: {
     <CardDisplay
       header={label}
       subheader={SUBHEADERS[vendor]}
-      help={{ title: label, excerpt: HELP[vendor] }}
+      help={pluginDocsHelp('postPurchase', { anchor: '#connect-a-service', title: label, excerpt: HELP[vendor] })}
       HeaderProps={{
         action: (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
