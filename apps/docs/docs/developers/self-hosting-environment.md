@@ -850,10 +850,18 @@ public internet, must never have them.
 | `XERO_CLIENT_ID` | Feature | Runtime, console | The Xero app's client id. |
 | `XERO_CLIENT_SECRET` | Feature | Runtime, console | The Xero app's client secret. |
 | `XERO_SCOPES` | Optional | Runtime, console | Space-separated scopes that replace the default request, for a Xero app made before Xero's granular scopes. |
+| `CODAT_API_KEY` | Feature | Runtime, console | The Codat client's API key. Set, the Accounting page also offers other accounting software (QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books, Wave and the rest Codat reaches), each workspace as one Codat company. |
 | `ACCOUNTING_TOKEN_KEY` | Feature | Runtime, console | 32 random bytes, base64. Seals every stored token. A comma-separated list rotates: the first key seals, the rest only open, and a token opened under an older key is sealed again under the first. |
 
 Register `https://<console>/api/accounting/oauth/callback` as the redirect URI
 in both developer apps. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
+
+For Codat, set the redirect in the Codat Portal under **Settings > Auth flow >
+Redirects** to
+`https://<console>/api/accounting/oauth/callback?code={companyId}&state={state}&statusCode={statusCode}`,
+and turn on the accounting integrations you want to offer under
+**Settings > Integrations > Accounting**. Codat is a subprocessor: publish its
+row before setting the key in production.
 
 ### Tax services {#tax-engines}
 
