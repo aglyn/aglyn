@@ -101,6 +101,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var discountBy: String?
   public var discountPct: Double?
   public var dispute: OrderDispute?
+  public var extras: [OrderExtra]?
   public var feeCents: Double?
   public var fulfillments: [OrderFulfillment]?
   public var invoiceId: String?
@@ -127,7 +128,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var totals: OrderTotals?
   public var unresolvedLines: [OrderUnresolvedLine]?
 
-  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, feeCents: Double? = nil, fulfillments: [OrderFulfillment]? = nil, invoiceId: String? = nil, lineItems: [OrderLineItem]? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, productId: String? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: HostOrderTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil) {
+  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillments: [OrderFulfillment]? = nil, invoiceId: String? = nil, lineItems: [OrderLineItem]? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, productId: String? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: HostOrderTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil) {
     self.amountCents = amountCents
     self.billingAddress = billingAddress
     self.buyerNotifications = buyerNotifications
@@ -144,6 +145,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
     self.discountBy = discountBy
     self.discountPct = discountPct
     self.dispute = dispute
+    self.extras = extras
     self.feeCents = feeCents
     self.fulfillments = fulfillments
     self.invoiceId = invoiceId
@@ -663,6 +665,24 @@ public struct OrderDispute: Codable, Hashable, Sendable {
   }
 }
 
+public struct OrderExtra: Codable, Hashable, Sendable {
+  public var amountCents: Double
+  public var id: String
+  public var key: String
+  public var label: String
+  public var pluginId: String
+  public var quoteRef: String?
+
+  public init(amountCents: Double, id: String, key: String, label: String, pluginId: String, quoteRef: String? = nil) {
+    self.amountCents = amountCents
+    self.id = id
+    self.key = key
+    self.label = label
+    self.pluginId = pluginId
+    self.quoteRef = quoteRef
+  }
+}
+
 public struct OrderFulfillment: Codable, Hashable, Sendable {
   public var atMs: Double
   public var cancelledAtMs: Double?
@@ -943,6 +963,7 @@ public struct OrderTimelineEvent: Codable, Hashable, Sendable {
 
 public struct OrderTotals: Codable, Hashable, Sendable {
   public var discountCents: Double?
+  public var extrasCents: Double?
   public var feeCents: Double?
   public var itemsCents: Double?
   public var shippingCents: Double?
@@ -950,8 +971,9 @@ public struct OrderTotals: Codable, Hashable, Sendable {
   public var tipCents: Double?
   public var totalCents: Double?
 
-  public init(discountCents: Double? = nil, feeCents: Double? = nil, itemsCents: Double? = nil, shippingCents: Double? = nil, taxCents: Double? = nil, tipCents: Double? = nil, totalCents: Double? = nil) {
+  public init(discountCents: Double? = nil, extrasCents: Double? = nil, feeCents: Double? = nil, itemsCents: Double? = nil, shippingCents: Double? = nil, taxCents: Double? = nil, tipCents: Double? = nil, totalCents: Double? = nil) {
     self.discountCents = discountCents
+    self.extrasCents = extrasCents
     self.feeCents = feeCents
     self.itemsCents = itemsCents
     self.shippingCents = shippingCents

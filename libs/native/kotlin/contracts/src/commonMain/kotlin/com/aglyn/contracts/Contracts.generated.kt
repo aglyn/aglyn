@@ -75,6 +75,7 @@ data class HostOrder(
     val discountBy: String? = null,
     val discountPct: Double? = null,
     val dispute: OrderDispute? = null,
+    val extras: List<OrderExtra>? = null,
     val feeCents: Double? = null,
     val fulfillments: List<OrderFulfillment>? = null,
     val invoiceId: String? = null,
@@ -447,6 +448,16 @@ data class OrderDispute(
 )
 
 @Serializable
+data class OrderExtra(
+    val amountCents: Double,
+    val id: String,
+    val key: String,
+    val label: String,
+    val pluginId: String,
+    val quoteRef: String? = null,
+)
+
+@Serializable
 data class OrderFulfillment(
     val atMs: Double,
     val cancelledAtMs: Double? = null,
@@ -632,6 +643,7 @@ data class OrderTimelineEvent(
 @Serializable
 data class OrderTotals(
     val discountCents: Double? = null,
+    val extrasCents: Double? = null,
     val feeCents: Double? = null,
     val itemsCents: Double? = null,
     val shippingCents: Double? = null,

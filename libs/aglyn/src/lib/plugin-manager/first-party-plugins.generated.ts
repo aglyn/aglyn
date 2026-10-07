@@ -230,10 +230,10 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     "id": "post-purchase",
     "label": "Tracking and protection",
     "alwaysOnForWorkspace": true,
-    "description": "Parcel tracking through AfterShip, package protection at checkout through Route, and Narvar order tracking, with the store's own accounts.",
+    "description": "Order tracking and package protection.",
     "siteOff": {
-      "stops": "Switching Tracking and protection off for this site stops offering package protection in its cart, following new parcels and sending new orders to Narvar.",
-      "keeps": "Protection already bought stays open with Route, connected accounts stay connected, and it keeps working on the workspace's other sites."
+      "stops": "Stops protection and tracking for new orders.",
+      "keeps": "Bought protection stays in force."
     }
   },
 ]
