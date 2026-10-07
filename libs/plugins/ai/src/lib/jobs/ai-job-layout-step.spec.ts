@@ -529,6 +529,8 @@ describe('the layout step', () => {
       expect(written).toContain('{{host.businessName}}')
       expect(written).not.toContain('Hillside Dog Grooming')
       expect(written).not.toContain('555-0142')
+      // The layout fills the window, so a short page keeps its footer at the bottom.
+      expect(written).toContain('"minHeight":"100vh"')
     })
 
     it('adds a nav row to the Toolbar Content when the model built none, so the plan’s nav region is built', async () => {

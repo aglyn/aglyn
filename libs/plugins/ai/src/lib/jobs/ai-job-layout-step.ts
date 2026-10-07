@@ -70,6 +70,7 @@ import {
 import { aiPlanRegionViolations, aiPlannedLayoutRegions } from './ai-job-plan-conformance'
 import { aiLayoutSitePages, aiLayoutSitePagesLines, aiLayoutWithSitePages } from './ai-job-layout-site-pages'
 import { aiLayoutInventedContactViolations, aiLayoutWithSiteName } from './ai-layout-site-facts'
+import { aiLayoutWithFullHeight } from './ai-layout-full-height'
 import type { AiJobStepRunner } from './ai-job-text-step'
 import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
@@ -395,11 +396,15 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
       ...(AI_ROUTING_TABLE['job.layout'].thinking ? { thinking: AI_ROUTING_TABLE['job.layout'].thinking } : {}),
       ...(AI_ROUTING_TABLE['job.layout'].effort ? { effort: AI_ROUTING_TABLE['job.layout'].effort } : {}),
       extend: aiLayoutChecks(inventory, plan, job.brief),
-      // The site's name is written as the token that reads it (AGL-3596).
+      // The site's name is written as the token that reads it, and the
+      // layout fills the window so a short page keeps its footer at the
+      // bottom (AGL-3596).
       complete: (tree: unknown) =>
-        aiLayoutWithSiteName(
-          sitePages.length ? aiLayoutWithSitePages(tree, sitePages, { homeScreenIds: aiHomeScreenIds(inventory) }) : tree,
-          typeof job.inputs?.['businessName'] === 'string' ? job.inputs['businessName'] : null,
+        aiLayoutWithFullHeight(
+          aiLayoutWithSiteName(
+            sitePages.length ? aiLayoutWithSitePages(tree, sitePages, { homeScreenIds: aiHomeScreenIds(inventory) }) : tree,
+            typeof job.inputs?.['businessName'] === 'string' ? job.inputs['businessName'] : null,
+          ),
         ),
       ...(sitePages.length
         ? { context: { screenIds: [...inventory.screens.map((screen) => screen.id), ...sitePages.map((page) => page.id)] } }
