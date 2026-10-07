@@ -21,6 +21,15 @@ dependencyResolutionManagement {
   repositories {
     google()
     mavenCentral()
+    // Microsoft's NuGet feed, for the WebView2 SDK's loader only (the Windows
+    // Besigner; approved 2026-10-07). Nothing else resolves from here.
+    ivy {
+      name = "nuget"
+      url = uri("https://api.nuget.org/v3-flatcontainer/")
+      patternLayout { artifact("[module]/[revision]/[module].[revision].[ext]") }
+      metadataSources { artifact() }
+      content { includeGroup("nuget.microsoft") }
+    }
   }
 }
 

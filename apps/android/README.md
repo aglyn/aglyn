@@ -20,6 +20,23 @@ Versions live in `gradle/libs.versions.toml`: Gradle 9.8, AGP 9.4, Kotlin
 Android SDK (the BoM 34.19.0 set). `compileSdk` is 37 because the current
 Compose and adaptive artifacts require it; `minSdk` is 26.
 
+Dependencies beyond the base stack are each approved by Zach (2026-10-07) and
+pinned in the catalog:
+
+| dependency | used by | license |
+| -- | -- | -- |
+| Stripe Terminal Android SDK (`stripeterminal`, `stripeterminal-taptopay`) | `:pos` only: Tap to Pay and Bluetooth readers | MIT |
+| CameraX (`camera-camera2`, `camera-lifecycle`, `camera-view`) | `:native-camera`, Android only | Apache-2.0 |
+| ML Kit barcode scanning (bundled model) | `:native-camera`, Android only | ML Kit Terms of Service |
+| JNA | desktop: Windows Credential Manager, WebView2 over COM | Apache-2.0 / LGPL-2.1 |
+| grpc-java (`grpc-okhttp`, `grpc-stub`) + `proto-google-cloud-firestore-v1` | desktop: Firestore `Listen` | Apache-2.0 |
+| Microsoft Edge WebView2 SDK (`Microsoft.Web.WebView2`, NuGet): `WebView2Loader.dll` only | desktop on Windows: the Besigner, on the Evergreen runtime Windows keeps updated | Microsoft BSD-style (packaged as `licenses/WebView2-LICENSE.txt`) |
+
+The WebView2 SDK resolves from Microsoft's NuGet feed (an Ivy repository in
+`settings.gradle.kts` that serves nothing else) and only when Windows
+packages or runs the desktop app: `:desktop:webview2Loader` extracts the x64
+and arm64 loaders into Compose's `appResources`.
+
 Shared modules are Kotlin Multiplatform with an Android target
 (`com.android.kotlin.multiplatform.library`) and a JVM `desktop` target. The
 shells, the theme and every plugin screen are Compose Multiplatform in
