@@ -12,7 +12,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -26,8 +25,8 @@ import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.MetricCard
 import com.aglyn.ui.SectionCard
-import com.aglyn.ui.Skeleton
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -107,21 +106,25 @@ private fun RedirectDetail(row: RedirectRow) {
   }
 }
 
-/** The Redirects card on the dashboard: how many rules the site serves, and how many are off. */
+/**
+ * The Redirects card on the dashboard: how many rules the site serves and
+ * how many are switched off. The whole card opens the Redirects screen.
+ */
 @Composable
 fun RedirectsSummaryWidget(context: NativePluginContext) {
-  when (val live = hostRedirects(context)) {
-    Live.Loading -> Skeleton(height = 36.dp)
-    is Live.Failed -> Text("Could not load redirects.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-    is Live.Ready -> {
-      val off = live.value.count { !it.enabled }
-      val on = live.value.size - off
-      Text(on.toString(), style = MaterialTheme.typography.displaySmall, modifier = Modifier.testTag("redirects-summary-count"))
-      Text(
-        (if (on == 1) "redirect is on" else "redirects are on") + if (off > 0) " · $off off" else "",
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-      TextButton(onClick = { context.navigate(REDIRECTS_LIST_SCREEN) }) { Text("View") }
-    }
-  }
+  val live = hostRedirects(context)
+  val rows = (live as? Live.Ready)?.value
+  val off = rows?.count { !it.enabled } ?: 0
+  val on = rows?.let { it.size - off }
+  MetricCard(
+    title = "Redirects",
+    value = on?.toString(),
+    caption = on?.let { (if (it == 1) "redirect is on" else "redirects are on") + if (off > 0) " · $off off" else "" },
+    icon = "alt_route",
+    actionLabel = "Open redirects",
+    modifier = Modifier.fillMaxSize().testTag("redirects-summary"),
+    loading = live is Live.Loading,
+    error = if (live is Live.Failed) "Could not load redirects." else null,
+    onClick = { context.navigate(REDIRECTS_LIST_SCREEN) },
+  )
 }

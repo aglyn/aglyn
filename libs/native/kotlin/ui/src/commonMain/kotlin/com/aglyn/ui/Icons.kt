@@ -21,6 +21,26 @@ import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Web
 import androidx.compose.material.icons.outlined.Workspaces
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Insights
+import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.Event
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.outlined.Campaign
+import androidx.compose.material.icons.outlined.SupportAgent
+import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.TaskAlt
+import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.PersonOutline
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.automirrored.outlined.Launch
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -49,6 +69,26 @@ object AglynIcons {
     "swap_horiz" to Icons.Outlined.SwapHoriz,
     "web" to Icons.Outlined.Web,
     "workspaces" to Icons.Outlined.Workspaces,
+    "chevron_right" to Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+    "description" to Icons.Outlined.Description,
+    "photo_library" to Icons.Outlined.PhotoLibrary,
+    "insights" to Icons.Outlined.Insights,
+    "receipt" to Icons.Outlined.ReceiptLong,
+    "event" to Icons.Outlined.Event,
+    "inbox" to Icons.Outlined.Inbox,
+    "group" to Icons.Outlined.Group,
+    "credit_card" to Icons.Outlined.CreditCard,
+    "campaign" to Icons.Outlined.Campaign,
+    "support" to Icons.Outlined.SupportAgent,
+    "star" to Icons.Outlined.StarOutline,
+    "auto_awesome" to Icons.Outlined.AutoAwesome,
+    "task" to Icons.Outlined.TaskAlt,
+    "inventory" to Icons.Outlined.Inventory2,
+    "person" to Icons.Outlined.PersonOutline,
+    "shield" to Icons.Outlined.Shield,
+    "warning" to Icons.Outlined.WarningAmber,
+    "info" to Icons.Outlined.Info,
+    "launch" to Icons.AutoMirrored.Outlined.Launch,
   )
 
   fun named(name: String?): ImageVector = byName[name] ?: Icons.Outlined.Extension

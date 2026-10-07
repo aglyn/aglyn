@@ -26,6 +26,9 @@ import androidx.compose.ui.semantics.semantics
 import com.aglyn.core.AuthState
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.ui.AglynIcons
+import com.aglyn.ui.AglynLogo
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.unit.dp
 import com.aglyn.ui.AglynNavigationSuite
 import com.aglyn.ui.AglynTheme
 import com.aglyn.ui.NavDestination
@@ -116,7 +119,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
         TopAppBar(
           title = {
             if (route == null && navigator.top == ShellNavigator.HOME) {
-              WorkspaceTitle(workspace) { navigator.push(Route.Switcher) }
+              AglynLogo(Modifier.height(28.dp), contentDescription = services.config.brandName)
             } else {
               Text(title)
             }
