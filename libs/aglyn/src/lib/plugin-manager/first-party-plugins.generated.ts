@@ -582,6 +582,18 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "mediaScanReason": "Register staff PINs (AGL-3609): a salted hash and a lockout counter per member, written only by the staff PIN route. No content field at all."
   },
   {
+    "pluginId": "commerce",
+    "name": "terminal",
+    "mediaScan": "none",
+    "mediaScanReason": "The site's Stripe Terminal Location (AGL-3607): a vendor id and the address it was registered with, written only by the reader routes. No content field."
+  },
+  {
+    "pluginId": "commerce",
+    "name": "terminalReaders",
+    "mediaScan": "none",
+    "mediaScanReason": "The site's card readers (AGL-3607): a Stripe reader id, a label and a status, written only by `/api/commerce/pos-readers`. No content field."
+  },
+  {
     "pluginId": "marketplace",
     "name": "installs"
   },

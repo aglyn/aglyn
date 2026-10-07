@@ -660,6 +660,16 @@
           "name": "posStaffPins",
           "mediaScan": "none",
           "mediaScanReason": "Register staff PINs (AGL-3609): a salted hash and a lockout counter per member, written only by the staff PIN route. No content field at all."
+        },
+        {
+          "name": "terminal",
+          "mediaScan": "none",
+          "mediaScanReason": "The site's Stripe Terminal Location (AGL-3607): a vendor id and the address it was registered with, written only by the reader routes. No content field."
+        },
+        {
+          "name": "terminalReaders",
+          "mediaScan": "none",
+          "mediaScanReason": "The site's card readers (AGL-3607): a Stripe reader id, a label and a status, written only by `/api/commerce/pos-readers`. No content field."
         }
       ],
       "sitemapSections": [
