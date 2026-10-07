@@ -11,8 +11,8 @@ Aglyn uses **two** email systems that do different jobs and don't conflict:
 | System | Job | Sends as | Config |
 | --- | --- | --- | --- |
 | **Google Workspace** | Human **mailboxes** + **inbound** mail (`info@aglyn.com` inbox). Your `MX` records point here. | n/a (receiving) | Workspace admin |
-| **Firebase Auth** | Auth emails only — verification, password reset. **Does not send its own mail**: configured `CUSTOM_SMTP`, relaying through Resend (`smtp.resend.com`). | `noreply@notify.aglyn.com` (via Resend) | Firebase console |
-| **Resend** | Everything else the **app** sends programmatically — and the Firebase Auth relay above. | `noreply@notify.aglyn.com` | `RESEND_API_KEY` + `USAGE_EMAIL_FROM` |
+| **Firebase Auth** | Mints the action LINKS only — verification and password reset come from `generateEmailVerificationLink` / `generatePasswordResetLink`, and the console sends the email itself as a catalog system email through Resend. Firebase's own templates are not sent by any flow; its `CUSTOM_SMTP` relay (`smtp.resend.com`) is a dormant fallback. | `noreply@notify.aglyn.com` (fallback only) | Firebase console |
+| **Resend** | Everything the **app** sends programmatically, auth emails included. | `noreply@notify.aglyn.com` | `RESEND_API_KEY` + `USAGE_EMAIL_FROM` |
 
 Sending **from** `@aglyn.com` does **not** mean sending **through** Google.
 Resend sends on your behalf and proves it's authorized with DKIM/SPF DNS
@@ -29,7 +29,7 @@ on separate registered domains, never under `aglyn.com`.
 | Stream | Sends as | Where it is set |
 | --- | --- | --- |
 | A person writing 1:1 | their own `@aglyn.com` Workspace mailbox | Gmail |
-| Platform mail — invites, billing, account notices, auth | `noreply@notify.aglyn.com` | team-shared `USAGE_EMAIL_FROM`; Firebase Auth SMTP sender |
+| Platform mail — invites, billing, account notices, auth | `noreply@notify.aglyn.com` | team-shared `USAGE_EMAIL_FROM` |
 | Aglyn's own marketing — product updates, newsletters | `@news.aglyn.com` | the aglyn-marketing site's sending domain (org `jWmGooWE3L`) |
 | Cold outreach | `getaglyn.com`, `tryaglyn.com`, `aglynhq.com` (Microsoft 365) | Sequences mailboxes |
 
