@@ -42,6 +42,7 @@ import {
   ACCOUNTING_BASE_TAX_KEYS,
   ACCOUNTING_PROVIDERS,
   ACCOUNTING_PROVIDER_LABELS,
+  accountingProviderName,
   parseAccountingConnectFragment,
   type AccountingAccountRole,
   type AccountingConnectionView,
@@ -81,7 +82,18 @@ export function accountingDocsHelp(
 }
 
 /** The connect buttons' names, spelled once for the specs. */
-export const connectLabel = (provider: AccountingProviderId) => `Connect ${ACCOUNTING_PROVIDER_LABELS[provider]}`
+export const connectLabel = (provider: AccountingProviderId) =>
+  provider === 'codat' ? 'Connect other accounting software' : `Connect ${ACCOUNTING_PROVIDER_LABELS[provider]}`
+
+/**
+ * A connection's card title: the provider and the company, or — through
+ * Codat — the company and the software it keeps its books in.
+ */
+export function connectionTitle(connection: Pick<AccountingConnectionView, 'provider' | 'tenantName'>): string {
+  const label = ACCOUNTING_PROVIDER_LABELS[connection.provider]
+  if (connection.provider === 'codat') return connection.tenantName || label
+  return connection.tenantName ? `${label} — ${connection.tenantName}` : label
+}
 
 const ROLE_HELP: Readonly<Record<AccountingAccountRole, string>> = {
   income: 'Where item sales are recorded.',
@@ -160,8 +172,10 @@ export function AccountingConnectionSection(props: AccountingConnectionSectionPr
               severity: 'success',
               text:
                 connection.status === 'choose-tenant'
-                  ? 'Connected. Choose which Xero organization to use.'
-                  : `Connected ${ACCOUNTING_PROVIDER_LABELS[connection.provider]}${connection.tenantName ? ` — ${connection.tenantName}` : ''}. Choose your accounts below.`,
+                  ? connection.provider === 'codat'
+                    ? 'Connected. Choose which books to use.'
+                    : 'Connected. Choose which Xero organization to use.'
+                  : `Connected ${connectionTitle(connection)}. Choose your accounts below.`,
             }),
           )
           .catch((error: unknown) =>
@@ -265,16 +279,16 @@ export function AccountingConnectionSection(props: AccountingConnectionSectionPr
     )
   }
 
-  const label = ACCOUNTING_PROVIDER_LABELS[connection.provider]
+  const name = accountingProviderName(connection.provider)
   return (
     <Stack spacing={2}>
       {noticeAlert}
       <CardDisplay
-        header={connection.tenantName ? `${label} — ${connection.tenantName}` : label}
+        header={connectionTitle(connection)}
         help={accountingDocsHelp(
           connection.provider,
           '#disconnect',
-          `The ledger this workspace posts to. Disconnecting stops posting; what was already posted stays in ${label}.`,
+          `The ledger this workspace posts to. Disconnecting stops posting; what was already posted stays in ${name}.`,
         )}
         contentGutterX
         contentGutterY
@@ -283,7 +297,7 @@ export function AccountingConnectionSection(props: AccountingConnectionSectionPr
             <Stack direction="row" spacing={1}>
               {connection.status === 'reconnect-required' && data.providers[connection.provider] ? (
                 <Button variant="contained" disabled={busy} onClick={() => void connect(connection.provider)}>
-                  {`Reconnect ${label}`}
+                  {`Reconnect ${name}`}
                 </Button>
               ) : null}
               <Button color="error" disabled={busy} onClick={() => void disconnect()}>
@@ -316,7 +330,7 @@ export function AccountingConnectionSection(props: AccountingConnectionSectionPr
           ) : null}
           {connection.status === 'reconnect-required' ? (
             <Alert severity="warning">
-              {`${label} no longer accepts this connection${connection.lastError ? ` (${connection.lastError})` : ''}. ` +
+              {`${connectionTitle(connection)} no longer accepts this connection${connection.lastError ? ` (${connection.lastError})` : ''}. ` +
                 'Nothing is posted until you reconnect; what is waiting will post then.'}
             </Alert>
           ) : null}
@@ -338,6 +352,7 @@ AccountingConnectionSection.displayName = 'AccountingConnectionSection'
 
 function TenantPicker(props: { connection: AccountingConnectionView; api: AccountingApi; onPicked: () => Promise<void> }) {
   const tenants = props.connection.tenants ?? []
+  const codat = props.connection.provider === 'codat'
   const [picked, setPicked] = useState(tenants[0]?.id ?? '')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -354,18 +369,20 @@ function TenantPicker(props: { connection: AccountingConnectionView; api: Accoun
   }
   return (
     <CardDisplay
-      header="Choose a Xero organization"
+      header={codat ? 'Choose your books' : 'Choose a Xero organization'}
       help={accountingDocsHelp(
-        'xero',
+        props.connection.provider,
         '#connect',
-        'Your Xero login reaches more than one organization. Choose the one this workspace posts to.',
+        codat
+          ? 'More than one set of books was linked. Choose the one this workspace posts to.'
+          : 'Your Xero login reaches more than one organization. Choose the one this workspace posts to.',
       )}
       contentGutterX
       contentGutterY
       HeaderProps={{
         action: (
           <Button variant="contained" disabled={busy || !picked} onClick={() => void choose()}>
-            Use this organization
+            {codat ? 'Use these books' : 'Use this organization'}
           </Button>
         ),
       }}

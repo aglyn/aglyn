@@ -109,12 +109,16 @@ class OrdersTest {
   }
 
   @Test
-  fun anOrderWithNoStatusOrBuyerReadsAsAPendingGuestOrder() {
+  fun anOrderWithNoStatusReadsAsTheConsoleLiftsIt() {
     val row = orderRow(FirestoreDoc("abcdef123456", "hosts/h1/orders/abcdef123456", emptyMap()))
     assertEquals("#123456", row.label)
-    assertEquals(OrderStatus.PENDING, row.status)
+    assertEquals(OrderStatus.PAID, row.status)
     assertEquals("Guest", row.customer)
     assertFalse(row.testMode)
+    val legacy = orderRow(FirestoreDoc("cs_test_a1", "hosts/h1/orders/cs_test_a1", mapOf("amountCents" to 1200L, "productId" to "p3")))
+    assertEquals(1200.0, legacy.netCents)
+    assertEquals(1L, legacy.itemCount)
+    assertTrue(legacy.testMode, "a test checkout session id is a test order")
   }
 
   @Test

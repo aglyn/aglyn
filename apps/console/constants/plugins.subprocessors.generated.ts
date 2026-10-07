@@ -112,7 +112,17 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
   },
   {
     pluginId: 'accounting',
-    subprocessors: [],
+    subprocessors: [
+      {
+        host: "api.codat.io",
+        entity: "Codat Limited",
+        region: "United Kingdom",
+        purpose: "Connecting a merchant's accounting software the platform does not connect directly (such as QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books and Wave) and posting their sales, refunds, fees and payouts to it",
+        publishedOn: "2026-10-07",
+        reason: "The Codat adapter (`libs/plugins/accounting/src/lib/server/providers/codat.ts`): one Codat company per workspace, tagged with the workspace's id, made when a member starts a connect; reads of the linked ledger's company details, chart of accounts and tax rates for the mapping; and writes of the workspace's direct incomes, direct costs, transfers or journals, and one walk-in customer and one fee supplier, through Codat into the linked software. The company is deleted on disconnect or erasure. Reached only while `CODAT_API_KEY` and `ACCOUNTING_TOKEN_KEY` are set.",
+        dataReceived: "The workspace's name and id, as its Codat company. The workspace's own sales as ledger documents: per order, its number, date, line descriptions, quantities and prices, shipping, discount, sales tax and total, with the buyer's name and email address in the document's note; per refund, its amount and the order it reverses; per sale, the platform's fee; per Stripe payout, its amount and date. In daily-summary mode, one journal of the day's totals instead of the per-order documents. The platform's own API key authenticates; Codat holds the credentials to the merchant's software. Nothing about a site visitor who did not buy, and no card data.",
+      },
+    ],
     hosts: [
       {
         host: "quickbooks.api.intuit.com",
@@ -161,6 +171,12 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         disposition: "no-request",
         reason: "Xero's consent page, built by the Xero adapter's `authorizeUrl` and opened by the member's own browser to grant access to their own organization. No server of ours requests it.",
         dataReceived: "Nothing from our servers. The browser carries the OAuth client id, the scopes, the redirect address and a signed state.",
+      },
+      {
+        host: "link.codat.io",
+        disposition: "no-request",
+        reason: "Codat Link, whose address the Codat adapter's `authorizeUrl` answers and the member's own browser opens to pick their accounting software and sign in to it. No server of ours requests it.",
+        dataReceived: "Nothing from our servers. The browser carries the Codat company's id and a signed state; what the member types there goes to Codat.",
       },
     ],
     uses: [
@@ -249,19 +265,19 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
       {
         host: "api.aftership.com",
         disposition: "not-a-subprocessor",
-        reason: "The AfterShip adapter (`libs/plugins/post-purchase/src/lib/providers/aftership.ts`), with the API key the merchant connected from their own AfterShip account: starts following each parcel the merchant ships. The merchant chose AfterShip and the data lands in the merchant's account.",
+        reason: "The AfterShip adapter (`libs/plugins/post-purchase/src/lib/providers/aftership.ts`), with the API key the merchant connected from their own AfterShip account: starts following each parcel the merchant ships. Customer-chosen: the merchant chose AfterShip and the data lands in the merchant's account.",
         dataReceived: "For each parcel: its tracking number and carrier, the order's id and number, the buyer's name, and the site's id. No address, email, phone or payment detail.",
       },
       {
         host: "api.route.com",
         disposition: "not-a-subprocessor",
-        reason: "The Route adapter (`libs/plugins/post-purchase/src/lib/providers/route.ts`), with the secret token the merchant connected from their own Route account: quotes package protection at the cart and opens, updates and cancels the policy a buyer pays for. The merchant chose Route and the data lands in the merchant's account.",
+        reason: "The Route adapter (`libs/plugins/post-purchase/src/lib/providers/route.ts`), with the secret token the merchant connected from their own Route account: quotes package protection at the cart and opens, updates and cancels the policy a buyer pays for. Customer-chosen: the merchant chose Route and the data lands in the merchant's account.",
         dataReceived: "For a quote: the basket's shipped items (name, SKU, quantity, price) and subtotal. For a policy: the order's id, number and date, the buyer's name, email and delivery address, the covered items, the premium paid, and each parcel's tracking number and carrier. No phone or payment detail.",
       },
       {
         host: "ws.narvar.com",
         disposition: "not-a-subprocessor",
-        reason: "The Narvar adapter (`libs/plugins/post-purchase/src/lib/providers/narvar.ts`), with the account id and auth token the merchant connected from their own Narvar account: sends each order and its parcels so Narvar can run the merchant's tracking page and notifications. The merchant chose Narvar and the data lands in the merchant's account.",
+        reason: "The Narvar adapter (`libs/plugins/post-purchase/src/lib/providers/narvar.ts`), with the account id and auth token the merchant connected from their own Narvar account: sends each order and its parcels so Narvar can run the merchant's tracking page and notifications. Customer-chosen: the merchant chose Narvar and the data lands in the merchant's account.",
         dataReceived: "For each order: its number, date, status and currency, the items (name, SKU, quantity, price), the buyer's name, email and delivery address, and each parcel's tracking number, carrier and ship date. No phone or payment detail.",
       },
     ],

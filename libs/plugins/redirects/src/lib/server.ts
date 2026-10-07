@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { registerSiteRedirectResolver } from '@aglyn/aglyn/server'
+import { registerPluginApiRoute, registerSiteRedirectResolver } from '@aglyn/aglyn/server'
 import { resolveRedirect } from './server/resolve-redirect'
 
 /**
@@ -31,4 +31,15 @@ export function registerRedirectsApi(): void {
       ? { destination: rule.destination, statusCode: rule.statusCode }
       : undefined
   })
+}
+
+/**
+ * The redirects plugin's CONSOLE API: `POST /api/redirects/check`, the
+ * Redirects page's save checks for the native apps (`server/redirect-check.ts`).
+ * The handler loads with its first call, so neither boot pays for it.
+ */
+export function registerRedirectsConsoleApi(): void {
+  registerPluginApiRoute('redirects/check', async (req, res) =>
+    (await import('./server/redirect-check')).redirectCheckHandler(req, res),
+  )
 }

@@ -878,6 +878,726 @@
           }
         ]
       ]
+    },
+    "liftLegacyOrder": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "amountCents": 1200,
+            "productId": "p3",
+            "feeCents": 65
+          }
+        ],
+        [
+          {
+            "amountCents": 500
+          }
+        ],
+        [
+          {
+            "status": "refunded",
+            "channel": "pos",
+            "amountCents": 300
+          }
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 1,
+                "unitAmountCents": 100
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "status": "pending",
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 1,
+                "unitAmountCents": 100
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "orderIsTestMode": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "livemode": false
+          }
+        ],
+        [
+          {
+            "livemode": true,
+            "$id": "cs_test_1"
+          }
+        ],
+        [
+          {
+            "$id": "cs_test_a1"
+          }
+        ],
+        [
+          {
+            "checkoutSessionId": "cs_test_b2"
+          }
+        ],
+        [
+          {
+            "$id": "cs_live_x"
+          }
+        ],
+        [
+          {
+            "$id": "ABCdef123"
+          }
+        ],
+        [
+          {
+            "$id": " pi_test_9 "
+          }
+        ]
+      ]
+    },
+    "orderCountsAsSale": {
+      "module": "libs/plugins/commerce/src/lib/model/order-figures.ts",
+      "args": [
+        [
+          {
+            "$id": "o1",
+            "status": "paid",
+            "createdAtMs": 1000,
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 500
+              }
+            ],
+            "totals": {
+              "totalCents": 1000
+            },
+            "livemode": true
+          }
+        ],
+        [
+          {
+            "$id": "o2",
+            "status": "refunded",
+            "createdAtMs": 2000,
+            "lineItems": [
+              {
+                "productId": "p2",
+                "name": "Tote",
+                "quantity": 1,
+                "unitAmountCents": 700
+              }
+            ],
+            "totals": {
+              "totalCents": 700
+            },
+            "refundedCents": 700,
+            "livemode": true
+          }
+        ],
+        [
+          {
+            "$id": "o3",
+            "status": "pending",
+            "createdAtMs": 3000,
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 1,
+                "unitAmountCents": 900
+              }
+            ],
+            "totals": {
+              "totalCents": 900
+            }
+          }
+        ],
+        [
+          {
+            "$id": "cs_test_abc",
+            "status": "paid",
+            "createdAtMs": 4000,
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 1,
+                "unitAmountCents": 300
+              }
+            ],
+            "totals": {
+              "totalCents": 300
+            }
+          }
+        ],
+        [
+          {
+            "$id": "o5",
+            "createdAtMs": 5000,
+            "amountCents": 1200,
+            "productId": "p3"
+          }
+        ],
+        [
+          {
+            "$id": "o6",
+            "status": "cancelled",
+            "createdAtMs": 6000,
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 1,
+                "unitAmountCents": 100
+              }
+            ],
+            "totals": {
+              "totalCents": 100
+            }
+          }
+        ],
+        [
+          {
+            "$id": "o7",
+            "status": "fulfilled",
+            "createdAtMs": 7000,
+            "lineItems": [
+              {
+                "productId": "p2",
+                "name": "Tote",
+                "quantity": 3,
+                "unitAmountCents": 200
+              },
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 1,
+                "unitAmountCents": 50
+              }
+            ],
+            "totals": {
+              "totalCents": 650
+            },
+            "refundedCents": 50,
+            "livemode": true
+          }
+        ]
+      ]
+    },
+    "orderWindowFigures": {
+      "module": "libs/plugins/commerce/src/lib/model/order-figures.ts",
+      "args": [
+        [
+          [
+            {
+              "$id": "o1",
+              "status": "paid",
+              "createdAtMs": 1000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 2,
+                  "unitAmountCents": 500
+                }
+              ],
+              "totals": {
+                "totalCents": 1000
+              },
+              "livemode": true
+            },
+            {
+              "$id": "o2",
+              "status": "refunded",
+              "createdAtMs": 2000,
+              "lineItems": [
+                {
+                  "productId": "p2",
+                  "name": "Tote",
+                  "quantity": 1,
+                  "unitAmountCents": 700
+                }
+              ],
+              "totals": {
+                "totalCents": 700
+              },
+              "refundedCents": 700,
+              "livemode": true
+            },
+            {
+              "$id": "o3",
+              "status": "pending",
+              "createdAtMs": 3000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 900
+                }
+              ],
+              "totals": {
+                "totalCents": 900
+              }
+            },
+            {
+              "$id": "cs_test_abc",
+              "status": "paid",
+              "createdAtMs": 4000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 300
+                }
+              ],
+              "totals": {
+                "totalCents": 300
+              }
+            },
+            {
+              "$id": "o5",
+              "createdAtMs": 5000,
+              "amountCents": 1200,
+              "productId": "p3"
+            },
+            {
+              "$id": "o6",
+              "status": "cancelled",
+              "createdAtMs": 6000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 100
+                }
+              ],
+              "totals": {
+                "totalCents": 100
+              }
+            },
+            {
+              "$id": "o7",
+              "status": "fulfilled",
+              "createdAtMs": 7000,
+              "lineItems": [
+                {
+                  "productId": "p2",
+                  "name": "Tote",
+                  "quantity": 3,
+                  "unitAmountCents": 200
+                },
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 50
+                }
+              ],
+              "totals": {
+                "totalCents": 650
+              },
+              "refundedCents": 50,
+              "livemode": true
+            }
+          ],
+          0,
+          10000
+        ],
+        [
+          [
+            {
+              "$id": "o1",
+              "status": "paid",
+              "createdAtMs": 1000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 2,
+                  "unitAmountCents": 500
+                }
+              ],
+              "totals": {
+                "totalCents": 1000
+              },
+              "livemode": true
+            },
+            {
+              "$id": "o2",
+              "status": "refunded",
+              "createdAtMs": 2000,
+              "lineItems": [
+                {
+                  "productId": "p2",
+                  "name": "Tote",
+                  "quantity": 1,
+                  "unitAmountCents": 700
+                }
+              ],
+              "totals": {
+                "totalCents": 700
+              },
+              "refundedCents": 700,
+              "livemode": true
+            },
+            {
+              "$id": "o3",
+              "status": "pending",
+              "createdAtMs": 3000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 900
+                }
+              ],
+              "totals": {
+                "totalCents": 900
+              }
+            },
+            {
+              "$id": "cs_test_abc",
+              "status": "paid",
+              "createdAtMs": 4000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 300
+                }
+              ],
+              "totals": {
+                "totalCents": 300
+              }
+            },
+            {
+              "$id": "o5",
+              "createdAtMs": 5000,
+              "amountCents": 1200,
+              "productId": "p3"
+            },
+            {
+              "$id": "o6",
+              "status": "cancelled",
+              "createdAtMs": 6000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 100
+                }
+              ],
+              "totals": {
+                "totalCents": 100
+              }
+            },
+            {
+              "$id": "o7",
+              "status": "fulfilled",
+              "createdAtMs": 7000,
+              "lineItems": [
+                {
+                  "productId": "p2",
+                  "name": "Tote",
+                  "quantity": 3,
+                  "unitAmountCents": 200
+                },
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 50
+                }
+              ],
+              "totals": {
+                "totalCents": 650
+              },
+              "refundedCents": 50,
+              "livemode": true
+            }
+          ],
+          2000,
+          6000
+        ],
+        [
+          [
+            {
+              "$id": "o1",
+              "status": "paid",
+              "createdAtMs": 1000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 2,
+                  "unitAmountCents": 500
+                }
+              ],
+              "totals": {
+                "totalCents": 1000
+              },
+              "livemode": true
+            },
+            {
+              "$id": "o2",
+              "status": "refunded",
+              "createdAtMs": 2000,
+              "lineItems": [
+                {
+                  "productId": "p2",
+                  "name": "Tote",
+                  "quantity": 1,
+                  "unitAmountCents": 700
+                }
+              ],
+              "totals": {
+                "totalCents": 700
+              },
+              "refundedCents": 700,
+              "livemode": true
+            },
+            {
+              "$id": "o3",
+              "status": "pending",
+              "createdAtMs": 3000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 900
+                }
+              ],
+              "totals": {
+                "totalCents": 900
+              }
+            },
+            {
+              "$id": "cs_test_abc",
+              "status": "paid",
+              "createdAtMs": 4000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 300
+                }
+              ],
+              "totals": {
+                "totalCents": 300
+              }
+            },
+            {
+              "$id": "o5",
+              "createdAtMs": 5000,
+              "amountCents": 1200,
+              "productId": "p3"
+            },
+            {
+              "$id": "o6",
+              "status": "cancelled",
+              "createdAtMs": 6000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 100
+                }
+              ],
+              "totals": {
+                "totalCents": 100
+              }
+            },
+            {
+              "$id": "o7",
+              "status": "fulfilled",
+              "createdAtMs": 7000,
+              "lineItems": [
+                {
+                  "productId": "p2",
+                  "name": "Tote",
+                  "quantity": 3,
+                  "unitAmountCents": 200
+                },
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 50
+                }
+              ],
+              "totals": {
+                "totalCents": 650
+              },
+              "refundedCents": 50,
+              "livemode": true
+            }
+          ],
+          8000,
+          9000
+        ],
+        [
+          [],
+          0,
+          1
+        ]
+      ]
+    },
+    "productSales": {
+      "module": "libs/plugins/commerce/src/lib/model/order-figures.ts",
+      "args": [
+        [
+          [
+            {
+              "$id": "o1",
+              "status": "paid",
+              "createdAtMs": 1000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 2,
+                  "unitAmountCents": 500
+                }
+              ],
+              "totals": {
+                "totalCents": 1000
+              },
+              "livemode": true
+            },
+            {
+              "$id": "o2",
+              "status": "refunded",
+              "createdAtMs": 2000,
+              "lineItems": [
+                {
+                  "productId": "p2",
+                  "name": "Tote",
+                  "quantity": 1,
+                  "unitAmountCents": 700
+                }
+              ],
+              "totals": {
+                "totalCents": 700
+              },
+              "refundedCents": 700,
+              "livemode": true
+            },
+            {
+              "$id": "o3",
+              "status": "pending",
+              "createdAtMs": 3000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 900
+                }
+              ],
+              "totals": {
+                "totalCents": 900
+              }
+            },
+            {
+              "$id": "cs_test_abc",
+              "status": "paid",
+              "createdAtMs": 4000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 300
+                }
+              ],
+              "totals": {
+                "totalCents": 300
+              }
+            },
+            {
+              "$id": "o5",
+              "createdAtMs": 5000,
+              "amountCents": 1200,
+              "productId": "p3"
+            },
+            {
+              "$id": "o6",
+              "status": "cancelled",
+              "createdAtMs": 6000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 100
+                }
+              ],
+              "totals": {
+                "totalCents": 100
+              }
+            },
+            {
+              "$id": "o7",
+              "status": "fulfilled",
+              "createdAtMs": 7000,
+              "lineItems": [
+                {
+                  "productId": "p2",
+                  "name": "Tote",
+                  "quantity": 3,
+                  "unitAmountCents": 200
+                },
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 50
+                }
+              ],
+              "totals": {
+                "totalCents": 650
+              },
+              "refundedCents": 50,
+              "livemode": true
+            }
+          ]
+        ],
+        [
+          []
+        ]
+      ]
     }
   }
 }

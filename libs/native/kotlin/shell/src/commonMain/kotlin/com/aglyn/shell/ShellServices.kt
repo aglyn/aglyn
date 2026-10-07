@@ -105,6 +105,7 @@ internal class ShellPluginContext(
   override val hostSlug get() = workspace.site?.subdomain?.ifEmpty { null }
   override val firestore get() = services.firestore
   override val api get() = services.api
+  override val writer get() = services.writer
   override val peripherals get() = services.peripherals
   override val deviceStore get() = services.prefs
 

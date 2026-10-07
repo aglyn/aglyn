@@ -3,6 +3,8 @@ package com.aglyn.pluginhost
 import androidx.compose.runtime.Composable
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.FirestoreReader
+import com.aglyn.core.FirestoreWriter
+import com.aglyn.core.NoFirestoreWrites
 import com.aglyn.core.KeyValueStore
 import com.aglyn.hardware.NoPeripherals
 import com.aglyn.hardware.Peripherals
@@ -45,6 +47,12 @@ interface NativePluginContext {
   val hostSlug: String?
   val firestore: FirestoreReader
   val api: ConsoleApiClient
+
+  /**
+   * Writes the console makes straight to Firestore (no route), made the same
+   * way under the same security rules, as the signed-in person.
+   */
+  val writer: FirestoreWriter get() = NoFirestoreWrites
 
   /**
    * The device's register peripherals: printers, its own card reader and a

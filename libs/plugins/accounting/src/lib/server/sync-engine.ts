@@ -260,9 +260,13 @@ export function foreignCurrencyRefusal(
   const home = normalizeCurrency(connection.homeCurrency)
   const own = normalizeCurrency(currency)
   if (own === home) return null
-  return connection.provider === 'quickbooks'
-    ? `This is in ${own}, and the QuickBooks company keeps only ${home}. Turn on Multicurrency in QuickBooks, then retry.`
-    : `This is in ${own}, and the Xero organization keeps only ${home}. Add ${own} under Currencies in Xero, then retry.`
+  if (connection.provider === 'quickbooks') {
+    return `This is in ${own}, and the QuickBooks company keeps only ${home}. Turn on Multicurrency in QuickBooks, then retry.`
+  }
+  if (connection.provider === 'xero') {
+    return `This is in ${own}, and the Xero organization keeps only ${home}. Add ${own} under Currencies in Xero, then retry.`
+  }
+  return `This is in ${own}, and your books keep only ${home}. Add ${own} in your accounting software, then retry.`
 }
 
 /** The contact a fee is paid to: made once, then remembered on the connection. */

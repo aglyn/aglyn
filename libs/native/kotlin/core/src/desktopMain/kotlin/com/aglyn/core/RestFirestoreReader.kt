@@ -89,7 +89,8 @@ class RestFirestoreReader(
       header("Authorization", "Bearer ${bearer()}")
       url { for (field in mergeFieldPaths(data)) parameters.append("updateMask.fieldPaths", field) }
       contentType(ContentType.Application.Json)
-      setBody(buildJsonObject { put("fields", JsonObject(data.mapValues { encodeValue(it.value) })) }.toString())
+      // A deleted field is in the mask and absent from the fields, which is how REST removes it.
+      setBody(buildJsonObject { put("fields", JsonObject(withoutDeletes(data).mapValues { encodeValue(it.value) })) }.toString())
     }
     if (response.status.value !in 200..299) {
       val body = runCatching { Json.parseToJsonElement(response.bodyAsText()) }.getOrNull()
@@ -233,6 +234,12 @@ class RestFirestoreReader(
   companion object {
     /** Consecutive `Listen` failures, with no snapshot between, before an observation falls back to polling. */
     const val LISTEN_ATTEMPTS = 3
+
+    /** [data] without its [FirestoreDelete] leaves, at every depth. */
+    @Suppress("UNCHECKED_CAST")
+    fun withoutDeletes(data: Map<String, Any?>): Map<String, Any?> = data
+      .filterValues { it != FirestoreDelete }
+      .mapValues { (_, value) -> if (value is Map<*, *>) withoutDeletes(value as Map<String, Any?>) else value }
 
     fun encodeValue(value: Any?): JsonObject = when (value) {
       null -> buildJsonObject { put("nullValue", JsonNull) }

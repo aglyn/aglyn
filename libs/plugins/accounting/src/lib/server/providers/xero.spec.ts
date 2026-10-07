@@ -60,13 +60,13 @@ function provider(routes: Parameters<typeof mockFetch>[0], scopes?: string) {
 }
 
 describe('Xero adapter', () => {
-  it('asks for the granular scopes, or the override', () => {
-    const url = new URL(provider([]).adapter.authorizeUrl({ state: 's', redirectUri: 'https://x/cb' }))
+  it('asks for the granular scopes, or the override', async () => {
+    const url = new URL(await provider([]).adapter.authorizeUrl({ state: 's', redirectUri: 'https://x/cb', orgId: 'org-1', orgName: null }))
     expect(url.origin + url.pathname).toBe('https://login.xero.com/identity/connect/authorize')
     expect(url.searchParams.get('scope')).toBe(XERO_SCOPES.join(' '))
     expect(url.searchParams.get('scope')).toContain('offline_access')
     const legacy = new URL(
-      provider([], 'offline_access accounting.transactions').adapter.authorizeUrl({ state: 's', redirectUri: 'https://x/cb' }),
+      await provider([], 'offline_access accounting.transactions').adapter.authorizeUrl({ state: 's', redirectUri: 'https://x/cb', orgId: 'org-1', orgName: null }),
     )
     expect(legacy.searchParams.get('scope')).toBe('offline_access accounting.transactions')
   })
