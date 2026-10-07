@@ -43,6 +43,7 @@ Each capability has its own page, next to the thing it builds:
 | A page template | **Templates → Create with AI** | [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai) |
 | A reusable component | **Components → Create with AI** | [Generate a component](../building-sites/components/generate-a-component-with-aglyn-ai.md) |
 | A form | **Forms → Create with AI** | [Generate a form](generate-a-form.md) |
+| Images for your site | **Media → Create with AI** | [Create images with AI](create-images.md) |
 | A section on the canvas | The Besigner | [Generate a section](generate-section.md) |
 | Copy, rewritten or fresh | Any text in the Besigner | [Rewrite and write copy](copy-assist.md) |
 | A change to your theme | **Setup → Theme** | [Change your theme with AI](theme-assist.md) |
@@ -139,8 +140,8 @@ switching it off stops and what it leaves running.
 
 With AI off for a site:
 
-- the assistant, **Create with AI** on the Pages, Templates, Layouts, Forms and
-  Components pages, the SEO and theme cards, the editor's **Rewrite with AI**,
+- the assistant, **Create with AI** on the Pages, Templates, Layouts, Forms,
+  Components and Media pages, the SEO and theme cards, the editor's **Rewrite with AI**,
   **Generate a section with AI** and **Make a reusable component with AI** controls, and
   the AI columns on the site's collaborators card are gone from that site;
 - every AI request made for the site is refused with **AI is switched off for this
@@ -160,6 +161,10 @@ components, layouts, forms and datasets your site already has, your theme's valu
 the copy of anything it is starting from. Each capability's page says exactly what its
 own job is sent: the CRM page lists what a record sends, and the automation page what is
 removed first.
+
+[Create images with AI](create-images.md#what-is-sent) is the one capability served by
+Google rather than by the assistant's own model: it sends the description you type, and
+nothing else of your site.
 
 Your brief is customer text and is kept with the job for 180 days, then deleted. No
 contact, lead, deal, form submission or list member is read to build a page.
