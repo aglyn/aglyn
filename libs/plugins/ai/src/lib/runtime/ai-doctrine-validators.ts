@@ -26,6 +26,7 @@ import {
   parseMediaRef,
 } from '@aglyn/aglyn/app-utils/media-ref'
 import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { createIdUrlSafe } from '@aglyn/aglyn/foundation/constants/app'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   REUSABLE_INSTANCE_COMPONENT_ID,
@@ -1473,6 +1474,138 @@ export function detectUnresponsiveGrids(
     })
   }
   return violations
+}
+
+/** The breakpoints a size names, in the order the renderer's string writes them. */
+const GRID_SIZE_BREAKPOINTS = ['xs', 'sm', 'md', 'lg', 'xl']
+
+/**
+ * A size the model wrote as an object of breakpoints (`{ "xs": 12, "md": 4 }`),
+ * which the palette validator drops because a size is stored as one string,
+ * written as that string (`xs:12 md:4`). Anything else is not read.
+ */
+function writtenGridSizeText(size: unknown): string | null {
+  if (!isRecord(size)) return null
+  const pairs: string[] = []
+  for (const [breakpoint, value] of Object.entries(size)) {
+    const span = typeof value === 'string' && value.trim() !== '' ? Number(value) : value
+    if (!GRID_SIZE_BREAKPOINTS.includes(breakpoint) || typeof span !== 'number' || !Number.isInteger(span)) return null
+    pairs.push(`${breakpoint}:${span}`)
+  }
+  pairs.sort((a, b) => GRID_SIZE_BREAKPOINTS.indexOf(a.split(':')[0]) - GRID_SIZE_BREAKPOINTS.indexOf(b.split(':')[0]))
+  return pairs.length ? pairs.join(' ') : null
+}
+
+/**
+ * Rule 12's `grid-item-size`, settled before the check reads it where it has
+ * one answer (AGL-3596), as `aiSettlePlanRefs` settles a plan. The re-ask for
+ * it states the very size to write, and a production Home page was refused and
+ * refunded after its re-ask still left a container's items unsized: the model
+ * breaks a different rule each run, and a rule whose answer the validator
+ * already knows is applied rather than asked for.
+ *
+ * For every Grid container, its items are read exactly as
+ * `detectUnresponsiveGrids` counts them, a Box or a Stack holding nothing but
+ * sized Grid items lending its items to the container:
+ *
+ * - an item whose size is missing, or is not full width on a phone, takes the
+ *   size the model wrote as an object of breakpoints where that one is full
+ *   width on a phone, and otherwise the size the re-ask would ask for
+ *   (`gridItemSizeFor`);
+ * - an element that is no Grid, directly in the container, is wrapped in a new
+ *   Grid item of that size, minted the way the palette validator mints ids;
+ * - a container of several items none of which steps down to columns at a
+ *   larger width takes that size on every item, which is what the re-ask asks;
+ * - a `container` written as the text "true" in any case or spacing
+ *   (`grid-container-text`) is true, since it can mean nothing else.
+ *
+ * A size that is already full width on a phone is kept. Nothing else rule 12
+ * names is touched: a Grid that is not a container may be meant as a row or as
+ * a stack (`grid-not-container`, `grid-as-stack`), and a sized item inside a
+ * Box (`grid-item-outside-container`) is moved only by changing the Box.
+ *
+ * `written` is the node as the model wrote it, by an id of `tree`, as
+ * `detectUnresponsiveGrids` reads it. A tree with nothing to settle comes back
+ * as the same object, so settling is idempotent. A node that is changed is
+ * copied, never edited in place.
+ */
+export function aiSettleGridItems<T extends AiDoctrineTree>(
+  tree: T,
+  options: { written?: (id: string) => unknown; mintId?: () => string } = {},
+): T {
+  const written = options.written ?? (() => undefined)
+  const mintId = options.mintId ?? createIdUrlSafe
+  const nodes: Record<string, AiDoctrineNode> = { ...tree.nodes }
+  const copied = new Set<string>()
+  const edit = (id: string): AiDoctrineNode & Record<string, unknown> => {
+    if (!copied.has(id)) {
+      const node = nodes[id]
+      nodes[id] = { ...node, props: { ...node.props }, ...(node.nodes ? { nodes: [...node.nodes] } : {}) }
+      copied.add(id)
+    }
+    return nodes[id] as AiDoctrineNode & Record<string, unknown>
+  }
+  const setSize = (id: string, size: string): void => {
+    if (nodes[id].props?.['size'] === size) return
+    ;(edit(id).props as Record<string, unknown>)['size'] = size
+  }
+  const writtenProp = (id: string, name: string): unknown => {
+    const node = written(id)
+    return isRecord(node) && isRecord(node['props']) ? node['props'][name] : undefined
+  }
+  const childrenOf = (id: string): string[] => (nodes[id]?.nodes ?? []).filter((child) => nodes[child])
+  const isSized = (id: string): boolean => nodes[id]?.componentId === GRID && nodes[id].props?.['size'] !== undefined
+  const wrapsItems = (id: string): boolean => {
+    const children = childrenOf(id)
+    return GRID_ITEM_WRAPPERS.has(nodes[id].componentId) && children.length > 0 && children.every(isSized)
+  }
+
+  for (const { id } of walkTree(tree)) {
+    if (nodes[id].componentId !== GRID) continue
+    if (nodes[id].props?.['container'] !== true) {
+      const text = writtenProp(id, 'container')
+      const readsTrue = typeof text === 'string' && text.trim().toLowerCase() === 'true'
+      if (nodes[id].props?.['container'] !== undefined || !readsTrue) continue
+      ;(edit(id).props as Record<string, unknown>)['container'] = true
+    }
+    const container = nodes[id]
+    const columns = gridColumns(container)
+    const children = childrenOf(id)
+    const items = children.flatMap((child) => (wrapsItems(child) ? childrenOf(child) : [child]))
+    if (!items.length) continue
+    const size = gridItemSizeFor(items.length, columns)
+    const settledItems: string[] = []
+    for (const item of items) {
+      if (nodes[item].componentId !== GRID) {
+        // Only a direct child can be no Grid: a wrapper lends only sized Grid items.
+        const wrapperId = mintId()
+        const host = edit(id)
+        host.nodes = (host.nodes ?? []).map((child) => (child === item ? wrapperId : child))
+        const shape = container as AiDoctrineNode & Record<string, unknown>
+        nodes[wrapperId] = {
+          ...('$id' in shape ? { $id: wrapperId } : {}),
+          ...('type' in shape ? { type: shape['type'] } : {}),
+          componentId: GRID,
+          ...('pluginId' in shape ? { pluginId: shape['pluginId'] } : {}),
+          ...('parentId' in shape ? { parentId: id } : {}),
+          nodes: [item],
+          props: { size },
+        } as AiDoctrineNode
+        copied.add(wrapperId)
+        if ('parentId' in (nodes[item] as unknown as Record<string, unknown>)) edit(item)['parentId'] = wrapperId
+        settledItems.push(wrapperId)
+        continue
+      }
+      if (!gridItemSpan(nodes[item].props?.['size'], columns).phoneFull) {
+        const own = writtenGridSizeText(writtenProp(item, 'size'))
+        setSize(item, own !== null && gridItemSpan(own, columns).phoneFull ? own : size)
+      }
+      settledItems.push(item)
+    }
+    const steps = settledItems.some((item) => gridItemSpan(nodes[item].props?.['size'], columns).steps)
+    if (settledItems.length >= 2 && !steps) for (const item of settledItems) setSize(item, size)
+  }
+  return copied.size ? ({ ...tree, nodes } as T) : tree
 }
 
 /** The palette colors a link or a button can take, and a band can be painted in. */

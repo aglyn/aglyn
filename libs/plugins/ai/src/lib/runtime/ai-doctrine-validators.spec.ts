@@ -49,6 +49,7 @@ import {
   aiFreePageSectionsWithin,
   aiPlanEmbedBriefViolations,
   aiNamesMatch,
+  aiSettleGridItems,
   aiTreeCopy,
   detectAdHocWidths,
   detectCreateBeforeReuse,
@@ -1446,6 +1447,95 @@ describe('rule 12 — a Grid of columns is a container of items sized for every 
     const answer = tree(page(section(text('h1', 'About', 'h1')), section(text('h2', 'What we help with', 'h2'), grid({ container: 'true', spacing: 3 }, cells(4)))))
     const report = validateAiDoctrineTree(answer, 'page', { reusableComponents: false })
     expect(report.violations.map((violation) => violation.code)).toEqual(['grid-item-size'])
+  })
+})
+
+describe('rule 12 — a Grid container’s items are sized where the rule has one answer (AGL-3596)', () => {
+  const grid = (props: Record<string, unknown>, children: Nested[]): Nested => ({ componentId: 'muiGrid', props, children })
+  const cards = () => ['Full groom', 'Bath and brush', 'Nail trim'].map((title) => card(title, 'What it includes.'))
+  const cells = (size?: unknown) => cards().map((child) => grid(size === undefined ? {} : { size }, [child]))
+  const settle = (root: Nested, written: Record<string, unknown> = {}) => {
+    let minted = 0
+    return aiSettleGridItems(tree(page(section(root))), {
+      written: (id) => written[id],
+      mintId: () => `minted-${++minted}`,
+    })
+  }
+  const sizes = (settled: AiDoctrineTree, ids: string[]) => ids.map((id) => settled.nodes[id].props?.['size'])
+  const codesOf = (settled: AiDoctrineTree) => detectUnresponsiveGrids(settled, 'page').map((violation) => violation.code)
+  const thirds = ['xs:12 md:4', 'xs:12 md:4', 'xs:12 md:4']
+
+  it('sizes a container’s unsized items with the size the re-ask would name, and the rule then passes', () => {
+    expect(codesOf(tree(page(section(grid({ container: true, spacing: '3' }, cells())))))).toEqual(['grid-item-size'])
+    const settled = settle(grid({ container: true, spacing: '3' }, cells()))
+    expect(sizes(settled, ['n3', 'n8', 'n13'])).toEqual(thirds)
+    expect(codesOf(settled)).toEqual([])
+    // A size the renderer reads as one column on a phone, or a phone size that is not full width, the same way.
+    expect(sizes(settle(grid({ container: true }, cells('4'))), ['n3', 'n8', 'n13'])).toEqual(thirds)
+    expect(codesOf(settle(grid({ container: true }, cells('sm:6 md:3'))))).toEqual([])
+    // Full width at every width never steps down to columns, so every item takes the size.
+    expect(sizes(settle(grid({ container: true }, cells('xs:12'))), ['n3', 'n8', 'n13'])).toEqual(thirds)
+  })
+
+  it('keeps a size written as an object of breakpoints where it is full width on a phone, and names the size for one that is not', () => {
+    // The palette validator drops a size written as an object; what the model wrote still names it.
+    const written = {
+      n3: { props: { size: { md: 6, xs: 12 } } },
+      n8: { props: { size: { xs: '12', md: '6' } } },
+      n13: { props: { size: { xs: 6, md: 4 } } },
+    }
+    const settled = settle(grid({ container: true }, cells()), written)
+    expect(sizes(settled, ['n3', 'n8', 'n13'])).toEqual(['xs:12 md:6', 'xs:12 md:6', 'xs:12 md:4'])
+    expect(codesOf(settled)).toEqual([])
+  })
+
+  it('wraps an element placed straight in a container in a new Grid item, its parent and children kept in step', () => {
+    const settled = settle(grid({ container: true }, [card('Loose', 'No item.'), grid({ size: 'xs:12 md:6' }, cards().slice(0, 1))]))
+    expect(settled.nodes['n2'].nodes).toEqual(['minted-1', 'n7'])
+    expect(settled.nodes['minted-1']).toEqual({
+      $id: 'minted-1',
+      componentId: 'muiGrid',
+      parentId: 'n2',
+      nodes: ['n3'],
+      props: { size: 'xs:12 md:6' },
+    })
+    expect((settled.nodes['n3'] as unknown as { parentId: string }).parentId).toBe('minted-1')
+    // The valid item beside it is kept as written.
+    expect(settled.nodes['n7'].props?.['size']).toBe('xs:12 md:6')
+    expect(codesOf(settled)).toEqual([])
+  })
+
+  it('sizes the items a Box holds for its container, and leaves the Box to the rule that asks for it', () => {
+    const settled = settle(grid({ container: true }, [{ componentId: 'muiBox', children: cells('4') }]))
+    expect(sizes(settled, ['n4', 'n9', 'n14'])).toEqual(thirds)
+    expect(settled.nodes['n2'].nodes).toEqual(['n3'])
+    expect(codesOf(settled)).toEqual(['grid-item-outside-container'])
+  })
+
+  it('reads a container written as the text "True" as true, and sizes its items', () => {
+    // The palette validator cannot read "True" and drops it; the model's own spelling names it.
+    const settled = settle(grid({}, cells()), { n2: { props: { container: 'True' } } })
+    expect(settled.nodes['n2'].props?.['container']).toBe(true)
+    expect(sizes(settled, ['n3', 'n8', 'n13'])).toEqual(thirds)
+  })
+
+  it('returns a tree with nothing to settle as it was given, settles once, and never edits what it was given', () => {
+    const heading = grid({ size: 'xs:12' }, [text('h2', 'Services', 'h2')])
+    const valid = tree(page(section(grid({ container: true }, [heading, ...cells('xs:12 sm:6 md:4')]))))
+    expect(aiSettleGridItems(valid)).toBe(valid)
+    // A Grid that is not a container may be a row or a stack; its own re-ask asks which.
+    const row = tree(page(section(grid({ ariaLabel: 'Services' }, cells('4')))))
+    expect(aiSettleGridItems(row)).toBe(row)
+    const loose = tree(page(section(grid({ container: true }, [card('Loose', 'No item.'), ...cells()]))))
+    const snapshot = JSON.stringify(loose)
+    const once = aiSettleGridItems(loose)
+    expect(JSON.stringify(loose)).toBe(snapshot)
+    expect(once).not.toBe(loose)
+    expect(aiSettleGridItems(once)).toBe(once)
+    // A full-width heading item is kept, and the columns beside it step down.
+    const headed = settle(grid({ container: true }, [heading, ...cells()]))
+    expect(sizes(headed, ['n3', 'n5', 'n10', 'n15'])).toEqual(['xs:12', 'xs:12 sm:6 md:3', 'xs:12 sm:6 md:3', 'xs:12 sm:6 md:3'])
+    expect(codesOf(headed)).toEqual([])
   })
 })
 

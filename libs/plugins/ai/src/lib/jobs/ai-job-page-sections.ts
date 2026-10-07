@@ -35,6 +35,7 @@ import {
   type AiGenerationCheck,
 } from '../runtime/ai-doctrine'
 import {
+  aiSettleGridItems,
   detectCutLines,
   detectDisagreeingNodes,
   isAiLinkElement,
@@ -452,7 +453,8 @@ function offendingOf(raw: unknown, violations: readonly AiDoctrineViolation[]): 
 /**
  * The check a section's answer is held to: a repeated item written once drawn
  * into its copies (AGL-3053), then the palette validator on the section, with
- * any line it cut at its ceiling refused (AGL-3076), the doctrine's page check
+ * any line it cut at its ceiling refused (AGL-3076), a Grid container's items
+ * sized where rule 12 has one answer (AGL-3596), the doctrine's page check
  * on the page with the section added, and the plan line — every component it
  * names placed as an instance, every form bound by its id (rule 7), and as
  * many items as it promised (AGL-3024). Violations
@@ -493,9 +495,18 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
         ],
       }
     }
-    const wrapper = validated.nodes[validated.rootId] as unknown as AiDoctrineNode | undefined
-    const top = (wrapper?.nodes ?? []).filter((id) => validated.nodes[id])
-    const sectionNode = top.length === 1 ? (validated.nodes[top[0]] as unknown as AiDoctrineNode) : null
+    const drawnNodes = isRecord(drawn.tree) && isRecord(drawn.tree['nodes']) ? drawn.tree['nodes'] : {}
+    // A Grid container's items are sized, and an element straight in one is
+    // put in an item, before the page check reads them: that rule has one
+    // answer, the size its re-ask would name (AGL-3596). Read off the section
+    // as the palette validator stored it, with what the model wrote beside it.
+    const { nodes: settled } = aiSettleGridItems(
+      { rootId: validated.rootId, nodes: validated.nodes as unknown as Record<string, AiDoctrineNode> },
+      { written: (id) => drawnNodes[validated.sourceIds[id] ?? id] },
+    )
+    const wrapper = settled[validated.rootId] as AiDoctrineNode | undefined
+    const top = (wrapper?.nodes ?? []).filter((id) => settled[id])
+    const sectionNode = top.length === 1 ? settled[top[0]] : null
     if (!sectionNode || sectionNode.componentId !== 'section') {
       return {
         value: null,
@@ -517,10 +528,7 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
     )
     modelIds[sectionId] = written(validated.sourceIds[minted] ?? minted)
     const sectionNodes: Record<string, Record<string, unknown>> = {}
-    for (const { id, node } of walkTree({
-      rootId: minted,
-      nodes: validated.nodes as unknown as Record<string, AiDoctrineNode>,
-    })) {
+    for (const { id, node } of walkTree({ rootId: minted, nodes: settled })) {
       const stored = { ...(node as unknown as Record<string, unknown>) }
       if (id === minted) {
         stored['$id'] = sectionId
@@ -530,7 +538,6 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
       }
       sectionNodes[id === minted ? sectionId : id] = stored
     }
-    const drawnNodes = isRecord(drawn.tree) && isRecord(drawn.tree['nodes']) ? drawn.tree['nodes'] : {}
     // What the model wrote of one of the section's nodes, by the id the page stores it under.
     const drawnIdOf = (stored: string): string =>
       validated.sourceIds[stored === sectionId ? minted : stored] ?? stored

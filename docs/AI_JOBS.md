@@ -1910,6 +1910,19 @@ the same way, in a Grid with a row direction and no container.
   wrote it: the tree check from the answer it was given, and the page section check from
   the section as it was drawn, since its page check sees the section as the page stores it
   (`writtenNode` on the check's context).
+- **Settled where the answer is known (AGL-3596).** A page section pass sizes a Grid
+  container's items before its page check reads them (`aiSettleGridItems`), since
+  `grid-item-size` has one answer, the size its re-ask would name: an item with no size,
+  or one not full width on a phone, takes that size (or the size the model wrote as an
+  object of breakpoints, such as `{ "xs": 12, "md": 6 }`, where that one is full width on
+  a phone); an element placed straight in a container is wrapped in a new Grid item of
+  that size; a container of several items none of which steps down takes it on every
+  item. A `container` written as the text `"true"` in any case is read as true. A
+  production Home page was refused and refunded after its re-ask for this rule. Every
+  other shape above is still re-asked: a Grid that is not a container may be meant as a
+  row or as a stack, and an item in a Box moves only by changing the Box.
+  `ai-job-page-sections-live.spec.ts` builds guided starts' Home pages through the
+  section pass with the real model (`AGLYN_LIVE_AI=1`).
 - **The goldens are real rows.** `ai-page-briefs.ts` draws every row of cards as a Grid
   container (`"spacing": 3`) of items sized for the row (`span`): the ten briefs'
   component cards, the Free pages' inline cards written out and written once (the
@@ -1928,8 +1941,8 @@ the same way, in a Grid with a row direction and no container.
   moves. A Grid item is an element, so a row of cards takes one more element a card:
   written once, one. The shapes AGL-3078 tells apart cost nothing until a rule is broken:
   they are re-ask sentences, and no system block, tool or cached prefix changes.
-  `ai-job-free-page.spec.ts` re-asks the Free page's practice areas for each of the four
-  shapes through the real page step: a section re-asked for any of them costs at most 22
+  `ai-job-free-page.spec.ts` re-asks the Free page's practice areas for each of the three
+  shapes a section pass still re-asks through the real page step: a section re-asked for any of them costs at most 22
   credits, less than the 44 of the largest pass, which the room the arithmetic keeps for
   a re-asked section must exceed.
 

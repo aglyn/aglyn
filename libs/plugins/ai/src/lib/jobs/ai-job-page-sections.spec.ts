@@ -316,15 +316,8 @@ describe('a section that breaks the page’s rules', () => {
       })
       return result.violations.map(({ rule, code, message, nodeIds }) => ({ rule, code, message, nodeIds }))
     }
-    // A container written as text: the page stores the row with no container at all.
-    expect(check((nodes) => (nodes['b8'].props = { container: 'True', spacing: '3' }))).toEqual([
-      {
-        rule: 12,
-        code: 'grid-container-text',
-        message: expect.stringContaining('This Grid\'s "container" is the text "True", not true'),
-        nodeIds: ['b8'],
-      },
-    ])
+    // A container written as the text "True" can mean nothing but true, and is settled so (AGL-3596).
+    expect(check((nodes) => (nodes['b8'].props = { container: 'True', spacing: '3' }))).toEqual([])
     // The heading and the row stacked in a Grid with a column direction: the page stores no direction.
     expect(check((nodes) => (nodes['b9'] = { componentId: 'muiGrid', props: { direction: 'column' }, nodes: ['b7', 'b8'] }))).toEqual([
       {
@@ -348,6 +341,42 @@ describe('a section that breaks the page’s rules', () => {
         nodeIds: ['b2', 'b4', 'b6'],
       },
     ])
+  })
+
+  it('keeps a row of cards whose items the model left unsized, sized as an object, or left out, sized as the re-ask would name them (AGL-3596)', () => {
+    // A production Home page was refused after its re-ask for these shapes, which have one answer each.
+    const answer = structuredClone(fixture.answers[1])
+    const nodes = answer.nodes as Record<string, { componentId: string; props?: Record<string, unknown>; nodes?: string[] }>
+    const [loose] = nodes['b6'].nodes ?? []
+    nodes['b2'].props = {}
+    nodes['b4'].props = { size: { xs: 12, md: 6 } }
+    nodes['b8'].nodes = ['b2', 'b4', loose]
+    delete nodes['b6']
+    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, section: screen.sections[1], inventory: fixture.inventory })({
+      tree: JSON.stringify(answer),
+    })
+    expect(result.violations).toEqual([])
+    const stored = Object.values((result.value as AiPageSection).nodes) as unknown as Array<{
+      $id: string
+      componentId: string
+      parentId: string | null
+      props: Record<string, unknown>
+      nodes: string[]
+    }>
+    const row = stored.find((node) => node.componentId === 'muiGrid' && node.props['container'] === true)
+    const items = (row?.nodes ?? []).map((id) => stored.find((node) => node.$id === id))
+    expect(items.map((item) => [item?.componentId, item?.props['size'], item?.parentId === row?.$id])).toEqual([
+      ['muiGrid', 'xs:12 md:4', true],
+      ['muiGrid', 'xs:12 md:6', true],
+      ['muiGrid', 'xs:12 md:4', true],
+    ])
+    // The card placed straight in the row now sits in the item minted for it.
+    const card = stored.find((node) => node.$id === items[2]?.nodes[0])
+    expect([card?.componentId, card?.parentId]).toEqual([nodes[loose].componentId, items[2]?.$id])
+    // The page the section joins passes the page check as the last pass runs it.
+    const page = aiPageWithSection(firstPage(), result.value as AiPageSection, sectionIds)
+    const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', context)
+    expect(report.violations.filter((violation) => violation.rule === 12)).toEqual([])
   })
 
   it('is refused for a subhead cut short, an empty list item and a button that goes nowhere, each named by the model’s own id with what to write instead (AGL-3072)', () => {
