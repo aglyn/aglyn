@@ -381,6 +381,39 @@ The intents map to Material 3 roles as follows: primary → primary, secondary �
 secondary, tertiary → tertiary, error → error, background/paper →
 background/surface. `--check` covers all three outputs.
 
+### Brand, type and polish (binding)
+
+Every Apple screen is SwiftUI, on iPhone, iPad and macOS. UIKit or AppKit
+appears only where SwiftUI has no equivalent, and then wrapped in a SwiftUI
+view: `WKWebView`, the camera scanner and the Stripe Terminal UI.
+
+Both platforms carry the console's branding and colors. Nothing is hand-typed;
+each of these is generated from the source the web uses:
+
+| what | source | Apple output | Kotlin output |
+| -- | -- | -- | -- |
+| colors (light and dark) | the resolved console MUI theme | `Tokens.generated.swift` | `Tokens.generated.kt`, Material 3 `ColorScheme`, dynamic color off |
+| typography | the MUI theme's typography | type scale in `Tokens.generated.swift` | M3 `Typography` |
+| shape and spacing | the MUI theme's shape and spacing | `Tokens.generated.swift` | M3 `Shapes` |
+| typeface | Roboto Flex, the console's font (`buildFontFamilyList`, SIL OFL) | vendored with its license, behind a sha256 `--check`; `Font.custom(_:size:relativeTo:)`, so Dynamic Type scales | vendored, as a `FontFamily` |
+| logo and wordmark | `apps/console/public/_static/images/brand/*.svg` (ink naming per `docs/BRAND_ASSETS.md`) | generated asset catalog | generated resources |
+| app icons and launch/splash | the official logo | built for "Aglyn" and "Aglyn POS" | built for "Aglyn" and "Aglyn POS" |
+
+The polish bar for every screen:
+
+- platform-native navigation and controls, with SF Symbols on Apple and
+  Material icons on Kotlin;
+- skeleton loading, empty and error states;
+- Dynamic Type and font scaling;
+- accessibility labels;
+- haptics where natural;
+- split views and sidebars that use the space on tablets and desktops;
+- keyboard shortcuts on Mac and desktop;
+- Compose Desktop window chrome and menus that follow the same theme.
+
+Each screen's screenshots are compared side by side with the matching console
+screen.
+
 ## 8. Push
 
 The registry stays `users/{uid}/devices/{installId}`, one row per install, and
