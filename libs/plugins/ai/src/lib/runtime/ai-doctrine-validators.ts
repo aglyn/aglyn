@@ -491,7 +491,10 @@ export function detectRepeatedSubtrees(
     index,
     AI_REPEAT_MIN_NODES,
     AI_REPEAT_MIN_COUNT,
-    undefined,
+    // Counted within the band of the page it sits in (AGL-3660), as rule 8
+    // counts a typed list: a heading over its words in the About band and in
+    // the Services band are two parts of two stories, not one block placed twice.
+    (visit) => [...visit.ancestors].reverse().find((id) => tree.nodes[id]?.componentId === 'section') ?? tree.rootId,
     aiRepeatFrameOrSection(tree),
   ).map(({ ids }) => {
     const name = displayName(tree.nodes[ids[0]].componentId)

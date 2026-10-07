@@ -315,6 +315,9 @@ async function buildPage(brief: Brief, index: number): Promise<Result> {
     thinking: 'off',
     check: aiLayoutPageCheck({ screen, sectionIds, targets, context, reusableComponents }),
   })
+  if (OUT && result.status === 'needs_input') {
+    writeFileSync(join(OUT, `${brief.key}-${page.title.toLowerCase()}.refused.json`), JSON.stringify(result.answer, null, 1))
+  }
   if (OUT && result.status === 'ok') {
     writeFileSync(join(OUT, `${brief.key}-${page.title.toLowerCase()}.json`), JSON.stringify({ name: `${brief.key}-${page.title}`, nodes: result.value.nodes }, null, 1))
   }
