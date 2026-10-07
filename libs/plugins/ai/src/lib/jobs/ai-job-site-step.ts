@@ -61,6 +61,7 @@ import { aiOriginJobId, aiRecordedJobDraftId } from './ai-job-draft-ids'
 import { readAiDraftNodes } from './ai-job-drafts'
 import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePagesOfPlan } from './ai-job-layout-site-pages'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
+import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import { aiJobPublishesSite, aiPublishGuidedSite } from './ai-site-publish'
 import { aiConfirmedPlan, aiUnspentOutcome } from './ai-job-generation'
 import {
@@ -552,6 +553,13 @@ export function aiSiteUnitJob(
   if (job.kind === 'site' && (unit.kind === 'layout' || unit.kind === 'page')) {
     const pages = aiLayoutSitePagesOfPlan(plan.screens)
     if (pages.length) unitInputs[AI_LAYOUT_SITE_PAGES_INPUT] = pages
+  }
+  // A site's pages and its layout are designed in the layout language and
+  // compiled (AGL-3660), and a page is told which page places the site's form.
+  if (unit.kind === 'layout' || unit.kind === 'page') {
+    unitInputs[AI_LAYOUT_LANGUAGE_INPUT] = true
+    const formPage = aiLayoutFormPageOfPlan(plan)
+    if (formPage) unitInputs[AI_LAYOUT_FORM_PAGE_INPUT] = formPage
   }
   return {
     ...job,

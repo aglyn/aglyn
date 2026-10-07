@@ -1,0 +1,224 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import type { NodesMap } from '@aglyn/aglyn/types/nodes'
+import { aiCompileLayoutFrame } from '../layout-language/ai-layout-frame'
+import {
+  AI_LAYOUT_FRAME_TOOL,
+  AI_LAYOUT_LANGUAGE_TEXT,
+  aiReadLayoutFrame,
+} from '../layout-language/ai-layout-language'
+import type {
+  AiLayoutPage,
+  AiLayoutTargets,
+} from '../layout-language/ai-layout-links'
+import { aiLayoutStoredTree } from '../layout-language/ai-layout-store'
+import type { AiJob } from '../model/ai-jobs.types'
+import {
+  aiHomeScreenIds,
+  type AiSiteInventory,
+} from '../model/ai-site-inventory'
+import { AI_STEP_TIERS } from '../providers/catalog'
+import type { AiGenerationCheck, AiValidatedTree } from '../runtime/ai-doctrine'
+import {
+  validateAiDoctrineTree,
+  type AiDoctrineViolation,
+} from '../runtime/ai-doctrine-validators'
+import type { AiLoadEstimate } from '../runtime/ai-palette'
+import type { AiSystemBlock } from '../runtime/ai-runtime'
+import { aiJobStepBudget } from './ai-job-budget'
+import { aiJobBriefLine } from './ai-job-generation'
+import {
+  AI_LAYOUT_SITE_PAGES_MAX,
+  aiLayoutSitePages,
+} from './ai-job-layout-site-pages'
+import { aiLayoutPageTargets } from './ai-job-page-language'
+import { AI_SITE_NAME_TOKEN } from './ai-layout-site-facts'
+
+/**
+ * A site's layout built in the compact layout language (AGL-3660): the layout
+ * step's pass for a guided start's and a build's layout unit. The model
+ * designs the header and the footer — their bands, the call to action, the
+ * footer's columns and every word — in one short answer through
+ * `submit_frame`, and the compiler writes the layout around what the site
+ * owes it: its name as the brand, its pages as the navigation and the phone
+ * menu, the Layout Slot, and the footer at the bottom of a short page
+ * (`ai-layout-frame.ts`).
+ */
+
+/** The most a frame's answer asks for: two sections of a few blocks each. */
+export const AI_JOB_LAYOUT_LANGUAGE_TOKENS = 1_200
+
+/** A language layout pass's time, on the tier the layout step is served from. */
+export const AI_JOB_LAYOUT_LANGUAGE_BUDGET = aiJobStepBudget({
+  tier: AI_STEP_TIERS['job.layout'],
+  maxTokens: AI_JOB_LAYOUT_LANGUAGE_TOKENS,
+})
+
+/** The generation kind a frame is asked under, which the doctrine scopes. */
+export const AI_LAYOUT_FRAME_KIND = 'layout-frame'
+
+/** The language, as the frame door's cached instructions. */
+export const AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS: readonly AiSystemBlock[] = [
+  {
+    text: [
+      AI_LAYOUT_LANGUAGE_TEXT,
+      '',
+      "Now you design a site's header and footer, each one section of the language, answered with submit_frame.",
+      "- header: the platform writes the site's name and its navigation itself. Choose its band and align (start, or center for a centered navigation), and give it at most one button: the call to action every page shows.",
+      '- footer: a section like any other, usually a row of two or three columns: a few words about the business, the details the brief gives, and a list of links (items with to). Put no contact detail, opening hours or address in it that the brief does not give.',
+    ].join('\n'),
+    cacheBreakpoint: true,
+  },
+]
+
+/** The site's name as the brand: the name the job was given, else the token the site's own name fills. */
+export function aiLayoutSiteName(job: Pick<AiJob, 'inputs'>): string {
+  const given = job.inputs?.['businessName']
+  return typeof given === 'string' && given.trim()
+    ? given.trim()
+    : AI_SITE_NAME_TOKEN
+}
+
+/** The pages a frame's navigation links: the planned pages, else the site's own, in order. */
+export function aiLayoutNavPages(
+  job: Pick<AiJob, 'inputs'>,
+  inventory: AiSiteInventory | null,
+): AiLayoutPage[] {
+  const planned = aiLayoutSitePages(job.inputs)
+  if (planned.length) return planned
+  return (inventory?.screens ?? [])
+    .filter((row) => !row.template)
+    .slice(0, AI_LAYOUT_SITE_PAGES_MAX)
+    .map((row) => ({ id: row.id, label: row.name, slug: row.slug }))
+}
+
+/** The home page the brand links: the planned home, else the site's. */
+export function aiLayoutHomeId(
+  pages: readonly AiLayoutPage[],
+  inventory: AiSiteInventory | null,
+): string | null {
+  const planned = pages.find(
+    (page) => page.slug.replace(/^\/+|\/+$/g, '') === '',
+  )
+  return planned?.id ?? aiHomeScreenIds(inventory)[0] ?? null
+}
+
+/** The frame's user turn: the site, its brief, its pages and its form. */
+export function aiLayoutFramePrompt(input: {
+  job: Pick<AiJob, 'brief' | '$id'>
+  siteName: string
+  pages: readonly AiLayoutPage[]
+  targets: AiLayoutTargets
+}): string {
+  const { job, pages, targets } = input
+  return [
+    `Site: ${input.siteName === AI_SITE_NAME_TOKEN ? 'the business the brief describes' : `"${input.siteName}"`}`,
+    aiJobBriefLine(job),
+    pages.length
+      ? `Its pages, which the navigation links: ${pages.map((page) => `${page.label} (page:${page.id})`).join(', ')}.`
+      : 'It has no pages yet.',
+    targets.forms.length || targets.formPageId
+      ? 'A call to action that asks a visitor to get in touch goes to form.'
+      : 'The site has no form yet.',
+    `Design seed: ${job.$id.slice(-6)}.`,
+  ].join('\n')
+}
+
+/** A validated language layout. */
+export interface AiLayoutFrameBuilt {
+  rootId: string
+  nodes: NodesMap
+  load: AiLoadEstimate | null
+}
+
+/** The check a frame answer is held to: read, compiled, stored and checked as a layout, with the layout door's own checks. */
+export function aiLayoutFrameCheck(input: {
+  siteName: string
+  homeId: string | null
+  pages: readonly AiLayoutPage[]
+  targets: AiLayoutTargets
+  extend: (tree: AiValidatedTree) => AiDoctrineViolation[]
+}): AiGenerationCheck<AiLayoutFrameBuilt> {
+  return (answer) => {
+    const frame = aiReadLayoutFrame(answer)
+    const compiled = aiCompileLayoutFrame(
+      frame,
+      { siteName: input.siteName, homeId: input.homeId, navPages: input.pages },
+      input.targets,
+    )
+    const context = {
+      screenIds: [
+        ...new Set([
+          ...input.targets.pages.map((page) => page.id),
+          ...input.pages.map((page) => page.id),
+          ...(input.homeId ? [input.homeId] : []),
+        ]),
+      ],
+      formIds: input.targets.forms.map((form) => form.id),
+      homeScreenIds: input.targets.homeIds,
+      codeBuilt: true,
+    }
+    const stored = aiLayoutStoredTree(compiled.tree, 'layout', context)
+    if (stored.ok === false) {
+      console.error('ai layout frame: a compiled layout did not store', {
+        error: stored.error,
+      })
+      return {
+        value: null,
+        violations: [
+          {
+            rule: null,
+            code: 'layout-compile',
+            message: 'This layout could not be built. Try again.',
+            detail: stored.error,
+          },
+        ],
+      }
+    }
+    const report = validateAiDoctrineTree(
+      { rootId: stored.rootId, nodes: stored.nodes },
+      'layout',
+      context,
+    )
+    const violations = [
+      ...report.violations,
+      ...input.extend({
+        rootId: stored.rootId,
+        nodes: stored.nodes,
+        repairs: [],
+        sourceIds: {},
+        score: report.score as AiValidatedTree['score'],
+        load: report.load,
+      }),
+    ]
+    return {
+      value: violations.length
+        ? null
+        : { rootId: stored.rootId, nodes: stored.nodes, load: report.load },
+      violations,
+    }
+  }
+}
+
+/** What a frame's links resolve against: the site's pages and its form, as a page's do. */
+export function aiLayoutFrameTargets(
+  job: Pick<AiJob, 'brief' | 'inputs'>,
+  inventory: AiSiteInventory | null,
+): AiLayoutTargets {
+  return aiLayoutPageTargets({ job, inventory, own: [] })
+}

@@ -88,6 +88,17 @@ import {
 } from './ai-job-page-sections'
 import { aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { AI_PLAN_ITEMS_MIN, aiPlanCopiedPageViolations } from './ai-job-plan-conformance'
+import { AI_LAYOUT_PAGE_TOOL } from '../layout-language/ai-layout-language'
+import {
+  AI_JOB_PAGE_LANGUAGE_BUDGET,
+  AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS,
+  AI_LAYOUT_PAGE_KIND,
+  aiJobUsesLayoutLanguage,
+  aiLayoutPageCheck,
+  aiLayoutPagePrompt,
+  aiLayoutPageTargets,
+  type AiLayoutPageBuilt,
+} from './ai-job-page-language'
 import {
   aiCreationUnit,
   aiRunJobUnit,
@@ -263,11 +274,13 @@ export function aiPageJobUnits(plan: Pick<AiJobPlan, 'create'>): AiSiteUnit[] {
  */
 export function aiPageJobRunMinimumMs(job: AiJob): number {
   const confirmed = aiConfirmedPlan(job)
-  if (!confirmed) return AI_JOB_PAGE_STEP_MINIMUM_MS
+  // A page built in the layout language is one answer for the whole page (AGL-3660).
+  const pagePass = aiJobUsesLayoutLanguage(job) ? AI_JOB_PAGE_LANGUAGE_BUDGET.minimumMs : AI_JOB_PAGE_STEP_MINIMUM_MS
+  if (!confirmed) return pagePass
   const units = aiPageJobUnits(confirmed)
   const outputs = job.outputs ?? []
   const [unit] = aiSitePendingUnits(units, outputs)
-  if (!unit) return AI_JOB_PAGE_STEP_MINIMUM_MS
+  if (!unit) return pagePass
   return aiJobStepRunMinimumMs(aiSiteUnitJob(job, unit, aiSiteBuiltRefs(units, outputs)))
 }
 
@@ -589,13 +602,20 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     // The site's other pages a link may go to, built or minted on a guided
     // start's plan, and the one a link that names none can only mean (AGL-3596).
     const { linkablePages, linkTarget } = aiPageLinkablePages(inventory, aiLayoutSitePages(job.inputs), [screen.id, draftId])
-    const context = aiPageCheckContext(inventory, {
-      reusableComponents,
-      sections,
-      embeds,
-      recordTokens: aiPageRecordTokens(record),
-      linkablePages,
-    })
+    // A page unit of a guided start or a build is designed in the layout
+    // language and compiled (AGL-3660); a record template keeps the raw tree,
+    // since its copy binds fields the language does not name.
+    const language = aiJobUsesLayoutLanguage(job) && !record
+    const context = {
+      ...aiPageCheckContext(inventory, {
+        reusableComponents,
+        sections,
+        embeds,
+        recordTokens: aiPageRecordTokens(record),
+        linkablePages,
+      }),
+      ...(language ? { codeBuilt: true } : {}),
+    }
 
     // ── The last pass: the whole page, its listing, and the draft reported ──
     if (index === -1 && written) {
@@ -694,6 +714,56 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     if (!written) {
       const allowance = await aiDraftAllowanceRefusal(firestore, { kind: 'screen', hostId, org })
       if (allowance) return aiUnspentOutcome(model, { review: aiLimitReview(allowance) })
+    }
+    if (language) {
+      // ── The whole page in one answer, in the layout language ──
+      const targets = aiLayoutPageTargets({ job, inventory, own: [screen.id, draftId] })
+      const result = await runValidatedGeneration<AiLayoutPageBuilt>(AI_LAYOUT_PAGE_KIND, {
+        step: 'job.page',
+        model,
+        instructions: AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS,
+        inventory,
+        messages: [{ role: 'user', content: aiLayoutPagePrompt({ job, plan, screen, targets, reusableComponents }) }],
+        tool: AI_LAYOUT_PAGE_TOOL,
+        maxTokens: AI_JOB_PAGE_LANGUAGE_BUDGET.maxTokens(model),
+        cutOff: { noun: 'page', smaller: 'Write shorter copy, and fewer items in each group.' },
+        thinking: 'off',
+        check: aiLayoutPageCheck({ screen, sectionIds, targets, context, reusableComponents }),
+        ...(signal ? { signal } : {}),
+      })
+      const spent = aiGenerationSpent(result)
+      if (result.status === 'refused') return { ...spent, refused: true }
+      if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
+      if (!written) {
+        const draft = await writeAiDraft(firestore, {
+          kind: 'screen',
+          hostId,
+          id: draftId,
+          uid: job.createdBy,
+          org,
+          name,
+          nodes: result.value.nodes,
+          slug,
+          layoutId: aiPageDraftLayoutId(screen, inventory),
+          aiJobId: aiOriginJobId(job),
+          now,
+        })
+        if (draft.ok === false) {
+          if (draft.status === 404) throw new Error(`site ${hostId} vanished while its page was generated`)
+          return { ...spent, review: aiLimitReview(draft.error) }
+        }
+      } else {
+        // A draft written by an earlier, interrupted pass is replaced whole.
+        const update = await updateAiDraftNodes(firestore, {
+          kind: 'screen',
+          hostId,
+          id: draftId,
+          now,
+          update: () => result.value.nodes,
+        })
+        if (update.ok === false) return { ...spent, failure: AI_JOB_PAGE_DELETED_COPY }
+      }
+      return { ...spent, continue: true }
     }
     const maxTokens = aiJobPageSectionMaxTokens(model)
     const maxElements = aiJobPageSectionMaxElements(maxTokens)

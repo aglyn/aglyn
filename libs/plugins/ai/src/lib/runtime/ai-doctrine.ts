@@ -287,6 +287,12 @@ export const AI_DOCTRINE_KIND_SCOPE: Readonly<Record<string, AiDoctrineScope>> =
   // Logic by AI (AGL-3603): a function's or a variable's values, which the
   // logic editor takes, composing nothing.
   logic: 'fields',
+  // The layout language (AGL-3660): a page or a site's frame designed in a
+  // short form the compiler turns into the tree, which the compiler — not the
+  // model — holds to the building rules. The language's own instructions say
+  // what the writing rules ask of its words.
+  'layout-page': 'fields',
+  'layout-frame': 'fields',
 }
 
 /** The scope for a kind; `documents` unless the kind names another. */
