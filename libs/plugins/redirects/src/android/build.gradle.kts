@@ -21,6 +21,7 @@ kotlin {
     commonMain.dependencies {
       implementation(project(":native-plugin-host"))
       implementation(project(":native-ui"))
+      implementation(project(":native-contracts"))
     }
     commonTest.dependencies {
       implementation(kotlin("test"))
