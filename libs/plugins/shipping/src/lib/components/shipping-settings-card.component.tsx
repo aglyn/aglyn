@@ -18,6 +18,7 @@
 
 import type { PluginShippingAddress, PluginShippingService } from '@aglyn/aglyn/plugin-manager/plugin-shipping-rates'
 import { mdiDeleteOutline } from '@aglyn/shared-data-mdi'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -142,6 +143,12 @@ export function ShippingSettingsCard(props: ShippingSettingsWidgetProps) {
   return (
     <CardDisplay
       header="Shipping labels"
+      help={pluginDocsHelp('shipping', {
+        anchor: '#where-parcels-ship-from',
+        title: 'Shipping labels',
+        excerpt:
+          'Where labels ship from, the boxes you pack in, label format, signature and insurance, and which carrier services checkout offers.',
+      })}
       subheader={`Buy carrier labels from your orders through ${availability.provider ?? 'your carrier platform'}.`}
       HeaderProps={{
         action: (

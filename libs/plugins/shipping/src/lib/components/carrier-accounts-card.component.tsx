@@ -17,6 +17,7 @@
 'use client'
 
 import type { PluginShippingAddress } from '@aglyn/aglyn/plugin-manager/plugin-shipping-rates'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -135,6 +136,11 @@ export function CarrierAccountsCard(props: ShippingSettingsWidgetProps) {
     <CardDisplay
       header="Carrier accounts"
       subheader="Every site in this workspace ships with these accounts."
+      help={pluginDocsHelp('shipping', {
+        title: 'Carrier accounts',
+        excerpt:
+          'The carrier accounts your labels and checkout rates come from. Connect your own UPS or FedEx account to ship on its rates; labels on it are billed to you by the carrier.',
+      })}
       HeaderProps={
         canConnect
           ? { action: <Button onClick={() => setConnecting(true)}>{'Connect your own account'}</Button> }

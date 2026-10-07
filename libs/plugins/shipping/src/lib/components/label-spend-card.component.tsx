@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import ScrollTable from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material'
@@ -70,7 +71,16 @@ export function LabelSpendCard(props: LabelSpendCardProps) {
   if (!months || !months.some((month) => month.labels > 0)) return null
 
   return (
-    <CardDisplay header="Shipping labels" contentGutterX contentGutterY>
+    <CardDisplay
+      header="Shipping labels"
+      help={pluginDocsHelp('shipping', {
+        title: 'Shipping labels',
+        excerpt:
+          'What shipping labels cost this workspace each month: how much was taken from your Stripe balance, how much went on the monthly invoice, and what voided labels gave back.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
         {markupPct > 0
           ? `Labels are charged at the carrier’s price plus ${markupPct}%.`
