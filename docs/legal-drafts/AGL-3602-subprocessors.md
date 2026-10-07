@@ -1,8 +1,9 @@
 # Subprocessors and Privacy: Create with AI in Media (AGL-3602)
 
-**Status: APPROVED 2026-10-07, with Location "United States and European
-Union" (option 1, the default `global` Vertex AI location) and the purpose
-worded as images rather than photos. The final text is below.** SUB-1
+**Status: APPROVED 2026-10-07, with Location "Global — Google selects where
+requests are processed" (the default `global` Vertex AI endpoint, which makes
+no processing-location promise) and the purpose worded as images rather than
+photos. The final text is below.** SUB-1
 and PP-1 are published together as legal v11 with re-acceptance; SUB-2 is not
 applied (see below). The AI catalog declares the SUB-1 row dated 2026-10-07
 (`AI_IMAGE_CATALOG_PROVIDERS` in `libs/plugins/ai/src/lib/providers/catalog.ts`),
@@ -17,7 +18,7 @@ kinds use the existing AI text provider and need no change to run.
 
 **Photos** (`libs/plugins/ai/src/lib/providers/vertex-image.ts`), one request
 per picture to `aiplatform.googleapis.com` (Vertex AI, `global` location by
-default), as Aglyn's own service account:
+default, which Google may process anywhere), as Aglyn's own service account:
 
 - the description the member typed, followed by the fixed style wording of
   the kind chosen (`libs/plugins/ai/src/lib/server/ai-media-raster-prompt.ts`:
@@ -42,22 +43,33 @@ site's theme colors as hex values or the colors the member picked.
 
 Approved 2026-10-07 with the purpose worded as **images**, not photos: the same
 request makes photographs, art (a watercolor, a 3D render) and design assets
-(a banner, a social post graphic). Location is option 1, the default `global`
-Vertex AI endpoint, which Google lists as multi-region United States and
-European Union.
+(a banner, a social post graphic).
+
+**Location.** Production uses Vertex AI's default `global` endpoint
+(`aiplatform.googleapis.com`). Google's data residency page ("Where your data
+lives and is processed", read 2026-10-07) says global endpoints "route and
+process data anywhere globally, without restricting it to a specific
+geographic region" and "don't provide regional isolation or data residency
+guarantees". An earlier draft of this row said "United States and European
+Union", which the global endpoint does not promise; the row therefore says
+that Google selects the location. (`AI_IMAGE_VERTEX_LOCATION=us` or `eu`, the
+multi-region endpoints that do keep processing in one jurisdiction, remain
+available to a self-hosted operator; Aglyn's production leaves it unset.)
 
 Placement: after the existing Google Cloud rows, before Anthropic.
 
 | Subprocessor | Location | Purpose | Data processed |
 | --- | --- | --- | --- |
-| Google LLC (Google Cloud Vertex AI) | United States and European Union | AI image generation: creating images for a customer's media library from a description a user writes | The description the user writes and the shape requested, and the generated image returned. No account identifiers, email addresses, or other content of the customer's site. |
+| Google LLC (Google Cloud Vertex AI) | Global — Google selects where requests are processed | AI image generation: creating images for a customer's media library from a description a user writes | The description the user writes and the shape requested, and the generated image returned. No account identifiers, email addresses, or other content of the customer's site. |
 
 **Change-log entry** (new first item):
 
 > **October 7, 2026** — Added Google LLC (Google Cloud Vertex AI) for AI image
 > generation: when a user creates an image in the media library, the
 > description they write and the shape they choose are sent to Google's image
-> models, and the generated image is stored in the customer's media library.
+> models on Google Cloud Vertex AI, which processes each request at a location
+> Google selects anywhere in the world, and the generated image is stored in
+> the customer's media library.
 
 The catalog row (`AI_IMAGE_CATALOG_PROVIDERS` in
 `libs/plugins/ai/src/lib/providers/catalog.ts`) carries this wording dated

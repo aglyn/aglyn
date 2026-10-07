@@ -66,7 +66,7 @@ const VERTEX_HOSTS = [
 /** The Google Vertex AI row as `/legal/subprocessors` carries it (AGL-3602, legal v11). */
 const PUBLISHED_GOOGLE_VERTEX_ROW = {
   entity: 'Google LLC (Google Cloud Vertex AI)',
-  region: 'United States and European Union',
+  region: 'Global — Google selects where requests are processed',
   purpose:
     "AI image generation: creating images for a customer's media library from a description a user writes",
   publishedOn: '2026-10-07',

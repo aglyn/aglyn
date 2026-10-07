@@ -433,9 +433,10 @@ export const AI_IMAGE_CATALOG_PROVIDERS: readonly AiCatalogProvider[] = [
     label: 'Google Vertex AI',
     subprocessor: {
       entity: 'Google LLC (Google Cloud Vertex AI)',
-      // The global endpoint: Google lists its processing for these models as
-      // multi-region United States and European Union.
-      region: 'United States and European Union',
+      // The global endpoint, which Google documents as routing and
+      // processing a request anywhere in the world, with no data residency
+      // guarantee: Google, not Aglyn, chooses the location.
+      region: 'Global — Google selects where requests are processed',
       purpose:
         "AI image generation: creating images for a customer's media library from a description a user writes",
       publishedOn: '2026-10-07',

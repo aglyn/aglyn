@@ -72,7 +72,7 @@ describe('plugin-declared subprocessors reach the registry (AGL-2984)', () => {
       entity: 'Google LLC (Google Cloud Vertex AI)',
       purpose:
         "AI image generation: creating images for a customer's media library from a description a user writes",
-      region: 'United States and European Union',
+      region: 'Global — Google selects where requests are processed',
       publishedOn: '2026-10-07',
       reaches: [
         'aiplatform.eu.rep.googleapis.com',

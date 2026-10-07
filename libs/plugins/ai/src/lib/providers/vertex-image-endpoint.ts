@@ -98,9 +98,11 @@ export function vertexImageUrl(project: string, location: string, model: string)
 }
 
 /**
- * The hosts the published subprocessor row covers: the global endpoint's and
- * the United States and European Union multi-regions'. A single region is a
- * different host the row does not name.
+ * The hosts the published subprocessor row covers: the global endpoint's,
+ * which production uses, and the United States and European Union
+ * multi-regions', which an operator may choose and which fall inside a row
+ * whose location Google selects. A single region is a host the row does not
+ * name.
  */
 export const VERTEX_IMAGE_PUBLISHED_HOSTS: readonly string[] = Object.keys(VERTEX_IMAGE_ORIGINS).map(
   (location) => vertexImageHost(location),

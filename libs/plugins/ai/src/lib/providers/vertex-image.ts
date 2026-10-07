@@ -64,8 +64,9 @@ import {
  * ⛔ THE ORDER FOR AGLYN'S OWN PRODUCTION, and no check can see it, so this
  * paragraph is the gate: a description reaching Vertex AI makes Google LLC a
  * recipient of customer content. The row naming it — Google LLC (Google Cloud
- * Vertex AI), "United States and European Union", the global endpoint's own
- * processing locations — is declared in the AI catalog
+ * Vertex AI), located "Global — Google selects where requests are processed",
+ * because the global endpoint promises no processing location — is declared
+ * in the AI catalog
  * (`AI_IMAGE_CATALOG_PROVIDERS`) dated to its change-log entry, with the
  * Privacy Policy §2 sentence beside it (legal v11). Both pages are live
  * before either variable is set in production; the wording is in
