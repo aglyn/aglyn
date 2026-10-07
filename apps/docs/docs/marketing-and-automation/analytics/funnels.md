@@ -1,7 +1,7 @@
 ---
 sidebar_position: 5
 title: Funnels
-description: Measure how visitors move through the steps you care about — pages, forms, bookings, cart and orders — with drop-off, conversion and time between steps, build or explain a funnel with Aglyn AI, and follow up with the people who dropped off.
+description: See how visitors move through the steps you care about, where they drop off and how long each step takes; build or explain a funnel with Aglyn AI, and follow up with people who dropped off.
 ---
 
 # Funnels

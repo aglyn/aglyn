@@ -172,7 +172,8 @@ export async function resolveSiteCaller(
 }
 
 const funnelsRef = (firestore: any, hostId: string) =>
-  firestore.collection('hosts').doc(hostId).collection(FUNNELS_COLLECTION)
+  // Spelled out (FUNNELS_COLLECTION) so the repo's host-collection sweeps find it.
+  firestore.collection('hosts').doc(hostId).collection('funnels')
 
 /** Switches the site's recording to `on` when it is not already; says whether it moved. */
 async function setRecording(firestore: any, hostId: string, hostData: Record<string, unknown>, on: boolean) {

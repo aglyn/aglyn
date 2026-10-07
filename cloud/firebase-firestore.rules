@@ -2798,6 +2798,11 @@ service cloud.firestore {
                      // whether the guided AI start is still offered, and only
                      // the starter route writes it.
                      'starterProvisionedAt',
+                     // Whether the site records visitor journeys (AGL-3605).
+                     // The tenant's collector reads it to decide whether a
+                     // visit is stored, and only the funnels routes write it,
+                     // as a funnel is saved or removed.
+                     'funnelRecording',
                      // `sendingDomain`/`sendingLocalPart` are this site's
                      // half of the custom-sending-domain model: together they
                      // are the `From:` address every recipient of this site's

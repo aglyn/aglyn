@@ -292,6 +292,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'platform',
     why: "The starter site's SEO (AGL-3497): the `image:` marker is `defaultSiteSeo`'s sharing image, `DEFAULT_SITE_IMAGES.hero.src` — a same-origin `/_static/starter/` path to a photo shipped in the tenant app's own public folder. provision-host.ts stores it as a new site's `seo.image`; from then on it is the owner's stored value, rendered through resolveSocialImage like any other. No author string reaches this file and no third-party host is named.",
   },
+  'libs/plugins/ai/src/lib/providers/vertex-image.ts': {
+    markers: 3,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: the Vertex AI photo provider (AGL-3602) runs only in the console's AI media route. The `image` the sweep sees is the generated picture's BYTES, returned to that route, which stores them as an upload in the site's media library; no URL is rendered for a visitor from here.",
+  },
   'libs/plugins/ai/src/lib/jobs/ai-job-products-step.ts': {
     markers: 1,
     guard: 'off-tenant',
