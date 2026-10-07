@@ -91,7 +91,7 @@ describe('the fulfillment networks card (AGL-3634)', () => {
   })
 
   it('offers each network the deployment has, with Connect in the card header', async () => {
-    const routes = api({ list: jest.fn(async () => ({ offered: [{ id: 'shipbob', sandbox: false }, { id: 'amazon-mcf', sandbox: true }], connections: [] })) })
+    const routes = api({ list: jest.fn(async () => ({ offered: [{ id: 'shipbob' as const, sandbox: false }, { id: 'amazon-mcf' as const, sandbox: true }], connections: [] })) })
     render(<FulfillmentNetworksCard hostId="h" api={routes} />)
     expect(await screen.findByText('ShipBob')).toBeTruthy()
     expect(screen.getByText('Amazon Multi-Channel Fulfillment')).toBeTruthy()
@@ -101,7 +101,7 @@ describe('the fulfillment networks card (AGL-3634)', () => {
   })
 
   it('shows a connection’s state and saves its settings', async () => {
-    const routes = api({ list: jest.fn(async () => ({ offered: [{ id: 'shipbob', sandbox: false }], connections: [connection()] })) })
+    const routes = api({ list: jest.fn(async () => ({ offered: [{ id: 'shipbob' as const, sandbox: false }], connections: [connection()] })) })
     render(<FulfillmentNetworksCard hostId="h" api={routes} />)
     expect(await screen.findByText('Sending orders')).toBeTruthy()
     expect(screen.getByText(/4 orders sent · 3 parcels shipped/)).toBeTruthy()
@@ -112,7 +112,7 @@ describe('the fulfillment networks card (AGL-3634)', () => {
   })
 
   it('asks before disconnecting', async () => {
-    const routes = api({ list: jest.fn(async () => ({ offered: [{ id: 'shipbob', sandbox: false }], connections: [connection()] })) })
+    const routes = api({ list: jest.fn(async () => ({ offered: [{ id: 'shipbob' as const, sandbox: false }], connections: [connection()] })) })
     render(<FulfillmentNetworksCard hostId="h" api={routes} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }))
     await waitFor(() => expect(routes.disconnect).toHaveBeenCalledWith('shipbob'))
@@ -122,7 +122,7 @@ describe('the fulfillment networks card (AGL-3634)', () => {
   it('asks to connect again when the grant was refused', async () => {
     const routes = api({
       list: jest.fn(async () => ({
-        offered: [{ id: 'shipbob', sandbox: false }],
+        offered: [{ id: 'shipbob' as const, sandbox: false }],
         connections: [connection({ status: 'reconnect', lastError: 'ShipBob refused the connection. Connect again to keep orders moving.' })],
       })),
     })
