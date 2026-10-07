@@ -582,8 +582,13 @@ export function AssistPanelComponent(props: AssistDockProps) {
   // the panel again later does not re-highlight a job asked for before.
   const openRequest = useAiJobsOpenRequest()
   const [jobsFocus, setJobsFocus] = useState<AiJobsOpenRequest | null>(null)
+  // The request outlives the panel: it is module state, and a page in
+  // another layout mounts a fresh panel. Only a request made after this
+  // panel mounted opens it — one already answered never reopens it.
+  const answeredSeq = useRef(openRequest.seq)
   useEffect(() => {
-    if (openRequest.seq === 0) return
+    if (openRequest.seq <= answeredSeq.current) return
+    answeredSeq.current = openRequest.seq
     setJobsFocus(openRequest)
     setOpen(true)
     // A new `seq` is a new request; the object is read as it stands.
