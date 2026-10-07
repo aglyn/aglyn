@@ -341,26 +341,34 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
 
 /**
  * The IMAGE models (AGL-3602): every model id the Media library's "Create
- * with AI" may route to, with a per-picture provider rate and a per-picture
- * billed rate. Kept apart from `AI_MODEL_CATALOG` because nothing that lists
- * text models — the model selector, the routing table, the allotments'
- * allowlists — may ever offer one of these for a conversation.
+ * with AI" photo mode may route to — Google's Gemini image models on Vertex
+ * AI — with a per-picture provider rate and a per-picture billed rate, and the
+ * token rates the same request's prompt and thinking are billed at. Kept
+ * apart from `AI_MODEL_CATALOG` because nothing that lists text models — the
+ * model selector, the routing table, the allotments' allowlists — may ever
+ * offer one of these for a conversation.
  *
- * ## The two rates, per picture
+ * ## The rates
  *
- * `providerUsdPerImage` is Google's published Vertex AI list price per
- * generated image. `billedUsdPerImage` is what a customer's credits are
- * charged, at `AI_IMAGE_BILLED_MARKUP` over it: the same ratio the balanced
- * text tier is billed at over its provider rate (Claude Sonnet 5, $3/$15
- * billed over $2/$10), so a credit buys the same share of margin whether it
- * is spent on words or on pictures. A picture is NEVER billed at provider
- * cost; `billed-rate-is-not-provider-cost.spec.ts` refuses a row that is.
+ * Google prices an output picture as image-output tokens: Gemini 3.1 Flash
+ * Image writes a 1K picture as 1,120 tokens at $60 per million on the global
+ * endpoint, so $0.0672 a picture. Its prompt is input tokens ($0.50 per
+ * million) and its thinking is text output ($3.00 per million). Every figure
+ * here is the global endpoint's list price, read from Google's Vertex AI
+ * pricing page on 2026-10-06; a regional endpoint lists 10% higher, so a
+ * deployment that moves off `global` reads its cost low by that much.
+ *
+ * Every billed figure is the provider figure at `AI_IMAGE_BILLED_MARKUP`:
+ * the same ratio the balanced text tier is billed at over its provider rate
+ * (Claude Sonnet 5, $3/$15 billed over $2/$10), so a credit buys the same
+ * share of margin whether it is spent on words or on pictures. A picture is
+ * NEVER billed at provider cost; `billed-rate-is-not-provider-cost.spec.ts`
+ * refuses a row that is.
  *
  * A credit is $0.001 of billed spend (`ASSIST_CREDIT_COST_USD`), so the
- * default model's $0.06 is 60 credits a picture and a Free workspace's 300
- * credits make five.
+ * default model's picture is 101 credits before its prompt and thinking.
  */
-export interface AiImageCatalogEntry {
+export interface AiImageCatalogEntry extends AiCatalogRates {
   id: string
   /** The image provider the model is served by. */
   provider: string
@@ -372,53 +380,62 @@ export interface AiImageCatalogEntry {
 }
 
 /**
- * The billed rate over the provider rate, per picture: the balanced text
- * tier's own markup (`claude-sonnet-5`, 3 / 2), restated as a number so an
- * image row cannot be written at list by accident.
+ * The billed rate over the provider rate: the balanced text tier's own markup
+ * (`claude-sonnet-5`, 3 / 2), restated as a number so an image row cannot be
+ * written at list by accident.
  */
 export const AI_IMAGE_BILLED_MARKUP = 1.5
 
-/** A per-picture row billed at `AI_IMAGE_BILLED_MARKUP` over its list price. */
+/**
+ * An image row's four figures from Google's list prices — USD per output
+ * picture, and USD per million input and text-output tokens — each billed at
+ * `AI_IMAGE_BILLED_MARKUP`.
+ */
 export function aiImageRatesAtMarkup(
   providerUsdPerImage: number,
-): Pick<AiImageCatalogEntry, 'providerUsdPerImage' | 'billedUsdPerImage'> {
+  inputPerMTok: number,
+  outputPerMTok: number,
+): Pick<
+  AiImageCatalogEntry,
+  'providerUsdPerImage' | 'billedUsdPerImage' | 'providerRates' | 'billedRates'
+> {
   return {
     providerUsdPerImage,
     billedUsdPerImage: roundUsd(providerUsdPerImage * AI_IMAGE_BILLED_MARKUP),
+    providerRates: aiRatesPerMTok(inputPerMTok, outputPerMTok),
+    billedRates: aiRatesPerMTok(
+      inputPerMTok * AI_IMAGE_BILLED_MARKUP,
+      outputPerMTok * AI_IMAGE_BILLED_MARKUP,
+    ),
   }
 }
+
+/** The image model a photo is made with when the operator names none. */
+export const AI_IMAGE_DEFAULT_MODEL = 'gemini-3.1-flash-image'
 
 /** The image provider's id: Google's models on Vertex AI. */
 export const AI_IMAGE_VERTEX_PROVIDER_ID = 'google-vertex'
 
 export const AI_IMAGE_MODEL_CATALOG: readonly AiImageCatalogEntry[] = [
-  // Vertex AI's list prices per output image (Imagen 4 $0.04, Imagen 4 Fast
-  // $0.02, Imagen 4 Ultra $0.06, Imagen 3 $0.04). Re-read Google's Vertex AI
-  // pricing page before changing a row; both rates move together through
-  // `aiImageRatesAtMarkup`.
   {
-    id: 'imagen-4.0-generate-001',
+    // The default: Google's own replacement for Imagen 4, which Vertex AI
+    // discontinued in 2026.
+    id: 'gemini-3.1-flash-image',
     provider: AI_IMAGE_VERTEX_PROVIDER_ID,
-    label: 'Imagen 4',
-    ...aiImageRatesAtMarkup(0.04),
+    label: 'Gemini 3.1 Flash Image',
+    ...aiImageRatesAtMarkup(0.0672, 0.5, 3),
   },
   {
-    id: 'imagen-4.0-fast-generate-001',
+    id: 'gemini-3.1-flash-lite-image',
     provider: AI_IMAGE_VERTEX_PROVIDER_ID,
-    label: 'Imagen 4 Fast',
-    ...aiImageRatesAtMarkup(0.02),
+    label: 'Gemini 3.1 Flash-Lite Image',
+    ...aiImageRatesAtMarkup(0.0336, 0.25, 1.5),
   },
   {
-    id: 'imagen-4.0-ultra-generate-001',
+    id: 'gemini-3-pro-image',
     provider: AI_IMAGE_VERTEX_PROVIDER_ID,
-    label: 'Imagen 4 Ultra',
-    ...aiImageRatesAtMarkup(0.06),
-  },
-  {
-    id: 'imagen-3.0-generate-002',
-    provider: AI_IMAGE_VERTEX_PROVIDER_ID,
-    label: 'Imagen 3',
-    ...aiImageRatesAtMarkup(0.04),
+    label: 'Gemini 3 Pro Image',
+    ...aiImageRatesAtMarkup(0.1344, 2, 12),
   },
 ]
 
@@ -495,7 +512,8 @@ const isSentinel = (modelId: string): boolean =>
 
 /**
  * What the PROVIDER charges for a model id — our bill. A meter sentinel is
- * free; an unknown id is priced at the dearest tier.
+ * free; an image model's prompt and thinking are priced at its image row's
+ * token rates (AGL-3602); an unknown id is priced at the dearest tier.
  *
  * The figure every cost and margin surface prices usage at. Answering the
  * customer's question from here would report a margin the platform does not
@@ -505,7 +523,11 @@ const isSentinel = (modelId: string): boolean =>
  */
 export function aiProviderRatesForModel(modelId: string): AiTokenRates {
   if (isSentinel(modelId)) return ZERO_RATES
-  return aiCatalogEntry(modelId)?.providerRates ?? AI_FALLBACK_RATES
+  return (
+    aiCatalogEntry(modelId)?.providerRates ??
+    aiImageCatalogEntry(modelId)?.providerRates ??
+    AI_FALLBACK_RATES
+  )
 }
 
 /**
@@ -517,7 +539,11 @@ export function aiProviderRatesForModel(modelId: string): AiTokenRates {
  */
 export function aiBilledRatesForModel(modelId: string): AiTokenRates {
   if (isSentinel(modelId)) return ZERO_RATES
-  return aiCatalogEntry(modelId)?.billedRates ?? AI_FALLBACK_RATES
+  return (
+    aiCatalogEntry(modelId)?.billedRates ??
+    aiImageCatalogEntry(modelId)?.billedRates ??
+    AI_FALLBACK_RATES
+  )
 }
 
 function priceUsage(usage: AiUsage, rate: AiTokenRates): number {

@@ -1233,8 +1233,8 @@ describe('pictures are metered per picture, on the same meter (AGL-3602)', () =>
   const NO_TOKENS = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
 
   it('draws the billed per-picture rate and records our cost beside it', async () => {
-    expect(estimateAssistCostUsd({ ...NO_TOKENS, images: 2 }, 'imagen-4.0-generate-001')).toBe(0.12)
-    expect(estimateAssistProviderCostUsd({ ...NO_TOKENS, images: 2 }, 'imagen-4.0-generate-001')).toBe(0.08)
+    expect(estimateAssistCostUsd({ ...NO_TOKENS, images: 2 }, 'gemini-3.1-flash-image')).toBe(0.2016)
+    expect(estimateAssistProviderCostUsd({ ...NO_TOKENS, images: 2 }, 'gemini-3.1-flash-image')).toBe(0.1344)
     const store = firestore()
     const signalId = await recordAssistCost(
       store,
@@ -1242,7 +1242,7 @@ describe('pictures are metered per picture, on the same meter (AGL-3602)', () =>
       {
         route: '/api/ai/media/images',
         hostId: 'host-1',
-        model: 'imagen-4.0-generate-001',
+        model: 'gemini-3.1-flash-image',
         tier: 'entitled',
         usage: { ...NO_TOKENS, images: 2 },
         docsPaths: [],
@@ -1253,11 +1253,11 @@ describe('pictures are metered per picture, on the same meter (AGL-3602)', () =>
       NOW,
     )
     const month = mockDocs.get(monthPath) as Record<string, any>
-    expect(Number(month.estCostUsd)).toBe(0.12)
-    expect(Number(month.providerCostUsd)).toBe(0.08)
+    expect(Number(month.estCostUsd)).toBe(0.2016)
+    expect(Number(month.providerCostUsd)).toBe(0.1344)
     expect(Number(month.kinds?.image?.requests)).toBe(1)
-    // 120 credits against the site, as 60 a picture.
-    expect(Number(month.byHost?.['host-1'])).toBe(120)
+    // 202 credits against the site: $0.2016 of billed spend, rounded up.
+    expect(Number(month.byHost?.['host-1'])).toBe(202)
     const signalDoc = mockDocs.get(`orgs/${ORG}/assistSignals/${signalId}`) as Record<string, any>
     expect(signalDoc.images).toBe(2)
     expect(signalDoc.kind).toBe('image')
@@ -1271,7 +1271,7 @@ describe('pictures are metered per picture, on the same meter (AGL-3602)', () =>
       {
         route: '/api/ai/media/images',
         hostId: null,
-        model: 'imagen-4.0-generate-001',
+        model: 'gemini-3.1-flash-image',
         tier: 'entitled',
         usage: { ...NO_TOKENS, images: 0 },
         docsPaths: [],
