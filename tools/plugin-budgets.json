@@ -102,5 +102,9 @@
   "marketing-platforms": {
     "baseline": 5107,
     "budget": 7168
+  },
+  "fonts": {
+    "baseline": 4059,
+    "budget": 5120
   }
 }
