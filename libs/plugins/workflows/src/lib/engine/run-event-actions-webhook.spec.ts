@@ -161,6 +161,29 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   enrollListMember: async () => undefined,
 }))
 
+/**
+ * Name resolution for the configured-URL fetch the step sends through. An IP
+ * literal answers itself, as the real `lookup` does; `sink.example.com` is
+ * public, `inward.example.com` is a name pointed at the metadata endpoint,
+ * and anything else does not resolve.
+ */
+jest.mock('dns/promises', () => {
+  const { isIP } = jest.requireActual('net')
+  const names: Record<string, string> = {
+    'sink.example.com': '93.184.215.14',
+    'redirector.example.com': '93.184.215.15',
+    'inward.example.com': '169.254.169.254',
+  }
+  return {
+    __esModule: true,
+    lookup: async (hostname: string) => {
+      const address = isIP(hostname) ? hostname : names[hostname]
+      if (!address) throw Object.assign(new Error('ENOTFOUND'), { code: 'ENOTFOUND' })
+      return [{ address, family: isIP(address) }]
+    },
+  }
+})
+
 jest.mock('@aglyn/shared-util-email', () => ({
   __esModule: true,
   isEmailConfigured: () => true,
@@ -332,5 +355,45 @@ describe('the webhook step, from the emit door', () => {
     mockActions = [forwarding('dealWon')]
     await emitHostEvent(HOST_ID, 'dealWon', { dealId: 'd-1' })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('the webhook step only reaches public addresses (AGL-3628)', () => {
+  // Each of these passed the old URL pattern, which read only the text.
+  it.each([
+    ['IPv6 loopback', 'https://[::1]/x'],
+    ['v4-mapped IPv6 loopback', 'https://[::ffff:127.0.0.1]/x'],
+    ['v4-mapped metadata endpoint', 'https://[::ffff:169.254.169.254]/x'],
+    ['decimal IPv4 loopback', 'https://2130706433/x'],
+    ['hex IPv4 loopback', 'https://0x7f000001/x'],
+    ['a name that resolves to the metadata endpoint', 'https://inward.example.com/x'],
+  ])('refuses %s without a request', async (_label, url) => {
+    mockWebhooks = { 'hook-1': { ...HOOK, url } }
+    mockActions = [forwarding('contactCreated')]
+    await emitHostEvent(HOST_ID, 'contactCreated', { contactId: 'c-1' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('pins the connection and never follows a redirect to the metadata endpoint', async () => {
+    mockWebhooks = { 'hook-1': { ...HOOK, url: 'https://redirector.example.com/x' } }
+    mockActions = [forwarding('contactCreated')]
+    fetchMock.mockImplementation(async () => ({
+      ok: false,
+      status: 302,
+      headers: new Headers({ location: 'http://169.254.169.254/latest/meta-data/' }),
+    }) as any)
+    try {
+      await emitHostEvent(HOST_ID, 'contactCreated', { contactId: 'c-1' })
+    } finally {
+      fetchMock.mockImplementation(async () => ({ ok: true, status: 200 }))
+    }
+    // A 3xx is a failed delivery, retried against the SAME url; the
+    // Location is never requested.
+    expect(fetchMock).toHaveBeenCalled()
+    for (const [url, init] of fetchMock.mock.calls as unknown as [string, any][]) {
+      expect(url).toBe('https://redirector.example.com/x')
+      expect(init.redirect).toBe('manual')
+      expect(init.dispatcher).toBeDefined()
+    }
   })
 })
