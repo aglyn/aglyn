@@ -475,15 +475,24 @@ light appearance, and `-light` the dark one:
 - `libs/native/kotlin/ui/src/commonMain/composeResources/drawable{,-dark}/`:
   `aglyn_mark`, `aglyn_logo` and `aglyn_wordmark` as vector drawables
   (`Res.drawable.aglyn_logo`), converted from the same SVG paths.
-- App icons: `apps/ios/{Aglyn,AglynPOS}/Assets.xcassets/AppIcon.appiconset`
-  (1024 universal, and 512 at 1x and 2x for the Mac), and for
+- App icons, one per app, drawn from vector sources only: the layers in
+  `apps/console/public/_static/images/brand/app-icon/` (`native-icon-ground.svg`,
+  the primary-to-secondary gradient; `native-pos-receipt.svg`, the receipt)
+  plus the console's own mark SVG, placed per `APP_ICONS` in
+  `tools/scripts/lib/native-brand.mjs`. Aglyn is the all-white mark on the
+  gradient; Aglyn POS is the multi-color mark printed on a receipt over the
+  same gradient (AGL-3659). Outputs:
+  `apps/ios/{Aglyn,AglynPOS}/Assets.xcassets/AppIcon.appiconset` (the 1024
+  universal icon, and the macOS plate at every Mac size, 1x and 2x); for
   `apps/android/{app,pos}`, an adaptive icon
-  (`res/mipmap-anydpi-v26/ic_launcher.xml`, a vector foreground, a white
-  background) plus the 512 `ic_launcher-playstore.png`. They show the
-  multi-color mark on the white ground the console's installed icon uses, at
-  its proportion. The brand kit has no POS mark, so Aglyn POS uses the same
-  icon. The PNGs are rendered with sharp (librsvg). `--check` holds them by
-  size and by the sha256 of the SVG they came from, in
+  (`res/mipmap-anydpi-v26/ic_launcher.xml` with the vector drawables
+  `ic_launcher_background` (the gradient), `ic_launcher_foreground` (the art
+  inside the 72dp viewport) and `ic_launcher_monochrome` (themed icons, where
+  white shapes become outlines)) plus the 512 `ic_launcher-playstore.png`; and
+  `apps/android/desktop/icons/{aglyn,aglyn-pos}.{ico,icns}` for the packaged
+  desktop app. minSdk is 26, so no legacy mipmap PNGs are needed. The PNGs are
+  rendered with sharp (librsvg). `--check` holds them by size, transparency and
+  the sha256 of every source SVG, in
   `tools/scripts/native-brand-assets.lock.json`.
 
 ### Brand, type and polish (binding)
