@@ -61,7 +61,7 @@ Regenerate the derived files after these changes:
 ## What Zach owes before release
 
 1. **Apple Developer:** register an App ID for `com.aglyn.app` with the Push Notifications and Associated Domains capabilities. Register `com.aglyn.pos` too, for AGL-3618.
-2. **Expo / EAS:** create the Expo account and the EAS project `aglyn`. Set `EAS_PROJECT_ID` for builds, and run `eas credentials` to upload the APNs key (`.p8`, Key ID, Team ID) and the FCM v1 service-account JSON. You can optionally turn on Expo's enhanced push security and set `EXPO_ACCESS_TOKEN` on the server.
+2. **Expo / EAS:** create the Expo account and the EAS project `aglyn` (`eas.json` has the `development`, `preview` and `production` build profiles). Set `EAS_PROJECT_ID` for builds, and run `eas credentials` to upload the APNs key (`.p8`, Key ID, Team ID) and the FCM v1 service-account JSON. You can optionally turn on Expo's enhanced push security and set `EXPO_ACCESS_TOKEN` on the server.
 3. **Firebase:** add an iOS app (`com.aglyn.app`) and an Android app (`com.aglyn.app`) to the production project. Their Firebase config goes into the `EXPO_PUBLIC_FIREBASE_*` build variables. The `GoogleService-Info.plist` and `google-services.json` files stay out of git.
 4. **Google sign-in (optional):** create the iOS and web OAuth client ids, and set `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` and `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`. Until both are set, the button stays hidden.
 5. **Google Play Console:** create the app "Aglyn" with package `com.aglyn.app`, and complete its store listing, content rating and data-safety form.
