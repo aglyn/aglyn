@@ -61,6 +61,34 @@ describe('what a layout may say about its business (AGL-3596)', () => {
       ).toEqual([])
     })
 
+    it('refuses a street address or opening hours the brief never gave', () => {
+      const violations = aiLayoutInventedContactViolations(
+        footer('1234 South Lamar Blvd, Austin, TX', 'Open Mon–Sat, 8am – 6pm', 'Grooming for every coat'),
+        GUIDED_BRIEF,
+      )
+      expect(violations).toEqual([
+        expect.objectContaining({ rule: 14, code: 'contact-not-in-brief', nodeIds: ['line0', 'line1'] }),
+      ])
+      expect(violations[0].message).toContain('"1234 South Lamar Blvd"')
+      expect(violations[0].message).toContain('"Mon–Sat"')
+    })
+
+    it('keeps an address and hours the brief gives, however the footer rewords them', () => {
+      const brief = `${GUIDED_BRIEF}\nWe are at 1234 South Lamar Blvd. Open Monday through Saturday, 8 AM to 6 PM.`
+      expect(
+        aiLayoutInventedContactViolations(footer('1234 S. Lamar', '1234 South Lamar Blvd.', 'Mon–Sat 8am–6pm'), brief),
+      ).toEqual([])
+    })
+
+    it('reads no count, duration or step as an address or hours', () => {
+      expect(
+        aiLayoutInventedContactViolations(
+          footer('3 Easy Steps', 'Sunrise to Sunset Grooming', 'Ready in 2–3 weeks', '1-2 dogs a visit', 'Est. 2019', '[Opening hours]'),
+          GUIDED_BRIEF,
+        ),
+      ).toEqual([])
+    })
+
     it('reads no year, price or bracketed placeholder as a phone number', () => {
       expect(
         aiLayoutInventedContactViolations(footer('© 2026', 'From $45', 'Call [Office phone number]'), GUIDED_BRIEF),
