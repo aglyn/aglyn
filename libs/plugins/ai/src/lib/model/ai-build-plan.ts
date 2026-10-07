@@ -632,6 +632,29 @@ function buildItemArgs(value: unknown, path: string): Record<string, AiBuildItem
  * differently from what the model meant is worse than a re-ask. Length is
  * repaired: copy past a ceiling is cut and the cut is listed.
  */
+/**
+ * A layout's regions, one word each. A plan sometimes writes the whole list as
+ * one entry — "regions: header, nav, main, footer" — which names regions the
+ * platform builds but reads as one unknown word, and the plan was refused for
+ * it (job AvVxbFbzQx). A leading label is dropped and a list is split on its
+ * commas, slashes, plus signs and "and", so each region is checked on its own;
+ * a duplicate keeps its first place.
+ */
+export function aiPlanLayoutRegionWords(fields: readonly string[]): string[] {
+  const words: string[] = []
+  for (const field of fields) {
+    const listed = /^\s*(?:the\s+)?(?:layout\s+)?(?:regions?|areas?)\s*[:=-]\s*(.+)$/i.exec(field)?.[1] ?? field
+    const parts = /[,/+]|\band\b/i.test(listed)
+      ? listed.split(/\s*(?:,|\/|\+|\band\b)\s*/i)
+      : [listed]
+    for (const part of parts) {
+      const word = part.trim()
+      if (word && !words.some((seen) => seen.toLowerCase() === word.toLowerCase())) words.push(word)
+    }
+  }
+  return words
+}
+
 export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
   const repairs: string[] = []
   const text = (
@@ -709,14 +732,16 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
           throw new PlanShapeError(`create[${index}].name "${name}" is used twice`)
         }
         names.add(key)
+        const kind = oneOf(entry['kind'], AI_BUILD_PLAN_CREATE_KINDS, `create[${index}].kind`)
+        const fields = list(entry['fields'] ?? [], `create[${index}].fields`, AI_BUILD_PLAN_LIMITS.fields)
+          .map((field, fieldIndex) => text(field, `create[${index}].fields[${fieldIndex}]`))
+          .filter(Boolean)
         return {
-          kind: oneOf(entry['kind'], AI_BUILD_PLAN_CREATE_KINDS, `create[${index}].kind`),
+          kind,
           name,
           why: text(entry['why'], `create[${index}].why`),
           duplicateOf: nullable(entry['duplicateOf'], `create[${index}].duplicateOf`),
-          fields: list(entry['fields'] ?? [], `create[${index}].fields`, AI_BUILD_PLAN_LIMITS.fields)
-            .map((field, fieldIndex) => text(field, `create[${index}].fields[${fieldIndex}]`))
-            .filter(Boolean),
+          fields: kind === 'layout' ? aiPlanLayoutRegionWords(fields) : fields,
         }
       },
     )
