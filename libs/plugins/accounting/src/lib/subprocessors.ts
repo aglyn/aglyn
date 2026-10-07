@@ -34,11 +34,11 @@
  * CODAT is different (AGL-3636): Aglyn chooses it and holds the account —
  * one API key for the deployment, one Codat company per workspace — and the
  * ledger data passes through it on the way to the business's own software.
- * So Codat is a published SUBPROCESSOR. ⚑ Its row has to be on the published
- * Subprocessors page before `CODAT_API_KEY` is set in production; with the
- * key unset no request leaves for Codat. The accounting systems Codat
- * reaches are the customer's own, as above, and are not declared here:
- * Aglyn's code names none of their hosts.
+ * So Codat is a published SUBPROCESSOR: its row went on the Subprocessors
+ * page on 2026-10-07, ahead of `CODAT_API_KEY`, and `purpose` reads as that
+ * row does. With the key unset no request leaves for Codat. The accounting
+ * systems Codat reaches are the customer's own, as above, and are not
+ * declared here: Aglyn's code names none of their hosts.
  *
  * Each host is read off the constant the adapter calls, so a moved endpoint
  * moves its declaration with it.
@@ -130,7 +130,7 @@ export const CODAT_SUBPROCESSOR: PluginSubprocessorDeclaration = {
   entity: 'Codat Limited',
   region: 'United Kingdom',
   purpose:
-    "Connecting a merchant's accounting software the platform does not connect directly (such as QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books and Wave) and posting their sales, refunds, fees and payouts to it",
+    'Connecting a merchant’s accounting software that the Services do not connect to directly, such as QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave, and posting the merchant’s sales, refunds, fees and payouts to it',
   publishedOn: '2026-10-07',
   reason:
     "The Codat adapter (`libs/plugins/accounting/src/lib/server/providers/codat.ts`): one Codat company per workspace, tagged with the workspace's id, made when a member starts a connect; reads of the linked ledger's company details, chart of accounts and tax rates for the mapping; and writes of the workspace's direct incomes, direct costs, transfers or journals, and one walk-in customer and one fee supplier, through Codat into the linked software. The company is deleted on disconnect or erasure. Reached only while `CODAT_API_KEY` and `ACCOUNTING_TOKEN_KEY` are set.",
