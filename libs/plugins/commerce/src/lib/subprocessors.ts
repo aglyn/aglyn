@@ -36,9 +36,9 @@ export function commerceSubprocessors(): PluginSubprocessorsAnswer {
       reason:
         `${carrier.label}'s public tracking page. Commerce builds a link to it from a ` +
         'shipment’s carrier and tracking number (`libs/plugins/commerce/src/lib/model/tracking-url.ts`) ' +
-        'and prints it in the buyer’s shipping email and order status page; no Aglyn server ever requests it.',
+        'and prints it in the buyer’s shipping email and order status page; no platform server ever requests it.',
       dataReceived:
-        'Nothing from Aglyn. When the buyer clicks the link, their own browser sends the carrier the tracking number in the URL; no customer record, email or order detail goes with it.',
+        'Nothing from the platform. When the buyer clicks the link, their own browser sends the carrier the tracking number in the URL; no customer record, email or order detail goes with it.',
     }),
   )
   return { hosts }
