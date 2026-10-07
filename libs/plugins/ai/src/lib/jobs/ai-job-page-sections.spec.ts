@@ -813,7 +813,7 @@ describe('a repeated item written once (AGL-3053)', () => {
     const prompt = (index: number, reusableComponents?: boolean) =>
       aiPageSectionPrompt({ job, plan, screen, index, maxElements: 15, reusableComponents })
     expect(AI_PAGE_SECTION_INLINE_LINE).toBe(
-      'This site keeps no saved forms or reusable components: write a repeated item once, and draw a form as a Form holding its Form Fields.',
+      'This site keeps no reusable components: write a repeated item once.',
     )
     expect(screen.sections.map((section) => section.items)).toEqual([0, 4, 0, 0])
     expect(screen.sections.map((_, index) => [prompt(index, false).includes(AI_PAGE_SECTION_INLINE_LINE), prompt(index, false).includes(AI_PAGE_SECTION_REPEAT_LINE)])).toEqual([
@@ -825,7 +825,7 @@ describe('a repeated item written once (AGL-3053)', () => {
     // A workspace that places components is never shown either.
     expect(screen.sections.map((_, index) => /repeat|\{\{1\}\}/.test(prompt(index)))).toEqual([false, false, false, false])
     // The page instructions every workspace shares say only that a repeated item is written once.
-    expect(AI_JOB_PAGE_INSTRUCTIONS[0].text).toContain('a repeated item is written once, and a form is a Form (form) with no formId')
+    expect(AI_JOB_PAGE_INSTRUCTIONS[0].text).toContain('draw a repeated item in the section instead, written once')
     expect(AI_JOB_PAGE_INSTRUCTIONS[0].text).not.toMatch(/written out each time|\{\{1\}\}|"repeat"/)
   })
 

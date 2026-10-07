@@ -640,6 +640,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     // prompt moves one of them DOWN and says so in its commit, and a prompt
     // that grows without anyone meaning it to moves one UP and is red here.
     expect(measured()).toEqual({
+      // Every request that carries the doctrine is down 4 at AGL-3596, whose
+      // rule 3 no longer describes a form drawn on the page; the page section
+      // is down 24, its instructions dropping the same.
       // Every request that carries the document doctrine is up 12 or 13 at
       // AGL-3475, whose rule 4 names a dataset's record template as the third
       // way similar pages share one template.
@@ -648,7 +651,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // at AGL-3433, whose shorter rule 16 every document request below also
       // carries. A brief that asks for a video is offered the plan's list of
       // players on a tool of its own; this plain one is the same bytes.
-      plan: { prefixTokens: 2_988, minimum: 1_024, caches: true, toolsStable: true },
+      plan: { prefixTokens: 2_984, minimum: 1_024, caches: true, toolsStable: true },
       // The layout, template, component and section doors each grew 20 when
       // the palette learned the layout elements' Color scheme (AGL-3284).
       // All four then came DOWN 2 at AGL-3411: Tertiary
@@ -661,17 +664,17 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // AGL-3143 §16, which tells it copy never prints an address, a slug or
       // a timestamp: a live build printed all three on every article. All
       // four grew 6 at AGL-3588, the App Bar's shrink and hide switches.
-      layout: { prefixTokens: 4_431, minimum: 1_024, caches: true, toolsStable: true },
-      template: { prefixTokens: 5_043, minimum: 1_024, caches: true, toolsStable: true },
-      component: { prefixTokens: 5_042, minimum: 1_024, caches: true, toolsStable: true },
+      layout: { prefixTokens: 4_427, minimum: 1_024, caches: true, toolsStable: true },
+      template: { prefixTokens: 5_039, minimum: 1_024, caches: true, toolsStable: true },
+      component: { prefixTokens: 5_038, minimum: 1_024, caches: true, toolsStable: true },
       // 2,901 before AGL-3287 gave the email palette its Header and Footer,
       // which the catalog names as blocks to imitate.
-      email: { prefixTokens: 2_900, minimum: 1_024, caches: true, toolsStable: true },
-      form: { prefixTokens: 2_732, minimum: 1_024, caches: true, toolsStable: true },
-      'page-section': { prefixTokens: 4_620, minimum: 1_024, caches: true, toolsStable: true },
+      email: { prefixTokens: 2_896, minimum: 1_024, caches: true, toolsStable: true },
+      form: { prefixTokens: 2_728, minimum: 1_024, caches: true, toolsStable: true },
+      'page-section': { prefixTokens: 4_596, minimum: 1_024, caches: true, toolsStable: true },
       // 3,326 before AGL-3403 widened the components a theme may style and
       // gave a component leaf its theme-aware `sx` target.
-      theme: { prefixTokens: 3_521, minimum: 1_024, caches: true, toolsStable: true },
+      theme: { prefixTokens: 3_517, minimum: 1_024, caches: true, toolsStable: true },
       // The automation tool carries a variant per step type, each with only its
       // own fields and none a `null` union: the bytes that keep a request
       // within a provider's union limit (AGL-3096). Up 84 at AGL-3538: a
@@ -679,8 +682,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // the steps' field lists. Up 9 more at AGL-3458, which named the
       // `lead` event's keys — the form, the site, the name, the campaigns —
       // which the tool lists for the conditions it may write.
-      'workflow-draft': { prefixTokens: 4_717, minimum: 1_024, caches: true, toolsStable: true },
-      'workflow-explain': { prefixTokens: 2_219, minimum: 1_024, caches: true, toolsStable: true },
+      'workflow-draft': { prefixTokens: 4_713, minimum: 1_024, caches: true, toolsStable: true },
+      'workflow-explain': { prefixTokens: 2_215, minimum: 1_024, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
       'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },
       'seo-site': { prefixTokens: 951, minimum: 4_096, caches: false, toolsStable: true },
@@ -689,7 +692,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // deliberately: on a door that cannot cache either way, a schema that
       // refuses a page outside the batch is worth more than a stable prefix.
       'seo-fixes': { prefixTokens: 921, minimum: 4_096, caches: false, toolsStable: false },
-      'eval-grade': { prefixTokens: 2_010, minimum: 1_024, caches: true, toolsStable: true },
+      'eval-grade': { prefixTokens: 2_006, minimum: 1_024, caches: true, toolsStable: true },
       // An insight's rules are short on purpose: no model caches them, so every
       // byte is billed as input on both calls and on a re-ask.
       // A/B tests by AI (AGL-2914): the rules are one block, well under the
@@ -703,9 +706,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // the whole doctrine, each generation's rules and its tool, which clear
       // the balanced tier's minimum, so a bulk job reads the prefix once a
       // product after its first.
-      'product-copy': { prefixTokens: 2_428, minimum: 1_024, caches: true, toolsStable: true },
-      catalog: { prefixTokens: 2_453, minimum: 1_024, caches: true, toolsStable: true },
-      categories: { prefixTokens: 2_352, minimum: 1_024, caches: true, toolsStable: true },
+      'product-copy': { prefixTokens: 2_424, minimum: 1_024, caches: true, toolsStable: true },
+      catalog: { prefixTokens: 2_449, minimum: 1_024, caches: true, toolsStable: true },
+      categories: { prefixTokens: 2_348, minimum: 1_024, caches: true, toolsStable: true },
       // CRM by AI (AGL-2917), on the fast tier: no shape reaches its minimum,
       // so each prompt is only the field rules, the kind's own and its tool.
       'crm-record-contact': { prefixTokens: 768, minimum: 4_096, caches: false, toolsStable: true },

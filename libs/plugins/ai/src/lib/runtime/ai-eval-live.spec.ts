@@ -333,7 +333,7 @@ describe('the live run', () => {
     const reask = String(plans[1].messages.at(-1).content)
     expect(reask).toContain(`Rule 2 (${AI_DOCTRINE_RULES[2]}): A section places a layout.`)
     expect(reask).toContain(
-      `Rule 7 (${AI_DOCTRINE_RULES[7]}): The "consultation request form" section places a creation named "consultation-form", but the plan never creates it, and this workspace's plan does not include saved forms. Draw the form on the page instead, as a Form element holding its Form Fields.`,
+      `Rule 7 (${AI_DOCTRINE_RULES[7]}): The "consultation request form" section places a creation named "consultation-form", but the plan never creates it, and this workspace's plan does not include saved forms. Place a form the site already has, or leave the form off the page.`,
     )
     // The recording goes on to build the page, with both plan answers on its bill.
     expect(candidate).toMatchObject({ scope: 'full', plan: freePage.candidates[0].plan })

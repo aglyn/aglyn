@@ -52,6 +52,7 @@ import {
 } from '../model/ai-build-plan'
 import {
   aiCreationNoun,
+  aiPlanCanPlaceForm,
   aiPlanUncreatable,
   aiPlanUncreatableKind,
   type AiPlanCapabilities,
@@ -639,24 +640,22 @@ export function detectLayoutRegions(
  * the page never renders: the placed form's own design replaces them) are
  * refused. A form's own design is the one place fields are drawn.
  *
- * A workspace that keeps no saved forms (AGL-3030) has no Forms page to build
- * one on, so there the form IS the page's: an unbound Form holding its Form
- * Fields, which the site's submit route collects like any other. Loose fields
- * are still refused, and so is an unbound Form with no field to send.
+ * On every plan (AGL-3596). A workspace that can save no form once drew an
+ * unbound Form holding its fields (AGL-3030): inputs on a page with no saved
+ * form behind them, no routing, no consent and nothing in the Forms list —
+ * which is what a guided start shipped on its first production run. A page
+ * with no saved form to place now places no form, so there is no exception
+ * left to read: `reusableComponents` decides repeats only.
  */
 export function detectInlineForms(
   tree: AiDoctrineTree,
   outputKind: AiOutputKind,
-  context: Pick<AiDoctrineTreeContext, 'reusableComponents'> = {},
 ): AiDoctrineViolation[] {
   if (outputKind === 'form' || outputKind === 'email') return []
-  const inline = context.reusableComponents === false
   const loose: string[] = []
   const unbound: string[] = []
   const shadowed: string[] = []
-  const empty: string[] = []
-  const visits = walkTree(tree)
-  for (const visit of visits) {
+  for (const visit of walkTree(tree)) {
     if (
       visit.node.componentId === 'formField' &&
       !hasAncestor(tree, visit, (node) => node.componentId === 'form')
@@ -667,41 +666,18 @@ export function detectInlineForms(
       const bound = visit.node.props?.['formId']
       if (typeof bound === 'string' && bound) {
         if ((visit.node.nodes ?? []).length) shadowed.push(visit.id)
-      } else if (!inline) {
+      } else {
         unbound.push(visit.id)
-      } else if (
-        !visits.some(
-          (inner) => inner.node.componentId === 'formField' && inner.ancestors.includes(visit.id),
-        )
-      ) {
-        empty.push(visit.id)
       }
     }
   }
   const violations: AiDoctrineViolation[] = []
-  if (inline && loose.length) {
-    violations.push({
-      rule: 3,
-      code: 'loose-form-field',
-      message:
-        'This draws form fields outside a form, where nothing sends them. Put every Form Field inside the Form it belongs to.',
-      nodeIds: loose,
-    })
-  }
-  if (empty.length) {
-    violations.push({
-      rule: 3,
-      code: 'form-without-fields',
-      message: 'This form has no field to send. Give it the Form Fields it collects.',
-      nodeIds: empty,
-    })
-  }
-  if (!inline && (loose.length || unbound.length)) {
+  if (loose.length || unbound.length) {
     violations.push({
       rule: 3,
       code: 'inline-form',
       message:
-        'This draws a form inline. Build the form on the Forms page, with its fields, validation, consent and routing, then place it here by its id.',
+        'This draws a form inline. Place a saved form from the Forms page by its id, or, where the site has none to place, leave the form off the page.',
       nodeIds: [...unbound, ...loose],
     })
   }
@@ -2662,7 +2638,7 @@ export function validateAiDoctrineTree(
     ...publish,
     ...detectRepeatedSubtrees(tree, otherPages, context),
     ...detectLayoutRegions(tree, outputKind),
-    ...detectInlineForms(tree, outputKind, context),
+    ...detectInlineForms(tree, outputKind),
     ...detectLiteralStyles(tree, outputKind),
     ...detectInvisibleLinks(tree, outputKind),
     ...detectOffBrandEmail(tree, outputKind, context.brand),
@@ -3020,16 +2996,18 @@ export function detectPlanLayoutRegions(
 }
 
 /**
- * Rule 3 (plan): a section that collects answers places a form from the Forms
- * page. A workspace that keeps no saved forms draws the form on the page
- * (AGL-3030), and nothing is refused.
+ * Rule 3 (plan): a section that collects answers places a saved form — one
+ * the site has, or one the plan creates on the Forms page. Where neither is
+ * possible (the site has no form and this job may create none), the page
+ * places no form, and a section named for one is not refused: there is
+ * nothing it could place (AGL-3596). It is never drawn inline instead.
  */
 export function detectPlanInlineForms(
   plan: AiBuildPlan,
   inventory: AiSiteInventory | null,
   capabilities: AiPlanCapabilities | null = null,
 ): AiDoctrineViolation[] {
-  if (capabilities?.reusableComponents === false) return []
+  if (!aiPlanCanPlaceForm(inventory, capabilities)) return []
   const kinds = inventoryKinds(inventory)
   const unbound = sectionPaths(plan).filter(
     ({ section }) =>

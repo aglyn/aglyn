@@ -272,40 +272,6 @@ function inlineCardsOnce(prefix: string, input: { name: string; heading: string;
   })
 }
 
-/**
- * A form the page carries itself: a Form with no formId, holding its Form
- * Fields — what a workspace that keeps no saved forms builds instead of
- * placing one (AGL-3030). The site's submit route collects it by its name.
- */
-function inlineForm(
-  prefix: string,
-  input: {
-    name: string
-    heading: string
-    intro: string
-    formName: string
-    submitLabel: string
-    fields: Array<{ fieldName: string; label: string; fieldType: string; required?: boolean }>
-  },
-): Built {
-  return section(prefix, input.name, [], 0, (add) =>
-    framed(
-      add,
-      [
-        add(typography('h2', input.heading, 'h2')),
-        add(typography('body1', input.intro)),
-        add({
-          componentId: 'form',
-          props: { formName: input.formName, submitLabel: input.submitLabel },
-          nodes: input.fields.map((field) => add({ componentId: 'formField', props: { ...field } })),
-        }),
-      ],
-      'sm',
-      8,
-    ),
-  )
-}
-
 function callToAction(prefix: string, input: { name: string; heading: string; body: string; label: string; screenId: string }): Built {
   return section(prefix, input.name, [input.screenId], 0, (add) =>
     framed(
@@ -939,19 +905,22 @@ function repeatedCards(prefix: string, input: PracticeAreas): { once: Built; ful
 
 /**
  * A page brief for a Free workspace (AGL-3030): a site that keeps no reusable
- * components and no saved forms, with the one layout its plan includes. Its
- * practice areas repeat and its consultation request is a form, so the page
- * is built the one way such a workspace can build it — the cards drawn where
- * they repeat, written once in the answer (AGL-3053), and the form carried by
- * the page with its fields inside it. The plan the page job keeps for it is
- * held to the Free workspace's capabilities, never the whole doctrine.
+ * components, with the one layout its plan includes and the one saved form
+ * its consultation requests arrive through. Its practice areas repeat, so the
+ * cards are drawn where they repeat, written once in the answer (AGL-3053);
+ * its consultation request places that saved form by its id, as every page
+ * does (AGL-3596) — a form is never drawn on a page. The plan the page job
+ * keeps for it is held to the Free workspace's capabilities, never the whole
+ * doctrine.
  */
 export const AI_FREE_PAGE_FIXTURE: AiFreePageFixture = freeBrief({
   id: 'free-law-firm-about',
   icp: 'small-business',
   pageType: 'about',
   brief: 'An about page for Brightwater Law: who we are, the four areas we practice, how we work with clients, and a form to request a consultation.',
-  inventory: site('host-brightwater-law', {}),
+  inventory: site('host-brightwater-law', {
+    forms: [{ id: 'frm-consultation', name: 'Consultation request', fields: ['name', 'email', 'phone', 'matter'] }],
+  }),
   title: 'About Brightwater Law',
   slug: '/about',
   layout: 'lay-site',
@@ -982,18 +951,11 @@ export const AI_FREE_PAGE_FIXTURE: AiFreePageFixture = freeBrief({
         'Your first call is with the attorney who will handle the matter. We quote a flat fee where the work allows one, and we say so before we start when it does not.',
       ],
     }),
-    inlineForm('d', {
+    form('d', {
       name: 'consultation request form',
       heading: 'Request a consultation',
       intro: 'Tell us a little about what you need. We reply within one business day.',
-      formName: 'Consultation request',
-      submitLabel: 'Request a consultation',
-      fields: [
-        { fieldName: 'name', label: 'Your name', fieldType: 'text', required: true },
-        { fieldName: 'email', label: 'Email', fieldType: 'email', required: true },
-        { fieldName: 'phone', label: 'Phone', fieldType: 'text' },
-        { fieldName: 'matter', label: 'What can we help with?', fieldType: 'textarea', required: true },
-      ],
+      formId: 'frm-consultation',
     }),
   ],
 })

@@ -575,8 +575,9 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     if (written && !stored) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_DELETED_COPY }
     const page = stored?.nodes ?? aiEmptyPage()
     const index = sectionIds.findIndex((id) => !(id in page))
-    // A workspace that keeps no reusable components or saved forms builds its
-    // page inline, and every pass is held to the rules that way (AGL-3030).
+    // A workspace that keeps no reusable components draws its repeats inline,
+    // and every pass is held to the rules that way (AGL-3030). A form is a
+    // saved one placed by id on every plan, or none (AGL-3596).
     const reusableComponents = checkEntitlement(org, 'reusableComponents')
     // A link may take a visitor to a section of this page, by its name in the plan (AGL-3097).
     const sections = screen.sections.map((section) => section.name)

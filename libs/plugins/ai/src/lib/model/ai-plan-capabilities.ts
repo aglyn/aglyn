@@ -37,12 +37,13 @@ import {
  *
  * The building doctrine makes a repeat a reusable component and a form a
  * saved form placed by id. A workspace whose plan keeps no reusable
- * components can do neither: the create route refuses a component and a
- * saved form on that entitlement. There, and only there, the doctrine builds
- * inline instead — a form is a Form element the page carries with its fields
- * inside it, which the site's submit route collects like any other, and a
- * list's repeated items are drawn in one section (AGL-3071).
- * `reusableComponents` is the one flag every validator reads for that.
+ * components draws a list's repeated items in one section instead
+ * (AGL-3071); `reusableComponents` is the one flag every validator reads for
+ * that.
+ *
+ * A form is never drawn inline (AGL-3596): it is a saved form, counted
+ * against the site's form allowance like one a member makes. Where the site
+ * has none to place and may create none, the page places no form at all.
  *
  * ── Kept out of the cached prefix ────────────────────────────────────────
  *
@@ -73,9 +74,9 @@ export interface AiPlanCreation {
 
 export interface AiPlanCapabilities {
   /**
-   * Whether the workspace keeps reusable components and saved forms. Where
-   * it does not, the doctrine builds inline: a form is a Form element holding
-   * its fields, and a list's repeated items are drawn in one section.
+   * Whether the workspace keeps reusable components. Where it does not, a
+   * list's repeated items are drawn in one section. Forms are not read off
+   * it: whether one may be created is `create.form` (AGL-3596).
    */
   reusableComponents: boolean
   /** Every creation kind a plan may name, and whether this job may make one here. */
@@ -151,7 +152,15 @@ export function aiCreationNoun(kind: AiBuildPlanCreateKind): string {
  * planned as four sections of one item.
  */
 export const AI_PLAN_INLINE_SENTENCE =
-  "This workspace keeps no reusable components or saved forms: draw a list's repeated items in one section, and a form as a Form element holding its Form Fields."
+  "This workspace keeps no reusable components: draw a list's repeated items in one section."
+
+/**
+ * The sentence a request states when the site has no saved form and this job
+ * may create none (AGL-3596): the plan places no form, rather than one drawn
+ * on the page with no saved form behind it.
+ */
+export const AI_PLAN_NO_FORM_SENTENCE =
+  'This site has no saved form and may create none: plan no form, and no section that collects answers.'
 
 /**
  * What the plan step's user turn says the job may create here: one line a
@@ -173,6 +182,19 @@ export function aiPlanCapabilityLines(capabilities: AiPlanCapabilities): string[
   return lines
 }
 
+/**
+ * Whether a plan on this site can place a saved form at all (AGL-3596): the
+ * site has one, or the job may create one. Absent capabilities restrict
+ * nothing, as everywhere else.
+ */
+export function aiPlanCanPlaceForm(
+  inventory: { forms: readonly unknown[] } | null,
+  capabilities: Pick<AiPlanCapabilities, 'create'> | null,
+): boolean {
+  if (inventory?.forms.length) return true
+  return capabilities?.create.form.allowed !== false
+}
+
 /** What to do instead of a creation the job may not make, for the re-ask and the review. */
 function insteadOf(kind: AiBuildPlanCreateKind, capabilities: AiPlanCapabilities): string {
   switch (kind) {
@@ -181,9 +203,7 @@ function insteadOf(kind: AiBuildPlanCreateKind, capabilities: AiPlanCapabilities
         ? 'Place a component the site already has.'
         : "Draw a list's repeated items in one section instead."
     case 'form':
-      return capabilities.reusableComponents
-        ? 'Place a form the site already has.'
-        : 'Draw the form on the page instead, as a Form element holding its Form Fields.'
+      return 'Place a form the site already has, or leave the form off the page.'
     case 'layout':
       return 'Put the page in a layout the site already has.'
     case 'template':

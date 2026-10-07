@@ -1915,7 +1915,7 @@ the same way, in a Grid with a row direction and no container.
   written once, one. The shapes AGL-3078 tells apart cost nothing until a rule is broken:
   they are re-ask sentences, and no system block, tool or cached prefix changes.
   `ai-job-free-page.spec.ts` re-asks the Free page's practice areas for each of the four
-  shapes through the real page step: a section re-asked for any of them costs at most 21
+  shapes through the real page step: a section re-asked for any of them costs at most 22
   credits, less than the 44 of the largest pass, which the room the arithmetic keeps for
   a re-asked section must exceed.
 
@@ -2145,7 +2145,7 @@ needs, and the machine does not start it with less.
   request's line is the same length either way, so no figure the Free page's
   arithmetic quotes moves.
 - **The ceiling does not move to make a section fit.** The balanced tier's
-  1,050 fits the Free page's wall with little to spare: past 1,052 tokens the
+  1,050 fits the Free page's wall with little to spare: past 1,055 tokens the
   first section pass costs 45 credits, and the Free page that builds its layout
   first leaves 45 of the 300 — no more than that pass, which is the room the
   arithmetic keeps for a re-asked section. That margin was 1,060 until the
@@ -2159,7 +2159,9 @@ needs, and the machine does not start it with less.
   ten. Rule 4's record template (AGL-3475) put 13 back, 4,614, and left five;
   the plan's record field rides only a job that may bind a dataset, so the
   Free plan's request carries none of it. The App Bar's two scroll switches
-  (AGL-3587, AGL-3588) put 6 more back, 4,620, and left two. A two-person introduction drawn
+  (AGL-3587, AGL-3588) put 6 more back, 4,620, and left two. A form being a saved one on
+  every plan (AGL-3596) took the inline-form sentences out of the doctrine and the page
+  instructions, 4,596, and left five. A two-person introduction drawn
   roomier, in the 20 elements an estimate-counted budget allowed, needs 1,114
   real tokens, so no ceiling the wall holds fits it; drawn in 15, it needs 834.
   A plan rule that splits a section cannot see how long its items' copy runs,

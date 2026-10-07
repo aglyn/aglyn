@@ -19,7 +19,7 @@
     "components": [],
     "layouts": [],
     "templates": [],
-    "forms": [],
+    "forms": [{ "id": "frm-consultation", "name": "Consultation request", "fields": ["name", "email", "phone", "matter"] }],
     "datasets": [],
     "collections": [],
     "screens": [{ "id": "scr-home", "name": "Home", "slug": "/", "layoutId": null, "template": false }],
@@ -35,9 +35,9 @@
       "step": null,
       "model": null,
       "effort": null,
-      "note": "A reference answer written by hand for a Free workspace, which keeps no reusable components or saved forms, on a site with no layout yet: the one layout the Free plan includes is created, the four practice areas drawn where they repeat, and the consultation request carried by the page as a Form holding its fields.",
+      "note": "A reference answer written by hand for a Free workspace, which keeps no reusable components, on a site with no layout yet and its one saved form: the one layout the Free plan includes is created, the four practice areas drawn where they repeat, and the consultation request placing that saved form by its id, as every page does (AGL-3596).",
       "plan": {
-        "reuse": [],
+        "reuse": [{ "kind": "form", "id": "frm-consultation", "purpose": "consultation request form" }],
         "create": [
           { "kind": "layout", "name": "Site layout", "why": "The site has no layout yet, so its pages would otherwise carry their own header and footer.", "duplicateOf": null, "fields": [] }
         ],
@@ -55,7 +55,7 @@
               { "name": "hero", "uses": [], "items": 0 },
               { "name": "practice areas", "uses": [], "items": 4 },
               { "name": "how we work", "uses": [], "items": 0 },
-              { "name": "consultation request form", "uses": [], "items": 0 }
+              { "name": "consultation request form", "uses": ["frm-consultation"], "items": 0 }
             ]
           }
         ]
@@ -101,11 +101,7 @@
             "csection": { "componentId": "section", "props": { "element": "section" }, "nodes": ["c4"] },
             "d1": { "componentId": "muiTypography", "props": { "variant": "h2", "children": "Request a consultation", "component": "h2" } },
             "d2": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Tell us a little about what you need. We reply within one business day." } },
-            "d3": { "componentId": "formField", "props": { "fieldName": "name", "label": "Your name", "fieldType": "text", "required": true } },
-            "d4": { "componentId": "formField", "props": { "fieldName": "email", "label": "Email", "fieldType": "email", "required": true } },
-            "d5": { "componentId": "formField", "props": { "fieldName": "phone", "label": "Phone", "fieldType": "text" } },
-            "d6": { "componentId": "formField", "props": { "fieldName": "matter", "label": "What can we help with?", "fieldType": "textarea", "required": true } },
-            "d7": { "componentId": "form", "props": { "formName": "Consultation request", "submitLabel": "Request a consultation" }, "nodes": ["d3", "d4", "d5", "d6"] },
+            "d7": { "componentId": "form", "props": { "formId": "frm-consultation" } },
             "d8": { "componentId": "muiStack", "props": { "direction": "column" }, "sx": { "gap": 2 }, "nodes": ["d1", "d2", "d7"] },
             "d9": { "componentId": "muiContainer", "props": { "maxWidth": "sm" }, "sx": { "py": 8 }, "nodes": ["d8"] },
             "dsection": { "componentId": "section", "props": { "element": "section" }, "nodes": ["d9"] },
@@ -123,7 +119,7 @@
       "effort": null,
       "note": "The same reference answer with the practice-area card written once, the way a section pass writes it where the workspace keeps no reusable components (AGL-3053): {{1}} and {{2}} where the cards differ, and each card's title and summary listed in its \"repeat\", which the page step draws into the four cards before any check reads them.",
       "plan": {
-        "reuse": [],
+        "reuse": [{ "kind": "form", "id": "frm-consultation", "purpose": "consultation request form" }],
         "create": [
           { "kind": "layout", "name": "Site layout", "why": "The site has no layout yet, so its pages would otherwise carry their own header and footer.", "duplicateOf": null, "fields": [] }
         ],
@@ -141,7 +137,7 @@
               { "name": "hero", "uses": [], "items": 0 },
               { "name": "practice areas", "uses": [], "items": 4 },
               { "name": "how we work", "uses": [], "items": 0 },
-              { "name": "consultation request form", "uses": [], "items": 0 }
+              { "name": "consultation request form", "uses": ["frm-consultation"], "items": 0 }
             ]
           }
         ]
@@ -182,11 +178,7 @@
             "csection": { "componentId": "section", "props": { "element": "section" }, "nodes": ["c4"] },
             "d1": { "componentId": "muiTypography", "props": { "variant": "h2", "children": "Request a consultation", "component": "h2" } },
             "d2": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Tell us a little about what you need. We reply within one business day." } },
-            "d3": { "componentId": "formField", "props": { "fieldName": "name", "label": "Your name", "fieldType": "text", "required": true } },
-            "d4": { "componentId": "formField", "props": { "fieldName": "email", "label": "Email", "fieldType": "email", "required": true } },
-            "d5": { "componentId": "formField", "props": { "fieldName": "phone", "label": "Phone", "fieldType": "text" } },
-            "d6": { "componentId": "formField", "props": { "fieldName": "matter", "label": "What can we help with?", "fieldType": "textarea", "required": true } },
-            "d7": { "componentId": "form", "props": { "formName": "Consultation request", "submitLabel": "Request a consultation" }, "nodes": ["d3", "d4", "d5", "d6"] },
+            "d7": { "componentId": "form", "props": { "formId": "frm-consultation" } },
             "d8": { "componentId": "muiStack", "props": { "direction": "column" }, "sx": { "gap": 2 }, "nodes": ["d1", "d2", "d7"] },
             "d9": { "componentId": "muiContainer", "props": { "maxWidth": "sm" }, "sx": { "py": 8 }, "nodes": ["d8"] },
             "dsection": { "componentId": "section", "props": { "element": "section" }, "nodes": ["d9"] },
