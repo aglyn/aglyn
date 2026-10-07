@@ -52,6 +52,7 @@ import { BOOKINGS_CONFIG_SCHEMA } from './plugin-config'
 import { bookingsBillingWebhookHandler } from './server/billing-webhook'
 import { bookingAnalyticsHandler } from './server/booking-analytics'
 import { registerBookingFigureReader } from './server/booking-figures'
+import { registerBookingServiceAiCapability } from './server/booking-service-ai-capability'
 import { registerBookingServiceDraftWriter } from './server/booking-service-drafts'
 import { bookingRefundHandler } from './server/refund'
 // The booking's way back to the record it was booked from (AGL-2660): the
@@ -1188,4 +1189,6 @@ export function registerBookingsConsoleApi(): void {
   // A draft service another plugin asks for by name (AGL-3616) — an AI build
   // setting a site up from a brief. The console runs AI jobs (AGL-3026).
   registerBookingServiceDraftWriter()
+  // …and the operation an AI build plans for it, which that writer executes.
+  registerBookingServiceAiCapability()
 }
