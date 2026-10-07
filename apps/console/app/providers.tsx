@@ -19,11 +19,11 @@
 import { ConfirmationProviderComponent } from '@aglyn/shared-ui-jsx/components/confirmation-provider.component'
 import { LoadingLayoutAppComponent } from '@aglyn/shared-ui-jsx/components/loading-layout-app.component'
 import { SnackbarProvider } from '@aglyn/shared-ui-snackstack'
+import { withThemeCssVarProvider } from '@aglyn/shared-ui-theme'
 import {
-  consoleThemeDark,
-  consoleThemeLight,
-  withThemeCssVarProvider,
-} from '@aglyn/shared-ui-theme'
+  consoleAppThemeDark,
+  consoleAppThemeLight,
+} from '@aglyn/shared-ui-theme/console-app.theme'
 import type { ReactNode } from 'react'
 import ConsoleBrandingEffects from '../components/console-branding-effects.component'
 import EditHintBounce from '../components/edit-hint-bounce.component'
@@ -74,7 +74,10 @@ const ThemeStack = withThemeCssVarProvider(
       <VisitorMarketingSurface nonce={nonce} />
       <LoadingLayoutAppComponent>
         <ConfirmationProviderComponent>
-          <SnackbarProvider>
+          {/* Every toast carries a close button: a reader clears one without
+              waiting out its timer, which on a phone covers the bottom of
+              the page. */}
+          <SnackbarProvider dismissible>
             <HostIdProvider>
               <ConsolePluginsGate>{children}</ConsolePluginsGate>
             </HostIdProvider>
@@ -83,7 +86,7 @@ const ThemeStack = withThemeCssVarProvider(
       </LoadingLayoutAppComponent>
     </FirebaseAppLayout>
   ),
-  { theme: { light: consoleThemeLight, dark: consoleThemeDark } },
+  { theme: { light: consoleAppThemeLight, dark: consoleAppThemeDark } },
 )
 
 export default function Providers({ children, nonce }: ProvidersProps) {

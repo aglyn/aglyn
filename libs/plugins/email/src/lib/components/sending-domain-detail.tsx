@@ -435,7 +435,7 @@ export function SendingDomainDetail(props: SendingDomainDetailProps) {
           ) : null}
 
           <Divider />
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
             {record.status === 'requested' && canManage ? (
               <Button
                 variant="contained"

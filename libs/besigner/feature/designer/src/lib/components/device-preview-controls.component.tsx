@@ -74,13 +74,16 @@ const devicePreviewOptions = [
   },
 ]
 
-export interface DevicePreviewControlsProps extends Partial<MenuProps> {}
+export interface DevicePreviewControlsProps extends Partial<MenuProps> {
+  /** Show the active device's icon without its name, for a narrow toolbar. */
+  iconOnly?: boolean
+}
 
 const DevicePreviewControlsComponent = forwardRef<
   any,
   DevicePreviewControlsProps
 >((props, ref) => {
-  const { ...rest } = props
+  const { iconOnly, ...rest } = props
 
   const [devicePreview, setDevicePreview] =
     useAglynBesignerFlag('devicePreview')
@@ -149,10 +152,11 @@ const DevicePreviewControlsComponent = forwardRef<
             sx={{
               borderColor: 'divider',
               '& .MuiButton-endIcon': { ml: 0.15 },
-              '& .MuiButton-startIcon': { mr: 0.85 },
+              '& .MuiButton-startIcon': { mr: iconOnly ? 0 : 0.85 },
+              ...(iconOnly ? { minWidth: 0, px: 0.75 } : {}),
             }}
           >
-            {activeDevice.children}
+            {iconOnly ? null : activeDevice.children}
           </MuiButton>
         </MuiTooltip>
       </MuiButtonGroup>

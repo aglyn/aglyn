@@ -443,7 +443,7 @@ function FormsHoldings(props: {
       <Typography variant="overline" color="text.secondary">
         {'What these forms hold'}
       </Typography>
-      <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+      <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
         <Figure
           label="Views"
           value={rollup.views.value}

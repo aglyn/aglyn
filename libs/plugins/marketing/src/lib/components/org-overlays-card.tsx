@@ -280,6 +280,7 @@ export function OrgOverlaysCard(props: OrgOverlaysCardProps) {
                     <TableRow>
                       <TableCell colSpan={COLUMNS}>
                         <Stack
+                          useFlexGap
                           direction="row"
                           spacing={2}
                           sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}

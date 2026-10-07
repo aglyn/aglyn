@@ -228,7 +228,12 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                   hrefLabel: 'Break this down',
                 },
               ].map((metric) => ({
-                size: { xs: 6, md: 3 },
+                // One tile a row on a phone: half a phone's width is narrower
+                // than a card header with its help icon, and "Signups (30d)"
+                // or the MRR tile's button would wrap inside it.
+
+                size: { xs: 12, sm: 6, md: 3 },
+
                 children: (
                   <CardDisplay
                     header={metric.label}
@@ -391,7 +396,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                           '(in-app, respects their mute preferences). ' +
                           'Audited.'}
                       </Typography>
-                      <Stack direction="row" spacing={1}>
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                         <TextField
                           size="small"
                           label="Title"
@@ -457,13 +462,14 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                         }
                       />
                       <Stack
-                        direction="row"
+                        direction={{ xs: 'column', sm: 'row' }}
                         spacing={1}
-                        sx={{ alignItems: 'center' }}
+                        sx={{ alignItems: { sm: 'center' } }}
                       >
                         <TextField
                           size="small"
                           label="Link (optional)"
+
                           placeholder="/manage/notifications or https://…"
                           value={broadcast.link}
                           onChange={(event) =>

@@ -366,6 +366,7 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
                   >
                     <Stack sx={{ flex: 1, minWidth: 0 }}>
                       <Stack
+                        useFlexGap
                         direction="row"
                         spacing={0.5}
                         sx={{ alignItems: 'center', flexWrap: 'wrap' }}

@@ -87,7 +87,16 @@ export function FaviconCard(props: FaviconCardProps) {
           'you, or paste a URL below.',
       })}
     >
-      <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+      <Stack
+        direction="row"
+        spacing={2}
+        useFlexGap
+        sx={{
+          alignItems: 'center',
+          flexWrap: { xs: 'wrap', md: 'nowrap' },
+          rowGap: 1,
+        }}
+      >
         {preview ? (
           <Box
             component="img"

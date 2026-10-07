@@ -347,7 +347,14 @@ export function StaffOrgEmailCard(props: { orgId: string }) {
         contentGutterY
       >
         <Stack spacing={2}>
-          <Tabs value={tab} onChange={(_event, next: EmailTab) => setTab(next)}>
+          <Tabs
+            value={tab}
+            onChange={(_event, next: EmailTab) => setTab(next)}
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+          >
+
             <Tab value="sends" label="Sends" />
             <Tab value="campaigns" label="Campaigns" />
           </Tabs>

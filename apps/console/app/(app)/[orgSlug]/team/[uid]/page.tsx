@@ -445,7 +445,12 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
                         ) : null}
                       </Stack>
                     )}
-                    <Stack direction="row" spacing={1}>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      useFlexGap
+                      sx={{ flexWrap: 'wrap' }}
+                    >
                       <Button
                         variant="contained"
                         disabled={busy}

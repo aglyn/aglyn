@@ -1082,7 +1082,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           em dash rather than a zero where nothing was recorded.
          */}
         <Section title="The mail, across this campaign">
-          <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+          <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
             <Figure label="Addressed" {...rolled(rollup.addressed)} />
             <Figure label="Sent" {...rolled(rollup.sent)} />
             <Figure label="Delivered" {...rolled(rollup.delivered)} />

@@ -87,7 +87,12 @@ export function ListingDetailPage(props: {
   const ownerActions = useMemo(
     () =>
       isOwner && !editing ? (
-        <Stack direction="row" spacing={1}>
+        <Stack
+          direction="row"
+          spacing={1}
+          useFlexGap
+          sx={{ flexWrap: 'wrap' }}
+        >
           {/* Shipping a new version had no door on the listing itself
               (AGL-1008) — Edit changes metadata and View changes nothing,
               so the only reading left was "make a second listing". Same

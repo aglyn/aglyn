@@ -155,7 +155,13 @@ export function NotificationScopeTable(props: NotificationScopeTableProps) {
         <TableRow>
           <TableCell>{'Category'}</TableCell>
           {channels.map((channel) => (
-            <TableCell key={channel.key} align="center">
+            <TableCell
+              key={channel.key}
+              align="center"
+              // The switch columns hug their one-line headers so the category
+              // column, which wraps, keeps the width.
+              sx={{ whiteSpace: 'nowrap', width: '1%' }}
+            >
               {channel.label}
             </TableCell>
           ))}

@@ -194,6 +194,7 @@ export function ContactDuplicatesCard(props: ContactDuplicatesCardProps) {
                 }
                 secondary={
                   <Stack
+                    useFlexGap
                     component="span"
                     direction="row"
                     spacing={1}

@@ -27,7 +27,6 @@ import {
   Stack,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
   TextField,
   Typography,
@@ -53,6 +52,7 @@ import {
   refundReasonNeedsNote,
   type RefundReasonCode,
 } from '../constants/refund-reasons'
+import StaffTableHead from './staff-table-head.component'
 
 /** One refundable Stripe charge, as `/api/admin/org-refund` describes it. */
 export interface RefundableCharge {
@@ -432,14 +432,14 @@ export default function StaffOrgRefundCard({
         {charges != null && charges.length > 0 ? (
           <>
             <ScrollTable size="small">
-              <TableHead>
+              <StaffTableHead>
                 <TableRow>
                   <TableCell>{'Charge'}</TableCell>
                   <TableCell>{'Captured'}</TableCell>
                   <TableCell>{'Refundable'}</TableCell>
                   <TableCell>{'Stripe fee (kept)'}</TableCell>
                 </TableRow>
-              </TableHead>
+              </StaffTableHead>
               <TableBody>
                 {visibleCharges.map((charge) => {
                   const left = remainingRefundableCents(charge)

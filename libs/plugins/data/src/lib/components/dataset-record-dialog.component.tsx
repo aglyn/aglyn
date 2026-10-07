@@ -123,7 +123,7 @@ function RecordFieldValue(props: { field: DatasetRecordField }) {
   }
   if (value.references) {
     return (
-      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 0.5 }}>
+      <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 0.5 }}>
         {value.references.map((reference) => (
           <Typography
             key={reference.id}
@@ -226,6 +226,7 @@ export function DatasetRecordDialog(props: DatasetRecordDialogProps) {
           {fields.map((field) => (
             <Box key={field.fieldId}>
               <Stack
+                useFlexGap
                 direction="row"
                 spacing={1}
                 sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}

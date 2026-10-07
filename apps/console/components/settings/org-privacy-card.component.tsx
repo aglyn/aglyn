@@ -143,7 +143,7 @@ export function OrgPrivacyCard() {
               'sites captured, with the fields and the format you choose. Available on ' +
               'every plan, whether or not it includes the CRM.'}
           </Typography>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
             {PEOPLE_FILES.map(({ resource, label, title }) => (
               <Button
                 key={resource}

@@ -125,6 +125,9 @@ const TreeView = styled(MuiList)<MuiListProps>(({ theme }) => ({
       borderBottomLeftRadius: 4,
       [`& .${classKey.dragHandle}, & .${classKey.moreButton}`]: {
         visibility: 'hidden',
+        // No hover on a touch screen to reveal them, and a hidden grip
+        // cannot be touched: there every row carries both.
+        '@media (hover: none)': { visibility: 'visible' },
       },
       // An open menu keeps its own button on screen — the pointer has left
       // the row to reach the menu, so the hover rule no longer holds it.
@@ -722,6 +725,11 @@ const NodeTreeItem = observer(
                   transition: 'opacity 120ms',
                   '&:focus-visible': { opacity: 1 },
                   [`.${classKey.treeListItem}:hover &`]: { opacity: 1 },
+                  // No hover on a touch screen, so nothing would ever reveal
+                  // it: there the eye shows on every row, quietly.
+                  '@media (hover: none)': {
+                    opacity: authorHidden ? 1 : 0.6,
+                  },
                 }}
               >
                 <MdiIcon

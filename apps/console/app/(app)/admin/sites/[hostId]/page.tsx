@@ -221,7 +221,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
       }}
       help={{ topic: 'staffConsole', anchor: '#site-detail' }}
       headerRight={
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
           <Button
             size="small"
             variant="outlined"
@@ -311,7 +311,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                       >
                         {`host id ${hostId}`}
                       </Typography>
-                      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
+                      <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
                         {/*
                           The custom domain moved to its own card below
                           (AGL-2011). It used to be a bare `domain: {cname}`
@@ -490,6 +490,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                     contentGutterY
                   >
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={3}
                       sx={{ flexWrap: 'wrap', gap: 2 }}

@@ -494,7 +494,7 @@ function HostsContent() {
         icon: { path: ICON_VARIANT_HOST_GROUP.path },
       }}
       headerRight={
-        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+        <Stack useFlexGap direction="row" spacing={2} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
           {allowance ? (
             <Typography variant="body2" color="text.secondary">
               {allowance}

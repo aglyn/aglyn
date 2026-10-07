@@ -271,7 +271,7 @@ export function CampaignConversionsSection(
         </Typography>
       ) : (
         <Stack spacing={1}>
-          <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+          <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
             {CAMPAIGN_CONVERSION_KINDS.map((kind: CampaignConversionKind) => (
               <Figure
                 key={kind}
@@ -898,7 +898,7 @@ export function CampaignSequencesSection(props: {
         </Typography>
       ) : (
         <Stack spacing={1}>
-          <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+          <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
             {report.figures.map((figure) => (
               <Figure key={figure.outcome} label={figure.label} value={figure.value} note={figure.note} />
             ))}
@@ -978,7 +978,7 @@ export function CampaignVisitsSection(props: {
         </Typography>
       ) : (
         <Stack spacing={1}>
-          <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+          <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
             <Figure
               label="First visits"
               value={report.firstVisits}

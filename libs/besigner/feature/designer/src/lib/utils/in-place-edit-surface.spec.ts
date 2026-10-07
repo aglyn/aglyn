@@ -85,6 +85,32 @@ describe('findLeafTextElement', () => {
 
 describe('beginInPlaceEdit on the resolved text element', () => {
   /**
+   * A Typography that holds elements (AGL-3672) renders its own text, rich
+   * or plain, in an `<aglyn-text>` ahead of them. An edit rewrites that and
+   * nothing else, so the elements are untouched while the author types and
+   * afterwards.
+   */
+  it('leaves the elements a Typography holds standing', () => {
+    const root = mount(
+      `<h2 data-aglyn="leaf:heading">
+         <aglyn-text><em>Fresh</em> bread</aglyn-text>
+         <span data-aglyn="leaf:run"><aglyn-text>daily</aglyn-text></span>
+       </h2>`,
+    )
+    const target = findLeafTextElement(root)!
+    expect(target.innerHTML).toBe('<em>Fresh</em> bread')
+
+    const surface = beginInPlaceEdit(target, (el) => {
+      el.innerHTML = '<em>Fresh</em> bread'
+    })
+    expect(root.querySelector('[data-aglyn="leaf:run"]')?.textContent).toBe('daily')
+
+    surface!.dispose()
+    expect(root.querySelector('[data-aglyn="leaf:run"]')?.textContent).toBe('daily')
+    expect(target.innerHTML).toBe('<em>Fresh</em> bread')
+  })
+
+  /**
    * The whole point of resolving the text first: everything the component
    * built around it is still standing while the author types.
    */

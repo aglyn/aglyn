@@ -306,7 +306,7 @@ export default function BillingRegisterAllocationsCardComponent({
 
   return (
     <Stack spacing={2}>
-      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+      <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
         <Chip label={`${pool.purchased} purchased`} size="small" />
         <Chip label={`${pool.allocated} assigned`} size="small" />
         <Chip
@@ -345,6 +345,7 @@ export default function BillingRegisterAllocationsCardComponent({
             const busy = busyHostId === site.hostId
             return (
               <Stack
+                useFlexGap
                 key={site.hostId}
                 direction="row"
                 spacing={2}

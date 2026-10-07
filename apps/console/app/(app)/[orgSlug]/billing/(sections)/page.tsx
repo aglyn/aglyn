@@ -1505,6 +1505,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                     </Typography>
                   ) : null}
                   <Stack
+                    useFlexGap
                     direction="row"
                     spacing={0.5}
                     sx={{ flexWrap: 'wrap', gap: 0.5, mb: 1 }}
@@ -1571,6 +1572,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   ) : null}
                   {can('billing.manage') ? (
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={1}
                       sx={{ mt: 1.5, flexWrap: 'wrap', gap: 1 }}

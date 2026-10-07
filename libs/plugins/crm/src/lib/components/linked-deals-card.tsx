@@ -137,6 +137,7 @@ export function LinkedDealsCard(props: LinkedDealsCardProps) {
               )
               return (
                 <Stack
+                  useFlexGap
                   key={deal.$id}
                   direction="row"
                   spacing={1}

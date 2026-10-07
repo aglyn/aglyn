@@ -21,8 +21,9 @@ import { type BoxProps as MuiBoxProps } from '@mui/material/Box'
 import MuiDrawer, {
   type DrawerProps as MuiDrawerProps,
 } from '@mui/material/Drawer'
+import MuiSwipeableDrawer from '@mui/material/SwipeableDrawer'
 import clsx from 'clsx'
-import { forwardRef } from 'react'
+import { createContext, forwardRef, useContext } from 'react'
 import { DEFAULT_LEFT_DRAWER_WIDTH } from '../constants/shared'
 
 const classKeys = generateComponentClassKeys('AglynWorkspacePanel', [
@@ -118,7 +119,26 @@ export interface WorkspacePanelComponentProps extends WorkspacePanelProps {
   DrawerProps?: MuiDrawerProps
   open?: boolean
   anchor?: MuiDrawerProps['anchor']
+  /**
+   * Overlay the workspace instead of sitting beside it. A screen too narrow
+   * for a docked panel AND a usable canvas gets the panel as a temporary
+   * drawer: it covers the canvas while open and gives all of it back when
+   * dismissed, rather than squeezing the canvas to nothing.
+   */
+  temporary?: boolean
+  /** Where the temporary drawer comes from; `anchor` when unset. */
+  temporaryAnchor?: MuiDrawerProps['anchor']
+  /** The temporary drawer asks to close (backdrop tap, swipe, Escape). */
+  onClose?: () => void
+  /** The temporary drawer asks to open. */
+  onOpen?: () => void
 }
+
+/**
+ * True while a drag is in flight. A temporary (overlay) panel hides for the
+ * length of it: the drop targets are on the canvas it covers.
+ */
+export const WorkspacePanelDragContext = createContext(false)
 
 export const WorkspacePanelComponent = forwardRef<
   any,
@@ -132,8 +152,13 @@ export const WorkspacePanelComponent = forwardRef<
     open: openProp,
     anchor = 'left',
     id,
+    temporary,
+    temporaryAnchor,
+    onClose,
+    onOpen,
     ...rest
   } = props
+  const dragging = useContext(WorkspacePanelDragContext)
   const open = Boolean(openProp)
   const {
     className: drawerClassName,
@@ -150,6 +175,49 @@ export const WorkspacePanelComponent = forwardRef<
     },
     classNameProp,
   )
+
+  if (temporary) {
+    const sheetAnchor = temporaryAnchor ?? anchor
+    const sheet = sheetAnchor === 'top' || sheetAnchor === 'bottom'
+    const {
+      component,
+      'aria-label': ariaLabel,
+    } = rest as { component?: string; 'aria-label'?: string }
+    const { onClose: _onDrawerClose, ...sheetProps } = drawerProps
+    return (
+      <MuiSwipeableDrawer
+        {...sheetProps}
+        open={open}
+        anchor={sheetAnchor}
+        onClose={() => onClose?.()}
+        onOpen={() => onOpen?.()}
+        // The toolbar opens these; an edge swipe would fight the canvas
+        // scrolling under the same finger. Swiping one closed still works.
+        disableSwipeToOpen
+        className={clsx(classKeys.drawer, drawerClassName)}
+        // Hidden, not closed: closing would unmount the card being dragged
+        // and end the drag with it.
+        sx={dragging ? { visibility: 'hidden' } : undefined}
+        slotProps={{
+          paper: {
+            ref,
+            id,
+            component,
+            'aria-label': ariaLabel,
+            sx: sheet
+              ? {
+                  height: '75dvh',
+                  borderTopLeftRadius: 12,
+                  borderTopRightRadius: 12,
+                }
+              : { width: size || DEFAULT_LEFT_DRAWER_WIDTH, maxWidth: '88vw' },
+          } as object,
+        }}
+      >
+        {children}
+      </MuiSwipeableDrawer>
+    )
+  }
 
   return (
     <WorkspacePanel

@@ -249,7 +249,12 @@ export default function StaffTaxablePurchasesCard({
           */}
           {entry ? (
             <Stack spacing={0.5}>
-              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Stack
+                useFlexGap
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+              >
                 <Typography variant="body2">
                   {'Item 3 for this period: '}
                   <strong>{`$${entry.amountDollars}`}</strong>
@@ -269,7 +274,12 @@ export default function StaffTaxablePurchasesCard({
               </Typography>
             </Stack>
           ) : (
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <Stack
+              useFlexGap
+              direction="row"
+              spacing={1}
+              sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+            >
               <Typography variant="body2">
                 {'Item 3 for this period: '}
                 <strong>not computed</strong>
@@ -306,10 +316,16 @@ export default function StaffTaxablePurchasesCard({
                   {blockedReason}
                 </Typography>
               ) : null}
-              <Stack direction="row" spacing={1}>
+              <Stack
+                useFlexGap
+                direction="row"
+                spacing={1}
+                sx={{ flexWrap: 'wrap' }}
+              >
                 <Button
                   variant="contained"
                   onClick={() => void submit('PUT')}
+
                   disabled={busy || !amount.trim() || !note.trim()}
                 >
                   {entry ? 'Update Item 3' : 'Record Item 3'}
