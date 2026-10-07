@@ -4512,6 +4512,7 @@ export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = {
       'video',
       'videoEmbed',
     ],
+    codeOnly: ['icon'],
   },
   email: {
     root: 'div',
@@ -4574,6 +4575,7 @@ export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = {
       'video',
       'videoEmbed',
     ],
+    codeOnly: ['icon', 'muiDrawer', 'muiDrawerToggle'],
   },
   component: {
     root: 'div',

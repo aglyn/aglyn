@@ -136,6 +136,10 @@ const MENTIONS_ONLY = new Map<string, string>([
     "The guided start's live page-sections eval (AGL-3596). Like the live plan eval above, it checks the key is SET and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter, and what it sends is the fixed sample briefs written in the spec, never a customer's content. CI never sets the switch, so CI never calls the provider.",
   ],
   [
+    'libs/plugins/ai/src/lib/jobs/ai-job-layout-language-live.spec.ts',
+    "The layout language's live eval (AGL-3660). Like the live evals above, it checks the key is SET and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter, and what it sends is the fixed sample briefs written in the spec, never a customer's content. CI never sets the switch, so CI never calls the provider.",
+  ],
+  [
     'tools/scripts/lib/emulated-env.mjs',
     "The local emulator stack's environment builder (AGL-3596). It names the key only to BLANK it for an emulated console unless a developer asks for live AI on their own machine, in which case it passes the developer's own key through unchanged. It reads no customer data and is never part of a deployment.",
   ],

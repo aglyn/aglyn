@@ -158,6 +158,90 @@ internal object HostOrderTaxModeSerializer :
     RawEnumSerializer<HostOrderTaxMode>("com.aglyn.contracts.HostOrderTaxMode", HostOrderTaxMode.entries, HostOrderTaxMode.UNKNOWN, { it.raw })
 
 @Serializable
+data class HostProduct(
+    val categoryIds: List<String>? = null,
+    val channel: ProductChannelFacts? = null,
+    val collectionIds: List<String>? = null,
+    val createdAtMs: Double? = null,
+    val description: String? = null,
+    val digitalFiles: List<HostProductDigitalFilesItem>? = null,
+    val downloadLimit: Double? = null,
+    val gatedVideos: List<HostProductGatedVideosItem>? = null,
+    val giftCard: Boolean? = null,
+    val imageUrl: String? = null,
+    val inventory: Double? = null,
+    val lowStockThreshold: Double? = null,
+    val mediaUrls: List<String>? = null,
+    val modifierGroups: List<ProductModifierGroup>? = null,
+    val name: String? = null,
+    val options: List<ProductOption>? = null,
+    val oversellPolicy: HostProductOversellPolicy? = null,
+    val posQuickKey: Boolean? = null,
+    val priceUsd: Double? = null,
+    val relatedProductIds: List<String>? = null,
+    val seo: HostProductSeo? = null,
+    val shipping: ProductShippingFacts? = null,
+    val slug: String? = null,
+    val status: ProductStatus? = null,
+    val subscription: HostProductSubscription? = null,
+    val subscriptionOptional: Boolean? = null,
+    val supplierId: String? = null,
+    val tags: List<String>? = null,
+    val taxExempt: Boolean? = null,
+    val type: ProductType? = null,
+    val updatedAtMs: Double? = null,
+    val variants: List<ProductVariant>? = null,
+)
+
+@Serializable
+data class HostProductDigitalFilesItem(
+    val fileName: String,
+    val url: String,
+    val version: String? = null,
+)
+
+@Serializable
+data class HostProductGatedVideosItem(
+    val title: String? = null,
+    val url: String,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = HostProductOversellPolicySerializer::class)
+enum class HostProductOversellPolicy(val raw: String) {
+    BACKORDER("backorder"),
+    DENY("deny"),
+    UNKNOWN(""),
+}
+
+internal object HostProductOversellPolicySerializer :
+    RawEnumSerializer<HostProductOversellPolicy>("com.aglyn.contracts.HostProductOversellPolicy", HostProductOversellPolicy.entries, HostProductOversellPolicy.UNKNOWN, { it.raw })
+
+@Serializable
+data class HostProductSeo(
+    val description: String? = null,
+    val imageUrl: String? = null,
+    val title: String? = null,
+)
+
+@Serializable
+data class HostProductSubscription(
+    val interval: HostProductSubscriptionInterval,
+    val trialDays: Double? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = HostProductSubscriptionIntervalSerializer::class)
+enum class HostProductSubscriptionInterval(val raw: String) {
+    MONTH("month"),
+    YEAR("year"),
+    UNKNOWN(""),
+}
+
+internal object HostProductSubscriptionIntervalSerializer :
+    RawEnumSerializer<HostProductSubscriptionInterval>("com.aglyn.contracts.HostProductSubscriptionInterval", HostProductSubscriptionInterval.entries, HostProductSubscriptionInterval.UNKNOWN, { it.raw })
+
+@Serializable
 data class HostRedirect(
     val destination: String,
     val enabled: Boolean? = null,
@@ -723,6 +807,27 @@ internal object PosReceiptChannelSerializer :
     RawEnumSerializer<PosReceiptChannel>("com.aglyn.contracts.PosReceiptChannel", PosReceiptChannel.entries, PosReceiptChannel.UNKNOWN, { it.raw })
 
 @Serializable
+data class ProductChannelFacts(
+    val brand: String? = null,
+    val condition: ProductChannelFactsCondition? = null,
+    val googleProductCategory: String? = null,
+    val gtin: String? = null,
+    val mpn: String? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = ProductChannelFactsConditionSerializer::class)
+enum class ProductChannelFactsCondition(val raw: String) {
+    NEW("new"),
+    REFURBISHED("refurbished"),
+    USED("used"),
+    UNKNOWN(""),
+}
+
+internal object ProductChannelFactsConditionSerializer :
+    RawEnumSerializer<ProductChannelFactsCondition>("com.aglyn.contracts.ProductChannelFactsCondition", ProductChannelFactsCondition.entries, ProductChannelFactsCondition.UNKNOWN, { it.raw })
+
+@Serializable
 data class ProductModifierGroup(
     val id: String,
     val max: Double,
@@ -738,6 +843,33 @@ data class ProductModifierOption(
     val priceCents: Double,
 )
 
+@Serializable
+data class ProductOption(
+    val name: String,
+    val values: List<String>,
+)
+
+@Serializable
+data class ProductShippingFacts(
+    val heightCm: Double? = null,
+    val hsCode: String? = null,
+    val lengthCm: Double? = null,
+    val originCountry: String? = null,
+    val widthCm: Double? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = ProductStatusSerializer::class)
+enum class ProductStatus(val raw: String) {
+    ACTIVE("active"),
+    ARCHIVED("archived"),
+    DRAFT("draft"),
+    UNKNOWN(""),
+}
+
+internal object ProductStatusSerializer :
+    RawEnumSerializer<ProductStatus>("com.aglyn.contracts.ProductStatus", ProductStatus.entries, ProductStatus.UNKNOWN, { it.raw })
+
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = ProductTypeSerializer::class)
 enum class ProductType(val raw: String) {
@@ -749,6 +881,20 @@ enum class ProductType(val raw: String) {
 
 internal object ProductTypeSerializer :
     RawEnumSerializer<ProductType>("com.aglyn.contracts.ProductType", ProductType.entries, ProductType.UNKNOWN, { it.raw })
+
+@Serializable
+data class ProductVariant(
+    val barcode: String? = null,
+    val compareAtPriceUsd: Double? = null,
+    val id: String? = null,
+    val imageUrl: String? = null,
+    val inventory: Double? = null,
+    val inventoryByLocation: Map<String, Double>? = null,
+    val options: Map<String, String>? = null,
+    val priceUsd: Double? = null,
+    val sku: String? = null,
+    val weightGrams: Double? = null,
+)
 
 @Serializable
 data class ReceiptData(

@@ -160,6 +160,18 @@ const PAGE_EXTRA_IDS = [
 const COMPONENT_EXTRA_IDS = ['icon']
 
 /**
+ * Elements a surface admits only in a tree the platform's own code composed
+ * (AGL-3660), never one a model wrote, and so never listed in a catalog. The
+ * layout language compiler draws an Icon from the icon library, where the
+ * path is code's to give; and a layout's phone menu is the Drawer with its
+ * Menu Button, which a model writing nodes was never offered.
+ */
+const CODE_ONLY_IDS: Readonly<Record<string, readonly string[]>> = {
+  screen: ['icon'],
+  layout: ['icon', 'muiDrawer', 'muiDrawerToggle'],
+}
+
+/**
  * Never offered to a model, whatever list they are on: a raw-HTML escape
  * hatch, a code-invoking widget, the canvas root, a reference into another
  * document, and third-party plugin elements.
@@ -684,12 +696,13 @@ async function main(): Promise<void> {
     .sort()
   const formAllow = ['form', 'formField'].map(registered)
   const surfaces = {
-    screen: { root: 'div', allow: pageAllow },
+    screen: { root: 'div', allow: pageAllow, codeOnly: CODE_ONLY_IDS.screen.map(registered) },
     email: { root: 'div', allow: emailAllow },
     form: { root: 'form', allow: formAllow },
     layout: {
       root: 'div',
       allow: [...pageAllow, registered('layoutSlot')].sort(),
+      codeOnly: CODE_ONLY_IDS.layout.map(registered),
     },
     component: {
       root: 'div',

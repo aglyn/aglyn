@@ -13,3 +13,5 @@ actual fun formatLocalDay(atMs: Long, pattern: String, timeZone: String?): Strin
   val zone = timeZone?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: ZoneId.systemDefault()
   return java.time.format.DateTimeFormatter.ofPattern(pattern, java.util.Locale.getDefault()).format(Instant.ofEpochMilli(atMs).atZone(zone))
 }
+
+actual fun normalizeNfkd(text: String): String = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFKD)
