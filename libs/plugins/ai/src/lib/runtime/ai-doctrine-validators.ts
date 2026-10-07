@@ -212,10 +212,10 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
   plannedEmbeds?: readonly Pick<AiBuildPlanEmbed, 'host' | 'url'>[]
   framing?: AiCopyFraming
   /**
-   * Whether the workspace keeps reusable components and saved forms
-   * (AGL-3030). `false` builds inline, the one way such a workspace can: a
-   * form is a Form holding its fields, and a repeated block is drawn where it
-   * repeats. Absent is `true`, the doctrine whole.
+   * Whether the workspace keeps reusable components (AGL-3030). `false`
+   * draws a repeated block where it repeats. Absent is `true`, the doctrine
+   * whole. Forms do not read it: a form is a saved form placed by its id on
+   * every plan, counted against `formsPerHost`, or none (AGL-3596).
    */
   reusableComponents?: boolean
   /**
