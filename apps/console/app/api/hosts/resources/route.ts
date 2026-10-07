@@ -255,18 +255,20 @@ const RESOURCES: Record<string, HostResource> = {
    * so renaming one split its submission history, and two pages sharing a
    * label had always been one list.
    *
-   * TWO gates, asking different questions. `reusableComponents` asks whether
-   * the plan has the reuse engine a bound form rides at all — a promoted
-   * `Form` subtree is placed like any other definition and the `formId`
-   * travels inside it. `formsPerHost` asks how many distinct intake forms one
-   * site may hold, and answers `FORMS_PER_HOST_CEILING` on every plan that
-   * passes the first gate: it is an abuse ceiling, not a tier. It rides an
-   * entitlement key so the refusal happens inside the counting transaction,
-   * and so one org's number can be overridden by contract.
+   * ONE gate: `formsPerHost`, how many saved forms one site may hold — Free
+   * 1, Starter 5, Pro 25, Business 100, `FORMS_PER_HOST_CEILING` above
+   * (AGL-3597). It is deliberately NOT behind `reusableComponents`: a Free
+   * site saves its one form, and only components stay Starter-and-above. It
+   * rides an entitlement key so the refusal happens inside the counting
+   * transaction, and so one org's number can be overridden by contract.
+   *
+   * The count is checked at the create and nowhere else, so a site holding
+   * more forms than its plan now allows keeps every one of them; only the
+   * next create is refused, with the over-limit copy and the upgrade path.
    *
    * The catalog is the only thing this counts. A `Form` node drawn on a page
    * and left unbound has no document here, so a site whose allowance is spent
-   * — or zero — still collects submissions; those are rationed by
+   * still collects submissions; those are rationed by
    * `formSubmissionsPerMonth`, on their own axis, at their own numbers.
    *
    * ⚠️ No `softDeletes`. That branch reads EVERY document to count live ones,
@@ -276,7 +278,6 @@ const RESOURCES: Record<string, HostResource> = {
    */
   form: {
     collection: 'forms',
-    entitlement: 'reusableComponents',
     quotaKey: 'formsPerHost',
     label: 'forms',
     activity: { type: 'content', noun: 'form' },

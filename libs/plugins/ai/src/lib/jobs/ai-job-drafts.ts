@@ -196,12 +196,9 @@ export interface AiDraftBand {
 export const AI_DRAFT_BANDS: Readonly<Record<AiDraftKind, AiDraftBand>> = {
   layout: { collection: 'layouts', quotaKey: 'sharedLayoutsPerHost', label: 'shared layouts' },
   template: { collection: 'templates', quotaKey: 'templatesPerHost', label: 'templates' },
-  form: {
-    collection: 'forms',
-    quotaKey: 'formsPerHost',
-    entitlement: 'reusableComponents',
-    label: 'forms',
-  },
+  // A saved form is counted against `formsPerHost` alone — Free 1 through
+  // the ceiling — and is not behind `reusableComponents` (AGL-3597).
+  form: { collection: 'forms', quotaKey: 'formsPerHost', label: 'forms' },
   component: {
     collection: 'components',
     entitlement: 'reusableComponents',

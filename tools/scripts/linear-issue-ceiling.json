@@ -1,8 +1,8 @@
 {
   "team": "AGL",
-  "highest": 3595,
+  "highest": 3597,
   "verifiedAt": "2026-10-06",
-  "verifiedBy": "Read from Linear on 2026-10-06 (team AGL, newest-first, archived included): AGL-3595 (\"Staff can give back AI credits: a compensation control on the staff org and user pages, audited\") was created 2026-10-06T23:35Z and is the newest.",
+  "verifiedBy": "Read from Linear on 2026-10-06 (team AGL): AGL-3597 (\"Saved forms per site: Free 1, Starter 5, Pro 25, Business 100, higher 500, listed on the pricing pages\") exists, created 2026-10-07T01:45Z. A floor, not the newest.",
   "note": "The highest issue identifier that EXISTS, and a FLOOR rather than the answer. Any citation above it was never assigned, because Linear numbers issues sequentially per team. check-linear-ids.mjs asks Linear for the real highest on every run and can only ever RAISE this number with the answer, so with LINEAR_API_KEY set there is nothing to maintain here; this value is what the check falls back to when the query cannot be made. Raise it only after reading the workspace — never to whatever number a failing check just reported. See tools/scripts/lib/linear-ids.mjs.",
   "historicalCitations": {
     "note": "Commits already on `main` whose messages cite a fabricated id. History is NOT rewritten (see docs/DECISION_LOG.md, 2026-08-28), so the commit sweep would otherwise be permanently red and the guard would never be wirable into CI. Listed by sha rather than exempted by date: a FIFTEENTH such commit still fails. This list may shrink and must never grow.",

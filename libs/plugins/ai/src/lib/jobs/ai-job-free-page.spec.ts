@@ -23,8 +23,9 @@
 /**
  * A Free workspace builds its first page (AGL-3030).
  *
- * The Free plan keeps no reusable components and no saved forms, and its AI
- * allowance is a 300-credit wall. A page it describes has to be buildable the
+ * The Free plan keeps no reusable components and its AI allowance is a
+ * 300-credit wall. (It saves one form per site since AGL-3597, but a page it
+ * describes still carries its form inline, the way it is built here.) A page it describes has to be buildable the
  * one way it can build — the repeated items drawn where they repeat, the form
  * carried by the page — and has to fit that wall end to end: the plan, every
  * section pass, and the listing.
@@ -292,10 +293,11 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks())
 
 describe('a Free workspace builds its first page', () => {
-  it('is told it keeps no reusable components or saved forms, and what it may still create', () => {
+  it('is told it keeps no reusable components, the one saved form its site has room for, and what else it may create', () => {
     expect(FREE.reusableComponents).toBe(false)
     expect(FREE.create.component).toMatchObject({ allowed: false, reason: expect.stringContaining('reusable components') })
-    expect(FREE.create.form).toMatchObject({ allowed: false, reason: expect.stringContaining('saved forms') })
+    // A Free site saves one form (AGL-3597); it is not behind the component feature.
+    expect(FREE.create.form).toMatchObject({ allowed: true })
     // The one shared layout the Free plan includes is already the site's.
     expect(FREE.create.layout).toMatchObject({ allowed: false, left: 0 })
     expect(FREE.create.template).toMatchObject({ allowed: true, left: 10 })
