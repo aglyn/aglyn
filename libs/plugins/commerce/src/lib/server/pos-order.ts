@@ -33,6 +33,9 @@ import {
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import { alertLowStockCrossing } from './low-stock'
+import { notifyOrderBuyer } from './order-notifications'
+import { ORDER_PAID_EVENT } from '../model/order-events'
+import { raiseOrderEvent } from './order-events'
 import { decrementVariantStock } from './reserve-stock'
 import {
   type PromotionSlotHold,
@@ -41,6 +44,8 @@ import {
   settlePromotionSlot,
 } from './promotion-hold'
 import { posMaxDiscountPct } from '../plugin-config'
+import { offlineFeeMonthKey } from './pos-fee-month'
+import { notifyPosSaleCompleted } from './pos-sale'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 
 /**
@@ -74,7 +79,10 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
   const body =
     typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {})
   const hostId = String(body.hostId ?? '')
-  const payment = String(body.payment ?? 'cash') as 'cash' | 'link' | 'folio'
+  // `open` (AGL-3607) prices the basket and writes a PENDING sale with an
+  // empty tender ledger; the register then takes one or more payments
+  // against it through `commerce/pos-payment` until the balance is zero.
+  const payment = String(body.payment ?? 'cash') as 'cash' | 'link' | 'folio' | 'open'
   const cashReceivedCents = Math.round(Number(body.cashReceivedCents ?? 0))
   const customerEmail = String(body.customerEmail ?? '').trim().toLowerCase()
   const reservationId = String(body.reservationId ?? '')
@@ -711,6 +719,61 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       }
     }
 
+    if (payment === 'open') {
+      // AN OPEN SALE (AGL-3607): priced here, exactly like every other
+      // tender, and paid by the ledger. The fee on `totals` is the TAKE alone;
+      // each card payment adds Stripe's processing cost to its own payout
+      // fee, and `pos-sale.ts` restates `feeCents` from what actually paid
+      // when the balance reaches zero.
+      const orderRef = hostRef.collection('orders').doc()
+      const counterRef = hostRef.collection('counters').doc('orders')
+      const openTotals = CommerceModel.computeOrderTotals(lineItems, {
+        discountCents,
+        taxCents,
+        feeCents: takeFeeCents,
+      })
+      await firestore.runTransaction(async (transaction) => {
+        const counter = await transaction.get(counterRef)
+        const number = Number(counter.get('next') ?? 1)
+        transaction.set(counterRef, { next: number + 1 }, { merge: true })
+        transaction.set(orderRef, CommerceModel.withOrderListFields(orderRef.id, {
+          number,
+          status: 'pending',
+          channel: 'pos',
+          registerId,
+          cashierId: decoded.uid,
+          ...(discountPct > 0 ? { discountPct, discountBy: decoded.uid } : {}),
+          // The slot stays HELD until the sale completes, and is settled or
+          // handed back by `pos-sale.ts` (AGL-305): a sale voided half-paid
+          // must not count against the merchant's cap.
+          ...(appliedDiscountId ? { discountId: appliedDiscountId } : {}),
+          ...(discountHoldKey ? { discountHoldKey } : {}),
+          ...(locationId ? { locationId } : {}),
+          lineItems,
+          totals: openTotals,
+          taxMode: CommerceModel.storefrontTaxModeForDecision(taxDecision, taxCents),
+          posTakeFeeCents: takeFeeCents,
+          ...(offlineFeeOrgId ? { posFeeOrgId: offlineFeeOrgId } : {}),
+          payments: [],
+          customerEmail: customerEmail || null,
+          timeline: [{ atMs: Date.now(), event: 'pos-sale-opened' }],
+          createdAtMs: Date.now(),
+          createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        }))
+      })
+      // The hold now belongs to the sale document, not to this request.
+      discountSlot = null
+      discountHoldKey = ''
+      const openPayload = {
+        orderId: orderRef.id,
+        totals: openTotals,
+        dueCents: openTotals.totalCents,
+        ...(stockWarnings.length > 0 ? { stockWarnings } : {}),
+      }
+      await claim.record(200, openPayload)
+      return res.status(200).json(openPayload)
+    }
+
     if (payment === 'link') {
       // QR payment link on the merchant account, completed by webhook.
       const ownerProfile = await firestore
@@ -747,6 +810,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           status: 'pending',
           channel: 'pos',
           registerId,
+          cashierId: decoded.uid,
           // WHO COMPED IT (AGL-2161). `totals.discountCents` recorded that
           // a discount happened and nothing recorded who asked for it or on
           // what basis — `decoded.uid` was read once, for the role gate, and
@@ -1004,6 +1068,28 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         // it will arrive on the org's Aglyn invoice rather than as a short
         // payout — there is no payout, the merchant kept the cash.
         ...(feeCents > 0 ? { feeCollection } : {}),
+        // THE TENDER, RECORDED (AGL-3607): one settled payment, so this sale
+        // reads the same as a split one rather than by inference.
+        cashierId: decoded.uid,
+        payments: [
+          {
+            id: `pay_${payment}`,
+            method: payment === 'folio' ? 'folio' : 'cash',
+            amountCents: totals.totalCents,
+            status: 'succeeded',
+            atMs: paidEvent.atMs,
+            settledAtMs: paidEvent.atMs,
+            takeFeeCents,
+            feeCents: 0,
+            cashierId: decoded.uid,
+            ...(payment === 'cash'
+              ? {
+                  cashTenderedCents: cashReceivedCents,
+                  changeCents: cashReceivedCents - totals.totalCents,
+                }
+              : { reservationId }),
+          } satisfies CommerceModel.OrderPayment,
+        ],
         customerEmail: customerEmail || null,
         timeline: [paidEvent],
         ...(payment === 'folio' ? { reservationId } : {}),
@@ -1224,6 +1310,13 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         console.error('[pos-order] contact upsert failed', error)
       })
     }
+    // THE ONE "SALE COMPLETED" POINT (AGL-3607), reached here by a
+    // single-tender cash or room sale as by every other register sale.
+    await notifyPosSaleCompleted({
+      hostId,
+      orderId: orderRef.id,
+      order: { status: 'paid', channel: 'pos', registerId, lineItems, totals } as CommerceModel.HostOrder,
+    })
     const cashPayload = {
       orderId: orderRef.id,
       totals,
@@ -1232,6 +1325,10 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       ...(stockWarnings.length > 0 ? { stockWarnings } : {}),
     }
     await claim.record(200, cashPayload)
+    // The receipt, when the customer gave an email (AGL-3610).
+    await notifyOrderBuyer({ hostId, orderId: orderRef.id }, 'receipt', { email: contactEmail })
+    // A cash or folio sale is paid on the spot (AGL-3611); a card sale is raised by the webhook.
+    await raiseOrderEvent(ORDER_PAID_EVENT, { hostId, orderId: orderRef.id, key: 'paid' })
     return res.status(200).json(cashPayload)
   } catch (error) {
     console.error(error)
@@ -1248,23 +1345,6 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
   }
 }
 
-/**
- * The billing month a non-card POS fee accrues into (AGL-2111): `YYYY-MM` in
- * **UTC**, byte-identical to the key `apps/console/utils/billing-month.ts`
- * mints and to the twelve other month counters on the platform
- * (`orgs/{id}/apiUsage/*`, `orgs/{id}/assistUsage/*`, the per-host counters).
- *
- * It has to be UTC and it has to be this exact expression: `report-usage`
- * sweeps `previousMonth()` in UTC and reads the accrual document by that key,
- * so a local-time month would strand every sale rung in the offset window on a
- * document no sweep ever looks at — which is uncollected revenue that leaves
- * no trace. `offline-pos-fee-month-key.spec.ts` pins the two against each
- * other rather than trusting the comment.
- *
- * Local rather than imported because `apps/console` is an app: a plugin
- * library cannot import from it, and the repo's other eleven copies of this
- * one-liner are the established shape.
- */
-export function offlineFeeMonthKey(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 7)
-}
+// Moved beside the ledger that also accrues into it (AGL-3607); still
+// exported here, where its readers have always imported it from.
+export { offlineFeeMonthKey } from './pos-fee-month'

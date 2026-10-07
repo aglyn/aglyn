@@ -29,6 +29,8 @@
 
 let mockDocs = new Map<string, Record<string, unknown>>()
 let mockAutoId = 0
+/** The (hostId, createdAt) index still building (AGL-3596): a host query is refused. */
+let mockHostIndexBuilding = false
 const mockRunAiRequest = jest.fn()
 
 function applyData(
@@ -76,6 +78,9 @@ function mockMakeFirestore() {
         makeQuery(matches, filters, { field, direction }, limit),
       limit: (count: number) => makeQuery(matches, filters, order, count),
       get: async () => {
+        if (mockHostIndexBuilding && filters.some((filter) => filter.field === 'hostId')) {
+          throw Object.assign(new Error('9 FAILED_PRECONDITION: The query requires an index.'), { code: 9 })
+        }
         const millis = (value: unknown) =>
           value instanceof Date ? value.getTime() : Number(value)
         let docs = [...mockDocs.keys()].filter(matches).filter((path) => {
@@ -259,6 +264,7 @@ import {
   type AiJobStepRun,
 } from './ai-jobs'
 import { AI_SITE_PAGES, aiJobPlanCreditEstimate } from '../model/ai-site-job'
+import { AI_SITE_GUIDED_BUILD_FAILED_COPY } from '../model/ai-job-failure-copy'
 import type { AiBuildPlan } from '../model/ai-build-plan'
 import type { AiJob, AiJobDraftSlot, AiJobPlan } from '../model/ai-jobs.types'
 import { aiJobDraftId, aiPlanWithDraftIds } from './ai-job-draft-ids'
@@ -625,6 +631,85 @@ describe('a step run again after its draft was written finds that draft and writ
     expect((await runAiJobStep(firestore, ORG, asked.$id, { owner: 'route-1', now: NOW })).outcome).toBe('needs_review')
     expect((await getAiJob(firestore, ORG, asked.$id))?.plan?.status).toBe('proposed')
   })
+
+  it('fails a guided start whose build broke a rule after its re-ask, gives back everything, and tells the person so — never a plan review (AGL-3596)', async () => {
+    const screens = [
+      { title: 'Home', slug: '/', layout: 'new:Dog Grooming Layout', template: null, record: null, duplicateOf: null, nav: true, seoTitle: 'Home', seoDescription: 'Home.', sections: [{ name: 'hero', uses: [], items: 0 }] },
+    ]
+    registerAiJobPlanStep(async ({ job }) => ({
+      outputs: [],
+      usage: USAGE,
+      estCostUsd: 0.006,
+      model: 'claude-sonnet-5',
+      stopReason: 'tool_use',
+      plan: {
+        ...aiPlanWithDraftIds(job.kind, {
+          reuse: [],
+          create: [{ kind: 'layout', name: 'Dog Grooming Layout', why: 'The frame.', duplicateOf: null, fields: ['header', 'nav', 'footer'] }],
+          screens,
+        }),
+        status: 'proposed',
+        labels: {},
+        proposedAt: NOW as unknown as AiJobPlan['proposedAt'],
+        confirmedAt: null,
+        confirmedBy: null,
+      },
+      review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+    }))
+    const refused: AiJobStepRunner = async () => ({
+      outputs: [{ resource: 'seo', id: 'site:listing', hostId: 'host-1', label: 'Listing', proposal: {} }],
+      usage: USAGE,
+      estCostUsd: 0.006,
+      model: 'claude-sonnet-5',
+      stopReason: 'tool_use',
+      review: {
+        reason: 'doctrine',
+        message: 'Rule 16 (The smallest document that does the job): An element meant to hold content is empty.',
+        findings: [{ rule: 16, code: 'empty-container', message: 'empty', nodeIds: ['navRegion'] }],
+      },
+    })
+    const kept = aiJobStepRunnerFor('site')
+    const notices: Array<{ to: string; status: string; refundedCredits?: number; error?: string | null }> = []
+    registerAiJobTransitionListener(async ({ job, to }) => {
+      notices.push({ to, status: job.status, refundedCredits: job.refundedCredits, error: job.error })
+    })
+    try {
+      registerAiJobStep('site', refused)
+      const guided = await createAiJob(
+        firestore,
+        {
+          orgId: ORG,
+          hostId: 'host-1',
+          kind: 'site',
+          brief: 'A two-page site for a dog groomer.',
+          inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, welcomeEmail: false, autoConfirm: true },
+          createdBy: 'uid-1',
+        },
+        NOW,
+      )
+      expect((await runAiJobStep(firestore, ORG, guided.$id, { owner: 'route-1', now: NOW })).outcome).toBe('done')
+      const run = await runAiJobStep(firestore, ORG, guided.$id, { owner: 'route-1', now: NOW })
+      expect(run.outcome).toBe('failed')
+      const stored = await getAiJob(firestore, ORG, guided.$id)
+      expect(stored).toMatchObject({
+        status: 'failed',
+        error: AI_SITE_GUIDED_BUILD_FAILED_COPY,
+        creditsSpent: 12,
+        refundedCredits: 12,
+        refundReason: 'doctrine-refused',
+        review: null,
+      })
+      expect(stored?.steps.map((step) => step.status)).toEqual(['done', 'failed'])
+      // No "your plan is ready" for a plan confirmed on the person's behalf;
+      // the one notice is the failure, written after the give-back.
+      expect(notices).toEqual([
+        { to: 'failed', status: 'failed', refundedCredits: 12, error: AI_SITE_GUIDED_BUILD_FAILED_COPY },
+      ])
+    } finally {
+      registerAiJobTransitionListener(null)
+      if (kept) registerAiJobStep('site', kept)
+    }
+  })
 })
 
 describe('the lease', () => {
@@ -965,6 +1050,26 @@ describe('a step’s own failure, and what a runner is handed (AGL-2938)', () =>
       expect(Object.values(returns)).toEqual([
         expect.objectContaining({ credits: 6, source: 'job-refund', actorUid: 'system:job-refund', jobId: job.$id }),
       ])
+    })
+
+    it('a building step that still broke a rule after its re-ask: parked for the person, given back before they are told (AGL-3596)', async () => {
+      registerAiJobStep('insight', spent({
+        review: { reason: 'doctrine', message: 'Rule 16: An element meant to hold content is empty.', findings: [] },
+      }) as never)
+      const notices: Array<{ to: string; refundedCredits?: number }> = []
+      registerAiJobTransitionListener(async ({ job, to }) => {
+        notices.push({ to, refundedCredits: job.refundedCredits })
+      })
+      try {
+        const job = await freeJob()
+        expect((await runAiJobStep(firestore, 'org-free', job.$id, { owner: 'route-1', now: NOW })).outcome).toBe('needs_review')
+        expect(await getAiJob(firestore, 'org-free', job.$id)).toMatchObject({
+          status: 'needs_review', creditsSpent: 6, refundedCredits: 6, refundReason: 'doctrine-refused', refunds: 1,
+        })
+        expect(notices).toEqual([{ to: 'needs-review', refundedCredits: 6 }])
+      } finally {
+        registerAiJobTransitionListener(null)
+      }
     })
 
     it('a step that failed of its own accord, on a paid workspace too', async () => {
@@ -1330,6 +1435,20 @@ describe('listAiJobs and the summary', () => {
     })
     expect(summary).not.toHaveProperty('lease')
     expect(summary.steps[0].startedAt).toBe(NOW.toISOString())
+  })
+})
+
+describe('a site’s list while its index builds (AGL-3596)', () => {
+  afterEach(() => {
+    mockHostIndexBuilding = false
+  })
+
+  it('lists the site’s jobs from the org’s newest instead of failing', async () => {
+    const mine = await createAiJob(firestore, { orgId: ORG, hostId: 'host-1', kind: 'text', brief: 'mine', createdBy: 'u' }, NOW)
+    await createAiJob(firestore, { orgId: ORG, hostId: 'host-2', kind: 'text', brief: 'theirs', createdBy: 'u' }, NOW)
+    mockHostIndexBuilding = true
+    const listed = await listAiJobs(firestore, ORG, { hostId: 'host-1' })
+    expect(listed.map((job) => job.$id)).toEqual([mine.$id])
   })
 })
 

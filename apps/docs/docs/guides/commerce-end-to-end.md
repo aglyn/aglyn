@@ -158,23 +158,31 @@ template** does the same for `/collections/{slug}`.
 
 ## 4. What checkout does
 
-Both buy buttons and the cart's **Checkout** redirect to **Stripe-hosted
-Checkout**, then back to your site with a success/canceled marker:
+Both buy buttons and the cart's **Checkout** open the payment form **in
+place**, on your own site, below the button. After paying, the shopper lands
+back on the same page with a success marker.
 
 ### Paying without leaving your site
 
-There is a second checkout that keeps the shopper on your own pages: instead
-of sending them to `checkout.stripe.com`, the card form opens **in place**,
-below the Buy or Checkout button, styled with your site's theme. Leaving the
+The shopper never leaves your store for `checkout.stripe.com`. Leaving the
 store mid-purchase is one of the most common places a cart gets abandoned, so
-this exists to remove that step.
+the whole checkout happens on your pages:
 
-**Rolling out.** In-page checkout is **off by default** and is switched on per
-workspace by Aglyn staff (release flag *In-page checkout*). Until it is on for
-your workspace, checkout behaves exactly as described above — the redirect is
-what your shoppers see.
+- **Email** for the receipt. If the shopper already typed it in the cart, it
+  is shown rather than asked for again.
+- **Shipping address and shipping method**, only when the order ships. The
+  methods listed are the rates your shipping settings give for that
+  destination, and choosing one updates the total.
+- **Card or other payment method**, through Stripe's Payment Element.
+- **A live total**: subtotal, any discount, shipping and tax, recalculated as
+  the address and shipping method change, so the amount on screen is the
+  amount charged.
 
-Nothing else about a sale changes when it is on, and that is deliberate:
+The form uses your site's theme: its primary color, background and text
+colors, corner radius and font carry into the payment fields.
+
+Nothing about the sale itself differs from the Stripe-hosted page, and that is
+deliberate:
 
 - **The price, tax, shipping and any coupon are computed by the same code.**
   The in-page form is the same Stripe Checkout Session as the redirect, just
@@ -189,6 +197,11 @@ Nothing else about a sale changes when it is on, and that is deliberate:
   a bank verification step (3-D Secure) show that challenge in place.
 - **Abandoned in-page checkouts are still recoverable** and still feed the
   abandoned-cart emails, the same as an abandoned redirect.
+
+- **A payment that does not go through is said plainly.** If a bank-redirect
+  payment method fails or is abandoned, the shopper returns to your page with
+  a notice that nothing was charged and their items are still there. A
+  checkout left open long enough to expire offers to start again.
 
 A shopper who cancels the in-page form is returned to the store with their
 cart intact.

@@ -107,9 +107,9 @@
     },
     "release_native_checkout": {
       "defaultValue": {
-        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+        "value": "{\"enabled\":true,\"rolloutPercent\":0,\"note\":\"Released to every workspace 2026-10-06 (AGL-3606)\"}"
       },
-      "description": "Pay for a plan without leaving the console - Stripe embedded Checkout instead of a redirect. OFF by default until a real card has been through it.",
+      "description": "In-page storefront checkout: shoppers pay on the merchant's site (Payment Element) instead of checkout.stripe.com. Released to every workspace 2026-10-06 (AGL-3606). Off returns every storefront to the redirect.",
       "valueType": "JSON"
     },
     "release_edit_bar": {

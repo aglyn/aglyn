@@ -84,10 +84,16 @@ import { cancelOrderHandler } from './server/cancel-order'
 import { collectionMembershipHandler } from './server/collection-membership'
 import { draftOrderHandler } from './server/draft-order'
 import { fulfillOrderHandler } from './server/fulfill-order'
+import { orderReceiptSendHandler } from './server/order-receipt-send'
 import { giftCardsHandler } from './server/gift-cards'
 import { memberPostHandler } from './server/member-post'
 import { orderAnalyticsHandler } from './server/order-analytics'
+import { checkoutStatusHandler } from './server/checkout-status'
 import { posOrderHandler } from './server/pos-order'
+import { printersHandler } from './server/printers'
+import { posPaymentHandler } from './server/pos-payment'
+import { posReadersHandler } from './server/pos-readers'
+import { posDisplayHandler } from './server/pos-display'
 import {
   processAbandonedHandler,
   scanAbandonedCheckouts,
@@ -264,6 +270,8 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('commerce/notify-restock', notifyRestockHandler)
   // GA-safe order projection for the storefront `purchase` (AGL-1641).
   registerPluginApiRoute('commerce/order-analytics', orderAnalyticsHandler)
+  // What became of a session the shopper was returned from (AGL-3606).
+  registerPluginApiRoute('commerce/checkout-status', checkoutStatusHandler)
   registerPluginApiRoute('commerce/product', productHandler)
   registerPluginApiRoute('commerce/related', relatedHandler)
   registerPluginApiRoute('commerce/reservation-availability', reservationAvailabilityHandler)
@@ -333,6 +341,10 @@ export function registerCommerceConsoleApi(): void {
   // `PATCH /v1/sites/{id}/orders/{id}` records a shipment through the same
   // transaction (`server/api-v1/orders-and-products.ts`).
   registerPluginApiRoute('commerce/fulfill-order', fulfillOrderHandler)
+  // "Resend receipt" from the order dialog (AGL-3610): by email, or by text
+  // when the platform's SMS provider is configured. Rate-limited per member
+  // and per order.
+  registerPluginApiRoute('commerce/order-receipt-send', orderReceiptSendHandler)
   // Issue / void store credit (AGL-2226). Server-side because the host
   // catch-all in the Firestore rules would otherwise let a client write
   // its own `balanceCents`, which checkout applies as amount-off.
@@ -354,6 +366,36 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('membership/admin-remove', membershipAdminRemoveHandler)
   registerPluginApiRoute('commerce/member-post', memberPostHandler)
   registerPluginApiRoute('commerce/pos-order', posOrderHandler)
+  // A register's cloud receipt printers and the jobs a manager sends them
+  // (AGL-3619), and the two doors the printers themselves poll. The doors are
+  // MACHINE routes: a printer is no member and names no site cookie, so it
+  // authenticates with the per-printer secret in its URL and its own device id,
+  // and the route asks the plan before it hands over a job. Loaded with the
+  // first poll, so a console that has no printers never imports them.
+  registerPluginApiRoute('commerce/printers', printersHandler)
+  registerPluginApiRoute(
+    'commerce/cloudprnt/:hostId/:printerId/:secret',
+    {
+      web: async (request, context) =>
+        (await import('./server/printer-poll')).cloudPrntRoute(request, context),
+    },
+    { machine: true },
+  )
+  registerPluginApiRoute(
+    'commerce/epson-sdp/:hostId/:printerId/:secret',
+    {
+      web: async (request, context) =>
+        (await import('./server/printer-poll')).epsonServerDirectPrintRoute(request, context),
+    },
+    { machine: true },
+  )
+  // The register's tenders against an open sale, its Stripe Terminal card
+  // readers, and the paired customer display (AGL-3607, AGL-3608). The
+  // display's `pair`/`poll`/`respond` take a display token and no console
+  // session; every other action is gated like a sale.
+  registerPluginApiRoute('commerce/pos-payment', posPaymentHandler)
+  registerPluginApiRoute('commerce/pos-readers', posReadersHandler)
+  registerPluginApiRoute('commerce/pos-display', posDisplayHandler)
   registerPluginApiRoute('commerce/process-abandoned', processAbandonedHandler)
   registerPluginApiRoute('commerce/process-restock', processRestockHandler)
   registerPluginApiRoute('commerce/refund', refundHandler)

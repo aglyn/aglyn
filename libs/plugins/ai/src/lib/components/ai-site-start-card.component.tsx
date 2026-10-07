@@ -266,6 +266,15 @@ function SectionLabel({ children }: { children: ReactNode }) {
   )
 }
 
+/**
+ * The guided start, as the `hostFirstRun` zone draws it, or reopened on a
+ * failed start's own answers (AGL-3596): `initialAnswers` opens it on the
+ * questions, filled in, for the person to adjust and start a fresh job.
+ */
+export type AiSiteStartCardProps = ConsoleHostFirstRunZoneProps & {
+  initialAnswers?: AiSiteStartAnswers | null
+}
+
 export function AiSiteStartCard({
   hostId,
   orgId,
@@ -273,7 +282,8 @@ export function AiSiteStartCard({
   host,
   startBlank,
   leave,
-}: ConsoleHostFirstRunZoneProps) {
+  initialAnswers = null,
+}: AiSiteStartCardProps) {
   const { data: user } = useUser()
   const router = useRouter()
   // Held in a ref so a request reads WHO is signed in, never the identity of
@@ -282,8 +292,10 @@ export function AiSiteStartCard({
   userRef.current = user
   const uid = user?.uid ?? null
   const [verdict, setVerdict] = useState<Verdict>('checking')
-  const [step, setStep] = useState<Step>('choose')
-  const [answers, setAnswers] = useState<AiSiteStartAnswers>(AI_SITE_START_ANSWERS)
+  // Read once: a start reopened on its answers stays one while it is open.
+  const reopened = useRef(initialAnswers !== null)
+  const [step, setStep] = useState<Step>(initialAnswers ? 'describe' : 'choose')
+  const [answers, setAnswers] = useState<AiSiteStartAnswers>(initialAnswers ?? AI_SITE_START_ANSWERS)
   const [busy, setBusy] = useState(false)
   // The starter card's own busy state while `startBlank` runs (AGL-3594).
   const [startingStarter, setStartingStarter] = useState(false)
@@ -306,7 +318,12 @@ export function AiSiteStartCard({
         if (active) {
           if (payload?.freeTaste === true) {
             setFreeTaste(true)
-            setAnswers((current) => ({ ...current, pages: AI_SITE_FREE_PAGES.max, welcomeEmail: false }))
+            // A reopened start keeps the pages it asked for, within the band.
+            setAnswers((current) => ({
+              ...current,
+              pages: reopened.current ? Math.min(current.pages, AI_SITE_FREE_PAGES.max) : AI_SITE_FREE_PAGES.max,
+              welcomeEmail: false,
+            }))
           }
           setVerdict(response.status === 404 || response.status === 403 ? 'hidden' : 'ready')
         }

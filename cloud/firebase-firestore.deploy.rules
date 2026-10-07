@@ -3468,11 +3468,20 @@ allow create: if subcollection != 'siteMemberCredentials' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'recordPages']) &&
+'siteMemberCredentials', 'recordPages', 'printers',
+'printJobs']) &&
 
 
 
 !string(document).matches('.*/formSubmissions/[^/]+')));
+
+
+
+
+
+
+
+
 
 
 
@@ -3586,7 +3595,8 @@ allow update: if subcollection != 'siteMemberCredentials' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'recordPages'])));
+'siteMemberCredentials', 'recordPages', 'printers',
+'printJobs'])));
 
 
 
@@ -3637,7 +3647,7 @@ allow delete: if subcollection != 'siteMemberCredentials' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-'recordPages'])));
+'recordPages', 'printers', 'printJobs'])));
 }
 
 

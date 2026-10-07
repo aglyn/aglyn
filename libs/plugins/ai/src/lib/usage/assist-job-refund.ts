@@ -28,7 +28,8 @@ import type { FreeAssistAccount } from './assist-free-taste'
  * A job that failed on our side gives back what it spent (AGL-3594).
  *
  * "On our side" is the machine's to say, and it says it for: a plan the plan
- * rules still refused after their re-ask, a provider or model error, a step
+ * rules still refused after their re-ask, a building step whose answer still
+ * broke a building rule after its re-ask (AGL-3596), a provider or model error, a step
  * the machine gave up on after its attempts (a timeout or a lease that kept
  * expiring), a step that failed of its own accord, and a step no runner could
  * take. Never for a person canceling — they pay for what ran until they did —
@@ -67,6 +68,7 @@ export const AI_JOB_REFUND_ACTOR = `system:${AI_JOB_REFUND_SOURCE}`
 /** Why a job's credits went back, as the job records it. */
 export type AiJobRefundReason =
   | 'plan-refused'
+  | 'doctrine-refused'
   | 'provider'
   | 'timeout'
   | 'step-failure'
