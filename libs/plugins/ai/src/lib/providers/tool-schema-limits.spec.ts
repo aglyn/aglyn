@@ -47,6 +47,7 @@ import { AI_EVAL_RUBRIC_TOOL } from '../runtime/ai-eval-live'
 import { AI_OUTPUT_KINDS } from '../runtime/ai-palette'
 import { assistSectionTool } from '../server/ai-assist-prompts'
 import { aiComponentSelectionTool } from '../server/ai-generate-component'
+import { aiMediaSvgTool } from '../server/ai-media-svg'
 import { assistEditTool } from '../server/assist-edit'
 import { aiComponentTool } from '../tools/ai-component-tool'
 import { AI_CRM_EMAIL_TOOL, AI_CRM_MAPPING_TOOL, aiCrmRecordTool } from '../tools/ai-crm-tool'
@@ -160,6 +161,7 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
     mapping: () => [AI_CRM_MAPPING_TOOL],
   },
   'server/ai-generate-component.ts': { selection: () => [aiComponentSelectionTool()] },
+  'server/ai-media-svg.ts': { illustration: () => [aiMediaSvgTool()] },
   'jobs/ai-job-theme-step.ts': { theme: () => [aiThemeTool()] },
   'jobs/ai-job-seo-step.ts': {
     site: () => [aiSeoSiteTool()],
