@@ -45,7 +45,7 @@ struct RedirectsListScreen: View {
   @ViewBuilder
   private func list(selectable: Bool) -> some View {
     if !model.ready {
-      List { SkeletonRows(count: 4) }
+      List { SkeletonRows(count: 4) }.aglynListBackground()
     } else if model.failed {
       AglynEmptyState("Could not load this site's redirects", systemImage: "exclamationmark.triangle")
     } else if model.rows.isEmpty {
@@ -64,6 +64,7 @@ struct RedirectsListScreen: View {
         if selection == nil || !rows.contains(where: { $0.id == selection }) { selection = rows.first?.id }
       }
       .sensoryFeedback(.selection, trigger: selection)
+      .aglynListBackground()
       .accessibilityIdentifier("redirects-list")
     } else {
       List(model.rows) { row in
@@ -73,7 +74,9 @@ struct RedirectsListScreen: View {
           RedirectListRow(row: row)
         }
         .accessibilityIdentifier("redirect-\(row.id)")
+        .aglynListRow()
       }
+      .aglynListBackground()
       .accessibilityIdentifier("redirects-list")
     }
   }
@@ -113,6 +116,7 @@ struct RedirectDetail: View {
         }
       }
       .formStyle(.grouped)
+      .aglynListBackground()
       .navigationTitle(titled ? row.source : "Redirects")
     } else {
       AglynEmptyState("Pick a redirect to see it here", systemImage: RedirectsSymbols.rule)

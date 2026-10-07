@@ -19,8 +19,8 @@ AGLYN_GOOGLE_WEB_CLIENT_ID =
 AGLYN_BRAND_NAME = Aglyn
 
 // Debug builds only: with `-AglynAutoSignIn YES` on the launch arguments,
-// an emulator build signs in as this seeded test member (apps/mobile/scripts/
-// seed-emulator.mjs prints it). Set in Local.xcconfig; never a real account.
+// an emulator build signs in as this seeded test member (tools/scripts/
+// seed-native-emulator.mjs prints it). Set in Local.xcconfig; never a real account.
 AGLYN_DEBUG_EMAIL =
 AGLYN_DEBUG_PASSWORD =
 

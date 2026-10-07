@@ -78,5 +78,7 @@ extension AglynColor {
   public static let page = adaptive(light: AglynTokens.light.background.default, dark: AglynTokens.dark.background.default)
   /// A card or sheet surface: the console's `background.paper`.
   public static let paper = adaptive(light: AglynTokens.light.background.paper, dark: AglynTokens.dark.background.paper)
+  /// Text on a primary fill (a prominent button), the console's `primary.contrastText`.
+  public static let primaryContrast = intent({ $0.primary }, \.contrastText)
   public static let divider = adaptive(light: AglynTokens.light.divider, dark: AglynTokens.dark.divider)
 }

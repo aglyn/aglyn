@@ -79,28 +79,19 @@ func openNotification(_ row: FeedNotification, model: AppModel, navigation: Shel
 struct NotificationRow: View {
   let row: FeedNotification
 
-  var body: some View {
-    HStack(alignment: .top, spacing: 12) {
-      Circle()
-        .fill(row.read ? Color.clear : FeedNotification.tone(row.level).color)
-        .strokeBorder(FeedNotification.tone(row.level).color, lineWidth: row.read ? 1 : 0)
-        .frame(width: 10, height: 10)
-        .padding(.top, 6)
-        .accessibilityHidden(true)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(row.title).font(row.read ? AglynFont.body : AglynFont.body.weight(.semibold))
-        if let body = row.body, !body.isEmpty {
-          Text(body).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(3)
-        }
-        if let date = row.createdAt {
-          Text(date, format: .relative(presentation: .named)).font(AglynFont.caption).foregroundStyle(.tertiary)
-        }
-      }
-      Spacer(minLength: 0)
+  private var icon: String {
+    switch row.level {
+    case "critical", "error": "xmark.octagon"
+    case "warning": "exclamationmark.triangle"
+    case "success": "checkmark.circle"
+    default: "bell"
     }
-    .contentShape(Rectangle())
-    .accessibilityElement(children: .combine)
-    .accessibilityHint(row.read ? "" : "Unread")
+  }
+
+  var body: some View {
+    ActivityRow(
+      row.title, subtitle: row.body, time: row.createdAt.map { relativeTime($0) }, systemImage: icon,
+      tone: FeedNotification.tone(row.level), unread: !row.read)
   }
 }
 
@@ -122,10 +113,12 @@ struct NotificationsView: View {
           List(rows) { row in
             Button { openNotification(row, model: model, navigation: navigation) } label: { NotificationRow(row: row) }
               .buttonStyle(.plain)
+              .aglynListRow()
           }
+          .aglynListBackground()
         }
       } else {
-        List { SkeletonRows(count: 5) }
+        List { SkeletonRows(count: 5) }.aglynListBackground()
       }
     }
     .navigationTitle("Notifications")

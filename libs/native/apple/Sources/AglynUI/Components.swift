@@ -41,6 +41,7 @@ public struct StatusChip: View {
 
 /// A list row: an SF Symbol, a title, an optional subtitle, and a trailing accessory.
 public struct AglynRow<Trailing: View>: View {
+  @Environment(\.dynamicTypeSize) private var typeSize
   let title: String
   let subtitle: String?
   let systemImage: String?
@@ -60,16 +61,17 @@ public struct AglynRow<Trailing: View>: View {
 
   public var body: some View {
     HStack(spacing: 12) {
-      if let systemImage {
+      if let systemImage, !typeSize.isAccessibilitySize {
         Image(systemName: systemImage)
           .foregroundStyle(tint ?? AglynColor.tint)
           .frame(width: 28)
           .accessibilityHidden(true)
       }
       VStack(alignment: .leading, spacing: 2) {
-        Text(title).font(AglynFont.body).lineLimit(2)
+        Text(title).font(AglynFont.body).lineLimit(typeSize.isAccessibilitySize ? nil : 2)
         if let subtitle, !subtitle.isEmpty {
-          Text(subtitle).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(2)
+          Text(subtitle).font(AglynFont.subheadline).foregroundStyle(.secondary)
+            .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
         }
       }
       Spacer(minLength: 8)
@@ -159,29 +161,6 @@ public struct AglynCard<Content: View, Accessory: View>: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(16)
-    .background(AglynColor.paper, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(AglynColor.divider))
-  }
-}
-
-/// A grid tile for a quick action.
-public struct QuickActionTile: View {
-  let title: String
-  let systemImage: String
-
-  public init(_ title: String, systemImage: String) {
-    self.title = title
-    self.systemImage = systemImage
-  }
-
-  public var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Image(systemName: systemImage).font(.title3).foregroundStyle(AglynColor.tint)
-      Text(title).font(AglynFont.strongSubheadline).foregroundStyle(.primary).lineLimit(2)
-    }
-    .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
-    .padding(12)
-    .background(AglynColor.paper, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(AglynColor.divider))
+    .aglynCardSurface()
   }
 }

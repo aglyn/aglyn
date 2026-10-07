@@ -55,6 +55,7 @@ struct SwitcherView: View {
             }
           }
           .sensoryFeedback(.selection, trigger: workspace.effective)
+          .aglynListBackground()
         } else {
           ProgressView()
         }

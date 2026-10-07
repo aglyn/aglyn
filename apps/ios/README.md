@@ -28,9 +28,9 @@ The architecture is `docs/mobile/native-architecture.md`. In short:
 Xcode 16 or later (the project uses synchronized folders), iOS 17+ and macOS 14+.
 
 ```bash
-# A local stack: the emulators on a demo- project, seeded with one member, one site and three redirects
+# A local stack: the emulators on a demo- project, seeded with a member, a workspace, a site and its content
 (cd cloud && firebase emulators:start --only auth,firestore --project demo-aglyn)
-node apps/mobile/scripts/seed-emulator.mjs     # prints the seeded sign-in
+node tools/scripts/seed-native-emulator.mjs   # prints the seeded sign-in
 
 open apps/ios/Aglyn.xcodeproj                  # run the Aglyn or AglynPOS scheme on a simulator or My Mac
 ```
@@ -47,7 +47,7 @@ AGLYN_AUTH_EMULATOR_HOST = 127.0.0.1:9399
 AGLYN_FIRESTORE_EMULATOR_HOST = 127.0.0.1:8389
 // Debug builds: `-AglynAutoSignIn YES` signs in as the seeded member
 AGLYN_DEBUG_EMAIL = mobile-owner@example.test
-AGLYN_DEBUG_PASSWORD = <the password seed-emulator.mjs printed>
+AGLYN_DEBUG_PASSWORD = <the password seed-native-emulator.mjs printed>
 ```
 
 Debug launch arguments, for screenshots and UI tests:

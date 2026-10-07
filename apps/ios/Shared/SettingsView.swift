@@ -37,6 +37,7 @@ struct SettingsView: View {
       }
     }
     .formStyle(.grouped)
+    .aglynListBackground()
     .navigationTitle("Settings")
     .confirmationDialog("Sign out of \(model.brandName)?", isPresented: $confirmSignOut) {
       Button("Sign out", role: .destructive) { Task { await model.signOut() } }
