@@ -857,6 +857,33 @@ in both developer apps. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
 
 ---
 
+## Mobile apps and push {#mobile}
+
+The iOS and Android apps (`apps/mobile`) are built with Expo, not served by
+your containers. Their `EXPO_PUBLIC_*` variables are **build** variables:
+Expo inlines each one into the app bundle when it is built, so changing one
+means building and shipping the app again. None of them is a secret.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `EXPO_PUBLIC_CONSOLE_URL` | Required | Build, app | Your console origin. Every API call and console page the app opens is on it, and it is the app's universal-link host. Default `https://app.aglyn.com`. |
+| `EXPO_PUBLIC_BRAND_NAME` | Optional | Build, app | The app's name and the product name its copy says. Default `Aglyn`. |
+| `EXPO_PUBLIC_FIREBASE_API_KEY` | Required | Build, app | The Firebase app config of the iOS or Android app you registered in your project. |
+| `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN` | Required | Build, app | As above. |
+| `EXPO_PUBLIC_FIREBASE_PROJECT_ID` | Required | Build, app | As above. |
+| `EXPO_PUBLIC_FIREBASE_APP_ID` | Required | Build, app | As above. |
+| `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` | Optional | Build, app | As above. |
+| `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Optional | Build, app | As above. |
+| `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | Optional | Build, app | Google sign-in's iOS OAuth client id. The Google button is hidden until both client ids are set. |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Optional | Build, app | Google sign-in's web OAuth client id. |
+| `EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` | Development | Build, app | `host:port` of a local Auth emulator. Never set in a store build. |
+| `EXPO_PUBLIC_FIRESTORE_EMULATOR_HOST` | Development | Build, app | `host:port` of a local Firestore emulator. Never set in a store build. |
+| `EAS_PROJECT_ID` | Feature | Build, app | Your EAS project id. Without it the app registers no push token, so no device receives a push. |
+| `MOBILE_PUSH_ENABLED` | Optional | Runtime, console and tenant | `1` sends notifications to registered devices through the Expo Push API. Off otherwise. A notification's title and body then pass through Expo, Apple and Google, so name them as subprocessors before you turn it on. |
+| `EXPO_ACCESS_TOKEN` | Optional | Runtime, console and tenant | Sent as the bearer token when Expo's enhanced push security is on for your project. |
+
+---
+
 ## Analytics and advertising {#analytics}
 
 :::warning The advertising ids are Aglyn's own marketing funnel. Leave them unset.

@@ -126,6 +126,8 @@ const INDIRECT_READS: Record<string, string> = {
   SHIPPO_WEBHOOK_TOKEN: 'libs/plugins/shipping/src/lib/server/config.ts',
   SHIPPO_WEBHOOK_HMAC_SECRET: 'libs/plugins/shipping/src/lib/server/config.ts',
   EASYPOST_WEBHOOK_SECRET: 'libs/plugins/shipping/src/lib/server/config.ts',
+  MOBILE_PUSH_ENABLED: 'libs/tenant/data/admin/src/lib/server/push-delivery.ts',
+  EXPO_ACCESS_TOKEN: 'libs/tenant/data/admin/src/lib/server/push-delivery.ts',
 }
 
 /**

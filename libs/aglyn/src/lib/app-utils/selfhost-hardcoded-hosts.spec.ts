@@ -191,6 +191,18 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "The same shape as `auth-action-url.ts` above, and modelled on it by name: `DEFAULT_CONSOLE_ORIGIN` is the `??` default of NEXT_PUBLIC_CONSOLE_URL and nothing else reads the literal, so an operator who sets that variable never evaluates it. It matters more here than for an auth email, because a mailbox's OAuth callback must be an address the operator REGISTERED with the provider — a self-hoster who left the variable unset would send Google to a console that is not theirs, and Google would refuse it as an unregistered redirect_uri rather than leak anything. That is the right failure: loud, at connect time, on a deployment that has not been configured. AGL-3228 added the fallback; this row is the decision it implies.",
   },
   {
+    file: 'apps/mobile/app.config.ts',
+    count: 3,
+    reason:
+      "AGL-3620. Two are the store identity `com.aglyn.app` (iOS bundle identifier and Android package), which a rebuilt app replaces with its own store listing and which no request is ever sent to. The third is the `??` default of EXPO_PUBLIC_CONSOLE_URL, the same variable and default `readMobileConfig` reads at runtime; a self-host build sets it and the universal-link host follows.",
+  },
+  {
+    file: 'libs/mobile/core/src/lib/config.ts',
+    count: 1,
+    reason:
+      'AGL-3620. `DEFAULT_CONSOLE_ORIGIN` is the fallback of EXPO_PUBLIC_CONSOLE_URL in `readMobileConfig`, the mobile twin of the web readers of NEXT_PUBLIC_CONSOLE_URL above; it applies only to a build that never set the variable.',
+  },
+  {
     file: 'libs/plugins/accounting/src/lib/server/oauth-redirect.ts',
     count: 1,
     reason:
