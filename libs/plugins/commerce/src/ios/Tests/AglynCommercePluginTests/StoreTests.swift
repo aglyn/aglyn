@@ -55,6 +55,14 @@ final class StoreOrdersTests: XCTestCase {
     XCTAssertEqual(OrderAction.available(for: .refunded), [])
   }
 
+  func testARefundIsOfferedOnlyWhileSomethingIsLeftToRefund() {
+    XCTAssertTrue(orderCanRefund(HostOrder(status: .paid, totals: OrderTotals(totalCents: 2500))))
+    XCTAssertFalse(orderCanRefund(HostOrder(status: .pending, totals: OrderTotals(totalCents: 2500))))
+    XCTAssertFalse(orderCanRefund(HostOrder(refundedCents: 2500, status: .paid, totals: OrderTotals(totalCents: 2500))))
+    XCTAssertEqual(
+      orderRefundableCents(HostOrder(refundedCents: 500, status: .fulfilled, totals: OrderTotals(totalCents: 2500))), 2000)
+  }
+
   func testSalesCountPaidOrdersByLocalDayLessRefunds() {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(identifier: "America/Chicago")!

@@ -251,6 +251,37 @@ enum OrderAction: String, CaseIterable, Identifiable {
   }
 }
 
+/// Refunds what is left of a paid order through the console's refund route.
+/// The attempt key is kept until the route answers definitively (below 500),
+/// so pressing Refund again after a lost answer dedupes instead of sending a
+/// second refund, as the console's order dialog does.
+func refundOrder(api: ConsoleAPIClient, hostID: String, orderID: String, attemptKey: String) async throws {
+  _ = try await api.request(
+    "/api/commerce/refund", method: .post,
+    body: .object(["hostId": .string(hostID), "orderId": .string(orderID)]), idempotencyKey: attemptKey)
+}
+
+/// Whether the order has anything left to refund by the transition rules.
+func orderCanRefund(_ order: HostOrder) -> Bool {
+  let status = order.status ?? .pending
+  return canTransitionOrder(from: status, to: .refunded) && orderRefundState(order) != .full
+}
+
+/// The paid amount still refundable, for the confirmation's words.
+func orderRefundableCents(_ order: HostOrder) -> Int {
+  max(0, Int((order.totals?.totalCents ?? order.amountCents ?? 0).rounded()) - Int((order.refundedCents ?? 0).rounded()))
+}
+
+/// Sends the order's receipt again by email, through the console's route.
+func resendOrderReceipt(api: ConsoleAPIClient, hostID: String, orderID: String, to email: String) async throws {
+  _ = try await api.request(
+    "/api/commerce/order-receipt-send", method: .post,
+    body: .object([
+      "hostId": .string(hostID), "orderId": .string(orderID), "channel": "email",
+      "to": .string(email.trimmingCharacters(in: .whitespacesAndNewlines)),
+    ]))
+}
+
 /// Runs one action through the console's own route. The routes write once,
 /// so a retry after a lost answer is safe.
 func performOrderAction(_ action: OrderAction, api: ConsoleAPIClient, hostID: String, orderID: String) async throws {
