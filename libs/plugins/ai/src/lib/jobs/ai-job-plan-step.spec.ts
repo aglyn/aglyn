@@ -298,8 +298,8 @@ describe('the plan step', () => {
       findings: [{ rule: 2, code: 'plan-screen-without-layout', message: expect.any(String), paths: ['screens[0].layout'] }],
     })
     expect(outcome.review?.message).not.toMatch(/Rule \d/)
-    // A paid workspace's refused plan is metered as it always was.
-    expect(outcome.uncredited).toBeUndefined()
+    // Our checks refused it: the machine gives its credits back (AGL-3594).
+    expect(outcome.uncredited).toBe(true)
   })
 
   it('reports a declined brief as refused, with no plan and nothing to review', async () => {

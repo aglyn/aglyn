@@ -537,7 +537,7 @@ describe('a plan our checks still refuse', () => {
     )
   })
 
-  it('on the Free taste: stops with the sentence, keeps the rules for staff, draws no credits, and disables Try again when the allowance cannot cover a plan', async () => {
+  it('on the Free taste: stops with the sentence, keeps the rules for staff, asks for its credits back, and disables Try again when the allowance cannot cover a plan', async () => {
     const edited: AiBuildPlan = { ...TWO_PAGES, screens: [HOME, { ...BOOK, slug: '/' }] }
     mockRunAiRequest.mockReset()
     mockRunAiRequest.mockResolvedValueOnce(toolAnswer(edited)).mockResolvedValueOnce(toolAnswer(edited))
@@ -549,7 +549,8 @@ describe('a plan our checks still refuse', () => {
     expect(outcome.uncredited).toBe(true)
     expect(outcome.review).toMatchObject({
       reason: 'doctrine',
-      message: 'Something went wrong planning your site, and it did not use any of your AI credits. Try again.',
+      // Whether the credits came back is the job's to say (refundedCredits), not this sentence.
+      message: 'Something went wrong planning your site. Try again.',
       detail: expect.stringContaining('Rule 10'),
       retryRefusal: `You have 10 AI credits left this month, and a plan needs up to ${AI_FREE_SITE_WORST_CASE_CREDITS.plan}. Your credits refresh next month, or upgrade for more.`,
     })

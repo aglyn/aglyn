@@ -430,6 +430,16 @@ export interface AiJob {
    */
   creditsReserved: number
   creditsSpent: number
+  /**
+   * Credits the job gave back because it failed on our side (AGL-3594),
+   * summed over its give-backs; absent when it gave none. `creditsSpent`
+   * stays what ran, so what the job cost is the one less the other.
+   */
+  refundedCredits?: number
+  /** Why the latest give-back was made (`AiJobRefundReason`). */
+  refundReason?: string
+  /** How many give-backs the job has had: the next one's key. */
+  refunds?: number
   createdBy: string
   createdAt: ITimestamp
   updatedAt: ITimestamp
@@ -505,6 +515,8 @@ export interface AiJobSummary {
   outputs: AiJobOutput[]
   creditsReserved: number
   creditsSpent: number
+  /** Credits given back for a failure on our side (AGL-3594); 0 when none. */
+  refundedCredits?: number
   createdBy: string
   createdAt: string
   updatedAt: string

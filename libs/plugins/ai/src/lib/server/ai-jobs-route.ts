@@ -32,6 +32,7 @@ import {
 import { aiGateLadder } from '../runtime/ai-gate'
 import { aiJobAdmissionRefusal, aiJobSiteRefusal } from '../jobs/ai-job-admission'
 import { AI_JOB_BRIEF_MAX_CHARS } from '../jobs/ai-job-text-step'
+import { aiJobAdmittedInputs } from '../jobs/ai-job-auto-confirm'
 import {
   AI_JOB_INLINE_BUDGET_MS,
   aiJobNextStepMinimumMs,
@@ -221,6 +222,13 @@ export async function POST(request: Request): Promise<Response> {
   const now = new Date()
   let created: Awaited<ReturnType<typeof createAiJob>>
   try {
+    // The guided start's own plan confirmation (AGL-3594), kept only for a
+    // site job on a site that has published nothing of the owner's yet.
+    const inputs = await aiJobAdmittedInputs(gate.firestore, {
+      kind: parsed.kind,
+      hostId: parsed.hostId,
+      inputs: parsed.inputs,
+    })
     created = await createAiJob(
       gate.firestore,
       {
@@ -228,7 +236,7 @@ export async function POST(request: Request): Promise<Response> {
         hostId: parsed.hostId,
         kind: parsed.kind,
         brief: parsed.brief,
-        inputs: parsed.inputs,
+        inputs,
         model: parsed.model,
         createdBy: gate.uid,
         createdByEmail: gate.decoded.email ?? null,

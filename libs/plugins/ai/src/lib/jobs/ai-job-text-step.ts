@@ -116,9 +116,9 @@ export interface AiJobStepOutcome {
   review?: AiJobReview
   /**
    * The answer was refused by the platform's own checks, not the model's
-   * (AGL-3594): on the Free taste the machine meters the step as any other
-   * and then gives its credits back to the workspace and the owner's
-   * allowance (`refundRefusedFreePlan`), a bounded number of times a day.
+   * (AGL-3594): the machine meters the step as any other and then gives the
+   * job's credits back to the meters it was charged to (`refundJobCredits`),
+   * a bounded number of times a day.
    */
   uncredited?: boolean
 }

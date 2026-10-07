@@ -571,6 +571,60 @@ describe('a step run again after its draft was written finds that draft and writ
     // The plan, kept, confirmed and read again on every pass, still names the draft by the id it was kept with.
     expect(done?.plan?.create[0].id).toBe(recorded)
   })
+
+  it('confirms a guided site start’s own plan and queues the build; any other job still waits for a person (AGL-3594)', async () => {
+    const screens = Array.from({ length: AI_SITE_PAGES.min }, (_, index) => ({
+      title: `Page ${index}`,
+      slug: index === 0 ? '/' : `page-${index}`,
+      layout: null,
+      template: null,
+      record: null,
+      duplicateOf: null,
+      nav: true,
+      seoTitle: `Page ${index}`,
+      seoDescription: `Page ${index} of the site.`,
+      sections: [{ name: 'hero', uses: [], items: 0 }],
+    }))
+    registerAiJobPlanStep(async ({ job }) => ({
+      outputs: [],
+      usage: USAGE,
+      estCostUsd: 0.006,
+      model: 'claude-sonnet-5',
+      stopReason: 'tool_use',
+      plan: {
+        ...aiPlanWithDraftIds(job.kind, { reuse: [], create: [], screens }),
+        status: 'proposed',
+        labels: {},
+        proposedAt: NOW as unknown as AiJobPlan['proposedAt'],
+        confirmedAt: null,
+        confirmedBy: null,
+      },
+      review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+    }))
+    const create = (inputs: Record<string, unknown>) =>
+      createAiJob(
+        firestore,
+        {
+          orgId: ORG,
+          hostId: 'host-1',
+          kind: 'site',
+          brief: 'A four-page site for a roofer.',
+          inputs: { businessType: 'roofer', pages: AI_SITE_PAGES.min, welcomeEmail: false, ...inputs },
+          createdBy: 'uid-1',
+        },
+        NOW,
+      )
+    const guided = await create({ autoConfirm: true })
+    expect((await runAiJobStep(firestore, ORG, guided.$id, { owner: 'route-1', now: NOW })).outcome).toBe('done')
+    const confirmed = await getAiJob(firestore, ORG, guided.$id)
+    expect(confirmed).toMatchObject({ status: 'queued', review: null })
+    expect(confirmed?.plan).toMatchObject({ status: 'confirmed', confirmedBy: 'uid-1' })
+    expect(confirmed?.steps.map((step) => step.status)).toEqual(['done', 'pending'])
+
+    const asked = await create({})
+    expect((await runAiJobStep(firestore, ORG, asked.$id, { owner: 'route-1', now: NOW })).outcome).toBe('needs_review')
+    expect((await getAiJob(firestore, ORG, asked.$id))?.plan?.status).toBe('proposed')
+  })
 })
 
 describe('the lease', () => {
@@ -876,58 +930,127 @@ describe('a step’s own failure, and what a runner is handed (AGL-2938)', () =>
       NOW,
     )
 
-  it('meters a Free step our checks refused, then gives its credits back to the workspace and the account, a bounded number a day (AGL-3594)', async () => {
-    registerAiJobStep('insight', async () => ({
+  describe('a job that failed on our side gives back what it spent (AGL-3594)', () => {
+    const month = () => assistUsageMonth(NOW)
+    const freeJob = () =>
+      createAiJob(
+        firestore,
+        { orgId: 'org-free', hostId: 'host-1', kind: 'insight', brief: 'Anything at all.', createdBy: 'uid-1' },
+        NOW,
+      )
+    const spent = (patch: Record<string, unknown> = {}) => async () => ({
       outputs: [],
       usage: USAGE,
       estCostUsd: 0.006,
       model: 'claude-sonnet-5',
       stopReason: 'tool_use',
-      uncredited: true,
-      review: { reason: 'doctrine', message: 'Something went wrong planning this. Try again.', findings: [] },
-    }))
-    mockDocs.set('orgs/org-free', { plan: 'free', ownerUid: 'owner-1' })
-    const free = await createAiJob(
-      firestore,
-      { orgId: 'org-free', hostId: 'host-1', kind: 'insight', brief: 'Anything at all.', createdBy: 'uid-1' },
-      NOW,
-    )
-    const run = await runAiJobStep(firestore, 'org-free', free.$id, { owner: 'route-1', now: NOW })
-    expect(run.outcome).toBe('needs_review')
-    const stored = await getAiJob(firestore, 'org-free', free.$id)
-    expect(stored).toMatchObject({ status: 'needs_review', creditsSpent: 0 })
-    expect(stored?.steps[0]).toMatchObject({ creditsSpent: 0 })
-    // The bill keeps what it cost; the give-back nets it out of both meters.
-    const month = mockDocs.get(`orgs/org-free/assistUsage/${assistUsageMonth(NOW)}`) ?? {}
-    expect(month).toMatchObject({ estCostUsd: 0.006, returnedUsd: 0.006 })
-    const account = mockDocs.get(`users/owner-1/aiUsage/${assistUsageMonth(NOW)}`) ?? {}
-    expect(account).toMatchObject({ estCostUsd: 0.006, returnedUsd: 0.006 })
-    const [key] = Object.keys(account['creditReturns'] as object)
-    expect((account['creditReturns'] as Record<string, unknown>)[key]).toMatchObject({
-      credits: 6,
-      source: 'plan-refund',
-      actorUid: 'system:plan-refund',
-      jobId: free.$id,
+      ...patch,
+    })
+    beforeEach(() => mockDocs.set('orgs/org-free', { plan: 'free', ownerUid: 'owner-1' }))
+
+    it('a plan our checks refused: metered, then given back to the workspace and the account, and the job records it', async () => {
+      registerAiJobStep('insight', spent({
+        uncredited: true,
+        review: { reason: 'doctrine', message: 'Something went wrong planning this. Try again.', findings: [] },
+      }) as never)
+      const job = await freeJob()
+      expect((await runAiJobStep(firestore, 'org-free', job.$id, { owner: 'route-1', now: NOW })).outcome).toBe('needs_review')
+      const stored = await getAiJob(firestore, 'org-free', job.$id)
+      expect(stored).toMatchObject({ status: 'needs_review', creditsSpent: 6, refundedCredits: 6, refundReason: 'plan-refused', refunds: 1 })
+      // The bill keeps what it cost; the give-back nets it out of both meters.
+      expect(mockDocs.get(`orgs/org-free/assistUsage/${month()}`)).toMatchObject({ estCostUsd: 0.006, returnedUsd: 0.006 })
+      const account = mockDocs.get(`users/owner-1/aiUsage/${month()}`) ?? {}
+      expect(account).toMatchObject({ estCostUsd: 0.006, returnedUsd: 0.006 })
+      const returns = account['creditReturns'] as Record<string, Record<string, unknown>>
+      expect(Object.values(returns)).toEqual([
+        expect.objectContaining({ credits: 6, source: 'job-refund', actorUid: 'system:job-refund', jobId: job.$id }),
+      ])
     })
 
-    // Past the day's bound, a refused plan is metered like any other step.
-    const day = assistUsageDay(NOW).replace(/-/g, '')
-    mockDocs.set(`users/owner-1/aiUsage/${assistUsageMonth(NOW)}`, {
-      ...account,
-      creditReturns: Object.fromEntries(['a', 'b', 'c'].map((id) => [`plan-refund-${day}-${id}-0-1`, { credits: 1 }])),
+    it('a step that failed of its own accord, on a paid workspace too', async () => {
+      registerAiJobStep('insight', spent({ failure: 'Part of this site could not be built.' }) as never)
+      const job = await newInsightJob()
+      expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })).outcome).toBe('failed')
+      expect(await getAiJob(firestore, ORG, job.$id)).toMatchObject({
+        status: 'failed', creditsSpent: 6, refundedCredits: 6, refundReason: 'step-failure',
+      })
+      expect(mockDocs.get(`orgs/${ORG}/assistUsage/${month()}`)).toMatchObject({ returnedUsd: 0.006 })
     })
-    const again = await createAiJob(
-      firestore,
-      { orgId: 'org-free', hostId: 'host-1', kind: 'insight', brief: 'Anything at all.', createdBy: 'uid-1' },
-      NOW,
-    )
-    await runAiJobStep(firestore, 'org-free', again.$id, { owner: 'route-1', now: NOW })
-    expect(await getAiJob(firestore, 'org-free', again.$id)).toMatchObject({ creditsSpent: 6 })
 
-    // The same outcome on a paid workspace is billed as it always was.
-    const paid = await newInsightJob()
-    await runAiJobStep(firestore, ORG, paid.$id, { owner: 'route-1', now: NOW })
-    expect(await getAiJob(firestore, ORG, paid.$id)).toMatchObject({ creditsSpent: 6 })
+    it('a provider error gives back what earlier steps spent, and a step no runner can take', async () => {
+      let calls = 0
+      registerAiJobStep('insight', async () => {
+        calls += 1
+        if (calls === 1) return { ...(await spent({ continue: true })()) } as never
+        throw new AiUpstreamError(400, false, 'req-x')
+      })
+      const job = await freeJob()
+      await runAiJobStep(firestore, 'org-free', job.$id, { owner: 'route-1', now: NOW })
+      expect((await runAiJobStep(firestore, 'org-free', job.$id, { owner: 'route-1', now: NOW })).outcome).toBe('failed')
+      expect(await getAiJob(firestore, 'org-free', job.$id)).toMatchObject({
+        status: 'failed', creditsSpent: 6, refundedCredits: 6, refundReason: 'provider',
+      })
+    })
+
+    it('a step the machine gave up on after its attempts gives back what the job spent', async () => {
+      registerAiJobStep('insight', spent({ continue: true }) as never)
+      const job = await freeJob()
+      await runAiJobStep(firestore, 'org-free', job.$id, { owner: 'route-1', now: NOW })
+      const path = `orgs/org-free/aiJobs/${job.$id}`
+      const stored = mockDocs.get(path) as { steps: Array<Record<string, unknown>> }
+      mockDocs.set(path, { ...stored, steps: [{ ...stored.steps[0], attempts: AI_JOB_STEP_MAX_ATTEMPTS }] })
+      expect((await runAiJobStep(firestore, 'org-free', job.$id, { owner: 'route-1', now: NOW })).outcome).toBe('failed')
+      expect(await getAiJob(firestore, 'org-free', job.$id)).toMatchObject({
+        status: 'failed', creditsSpent: 6, refundedCredits: 6, refundReason: 'timeout',
+      })
+    })
+
+    it('a job that delivered drafts keeps paying for them: only the failing step comes back', async () => {
+      let calls = 0
+      registerAiJobStep('insight', async () => {
+        calls += 1
+        return calls === 1
+          ? ((await spent({ continue: true, outputs: [{ resource: 'text', id: 'draft', hostId: 'host-1', label: 'Draft copy', text: 'Hi' }] })()) as never)
+          : ((await spent({ failure: 'The second part could not be built.' })()) as never)
+      })
+      const job = await freeJob()
+      await runAiJobStep(firestore, 'org-free', job.$id, { owner: 'route-1', now: NOW })
+      await runAiJobStep(firestore, 'org-free', job.$id, { owner: 'route-1', now: NOW })
+      expect(await getAiJob(firestore, 'org-free', job.$id)).toMatchObject({
+        status: 'failed', creditsSpent: 12, refundedCredits: 6, refundReason: 'step-failure',
+      })
+    })
+
+    it('nothing on success, on a person canceling, or on a model declining the brief', async () => {
+      registerAiJobStep('insight', spent({ outputs: [{ resource: 'text', id: 'draft', hostId: 'host-1', label: 'Draft copy', text: 'Hi' }] }) as never)
+      const done = await freeJob()
+      await runAiJobStep(firestore, 'org-free', done.$id, { owner: 'route-1', now: NOW })
+      expect((await getAiJob(firestore, 'org-free', done.$id))?.refundedCredits).toBeUndefined()
+
+      registerAiJobStep('insight', spent({ continue: true }) as never)
+      const canceled = await freeJob()
+      await runAiJobStep(firestore, 'org-free', canceled.$id, { owner: 'route-1', now: NOW })
+      await cancelAiJob(firestore, 'org-free', canceled.$id, NOW)
+      expect((await getAiJob(firestore, 'org-free', canceled.$id))?.refundedCredits).toBeUndefined()
+
+      registerAiJobStep('insight', spent({ refused: true, stopReason: 'refusal' }) as never)
+      const declined = await freeJob()
+      await runAiJobStep(firestore, 'org-free', declined.$id, { owner: 'route-1', now: NOW })
+      expect((await getAiJob(firestore, 'org-free', declined.$id))?.refundedCredits).toBeUndefined()
+      expect(mockDocs.get(`users/owner-1/aiUsage/${month()}`)?.['returnedUsd']).toBeUndefined()
+    })
+
+    it('gives back at most three a day an account; past that a failure is metered as any other', async () => {
+      const day = assistUsageDay(NOW).replace(/-/g, '')
+      mockDocs.set(`users/owner-1/aiUsage/${month()}`, {
+        creditReturns: Object.fromEntries(['a', 'b', 'c'].map((id) => [`job-refund-${day}-${id}-0`, { credits: 1 }])),
+      })
+      registerAiJobStep('insight', spent({ failure: 'It could not be built.' }) as never)
+      const job = await freeJob()
+      await runAiJobStep(firestore, 'org-free', job.$id, { owner: 'route-1', now: NOW })
+      expect(await getAiJob(firestore, 'org-free', job.$id)).toMatchObject({ status: 'failed', creditsSpent: 6 })
+      expect((await getAiJob(firestore, 'org-free', job.$id))?.refundedCredits).toBeUndefined()
+    })
   })
 
   it('hands the runner the machine’s Firestore and the org it reserved against', async () => {

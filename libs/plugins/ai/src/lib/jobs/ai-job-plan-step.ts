@@ -633,21 +633,23 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     if (result.status === 'refused') return { ...spent, refused: true }
     if (result.status === 'needs_input') {
       // Refused by our own checks, after the one re-ask (AGL-3594): the member
-      // reads a sentence and an action, staff the rules; on the Free taste
-      // the machine gives the credits back, and Try again says when it cannot work.
+      // reads a sentence and an action, staff the rules; the machine gives the
+      // credits back (`uncredited`), and on the Free taste Try again says when
+      // it cannot work. Whether the give-back was made is the job's to say
+      // (`refundedCredits`), so this sentence does not promise it.
       const review = aiDoctrineReview(result)
       const retryRefusal = freeTaste
         ? await aiFreePlanRetryRefusal({ job, org, firestore, now, site })
         : null
       return {
         ...spent,
-        ...(freeTaste ? { uncredited: true } : {}),
+        uncredited: true,
         review: {
           ...review,
           message: aiPlanFailureCopy({
             kind: job.kind,
             codes: result.violations.map((violation) => violation.code),
-            refunded: freeTaste,
+            refunded: false,
           }),
           detail: review.message,
           ...(retryRefusal ? { retryRefusal } : {}),
