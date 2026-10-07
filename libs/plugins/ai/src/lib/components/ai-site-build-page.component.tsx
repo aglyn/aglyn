@@ -48,6 +48,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import {
   aiJobPageCopy,
   aiSiteBuildCreditsLine,
+  aiSiteBuildFraction,
   aiSiteBuildPhase,
   aiSiteBuildRows,
   type AiSiteBuildRowState,
@@ -158,6 +159,23 @@ function RowIcon({ state }: { state: AiSiteBuildRowState }) {
 }
 
 /** The page's frame: the site's name over the heading and its sentence. */
+/** "0:42", "3:05": how long the active row has been running, from when it started or was first seen. */
+function useElapsed(key: string | null, startedAt: string | null | undefined): string | null {
+  const [now, setNow] = useState(() => Date.now())
+  const seen = useRef<{ key: string | null; at: number }>({ key: null, at: Date.now() })
+  if (seen.current.key !== key) seen.current = { key, at: Date.now() }
+  useEffect(() => {
+    if (!key) return
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [key])
+  if (!key) return null
+  const started = startedAt ? Date.parse(startedAt) : NaN
+  const from = Number.isFinite(started) ? Math.min(started, seen.current.at) : seen.current.at
+  const seconds = Math.max(0, Math.floor((now - from) / 1000))
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}
+
 function Frame({
   siteName,
   heading,
@@ -241,6 +259,12 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
 
   const ready = job && typeof job === 'object' ? job : null
   const copy = ready ? aiJobPageCopy(ready, PLATFORM_BRAND_NAME) : null
+  // The active row's running time, read before any early return (a hook).
+  const liveRow =
+    ready && aiSiteBuildPhase(ready) === 'working'
+      ? (aiSiteBuildRows(ready).find((row) => row.state === 'active') ?? null)
+      : null
+  const elapsed = useElapsed(liveRow ? `${ready?.id}:${liveRow.id}` : null, liveRow?.startedAt)
   // The shell's header names the job's page as the page does, and its trail
   // walks back to the site's AI jobs.
   const record = <PageHeaderRecord title={copy?.heading} />
@@ -296,6 +320,8 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
 
   const phase = aiSiteBuildPhase(ready)
   const rows = aiSiteBuildRows(ready)
+  const fraction = aiSiteBuildFraction(rows)
+  const activeRow = phase === 'working' ? (rows.find((row) => row.state === 'active') ?? null) : null
   const credits = aiSiteBuildCreditsLine(ready)
   const links = phase === 'done' ? aiSiteBuildDoneLinks(ready, orgSlug) : { view: null, pages: null }
   const sitePublish = ready.kind === 'site' && phase === 'done' ? (ready.sitePublish ?? null) : null
@@ -317,21 +343,51 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
       {record}
       {notice && <Alert severity="warning">{notice}</Alert>}
       <Card variant="outlined" sx={{ borderRadius: 2 }}>
-        {phase === 'working' && <LinearProgress aria-label="Building" />}
+        {phase === 'working' &&
+          (fraction !== null ? (
+            <LinearProgress
+              variant="determinate"
+              value={Math.round(fraction * 100)}
+              aria-label={`Building: ${rows.filter((row) => row.state === 'done').length} of ${rows.length} steps done`}
+            />
+          ) : (
+            <LinearProgress aria-label="Building" />
+          ))}
         <Box component="ol" aria-label="Progress" sx={{ listStyle: 'none', m: 0, p: { xs: 2, sm: 3 } }}>
           <Stack spacing={2}>
             {rows.map((row) => (
-              <Stack component="li" key={row.id} direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+              <Stack component="li" key={row.id} direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
                 <Box sx={{ width: (theme) => theme.spacing(3), display: 'flex', justifyContent: 'center' }}>
                   <RowIcon state={row.state} />
                 </Box>
-                <Box>
-                  <Typography
-                    variant="body1"
-                    color={row.state === 'waiting' || row.state === 'skipped' ? 'text.secondary' : 'text.primary'}
-                  >
-                    {row.label}
-                  </Typography>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}>
+                    <Typography
+                      variant="body1"
+                      color={row.state === 'waiting' || row.state === 'skipped' ? 'text.secondary' : 'text.primary'}
+                    >
+                      {row.label}
+                    </Typography>
+                    {row.id === activeRow?.id && elapsed ? (
+                      <Typography variant="body2" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {elapsed}
+                      </Typography>
+                    ) : typeof row.credits === 'number' && row.credits > 0 ? (
+                      <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                        {`${row.credits} ${row.credits === 1 ? 'credit' : 'credits'}`}
+                      </Typography>
+                    ) : null}
+                  </Stack>
+                  {row.id === activeRow?.id && row.hint ? (
+                    <Typography variant="body2" color="text.secondary">
+                      {row.hint}
+                    </Typography>
+                  ) : null}
+                  {row.sections?.length && (row.state === 'active' || row.state === 'done') ? (
+                    <Typography variant="body2" color="text.secondary">
+                      {`${row.state === 'active' ? 'Writing' : 'Wrote'}: ${row.sections.join(', ')}`}
+                    </Typography>
+                  ) : null}
                   {/* A build item's failure, note or refund (AGL-3616). */}
                   {row.detail ? (
                     <Typography variant="body2" color="text.secondary">
@@ -445,7 +501,13 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
         </Stack>
       )}
       {ready.plan && ready.plan.screens.length > 0 && (
-        <Accordion variant="outlined" disableGutters sx={{ borderRadius: 2, '&::before': { display: 'none' } }}>
+        <Accordion
+          // Open while the site is built, so the plan is in view as each part of it is written.
+          defaultExpanded={phase === 'working'}
+          variant="outlined"
+          disableGutters
+          sx={{ borderRadius: 2, '&::before': { display: 'none' } }}
+        >
           <AccordionSummary expandIcon={<MdiIcon path={mdiChevronDown.path} />}>
             <Typography variant="subtitle1">{'What we’re building'}</Typography>
           </AccordionSummary>

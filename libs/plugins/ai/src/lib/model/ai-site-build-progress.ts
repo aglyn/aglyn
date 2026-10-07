@@ -41,6 +41,14 @@ export interface AiSiteBuildRow {
   state: AiSiteBuildRowState
   /** What the person should know about this row (AGL-3616): a build item's failure, note or refund. */
   detail?: string | null
+  /** What the row is doing while it is the active one, in a sentence. */
+  hint?: string | null
+  /** A page's planned sections, in order, so the person sees what is being written. */
+  sections?: string[]
+  /** The credits this row's work used, once it has finished; absent while it runs. */
+  credits?: number
+  /** When this row's work started, for the elapsed time beside the active row. */
+  startedAt?: string | null
 }
 
 /** Where the whole job stands, as the page's header and actions read it. */
@@ -78,7 +86,8 @@ const CREATION_ROWS: ReadonlyArray<{ kind: string; resource: string; label: (nam
  * the first page's.
  */
 export function aiSiteBuildRows(
-  job: Pick<AiJobSummary, 'status' | 'steps' | 'plan' | 'outputs' | 'review'> & Partial<Pick<AiJobSummary, 'items' | 'kind'>>,
+  job: Pick<AiJobSummary, 'status' | 'steps' | 'plan' | 'outputs' | 'review'> &
+    Partial<Pick<AiJobSummary, 'items' | 'kind' | 'siteInputs' | 'sitePublish'>>,
 ): AiSiteBuildRow[] {
   const phase = aiSiteBuildPhase(job)
   // A build is read off its item ledger (AGL-3616): one row an item, each with
@@ -105,20 +114,51 @@ export function aiSiteBuildRows(
                     : ledger.op === 'email'
                       ? 'Writing your welcome email'
                       : row.label
-        return { id: row.slot, label, state: row.state, detail: row.detail }
+        const screen = ledger?.op === 'page' ? aiPlanScreenFor(job.plan, ledger.label, pages.indexOf(ledger)) : null
+        const finished = row.state === 'done' || row.state === 'failed'
+        const net = ledger ? Math.max(0, Math.floor((ledger.creditsSpent ?? 0) - (ledger.creditsRefunded ?? 0))) : 0
+        return {
+          id: row.slot,
+          label,
+          state: row.state,
+          detail: row.detail,
+          ...(screen?.sections.length ? { sections: screen.sections.map((section) => section.name) } : {}),
+          ...(finished && ledger ? { credits: net } : {}),
+        }
       }),
+      ...aiSitePublishRow(job, phase),
     ]
   }
   const planStep = job.steps.find((step) => step.name === 'plan')
   const planDone = planStep?.status === 'done' || Boolean(job.plan)
   const stopped = phase === 'failed' || phase === 'stopped'
+  const planState: AiSiteBuildRowState = planDone ? 'done' : stopped ? 'failed' : phase === 'working' ? 'active' : 'waiting'
   const rows: AiSiteBuildRow[] = [
     {
       id: 'plan',
       label: 'Planning your pages',
-      state: planDone ? 'done' : stopped ? 'failed' : phase === 'working' ? 'active' : 'waiting',
+      state: planState,
+      startedAt: planStep?.startedAt ?? null,
+      hint: planState === 'active' ? AI_SITE_PLAN_HINT : null,
+      ...(planDone && planStep ? { credits: Math.max(0, Math.floor(planStep.creditsSpent ?? 0)) } : {}),
     },
   ]
+  // Before there is a plan, the stages a guided start always goes through
+  // are named from its answers, so the page shows the whole way from the
+  // start rather than one row.
+  if (!job.plan && job.kind !== 'build') {
+    const pagesAsked = typeof job.siteInputs?.['pages'] === 'number' ? Math.round(job.siteInputs['pages'] as number) : 0
+    if (job.siteInputs) {
+      rows.push({ id: 'layout', label: 'Building the header and footer', state: 'waiting' })
+      rows.push({
+        id: 'pages',
+        label: pagesAsked > 1 ? `Writing your ${pagesAsked} pages` : 'Writing your pages',
+        state: 'waiting',
+      })
+      rows.push(...aiSitePublishRow(job, phase))
+    }
+    return rows
+  }
   const built = new Map<string, number>()
   for (const output of job.outputs) built.set(output.resource, (built.get(output.resource) ?? 0) + 1)
   const take = (resource: string): boolean => {
@@ -127,14 +167,19 @@ export function aiSiteBuildRows(
     built.set(resource, left - 1)
     return true
   }
-  const stages: Array<{ id: string; label: string; resource: string }> = []
+  const stages: Array<{ id: string; label: string; resource: string; sections?: string[] }> = []
   for (const row of CREATION_ROWS) {
     const creation = job.plan?.create.find((entry) => entry.kind === row.kind)
     if (creation) stages.push({ id: row.resource, label: row.label(creation.name), resource: row.resource })
   }
   const pages = job.plan?.screens ?? []
   pages.forEach((page, index) => {
-    stages.push({ id: `page-${index}`, label: `Writing page ${index + 1} of ${pages.length}: ${page.title}`, resource: 'screen' })
+    stages.push({
+      id: `page-${index}`,
+      label: `Writing page ${index + 1} of ${pages.length}: ${page.title}`,
+      resource: 'screen',
+      sections: page.sections.map((section) => section.name),
+    })
   })
   let reached = false
   for (const stage of stages) {
@@ -145,9 +190,59 @@ export function aiSiteBuildRows(
       id: stage.id,
       label: stage.label,
       state: done ? 'done' : current && stopped ? 'failed' : current && phase === 'working' ? 'active' : 'waiting',
+      ...(stage.sections?.length ? { sections: stage.sections } : {}),
     })
   }
+  rows.push(...aiSitePublishRow(job, phase))
   return rows
+}
+
+/** What the planning row says while it runs. */
+export const AI_SITE_PLAN_HINT =
+  'Reading your answers and choosing your pages, what each one says, and the forms and layout they need. This usually takes under a minute.'
+
+/** The plan's page an item builds: by its title, else by its place among the pages. */
+function aiPlanScreenFor(
+  plan: AiJobSummary['plan'],
+  title: string,
+  index: number,
+): NonNullable<AiJobSummary['plan']>['screens'][number] | null {
+  const screens = plan?.screens ?? []
+  return screens.find((screen) => screen.title === title) ?? (index >= 0 ? (screens[index] ?? null) : null)
+}
+
+/**
+ * A guided start ends by putting its pages live (AGL-3596): the last row, so
+ * the person sees that step coming and when it is done. Only a site job
+ * publishes on its own; a build publishes when asked, and says so in its plan.
+ */
+function aiSitePublishRow(
+  job: Pick<AiJobSummary, 'status'> & Partial<Pick<AiJobSummary, 'kind' | 'sitePublish'>>,
+  phase: AiSiteBuildPhase,
+): AiSiteBuildRow[] {
+  if (job.kind !== 'site') return []
+  const published = (job.sitePublish?.published.length ?? 0) > 0
+  return [
+    {
+      id: 'publish',
+      label: 'Publishing your site',
+      // A job that stopped or failed publishes nothing, so the row is passed over.
+      state: phase === 'done' ? (published ? 'done' : 'skipped') : phase === 'working' ? 'waiting' : 'skipped',
+    },
+  ]
+}
+
+/**
+ * How far the job is, from 0 to 1, by its rows: a finished row counts whole
+ * and the active one half. `null` before there is more than one row to count.
+ */
+export function aiSiteBuildFraction(rows: readonly AiSiteBuildRow[]): number | null {
+  if (rows.length < 2) return null
+  const counted = rows.reduce(
+    (sum, row) => sum + (row.state === 'active' ? 0.5 : row.state === 'waiting' ? 0 : 1),
+    0,
+  )
+  return Math.min(1, counted / rows.length)
 }
 
 /**
