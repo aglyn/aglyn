@@ -644,14 +644,14 @@ function Layouts(props) {
             looking at the create button, and that is where the number has to
             be. Inside the card it was a caption on a list.
           */
-          <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+          <Stack useFlexGap direction="row" spacing={2} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
             <QuotaReadoutComponent
               ready={orgReady}
               used={layoutsUsed}
               limit={layoutQuota.limit}
               noun="layout"
             />
-            <Stack direction="row" spacing={1}>
+            <Stack useFlexGap direction="row" sx={{ flexWrap: 'wrap' }} spacing={1}>
               {/* Other ways to start a layout, from plugins (AGL-3043). */}
               <PluginWidgetSlot
                 slot="hostLayouts"
@@ -729,7 +729,7 @@ function Layouts(props) {
                     noRowsDescription:
                       'Layouts are the chrome your pages render inside — headers, footers, sidebars. Create one, or start from a template.',
                     noRowsAction: (
-                      <Stack direction="row" spacing={1}>
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                         <Button variant="contained" onClick={handleFormOpen}>
                           {'Create your first layout'}
                         </Button>

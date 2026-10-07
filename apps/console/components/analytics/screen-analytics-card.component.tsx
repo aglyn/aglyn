@@ -246,7 +246,7 @@ export function ScreenAnalyticsCard(props: {
         </Typography>
       ) : (
         <Stack spacing={2}>
-          <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+          <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
             <Stack>
               <Typography variant="h4">{total.toLocaleString()}</Typography>
               <Typography variant="caption" color="text.secondary">

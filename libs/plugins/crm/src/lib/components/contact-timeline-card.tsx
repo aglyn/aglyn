@@ -113,6 +113,7 @@ function CapturedRow(props: {
       title={interaction.summary ?? label}
       meta={
         <Stack
+          useFlexGap
           direction="row"
           spacing={1}
           sx={{ alignItems: 'baseline', flexWrap: 'wrap', rowGap: 0.25 }}

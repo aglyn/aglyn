@@ -298,6 +298,7 @@ export function EmailTopicsCard(props: EmailTopicsCardProps) {
                   >
                     <TableCell>
                       <Stack
+                        useFlexGap
                         direction="row"
                         spacing={1}
                         sx={{ flexWrap: 'wrap', alignItems: 'center' }}

@@ -143,7 +143,7 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
         // The readout leads the create buttons, as it does on Sites, screens,
         // layouts and templates (AGL-2113/AGL-2501). The numbers come from the
         // CARD, which owns the listener they are counted from.
-        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+        <Stack useFlexGap direction="row" spacing={2} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
           {quota ? (
             <QuotaReadoutComponent
               ready={quota.ready}
@@ -152,7 +152,7 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
               noun="component"
             />
           ) : null}
-          <Stack direction="row" spacing={1}>
+          <Stack useFlexGap direction="row" sx={{ flexWrap: 'wrap' }} spacing={1}>
             {/* Other ways to start a component, from plugins (AGL-3051). */}
             <PluginWidgetSlot
               slot="hostComponents"

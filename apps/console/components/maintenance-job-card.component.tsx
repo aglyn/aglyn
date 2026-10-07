@@ -183,7 +183,7 @@ export function MaintenanceJobCard({
       contentGutterY
     >
       <Stack spacing={2}>
-        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+        <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
           {job.destructive ? (
             <Chip size="small" color="error" label="Destroys data" />
           ) : (
@@ -203,7 +203,11 @@ export function MaintenanceJobCard({
 
         {error ? <Alert severity="warning">{error}</Alert> : null}
 
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={1}
+          sx={{ alignItems: { xs: 'flex-start', sm: 'center' } }}
+        >
           <Button
             size="small"
             variant="outlined"
@@ -279,7 +283,11 @@ export function MaintenanceJobCard({
           />
         ) : null}
 
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={1}
+          sx={{ alignItems: { xs: 'flex-start', sm: 'center' } }}
+        >
           <Button
             size="small"
             variant="contained"

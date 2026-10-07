@@ -175,7 +175,7 @@ export default function OrgHoldsCard() {
               sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2 }}
             >
               <Stack spacing={1}>
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+                <Stack useFlexGap direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
                   <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
                     {notice.title}
                   </Typography>
@@ -212,7 +212,7 @@ export default function OrgHoldsCard() {
                     </Typography>
                   ))}
                 </Box>
-                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+                <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
                   {notice.actions.map((action) =>
                     action.id === 'request-review' ? (
                       notice.reviewable ? (

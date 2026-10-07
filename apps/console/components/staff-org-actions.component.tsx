@@ -1392,7 +1392,7 @@ const StaffOrgActions = ({
               'override on save. 0 is an override too — a cap of none, not ' +
               'an inherit.'}
           </Typography>
-          <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+          <Stack useFlexGap direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
             {QUOTA_FIELDS.map((field) => {
               // The defaults of the plan the org will RESOLVE as once saved,
               // comp included (AGL-3034) — not the stored plan, which a
@@ -1439,7 +1439,7 @@ const StaffOrgActions = ({
             })}
           </Stack>
           <Typography variant="subtitle2">{'Feature overrides'}</Typography>
-          <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+          <Stack useFlexGap direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
             {FLAG_FIELDS.map((key) => {
               // The defaults of the plan the org will RESOLVE as once saved,
               // comp included (AGL-3034) — not the stored plan, which a
@@ -1490,7 +1490,7 @@ const StaffOrgActions = ({
               'Inherit follows the platform flag and its rollout; forcing ' +
               'wins over both. Super staff only.'}
           </Typography>
-          <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+          <Stack useFlexGap direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
             {RELEASE_FLAG_FIELDS.map((field) => (
               <TextField
                 key={field.key}

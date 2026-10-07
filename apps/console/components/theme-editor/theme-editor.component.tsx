@@ -482,7 +482,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
                   },
                 }}
               />
-              <Stack direction="row" spacing={2}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                 <TextField
                   type="number"
                   size="small"
@@ -537,7 +537,12 @@ export function ThemeEditor(props: ThemeEditorProps) {
                       Object.keys(inheritedComponents).length
                     } component defaults, which the editor opens on. Edits are deep-merged, so you only need to name the property you're changing; only what differs is saved.`}
               </Typography>
-              <Stack direction="row" spacing={1}>
+              <Stack
+                direction="row"
+                spacing={1}
+                useFlexGap
+                sx={{ flexWrap: 'wrap' }}
+              >
                 <Button size="small" onClick={() => setOverridesOpen(true)}>
                   {'Edit overrides'}
                 </Button>
@@ -557,7 +562,15 @@ export function ThemeEditor(props: ThemeEditorProps) {
             </Stack>
           </CardDisplay>
 
-          <Stack direction="row" spacing={1}>
+          <Stack
+            direction="row"
+            spacing={1}
+            useFlexGap
+            sx={{
+              flexWrap: 'wrap',
+              '& > .MuiButton-root': { whiteSpace: 'nowrap' },
+            }}
+          >
             <Button
               variant="contained"
               disabled={!dirty || saving}

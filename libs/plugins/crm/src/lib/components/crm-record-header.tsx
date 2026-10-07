@@ -125,6 +125,7 @@ export function CrmRecordHeader(props: CrmRecordHeaderProps) {
         HeaderProps={{
           action: (
             <Stack
+              useFlexGap
               direction="row"
               spacing={1}
               sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
@@ -151,6 +152,7 @@ export function CrmRecordHeader(props: CrmRecordHeaderProps) {
           <Stack spacing={2}>
             {hasChipRow ? (
               <Stack
+                useFlexGap
                 direction="row"
                 spacing={1}
                 sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}

@@ -1451,14 +1451,14 @@ function Screens(props) {
             belongs to come to disagree, which is what the comment above that
             memo is about.
           */
-          <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+          <Stack useFlexGap direction="row" spacing={2} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
             <QuotaReadoutComponent
               ready={orgReady}
               used={billableScreenCount}
               limit={screenQuota.limit}
               noun="page"
             />
-            <Stack direction="row" spacing={1}>
+            <Stack useFlexGap direction="row" sx={{ flexWrap: 'wrap' }} spacing={1}>
               {/* Other ways to start a screen, from plugins (AGL-2907). */}
               <PluginWidgetSlot
                 slot="hostScreens"
@@ -1573,7 +1573,7 @@ function Screens(props) {
               onMoveScreen={handleMoveScreen}
               renderRowActions={renderRowActions}
               emptyAction={
-                <Stack direction="row" spacing={1}>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                   <Button
                     size="small"
                     variant="contained"

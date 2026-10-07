@@ -171,6 +171,7 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
   return (
     <Stack spacing={2}>
       <Stack
+        useFlexGap
         direction="row"
         spacing={2}
         sx={{
@@ -182,7 +183,7 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
         <Typography variant="h6" component="h2">
           {'Reports'}
         </Typography>
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+        <Stack useFlexGap direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
           <ToggleButtonGroup
             exclusive
             size="small"

@@ -480,7 +480,7 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                   Firestore reads per organization, which is why nothing is read
                   until this is pressed.
                 </Typography>
-                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+                <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
                   <Button
                     variant="contained"
                     disabled={loading || !isStaff}
@@ -600,6 +600,7 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                             <TableCell align="right">{band.overBand}</TableCell>
                             <TableCell>
                               <Stack
+                                useFlexGap
                                 direction="row"
                                 spacing={0.5}
                                 sx={{ flexWrap: 'wrap', gap: 0.5 }}
@@ -657,7 +658,7 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                   contentGutterY
                 >
                   <Stack spacing={2}>
-                    <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+                    <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
                       <Chip
                         label={`Median margin ${pct(fleet.medianMarginPct)}`}
                         color={fleet.medianMarginPct === null ? 'default' : 'primary'}

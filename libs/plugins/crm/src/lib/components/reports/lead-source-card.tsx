@@ -211,7 +211,7 @@ function LeadSourceBody(props: { report: CrmReportScope; window: WindowRead<Lead
       }}
     >
       <Stack spacing={2}>
-        <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+        <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
           <ReportStatTile
             label={LEAD_SOURCE_DIRECTION_LABELS.inbound}
             value={read ? (direction('inbound')?.leads ?? 0).toLocaleString() : null}

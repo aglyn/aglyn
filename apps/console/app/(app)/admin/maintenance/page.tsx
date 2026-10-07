@@ -165,6 +165,7 @@ const AdminMaintenance: NextPageWithLayout<Record<string, never>> = () => {
                   {check ? (
                     <Alert severity={check.ok ? 'success' : 'error'}>
                       <Stack
+                        useFlexGap
                         direction="row"
                         spacing={1}
                         sx={{ alignItems: 'center', flexWrap: 'wrap' }}

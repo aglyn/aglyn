@@ -661,11 +661,121 @@ export const consoleOptionsDark: ThemeOptions = {
   },
 }
 
+/**
+ * Dialogs on a phone, for the console's own chrome only.
+ *
+ * MUI keeps 32px around every dialog paper, which leaves a 375px phone a
+ * 311px column — and a `md`/`lg` dialog, laid out for a table or an editor,
+ * squeezed into it. Below `sm` the margin halves, and the wide dialogs take
+ * the whole screen: the same paper `fullScreen` draws, which is MUI's
+ * responsive full-screen dialog arrived at once instead of per call site.
+ * A dialog that asked for `fullScreen` is left alone.
+ *
+ * Kept off `consoleOptions`, which customer sites inherit for component
+ * behavior: a customer site's dialogs are its author's to lay out.
+ */
+const consoleChromeComponents: ThemeOptions['components'] = {
+  /*
+   * An alert carrying an action button — an upsell's "View add-ons", a
+   * notice's "Open" — on a phone. MUI lays message and action in one row,
+   * so the button squeezed to a word per line beside a paragraph. Below
+   * `sm` the action takes its own line under the message instead. A bare
+   * close button (`onClose` with no `action`) keeps its corner.
+   */
+  MuiAlert: {
+    styleOverrides: {
+      root: ({ theme, ownerState }: any) =>
+        ownerState?.action
+          ? { [theme.breakpoints.down('sm')]: { flexWrap: 'wrap' } }
+          : {},
+      action: ({ theme, ownerState }: any) =>
+        ownerState?.action
+          ? {
+              [theme.breakpoints.down('sm')]: {
+                flexBasis: '100%',
+                marginLeft: 0,
+                marginRight: 0,
+                paddingLeft: 0,
+                paddingTop: 0,
+                justifyContent: 'flex-end',
+              },
+            }
+          : {},
+    },
+  },
+  /*
+   * Every list footer on a phone — the DataGrid's, `ListPagination` and the
+   * bare ones. "Rows per page", its select and the range are one ~420px
+   * line, so on a 375px screen the footer scrolled sideways inside its own
+   * card. Below `sm` the label and the spacer before it go; the select and
+   * the range stay, and the select keeps the label as its accessible name.
+   */
+  MuiTablePagination: {
+    styleOverrides: {
+      toolbar: ({ theme }: any) => ({
+        [theme.breakpoints.down('sm')]: { paddingLeft: theme.spacing(1) },
+      }),
+      spacer: ({ theme }: any) => ({
+        [theme.breakpoints.down('sm')]: { display: 'none' },
+      }),
+      selectLabel: ({ theme }: any) => ({
+        [theme.breakpoints.down('sm')]: { display: 'none' },
+      }),
+      input: ({ theme }: any) => ({
+        [theme.breakpoints.down('sm')]: {
+          marginLeft: 0,
+          marginRight: theme.spacing(1),
+        },
+      }),
+      actions: ({ theme }: any) => ({
+        [theme.breakpoints.down('sm')]: { marginLeft: theme.spacing(0.5) },
+      }),
+    },
+  },
+  MuiDialog: {
+    styleOverrides: {
+      paper: ({ theme, ownerState }: any) => {
+        if (ownerState?.fullScreen) return {}
+        const wide = !['xs', 'sm'].includes(ownerState?.maxWidth)
+        return {
+          [theme.breakpoints.down('sm')]: wide
+            ? {
+                margin: 0,
+                width: '100%',
+                maxWidth: '100%',
+                height: '100%',
+                maxHeight: 'none',
+                borderRadius: 0,
+              }
+            : {
+                margin: theme.spacing(2),
+                maxWidth: `calc(100% - ${theme.spacing(4)})`,
+                maxHeight: `calc(100% - ${theme.spacing(4)})`,
+              },
+        }
+      },
+      paperFullWidth: ({ theme, ownerState }: any) =>
+        ownerState?.fullScreen || !['xs', 'sm'].includes(ownerState?.maxWidth)
+          ? {}
+          : {
+              [theme.breakpoints.down('sm')]: {
+                width: `calc(100% - ${theme.spacing(4)})`,
+              },
+            },
+    },
+  },
+}
+
+const withConsoleChrome = (options: ThemeOptions): ThemeOptions => ({
+  ...options,
+  components: { ...options.components, ...consoleChromeComponents },
+})
+
 export const consoleThemeLight: Theme = createResponsiveTheme({
-  themeOptions: { ...consoleOptions },
+  themeOptions: withConsoleChrome(consoleOptions),
 })
 export const consoleThemeDark: Theme = createResponsiveTheme({
-  themeOptions: { ...consoleOptionsDark },
+  themeOptions: withConsoleChrome(consoleOptionsDark),
 })
 
 export const consoleThemeCssVar = createResponsiveCssVarTheme(

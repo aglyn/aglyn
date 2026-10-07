@@ -855,6 +855,7 @@ export function OrgMembersCard() {
         {canManage ? (
           <Stack spacing={0.75}>
             <Stack
+              useFlexGap
               direction="row"
               spacing={1}
               sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'flex-start' }}

@@ -646,6 +646,7 @@ function AdminMediaQuarantine() {
                   }
                 </Typography>
                 <Stack
+                  useFlexGap
                   direction="row"
                   spacing={1}
                   sx={{ flexWrap: 'wrap', rowGap: 1 }}
@@ -697,6 +698,7 @@ function AdminMediaQuarantine() {
               >
                 <Stack spacing={2}>
                   <Stack
+                    useFlexGap
                     direction="row"
                     spacing={1}
                     sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
@@ -785,6 +787,7 @@ function AdminMediaQuarantine() {
                   <Stack spacing={1}>
                     {lookup.keys.map((entry) => (
                       <Stack
+                        useFlexGap
                         key={entry.key}
                         direction="row"
                         spacing={1}
@@ -846,6 +849,7 @@ function AdminMediaQuarantine() {
                   ) : null}
 
                   <Stack
+                    useFlexGap
                     direction="row"
                     spacing={1}
                     sx={{ flexWrap: 'wrap', rowGap: 1 }}
@@ -923,6 +927,7 @@ function AdminMediaQuarantine() {
                   ) : null}
 
                   <Stack
+                    useFlexGap
                     direction="row"
                     spacing={1}
                     sx={{ flexWrap: 'wrap', rowGap: 1 }}
@@ -961,6 +966,7 @@ function AdminMediaQuarantine() {
             >
               <Stack spacing={2}>
                 <Stack
+                  useFlexGap
                   direction="row"
                   spacing={1}
                   sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}

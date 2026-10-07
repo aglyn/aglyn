@@ -309,7 +309,7 @@ export function OrgApiKeysCard() {
                         {key.keyPrefix}
                       </Typography>
                     </Typography>
-                    <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5, mt: 0.5 }}>
+                    <Stack useFlexGap direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5, mt: 0.5 }}>
                       {key.scopes.map((scope) => (
                         <Chip key={scope} label={scope} size="small" variant="outlined" />
                       ))}

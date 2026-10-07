@@ -500,7 +500,7 @@ export function ContactsCard({
         contentBordered="all"
       >
         <Stack spacing={1.5}>
-          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+          <Stack useFlexGap direction="row" spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
             <ToggleButtonGroup
               exclusive
               size="small"

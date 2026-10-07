@@ -759,6 +759,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
         <Stack spacing={1}>
           {showStats ? (
             <Stack
+              useFlexGap
               direction="row"
               spacing={3}
               sx={{ flexWrap: 'wrap', rowGap: 1 }}
@@ -835,7 +836,8 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
           <Stack
             direction="row"
             spacing={1}
-            sx={{ alignItems: 'center', justifyContent: 'flex-end' }}
+            useFlexGap
+            sx={{ alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}
           >
             {/* Only for whom the route takes it (AGL-3554). */}
             {transfer?.can('export', { resource: COMMERCE_ORDERS_TRANSFER, scope: 'host', hostId }) ? (

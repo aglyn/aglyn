@@ -353,7 +353,7 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
           </Typography>
           <OutreachSequenceStatusChip status={sequence.status} />
         </Stack>
-        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+        <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
           {activatable ? (
             <Button
               variant="outlined"

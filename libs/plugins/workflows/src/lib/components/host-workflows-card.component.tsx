@@ -868,6 +868,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
                 fields={
                   call ? (
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={1}
                       sx={{ alignItems: 'center', flex: 1, flexWrap: 'wrap' }}

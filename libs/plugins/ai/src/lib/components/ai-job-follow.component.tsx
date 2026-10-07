@@ -180,7 +180,7 @@ export function AiJobFollow({
           </Button>
         }
       >
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}>
+        <Stack useFlexGap direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}>
           <Chip size="small" label={AI_JOB_PHASE_LABELS[phase]} />
           {job.steps.length > 1 ? (
             <Typography variant="caption" color="text.secondary">

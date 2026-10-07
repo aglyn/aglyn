@@ -151,7 +151,7 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
         // Opposite the heading, beside the create button — the Sites page
         // arrangement (AGL-2113). The numbers come from the CARD, which owns
         // the listener they are counted from.
-        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+        <Stack useFlexGap direction="row" spacing={2} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
           {quota ? (
             <QuotaReadoutComponent
               ready={quota.ready}
@@ -160,7 +160,7 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
               noun="template"
             />
           ) : null}
-          <Stack direction="row" spacing={1}>
+          <Stack useFlexGap direction="row" sx={{ flexWrap: 'wrap' }} spacing={1}>
             {/* Other ways to start a template, from plugins (AGL-3043). */}
             <PluginWidgetSlot
               slot="hostTemplates"

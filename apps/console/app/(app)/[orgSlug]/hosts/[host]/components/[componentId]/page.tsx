@@ -323,7 +323,7 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
       // that joined on arrival would report every browser as an editor.
       headerRight={
         notFound ? null : (
-          <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
+          <Stack useFlexGap direction="row" sx={{ flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
             <DocumentPresenceLive
               hostId={hostId}
               docType="component"

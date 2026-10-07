@@ -571,9 +571,27 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
   return (
     <>
       <NextPageTitle screen={'POS'} />
-      <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {/* A phone has no room for the register beside the products, so on xs
+          the register follows the grid and the grid scrolls in half the
+          screen; from sm up both columns fill the viewport side by side. */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          height: { xs: 'auto', sm: '100vh' },
+          overflow: { xs: 'visible', sm: 'hidden' },
+        }}
+      >
         {/* Product grid */}
-        <Box sx={{ flex: 1, p: 2, overflowY: 'auto' }}>
+        <Box
+          sx={{
+            flex: { xs: 'none', sm: 1 },
+            maxHeight: { xs: '50vh', sm: 'none' },
+            minWidth: 0,
+            p: 2,
+            overflowY: 'auto',
+          }}
+        >
           <TextField
             placeholder="Search or scan barcode…"
             value={search}
@@ -635,8 +653,10 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
         {/* Register */}
         <Box
           sx={{
-            width: 380,
-            borderLeft: 1,
+            width: { xs: 'auto', sm: 380 },
+            flexShrink: 0,
+            borderLeft: { xs: 0, sm: 1 },
+            borderTop: { xs: 1, sm: 0 },
             borderColor: 'divider',
             display: 'flex',
             flexDirection: 'column',

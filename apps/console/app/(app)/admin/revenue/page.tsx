@@ -73,7 +73,6 @@ import {
   Stack,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
   TextField,
   Typography,
@@ -103,6 +102,7 @@ import {
   type SourceAttributionView,
   type RevenuePayload,
 } from '../../../../utils/revenue-view'
+import StaffTableHead from '../../../../components/staff-table-head.component'
 
 /**
  * One attributed source table — listing, publisher or host (AGL-2486).
@@ -133,14 +133,14 @@ function SourceTable({
   return (
     <>
       <ScrollTable size="small">
-        <TableHead>
+        <StaffTableHead>
           <TableRow>
             <TableCell>{unit}</TableCell>
             <TableCell align="right">Earned</TableCell>
             <TableCell align="right">Returned</TableCell>
             <TableCell align="right">{countLabel}</TableCell>
           </TableRow>
-        </TableHead>
+        </StaffTableHead>
         <TableBody>
           {rows.map((row) => (
             <TableRow key={row.key}>
@@ -475,7 +475,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               contentGutterY
             >
               <ScrollTable size="small">
-                <TableHead>
+                <StaffTableHead>
                   <TableRow>
                     <TableCell>Org state</TableCell>
                     <TableCell align="right">Count</TableCell>
@@ -483,7 +483,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                     <TableCell align="right">Settled</TableCell>
                     <TableCell>Why</TableCell>
                   </TableRow>
-                </TableHead>
+                </StaffTableHead>
                 <TableBody>
                   <TableRow>
                     <TableCell>Active and collecting</TableCell>
@@ -637,13 +637,13 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               ) : null}
               <Divider sx={{ my: 2 }} />
               <ScrollTable size="small">
-                <TableHead>
+                <StaffTableHead>
                   <TableRow>
                     <TableCell>Cause</TableCell>
                     <TableCell align="right">Amount</TableCell>
                     <TableCell>What it means</TableCell>
                   </TableRow>
-                </TableHead>
+                </StaffTableHead>
                 <TableBody>
                   {shownCauses.map((cause) => (
                     <TableRow key={cause.id}>
@@ -706,13 +706,13 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                 />
               </Box>
               <ScrollTable size="small">
-                <TableHead>
+                <StaffTableHead>
                   <TableRow>
                     <TableCell>Source</TableCell>
                     <TableCell align="right">Earned</TableCell>
                     <TableCell>What is and is not in it</TableCell>
                   </TableRow>
-                </TableHead>
+                </StaffTableHead>
                 <TableBody>
                   {earned.map((line) => (
                     <TableRow key={line.id}>
@@ -750,13 +750,13 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               contentGutterY
             >
               <ScrollTable size="small">
-                <TableHead>
+                <StaffTableHead>
                   <TableRow>
                     <TableCell>Line</TableCell>
                     <TableCell align="right">Amount</TableCell>
                     <TableCell>Whose money</TableCell>
                   </TableRow>
-                </TableHead>
+                </StaffTableHead>
                 <TableBody>
                   <TableRow>
                     <TableCell>
@@ -884,7 +884,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                   Organizations list's panel.
                 */
                 <ScrollTable size="small">
-                  <TableHead>
+                  <StaffTableHead>
                     <TableRow>
                       <TableCell>Org</TableCell>
                       <TableCell>State</TableCell>
@@ -894,7 +894,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                       <TableCell align="right">Unbilled meter</TableCell>
                       <TableCell align="right">Invoices</TableCell>
                     </TableRow>
-                  </TableHead>
+                  </StaffTableHead>
                   <TableBody>
                     {attributionRows.map((row) => (
                       <TableRow key={row.orgId}>

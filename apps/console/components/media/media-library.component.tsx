@@ -4018,7 +4018,13 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         onDrop={handleFileDrop}
         sx={{ position: 'relative' }}
       >
-      <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
+      {/* The folder rail takes ~200px, which leaves a phone too little for
+          the toolbar and grid beside it, so it sits above them on xs. */}
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={2}
+        sx={{ alignItems: { xs: 'stretch', sm: 'flex-start' } }}
+      >
         <MediaFolderRail
           folders={folderList as any}
           current={currentFolder}
@@ -4030,12 +4036,18 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           readOnly={Boolean(onSelect)}
         />
         <Stack spacing={2} sx={{ flex: 1, minWidth: 0 }}>
-      <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+      <Stack
+        direction="row"
+        spacing={2}
+        useFlexGap
+        sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+      >
         <Button
           variant="contained"
           color="primary"
           disabled={busy}
           onClick={() => inputRef.current?.click()}
+          sx={{ whiteSpace: 'nowrap' }}
         >
           {'Upload media'}
         </Button>
@@ -4043,6 +4055,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           <Button
             variant="outlined"
             color="primary"
+            sx={{ whiteSpace: 'nowrap' }}
             onClick={() =>
               setFolderPrompt({
                 title: folderParentContext
@@ -4221,6 +4234,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       ) : null}
       {breadcrumb.length ? (
         <Stack
+          useFlexGap
           direction="row"
           spacing={2}
           sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -4278,7 +4292,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         </Typography>
       ) : null}
       {!onSelect && selected.size ? (
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          useFlexGap
+          sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+        >
           <Typography variant="body2">
             {`${selected.size} selected`}
           </Typography>
@@ -4581,7 +4600,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         open={Boolean(editor)}
         onClose={() => setEditor(null)}
       >
-        <Stack spacing={2} sx={{ width: 340, p: 2 }}>
+        <Stack spacing={2} sx={{ width: 340, maxWidth: '100vw', p: 2 }}>
           <TextField
             size="small"
             label="File name"
@@ -4643,7 +4662,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               .filter(Boolean)
               .join(' · ')}
           </Typography>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
             {editor?.media?.url && !editor.media.private ? (
               <Button size="small" onClick={handleCopyUrl(editor.media)}>
                 {'Copy URL'}
@@ -4791,6 +4810,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               {'Tags'}
             </Typography>
             <Stack
+              useFlexGap
               direction="row"
               sx={{ flexWrap: 'wrap', gap: 0.5, mb: 1 }}
             >

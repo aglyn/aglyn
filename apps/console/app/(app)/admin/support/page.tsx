@@ -326,6 +326,7 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
       >
         <DialogTitle>
           <Stack
+            useFlexGap
             direction="row"
             spacing={1}
             sx={{ alignItems: 'center', flexWrap: 'wrap' }}

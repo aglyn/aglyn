@@ -718,6 +718,7 @@ function StrikeLedger({ rows }: { rows: StrikeLedgerRow[] }) {
           sx={{ pl: 1, borderLeft: 2, borderColor: 'divider' }}
         >
           <Stack
+            useFlexGap
             direction="row"
             spacing={1}
             sx={{ alignItems: 'baseline', flexWrap: 'wrap', rowGap: 0.5 }}
@@ -1254,6 +1255,7 @@ function AdminAbuseReports() {
             >
               <Stack spacing={2}>
                 <Stack
+                  useFlexGap
                   direction="row"
                   spacing={1}
                   sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
@@ -1413,6 +1415,7 @@ function AdminAbuseReports() {
                   key={report.id}
                   header={
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={1}
                       sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
@@ -1525,6 +1528,7 @@ function AdminAbuseReports() {
                           platform — is the worst outcome this page has. Text and
                           a copy button only. */}
                       <Stack
+                        useFlexGap
                         direction="row"
                         spacing={1}
                         sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
@@ -1558,6 +1562,7 @@ function AdminAbuseReports() {
                     </Stack>
 
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={1}
                       sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
@@ -1593,6 +1598,7 @@ function AdminAbuseReports() {
                         {/* These two ARE safe to link: they are console routes
                             on this origin, not the reported address. */}
                         <Stack
+                          useFlexGap
                           direction="row"
                           spacing={1}
                           sx={{ flexWrap: 'wrap', rowGap: 1 }}
@@ -1648,6 +1654,7 @@ function AdminAbuseReports() {
                             {ownerNoticeCaption(report.riskNotice)}
                           </Typography>
                           <Stack
+                            useFlexGap
                             direction="row"
                             spacing={1}
                             sx={{ flexWrap: 'wrap', rowGap: 1 }}
@@ -2032,6 +2039,7 @@ function AdminAbuseReports() {
                     ) : null}
 
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={2}
                       sx={{ flexWrap: 'wrap', rowGap: 0.5 }}
@@ -2060,6 +2068,7 @@ function AdminAbuseReports() {
                     <Divider />
 
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={1}
                       sx={{ flexWrap: 'wrap', rowGap: 1 }}

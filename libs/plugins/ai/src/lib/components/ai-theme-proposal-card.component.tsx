@@ -503,7 +503,12 @@ export function AiThemeProposalCard(props: ConsoleHostThemeZoneProps) {
                   {'In the editor below as unsaved changes. Review them there, then Save — or Discard changes to go back.'}
                 </Alert>
               ) : null}
-              <Stack direction="row" spacing={1}>
+              <Stack
+                direction="row"
+                spacing={1}
+                useFlexGap
+                sx={{ flexWrap: 'wrap' }}
+              >
                 <Button variant="contained" onClick={apply} disabled={applied === job?.id}>
                   {'Put in the editor'}
                 </Button>

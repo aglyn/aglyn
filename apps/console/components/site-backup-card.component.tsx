@@ -192,7 +192,7 @@ export function SiteBackupCard(props: { hostId: string }) {
       })}
       HeaderProps={{
         action: (
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {lastImportId && (
               <Button size="small" color="warning" disabled={busy} onClick={() => openIfAllowed('undo')}>
                 {'Undo import'}
