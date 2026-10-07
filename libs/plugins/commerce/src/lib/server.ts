@@ -321,6 +321,11 @@ export function registerCommerceApi(): void {
  * instead of having it.
  */
 export function registerCommerceConsoleApi(): void {
+  // The register's gate (`managePos`) is resolved on THIS surface: every POS
+  // route below runs in the console, and a key no surface registered here is
+  // absent from the resolved map, which reads as refused — the site's own
+  // owner was answered 403 at the register.
+  registerPluginPermissions(COMMERCE_PERMISSIONS)
   // What a product looks like to a surface that is not this plugin's — a
   // campaign email that features one asks here rather than importing the model.
   registerProductCardReader()
