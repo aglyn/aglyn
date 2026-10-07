@@ -275,8 +275,12 @@ export function composeOrderBuyerMessage(input: {
       ? fulfillments.find((entry) => entry.id === options.fulfillmentId)
       : [...fulfillments].sort((a, b) => (b.atMs ?? 0) - (a.atMs ?? 0))[0]
     if (!fulfillment) return null
-    const shipped = (fulfillment.lineItemIds ?? [])
-      .map((index) => lines[index])
+    // The units THIS shipment carried (AGL-3611): a partial shipment of a
+    // line names its own count, not the line's.
+    const shipped = CommerceModel.fulfillmentLineQuantities(order, fulfillment)
+      .map((entry) =>
+        lines[entry.lineItemId] ? { ...lines[entry.lineItemId], quantity: entry.quantity } : null,
+      )
       .filter(Boolean) as CommerceModel.OrderLineItem[]
     const tracking = CommerceModel.fulfillmentTrackingUrl(fulfillment)
     const hasTracking = Boolean(fulfillment.trackingNumber)
@@ -288,11 +292,9 @@ export function composeOrderBuyerMessage(input: {
         line.productType !== 'digital' && line.productType !== 'service',
     )
     if (!hasTracking && (order.channel === 'pos' || !physical)) return null
-    const coveredAfter = new Set(
-      fulfillments.flatMap((entry) => entry.lineItemIds ?? []),
-    )
-    const remainingUnits = lines.reduce(
-      (sum, line, index) => (coveredAfter.has(index) ? sum : sum + line.quantity),
+    // Shippable units still out, over every active shipment (AGL-3611).
+    const remainingUnits = CommerceModel.remainingFulfillmentLines(order).reduce(
+      (sum, entry) => sum + entry.quantity,
       0,
     )
     const carrier = CommerceModel.carrierLabelFor(fulfillment.carrier)

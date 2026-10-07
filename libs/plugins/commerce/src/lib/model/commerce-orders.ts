@@ -28,6 +28,7 @@ import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mod
 import type { PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import type { ProductType } from './commerce'
 import type { StorefrontTaxMode } from './commerce-tax-decision'
+import { lineRequiresShipping, orderLineFulfillmentStates } from './order-fulfillment'
 
 export type OrderStatus =
   | 'pending'
@@ -99,10 +100,24 @@ export interface OrderTimelineEvent {
 
 export interface OrderFulfillment {
   id: string
+  /** The lines this fulfillment touches; `lines` says how many units of each. */
   lineItemIds: number[]
+  /**
+   * Units per line (AGL-3611). Absent on a fulfillment written before
+   * quantities, which reads as every unit of each line in `lineItemIds`.
+   */
+  lines?: Array<{ lineItemId: number; quantity: number }>
   carrier?: string
   trackingNumber?: string
   trackingUrl?: string
+  /** A shipping label bought for this parcel, when a shipping plugin bought one. */
+  labelUrl?: string
+  /** Absent reads as `active`; a cancelled fulfillment ships nothing. */
+  status?: 'active' | 'cancelled'
+  cancelledAtMs?: number
+  updatedAtMs?: number
+  /** Whether the buyer was to be told about this shipment. */
+  notify?: boolean
   atMs: number
 }
 
@@ -1280,12 +1295,12 @@ export function orderContainsProduct(
  * order shipped with one carrier and one tracking number.
  */
 export function coveredLineItemIds(order: Partial<HostOrder>): Set<number> {
+  // Quantity-aware since AGL-3611: a line is covered once every unit of it is
+  // on an active fulfillment, so a line shipped 2 of 5 is still open and a
+  // cancelled fulfillment covers nothing.
   const covered = new Set<number>()
-  for (const fulfillment of order.fulfillments ?? []) {
-    for (const index of fulfillment?.lineItemIds ?? []) {
-      const line = Math.round(Number(index))
-      if (Number.isFinite(line) && line >= 0) covered.add(line)
-    }
+  for (const state of orderLineFulfillmentStates(order)) {
+    if (state.quantity > 0 && state.remainingQuantity === 0) covered.add(state.lineItemId)
   }
   return covered
 }
@@ -1328,7 +1343,9 @@ export function statusAfterFulfilling(
 ): OrderStatus {
   const lines = order.lineItems ?? []
   if (lines.length === 0) return 'fulfilled'
-  return lines.every((_line, index) => covered.has(index))
+  // A digital or service line has nothing to ship (AGL-3611), so it never
+  // holds the order open.
+  return lines.every((line, index) => covered.has(index) || !lineRequiresShipping(line))
     ? 'fulfilled'
     : 'partially_fulfilled'
 }

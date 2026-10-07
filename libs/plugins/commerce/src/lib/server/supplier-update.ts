@@ -267,9 +267,27 @@ export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
             body: { error: `Order is already ${order.status}` } as any,
           }
         }
+        // The units still open on the supplier's lines (AGL-3611): the
+        // merchant may already have shipped part of one from the console.
+        const remainingByLine = new Map(
+          CommerceModel.orderLineFulfillmentStates(order).map((state) => [
+            state.lineItemId,
+            state.remainingQuantity,
+          ]),
+        )
+        const shippedLines = myLines
+          .map((index) => ({ lineItemId: index, quantity: remainingByLine.get(index) ?? 0 }))
+          .filter((entry) => entry.quantity > 0)
         const fulfillment: CommerceModel.OrderFulfillment = {
           id: `supplier-${Date.now().toString(36)}`,
-          lineItemIds: myLines,
+          lineItemIds: shippedLines.map((entry) => entry.lineItemId),
+          lines: shippedLines,
+          ...(carrier && trackingNumber
+            ? (() => {
+                const trackingUrl = CommerceModel.trackingUrlFor(carrier, trackingNumber)
+                return trackingUrl ? { trackingUrl } : {}
+              })()
+            : {}),
           ...(carrier ? { carrier } : {}),
           ...(trackingNumber ? { trackingNumber } : {}),
           atMs: Date.now(),

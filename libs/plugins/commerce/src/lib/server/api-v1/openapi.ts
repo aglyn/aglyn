@@ -70,11 +70,19 @@ export const ORDERS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
   description: 'A site’s orders. Status moves are constrained.',
   schemaName: 'Order',
   required: ['id', 'object', 'number', 'status'],
-  writable: ['status', 'carrier', 'trackingNumber'],
+  writable: ['status', 'carrier', 'trackingNumber', 'trackingUrl', 'lineItems', 'notify'],
   writeOnly: {
     status: { type: 'string', enum: ['fulfilled', 'delivered'], description: 'The status to move the order to.' },
-    carrier: str('Free text, e.g. `UPS`. Trimmed to 40 characters.'),
+    carrier: str('Free text, e.g. `UPS`. Trimmed to 40 characters. USPS, UPS, FedEx, DHL, Canada Post, Royal Mail and Australia Post get a tracking link.'),
     trackingNumber: str('Free text. Trimmed to 60 characters.'),
+    trackingUrl: str('An https tracking link, for a carrier the link is not derived for.'),
+    lineItems: {
+      type: 'array',
+      description:
+        'With `status: fulfilled`, the units this shipment covers: `[{ lineItemId, quantity }]`, where `lineItemId` is the line’s index. Omitted, the shipment covers everything still to ship. More than is left is `409 conflict` (`code: "over_fulfilled"`). Send an `Idempotency-Key` header so a retried partial shipment is recorded once.',
+      items: { type: 'object', additionalProperties: true },
+    },
+    notify: bool('Whether the buyer is told about this shipment. Defaults to true.'),
   },
   writeRequired: ['status'],
   fields: {
