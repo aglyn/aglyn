@@ -302,4 +302,26 @@ describe('queueRegisterPrint — what a sale, a refund or a paid-out queues', ()
       await queueRegisterPrint({ hostId: HOST, registerId: 'reg9', receipt, reason: 'sale', firestore: store.current }),
     ).toEqual({ jobIds: [] })
   })
+
+  it('prints a shift report once, on the receipt printer, keyed on its cause (AGL-3609)', async () => {
+    const { receiptPrinter } = await addTwo()
+    const report = {
+      title: 'Z REPORT',
+      storeName: 'Corner Cafe',
+      sections: [{ section: 'Sales', rows: [{ label: 'Orders', value: '3' }] }],
+    }
+    const input = {
+      hostId: HOST,
+      registerId: 'reg1',
+      report,
+      reason: 'z_report',
+      idempotencyKey: 'shift1-a',
+      firestore: store.current,
+    }
+    await queueRegisterPrint(input)
+    await queueRegisterPrint(input)
+    expect(jobs()).toEqual([
+      expect.objectContaining({ kind: 'report', printerId: receiptPrinter, reason: 'z_report', report }),
+    ])
+  })
 })

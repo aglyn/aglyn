@@ -20,6 +20,7 @@ import {
   code128Printable,
   layoutDrawerKick,
   layoutReceipt,
+  layoutReport,
   layoutTestPage,
   toPrintable,
   twoColumnLines,
@@ -162,6 +163,30 @@ describe('the printer-neutral layout (AGL-3619)', () => {
 
   it('a drawer kick prints nothing', () => {
     expect(layoutDrawerKick(48).ops).toEqual([{ op: 'drawer' }])
+  })
+
+  it('a shift report prints its sections as aligned two-column rows (AGL-3609)', () => {
+    const document = layoutReport(
+      {
+        title: 'Z REPORT',
+        storeName: 'Corner Café',
+        subtitle: 'Front - Closed by Cal',
+        sections: [
+          { section: 'Sales', rows: [{ label: 'Net sales', value: '$71.60', strong: true }] },
+          { section: 'Cash drawer', rows: [{ label: 'Short', value: '-$0.60', strong: true }] },
+        ],
+      },
+      { columns: 32 },
+    )
+    const text = renderText(document)
+    expect(text).toContain('Z REPORT')
+    expect(text).toContain('Corner Cafe')
+    expect(text).toContain('CASH DRAWER')
+    const short = text.split('\n').find((line) => line.startsWith('Short'))!
+    expect(short).toHaveLength(32)
+    expect(short.endsWith('-$0.60')).toBe(true)
+    expect(document.ops.some((op) => op.op === 'drawer')).toBe(false)
+    expect(document.ops.at(-1)).toEqual({ op: 'cut' })
   })
 
   it('a test page names the printer and exercises alignment, emphasis, size and a barcode', () => {

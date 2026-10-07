@@ -32,6 +32,8 @@ import LocationsCard from './console/locations-card.component'
 import MemberPostsCard from './console/member-posts-card.component'
 import OrderWebhooksCard from './console/order-webhooks-card.component'
 import PaymentsSettingsCard from './console/payments-settings-card.component'
+import PosShiftHistoryCard from './console/pos-ops/pos-shift-history-card.component'
+import PosStaffPinsCard from './console/pos-ops/pos-staff-pins-card.component'
 import ProductsHubCard from './console/products-hub-card.component'
 import RecoveryQueueCard from './console/recovery-queue-card.component'
 import RegistersCard from './console/registers-card.component'
@@ -95,6 +97,10 @@ function sectionBody(
               size: { xs: 12 },
               children: <RecoveryQueueCard hostId={hostId} />,
             },
+            {
+              size: { xs: 12 },
+              children: <PosShiftHistoryCard hostId={hostId} />,
+            },
           ]}
         />
       )
@@ -144,6 +150,7 @@ function sectionBody(
             { size: { xs: 12 }, children: <TaxSettingsCard hostId={hostId} /> },
             { size: { xs: 12 }, children: <LocationsCard hostId={hostId} /> },
             { size: { xs: 12 }, children: <RegistersCard hostId={hostId} /> },
+            { size: { xs: 12 }, children: <PosStaffPinsCard hostId={hostId} /> },
             {
               size: { xs: 12 },
               children: <ShippingSettingsCard hostId={hostId} />,

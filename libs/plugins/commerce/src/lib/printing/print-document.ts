@@ -20,6 +20,7 @@ import {
   formatReceiptTime,
   type ReceiptData,
 } from '../model/commerce-receipt'
+import type { PrintReport } from '../model/commerce-printers'
 
 /**
  * A printer-neutral document (AGL-3619): what a receipt, a test page or a
@@ -231,6 +232,34 @@ export function layoutTestPage(input: {
   ops.push({ op: 'feed', lines: 1 })
   for (const text of wrapText('If you can read this, receipts will print here.', columns)) {
     ops.push({ op: 'text', text, align: 'center' })
+  }
+  ops.push({ op: 'feed', lines: 2 })
+  ops.push({ op: 'cut' })
+  return { columns, ops }
+}
+
+/** A titled report on the receipt roll: a shift's X or Z report (AGL-3609). */
+export function layoutReport(report: PrintReport, options: Pick<LayoutOptions, 'columns' | 'logo'>): PrintDocument {
+  const { columns } = options
+  const ops: PrintOp[] = []
+  if (options.logo) ops.push({ op: 'logo' })
+  for (const text of wrapText(report.storeName, Math.floor(columns / 2))) {
+    ops.push({ op: 'text', text, align: 'center', bold: true, size: 2 })
+  }
+  for (const text of wrapText(report.title, Math.floor(columns / 2))) {
+    ops.push({ op: 'text', text, align: 'center', bold: true, size: 2 })
+  }
+  if (report.subtitle) {
+    for (const text of wrapText(report.subtitle, columns)) ops.push({ op: 'text', text, align: 'center' })
+  }
+  for (const section of report.sections) {
+    ops.push(rule(columns))
+    ops.push({ op: 'text', text: toPrintable(section.section.toUpperCase()).slice(0, columns), bold: true })
+    for (const row of section.rows) {
+      for (const text of twoColumnLines(row.label, row.value, columns)) {
+        ops.push({ op: 'text', text, bold: row.strong === true })
+      }
+    }
   }
   ops.push({ op: 'feed', lines: 2 })
   ops.push({ op: 'cut' })

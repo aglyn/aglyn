@@ -72,6 +72,30 @@ const REGISTER = { $id: 'reg-1', name: 'Front counter' }
 let requests: string[] = []
 let payloads: any[] = []
 
+// The register's operations (AGL-3609) have specs of their own; this one
+// reads the page around them.
+jest.mock('./pos-ops/register-ops', () => ({
+  PosOperationsBar: () => null,
+  PosCustomerLookup: () => null,
+  PosLastReceipt: () => null,
+  usePosOpsSettings: () => ({
+    requireOpenShift: false,
+    refundLimitCents: 0,
+    autoLockMinutes: 0,
+    receiptAddress: '',
+    returnPolicy: '',
+  }),
+  usePosCashier: () => ({
+    cashier: null,
+    assertion: undefined,
+    locked: false,
+    switchTo: () => undefined,
+    signOutCashier: () => undefined,
+    lock: () => undefined,
+    unlock: () => undefined,
+  }),
+}))
+
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...path: string[]) => path.join('/'),
   /*

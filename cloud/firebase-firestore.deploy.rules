@@ -3388,6 +3388,7 @@ match /{subcollection}/{document=**} {
 
 allow read: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
+subcollection != 'posStaffPins' &&
 (isStaff() || (isHostMember(hostId) &&
 !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
 'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnelJourneys', 'funnelResults'])));
@@ -3500,8 +3501,14 @@ subcollection != 'orderWebhookSecrets' &&
 
 
 
+
+
+
+
+
 allow create: if subcollection != 'siteMemberCredentials' &&
-subcollection != 'orderWebhookSecrets' && (isStaff() ||
+subcollection != 'orderWebhookSecrets' &&
+subcollection != 'posStaffPins' && (isStaff() ||
 ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
 !(subcollection in ['screens', 'layouts', 'variables',
 'functions', 'workflows', 'services', 'redirects',
@@ -3517,7 +3524,7 @@ subcollection != 'orderWebhookSecrets' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'recordPages', 'printers',
+'siteMemberCredentials', 'posStaffPins', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults']) &&
 
@@ -3659,7 +3666,8 @@ subcollection != 'orderWebhookSecrets' && (isStaff() ||
 
 
 allow update: if subcollection != 'siteMemberCredentials' &&
-subcollection != 'orderWebhookSecrets' && (isStaff() ||
+subcollection != 'orderWebhookSecrets' &&
+subcollection != 'posStaffPins' && (isStaff() ||
 ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
 !(subcollection in ['screens', 'layouts', 'components', 'installs',
 'templates', 'collections', 'datasets', 'orders', 'registers',
@@ -3675,7 +3683,7 @@ subcollection != 'orderWebhookSecrets' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'recordPages', 'printers',
+'siteMemberCredentials', 'posStaffPins', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
 
@@ -3715,7 +3723,8 @@ subcollection != 'orderWebhookSecrets' && (isStaff() ||
 
 
 allow delete: if subcollection != 'siteMemberCredentials' &&
-subcollection != 'orderWebhookSecrets' && (isStaff() ||
+subcollection != 'orderWebhookSecrets' &&
+subcollection != 'posStaffPins' && (isStaff() ||
 ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
 !(subcollection in ['screens', 'layouts', 'components',
 'collections', 'datasets', 'orders', 'registers', 'webhooks',
@@ -3730,7 +3739,8 @@ subcollection != 'orderWebhookSecrets' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-'recordPages', 'printers', 'printJobs', 'returns', 'orderWebhooks',
+'posStaffPins', 'recordPages', 'printers', 'printJobs', 'returns',
+'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
 }
 

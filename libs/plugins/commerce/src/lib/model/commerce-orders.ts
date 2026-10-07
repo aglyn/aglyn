@@ -310,6 +310,16 @@ export interface HostOrder {
   registerId?: string
   cashierId?: string
   /**
+   * The register shift the sale was rung in (AGL-3609), which the shift's X
+   * and Z reports count it under.
+   */
+  shiftId?: string
+  /**
+   * The person the cashier attached at the register (AGL-3609), as the
+   * person-records seam names them: which record system, and its id there.
+   */
+  customerRecord?: { kind: string; id: string }
+  /**
    * Every payment toward a register sale (AGL-3607): one per tender, until
    * the balance due is zero. Read through `orderPayments`, which infers one
    * payment for an order written before the ledger existed.

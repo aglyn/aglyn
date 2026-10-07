@@ -119,6 +119,30 @@ function mockAnswer(asked: Asked): Row[] {
   return cap ? rows.slice(0, Number(cap.value)) : rows
 }
 
+// The register's operations (AGL-3609) have specs of their own; this one
+// reads the page around them.
+jest.mock('./pos-ops/register-ops', () => ({
+  PosOperationsBar: () => null,
+  PosCustomerLookup: () => null,
+  PosLastReceipt: () => null,
+  usePosOpsSettings: () => ({
+    requireOpenShift: false,
+    refundLimitCents: 0,
+    autoLockMinutes: 0,
+    receiptAddress: '',
+    returnPolicy: '',
+  }),
+  usePosCashier: () => ({
+    cashier: null,
+    assertion: undefined,
+    locked: false,
+    switchTo: () => undefined,
+    signOutCashier: () => undefined,
+    lock: () => undefined,
+    unlock: () => undefined,
+  }),
+}))
+
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...path: string[]) => ({ path: path.join('/'), constraints: [] }),
   query: (base: Asked, ...constraints: Array<Record<string, unknown>>) => ({

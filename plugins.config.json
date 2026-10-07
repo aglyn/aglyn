@@ -643,6 +643,11 @@
           "name": "orderWebhookDeliveries",
           "mediaScan": "none",
           "mediaScanReason": "The webhook delivery log (AGL-3611): one row per event per endpoint, expiring after 30 days. A body copies the order, whose image URLs record what was sold rather than use the file, so a match would be wrong, and a busy store holds thousands."
+        },
+        {
+          "name": "posStaffPins",
+          "mediaScan": "none",
+          "mediaScanReason": "Register staff PINs (AGL-3609): a salted hash and a lockout counter per member, written only by the staff PIN route. No content field at all."
         }
       ],
       "sitemapSections": [

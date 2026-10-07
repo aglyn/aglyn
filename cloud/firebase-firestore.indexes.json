@@ -3215,6 +3215,20 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "customerEmailLower",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "customerEmailTokens",
           "arrayConfig": "CONTAINS"
         },

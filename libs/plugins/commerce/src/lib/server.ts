@@ -98,6 +98,7 @@ import { printersHandler } from './server/printers'
 import { posPaymentHandler } from './server/pos-payment'
 import { posReadersHandler } from './server/pos-readers'
 import { posDisplayHandler } from './server/pos-display'
+import { registerPosOpsRoutes } from './server/pos-ops-routes'
 import {
   processAbandonedHandler,
   scanAbandonedCheckouts,
@@ -417,6 +418,8 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/pos-payment', posPaymentHandler)
   registerPluginApiRoute('commerce/pos-readers', posReadersHandler)
   registerPluginApiRoute('commerce/pos-display', posDisplayHandler)
+  // Shifts, staff PINs, the customer lookup and returns (AGL-3609).
+  registerPosOpsRoutes()
   registerPluginApiRoute('commerce/process-abandoned', processAbandonedHandler)
   registerPluginApiRoute('commerce/process-restock', processRestockHandler)
   registerPluginApiRoute('commerce/refund', refundHandler)

@@ -23,6 +23,7 @@ import type {
 } from '@aglyn/aglyn/server'
 import { saleProcessingCostCents } from '@aglyn/aglyn/server'
 import { posOrderHandler } from './pos-order'
+import { defaultPosOpsDeps, mintPosAssertion } from './pos-ops-gate'
 
 /**
  * POS order idempotency (AGL-1691).
@@ -2591,5 +2592,55 @@ describe('the open tender (AGL-3607)', () => {
         changeCents: 100,
       }),
     ])
+  })
+})
+
+describe('what a register sale carries (AGL-3609)', () => {
+  it("stamps the register's open shift, so the X and Z reports count the sale", async () => {
+    docs.set('hosts/host-1/registers/register-1', {
+      ...docs.get('hosts/host-1/registers/register-1'),
+      openShiftId: 'shift-9',
+    })
+    await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(orderDocs()[0]).toMatchObject({ shiftId: 'shift-9', cashierId: 'cashier-1' })
+  })
+
+  it('refuses the sale when the site requires an open shift and none is', async () => {
+    mockPluginSettings = { posRequireOpenShift: true }
+    const result = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(result.status).toBe(409)
+    expect(result.body).toEqual({ error: 'Open a shift on this register before ringing a sale.' })
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('attaches the customer the lookup found, and takes their email for the sale', async () => {
+    await post({
+      payment: 'cash',
+      cashReceivedCents: 500,
+      customer: { kind: 'crm', id: 'rec_1', name: 'Dana Diaz', email: 'Dana@Example.com', phone: '555' },
+    })
+    const order = orderDocs()[0]
+    expect(order).toMatchObject({
+      customerEmail: 'dana@example.com',
+      customerName: 'Dana Diaz',
+      customerRecord: { kind: 'crm', id: 'rec_1' },
+    })
+    expect(order).not.toHaveProperty('customerPhone')
+  })
+
+  it('records the cashier a PIN switched in, on the sale, its payment and its discount', async () => {
+    process.env.TOKEN_SIGNING_SECRET = 'test-signing-secret'
+    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'editor', 'cashier-2': 'editor' } })
+    const { token } = mintPosAssertion(defaultPosOpsDeps(), {
+      hostId: 'host-1',
+      registerId: 'register-1',
+      memberUid: 'cashier-2',
+      purpose: 'cashier',
+    })
+    await post({ payment: 'cash', cashReceivedCents: 500, discountPct: 10, cashierAssertion: token })
+    const order = orderDocs()[0]
+    expect(order).toMatchObject({ cashierId: 'cashier-2', discountBy: 'cashier-2' })
+    expect(order?.payments?.[0]?.cashierId).toBe('cashier-2')
+    delete process.env.TOKEN_SIGNING_SECRET
   })
 })

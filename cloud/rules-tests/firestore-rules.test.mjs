@@ -1614,6 +1614,11 @@ describe('hosts', () => {
       // `/api/commerce/printers` and the printers' poll routes write either.
       'printers',
       'printJobs',
+      // A register member's PIN hash and lockout counter (AGL-3609). Only
+      // /api/commerce/pos-staff-pin reads or writes one: a read hands out a
+      // short PIN's hash to crack offline, a write plants a PIN or lifts a
+      // lockout. Named here for the `registers` reason above.
+      'posStaffPins',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -12899,6 +12904,76 @@ describe("a site member's password hash is no client's (AGL-3308)", () => {
       '`siteMemberCredentials` is no longer denied outright — something ' +
         're-grants it.',
     )
+  })
+})
+
+/**
+ * The register's server-only records (AGL-3609).
+ *
+ * A staff PIN's hash is no client's — not even its own member's, and not
+ * staff's: the PIN route is the only reader. Shifts and register returns
+ * live under `registers`, whose writes are the Admin SDK's (the pool is
+ * billed), so a cashier cannot rewrite a drawer count or forge a refund
+ * record; every member of the site can still read them for the history.
+ */
+describe("the register's PINs, shifts and returns are server-written (AGL-3609)", () => {
+  const HASH = `${'a'.repeat(32)}:${'b'.repeat(128)}`
+  const ROLES = [
+    ['viewer', VIEWER],
+    ['author', AUTHOR],
+    ['editor', EDITOR],
+    ['admin', OWNER],
+  ]
+  const pinDoc = (db, uid) => doc(db, 'hosts', HOST, 'posStaffPins', uid)
+  const shiftDoc = (db) => doc(db, 'hosts', HOST, 'registers', 'front', 'shifts', 's1')
+  const returnDoc = (db) => doc(db, 'hosts', HOST, 'registers', 'front', 'returns', 'r1')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'hosts', HOST, 'registers', 'front'), { name: 'Front' })
+      await setDoc(pinDoc(db, EDITOR), { pinScrypt: HASH, failedAttempts: 4, lockedUntilMs: null })
+      await setDoc(shiftDoc(db), { status: 'open', openingFloatCents: 10000, cashEvents: [] })
+      await setDoc(returnDoc(db), { refundedCents: 500, orderId: 'o1' })
+    })
+  })
+
+  it('no client reads or writes a PIN, its own member and staff included', async () => {
+    for (const [role, uid] of [...ROLES, ['staff', STAFF]]) {
+      const db = role === 'staff' ? authed(STAFF, { staff: true }) : authed(uid)
+      await mustDeny(`a ${role} reading a PIN hash`, getDoc(pinDoc(db, EDITOR)))
+      await mustDeny(
+        `a ${role} listing the PIN hashes`,
+        getDocs(query(collection(db, 'hosts', HOST, 'posStaffPins'), limit(10))),
+      )
+      await mustDeny(`a ${role} planting a PIN`, setDoc(pinDoc(db, uid), { pinScrypt: HASH }))
+      await mustDeny(
+        `a ${role} lifting a lockout`,
+        updateDoc(pinDoc(db, EDITOR), { failedAttempts: 0 }),
+      )
+      await mustDeny(`a ${role} deleting a PIN`, deleteDoc(pinDoc(db, EDITOR)))
+    }
+  })
+
+  it('no member writes a shift or a register return, and every member reads them', async () => {
+    for (const [role, uid] of ROLES) {
+      const db = authed(uid)
+      await mustDeny(
+        `a ${role} rewriting a drawer count`,
+        updateDoc(shiftDoc(db), { openingFloatCents: 0 }),
+      )
+      await mustDeny(
+        `a ${role} opening a shift client-side`,
+        setDoc(doc(db, 'hosts', HOST, 'registers', 'front', 'shifts', 's2'), { status: 'open' }),
+      )
+      await mustDeny(
+        `a ${role} forging a register return`,
+        setDoc(doc(db, 'hosts', HOST, 'registers', 'front', 'returns', 'r2'), { refundedCents: 1 }),
+      )
+      await mustDeny(`a ${role} deleting a register return`, deleteDoc(returnDoc(db)))
+      await mustAllow(`a ${role} reading a shift`, getDoc(shiftDoc(db)))
+      await mustAllow(`a ${role} reading a register return`, getDoc(returnDoc(db)))
+    }
   })
 })
 

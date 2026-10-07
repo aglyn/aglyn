@@ -42,6 +42,8 @@ import {
   type PosLiftedOrder,
   type PosPaymentOutcome,
 } from './pos-sale'
+import { posPaymentCashierId } from './pos-sale-stamp'
+import { printPosSaleReceipt } from './pos-print'
 import {
   posStripe,
   posStripeErrorMessage,
@@ -84,7 +86,7 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(body['hostId'] ?? '')
   const gate = await authorizePosStaff(req, hostId)
   if ('error' in gate) return res.status(gate.status).json({ error: gate.error })
-  const staff = gate.staff
+  let staff = gate.staff
   const action = String(body['action'] ?? '')
   const orderId = String(body['orderId'] ?? '')
   try {
@@ -141,6 +143,18 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
     const paymentId = startsPayment
       ? posPaymentId(orderId, attemptKey)
       : String(body['paymentId'] ?? '')
+    // The cashier a PIN switched in takes the payment (AGL-3609).
+    if (startsPayment && body['cashierAssertion']) {
+      staff = {
+        ...staff,
+        uid: await posPaymentCashierId({
+          hostId,
+          orderId,
+          signedInUid: staff.uid,
+          assertion: body['cashierAssertion'],
+        }),
+      }
+    }
     const amountCents = Math.round(Number(body['amountCents'] ?? 0))
     const tipCents = Math.round(Number(body['tipCents'] ?? 0)) || 0
     const settings = posRegisterSettings(
@@ -759,6 +773,11 @@ async function recordReceiptChoice(
     return { ...fresh, receiptRequest } as PosLiftedOrder
   })
   if (!order) return { ok: false, status: 404, error: 'Unknown sale' }
+  if (order.status === 'paid' && channel === 'print') {
+    // Chosen after the sale completed: printed now on the register's receipt
+    // printer, under the sale's own key so it never prints twice (AGL-3609).
+    await printPosSaleReceipt(staff.hostId, orderId)
+  }
   if (order.status === 'paid' && (channel === 'email' || channel === 'sms')) {
     // Chosen after the sale completed: sent now, through the same door.
     const sent = await notifyOrderBuyer({ hostId: staff.hostId, orderId }, 'receipt', {

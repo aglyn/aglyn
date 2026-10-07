@@ -28,6 +28,8 @@ import { notifyOrderBuyer } from './order-notifications'
 import { ORDER_REFUNDED_EVENT } from '../model/order-events'
 import { raiseOrderEvent } from './order-events'
 import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
+import { createStripeRefund } from './stripe-refund'
+import { posRegisterRefundAuthority } from './pos-refund-authority'
 
 /**
  * A claim on one refund attempt (AGL-1696), the same primitive the POS sale
@@ -192,9 +194,6 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     // it stays: `memberRoles` is the projection the rules read, so dropping it
     // here would let this route and the database disagree.
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin') {
-      return res.status(403).json({ error: 'Refunds require a site admin' })
-    }
     // The second is WHOSE admin, and it is the one this gate was missing.
     //
     // `memberRoles` is a per-host projection of `hostAccess`, and
@@ -217,10 +216,26 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     // (AGL-506), and `denied()` returns `orgWide: false` / `hostRole: null`,
     // so an absent membership refuses rather than folding to permitted.
     const membership = await resolveOrgPermissions(decoded.uid, { hostId })
-    if (!membership.orgWide || membership.hostRole !== 'admin') {
-      return res
-        .status(403)
-        .json({ error: 'Refunds require an admin of the whole workspace' })
+    const workspaceAdmin =
+      memberRole === 'admin' &&
+      membership.orgWide === true &&
+      membership.hostRole === 'admin'
+    // THE REGISTER'S OWN REFUNDS (AGL-3609). A member who works the register
+    // — `admin` or `editor` on this site with `managePos` — may refund a POS
+    // order up to the site's cashier refund limit, and above it with a
+    // workspace admin's PIN. Decided below, once the order and the amount are
+    // known; every other refund still needs the workspace admin above.
+    const registerStaff =
+      !workspaceAdmin &&
+      (memberRole === 'admin' || memberRole === 'editor') &&
+      membership.permissions?.managePos === true
+    if (!workspaceAdmin && !registerStaff) {
+      return res.status(403).json({
+        error:
+          memberRole !== 'admin'
+            ? 'Refunds require a site admin'
+            : 'Refunds require an admin of the whole workspace',
+      })
     }
     const orderRef = hostRef.collection('orders').doc(orderId)
     const orderSnapshot = await orderRef.get()
@@ -228,6 +243,20 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       return res.status(404).json({ error: 'Unknown order' })
     }
     const order = CommerceModel.liftLegacyOrder(orderSnapshot.data() as any)
+    if (registerStaff) {
+      const authority = await posRegisterRefundAuthority({
+        hostId,
+        hostRef,
+        order,
+        amountCents,
+        lineCents: requestedLineIds.length
+          ? CommerceModel.orderLineRefundCents(order, requestedLineIds)
+          : null,
+        registerId: String(body.registerId ?? (order as { registerId?: string }).registerId ?? ''),
+        managerAssertion: body.managerAssertion,
+      })
+      if ('body' in authority) return res.status(403).json(authority.body)
+    }
 
     // Replay a settled attempt before anything else can reject it. This read
     // is only a short-circuit, never the dedupe primitive — the atomic
@@ -494,26 +523,13 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       })
     }
 
-    const params = new URLSearchParams({
-      payment_intent: String(paymentIntentId),
-      amount: String(refundCents),
-      reverse_transfer: 'true',
-      refund_application_fee: 'true',
+    const refund = await createStripeRefund({
+      paymentIntentId: String(paymentIntentId),
+      amountCents: refundCents,
+      idempotencyKey: claim?.stripeKey ?? null,
     })
-    const response = await fetch('https://api.stripe.com/v1/refunds', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        ...(claim?.stripeKey
-          ? { 'Idempotency-Key': claim.stripeKey }
-          : {}),
-      },
-      body: params.toString(),
-    })
-    const refund = await response.json()
-    if (!response.ok) {
-      console.error('Stripe refund error', refund?.error)
+    if ('error' in refund) {
+      console.error('Stripe refund error', refund.code, refund.error)
       // Stripe said no, so we KNOW no money moved: give the reservation back
       // and let the same attempt be tried again.
       await firestore
@@ -532,29 +548,13 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       // Stripe refusing BECAUSE OF A DISPUTE is the guard above arriving by
       // the other door — our order document simply didn't know yet (webhook
       // lag, or an order from before disputes were subscribed at all). Same
-      // answer, same accuracy: a 409 naming the dispute, not a 502 reading
-      // "The charge you're attempting to refund has been charged back", which
-      // an admin has no reason to connect to the Refund button they pressed.
-      const stripeCode = String(refund?.error?.code ?? '')
-      if (
-        stripeCode === 'charge_disputed' ||
-        stripeCode === 'refund_disputed_payment'
-      ) {
-        return res.status(409).json({
-          error:
-            'Stripe refused this refund because the charge is disputed. ' +
-            'Respond to the dispute or accept it in the Stripe dashboard; ' +
-            'refund any remainder once it settles.',
-        })
-      }
-      return res
-        .status(502)
-        .json({ error: refund?.error?.message ?? 'Refund failed' })
+      // answer, same accuracy: a 409 naming the dispute (`createStripeRefund`
+      // words it), not a 502 reading "The charge you're attempting to refund
+      // has been charged back", which an admin has no reason to connect to
+      // the Refund button they pressed.
+      return res.status(refund.status === 409 ? 409 : 502).json({ error: refund.error })
     }
 
-    // SETTLE. Re-read inside the transaction: a concurrent partial may have
-    // reserved against the same order, and the timeline must be appended to
-    // whatever is there now rather than to the snapshot read at the top.
     let refundedCents = 0
     let fullyRefunded = false
     let closedTheOrder = false
@@ -718,9 +718,9 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     await flagOrderRestock({ hostId, orderId, kind: 'refund', closedTheOrder })
     // The buyer is told what came back (AGL-3610), once per Stripe refund id —
     // a keyed retry replays at the claim above and never reaches here.
-    await notifyOrderBuyer({ hostId, orderId }, 'refunded', { refundId: String(refund?.id ?? ''), refundCents, refundLineIndexes: requestedLineIds, fullyRefunded })
+    await notifyOrderBuyer({ hostId, orderId }, 'refunded', { refundId: refund.refundId, refundCents, refundLineIndexes: requestedLineIds, fullyRefunded })
     // Other plugins and the merchant's webhooks hear it too (AGL-3611), once per refund.
-    await raiseOrderEvent(ORDER_REFUNDED_EVENT, { hostId, orderId, key: `refund:${String(refund?.id ?? idempotencyKey)}`, extra: { refund: { id: refund?.id ? String(refund.id) : null, amountCents: refundCents, lineItemIds: [...(requestedLineIds ?? [])], full: Boolean(fullyRefunded) } } })
+    await raiseOrderEvent(ORDER_REFUNDED_EVENT, { hostId, orderId, key: `refund:${refund.refundId || idempotencyKey}`, extra: { refund: { id: refund.refundId || null, amountCents: refundCents, lineItemIds: [...(requestedLineIds ?? [])], full: Boolean(fullyRefunded) } } })
     return res.status(200).json(payload)
   } catch (error) {
     console.error(error)

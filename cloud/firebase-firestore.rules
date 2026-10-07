@@ -3388,6 +3388,7 @@ service cloud.firestore {
         // A result is that route's cache, served by the route.
         allow read: if subcollection != 'siteMemberCredentials' &&
           subcollection != 'orderWebhookSecrets' &&
+          subcollection != 'posStaffPins' &&
           (isStaff() || (isHostMember(hostId) &&
             !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
               'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnelJourneys', 'funnelResults'])));
@@ -3500,8 +3501,14 @@ service cloud.firestore {
         //    the suspend flag and a delete that strands no credential.
         //    `siteMemberCredentials` holds the password hashes; the `!=` that
         //    opens all four statements keeps every client out, staff included.
+        //  - `posStaffPins`, all four (AGL-3609): each register member's PIN
+        //    hash and its lockout counter. A read hands out a 4-6 digit hash
+        //    to crack offline, and a write plants a PIN or lifts a lockout.
+        //    /api/commerce/pos-staff-pin is the only reader and writer, so it
+        //    joins the `!=` with `siteMemberCredentials`.
         allow create: if subcollection != 'siteMemberCredentials' &&
-          subcollection != 'orderWebhookSecrets' && (isStaff() ||
+          subcollection != 'orderWebhookSecrets' &&
+          subcollection != 'posStaffPins' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
               'functions', 'workflows', 'services', 'redirects',
@@ -3517,7 +3524,7 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials', 'recordPages', 'printers',
+              'siteMemberCredentials', 'posStaffPins', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults']) &&
             // The org Inbox's collection-group read (AGL-3303) lists EVERY
@@ -3659,7 +3666,8 @@ service cloud.firestore {
         //    it a publish act (AGL-2334) rather than authoring, so the block
         //    below re-grants both on `canPublishHostContent`.
         allow update: if subcollection != 'siteMemberCredentials' &&
-          subcollection != 'orderWebhookSecrets' && (isStaff() ||
+          subcollection != 'orderWebhookSecrets' &&
+          subcollection != 'posStaffPins' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
@@ -3675,7 +3683,7 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials', 'recordPages', 'printers',
+              'siteMemberCredentials', 'posStaffPins', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
         // `collections` joins the delete exclusion (AGL-947): a collection
@@ -3715,7 +3723,8 @@ service cloud.firestore {
         // which is the same routing decision in the other direction and is
         // exactly the AGL-2334 `components` argument.
         allow delete: if subcollection != 'siteMemberCredentials' &&
-          subcollection != 'orderWebhookSecrets' && (isStaff() ||
+          subcollection != 'orderWebhookSecrets' &&
+          subcollection != 'posStaffPins' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components',
               'collections', 'datasets', 'orders', 'registers', 'webhooks',
@@ -3730,7 +3739,8 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-              'recordPages', 'printers', 'printJobs', 'returns', 'orderWebhooks',
+              'posStaffPins', 'recordPages', 'printers', 'printJobs', 'returns',
+              'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright

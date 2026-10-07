@@ -24,11 +24,13 @@ import {
   type PosPrinter,
   type PrintJob,
   type PrintJobKind,
+  type PrintReport,
 } from '../model/commerce-printers'
 import type { ReceiptData } from '../model/commerce-receipt'
 import {
   layoutDrawerKick,
   layoutReceipt,
+  layoutReport,
   layoutTestPage,
   type PrintDocument,
 } from '../printing/print-document'
@@ -75,6 +77,7 @@ export function printersRef(firestore: Firestore, hostId: string) {
 export interface EnqueuePrintJobInput {
   kind: PrintJobKind
   receipt?: ReceiptData
+  report?: PrintReport
   openDrawer?: boolean
   storeName?: string
   timeZone?: string
@@ -106,6 +109,7 @@ export async function enqueuePrintJob(
     kind: input.kind,
     status: 'queued',
     ...(input.receipt ? { receipt: input.receipt } : {}),
+    ...(input.report ? { report: input.report } : {}),
     ...(input.openDrawer ? { openDrawer: true } : {}),
     ...(input.storeName ? { storeName: input.storeName } : {}),
     ...(input.timeZone ? { timeZone: input.timeZone } : {}),
@@ -340,6 +344,9 @@ export function printJobDocument(
   const logo = Boolean(printer.logoKey)
   if (job.kind === 'receipt' && job.receipt) {
     return layoutReceipt(job.receipt, { columns, logo, openDrawer: job.openDrawer })
+  }
+  if (job.kind === 'report' && job.report) {
+    return layoutReport(job.report, { columns, logo })
   }
   if (job.kind === 'test') {
     return layoutTestPage({

@@ -59,6 +59,30 @@ const profile = { data: undefined as unknown, status: 'success' }
  * The hub's table is its query (AGL-3321): answered by the contract's double
  * over the same products, stamped the way every writer stamps them.
  */
+// The register's operations (AGL-3609) have specs of their own; this one
+// reads the page around them.
+jest.mock('./pos-ops/register-ops', () => ({
+  PosOperationsBar: () => null,
+  PosCustomerLookup: () => null,
+  PosLastReceipt: () => null,
+  usePosOpsSettings: () => ({
+    requireOpenShift: false,
+    refundLimitCents: 0,
+    autoLockMinutes: 0,
+    receiptAddress: '',
+    returnPolicy: '',
+  }),
+  usePosCashier: () => ({
+    cashier: null,
+    assertion: undefined,
+    locked: false,
+    switchTo: () => undefined,
+    signOutCashier: () => undefined,
+    lock: () => undefined,
+    unlock: () => undefined,
+  }),
+}))
+
 jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
   const { useListQueryDouble } = jest.requireActual(
     '@aglyn/tenant-feature-instance/testing/list-query-double',

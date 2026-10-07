@@ -25,6 +25,7 @@ import {
   PRINTER_BRANDS,
   type PosPrinter,
   type PrinterBrand,
+  type PrintReport,
 } from '../model/commerce-printers'
 import { receiptDataFromOrder, type ReceiptData } from '../model/commerce-receipt'
 import type { HostOrder } from '../model/commerce-orders'
@@ -203,6 +204,8 @@ export async function queueRegisterPrint(input: {
   hostId: string
   registerId: string
   receipt?: ReceiptData
+  /** A shift report (AGL-3609): printed once, on the register's receipt printer. */
+  report?: PrintReport
   openDrawer?: boolean
   orderId?: string
   reason: string
@@ -247,6 +250,27 @@ export async function queueRegisterPrint(input: {
           reason: input.reason,
           createdBy: input.createdBy,
           jobId: key(entry.id),
+        },
+        input.nowMs,
+      )
+      jobIds.push(jobId)
+    }
+  }
+  if (input.report) {
+    // One copy, on the printer that prints receipts — or the till's only one.
+    const target = printers.find((entry: any) => entry.printer.autoPrintReceipts) ?? printers[0]
+    if (target) {
+      const { jobId } = await enqueuePrintJob(
+        firestore,
+        input.hostId,
+        target.id,
+        {
+          kind: 'report',
+          report: input.report,
+          registerId: input.registerId,
+          reason: input.reason,
+          createdBy: input.createdBy,
+          jobId: key(`${target.id}-report`),
         },
         input.nowMs,
       )

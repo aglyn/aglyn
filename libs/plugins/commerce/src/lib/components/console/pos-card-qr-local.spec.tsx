@@ -70,6 +70,30 @@ let requests: string[] = []
 /** The decoded JSON body of each of those, so a test can assert the tender. */
 let payloads: any[] = []
 
+// The register's operations (AGL-3609) have specs of their own; this one
+// reads the page around them.
+jest.mock('./pos-ops/register-ops', () => ({
+  PosOperationsBar: () => null,
+  PosCustomerLookup: () => null,
+  PosLastReceipt: () => null,
+  usePosOpsSettings: () => ({
+    requireOpenShift: false,
+    refundLimitCents: 0,
+    autoLockMinutes: 0,
+    receiptAddress: '',
+    returnPolicy: '',
+  }),
+  usePosCashier: () => ({
+    cashier: null,
+    assertion: undefined,
+    locked: false,
+    switchTo: () => undefined,
+    signOutCashier: () => undefined,
+    lock: () => undefined,
+    unlock: () => undefined,
+  }),
+}))
+
 jest.mock('firebase/firestore', () => ({
   // The path is the only thing the collection mock has to carry — the
   // listener mock below dispatches the four listens by their last segment.

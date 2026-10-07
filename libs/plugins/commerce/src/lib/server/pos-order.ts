@@ -46,6 +46,7 @@ import {
 import { posMaxDiscountPct } from '../plugin-config'
 import { offlineFeeMonthKey } from './pos-fee-month'
 import { notifyPosSaleCompleted } from './pos-sale'
+import { posSaleStamp } from './pos-sale-stamp'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 
 /**
@@ -84,7 +85,11 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
   // against it through `commerce/pos-payment` until the balance is zero.
   const payment = String(body.payment ?? 'cash') as 'cash' | 'link' | 'folio' | 'open'
   const cashReceivedCents = Math.round(Number(body.cashReceivedCents ?? 0))
-  const customerEmail = String(body.customerEmail ?? '').trim().toLowerCase()
+  // The customer the register's lookup attached (AGL-3609) gives the email
+  // when the cashier did not type one.
+  const customerEmail = String(body.customerEmail ?? body.customer?.email ?? '')
+    .trim()
+    .toLowerCase()
   const reservationId = String(body.reservationId ?? '')
   const registerId = String(body.registerId ?? '')
   // A code the shopper hands the cashier (AGL-305). The same field name the
@@ -205,9 +210,8 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // site, and
     // reading only the workspace's answer would refuse the sale the console
     // says is allowed.
-    const maxDiscountPct = posMaxDiscountPct(
-      await getPluginConfig(ownerOrg?.orgId, 'commerce', { hostId }),
-    )
+    const commerceConfig = await getPluginConfig(ownerOrg?.orgId, 'commerce', { hostId })
+    const maxDiscountPct = posMaxDiscountPct(commerceConfig)
     if (discountPct > maxDiscountPct) {
       return res.status(403).json({
         error:
@@ -241,6 +245,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       .map((doc) => ({
         id: doc.id,
         createdAtMs: doc.get('createdAt')?.toMillis?.() ?? 0,
+        openShiftId: doc.get('openShiftId'),
       }))
       .sort((a, b) => a.createdAtMs - b.createdAtMs || a.id.localeCompare(b.id))
     const rank = registerDocs.findIndex((r) => r.id === registerId)
@@ -256,6 +261,22 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           'registers or upgrade in Billing to use it.',
       })
     }
+    // WHO RANG IT, IN WHICH SHIFT, FOR WHOM (AGL-3609): the PIN-switched
+    // cashier, the register's open shift (refused when the site requires one
+    // and none is open) and the customer the lookup attached.
+    const stamped = await posSaleStamp({
+      hostId,
+      hostRef,
+      registerId,
+      openShiftId: registerDocs[rank]?.openShiftId,
+      signedInUid: decoded.uid,
+      body,
+      config: commerceConfig,
+    })
+    if ('error' in stamped) {
+      return res.status(stamped.status).json({ error: stamped.error })
+    }
+    const saleStamp = stamped.stamp
 
     // Server pricing per line.
     const uniqueIds: string[] = [
@@ -741,8 +762,9 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           status: 'pending',
           channel: 'pos',
           registerId,
-          cashierId: decoded.uid,
-          ...(discountPct > 0 ? { discountPct, discountBy: decoded.uid } : {}),
+          cashierId: saleStamp.cashierId,
+          ...saleStamp.fields,
+          ...(discountPct > 0 ? { discountPct, discountBy: saleStamp.cashierId } : {}),
           // The slot stays HELD until the sale completes, and is settled or
           // handed back by `pos-sale.ts` (AGL-305): a sale voided half-paid
           // must not count against the merchant's cap.
@@ -810,7 +832,8 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           status: 'pending',
           channel: 'pos',
           registerId,
-          cashierId: decoded.uid,
+          cashierId: saleStamp.cashierId,
+          ...saleStamp.fields,
           // WHO COMPED IT (AGL-2161). `totals.discountCents` recorded that
           // a discount happened and nothing recorded who asked for it or on
           // what basis — `decoded.uid` was read once, for the role gate, and
@@ -823,7 +846,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           // (`issuedBy`, `voidedBy`), and this is the same field for the same
           // reason.
           ...(discountPct > 0
-            ? { discountPct, discountBy: decoded.uid }
+            ? { discountPct, discountBy: saleStamp.cashierId }
             : {}),
           // WHICH PROMOTION, where one applied (AGL-305). `discountPct` and
           // `discountBy` answer for the cashier's own reduction and cannot
@@ -1044,7 +1067,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         // (`issuedBy`, `voidedBy`), and this is the same field for the same
         // reason.
         ...(discountPct > 0
-          ? { discountPct, discountBy: decoded.uid }
+          ? { discountPct, discountBy: saleStamp.cashierId }
           : {}),
         // WHICH PROMOTION, where one applied (AGL-305) — see the card branch
         // above for why the cashier's two fields cannot answer for it.
@@ -1070,7 +1093,8 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         ...(feeCents > 0 ? { feeCollection } : {}),
         // THE TENDER, RECORDED (AGL-3607): one settled payment, so this sale
         // reads the same as a split one rather than by inference.
-        cashierId: decoded.uid,
+        cashierId: saleStamp.cashierId,
+        ...saleStamp.fields,
         payments: [
           {
             id: `pay_${payment}`,
@@ -1081,7 +1105,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
             settledAtMs: paidEvent.atMs,
             takeFeeCents,
             feeCents: 0,
-            cashierId: decoded.uid,
+            cashierId: saleStamp.cashierId,
             ...(payment === 'cash'
               ? {
                   cashTenderedCents: cashReceivedCents,

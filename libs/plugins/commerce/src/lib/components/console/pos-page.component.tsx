@@ -23,7 +23,14 @@ import {
   PRODUCT_LIST_BASE,
   PRODUCT_LIST_QUERY,
 } from '../../constants/product-list-query'
-import { escapeHtml } from '../../utils/escape-html'
+import {
+  PosCustomerLookup,
+  PosLastReceipt,
+  PosOperationsBar,
+  usePosCashier,
+  usePosOpsSettings,
+  type PosSelectedCustomer,
+} from './pos-ops/register-ops'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { ListQueryNotices } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
@@ -117,7 +124,10 @@ export function posProductPlan(options: {
  * product grid with search/barcode (keyboard-wedge scanners type into
  * the search box and press Enter), a register cart with a whole-sale
  * discount, and cash / QR-card / reservation-folio settlement through
- * the server-priced pos-order API. Receipts print via the browser.
+ * the server-priced pos-order API. The operations strip (AGL-3609) runs the
+ * shift and drawer, the PIN cashier switch and returns; the customer lookup
+ * attaches a person to the sale; receipts print on an 80mm roll through the
+ * browser or the register's cloud printer.
  */
 /*
  * `managePos` is NOT read here. The nav item in `plugin.ts` declares it and
@@ -213,7 +223,9 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
 
   const [lines, setLines] = useState<RegisterLine[]>([])
   const [discountPct, setDiscountPct] = useState(0)
-  const [customerEmail, setCustomerEmail] = useState('')
+  // The customer the lookup attached (AGL-3609); their email is the sale's.
+  const [customer, setCustomer] = useState<PosSelectedCustomer | null>(null)
+  const customerEmail = customer?.email ?? ''
   const [locationId, setLocationId] = useState('')
   // Register (AGL-472): a sale must run through a named register so the
   // `posRegisters` cap is meaningful and takings are attributable.
@@ -226,6 +238,16 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     setRegisterId(first.$id)
     if (first.locationId) setLocationId(first.locationId)
   }, [usableRegisters, registerId])
+  const registerName = String(
+    usableRegisters.find((register: any) => register.$id === registerId)?.name ?? '',
+  )
+  // Who is ringing (AGL-3609): a PIN-switched cashier, and the idle lock.
+  const opsSettings = usePosOpsSettings(hostId)
+  const cashier = usePosCashier({
+    hostId,
+    registerId,
+    autoLockMinutes: opsSettings.autoLockMinutes,
+  })
   // `paying` routes the settlement DIALOGS — nothing else. It is deliberately
   // not the tender `settle` acts on (AGL-1682): it used to be both, and the
   // Card button had to `setPaying('link')` and call `settle()` in one handler,
@@ -267,11 +289,8 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     // clears the lines, which is what retires a spent key.
     attemptKey.current = ''
   }, [lines, discountPct])
-  const [lastReceipt, setLastReceipt] = useState<{
-    lines: RegisterLine[]
-    totalCents: number
-    changeCents: number
-  } | null>(null)
+  // The last completed sale, whose receipt is read back from the stored order.
+  const [lastReceipt, setLastReceipt] = useState<{ orderId: string } | null>(null)
 
   const products = useMemo(
     () =>
@@ -464,6 +483,8 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
           payment: tender,
           registerId,
           customerEmail: customerEmail || undefined,
+          ...(customer ? { customer } : {}),
+          ...(cashier.assertion ? { cashierAssertion: cashier.assertion } : {}),
           locationId: locationId || undefined,
           cashReceivedCents: Math.round(Number(cashReceived) * 100) || 0,
           reservationId: tender === 'folio' ? folioReservation : undefined,
@@ -480,14 +501,10 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
         setCardUrl(payload.url)
         return
       }
-      setLastReceipt({
-        lines,
-        totalCents: payload.totals?.totalCents ?? dueCents,
-        changeCents: payload.changeCents ?? 0,
-      })
+      setLastReceipt(payload.orderId ? { orderId: String(payload.orderId) } : null)
       setLines([])
       setDiscountPct(0)
-      setCustomerEmail('')
+      setCustomer(null)
       setCashReceived('')
       setPaying(null)
       enqueueSnackbar(
@@ -507,10 +524,11 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     hostId,
     discountPct,
     customerEmail,
+    customer,
+    cashier.assertion,
     locationId,
     cashReceived,
     folioReservation,
-    dueCents,
     enqueueSnackbar,
   ])
 
@@ -529,44 +547,6 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     setPaying(null)
   }, [])
 
-  const printReceipt = useCallback(() => {
-    if (!lastReceipt) return
-    const win = window.open('', '_blank', 'width=320,height=600')
-    if (!win) return
-    // ESCAPED (AGL-2283), the same construction as the packing slip: a
-    // `document.write` into an `about:blank` popup that inherits the console's
-    // origin. These names are merchant-authored rather than shopper-typed, so
-    // the reach is a merchant's own session — still not a reason to build
-    // markup out of unescaped product text.
-    win.document.write(
-      `<pre style="font-family:monospace;font-size:12px">` +
-        lastReceipt.lines
-          .map(
-            (line) =>
-              `${escapeHtml(line.quantity)}x ${escapeHtml(line.name)}${line.variantLabel ? ` (${escapeHtml(line.variantLabel)})` : ''}` +
-              `  ${usd(line.unitAmountCents * line.quantity)}`,
-          )
-          .join('\n') +
-        `\n\nTOTAL  ${usd(lastReceipt.totalCents)}` +
-        (lastReceipt.changeCents
-          ? `\nCHANGE ${usd(lastReceipt.changeCents)}`
-          : '') +
-        `\n${new Date().toLocaleString()}` +
-        `</pre>`,
-    )
-    win.document.close()
-    // Print from HERE, not from a `<script>` written into the receipt
-    // (AGL-523). `window.open('')` yields an about:blank document that
-    // INHERITS the opener's CSP, so an injected inline script has no nonce and
-    // `strict-dynamic` means `'self'` will not save it either. Under the
-    // enforcing policy that script is blocked, the receipt window opens, and
-    // the print dialog never appears — a silent break of the one action the
-    // window exists for.
-    //
-    // This call is in the opener, whose script Next has already nonced.
-    win.focus()
-    win.print()
-  }, [lastReceipt])
 
   return (
     <>
@@ -691,6 +671,27 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
               ))}
             </TextField>
           ) : null}
+          {registerId ? (
+            <PosOperationsBar
+              hostId={hostId}
+              registerId={registerId}
+              {...(registerName ? { registerName } : {})}
+              cashier={cashier}
+              onExchange={(returned) =>
+                setCustomer(
+                  returned.email || returned.name
+                    ? {
+                        kind: 'none',
+                        id: '',
+                        name: returned.name ?? '',
+                        email: returned.email,
+                        phone: null,
+                      }
+                    : null,
+                )
+              }
+            />
+          ) : null}
           <Box sx={{ flex: 1, overflowY: 'auto' }}>
             {lines.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
@@ -748,14 +749,8 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
               sx={{ width: 110 }}
               slotProps={{ htmlInput: { inputMode: 'numeric' } }}
             />
-            <TextField
-              label="Customer email"
-              value={customerEmail}
-              onChange={(event) => setCustomerEmail(event.target.value)}
-              size="small"
-              sx={{ flex: 1 }}
-            />
           </Stack>
+          <PosCustomerLookup hostId={hostId} value={customer} onChange={setCustomer} />
           <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
             <Typography variant="h6">{'Due'}</Typography>
             <Typography variant="h6">{usd(dueCents)}</Typography>
@@ -788,9 +783,12 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
             </Button>
           </Stack>
           {lastReceipt ? (
-            <Button size="small" onClick={printReceipt}>
-              {'Print last receipt'}
-            </Button>
+            <PosLastReceipt
+              hostId={hostId}
+              orderId={lastReceipt.orderId}
+              {...(registerName ? { registerName } : {})}
+              {...(cashier.cashier ? { cashierName: cashier.cashier.name } : {})}
+            />
           ) : null}
         </Box>
       </Box>
