@@ -2429,6 +2429,26 @@ allow read, write: if false;
 
 
 
+match /podConnections/{connectionId} {
+allow read, write: if false;
+}
+match /podProductLinks/{linkId} {
+allow read, write: if false;
+}
+match /podOrders/{partId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
 match /marketingPlatformConnections/{connectionId} {
 allow read, write: if false;
 match /log/{entryId} {

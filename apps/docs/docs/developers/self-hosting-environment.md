@@ -975,6 +975,28 @@ tenant runtime never opens a grant.
 Register `https://<console>/api/marketplaces/oauth/callback` as the redirect
 address in every app (for eBay, as the accept URL of the RuName).
 
+### Print on demand: Printful and Printify {#print-on-demand}
+
+A merchant can connect their **own** Printful store or Printify shop, import its
+products, and have paid orders sent to it to make and ship. Each merchant
+connects with a token made in their own account — neither service needs a
+developer app or partnership of the deployment's — so the deployment holds only
+the key those tokens are sealed under. Leave it unset and no Print on demand
+card appears and no order is sent anywhere. Set it on the console **and** the
+tenant runtime: paid orders are sent from wherever commerce's order events are
+delivered, and the console connects, imports and runs the retry job.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `PRINT_ON_DEMAND_TOKEN_KEY` | Feature | Runtime | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored Printful and Printify token, and each connection's webhook secret, with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a token opened under an old key is sealed again under the new one the next time it is used. **Losing the key loses every connection**: each merchant connects again, and until they do their paid orders are not sent. |
+
+The services are told about shipments at
+`https://<console>/api/print-on-demand/webhooks/printful` and
+`…/webhooks/printify`, which the console registers itself when a merchant
+connects and builds from `NEXT_PUBLIC_CONSOLE_URL`. A console the services
+cannot reach (a laptop) still works: each open order is asked after by the
+console job every 15 minutes.
+
 ---
 
 ## Mobile apps and push {#mobile}

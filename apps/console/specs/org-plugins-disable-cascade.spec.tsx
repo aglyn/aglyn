@@ -176,8 +176,8 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
     await waitFor(() => expect(savedSet()).not.toBeNull())
     expect(continueButton()).toBeUndefined()
     // `forms`, `ai`, `theme-presets`, `funnels`, `shipping`, `tax-engines`,
-    // `sales-channels`, `marketing-platforms`, `post-purchase` and
-    // `fulfillment-networks` ride every save the way `mui` does: all are locked on for the workspace, so `resolveEnabledPlugins`
+    // `sales-channels`, `marketing-platforms`, `post-purchase`,
+    // `fulfillment-networks` and `print-on-demand` ride every save the way `mui` does: all are locked on for the workspace, so `resolveEnabledPlugins`
     // unions them in before the toggle subtracts. A site switches AI off for
     // itself.
     expect(savedSet()).toEqual([
@@ -194,6 +194,7 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
       'post-purchase',
       'fulfillment-networks',
       'marketplaces',
+      'print-on-demand',
       'commerce',
     ])
   })
@@ -256,6 +257,7 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
         'post-purchase',
         'fulfillment-networks',
         'marketplaces',
+        'print-on-demand',
       ])
       const settingsCalls = (globalThis.fetch as jest.Mock).mock.calls.filter(
         ([url]) => url === '/api/orgs/settings',

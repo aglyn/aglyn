@@ -221,6 +221,10 @@ const PLUGIN_TOPICS = {
   // The Tax service card under the store's Settings (AGL-3631). The guide is
   // unlisted while the service is rolling out; see PLUGIN_UNLISTED_TOPICS.
   taxServices: '/commerce-and-bookings/commerce/tax-services',
+  // The Print on demand card under the store's Settings, and its product and
+  // order widgets (AGL-3641). Unlisted while rolling out; see
+  // PLUGIN_UNLISTED_TOPICS.
+  printOnDemand: '/commerce-and-bookings/commerce/print-on-demand',
   // Shifts, staff PINs and register returns (AGL-3609).
   posOperations: '/commerce-and-bookings/commerce/pos-operations',
   posHardware: '/commerce-and-bookings/commerce/pos-hardware',
@@ -274,6 +278,9 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // MARKETPLACES_TOKEN_KEY and a marketplace's app, the gate the guide waits
   // on (AGL-3638).
   'marketplaces',
+  // The Print on demand card draws nothing until the deployment holds
+  // PRINT_ON_DEMAND_TOKEN_KEY, the same gate the guide waits on (AGL-3641).
+  'printOnDemand',
 ])
 
 // ── Docs parsing ──────────────────────────────────────────────────────────

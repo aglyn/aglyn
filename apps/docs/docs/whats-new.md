@@ -70,6 +70,25 @@ for the how-to.
 -->
 
 <!--
+  AGL-3641 — Print on demand is built and hidden until a deployment sets
+  PRINT_ON_DEMAND_TOKEN_KEY (the key merchants' Printful and Printify tokens are
+  sealed under; no developer app or partnership of Aglyn's is needed). This
+  entry is held unpublished, like the guide it links (`unlisted: true`): once
+  the key is set on aglyn.com, remove this comment's markers, move "(newest)"
+  here from the top heading, and delete `unlisted: true` and the "Rolling out"
+  note from commerce-and-bookings/commerce/print-on-demand.md.
+
+## October 2026 — print on demand with Printful and Printify
+
+- **[Printful and Printify](commerce-and-bookings/commerce/print-on-demand.md)** —
+  connect your own Printful store or Printify shop, import its products with their
+  variants, prices and photos, and every paid order for them is sent to be made and
+  shipped. Tracking lands on the order as the service ships, each order shows what
+  the service charged against what your buyer paid, test orders stay drafts, and a
+  canceled or fully refunded order is canceled at the service too.
+-->
+
+<!--
   AGL-3631 — Tax services are built and hidden until a deployment sets
   TAX_ENGINES_TOKEN_KEY (the key merchants' credentials are sealed under; no
   vendor account of Aglyn's is needed). This entry is held unpublished, like the

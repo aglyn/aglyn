@@ -7723,6 +7723,62 @@
       ]
     },
     {
+      "collectionGroup": "podProductLinks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "hostId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "productId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "podProductLinks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "hostId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "importedAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "podOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "work",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dueAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "podOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "hostId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "taxEngineExemptions",
       "queryScope": "COLLECTION",
       "fields": [
