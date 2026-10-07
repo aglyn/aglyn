@@ -189,10 +189,21 @@ describe('inspectUploadBytes', () => {
           Buffer.alloc(64),
         ]),
       ],
+      ['font/woff2', Buffer.concat([Buffer.from('wOF2', 'ascii'), Buffer.alloc(64)])],
     ])('accepts a genuine %s', (contentType, buffer) => {
       expect(
         inspectUploadBytes({ bytes: buffer, contentType, fileName: 'file' }),
       ).toBeNull()
+    })
+
+    it('refuses a TrueType file, or anything else, labelled as a WOFF2 font (AGL-3656)', () => {
+      for (const buffer of [
+        Buffer.concat([bytes(0x00, 0x01, 0x00, 0x00), Buffer.alloc(64)]),
+        Buffer.from('<svg onload="alert(1)">', 'utf8'),
+      ]) {
+        const refusal = inspectUploadBytes({ bytes: buffer, contentType: 'font/woff2', fileName: 'font.woff2' })
+        expect(refusal?.code).toBe('type_mismatch')
+      }
     })
 
     it('accepts text types, which have no magic to check', () => {

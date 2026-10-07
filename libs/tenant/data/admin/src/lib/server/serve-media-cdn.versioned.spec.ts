@@ -287,3 +287,35 @@ describe('mediaCdnVariantFor (AGL-3486)', () => {
     expect(mediaCdnVariantFor(['1280', 960.5, null, 1600], 768)).toBe(1600)
   })
 })
+
+describe('AGL-3656 · an uploaded web font', () => {
+  const FONT = {
+    fileName: 'Acme-400.woff2',
+    contentType: 'font/woff2',
+    sizeBytes: 8,
+    storagePath: 'hosts/h1/media/f1',
+    contentHash: '0123456789abcdef',
+    // A library on a plan without generated variants records no encoder
+    // generation and no variants.
+    variants: [],
+  }
+
+  beforeEach(() => {
+    mockState.doc = { ...FONT }
+    mockState.metadata = { contentType: 'font/woff2', size: 8 }
+  })
+
+  it('is kept for a year, at the edge too, under the versioned URL a page names', async () => {
+    const res = await serve(['h1', 'f1'], { v: CURRENT })
+    expect(res.body).toBe('PNGBYTES')
+    expect(res.headers['content-type']).toBe('font/woff2')
+    expect(res.headers['cache-control']).toBe(MEDIA_CDN_VERSIONED_CACHE_CONTROL)
+    expect(res.headers['content-disposition']).toMatch(/^inline/)
+  })
+
+  it('stays on the short policy under a stale version, serving the current bytes', async () => {
+    const res = await serve(['h1', 'f1'], { v: `fedcba9876543210.${MEDIA_VARIANT_ENCODER_VERSION}` })
+    expect(res.headers['cache-control']).toBe(MEDIA_CDN_STABLE_CACHE_CONTROL)
+    expect(res.headers['content-disposition']).toMatch(/^inline/)
+  })
+})

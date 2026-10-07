@@ -38,7 +38,10 @@ export interface HostThemeFontMetrics {
 
 /** One uploaded face of a `custom` font: a WOFF2 in the media library. */
 export interface HostThemeFontFace {
+  /** For a variable file, the bottom of its weight range. */
   weight: number
+  /** For a variable file, the top of its weight range (`font-weight: 100 900`). */
+  weightMax?: number
   style: 'normal' | 'italic'
   /** A `media:` reference. */
   src: string

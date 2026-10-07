@@ -273,6 +273,26 @@ describe('the loader picks faces, delivery and fallbacks (AGL-3656)', () => {
     ])
   })
 
+  it("declares an uploaded variable face over its weight range, and preloads it once", async () => {
+    const fonts = await selfHostedThemeFonts(
+      {
+        fonts: [
+          {
+            family: 'Acme Flex',
+            source: 'custom',
+            category: 'sans-serif',
+            metrics: { unitsPerEm: 1000, ascent: 900, descent: -250, lineGap: 0, xWidthAvg: 470 },
+            faces: [{ weight: 100, weightMax: 900, style: 'normal', src: 'media:h1/m9', version: 'abc123' }],
+          },
+        ],
+        typography: { fontFamily: '"Acme Flex", sans-serif' },
+      },
+      { hostId: 'h1', baseTypography: BASE },
+    )
+    expect(fonts?.css).toContain("font-weight:100 900;font-display:swap;src:url(/api/media/cdn/h1/m9?v=abc123.2) format('woff2');")
+    expect(fonts?.preloads).toEqual(['/api/media/cdn/h1/m9?v=abc123.2'])
+  })
+
   it("loads the base's own face — the brand on an operator host — when the theme names none", async () => {
     catalog({ ...INTER, family: 'Roboto Flex', italics: [] })
     fetchMock.mockImplementation(google({}))

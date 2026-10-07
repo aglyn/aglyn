@@ -308,6 +308,17 @@ export interface SelfHostedThemeFontsOptions {
 }
 
 /**
+ * An uploaded face's CSS `font-weight`: its weight, or for a variable file
+ * the range it draws (`100 900`), so every weight in between is drawn from
+ * the file rather than synthesized.
+ */
+export function customFaceWeight(face: { weight: number; weightMax?: number }): string {
+  const weight = Math.min(1000, Math.max(1, Math.round(Number(face.weight) || 400)))
+  const max = Math.round(Number(face.weightMax))
+  return Number.isFinite(max) && max > weight ? `${weight} ${Math.min(1000, max)}` : String(weight)
+}
+
+/**
  * The theme's web fonts as rules to inline and files to preload, or null when
  * the theme loads none.
  *
@@ -339,7 +350,7 @@ export async function selfHostedThemeFonts(
             {
               family: font.family.trim(),
               style: face.style,
-              weight: String(Math.round(Number(face.weight) || 400)),
+              weight: customFaceWeight(face),
               url,
               ...(face.unicodeRange ? { unicodeRange: face.unicodeRange } : {}),
             },
