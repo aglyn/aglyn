@@ -822,12 +822,13 @@ async function handler(request: Request): Promise<Response> {
           ? checkHostRegisterQuota(org, hostId, used)
           : checkQuota(org, resource.quotaKey as any, used)
         if (!quota.allowed) {
+          const noun = quota.limit === 1 ? singularLabel(resource.label) : resource.label
           return {
             error:
               hostAllocated
-                ? `This site can run ${quota.limit} ${resource.label} — ` +
+                ? `This site can run ${quota.limit} ${noun} — ` +
                   'assign another register seat to it in Billing, or buy one'
-                : `Your plan includes ${quota.limit} ${resource.label} — ` +
+                : `Your plan includes ${quota.limit} ${noun} — ` +
                   'upgrade in Billing for more',
           }
         }
@@ -1021,3 +1022,9 @@ async function handler(request: Request): Promise<Response> {
 
 export const dynamic = 'force-dynamic'
 export { handler as POST }
+
+/** "1 form", never "1 forms": a label's last word in the singular. */
+function singularLabel(label: string): string {
+  if (label.endsWith('ies')) return `${label.slice(0, -3)}y`
+  return label.endsWith('s') ? label.slice(0, -1) : label
+}

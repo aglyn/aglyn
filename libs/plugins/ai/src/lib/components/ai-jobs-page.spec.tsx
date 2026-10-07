@@ -149,7 +149,7 @@ describe('a site’s AI jobs', () => {
     mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
     openList()
     expect(await screen.findByRole('heading', { name: 'No AI jobs on this site yet' })).toBeTruthy()
-    expect(screen.getByText(/choose Describe it on this site’s Pages, Templates, Layouts, Forms or Components page/)).toBeTruthy()
+    expect(screen.getByText(/choose Create with AI on this site’s Pages, Templates, Layouts, Forms or Components page/)).toBeTruthy()
     expect(screen.queryByLabelText('Loading AI jobs')).toBeNull()
   })
 

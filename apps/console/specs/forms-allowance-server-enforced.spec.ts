@@ -271,7 +271,7 @@ describe('each plan is refused at its own rung', () => {
     const response = await createForm()
     expect(response.status).toBe(403)
     const error = (await response.json()).error
-    expect(error).toContain('includes 1 forms')
+    expect(error).toContain('includes 1 form —')
     expect(error).not.toContain('not included in your plan')
     expect(mockCreate).not.toHaveBeenCalled()
   })

@@ -203,7 +203,7 @@ export function AiJobsListPage({ hostId, basePath }: ConsolePluginPageProps) {
                   'Each one gets a page here that shows its progress and what it built.'}
               </Typography>
               <Typography variant="body1" color="text.secondary">
-                {'To start one, choose Describe it on this site’s Pages, Templates, Layouts, Forms or ' +
+                {'To start one, choose Create with AI on this site’s Pages, Templates, Layouts, Forms or ' +
                   'Components page. A new site can also be built with AI when it is created.'}
               </Typography>
             </Stack>
