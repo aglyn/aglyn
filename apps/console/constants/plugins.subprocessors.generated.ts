@@ -258,6 +258,54 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'marketing-platforms',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "api.mailchimp.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Mailchimp Marketing API of the account a site's owner or admin connects on the site's setup page, at the account's own data-center host (`{dc}.api.mailchimp.com`, named by the merchant's API key or by Mailchimp's metadata endpoint), reached only from `libs/plugins/marketing-platforms/src/lib/providers/mailchimp.ts` with the merchant's own credential, to keep an audience's members, merge fields, tags and subscription status in step with the site.",
+        dataReceived: "The site's contacts: each person's email address, name, phone number when it is in E.164 form, the tags the site holds on them, their lifetime value and order count at the site, and whether the site may send them marketing (subscribed or unsubscribed); a person the site holds no usable consent for is not sent at all. Read back: the addresses whose subscription changed in the account since the last sync. Also the merchant's own API key or OAuth token, which authenticates each call.",
+      },
+      {
+        host: "a.klaviyo.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Klaviyo account a site's owner or admin connects on the site's setup page, reached only from the marketing-platforms plugin's adapter (`libs/plugins/marketing-platforms/src/lib/providers/klaviyo.ts`) with the merchant's own credential, to keep its contacts and consent in step with the site and to deliver order events.",
+        dataReceived: "The site's contacts: each person's email address, name, phone number when it is in E.164 form, the tags the site holds on them, their lifetime value and order count at the site, and whether the site may send them marketing (subscribed or unsubscribed); a person the site holds no usable consent for is not sent at all. Read back: the addresses whose subscription changed in the account since the last sync. Also the merchant's own API key or OAuth token, which authenticates each call. For a person the site may market to, the commerce events the merchant's flows run on: a started checkout (its items, value and resume link), and a paid, fulfilled, refunded or canceled order (its number, total, currency, line items with product id, SKU, name, quantity and price, and a shipment's carrier and tracking link). No payment details are sent.",
+      },
+      {
+        host: "api.omnisend.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Omnisend account a site's owner or admin connects on the site's setup page, reached only from the marketing-platforms plugin's adapter (`libs/plugins/marketing-platforms/src/lib/providers/omnisend.ts`) with the merchant's own credential, to keep its contacts and consent in step with the site and to deliver order events.",
+        dataReceived: "The site's contacts: each person's email address, name, phone number when it is in E.164 form, the tags the site holds on them, their lifetime value and order count at the site, and whether the site may send them marketing (subscribed or unsubscribed); a person the site holds no usable consent for is not sent at all. Read back: the addresses whose subscription changed in the account since the last sync. Also the merchant's own API key or OAuth token, which authenticates each call. For a person the site may market to, the commerce events the merchant's flows run on: a started checkout (its items, value and resume link), and a paid, fulfilled, refunded or canceled order (its number, total, currency, line items with product id, SKU, name, quantity and price, and a shipment's carrier and tracking link). No payment details are sent.",
+      },
+      {
+        host: "api.attentivemobile.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Attentive account a site's owner or admin connects on the site's setup page, reached only from the marketing-platforms plugin's adapter (`libs/plugins/marketing-platforms/src/lib/providers/attentive.ts`) with the merchant's own credential, to keep its contacts and consent in step with the site and to deliver order events.",
+        dataReceived: "The site's contacts: each person's email address, name, phone number when it is in E.164 form, the tags the site holds on them, their lifetime value and order count at the site, and whether the site may send them marketing (subscribed or unsubscribed); a person the site holds no usable consent for is not sent at all. Read back: the addresses whose subscription changed in the account since the last sync. Also the merchant's own API key or OAuth token, which authenticates each call. For a person the site may market to, the commerce events the merchant's flows run on: a started checkout (its items, value and resume link), and a paid, fulfilled, refunded or canceled order (its number, total, currency, line items with product id, SKU, name, quantity and price, and a shipment's carrier and tracking link). No payment details are sent.",
+      },
+      {
+        host: "login.mailchimp.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. Mailchimp's OAuth token and metadata endpoints, for a deployment that registered the Mailchimp app: the code exchange when a merchant connects their own account, and the read of which data center it lives in (`libs/plugins/marketing-platforms/src/lib/server/oauth.ts`). Its consent page is on the same host and is opened by the merchant's browser.",
+        dataReceived: "The deployment's OAuth client credentials, and the authorization code or refresh token the platform itself issued — credentials, never contacts.",
+      },
+      {
+        host: "www.klaviyo.com",
+        disposition: "no-request",
+        reason: "Klaviyo's consent page, built by `authorizeUrl` in `libs/plugins/marketing-platforms/src/lib/server/oauth.ts` and opened by the merchant's own browser to connect their own account. No server of ours requests it.",
+        dataReceived: "Nothing from our servers. The browser carries the OAuth client id, the scopes, the redirect address and a single-use state.",
+      },
+      {
+        host: "ui.attentivemobile.com",
+        disposition: "no-request",
+        reason: "Attentive's consent page, built by `authorizeUrl` in `libs/plugins/marketing-platforms/src/lib/server/oauth.ts` and opened by the merchant's own browser to connect their own account. No server of ours requests it.",
+        dataReceived: "Nothing from our servers. The browser carries the OAuth client id, the scopes, the redirect address and a single-use state.",
+      },
+    ],
+  },
+  {
     pluginId: 'sales-channels',
     subprocessors: [],
     hosts: [

@@ -128,6 +128,7 @@ changes, because every rule is by tag.
 | `plugins-inbox` | `@aglyn/plugins-inbox` | `libs/plugins/inbox` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-logic` | `@aglyn/plugins-logic` | `libs/plugins/logic` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-marketing` | `@aglyn/plugins-marketing` | `libs/plugins/marketing` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
+| `plugins-marketing-platforms` | `@aglyn/plugins-marketing-platforms` | `libs/plugins/marketing-platforms` | `scope:plugin` `type:feature` | no — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/plugins-marketing-platforms --publish`, then `trust:packages --set`); two-way contact and consent sync with a merchant's own Mailchimp, Klaviyo, Omnisend or Attentive account, through core's person-records seam and site consent module, and order events through commerce's domain events | `.`, `./*` |
 | `plugins-marketplace` | `@aglyn/plugins-marketplace` | `libs/plugins/marketplace` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-mui` | `@aglyn/plugins-mui` | `libs/plugins/mui` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-outreach` | `@aglyn/plugins-outreach` | `libs/plugins/outreach` | `scope:plugin` `type:feature` | yes | `.`, `./*` |

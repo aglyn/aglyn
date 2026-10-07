@@ -175,6 +175,10 @@ const PLUGIN_TOPICS = {
   deals: '/content-and-data/crm/deals',
   designedEmails: '/marketing-and-automation/email-campaigns/designed-emails',
   emailCampaigns: '/marketing-and-automation/email-campaigns/overview',
+  // The Email platforms cards on a site's setup page (AGL-3639). Unlisted
+  // until the deployment sets MARKETING_PLATFORMS_TOKEN_KEY; see
+  // PLUGIN_UNLISTED_TOPICS.
+  emailPlatforms: '/marketing-and-automation/email-campaigns/email-platforms',
   events: '/content-and-data/events/overview',
   forms: '/content-and-data/forms/overview',
   funnels: '/marketing-and-automation/analytics/funnels',
@@ -241,6 +245,9 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // service configured for the deployment, which aglyn.com is not while the
   // guide is unlisted (AGL-3631).
   'taxServices',
+  // The Email platforms cards draw nothing until the console holds
+  // MARKETING_PLATFORMS_TOKEN_KEY, the same gate the guide waits on (AGL-3639).
+  'emailPlatforms',
 ])
 
 // ── Docs parsing ──────────────────────────────────────────────────────────

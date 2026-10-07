@@ -13617,6 +13617,53 @@ describe('tax service records are the server’s alone (AGL-3631)', () => {
   })
 })
 
+describe('email platform connections are the server’s alone (AGL-3639)', () => {
+  // A connection holds the merchant's sealed Mailchimp, Klaviyo, Omnisend or
+  // Attentive credential and the cursors the sync resumes from; an owed
+  // event is an order about to reach the merchant's flows. All written and
+  // read by the marketing-platforms plugin's routes and job through the
+  // Admin SDK.
+  const DOCS = [
+    ['marketingPlatformConnections', `${HOST}_klaviyo`],
+    ['marketingPlatformConnections', `${HOST}_klaviyo`, 'log', 'run-1'],
+    ['marketingPlatformEvents', `${HOST}_klaviyo_evt-1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), {
+          orgId: ORG,
+          hostId: HOST,
+          sealedToken: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
 describe('ShipStation credentials are server-only (AGL-3613)', () => {
   const connection = (db) => doc(db, 'commerceShipStationConnections', HOST)
 

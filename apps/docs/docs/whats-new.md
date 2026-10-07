@@ -72,6 +72,26 @@ for the how-to.
   responsible for registering, filing and paying your sales tax.
 -->
 
+<!--
+  AGL-3639 — Email platform connections are built and hidden until a deployment
+  sets MARKETING_PLATFORMS_TOKEN_KEY on the console (the key merchants' API keys
+  are sealed under; no vendor account of Aglyn's is needed). This entry is held
+  unpublished, like the guide it links (`unlisted: true`): once the key is set on
+  aglyn.com, remove this comment's markers, move "(newest)" here from the top
+  heading, and delete `unlisted: true` and the "Rolling out" note from
+  marketing-and-automation/email-campaigns/email-platforms.md.
+
+## October 2026 — your own email platform, kept in step
+
+- **[Mailchimp, Klaviyo and Omnisend](marketing-and-automation/email-campaigns/email-platforms.md)** —
+  connect your own account to a site with its API key and your contacts stay in
+  step both ways: everyone the site may market to is added with their name, tags and
+  order history, an unsubscribe on either side reaches the other, and Klaviyo and
+  Omnisend receive your started checkouts and orders for their abandoned-cart and
+  post-purchase flows. A sync log under each connection shows what ran and anything
+  that needs you.
+-->
+
 ## October 2026 — the register takes every payment
 
 - **[Split payments](commerce-and-bookings/commerce/pos-and-reservations.md#taking-payment)** —

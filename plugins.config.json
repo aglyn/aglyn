@@ -2765,6 +2765,51 @@
       }
     },
     {
+      "id": "marketing-platforms",
+      "package": "@aglyn/plugins-marketing-platforms",
+      "register": {
+        "console": "registerMarketingPlatformsConsole",
+        "consoleApi": "registerMarketingPlatformsConsoleApi",
+        "serverDeclarations": "registerMarketingPlatformsServerDeclarations",
+        "consoleServerDeclarations": "registerMarketingPlatformsConsoleServerDeclarations",
+        "subprocessors": "marketingPlatformsSubprocessors"
+      },
+      "apiPrefixes": [
+        "marketing-platforms"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's connection to the merchant's OWN Mailchimp, Klaviyo, Omnisend or Attentive account, the credential sealed, with its sync cursors and its log subcollection (AGL-3639). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "marketingPlatformConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "Commerce events owed to one connection, written by the event subscriber and delivered by the console job (AGL-3639).",
+          "name": "marketingPlatformEvents",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 23,
+        "$comment": "Two-way contact and consent sync with a merchant's OWN email platform (AGL-3639): Mailchimp, Klaviyo and Omnisend by the merchant's own API key, and by OAuth where the deployment registered the app (MAILCHIMP_CLIENT_ID/SECRET, KLAVIYO_CLIENT_ID/SECRET); Attentive only with its partner app (ATTENTIVE_CLIENT_ID/SECRET). It reaches the CRM's people only through core's person-records seam and each site's consent only through core's site-marketing-sync module, and commerce's events only through the domain-event outbox; it imports neither plugin. Sold with the CRM (`features.crm`), no price of its own. On for every workspace, off for a site only when that site says so, and no release flag: the card draws nothing until the console sets MARKETING_PLATFORMS_TOKEN_KEY, the key merchants' credentials are sealed under.",
+        "label": "Email platforms",
+        "alwaysOnForWorkspace": true,
+        "description": "Two-way contact and unsubscribe sync with your own Mailchimp, Klaviyo or Omnisend account, and order events for their flows.",
+        "siteOff": {
+          "stops": "Switching Email platforms off for this site stops its contacts, unsubscribes and order events syncing with the email platforms it connected.",
+          "keeps": "The connections and everything already synced are kept, and an unsubscribe already read back stays on the site’s list."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "hostSettings"
+          ]
+        }
+      }
+    },
+    {
       "id": "sales-channels",
       "package": "@aglyn/plugins-sales-channels",
       "register": {

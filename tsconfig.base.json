@@ -88,6 +88,8 @@
       "@aglyn/plugins-commerce/*": ["./libs/plugins/commerce/src/lib/*"],
       "@aglyn/plugins-marketplace": ["./libs/plugins/marketplace/src/index.ts"],
       "@aglyn/plugins-marketplace/*": ["./libs/plugins/marketplace/src/lib/*"],
+      "@aglyn/plugins-marketing-platforms": ["./libs/plugins/marketing-platforms/src/index.ts"],
+      "@aglyn/plugins-marketing-platforms/*": ["./libs/plugins/marketing-platforms/src/lib/*"],
       "@aglyn/plugins-crm": ["./libs/plugins/crm/src/index.ts"],
       "@aglyn/plugins-crm/*": ["./libs/plugins/crm/src/lib/*"],
       "@aglyn/plugins-outreach": ["./libs/plugins/outreach/src/index.ts"],

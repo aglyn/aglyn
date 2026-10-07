@@ -210,6 +210,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "keeps": "Each feed's address, its switch and the store's defaults are kept, so switching it back on resumes the same feeds."
     }
   },
+  {
+    "id": "marketing-platforms",
+    "label": "Email platforms",
+    "alwaysOnForWorkspace": true,
+    "description": "Two-way contact and unsubscribe sync with your own Mailchimp, Klaviyo or Omnisend account, and order events for their flows.",
+    "siteOff": {
+      "stops": "Switching Email platforms off for this site stops its contacts, unsubscribes and order events syncing with the email platforms it connected.",
+      "keeps": "The connections and everything already synced are kept, and an unsubscribe already read back stays on the site’s list."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -236,6 +246,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "shipping": "console-only",
   "tax-engines": "console-only",
   "sales-channels": "routes",
+  "marketing-platforms": "console-only",
 }
 
 /**
@@ -2189,6 +2200,16 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "tax-engines",
     "name": "taxEngineTransactions",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "marketing-platforms",
+    "name": "marketingPlatformConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "marketing-platforms",
+    "name": "marketingPlatformEvents",
     "orgField": "orgId"
   },
 ]
