@@ -122,6 +122,44 @@ When you look at a body font, **Headings that pair well** suggests fonts for you
 (and the other way round): well-known pairings first, then popular fonts from a contrasting
 style, such as serif headings over sans-serif text. **Use pair** sets both fonts at once.
 
+## Upload your own font
+
+Use a font that is not on Google Fonts (your brand's typeface, for example) from
+**Your own fonts**, at the bottom of the **Typography** card.
+
+1. Drop one or more font files on the box, or click it to choose them. Each file can be a
+   **WOFF2, WOFF, TTF or OTF** file of up to 4 MB. Upload each weight and style (Regular,
+   Bold, Italic) as its own file; a variable font is one file for every weight.
+2. Each file is checked before anything is stored. You see the family, weight and style
+   read from the file, what its license allows, and its size before and after.
+3. Choose **Use for body text** or **Use for headings** from the family's **⋮** menu, then
+   **Save** the theme. Until you save, the upload changes only your draft.
+
+What happens to the file:
+
+- **The license is read from the file.** A font carries embedding permissions set by its
+  maker. One marked as not embeddable (a restricted license), or as bitmap-only, is
+  refused, because it cannot be used on a website. One marked for viewing and printing
+  only is installed with a warning: many such licenses still exclude websites, so check
+  yours before you publish. **By uploading a font you confirm that its license lets you
+  use it on your website.** The check reads the font's own flags; it cannot see the
+  license you bought.
+- **It is converted for the web.** The file is stored as WOFF2 and trimmed to the scripts
+  it covers among Latin, Latin Extended, Cyrillic, Greek and Vietnamese, which usually
+  makes it a fraction of its original size. A font whose license asks for it to be
+  embedded whole is converted without trimming. A variable font keeps all of its weights.
+- **It lives in your media library**, and counts toward your storage like any other file.
+  Uploading a new file for the same family, weight and style **replaces** the one already
+  there rather than adding a second copy, and your published pages pick up the new file.
+- **Your published site serves it from its own address**, with a fallback sized to the
+  font so the text does not jump when the font arrives. **Fallback style** on the family
+  picks what that fallback looks like (sans serif, serif, monospace, display or
+  handwriting).
+- **Removing** a style or a family takes it out of the theme; the file stays in your media
+  library until you delete it there.
+
+Nothing is sent to anyone else: the check and the conversion run on Aglyn's own servers.
+
 ## Style components
 
 **Component overrides** restyle MUI components site-wide beyond the palette and type. The

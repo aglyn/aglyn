@@ -70,7 +70,7 @@ export function InstalledFontRow(props: InstalledFontRowProps) {
           </Typography>
         </Box>
         <RowActionsMenu
-          label={`${font.family} actions`}
+          label={font.family}
           items={[
             { key: 'body', label: 'Use for body text', onClick: () => onRole('body'), disabled: roles.includes('body') },
             {
