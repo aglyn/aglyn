@@ -31,6 +31,10 @@ import {
   registerPluginProductCatalog,
   type PluginProductCatalog,
 } from '@aglyn/aglyn/plugin-manager/plugin-product-catalog'
+import {
+  registerPluginStockLevels,
+  type PluginStockLevels,
+} from '@aglyn/aglyn/plugin-manager/plugin-stock-levels'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_OPERATOR_ALERTS } from './constants/operator-alerts'
 import { registerCommerceEventTriggers } from './server/order-event-triggers'
@@ -76,6 +80,14 @@ export function registerCommerceServerDeclarations(): void {
   )
   // The store's catalog, as a shopping-channel feed reads it (AGL-3637).
   registerPluginProductCatalog(lazyCatalog, { pluginId: BUNDLE_ID })
+  // Counts another warehouse keeps, applied as a stock-take (AGL-3634): a
+  // fulfillment network says how many it can ship and the products say so.
+  registerPluginStockLevels(lazyStockLevels, { pluginId: BUNDLE_ID })
+}
+
+/** Stock counts, with the Admin SDK and the model arriving on the first call. */
+const lazyStockLevels: PluginStockLevels = {
+  setAvailable: async (request) => (await import('./server/stock-levels')).commerceStockLevels.setAvailable(request),
 }
 
 const loadShipmentRecords = async () =>

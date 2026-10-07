@@ -15,13 +15,17 @@
  * limitations under the License.
  */
 
+import {
+  heldQuantitiesByLine,
+  pluginFulfillmentHolds,
+} from '@aglyn/aglyn/plugin-manager/plugin-fulfillment-providers'
 import type { PluginShippingAddress } from '@aglyn/aglyn/plugin-manager/plugin-shipping-rates'
 import {
   pluginShipmentRecords,
   type PluginShippableRecord,
 } from '@aglyn/aglyn/plugin-manager/plugin-shipment-records'
 import { createHash } from 'node:crypto'
-import { SHIPPING_COLLECTIONS } from '../constants/bundle-common'
+import { SHIPPING_COLLECTIONS, SHIPPING_PLUGIN_ID } from '../constants/bundle-common'
 import type { LabelBillingMethod } from '../model/label-billing'
 import { isCompleteAddress, type ShippingHostSettings } from '../model/shipping-settings'
 import type {
@@ -201,6 +205,39 @@ export async function readRecord(hostId: string, recordId: string): Promise<Plug
   return record
 }
 
+/**
+ * The record with the units an outside fulfiller holds taken off what is left
+ * to ship (AGL-3634): a fulfillment network or a supplier that has a line
+ * ships it from its own warehouse, and a label for it here would send the
+ * customer a second parcel. A fulfiller that cannot say what it holds stops
+ * the label rather than being read as holding nothing.
+ */
+export async function withoutHeldUnits(
+  record: PluginShippableRecord,
+): Promise<{ record: PluginShippableRecord; heldBy: string[] }> {
+  const { holds, unanswered } = await pluginFulfillmentHolds(record.hostId, record.recordId, {
+    exceptPluginId: SHIPPING_PLUGIN_ID,
+  })
+  if (unanswered.length) {
+    throw new ShippingFlowError(
+      `${unanswered.map((entry) => entry.providerLabel).join(' and ')} could not say which items it is shipping. Try again in a minute.`,
+      503,
+    )
+  }
+  if (!holds.length) return { record, heldBy: [] }
+  const held = heldQuantitiesByLine(holds)
+  return {
+    record: {
+      ...record,
+      lines: record.lines.map((line) => ({
+        ...line,
+        quantityUnshipped: Math.max(0, line.quantityUnshipped - (held.get(line.lineIndex) ?? 0)),
+      })),
+    },
+    heldBy: [...new Set(holds.map((entry) => entry.providerLabel))],
+  }
+}
+
 /** The lines a label carries by default: what has not shipped, or for a return what has. */
 export function defaultLines(
   record: PluginShippableRecord,
@@ -299,10 +336,11 @@ export async function rateRecord(
   input: RateRecordInput,
   settingsArg?: ShippingHostSettings,
 ): Promise<RecordQuote> {
-  const record = await readRecord(actor.hostId, input.recordId)
-  if (input.kind === 'outbound' && !record.shippable) {
-    throw new ShippingFlowError(`Orders that are ${record.status} can’t be shipped.`, 409)
+  const read = await readRecord(actor.hostId, input.recordId)
+  if (input.kind === 'outbound' && !read.shippable) {
+    throw new ShippingFlowError(`Orders that are ${read.status} can’t be shipped.`, 409)
   }
+  const { record, heldBy } = input.kind === 'outbound' ? await withoutHeldUnits(read) : { record: read, heldBy: [] }
   const settings = settingsArg ?? (await readHostSettings(actor.orgId, actor.hostId))
   const shipFrom = await resolveShipFrom(actor.hostId, settings)
   if (!shipFrom) {
@@ -319,7 +357,11 @@ export async function rateRecord(
   const lines = boundLines(record, input.kind, input.lines)
   if (!lines.length) {
     throw new ShippingFlowError(
-      input.kind === 'return' ? 'Nothing on this order has shipped yet.' : 'Everything on this order has shipped.',
+      input.kind === 'return'
+        ? 'Nothing on this order has shipped yet.'
+        : heldBy.length
+          ? `Everything left on this order is being shipped by ${heldBy.join(' and ')}.`
+          : 'Everything on this order has shipped.',
       409,
     )
   }
@@ -451,6 +493,16 @@ export async function buyLabel(
   const labelId = labelIdFor(actor.orgId, input.recordId, attemptKey)
   const ref = labelsRef(actor.orgId).doc(labelId)
   const record = await readRecord(actor.hostId, input.recordId)
+  if (hold.kind === 'outbound') {
+    // An outside fulfiller may have taken lines since the quote (AGL-3634).
+    const { record: free, heldBy } = await withoutHeldUnits(record)
+    const fits = hold.quote.lines.every(
+      (chosen) => chosen.quantity <= (free.lines.find((line) => line.lineIndex === chosen.lineIndex)?.quantityUnshipped ?? 0),
+    )
+    if (heldBy.length && !fits) {
+      throw new ShippingFlowError(`Some of these items are now being shipped by ${heldBy.join(' and ')}. Get rates again.`, 409)
+    }
+  }
   const nowMs = Date.now()
   const pending: StoredLabel = {
     labelId,
