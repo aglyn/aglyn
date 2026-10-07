@@ -53,6 +53,8 @@ beforeEach(() => {
 it('declares every event and subscribes one named bridge to each', () => {
   registerCommerceEventTriggers()
   expect(listPluginDomainEvents().map((entry) => entry.event)).toEqual([
+    // Declared beside the order events (AGL-3639), with no bridge of its own.
+    'checkout.started',
     'order.cancelled',
     'order.delivered',
     'order.fulfilled',
@@ -65,6 +67,8 @@ it('declares every event and subscribes one named bridge to each', () => {
     'return.requested',
   ])
   expect(listPluginDomainEventSubscribers('order.paid')).toEqual(['commerce:workflow-triggers', 'commerce:webhooks'])
+  // Not a workflow trigger and not offered to the merchant's webhooks.
+  expect(listPluginDomainEventSubscribers('checkout.started')).toEqual([])
 })
 
 it('raises the host event its declaration names, with a flat scope', async () => {

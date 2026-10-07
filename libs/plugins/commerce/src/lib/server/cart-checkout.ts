@@ -55,6 +55,7 @@ import {
   resolveNativeCheckoutMode,
 } from './native-checkout'
 import { ensureCheckoutDomain } from './payment-method-domains'
+import { raiseCheckoutStarted } from './order-events'
 
 /**
  * Cart checkout (AGL-293): the whole cart in one Stripe Checkout
@@ -208,6 +209,8 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
      * second resolution is a second chance to pick a different one.
      */
     const reserveLines: StockHoldLine[] = []
+    /** The basket as `checkout.started` reports it (AGL-3639). */
+    const startedItems: Parameters<typeof raiseCheckoutStarted>[1]['items'] = []
     // Cart checkout never builds subscription sessions — every line bills
     // one-time in `payment` mode (recurring products subscribe through the
     // PDP's direct checkout, AGL-303) — so the buyer-chosen billing field
@@ -268,6 +271,14 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       }
       const unitCents = Math.round(Number(variant.priceUsd) * 100)
       itemsCents += unitCents * line.quantity
+      startedItems.push({
+        productId: line.productId,
+        variantId: variant.id ?? null,
+        name: product.name,
+        sku: (variant as { sku?: string }).sku ?? null,
+        quantity: line.quantity,
+        unitCents,
+      })
       if (product.giftCard) giftCardCents += unitCents * line.quantity
       // What THIS line is worth, so a product-scoped discount can be priced
       // against the lines it actually covers rather than the whole basket
@@ -1288,6 +1299,19 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         createdAtMs: Date.now(),
       })
       .catch(() => undefined)
+    // The fact a merchant's own email platform starts an abandoned-cart flow
+    // from (AGL-3639); nothing subscribes unless a site connected one.
+    if (email) {
+      await raiseCheckoutStarted(String(hostId), {
+        id: String(session.id),
+        email,
+        marketingOptIn,
+        currency: 'usd',
+        itemsCents,
+        resumeUrl: backUrl ?? null,
+        items: startedItems,
+      })
+    }
     await claim.record(200, payload)
     return res.status(200).json(payload)
   } catch (error: any) {

@@ -21,7 +21,7 @@ import {
   type PluginDomainEventEnvelope,
 } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
 import { BUNDLE_ID } from '../constants/bundle-common'
-import { COMMERCE_EVENT_DECLARATIONS } from '../model/order-events'
+import { CHECKOUT_STARTED_EVENT_DECLARATION, COMMERCE_EVENT_DECLARATIONS } from '../model/order-events'
 
 /**
  * Commerce's events as workflow triggers (AGL-3611).
@@ -81,7 +81,7 @@ export function hostEventPayloadFor(
  * with the boot.
  */
 export function registerCommerceEventTriggers(): void {
-  declarePluginDomainEvents(COMMERCE_EVENT_DECLARATIONS, { pluginId: BUNDLE_ID })
+  declarePluginDomainEvents([...COMMERCE_EVENT_DECLARATIONS, CHECKOUT_STARTED_EVENT_DECLARATION], { pluginId: BUNDLE_ID })
   for (const declaration of COMMERCE_EVENT_DECLARATIONS) {
     subscribePluginDomainEvent(
       declaration.event,

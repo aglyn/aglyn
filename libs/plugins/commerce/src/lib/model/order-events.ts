@@ -113,6 +113,46 @@ export const RETURN_DECLINED_EVENT = definePluginDomainEvent<ReturnEventPayload>
 export const RETURN_RECEIVED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.received')
 export const RETURN_REFUNDED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.refunded')
 
+/**
+ * A checkout a shopper reached with an address (AGL-3639): the fact an
+ * abandoned-cart flow in a merchant's own email platform starts from. Not an
+ * order event — nothing was bought — so it is raised beside them rather than
+ * among them: it is not a workflow trigger and not offered to the merchant's
+ * outbound webhooks, whose events are about orders.
+ */
+export interface CheckoutStartedEventPayload {
+  checkout: {
+    /** The checkout session's id: one event per checkout. */
+    id: string
+    email: string
+    /** Whether the shopper ticked the store's marketing box at checkout. */
+    marketingOptIn: boolean
+    currency: string
+    /** The basket's list value, integer cents, before discounts and shipping. */
+    itemsCents: number
+    /** Where the shopper can pick the checkout up again. */
+    resumeUrl: string | null
+    items: Array<{
+      productId: string
+      variantId: string | null
+      name: string
+      sku: string | null
+      quantity: number
+      unitCents: number
+    }>
+  }
+}
+
+export const CHECKOUT_STARTED_EVENT = definePluginDomainEvent<CheckoutStartedEventPayload>('checkout.started')
+
+export const CHECKOUT_STARTED_EVENT_DECLARATION: PluginDomainEventDeclaration = {
+  event: CHECKOUT_STARTED_EVENT as PluginDomainEvent<unknown>,
+  label: 'Checkout started',
+  description:
+    'A shopper reached checkout with an email address: the basket, its value and the link back to it. Raised once per checkout, whether or not it is paid.',
+  payloadKeys: ['checkout'],
+}
+
 /** Every event commerce raises, by name. */
 export type CommerceEventName =
   | 'order.paid'

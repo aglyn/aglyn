@@ -24,6 +24,10 @@ import {
 } from '@aglyn/tenant-data-admin/server/plugin-event-outbox'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import type { OrderFulfillment } from '../model/commerce-orders'
+import {
+  CHECKOUT_STARTED_EVENT,
+  type CheckoutStartedEventPayload,
+} from '../model/order-events'
 import type {
   OrderEventFulfillment,
   OrderEventOrder,
@@ -125,5 +129,28 @@ export async function raiseOrderEvent<Payload extends OrderEventPayload>(
     })
   } catch (error) {
     console.error(`[commerce] ${event.id} not raised for ${request.orderId}`, error)
+  }
+}
+
+/**
+ * Raises `checkout.started` (AGL-3639) for a checkout a shopper reached with
+ * an address, keyed by the session so a retried request raises it once.
+ * Never throws into the checkout it reports.
+ */
+export async function raiseCheckoutStarted(
+  hostId: string,
+  checkout: CheckoutStartedEventPayload['checkout'],
+): Promise<void> {
+  if (!checkout.email) return
+  try {
+    await raisePluginEvent(firebaseAdmin.app().firestore(), {
+      event: CHECKOUT_STARTED_EVENT,
+      pluginId: BUNDLE_ID,
+      hostId,
+      key: `checkout:${checkout.id}`,
+      payload: { checkout },
+    })
+  } catch (error) {
+    console.error(`[commerce] checkout.started not raised for ${checkout.id}`, error)
   }
 }
