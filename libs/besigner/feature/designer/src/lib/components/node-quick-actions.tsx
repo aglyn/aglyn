@@ -109,7 +109,6 @@ export const NodeQuickActions = observer(
     // Controlled so menu actions can dismiss the tooltip — an uncontrolled
     // tooltip stays open behind (or above) dialogs its actions launch.
     const [moreOpen, setMoreOpen] = useState(false)
-    const openMore = useCallback(() => setMoreOpen(true), [])
     /**
      * Right-click on the canvas opens this menu (AGL-1405). The leaf records
      * the request and selects the node, which is what mounts this overlay —
@@ -125,14 +124,20 @@ export const NodeQuickActions = observer(
       clearCanvasContextMenu()
     }, [])
     const menuShown = moreOpen || requested
+    // The dots are a menu button: a click or tap opens the menu and the next
+    // one closes it. A menu that also opened on hover could not be closed
+    // by clicking, since the hover had already opened it under the cursor.
+    const toggleMore = useCallback(() => {
+      if (menuShown) closeMore()
+      else setMoreOpen(true)
+    }, [menuShown, closeMore])
     // Beside the strip there is no room on a phone: a 240px menu to the
     // right of an element runs off the screen. Below it, the popper slides
     // it sideways into the window instead.
     const theme = useTheme()
     const phone = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true })
     return (
-      // Hover closes the menu for a mouse; a touch screen has no hover to
-      // leave, so a tap anywhere else is what closes it there.
+      // A click or tap anywhere else closes the menu as well.
       <ClickAwayListener onClickAway={() => menuShown && closeMore()}>
         <Stack
           ref={ref}
@@ -234,16 +239,19 @@ export const NodeQuickActions = observer(
                   placement={phone ? 'bottom' : 'right'}
                   children={'more'}
                   icon={{ path: ICON_VARIANT_SHOW_MORE_VERTICAL.path }}
-                  enterDelay={200}
-                  leaveDelay={500}
                   open={menuShown}
-                  onOpen={openMore}
                   onClose={closeMore}
-                  // A tap opens the menu outright. MUI's touch path would show
-                  // it only after a long press and then close it 1.5 s after
-                  // the finger lifts, before an item could be chosen.
+                  // Only the button decides when the menu opens. Hover and
+                  // focus would open it on the way past, and MUI's touch
+                  // path would close it 1.5 s after the finger lifts.
+                  disableHoverListener
+                  disableFocusListener
                   disableTouchListener
-                  ButtonProps={{ onClick: openMore }}
+                  ButtonProps={{
+                    onClick: toggleMore,
+                    'aria-haspopup': 'menu',
+                    'aria-expanded': menuShown,
+                  }}
                   slotProps={{
                     popper: {
                       disablePortal: false,
