@@ -6,10 +6,16 @@
 package com.aglyn.plugins.manifest
 
 import com.aglyn.pluginhost.NativePluginManifestEntry
+import com.aglyn.plugins.bookings.registerBookingsNative
 import com.aglyn.plugins.commerce.registerCommerceNative
 
 object NativePluginManifest {
     val entries: List<NativePluginManifestEntry> = listOf(
+        NativePluginManifestEntry(
+            id = "bookings",
+            contributes = mapOf("screens" to listOf("bookings.counter")),
+            register = ::registerBookingsNative,
+        ),
         NativePluginManifestEntry(
             id = "commerce",
             contributes = mapOf("screens" to listOf("commerce.card-readers", "commerce.order", "commerce.orders", "commerce.product", "commerce.products", "commerce.register", "commerce.sales", "commerce.scan"), "tabs" to listOf("commerce.orders-tab", "commerce.products-tab"), "widgets" to listOf("commerce.sales-trend", "commerce.today"), "quickActions" to listOf("commerce.new-product", "commerce.orders-to-ship", "commerce.scan"), "deepLinks" to listOf("commerce.orders-page", "commerce.products-page")),

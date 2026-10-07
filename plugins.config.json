@@ -270,6 +270,16 @@
       "apiPrefixes": [
         "bookings"
       ],
+      "mobile": {
+        "$comment": "AGL-3652: today's bookings at the Aglyn POS counter, paid on the device's own card reader through bookings/in-person-payment.",
+        "android": {
+          "package": "com.aglyn.plugins.bookings",
+          "register": "registerBookingsNative"
+        },
+        "contributes": {
+          "screens": ["bookings.counter"]
+        }
+      },
       "catalog": {
         "order": 6,
         "label": "Bookings",
