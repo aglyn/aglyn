@@ -306,7 +306,7 @@ export function AiMediaCreateDialog({
             value={kind.id}
             onChange={(event) => chooseKind(event.target.value as AiMediaKindId)}
             disabled={busy}
-            sx={{ maxWidth: 360 }}
+            fullWidth
             helperText={kind.hint}
             slotProps={{
               select: {

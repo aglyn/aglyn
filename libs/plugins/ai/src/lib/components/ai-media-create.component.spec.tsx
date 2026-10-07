@@ -158,10 +158,10 @@ describe('the kinds', () => {
       (heading) => heading.textContent,
     )
     expect(headings).toEqual(['Vector', 'Photo', 'Art', 'Design'])
-    // MUI marks a heading as a read-only option; the kinds are the rest.
+    // MUI's Select gives a heading the option role too; the kinds are the rest.
     const options = within(listbox)
       .getAllByRole('option')
-      .filter((option) => option.getAttribute('aria-readonly') !== 'true')
+      .filter((option) => !option.classList.contains('MuiListSubheader-root'))
       .map((option) => option.textContent)
     expect(options).toHaveLength(21)
     expect(options).toContain('Studio product shotabout 108 credits')

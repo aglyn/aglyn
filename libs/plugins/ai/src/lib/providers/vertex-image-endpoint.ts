@@ -64,9 +64,17 @@ export function vertexImageModel(): string {
   return MODEL_ID.test(model) ? model : VERTEX_IMAGE_DEFAULT_MODEL
 }
 
+/**
+ * The global endpoint's origin, written as a URL so the subprocessor
+ * inventory's sweep of outbound hosts sees the host this module reaches.
+ */
+const VERTEX_IMAGE_GLOBAL_ORIGIN = 'https://aiplatform.googleapis.com'
+
 /** The host a request goes to: the global endpoint's, or a region's. */
 export function vertexImageHost(location = vertexImageLocation()): string {
-  return location === 'global' ? 'aiplatform.googleapis.com' : `${location}-aiplatform.googleapis.com`
+  return location === 'global'
+    ? new URL(VERTEX_IMAGE_GLOBAL_ORIGIN).host
+    : `${location}-aiplatform.googleapis.com`
 }
 
 /** The `:generateContent` address for a model. */
