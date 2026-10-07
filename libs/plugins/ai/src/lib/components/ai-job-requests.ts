@@ -18,6 +18,7 @@
 
 import { authorizedFetch, type MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
 import type { AiJobSummary } from '../model/ai-jobs.types'
+import { assistBuildJobRequest, type AssistBuildProposal } from '../model/assist-build'
 import { publishAiJob } from './ai-jobs-store'
 
 /**
@@ -82,6 +83,36 @@ export async function resumeAiJobRequest(
     }
   } catch {
     return { job: null, error: 'The job could not be resumed — try again.' }
+  }
+}
+
+/**
+ * Starts the build a chat turn proposed (AGL-3616): one `build` job on the
+ * proposal's site, through the same door every job is created by, which
+ * climbs its own gates and plans inline. What comes back stops at its plan
+ * card; nothing is built until the person confirms it.
+ */
+export async function startAssistBuildRequest(
+  user: MaybeTokenSource,
+  orgId: string,
+  proposal: AssistBuildProposal,
+): Promise<AiJobDecision> {
+  const failed = 'The build could not be planned — try asking again.'
+  try {
+    const response = await authorizedFetch(user, '/api/ai/jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(assistBuildJobRequest(orgId, proposal)),
+    })
+    const payload = await response.json().catch(() => null)
+    const next = (payload?.job as AiJobSummary | undefined) ?? null
+    if (response.ok && next) publishAiJob(next)
+    return {
+      job: response.ok ? next : null,
+      error: response.ok && next ? null : String(payload?.error ?? failed),
+    }
+  } catch {
+    return { job: null, error: failed }
   }
 }
 

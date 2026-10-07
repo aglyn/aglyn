@@ -48,6 +48,7 @@ import { AI_OUTPUT_KINDS } from '../runtime/ai-palette'
 import { assistSectionTool } from '../server/ai-assist-prompts'
 import { aiComponentSelectionTool } from '../server/ai-generate-component'
 import { assistEditTool } from '../server/assist-edit'
+import { assistBuildTool } from '../server/assist-build'
 import { aiComponentTool } from '../tools/ai-component-tool'
 import { AI_CRM_EMAIL_TOOL, AI_CRM_MAPPING_TOOL, aiCrmRecordTool } from '../tools/ai-crm-tool'
 import { aiExperimentExplainTool, aiExperimentVariantsTool } from '../tools/ai-experiment-tool'
@@ -185,6 +186,11 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
   'server/assist-chat.ts': {
     chat: () => [],
     ...Object.fromEntries(ASSIST_EDIT_DOCUMENT_KINDS.map((kind) => [`${kind} edit`, () => [assistEditTool(kind)]])),
+    // The build rung (AGL-3616): alone off the Besigner, beside the edit tool on it.
+    build: () => [assistBuildTool()],
+    ...Object.fromEntries(
+      ASSIST_EDIT_DOCUMENT_KINDS.map((kind) => [`${kind} edit and build`, () => [assistEditTool(kind), assistBuildTool()]]),
+    ),
   },
 }
 

@@ -78,6 +78,10 @@ import {
 } from '../model/assist-edit'
 import { applyAssistEdit, describeAssistEditCanvas } from './assist-edit-canvas'
 import { AssistEditCard } from './assist-edit-card.component'
+import { AssistBuildCard } from './assist-build-card.component'
+import { isAssistBuildProposal, type AssistBuildProposal } from '../model/assist-build'
+import type { AiJobSummary } from '../model/ai-jobs.types'
+import { startAssistBuildRequest } from './ai-job-requests'
 import { aiInsightSurfaceForPath } from '../model/ai-insight'
 import { AssistJobsDrawer } from './assist-jobs-drawer.component'
 import {
@@ -167,7 +171,20 @@ interface AssistMessage {
     | { kind: 'applied' }
     | { kind: 'dismissed' }
     | { kind: 'failed'; message: string }
+  /**
+   * A build proposed from this turn (AGL-3616): the panel starts its one
+   * `build` job when the turn ends, and the card shows that job's plan to
+   * confirm, then where it stands.
+   */
+  build?: AssistBuildProposal | null
+  /** The job the build started, as last seen. */
+  buildJob?: AiJobSummary | null
+  /** Why the build could not be planned or confirmed. */
+  buildNotice?: string | null
 }
+
+/** What a stored build that never got its job says, rather than planning forever. */
+const BUILD_NOT_STARTED = 'This build was not started. Ask again to plan it.'
 
 interface AssistQuotaInfo {
   period: 'day' | 'month'
@@ -185,7 +202,14 @@ function loadThread(orgId: string | undefined): AssistMessage[] {
   try {
     const raw = sessionStorage.getItem(storageKey(orgId))
     const parsed = raw ? (JSON.parse(raw) as AssistMessage[]) : []
-    return Array.isArray(parsed) ? parsed : []
+    if (!Array.isArray(parsed)) return []
+    // A build whose job was still being created when the page went away is
+    // not started again from a stored thread (AGL-3616): it says so instead.
+    return parsed.map((message) =>
+      message.build && !message.buildJob && !message.buildNotice
+        ? { ...message, buildNotice: BUILD_NOT_STARTED }
+        : message,
+    )
   } catch {
     return []
   }
@@ -636,6 +660,8 @@ export function AssistPanelComponent(props: AssistDockProps) {
         text: message.text ? `${message.text}\n\n${notice}` : notice,
       }))
     }
+    /** The build this turn proposed, started once its stream ends (AGL-3616). */
+    let proposedBuild: AssistBuildProposal | null = null
     try {
       // The canvas outline rides along from the besigner document the open
       // editor holds — ids, component ids and short values, never the stored
@@ -738,12 +764,16 @@ export function AssistPanelComponent(props: AssistDockProps) {
             // The edit proposal (AGL-2906), shape-checked before it can reach
             // a card whose Apply drives the canvas.
             const edit = isAssistEditProposal(event.edit) ? event.edit : null
+            // The build proposal (AGL-3616), shape-checked before it can start a job.
+            const build = isAssistBuildProposal(event.build) ? event.build : null
+            proposedBuild = build
             patchAnswer((message) => ({
               ...message,
               exchangeId: (event.exchangeId as string | null) ?? null,
               docs,
               proposal,
               edit,
+              ...(build ? { build, buildJob: null, buildNotice: null } : {}),
             }))
             if (event.quota) setQuota(event.quota as AssistQuotaInfo)
             publishMeter(event.meter)
@@ -757,10 +787,19 @@ export function AssistPanelComponent(props: AssistDockProps) {
             if (edit) {
               trackEvent('assistant_proposal_shown', { action: edit.id })
             }
+            if (build) {
+              trackEvent('assistant_proposal_shown', { action: build.id })
+            }
           } else if (event.type === 'error') {
             failAnswer(String(event.error ?? 'The assistant stream failed.'))
           }
         }
+      }
+      // One request, one build (AGL-3616): the job is created here, once,
+      // through the job door, and plans inline; its card shows the plan.
+      if (proposedBuild) {
+        const decision = await startAssistBuildRequest(user, scopedOrgId, proposedBuild)
+        patchAnswer((message) => ({ ...message, buildJob: decision.job, buildNotice: decision.error }))
       }
     } catch (error) {
       console.error(error)
@@ -850,6 +889,14 @@ export function AssistPanelComponent(props: AssistDockProps) {
       }).catch(() => undefined)
     },
     [enqueueSnackbar, messages, scopedOrgId, user],
+  )
+
+  /** Keep what a build card learned about its job on its own message (AGL-3616). */
+  const patchBuild = useCallback(
+    (index: number, patch: Pick<AssistMessage, 'buildJob'> | Pick<AssistMessage, 'buildNotice'>) => {
+      setMessages((prior) => prior.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)))
+    },
+    [],
   )
 
   /** Wave an edit card away. Nothing to tell the server: nothing happened. */
@@ -1119,6 +1166,18 @@ export function AssistPanelComponent(props: AssistDockProps) {
                         onDismiss={() => dismissEdit(index)}
                       />
                     )}
+                  {message.role === 'assistant' && message.build && scopedOrgId && (
+                    <AssistBuildCard
+                      proposal={message.build}
+                      job={message.buildJob ?? null}
+                      notice={message.buildNotice ?? null}
+                      orgId={scopedOrgId}
+                      user={user}
+                      staff={isStaff}
+                      onJob={(job) => patchBuild(index, { buildJob: job })}
+                      onNotice={(notice) => patchBuild(index, { buildNotice: notice })}
+                    />
+                  )}
                   {message.role === 'assistant' &&
                     message.editOutcome?.kind === 'applied' && (
                       <Typography
