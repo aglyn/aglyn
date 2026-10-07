@@ -62,6 +62,7 @@ import {
 } from '../model/ai-site-start-seo'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
+import { aiPageSectionNodeId } from './ai-job-page-sections'
 import type {
   AiJobStepContext,
   AiJobStepOutcome,
@@ -71,6 +72,7 @@ import {
   AI_SITE_MAX_PASSES,
   AI_SITE_NO_PAGE_STEP_COPY,
   AI_SITE_NO_PLAN_COPY,
+  AI_SITE_PAGE_NOT_WRITTEN_COPY,
   AI_SITE_UNIT_EMPTY_COPY,
   aiCreationUnit,
   aiRunJobUnit,
@@ -199,9 +201,22 @@ function context(job: AiJob): AiJobStepContext {
   }
 }
 
+/** A stored page that holds every section any plan could name. */
+const EVERY_SECTION = async () => ({
+  versionId: 'v-1',
+  nodes: new Proxy({}, { has: () => true }) as never,
+})
+
 /** The step, with a fake runner per kind it may delegate to. */
-function stepWith(runners: Partial<Record<AiJobKind, AiJobStepRunner>>) {
-  return createAiJobSiteStep({ runnerFor: (kind) => runners[kind] ?? null })
+function stepWith(
+  runners: Partial<Record<AiJobKind, AiJobStepRunner>>,
+  deps: Omit<Parameters<typeof createAiJobSiteStep>[0] & object, 'runnerFor'> = {},
+) {
+  return createAiJobSiteStep({
+    runnerFor: (kind) => runners[kind] ?? null,
+    readNodes: EVERY_SECTION,
+    ...deps,
+  })
 }
 
 const LAYOUT = {
@@ -981,5 +996,143 @@ describe('the unit machinery a page job shares (AGL-3031)', () => {
     // A delegate's own plan never rides back to the job that delegated.
     const proposed = await run({ outputs: [card], plan: confirmedPlan() })
     expect(proposed.outcome.plan).toBeUndefined()
+  })
+})
+
+describe('a site job generates every page from its plan (AGL-3596)', () => {
+  const STARTER_HOME = 'scrStarter'
+  const LAYOUT_BUILT = 'drftFrameL'
+
+  it('never hands a page unit a page to copy, and names the job the member started', () => {
+    const plan = confirmedPlan({
+      screens: [planScreen({ title: 'Home', slug: '/', duplicateOf: STARTER_HOME, id: 'drftPage00' })],
+    })
+    const job = siteJob({ plan, inputs: { businessType: 'dog groomer', pages: 1, autoConfirm: true } })
+    const [unit] = aiSiteJobUnits(plan)
+    const derived = aiSiteUnitJob(job, unit, new Map())
+    expect(derived.plan?.screens[0].duplicateOf).toBeNull()
+    expect(derived.inputs['originJobId']).toBe('job-1')
+  })
+
+  it('a page job keeps the page it was asked to start from', () => {
+    const plan = confirmedPlan({ screens: [planScreen({ duplicateOf: 'scrAbout' })] })
+    const [unit] = aiSiteJobUnits(plan)
+    expect(aiSiteUnitJob(siteJob({ kind: 'page', plan }), unit, new Map()).plan?.screens[0].duplicateOf).toBe('scrAbout')
+  })
+
+  it('renders a page the plan named no layout for inside the layout the scaffold built', () => {
+    const plan = confirmedPlan({ create: [LAYOUT] })
+    const units = aiSiteJobUnits(plan)
+    const built = aiSiteBuiltRefs(units, [output('layout', LAYOUT_BUILT, 'Site frame')])
+    const page = units.find((unit) => unit.kind === 'page')
+    if (!page) throw new Error('a page is a unit')
+    expect(aiSiteUnitJob(siteJob({ plan }), page, built).plan?.screens[0].layout).toBe(LAYOUT_BUILT)
+  })
+
+  it('does not count a page as built when its draft holds none of its planned sections', async () => {
+    // The production failure: the home page was a byte-for-byte copy of the
+    // starter, reported as written.
+    const starterNodes = { root: { $id: 'root', nodes: ['dh_hero'] }, dh_hero: { $id: 'dh_hero' } }
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'scrCopy')] })) },
+      { readNodes: async () => ({ versionId: 'v-1', nodes: starterNodes as never }) },
+    )
+    const outcome = await step(context(siteJob()))
+    expect(outcome.failure).toBe(AI_SITE_PAGE_NOT_WRITTEN_COPY)
+    expect(outcome.continue).toBeUndefined()
+    expect(outcome.outputs.some((entry) => entry.resource === 'screen')).toBe(false)
+  })
+
+  it('counts a page whose draft holds every section its plan named, under the unit’s ids', async () => {
+    const [, ...rest] = confirmedPlan().screens
+    const plan = confirmedPlan({
+      screens: [
+        planScreen({
+          id: 'drftPage00',
+          sections: [
+            { name: 'hero', uses: [], items: 0 },
+            { name: 'services', uses: [], items: 3 },
+          ],
+        }),
+        ...rest,
+      ],
+    })
+    const written = {
+      [aiPageSectionNodeId('drftPage00', 0)]: {},
+      [aiPageSectionNodeId('drftPage00', 1)]: {},
+    }
+    const read = jest.fn(async () => ({ versionId: 'v-1', nodes: written as never }))
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'drftPage00')] })) },
+      { readNodes: read },
+    )
+    const outcome = await step(context(siteJob({ plan })))
+    expect(outcome.failure).toBeUndefined()
+    expect(outcome.continue).toBe(true)
+    expect(read).toHaveBeenCalledWith(expect.anything(), { kind: 'screen', hostId: 'host-1', id: 'drftPage00' })
+  })
+})
+
+describe('a guided site start publishes what it built (AGL-3596)', () => {
+  const SITE_PUBLISH = {
+    liveUrl: 'https://hillside.aglyn.app/',
+    published: [{ id: 'screen-3', label: 'screen-3', path: '/' }],
+    drafts: [],
+  }
+  const lastPass = (inputs: Record<string, unknown>) =>
+    siteJob({
+      inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, welcomeEmail: false, ...inputs },
+      outputs: ['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id)),
+    })
+
+  it('publishes every page on the last pass of a guided start, once, and keeps what it put live', async () => {
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })) },
+      { publish },
+    )
+    const outcome = await step(context(lastPass({ autoConfirm: true })))
+    expect(publish).toHaveBeenCalledTimes(1)
+    const [, input] = publish.mock.calls[0] as unknown as [unknown, { outputs: AiJobOutput[] }]
+    expect(input.outputs.filter((entry) => entry.resource === 'screen').map((entry) => entry.id)).toEqual([
+      'screen-0',
+      'screen-1',
+      'screen-2',
+      'screen-3',
+    ])
+    expect(outcome.sitePublish).toEqual(SITE_PUBLISH)
+    // A job that already published does not publish again.
+    publish.mockClear()
+    await step(context({ ...lastPass({ autoConfirm: true }), sitePublish: SITE_PUBLISH }))
+    expect(publish).not.toHaveBeenCalled()
+  })
+
+  it('leaves every other site job’s pages as drafts', async () => {
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })) },
+      { publish },
+    )
+    const outcome = await step(context(lastPass({})))
+    expect(publish).not.toHaveBeenCalled()
+    expect(outcome.sitePublish).toBeUndefined()
+  })
+
+  it('does not publish before the last unit, and a publish that throws never fails the job', async () => {
+    const publish = jest.fn(async () => {
+      throw new Error('down')
+    })
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-0')] })) },
+      { publish },
+    )
+    await step(context(siteJob({ inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, autoConfirm: true } })))
+    expect(publish).not.toHaveBeenCalled()
+    const last = await step(context(lastPass({ autoConfirm: true })))
+    expect(publish).toHaveBeenCalledTimes(1)
+    expect(last.failure).toBeUndefined()
+    expect(last.sitePublish).toBeUndefined()
+    error.mockRestore()
   })
 })

@@ -10,6 +10,7 @@
 
 /** A surface's display name, by its URL slug. */
 export const PLUGIN_SURFACE_TITLES: Readonly<Record<string, string>> = {
+  'ai-jobs': 'AI jobs',
   automation: 'Automation',
   bookings: 'Bookings',
   crm: 'CRM',
@@ -81,4 +82,9 @@ export const PLUGIN_SURFACE_SECTIONS: Readonly<
     settings: 'Settings',
     analytics: 'Analytics',
   },
+}
+
+/** The noun for one record's page beneath a surface that owns its subtree, by the surface's URL slug. */
+export const PLUGIN_SURFACE_RECORD_TITLES: Readonly<Record<string, string>> = {
+  'ai-jobs': 'Building your site',
 }

@@ -85,12 +85,22 @@ export interface NavTabItem {
  * (the list moved to the bare `…/screens`), so prefix matching would now
  * happen to work for screens. The Dashboard reason above still stands, and it
  * is the one that always did.
+ *
+ * Three answers, and the difference between the last two is the point:
+ *  - the matching tab's `href`;
+ *  - `null` for a path INSIDE the section that no tab owns — an unlisted
+ *    plugin page such as a site's `/ai-jobs` (AGL-3596), or a page beneath a
+ *    tab that has not registered yet. It is an answer, "no tab", and the
+ *    strip draws nothing selected rather than falling back to the pathname,
+ *    where the Dashboard's href is a prefix of every site path and wins;
+ *  - `undefined` where there is nothing to decide: no path, or a path outside
+ *    the section's base.
  */
 export function resolveActiveTab(
   pathname: string | null,
   base: string,
   items: NavTabItem[],
-): string | undefined {
+): string | null | undefined {
   if (!pathname) return undefined
   const relative = (path: string) =>
     path === base || path.startsWith(`${base}/`)
@@ -99,8 +109,10 @@ export function resolveActiveTab(
 
   if (!(pathname === base || pathname.startsWith(`${base}/`))) return undefined
   const segment = relative(pathname)
-  return items.find((item) => item.href && relative(item.href) === segment)
-    ?.href
+  return (
+    items.find((item) => item.href && relative(item.href) === segment)?.href ??
+    null
+  )
 }
 
 /** What the route's org/site segments have resolved to, so far. */
@@ -148,7 +160,7 @@ export function isAddressableSection(
  */
 export function useSecondaryNav(): {
   navTabItems: NavTabItem[]
-  activeTab: string | undefined
+  activeTab: string | null | undefined
   section: NavSection
 } {
   // The path as the routes see it (AGL-3314): on a workspace host the address

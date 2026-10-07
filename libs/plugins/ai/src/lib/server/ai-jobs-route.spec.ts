@@ -150,6 +150,7 @@ function mockMakeFirestore() {
   }
   return {
     collection: (name: string) => makeCollection(name),
+    getAll: async (...refs: Array<{ path: string }>) => refs.map((ref) => snapshotOf(ref.path)),
     collectionGroup: (name: string) =>
       makeQuery((path) => {
         const parts = path.split('/')
@@ -675,6 +676,7 @@ describe('parseCreateAiJobBody', () => {
 
 describe('GET /api/ai/jobs — the read gate and the list', () => {
   async function seedJobs() {
+    mockDocs.set('hosts/host-1', { orgId: ORG })
     armCompletion()
     const { job: first } = await (await createJob(post({ ...VALID, brief: 'first' }))).json()
     // A job's id is random (AGL-3079), so two jobs created inside one
@@ -719,6 +721,51 @@ describe('GET /api/ai/jobs — the read gate and the list', () => {
     await seedJobs()
     const active = await (await listJobs(get(`/api/ai/jobs?orgId=${ORG}&status=active`))).json()
     expect(active.jobs.map((job: { brief: string }) => job.brief)).toEqual(['second'])
+  })
+
+  it('lists one site’s jobs for `hostId`, and refuses an id that is not one (AGL-3596)', async () => {
+    await seedJobs()
+    mockDocs.set('hosts/host-2', { orgId: ORG })
+    mockDocs.set(`orgs/${ORG}/aiJobs/job-other`, {
+      ...[...jobDocs()][0][1],
+      hostId: 'host-2',
+      brief: 'other site',
+      createdAt: new Date(Date.now() + 1_000),
+    })
+    const one = await (await listJobs(get(`/api/ai/jobs?orgId=${ORG}&hostId=host-1`))).json()
+    expect(one.jobs.map((job: { brief: string }) => job.brief)).toEqual(['second', 'first'])
+    const other = await (await listJobs(get(`/api/ai/jobs?orgId=${ORG}&hostId=host-2`))).json()
+    expect(other.jobs.map((job: { brief: string }) => job.brief)).toEqual(['other site'])
+    expect((await listJobs(get(`/api/ai/jobs?orgId=${ORG}&hostId=a/b`))).status).toBe(400)
+  })
+
+  it('leaves out a job whose site has been deleted, from every list (AGL-3596)', async () => {
+    await seedJobs()
+    // A job on a site that still exists, and one that names no site at all.
+    mockDocs.set('hosts/host-2', { orgId: ORG })
+    const at = (seconds: number) => new Date(Date.now() + seconds * 1_000)
+    mockDocs.set(`orgs/${ORG}/aiJobs/job-live`, {
+      ...[...jobDocs()][0][1],
+      hostId: 'host-2',
+      brief: 'live site',
+      status: 'needs_input',
+      createdAt: at(1),
+    })
+    mockDocs.set(`orgs/${ORG}/aiJobs/job-org`, {
+      ...[...jobDocs()][0][1],
+      hostId: null,
+      brief: 'no site',
+      status: 'needs_input',
+      createdAt: at(2),
+    })
+    // The site the seeded jobs were made on is deleted.
+    mockDocs.delete('hosts/host-1')
+    const all = await (await listJobs(get(`/api/ai/jobs?orgId=${ORG}`))).json()
+    expect(all.jobs.map((job: { brief: string }) => job.brief)).toEqual(['no site', 'live site'])
+    const active = await (await listJobs(get(`/api/ai/jobs?orgId=${ORG}&status=active`))).json()
+    expect(active.jobs.map((job: { brief: string }) => job.brief)).toEqual(['no site', 'live site'])
+    // The documents themselves are untouched: a list read deletes nothing.
+    expect(jobDocs()).toHaveLength(4)
   })
 })
 

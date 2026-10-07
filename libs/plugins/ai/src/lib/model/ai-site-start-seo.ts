@@ -90,13 +90,65 @@ export interface AiSiteSeoProposal {
 export const AI_SITE_SEO_NOTE =
   'Written from what you said the site is and who it is for, not from its pages — read it before you save it.'
 
-/** Held to a length, cut at a word rather than mid-word. */
+/**
+ * Words a phrase never ends on (AGL-3596): a title cut after "for" or "that"
+ * reads as broken mid-sentence, which a search result shows to everybody.
+ */
+const DANGLING = new Set([
+  'a', 'an', 'and', 'as', 'at', 'by', 'for', 'from', 'in', 'into', 'of', 'on', 'or', 'so',
+  'that', 'the', 'to', 'which', 'who', 'with', 'where', 'whose', 'while', 'your', 'our', '—', '-', '–', '&',
+])
+
+/** Without the words a phrase never ends on, or the punctuation before them. */
+function withoutDangling(text: string): string {
+  const words = text.split(' ')
+  while (words.length > 1 && DANGLING.has(words[words.length - 1].toLowerCase())) words.pop()
+  return words.join(' ').replace(/[\s,;:—–-]+$/, '').trim()
+}
+
+/** Held to a length, cut at a word rather than mid-word, and never on a dangling word. */
 function clip(value: string, max: number): string {
   const text = value.replace(/\s+/g, ' ').trim()
   if (text.length <= max) return text
   const cut = text.slice(0, max + 1)
   const space = cut.lastIndexOf(' ')
-  return (space > max / 2 ? cut.slice(0, space) : text.slice(0, max)).trim()
+  return withoutDangling((space > max / 2 ? cut.slice(0, space) : text.slice(0, max)).trim())
+}
+
+/**
+ * Where the first clause of an answer ends: "a dog groomer in Austin THAT
+ * takes bookings for…" is a subject and then a sentence about it. A title
+ * keeps the subject.
+ */
+const CLAUSE_BOUNDARY =
+  /\s+(?:that|which|who|whose|where|offering|providing|specializing|serving|helping|so|because|with|for|to|by|and|but)\b|[,;:(—–]|\s-\s/i
+
+/**
+ * A short search title (AGL-3596): the business's name, what it is and where,
+ * held to the title cap and never cut mid-phrase. The answer to "what kind of
+ * site" is often a whole sentence, and cutting that sentence at sixty
+ * characters published "…that takes bookings for" as a site's title.
+ *
+ * The longest of these that fits wins: the whole answer; its first clause
+ * (the subject before "that", "for", a comma…); that clause without its
+ * place. The city the person gave is added where the words do not already
+ * say it, and the name leads where there is one. Only when even the shortest
+ * does not fit is it cut, at a word, never on a dangling one.
+ */
+export function aiSiteSeoTitle(input: { name?: string; subject: string; city?: string }): string {
+  const max = AI_SITE_SEO_LIMITS.title
+  const name = (input.name ?? '').replace(/\s+/g, ' ').trim()
+  const subject = withoutDangling(input.subject.replace(/\s+/g, ' ').trim())
+  const city = (input.city ?? '').replace(/\s+/g, ' ').trim()
+  const placed = (what: string) =>
+    city && !what.toLowerCase().includes(city.toLowerCase()) ? `${what} in ${city}` : what
+  const boundary = subject.search(CLAUSE_BOUNDARY)
+  const clause = withoutDangling(boundary > 0 ? subject.slice(0, boundary) : subject)
+  const bare = withoutDangling(clause.replace(/\s+in\s+[^]*$/i, '')) || clause
+  const whats = [...new Set([placed(subject), subject, placed(clause), clause, bare])]
+  const candidates = name ? [...whats.map((what) => `${name} — ${what}`), name] : whats
+  const fits = candidates.find((candidate) => candidate.length <= max)
+  return fits ?? clip(candidates[candidates.length - 1], max)
 }
 
 /**
@@ -127,6 +179,8 @@ function sentence(text: string): string {
 export interface AiSiteSeoInput extends Partial<AiSiteWords> {
   /** The site's own name where the job carries one; empty for a site named on its pages. */
   siteName?: string
+  /** The city the person gave, where they gave one. */
+  city?: string
 }
 
 /**
@@ -139,7 +193,7 @@ export function aiSiteSeoProposal(input: AiSiteSeoInput): AiSiteSeoProposal | nu
   if (!subject) return null
   const name = (input.siteName ?? '').replace(/\s+/g, ' ').trim()
   const audience = (input.audience ?? '').replace(/\s+/g, ' ').trim()
-  const title = clip(name ? `${name} — ${subject}` : subject, AI_SITE_SEO_LIMITS.title)
+  const title = aiSiteSeoTitle({ name, subject, city: input.city })
   const described = name ? `${name} is ${input.about?.trim()}` : subject
   const description = clip(
     sentence(audience ? `${described}, for ${audience}` : described),
@@ -161,9 +215,11 @@ export function aiSiteSeoProposalForInputs(
 ): AiSiteSeoProposal | null {
   const words = aiSiteWords(inputs)
   const businessName = inputs?.['businessName']
+  const city = inputs?.['city']
   return aiSiteSeoProposal({
     ...words,
     ...(typeof businessName === 'string' ? { siteName: businessName } : {}),
+    ...(typeof city === 'string' ? { city } : {}),
   })
 }
 

@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: Generate a website from a prompt
-description: "Generate a website from a prompt: describe a business and an Aglyn AI build job plans a small site — pages, navigation, layout, contact form and palette — then builds each page as an unpublished draft."
+description: "Generate a website from a prompt: describe a business and an Aglyn AI build job plans a small site — pages, navigation, layout, contact form and palette — then builds it. A guided start publishes it."
 ---
 
 # Generate a website from a prompt
@@ -72,7 +72,9 @@ Canceling a job yourself is not given back; you pay for what ran until then.
   is several jobs. On a site that still has the starter home page untouched, the
   plan's home page takes its place at `/` when you publish it.
 - **A shared layout** for the header, navigation and footer every page sits in.
-- **A contact form**, created on the Forms page and placed on the page that needs it.
+- **A contact form**, created on the Forms page and placed on the page that needs it. It
+  counts toward your plan's saved forms; when the site has no room for another, the
+  pages are built without one.
 - **A palette suggestion** built from your theme's own colors, which you apply in the Theme
   section — or do not.
 - **A welcome email draft**, when you ask for one, written to the people the site
@@ -85,12 +87,18 @@ Canceling a job yourself is not given back; you pay for what ran until then.
 - **A navigation entry** per page, proposed for you to add. The live navigation is not
   touched.
 
-## Nothing is published
+## What is published
 
-Every page arrives as an **unpublished draft**, and so does everything else the scaffold
-makes. No address on your live site resolves to a new page, the navigation is unchanged, the
-palette waits in the Theme section until you save it, and the welcome email is not sent. You
-publish what you want, when you want, through the same buttons you always use.
+A new site started from **Start with AI** publishes its pages when the job finishes, so the
+site is live at its address. A page that cannot be published stays a draft, and the
+**Building your site** page names it with the reason.
+
+Every other scaffold — a site generated for an existing site, or for several sites at once —
+publishes nothing: every page arrives as an **unpublished draft**, and no address on your live
+site resolves to a new page until you publish it, through the same buttons you always use.
+
+Either way the palette waits in the Theme section until you save it, the welcome email is
+not sent, and the navigation entries are proposals for you to add.
 
 ## What it costs, before it starts
 
@@ -110,11 +118,16 @@ and the building starts straight away. **Plan my site** takes you to the site's
 pages, then writing each page — and the credits used so far. **What we're
 building** opens the plan: every page and its sections.
 
-When it is done the page says **Your site is ready** and how many credits the site
-used, with **View your site**, which opens the first page in the preview, and
-**Edit your pages**, which opens the site's **Pages** list. Your new pages are
-drafts: publish them when you are happy. If it stops instead, the page says why
+When it is done the page says **Your site is live** and how many credits the site
+used, with **View your site**, which opens your live site in a new tab, and
+**Edit your pages**, which opens the site's **Pages** list. If a page could not be
+published, the page lists it with the reason, and it waits as a draft in **Edit
+your pages** for you to fix and publish. If it stops instead, the page says why
 and what you can do, and whether the credits were given back.
+
+**AI jobs** in the trail above the heading opens the site's **AI jobs** page:
+every job that worked on the site, newest first, with what kind of job it was,
+its brief, where it stands and the credits it used. Each one opens its own page.
 
 You do not have to wait on the page. It keeps its own address, so you can come
 back to it, and the notification you get when the site is built or stops opens

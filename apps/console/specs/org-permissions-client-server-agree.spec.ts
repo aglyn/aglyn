@@ -128,9 +128,13 @@ describe('the console and the server resolve one permission model', () => {
     // the same member on the same request.
     const source = read(ADMIN_ORGS)
     expect(source).toContain('export async function resolveMemberOrgPermissions')
+    // The verdict reads the resolved set, and a key the set does not hold is
+    // re-asked of the SAME resolver after the plugins' declarations are
+    // repaired (AGL-3596) — never of a second source.
     expect(source).toContain(
-      '(await resolveMemberOrgPermissions(orgId, member))[permission]',
+      'verdictFor(permission, await resolveMemberOrgPermissions(orgId, member), () =>\n    resolveMemberOrgPermissions(orgId, member),',
     )
+    expect(source).toContain('if (permission in granted) return granted[permission] === true')
   })
 
   it('no org-management route gates on the RAW role any more', () => {

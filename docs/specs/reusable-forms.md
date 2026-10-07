@@ -804,7 +804,7 @@ Forms split cleanly across that line, and the split is the whole answer:
 
 | Thing | Class | Enforcement |
 | --- | --- | --- |
-| **A form** | an authored artifact, like a screen, a layout or a dataset | **at the create, and nowhere else.** `formsPerHost` is the create-time gate at `/api/hosts/resources` and is deliberately NOT an `overLimitRows` capacity — see the Decision Log. The ceiling does not vary by plan, so a downgrade cannot strand a catalog and there is nothing to release; no form is ever deleted, hidden or disabled. |
+| **A form** | an authored artifact, like a screen, a layout or a dataset | **at the create, and nowhere else.** `formsPerHost` is the create-time gate at `/api/hosts/resources` and is deliberately NOT an `overLimitRows` capacity — see the Decision Log. The allowance varies by plan since AGL-3597 (Free 1, Starter 5, Pro 25, Business 100, 500 above), so a downgrade can leave a site over it — and it keeps every form: only the next create is refused, there is nothing to release, and no form is ever deleted, hidden or disabled. |
 | **A submission** | a person's data arriving | **never refused for capacity on a paid plan.** Already correct: `checkFormSubmissionQuota` returns `allowed: true` on every metered plan and bills the excess. |
 | **A lead** | a person | **never refused, never ejected, never merged away.** §4's collapse is a dedupe of records, not a reduction of people. |
 | **Traffic that is not a customer's** | abuse | the ceiling, unchanged. `checkFormSubmissionAbuseCeiling` is containment and its docblock is explicit that conflating it with the plan gate is how *"the plan gate ended up as the anti-abuse control it was never designed to be."* |

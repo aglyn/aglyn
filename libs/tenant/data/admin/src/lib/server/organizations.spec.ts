@@ -16,8 +16,18 @@
  */
 
 import {
+  registerPluginEntitlements,
+  resetPluginEntitlementsForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
+import {
+  registerPluginDeclarationsRepair,
+  resetPluginDeclarationsRepairForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-declarations-repair'
+import {
   isSlugReservationClaimable,
   isSlugReservationLapsed,
+  memberHasOrgPermission,
+  memberHasPermissionOnHost,
 } from './organizations'
 
 // AGL-585: a slug an org renamed AWAY from leaves a `movedTo` tombstone so
@@ -142,5 +152,48 @@ describe('isSlugReservationLapsed (AGL-2585)', () => {
     expect(
       isSlugReservationClaimable({ orgId: 'org-a' }, 'org-b', NOW),
     ).toBe(false)
+  })
+})
+
+/*
+ * AGL-3596 — a plugin's catalog key the process never registered is not a
+ * silent "no". The site create door asked an owner for `ai.generate` in a
+ * route whose catalog had never heard of it and read `undefined`; now a
+ * missing key runs the app's boot step and asks again, and a key still
+ * missing is logged before it is refused.
+ */
+describe('memberHasOrgPermission with a key the catalog does not hold (AGL-3596)', () => {
+  const owner = { role: 'owner', allHosts: true, consoleUserType: 'manager' } as never
+  const declaration = {
+    pluginId: 'ai-spec',
+    orgPermissions: [
+      {
+        key: 'aispec.generate',
+        label: 'Generate',
+        description: 'Spec key.',
+        roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
+      },
+    ],
+  }
+
+  afterEach(() => {
+    resetPluginEntitlementsForTests()
+    resetPluginDeclarationsRepairForTests()
+    jest.restoreAllMocks()
+  })
+
+  it('runs the boot step once and answers from the key it registered', async () => {
+    const repair = jest.fn(async () => registerPluginEntitlements(declaration))
+    registerPluginDeclarationsRepair(repair)
+    await expect(memberHasOrgPermission('org-1', owner, 'aispec.generate')).resolves.toBe(true)
+    expect(repair).toHaveBeenCalledTimes(1)
+    await expect(memberHasPermissionOnHost('org-1', 'host-1', owner, 'aispec.generate')).resolves.toBe(true)
+    expect(repair).toHaveBeenCalledTimes(1)
+  })
+
+  it('logs a key still missing after the boot step, then refuses it', async () => {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    await expect(memberHasOrgPermission('org-1', owner, 'aispec.missing')).resolves.toBe(false)
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('"aispec.missing" is not in'))
   })
 })

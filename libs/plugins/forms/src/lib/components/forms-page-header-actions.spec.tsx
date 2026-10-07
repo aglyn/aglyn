@@ -38,7 +38,7 @@
  * down.
  */
 
-import { act, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { useMemo, useState, type ReactNode } from 'react'
 import {
   PageHeaderActionsContext,
@@ -106,6 +106,9 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
   },
 }))
 
+/** The create call the card makes, so a refusal from the route can be staged. */
+const mockCreateResource = jest.fn()
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => ({}),
@@ -114,7 +117,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     orgSlug: 'acme',
     subdomain: 'demo',
   }),
-  useHostResourceApi: () => jest.fn().mockResolvedValue(undefined),
+  useHostResourceApi: () => mockCreateResource,
   // The forms card offers Duplicate; nothing here opens it.
   useDuplicateResource: () => ({ request: jest.fn(), dialog: null }),
   useLiveArtifactCount: (hostId: string, kind: string) => {
@@ -169,7 +172,16 @@ jest.mock('@aglyn/shared-ui-jsx/components/list-pagination.component', () => ({
 
 jest.mock('@aglyn/shared-ui-jsx-forms', () => ({
   __esModule: true,
-  CreateArtifactDrawer: ({ open, title }: any) => (open ? <div>{title}</div> : null),
+  CreateArtifactDrawer: ({ open, title, onSubmit, errorSlot }: any) =>
+    open ? (
+      <div>
+        {title}
+        <button type="button" onClick={() => onSubmit({ displayName: 'Quote request' })}>
+          {'Submit new form'}
+        </button>
+        {errorSlot}
+      </div>
+    ) : null,
 }))
 
 /*
@@ -362,19 +374,19 @@ describe('other ways to start a form sit beside Create Form (AGL-3043)', () => {
 })
 
 describe('the readout names the plan’s allowance', () => {
-  it('reads the ceiling the server enforces, not the listing window', () => {
+  it('reads the allowance the server enforces, not the listing window', () => {
     renderForms({ org: { plan: 'pro' }, used: 3 })
-    // 500 is `formsPerHost` on every plan that carries it, and it is what
+    // 25 is Pro's `formsPerHost` (AGL-3597), and it is what
     // `/api/hosts/resources` refuses at. 1000 is `FORMS_MAX_PER_HOST`, which
-    // bounds a READ — quoting it would promise twice the room the plan has
+    // bounds a READ — quoting it would promise room the plan does not have
     // and send a customer into a refusal the page called impossible.
-    expect(quotaReadout()).toBe('3/500 forms on your plan')
+    expect(quotaReadout()).toBe('3/25 forms on your plan')
   })
 
-  it('does not invent room on a plan that carries no forms', () => {
-    // Free's allowance is 0 — the one plan where forms are not included.
+  it('gives Free its one form, and invents no more room', () => {
+    // Free saves one form per site (AGL-3597), not behind the component feature.
     renderForms({ org: { plan: 'free' }, used: 0 })
-    expect(quotaReadout()).toBe('0/0 forms on your plan')
+    expect(quotaReadout()).toBe('0/1 forms on your plan')
     expect(quotaReadout()).not.toContain('1000')
     expect(quotaReadout()).not.toContain('∞')
   })
@@ -469,5 +481,38 @@ describe('the catalog exports every form’s submissions from its card header', 
   it('offers no Export outside the console shell', () => {
     renderForms({ org: { plan: 'pro' }, used: 3 })
     expect(screen.queryByRole('button', { name: 'Export submissions' })).toBeNull()
+  })
+})
+
+describe('a create the allowance refuses says why, and where to get more (AGL-3597)', () => {
+  let quiet: jest.SpyInstance
+  beforeEach(() => {
+    mockCreateResource.mockReset()
+    // The card logs the failure it then shows; the log is not under test.
+    quiet = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+  })
+  afterEach(() => quiet.mockRestore())
+
+  const submit = () => {
+    fireEvent.click(within(pageHeader()).getByRole('button', { name: 'Create Form' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit new form' }))
+  }
+
+  it('shows the route’s own refusal, with the upgrade path', async () => {
+    mockCreateResource.mockRejectedValue(
+      new Error('Your plan includes 1 forms — upgrade in Billing for more'),
+    )
+    renderForms({ org: { plan: 'free' }, used: 1 })
+    submit()
+    expect(
+      await screen.findByText('Your plan includes 1 forms — upgrade in Billing for more'),
+    ).toBeTruthy()
+  })
+
+  it('CONTROL: a failure with no words of its own stays generic', async () => {
+    mockCreateResource.mockRejectedValue(new Error('Create failed'))
+    renderForms({ org: { plan: 'pro' }, used: 3 })
+    submit()
+    expect(await screen.findByText('Could not create that form')).toBeTruthy()
   })
 })

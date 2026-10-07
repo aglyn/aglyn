@@ -116,7 +116,7 @@ export const AI_JOB_PAGE_INSTRUCTIONS: readonly AiSystemBlock[] = [
       'You build a web page one section at a time, in the order a confirmed plan gives. Each answer is ONE section: call submit_section with a flat node map whose root is the document wrapper (componentId "div") holding exactly one Section (section).',
       'The first section is the top of the page and holds the page’s one h1, its title. Every later section opens with an h2, and headings below it step down one level at a time.',
       'Place what the section’s plan line names. A component the site has is placed as an instance, never drawn again: componentId "reusableInstance", props {"refId": "<component id>", "propValues": {…}} filling the props the inventory lists. A form the site has is a Form (form) whose formId is that form’s id. Another page of the site is linked by its page id, with a Page Link (muiScreenLink) or a Button (muiButton) whose screenId is that id.',
-      'Where the request says the site keeps no saved forms or reusable components, draw them in the section instead: a repeated item is written once, and a form is a Form (form) with no formId, a formName saying what it collects and a submitLabel, holding one Form Field (formField) for each answer with its fieldName, label and fieldType.',
+      'Where the request says the site keeps no reusable components, draw a repeated item in the section instead, written once. A form is only ever a saved one placed by its formId: where the plan line names no form, the section draws no form and no form fields.',
       'Lay the section out with a Container, a Stack or a Grid ("container": true, "spacing": 3) of Grid items sized like "xs:12 md:4", and size nothing with a fixed width. Colors come from the theme’s palette tokens such as primary.main, spacing from the spacing scale, and type from the text variants.',
       'The page renders inside the site’s layout, so a section is never a header, navigation or footer.',
       'A picture is an Image (image) with alt text that says what it should show and no src, for the site owner to fill from the media library.',
@@ -204,17 +204,18 @@ export interface AiPageSectionPromptInput {
   /** The most elements the section may carry at this pass's answer ceiling. */
   maxElements: number
   /**
-   * Whether the workspace keeps reusable components and saved forms
-   * (AGL-3030); `false` asks for the section built inline. Absent is `true`.
+   * Whether the workspace keeps reusable components (AGL-3030); `false`
+   * asks for a repeated item drawn in the section. Absent is `true`. A form
+   * is never drawn inline, whatever this says (AGL-3596).
    */
   reusableComponents?: boolean
   /** The dataset this page is the record template of; absent for a page that is one page. */
   record?: AiPageRecordTemplate | null
 }
 
-/** What a section request says where the workspace keeps no reusable components or saved forms. */
+/** What a section request says where the workspace keeps no reusable components. */
 export const AI_PAGE_SECTION_INLINE_LINE =
-  'This site keeps no saved forms or reusable components: write a repeated item once, and draw a form as a Form holding its Form Fields.'
+  'This site keeps no reusable components: write a repeated item once.'
 
 /** How a repeated item is written once, in the words a request and a re-ask share. */
 const AI_PAGE_SECTION_REPEAT_SHAPE = `put {{1}}, {{2}}… where its copies differ, and give its outermost node "${AI_REPEAT_KEY}", one list of values a copy, in that order, as [["Title 1", "Text 1"], ["Title 2", "Text 2"]]`
@@ -392,7 +393,7 @@ export function aiPageWithSection(
 
 /**
  * What a tree generated against this inventory may reference, the brand it is
- * held to, where the workspace keeps no reusable components or saved forms
+ * held to, where the workspace keeps no reusable components
  * (AGL-3030) that the page is built inline, the sections its plan names,
  * which a link may take a visitor to (AGL-3097), and the players its plan
  * lists for this page, the only ones it may embed (AGL-3433).

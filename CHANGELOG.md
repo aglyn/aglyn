@@ -9,6 +9,50 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.228 — 2026-10-07
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.227...v1.0.0-beta.228)
+
+### Added
+
+- **notifications:** form submissions, bookings and orders email by default ([AGL-3600](https://linear.app/aglyn/issue/AGL-3600))
+- **marketing:** a script adds "Saved forms per site" to /pricing ([AGL-3597](https://linear.app/aglyn/issue/AGL-3597))
+- **billing:** plan cards state each plan's saved forms per site ([AGL-3597](https://linear.app/aglyn/issue/AGL-3597))
+- **billing:** saved forms per site climb with the plan, and Free saves one ([AGL-3597](https://linear.app/aglyn/issue/AGL-3597))
+- **ai:** a site's AI jobs page lists its jobs; a guided start says its site is live ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** every AI door says Create with AI, wears a sparkle, and empty lists offer it ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+
+### Fixed
+
+- **sites:** the start gate reads the site through the console's useHost ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **sites:** a new site lands on itself and is offered its start once, never on Setup ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **forms:** a limit of one reads "1 form"; the AI jobs list says Create with AI ([AGL-3597](https://linear.app/aglyn/issue/AGL-3597), [AGL-3600](https://linear.app/aglyn/issue/AGL-3600))
+- **ai:** a form is a saved form placed by its id, or none, on every plan ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596), [AGL-3030](https://linear.app/aglyn/issue/AGL-3030))
+- **ai:** the guided start's paper is flat rather than overlay-stripped ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** the guided start is drawn on the console's own surface ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **console:** a deleted site's address says it doesn't exist anymore ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **console:** a page no tab owns selects no tab, not the Dashboard ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** a guided start links its live site by the deployment's own origin ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** an answered open-AI-jobs request never reopens the Assist panel ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** erasing a site erases its AI jobs, and the jobs list skips erased sites ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** site jobs generate every page in the site layout; a guided start publishes it ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** a site's search title is name, what and where, never cut mid-phrase ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **plugins:** one entitlements registry per process, so core decides ai.generate ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+
+### Documentation
+
+- **billing:** the saved-forms ladder is on record and in the Forms docs ([AGL-3597](https://linear.app/aglyn/issue/AGL-3597))
+- **ai:** a guided start publishes its site, and a generated form is a saved one ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+
+<details>
+<summary>Also in this release: 3 test</summary>
+
+- **billing:** the published saved-forms row matches formsPerHost ([AGL-3597](https://linear.app/aglyn/issue/AGL-3597))
+- **ai:** a site with form room is told it may create a saved form ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **sites:** the core-only guided start spec re-requires the registry by a variable ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+
+</details>
+
 ## v1.0.0-beta.227 — 2026-10-06
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.226...v1.0.0-beta.227)

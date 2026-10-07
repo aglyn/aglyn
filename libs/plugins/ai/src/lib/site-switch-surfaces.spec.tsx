@@ -21,7 +21,7 @@
  * The shell lists a zone's widgets against the site's resolved plugin set on
  * a site's pages, and against the workspace's everywhere else. So which zone
  * an AI widget is registered into decides whether a site's switch hides it:
- * the dock, every Describe it, the SEO and theme cards, the collaborator
+ * the dock, every Create with AI, the SEO and theme cards, the collaborator
  * columns, the editor's AI controls and the automation controls all sit in
  * SITE zones and go; the billing cards, the member usage and the agency batch
  * sit in WORKSPACE zones and stay, because they carry no site; the staff zones
@@ -72,7 +72,7 @@ const SITE_ZONES: readonly string[] = [
   // keeps the blank page — which is what that site asked for.
   CONSOLE_WIDGET_SLOTS.hostFirstRun,
   CONSOLE_WIDGET_SLOTS.hostScreens,
-  // Describe it on a site's Templates, Layouts and Forms pages (AGL-3043).
+  // Create with AI on a site's Templates, Layouts and Forms pages (AGL-3043).
   // The Forms page is the forms plugin's, which declares its zone and draws
   // it through the shell's slot, so the site's set decides there too; a
   // plain id, since the catalog does not name it.

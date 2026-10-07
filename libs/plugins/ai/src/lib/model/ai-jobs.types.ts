@@ -457,6 +457,24 @@ export interface AiJob {
    * door that applied them, never by a step runner, and absent until then.
    */
   applied?: AiJobApplied | null
+  /**
+   * What a guided site start put live when it finished (AGL-3596): written
+   * once by the site step's last pass, never by a person. Absent on every
+   * other job, which leaves its pages as drafts.
+   */
+  sitePublish?: AiJobSitePublish | null
+}
+
+/**
+ * A guided site start's publish (AGL-3596): the pages that went live, with
+ * the address each answers, and the pages that stayed drafts, each with the
+ * plain sentence for why. A page that stayed a draft never fails the job.
+ */
+export interface AiJobSitePublish {
+  /** The site's live address, `https://<subdomain>.aglyn.app/`; `null` when the site has no subdomain. */
+  liveUrl: string | null
+  published: Array<{ id: string; label: string; path: string }>
+  drafts: Array<{ id: string; label: string; reason: string }>
 }
 
 /**
@@ -531,4 +549,6 @@ export interface AiJobSummary {
     versions: Record<string, string>
     staged: string[]
   } | null
+  /** What a guided site start put live (AGL-3596); absent on every other job. */
+  sitePublish?: AiJobSitePublish | null
 }

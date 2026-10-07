@@ -16,7 +16,7 @@
  */
 
 /**
- * "Describe it" on the Automation page's Actions (AGL-2919), mounted through
+ * "Create with AI" on the Automation page's Actions (AGL-2919), mounted through
  * the `hostAutomations` zone's props: absent while the jobs route says the
  * feature is not this workspace's, the description it sends is a `workflow`
  * draft job for this site, and what it shows is the job's own account — the
@@ -133,7 +133,7 @@ function routes(answers: { create?: unknown; events?: unknown }) {
 }
 
 async function draftFrom(text: string) {
-  fireEvent.click(await screen.findByRole('button', { name: 'Describe it' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
   fireEvent.change(screen.getByLabelText(copy.briefLabel), { target: { value: text } })
   fireEvent.click(screen.getByRole('button', { name: copy.submit }))
 }
@@ -169,7 +169,7 @@ describe('whether the button is here at all', () => {
         <AiDescribeAutomationButton {...zoneProps({ orgId: undefined })} />
       </>,
     )
-    expect(await screen.findAllByRole('button', { name: 'Describe it' })).toHaveLength(2)
+    expect(await screen.findAllByRole('button', { name: 'Create with AI' })).toHaveLength(2)
     expect(mockFetch).toHaveBeenCalledTimes(1)
   })
 })
@@ -260,7 +260,7 @@ describe('drafting', () => {
   it('will not send an empty description', async () => {
     routes({})
     render(<AiDescribeAutomationButton {...zoneProps()} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Describe it' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
     fireEvent.change(screen.getByLabelText(copy.briefLabel), { target: { value: '   ' } })
     expect(screen.getByRole('button', { name: copy.submit }).hasAttribute('disabled')).toBe(true)
     expect(mockFetch).toHaveBeenCalledTimes(1)

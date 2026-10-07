@@ -255,11 +255,11 @@ const MOUNTS: Record<
     how: 'both',
     props: { orgId: 'org-1', org: {} },
   },
-  // AGL-2918: the top of the page a newly created site lands on, where a
-  // widget offers to start the site — and hands back the blank path.
+  // AGL-2918: over the page a newly created site lands on, where a widget
+  // offers to start the site — and hands back the blank path. Drawn by the
+  // host layout's gate since AGL-3596, never by Setup.
   hostFirstRun: {
-    file:
-      'apps/console/app/(app)/[orgSlug]/hosts/[host]/setup/(sections)/details/page.tsx',
+    file: 'apps/console/components/host-first-run-gate.component.tsx',
     how: 'slot',
     props: {
       hostId: 'host-1',

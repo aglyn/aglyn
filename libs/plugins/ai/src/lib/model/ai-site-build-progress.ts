@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { aiJobKindNoun } from './ai-job-activity'
 import type { AiJobSummary } from './ai-jobs.types'
 
 /**
@@ -92,15 +93,85 @@ export function aiSiteBuildRows(
  * back, that nothing was charged.
  */
 export function aiSiteBuildCreditsLine(
-  job: Pick<AiJobSummary, 'status' | 'creditsSpent' | 'refundedCredits'>,
+  job: Pick<AiJobSummary, 'status' | 'creditsSpent' | 'refundedCredits'> & Partial<Pick<AiJobSummary, 'kind'>>,
 ): string | null {
   const spent = Math.max(0, job.creditsSpent ?? 0)
   const refunded = Math.max(0, job.refundedCredits ?? 0)
   const net = Math.max(0, spent - refunded)
   const phase = aiSiteBuildPhase(job)
+  // What the job made, by its kind; a job that names none is a site's.
+  const subject = !job.kind || job.kind === 'site' ? 'This site' : aiJobKindNoun(job.kind) === 'AI job' ? 'This AI job' : `This ${aiJobKindNoun(job.kind)}`
   if (refunded > 0 && net === 0) return `Nothing was charged — we refunded ${refunded} credits.`
-  if (phase === 'done') return `This site used ${net} credits.`
+  if (phase === 'done') return `${subject} used ${net} credits.`
   if (phase === 'working') return `Credits used so far: ${net}`
-  if (refunded > 0) return `This site used ${net} credits — we refunded ${refunded}.`
-  return net > 0 ? `This site used ${net} credits.` : null
+  if (refunded > 0) return `${subject} used ${net} credits — we refunded ${refunded}.`
+  return net > 0 ? `${subject} used ${net} credits.` : null
+}
+
+/** The heading and the sentence under it, for one job's page in its current phase. */
+export interface AiJobPageCopy {
+  heading: string
+  lede: string
+}
+
+/**
+ * What one job's page says at the top (AGL-3594, AGL-3596). A site job reads
+ * as "Building your site"; any other kind names what it makes — "Building
+ * your page" — or, for a kind with no noun, the job itself.
+ *
+ * A guided site start publishes its pages when it finishes, and says so
+ * (`sitePublish`): with a page live the heading is "Your site is live". A
+ * done site job without that record — an older job, or one that was not a
+ * guided start — built drafts, and says that instead.
+ */
+export function aiJobPageCopy(
+  job: Pick<AiJobSummary, 'kind' | 'status' | 'review' | 'error'> & Partial<Pick<AiJobSummary, 'sitePublish'>>,
+  brand: string,
+): AiJobPageCopy {
+  const phase = aiSiteBuildPhase(job)
+  const noun = job.kind === 'site' ? 'site' : aiJobKindNoun(job.kind)
+  const generic = noun === 'AI job'
+  // `products` is the one plural noun.
+  const isAre = noun.endsWith('s') ? 'are' : 'is'
+  const why = job.review?.message ?? job.error ?? null
+  if (phase === 'working') {
+    return {
+      heading: generic ? 'Your AI job is running' : `Building your ${noun}`,
+      lede:
+        job.kind === 'site'
+          ? `${brand} AI is planning your pages and writing each one. You can leave this page; it keeps going.`
+          : `${brand} AI is working on it. You can leave this page; it keeps going.`,
+    }
+  }
+  if (phase === 'done') {
+    const published = job.sitePublish?.published.length ?? 0
+    if (job.kind === 'site' && published > 0) {
+      return {
+        heading: 'Your site is live',
+        lede: job.sitePublish?.drafts.length
+          ? 'Your pages are published, except the ones listed below, which stayed drafts.'
+          : 'Your pages are published, and anyone can visit your site now.',
+      }
+    }
+    if (job.kind === 'site' && job.sitePublish) {
+      return {
+        heading: 'Your site is ready',
+        lede: 'None of your new pages could be published, so they are drafts. The reasons are below.',
+      }
+    }
+    return {
+      heading: generic ? 'Your AI job finished' : `Your ${noun} ${isAre} ready`,
+      lede:
+        job.kind === 'site'
+          ? 'Your new pages are drafts. Publish them when you’re happy.'
+          : 'Everything it built is an unpublished draft until you publish it.',
+    }
+  }
+  if (phase === 'canceled') {
+    return { heading: generic ? 'Your AI job was canceled' : `Your ${noun} was not built`, lede: 'The job was canceled.' }
+  }
+  return {
+    heading: generic ? 'Your AI job stopped' : `Your ${noun} ${noun.endsWith('s') ? 'were' : 'was'} not built`,
+    lede: why ?? (generic ? 'Something went wrong running this job.' : `Something went wrong building your ${noun}.`),
+  }
 }

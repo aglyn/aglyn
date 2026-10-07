@@ -222,6 +222,7 @@ jest.mock('./dns-probe', () => ({
 import { eraseHost, SiteInConsentGroupError } from './erase'
 import type { HostSendingDomainTeardown } from './host-sending-domain'
 import { readSendingDomainTeardownByLabel } from './sending-domain-debt'
+import { listPluginOrgCollections } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
 
 const ORG = 'org123'
 const HOST = 'HostAbc'
@@ -607,5 +608,42 @@ describe('a site in a consent group', () => {
       tearDownSendingDomain: async () => ({ outcome: 'removed', detail: null }),
     })
     expect(store.has(`hosts/${HOST}`)).toBe(false)
+  })
+})
+
+describe('the documents a plugin declared as the site’s go with it', () => {
+  /*
+   * `eraseHost` deletes, for every plugin `orgCollections` declaration with a
+   * `siteField`, the org documents that name the site — Marketing's sends, AI
+   * jobs (AGL-3596). Read from the compiled declarations, so no plugin is
+   * loaded here, exactly as in a request that loaded none. Each collection
+   * gets a bystander on a sibling site, which must survive.
+   */
+  const owned = () => listPluginOrgCollections().filter((declared) => declared.siteField)
+
+  it('counts the AI jobs among them (AGL-3596)', () => {
+    expect(owned().map((declared) => declared.name)).toEqual(
+      expect.arrayContaining(['campaigns', 'aiJobs']),
+    )
+  })
+
+  it('deletes each declared collection’s documents naming the site, and only those', async () => {
+    seedProvisionedSite()
+    for (const declared of owned()) {
+      const field = declared.siteField as string
+      store.set(`orgs/${ORG}/${declared.name}/mine`, { [field]: HOST, status: 'needs_input' })
+      store.set(`orgs/${ORG}/${declared.name}/mine/steps/one`, { note: 'beneath it' })
+      store.set(`orgs/${ORG}/${declared.name}/sibling`, { [field]: 'HostSibling' })
+    }
+
+    await eraseHost(HOST, {
+      tearDownSendingDomain: async () => ({ outcome: 'removed', detail: null }),
+    })
+
+    for (const declared of owned()) {
+      expect(store.has(`orgs/${ORG}/${declared.name}/mine`)).toBe(false)
+      expect(store.has(`orgs/${ORG}/${declared.name}/mine/steps/one`)).toBe(false)
+      expect(store.has(`orgs/${ORG}/${declared.name}/sibling`)).toBe(true)
+    }
   })
 })

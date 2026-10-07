@@ -49,8 +49,10 @@ import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capa
  * where holding past the new plan really does mean capacity the org is no
  * longer entitled to.
  *
- * The ceiling also does not move with the plan, so a downgrade cannot strand
- * a catalog in the first place.
+ * The allowance does move with the plan since AGL-3597 (Free 1, Starter 5,
+ * Pro 25, Business 100, 500 above), so a downgrade CAN leave a site holding
+ * more forms than its new plan includes. That is grandfathering, not an
+ * excess: the forms stay, and only the next create is refused.
  *
  * A string rather than a closed union since AGL-3080, because the platform no
  * longer knows the whole set: `sites` and `seats` are its own — every

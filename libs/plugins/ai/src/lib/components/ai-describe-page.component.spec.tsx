@@ -16,7 +16,7 @@
  */
 
 /**
- * "Describe it" on a site's Screens page (AGL-2907), mounted through the
+ * "Create with AI" on a site's Screens page (AGL-2907), mounted through the
  * `hostScreens` zone's props: it stays absent while the jobs route says the
  * feature is not this workspace's, the brief it sends is a `page` job for
  * this site with the chip the member pressed, and what it promises after is
@@ -112,7 +112,7 @@ describe('the brief it sends', () => {
     mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
     render(<AiDescribePageButton {...zoneProps()} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Describe it' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
     fireEvent.change(screen.getByLabelText('What is the page for?'), {
       target: { value: '  A landing page for our spring roof inspection offer  ' },
     })
@@ -140,7 +140,7 @@ describe('the brief it sends', () => {
     mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
     render(<AiDescribePageButton {...zoneProps()} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Describe it' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
     fireEvent.change(screen.getByLabelText('What is the page for?'), {
       target: { value: 'An about page' },
     })
@@ -158,7 +158,7 @@ describe('the brief it sends', () => {
     mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
     render(<AiDescribePageButton {...zoneProps()} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Describe it' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
     fireEvent.change(screen.getByLabelText('What is the page for?'), {
       target: { value: 'A contact page' },
     })
@@ -175,7 +175,7 @@ describe('the brief it sends', () => {
     mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
     render(<AiDescribePageButton {...zoneProps()} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Describe it' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
     fireEvent.change(screen.getByLabelText('What is the page for?'), { target: { value: '   ' } })
     expect(screen.getByRole('button', { name: 'Plan the page' }).hasAttribute('disabled')).toBe(true)
     expect(mockFetch).toHaveBeenCalledTimes(1)

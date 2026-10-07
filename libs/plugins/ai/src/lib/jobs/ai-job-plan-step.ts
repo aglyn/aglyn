@@ -32,6 +32,8 @@ import {
 import { AI_JOB_CREATE_KINDS, AI_JOB_CREATE_NOUNS } from '../model/ai-job-creations'
 import { AI_PAGE_CREATE_KINDS, aiPagePlanShapeRefusal } from '../model/ai-page-job'
 import {
+  AI_PLAN_NO_FORM_SENTENCE,
+  aiPlanCanPlaceForm,
   aiPlanCapabilitiesForJob,
   aiPlanCapabilityLines,
   type AiPlanCapabilities,
@@ -165,6 +167,11 @@ export function aiJobPlanPrompt(
     }
   }
   if (capabilities) lines.push(...aiPlanCapabilityLines(capabilities))
+  // A form is a saved form or none (AGL-3596): said where the site read has
+  // none to place and the job may create none.
+  if (capabilities && inventory && !aiPlanCanPlaceForm(inventory, capabilities)) {
+    lines.push(AI_PLAN_NO_FORM_SENTENCE)
+  }
   lines.push(...aiPlanTemplateTokenLines(job))
   lines.push(...aiPlanSiteLines(job, inventory, capabilities))
   return lines.join('\n')
@@ -210,7 +217,7 @@ export function aiPlanSiteLines(
       FREE_AI_TASTE_CREDITS_PER_MONTH,
     )
     lines.push(
-      `This is a Free workspace: plan at most ${cap} ${cap === 1 ? 'page' : 'pages'} — the home page at / and the one page the brief most needs, such as services, booking or contact — with at most ${sections} sections across them. Put the contact form on one of them.`,
+      `This is a Free workspace: plan at most ${cap} ${cap === 1 ? 'page' : 'pages'} — the home page at / and the one page the brief most needs, such as services, booking or contact — with at most ${sections} sections across them.${aiPlanCanPlaceForm(inventory, capabilities) ? ' Put the contact form on one of them.' : ''}`,
     )
   }
   lines.push(

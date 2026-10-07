@@ -416,7 +416,14 @@ export function HostFormsCard(props: HostFormsCardProps) {
         router.push(formHref(formId))
       } catch (error) {
         console.error(error)
-        setCreateError('Could not create that form')
+        // The route's own words when it refused: a spent `formsPerHost`
+        // allowance answers "Your plan includes N forms — upgrade in Billing
+        // for more", which is the upgrade path a generic failure would hide.
+        setCreateError(
+          error instanceof Error && error.message && error.message !== 'Create failed'
+            ? error.message
+            : 'Could not create that form',
+        )
       } finally {
         setCreating(false)
       }
@@ -785,9 +792,15 @@ export function HostFormsCard(props: HostFormsCardProps) {
                 noRowsDescription:
                   'A form collects submissions, dedupes the people who send them, and can route them to a lead. Its design is drawn in the besigner and published like any other artifact.',
                 noRowsAction: (
-                  <Button variant="contained" onClick={() => setCreateOpen(true)}>
-                    {'Create your first form'}
-                  </Button>
+                  <Stack direction="row" spacing={1}>
+                    {/* Other ways to start a form, the header's zone again. */}
+                    {CreateZone ? (
+                      <CreateZone slot={HOST_FORMS_ZONE.id} hostId={hostId} orgId={org?.$id} />
+                    ) : null}
+                    <Button variant="contained" onClick={() => setCreateOpen(true)}>
+                      {'Create your first form'}
+                    </Button>
+                  </Stack>
                 ),
               })}
           rows={forms}

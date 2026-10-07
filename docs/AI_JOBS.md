@@ -523,7 +523,7 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
 - **The workspace.** `readAiPlanCapabilities` in `src/lib/jobs/ai-job-drafts.ts`
   answers every creation kind from the resolved entitlements and the site's counts,
   in the draft writer's own band arithmetic: `reusableComponents` for a component,
-  that feature then `formsPerHost` for a saved form, `sharedLayoutsPerHost` and
+  `formsPerHost` alone for a saved form (Free 1 and up since AGL-3597), `sharedLayoutsPerHost` and
   `templatesPerHost` with the room each has left, and the plan's datasets. It reads
   only the collections a finite allowance counts. A theme change counts against
   nothing, and an email design is the email plugin's to refuse.
@@ -565,7 +565,8 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   the cached prefix is the same bytes. A plan confirmed before these rules still stops
   at the page and scaffold doors, which name such a reference as a component to create.
 - **Inline, where the workspace keeps no reusable components.** A workspace whose plan
-  lacks `reusableComponents` can place no component and save no form, so there — and
+  lacks `reusableComponents` can place no component (it may save one form since
+  AGL-3597, but the page doctrine still keys on the component feature), so there — and
   only there — the doctrine builds inline: a form is a Form element the page carries,
   with its Form Fields inside it, and a list's repeated items are drawn in one section.
   Rules 1 and 3 state that exception, the plan rules accept it on those capabilities,
@@ -1048,7 +1049,7 @@ the submit route reads, agreeing with each other. It is a planned kind, like
   record or form submission; the step spec seeds each and asserts none is read
   or sent.
 - **The draft.** `writeAiDraft` with kind `form`: the resources route's
-  allow-list, its entitlement (`reusableComponents`) before `formsPerHost`, the
+  allow-list, the `formsPerHost` allowance (no feature gate since AGL-3597), the
   canvas-shaped design in msgpack, a `slug` from the unique name, and no
   version — the form's page mints the first when a member opens it. Nothing is
   promoted and no page places it.
@@ -1625,7 +1626,7 @@ which fails a listing's job and becomes an audit unit's note.
 `page` (AGL-2907) builds one screen from a brief, as an unpublished draft. It
 is a planned kind: the plan step runs first, and once a member confirms the
 plan the generation runner builds the layout, forms and components the plan
-creates, then its one screen (AGL-3031). A member starts one from "Describe it"
+creates, then its one screen (AGL-3031). A member starts one from "Create with AI"
 on a site's Screens page (the `hostScreens` widget zone) or from AI jobs in the
 Assist panel.
 
@@ -1915,7 +1916,7 @@ the same way, in a Grid with a row direction and no container.
   written once, one. The shapes AGL-3078 tells apart cost nothing until a rule is broken:
   they are re-ask sentences, and no system block, tool or cached prefix changes.
   `ai-job-free-page.spec.ts` re-asks the Free page's practice areas for each of the four
-  shapes through the real page step: a section re-asked for any of them costs at most 21
+  shapes through the real page step: a section re-asked for any of them costs at most 22
   credits, less than the 44 of the largest pass, which the room the arithmetic keeps for
   a re-asked section must exceed.
 
@@ -2145,7 +2146,7 @@ needs, and the machine does not start it with less.
   request's line is the same length either way, so no figure the Free page's
   arithmetic quotes moves.
 - **The ceiling does not move to make a section fit.** The balanced tier's
-  1,050 fits the Free page's wall with little to spare: past 1,052 tokens the
+  1,050 fits the Free page's wall with little to spare: past 1,055 tokens the
   first section pass costs 45 credits, and the Free page that builds its layout
   first leaves 45 of the 300 — no more than that pass, which is the room the
   arithmetic keeps for a re-asked section. That margin was 1,060 until the
@@ -2159,7 +2160,9 @@ needs, and the machine does not start it with less.
   ten. Rule 4's record template (AGL-3475) put 13 back, 4,614, and left five;
   the plan's record field rides only a job that may bind a dataset, so the
   Free plan's request carries none of it. The App Bar's two scroll switches
-  (AGL-3587, AGL-3588) put 6 more back, 4,620, and left two. A two-person introduction drawn
+  (AGL-3587, AGL-3588) put 6 more back, 4,620, and left two. A form being a saved one on
+  every plan (AGL-3596) took the inline-form sentences out of the doctrine and the page
+  instructions, 4,596, and left five. A two-person introduction drawn
   roomier, in the 20 elements an estimate-counted budget allowed, needs 1,114
   real tokens, so no ceiling the wall holds fits it; drawn in 15, it needs 834.
   A plan rule that splits a section cannot see how long its items' copy runs,
@@ -2609,7 +2612,7 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
 - **Where a member starts one.** Three widgets the AI plugin registers in the
   zones the workflows plugin hosts on the Automation page
   (`src/lib/components/ai-describe-automation.component.tsx` and
-  `ai-explain-automation.component.tsx`): Describe it beside Add action and
+  `ai-explain-automation.component.tsx`): Create with AI beside Add action and
   Recipes (`hostAutomations`), whose dialog follows the job and opens the draft
   in the Actions editor; Explain it at the top of the editor of a saved action
   or workflow (`automationEditor`); and Why did this fail? on each failed run

@@ -99,7 +99,7 @@ describe('useHostResolution (AGL-894)', () => {
   it('never reports a settled miss for a subdomain it has not resolved yet', async () => {
     // The projection read never settles during this test, so any `ready` seen
     // for "demo" can only have come from stale state, not from a real answer.
-    mockGetDocs.mockReturnValue(new Promise(() => undefined))
+    mockGetDocsFromServer.mockReturnValue(new Promise(() => undefined))
 
     // Start OFF a host route (e.g. the staff console): ready, no host.
     const { frames, rerender } = renderRecording(null)
@@ -122,7 +122,7 @@ describe('useHostResolution (AGL-894)', () => {
   })
 
   it('resolves the host id from the membership projection', async () => {
-    mockGetDocs.mockResolvedValue(snap([{ id: 'host-1' }]))
+    mockGetDocsFromServer.mockResolvedValue(snap([{ id: 'host-1' }]))
 
     const { result } = renderRecording('demo')
 
@@ -136,13 +136,13 @@ describe('useHostResolution (AGL-894)', () => {
   })
 
   it('drops a previous host id the moment the subdomain changes', async () => {
-    mockGetDocs.mockResolvedValue(snap([{ id: 'host-1' }]))
+    mockGetDocsFromServer.mockResolvedValue(snap([{ id: 'host-1' }]))
     const { result, frames, rerender } = renderRecording('demo')
     await waitFor(() => expect(result.current.hostId).toBe('host-1'))
 
     // Switching sites must not leave the old host id addressable for a render:
     // consumers build Firestore refs from it and would read the wrong site.
-    mockGetDocs.mockReturnValue(new Promise(() => undefined))
+    mockGetDocsFromServer.mockReturnValue(new Promise(() => undefined))
     frames.length = 0
     rerender({ subdomain: 'other-site' })
 
@@ -151,8 +151,7 @@ describe('useHostResolution (AGL-894)', () => {
   })
 
   it('settles a real miss so the guard can 404 an unknown subdomain', async () => {
-    // Projection empty, authoritative empty, server confirm empty (AGL-813).
-    mockGetDocs.mockResolvedValue(snap([]))
+    // Projection empty and authoritative empty, both from the server.
     mockGetDocsFromServer.mockResolvedValue(snap([]))
 
     const { result } = renderRecording('nope')
@@ -175,6 +174,7 @@ describe('useHostResolution (AGL-894)', () => {
       error: false,
     })
     expect(mockGetDocs).not.toHaveBeenCalled()
+    expect(mockGetDocsFromServer).not.toHaveBeenCalled()
   })
 
   /**
@@ -212,7 +212,6 @@ describe('useHostResolution (AGL-894)', () => {
 
     it('REGRESSION — retry() re-runs resolution and clears the error', async () => {
       // Every read fails, the way a cold connection does.
-      mockGetDocs.mockRejectedValue(new Error('unavailable'))
       mockGetDocsFromServer.mockRejectedValue(new Error('unavailable'))
 
       const { result } = renderRecording('demo')
@@ -222,7 +221,7 @@ describe('useHostResolution (AGL-894)', () => {
       // The connection comes up — which is what actually happens a second or
       // two later. Before the fix nothing re-read: the deps were unchanged
       // and Try again reloaded the page instead.
-      mockGetDocs.mockResolvedValue(snap([{ id: 'host-1' }]))
+      mockGetDocsFromServer.mockResolvedValue(snap([{ id: 'host-1' }]))
       await act(async () => {
         result.current.retry()
       })
@@ -239,7 +238,6 @@ describe('useHostResolution (AGL-894)', () => {
       // Without this, a `retry` that simply cleared the flag would pass the
       // test above while leaving the user on a broken page that claims to be
       // fine.
-      mockGetDocs.mockRejectedValue(new Error('unavailable'))
       mockGetDocsFromServer.mockRejectedValue(new Error('unavailable'))
 
       const { result } = renderRecording('demo')
@@ -256,7 +254,7 @@ describe('useHostResolution (AGL-894)', () => {
     })
 
     it('keeps retry stable across renders so a button handler does not churn', () => {
-      mockGetDocs.mockReturnValue(new Promise(() => undefined))
+      mockGetDocsFromServer.mockReturnValue(new Promise(() => undefined))
       const { result, rerender } = renderRecording('demo')
       const first = result.current.retry
       rerender({ subdomain: 'demo' })

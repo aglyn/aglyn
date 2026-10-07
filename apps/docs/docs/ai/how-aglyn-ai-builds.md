@@ -15,7 +15,7 @@ is checked against them before you see it.
 ## Where to describe a build
 
 Open the site you are building for, go to the page that lists what you want built, and
-choose **Describe it** beside its create button:
+choose **Create with AI** beside its create button:
 
 - a page on **Pages**, or **Describe a page** in **AI jobs** in the Assist panel; see
   [Generate a page](../building-sites/screens-and-layouts/generate-a-page.md);
@@ -27,7 +27,7 @@ choose **Describe it** beside its create button:
 - a reusable component on **Components**; see
   [Generate a reusable component](../building-sites/components/generate-a-component-with-aglyn-ai.md#from-a-brief).
 
-**Describe it** is there when your workspace has AI build jobs, you have the **Generate
+**Create with AI** is there when your workspace has AI build jobs, you have the **Generate
 with AI** permission, and AI is on for the site.
 
 ## The plan comes first
@@ -74,6 +74,9 @@ You never have to remember where a job went:
   finishes and when it stops. It opens the job, or what it built. You can turn
   these off under **AI job needs you**, **AI job finished** and **AI job stopped** in
   your notification settings.
+- **A site's AI jobs page** lists every job that worked on that site, newest first,
+  with its kind, its brief, where it stands and the credits it used; each opens its
+  own page. **AI jobs** in the trail above a job's page opens it.
 
 **AI jobs** opens on its own while anything is running or waiting for you, and
 lists each job with where it stands.
@@ -92,9 +95,9 @@ lists each job with where it stands.
    page sits in your layout and never carries its own copy of them.
 3. **Forms are built on the Forms page, then placed.** A form is created with its
    fields, validation, consent and routing on the Forms page, and a page places it
-   by reference, so you edit it in one place. On a plan without saved forms, such as
-   Free, the page carries the form itself, with its fields, and its submissions reach
-   your inbox like any form's. A search is never built as a form,
+   by reference, so you edit it in one place. A generated page never draws form
+   fields of its own: when your site has no saved form to place and no room for
+   another, the page goes without one. A search is never built as a form,
    because a form collects submissions: the AI places a
    [Search Box](../building-sites/site-search/overview.md) for your site search, or a
    Collection Search for the entries of one collection.

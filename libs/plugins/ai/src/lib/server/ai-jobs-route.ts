@@ -44,6 +44,7 @@ import {
 import { releaseAssistMessage } from '../usage/assist-usage'
 import { aiUsageMeter } from '../usage/ai-usage-meter'
 import { aiJobsGate } from './ai-jobs-gate'
+import { withoutErasedSites } from './ai-jobs-live-sites'
 import { AI_JOB_ACTIVE_STATUSES } from '../model/ai-job-activity'
 
 /**
@@ -60,7 +61,9 @@ import { AI_JOB_ACTIVE_STATUSES } from '../model/ai-job-activity'
  * from there.
  *
  * `GET` lists the org's jobs, newest first, through the read gate: the
- * same rungs up to the lockdown verdict, no reservation.
+ * same rungs up to the lockdown verdict, no reservation. A job naming a
+ * site that no longer exists is left out, so a page can come back shorter
+ * than its `limit`.
  *
  * The request must NAME the org it is metered against (AGL-1934). There
  * is no fallback to "the caller's first org".
@@ -318,12 +321,26 @@ export async function GET(request: Request): Promise<Response> {
   // console's top-bar indicator and the Assist launcher count.
   const active = rawStatus === 'active'
   const limit = Number(url.searchParams.get('limit') ?? '')
+  // `hostId` (AGL-3596): one site's jobs, for the site's AI jobs page — a
+  // query on the field under the (hostId, createdAt) index, never a filter
+  // of a loaded window. An id that is not one is refused rather than ignored,
+  // which would answer with every site's jobs.
+  const rawHost = url.searchParams.get('hostId')
+  if (rawHost !== null && !ID_CHARS.test(rawHost)) {
+    return Response.json({ error: 'hostId is not a site id' }, { status: 400 })
+  }
   const now = new Date()
-  const jobs = await listAiJobs(gate.firestore, gate.orgId, {
-    ...(status ? { status } : {}),
-    ...(active ? { statuses: AI_JOB_ACTIVE_STATUSES } : {}),
-    ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}),
-  })
+  // A job naming a site that has been deleted is not listed (AGL-3596), so
+  // no surface counts or shows work on a site nobody can open.
+  const jobs = await withoutErasedSites(
+    gate.firestore,
+    await listAiJobs(gate.firestore, gate.orgId, {
+      ...(status ? { status } : {}),
+      ...(active ? { statuses: AI_JOB_ACTIVE_STATUSES } : {}),
+      ...(rawHost ? { hostId: rawHost } : {}),
+      ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}),
+    }),
+  )
   return Response.json(
     {
       jobs: jobs.map((job) => aiJobSummary(job, now)),

@@ -17,7 +17,6 @@
 'use client'
 
 import { Box, Button, CircularProgress, Typography } from '@mui/material'
-import { notFound } from 'next/navigation'
 import { type ReactNode } from 'react'
 import {
   useHostAuthError,
@@ -28,6 +27,7 @@ import {
   useHostRetry,
   useHostSubdomain,
 } from './host-id-provider'
+import SiteNotFoundContent from './site-not-found-content.component'
 
 /**
  * `/[orgSlug]/hosts/[host]/…` resolution gate (AGL-622). The URL addresses the
@@ -35,10 +35,18 @@ import {
  * INSIDE the host route tree — below the route not-found boundary — so:
  *  - it holds a spinner until resolution settles (so useHostId() consumers
  *    never build a Firestore ref with a null id), then
- *  - renders the designed 404 for an unknown subdomain (one that is not one of
- *    the current org's hosts). Never a sign-out.
- * The provider can't do the 404 itself: it is global, above the boundaries, so
- * a notFound() there escapes to the error boundary instead.
+ *  - renders the site not-found state for a subdomain the SERVER says is not
+ *    one of the current org's hosts the user can open — deleted, or access
+ *    removed (AGL-3596). Never a sign-out.
+ * The provider can't render that itself: it is global, above the route tree,
+ * and the chrome around the page must stay.
+ *
+ * Nothing under `[host]` mounts until the server has named the site: the
+ * provider resolves from the server only, so a spinner here is the whole of
+ * what a cached mapping to a deleted site can produce. Pages, plugin pages
+ * included, never open listeners against an id the server has not confirmed,
+ * which is what kept a deleted site's cached screens on screen beneath a
+ * stream of refusal toasts.
  *
  * A transient read failure is NOT a 404 (AGL-813): if the host list gave up
  * after retries the subdomain resolves to no match too, but the site may well
@@ -113,7 +121,7 @@ export function HostGuard({ children }: { children?: ReactNode }) {
         </Box>
       )
     }
-    notFound()
+    return <SiteNotFoundContent />
   }
   return <>{children}</>
 }
