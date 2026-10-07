@@ -719,6 +719,7 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
       : null,
     ...(job.sitePublish ? { sitePublish: job.sitePublish } : {}),
     ...(job.kind === 'site' ? { siteInputs: aiSiteStartInputsOf(job.inputs) } : {}),
+    ...(aiJobAutoConfirms(job) ? { autoConfirm: true } : {}),
     ...(job.items?.length ? { items: job.items } : {}),
     ...(job.orchestration ? { orchestration: job.orchestration } : {}),
     ...(job.kind === 'build' && job.inputs?.['publish'] === true ? { publishAsked: true } : {}),

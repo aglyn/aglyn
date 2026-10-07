@@ -652,6 +652,13 @@ export interface AiJobSummary {
    * on every other kind.
    */
   siteInputs?: Record<string, unknown> | null
+  /**
+   * Whether the machine confirms this job's plan itself (AGL-3594): a guided
+   * site start. Its plan parks for the instant the confirmation takes, and a
+   * surface reads that park as the build going on (AGL-3596). Absent on every
+   * other job.
+   */
+  autoConfirm?: boolean
   /** A `build` job's items (AGL-3616); absent on every other job. */
   items?: AiJobItemLedger[]
   /**

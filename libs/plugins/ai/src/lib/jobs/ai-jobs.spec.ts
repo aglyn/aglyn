@@ -2823,6 +2823,9 @@ describe('a guided site start settles page by page, as a build does (AGL-3616)',
     // Each item records when it settled, in the write that records its pass,
     // so the next item's row counts from there (AGL-3596).
     expect(job.items?.every((row) => row.settledAt === NOW.toISOString())).toBe(true)
+    // The summary says the machine confirms the plan itself, so a surface
+    // reads its instant on the plan as the build going on (AGL-3596).
+    expect(aiJobSummary(job, NOW).autoConfirm).toBe(true)
   })
 
   it('Try again builds only the failed page', async () => {

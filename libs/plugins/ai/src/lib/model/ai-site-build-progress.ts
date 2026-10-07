@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { aiJobKindNoun } from './ai-job-activity'
+import { aiJobConfirmingOwnPlan, aiJobKindNoun } from './ai-job-activity'
 import { aiJobRefundCopy } from './ai-job-failure-copy'
 import { aiBuildItemRows, aiBuildOutcomeLine, aiSitePartialCopy } from './ai-build-progress'
 import type { AiJobSummary } from './ai-jobs.types'
@@ -54,7 +54,12 @@ export interface AiSiteBuildRow {
 /** Where the whole job stands, as the page's header and actions read it. */
 export type AiSiteBuildPhase = 'working' | 'done' | 'stopped' | 'failed' | 'canceled'
 
-export function aiSiteBuildPhase(job: Pick<AiJobSummary, 'status'>): AiSiteBuildPhase {
+export function aiSiteBuildPhase(
+  job: Pick<AiJobSummary, 'status'> & Partial<Pick<AiJobSummary, 'review' | 'autoConfirm' | 'updatedAt'>>,
+): AiSiteBuildPhase {
+  // A guided start's plan parked for the instant its confirmation takes is
+  // the build going on (AGL-3596), never a stop.
+  if (aiJobConfirmingOwnPlan(job)) return 'working'
   switch (job.status) {
     case 'done':
       return 'done'
@@ -121,7 +126,12 @@ export function aiSiteBuildRows(
           id: row.slot,
           label,
           state: row.state,
-          detail: row.detail,
+          // A part that failed while the rest is still being built says the
+          // build goes on (AGL-3596): read alone, it looked like the site had.
+          detail:
+            row.state === 'failed' && phase === 'working'
+              ? [row.detail, site ? 'The rest of your site keeps building.' : 'The rest keeps building.'].filter(Boolean).join(' ')
+              : row.detail,
           ...(row.state === 'active'
             ? { startedAt: row.startedAt ?? null, hint: ledger?.op === 'page' ? AI_SITE_PAGE_HINT : AI_SITE_ITEM_HINT }
             : {}),
