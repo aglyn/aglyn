@@ -23,8 +23,10 @@ struct RootView<Shell: View>: View {
           "This build is not configured", systemImage: "wrench.and.screwdriver",
           message: model.configProblems.joined(separator: "\n"))
       } else if let auth = model.auth {
+        // The launch view stays up until Auth has answered, so a signed-in
+        // relaunch goes from the launch screen straight to the shell.
         if !auth.ready {
-          ProgressView().controlSize(.large)
+          AglynLaunchView(name: model.brandName, caption: model.app == .pos ? "POS" : nil)
         } else if auth.user == nil {
           SignInView()
         } else {
@@ -36,9 +38,20 @@ struct RootView<Shell: View>: View {
     }
     .tint(AglynColor.tint)
     .font(AglynFont.body)
-    .onChange(of: model.auth?.user, initial: true) { _, user in model.userChanged(user) }
+    .onChange(of: model.auth?.user, initial: true) { _, user in
+      model.userChanged(user)
+      openPendingPush()
+    }
     .onOpenURL { url in model.open(url.absoluteString, in: navigation) }
+    .onChange(of: model.push.pendingLink) { openPendingPush() }
     .task { await DebugLaunch.autoSignIn(model) }
+  }
+
+  /// A tapped push's link, opened once someone is signed in.
+  private func openPendingPush() {
+    guard let link = model.push.pendingLink, model.auth?.user != nil else { return }
+    model.push.pendingLink = nil
+    model.open(link, in: navigation)
   }
 }
 

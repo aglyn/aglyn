@@ -27,7 +27,9 @@ let package = Package(
         "AglynContracts",
         .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
         .product(name: "FirebaseFirestore", package: "firebase-ios-sdk"),
-      ]
+      ],
+      // The notification catalog, linked in from libs/native/contracts.
+      resources: [.copy("Resources/notification-catalog.generated.json")]
     ),
     .target(name: "AglynUI", resources: [.process("Resources")]),
     // contracts.generated.json is a link to libs/native/contracts, so the

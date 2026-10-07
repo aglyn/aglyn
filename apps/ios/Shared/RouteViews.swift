@@ -114,7 +114,8 @@ struct ConsoleScreen: View {
 
   private func start() async {
     state = .starting
-    guard let config = model.config, let token = try? await AuthSession.idToken(forceRefresh: false) else {
+    guard let config = model.config, let auth = model.auth,
+      let token = try? await auth.idToken(forceRefresh: false) else {
       state = .failed("Sign in again to open the console.")
       return
     }

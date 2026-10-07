@@ -157,7 +157,7 @@ struct HomeView: View {
     let pages = site.status?.publishedPages
     return VStack(alignment: .leading, spacing: AglynSpace.oneAndHalf) {
       AglynSectionHeader("At a glance")
-      AglynGrid(minimum: 160) {
+      AglynCardGrid(minimum: 160, maxColumns: 3) {
         if hasSite {
           MetricCard(
             "Published pages", systemImage: "doc.text",
@@ -181,6 +181,7 @@ struct HomeView: View {
         if let context = model.context(for: navigation) {
           ForEach(widgets) { widget in
             widget.make(context)
+              .aglynGridFullWidth(widget.size == .full)
               .id("\(widget.id):\(context.hostID ?? ""):\(model.refreshToken)")
           }
         }

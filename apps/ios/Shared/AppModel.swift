@@ -20,6 +20,7 @@ final class AppModel {
   let reader: FirestoreReader?
   let api: ConsoleAPIClient?
   let registry = NativePluginRegistry()
+  let push: PushCenter
   private(set) var pluginFailures: [NativePluginLoadFailure] = []
   private(set) var workspace: WorkspaceStore?
   /// Bumped by Refresh (⌘R); live lists re-subscribe on it.
@@ -28,6 +29,9 @@ final class AppModel {
   init(app: AglynAppKind) {
     self.app = app
     let appID: AglynAppID = app == .pos ? .pos : .aglyn
+    let push = PushCenter(app: appID)
+    self.push = push
+    PushAppDelegate.push = push
     var config: AglynConfig?
     var problems: [String] = []
     do {
@@ -40,11 +44,19 @@ final class AppModel {
     if let config, problems.isEmpty {
       self.config = config
       AglynFirebase.configure(config)
-      self.auth = AuthSession()
-      self.reader = FirebaseFirestoreReader()
+      let auth = AuthSession.make(config)
+      self.auth = auth
+      // A REST sign-in has no SDK user for Firestore to read as, so Firestore goes over REST too.
+      self.reader =
+        auth.transport == .rest
+        ? RestFirestoreReader(
+          projectID: config.firebase.projectID, emulatorHost: config.firestoreEmulatorHost,
+          idToken: { try await auth.idToken(forceRefresh: false) })
+        : FirebaseFirestoreReader()
       self.api = ConsoleAPIClient(origin: config.consoleOrigin) { force in
-        try await AuthSession.idToken(forceRefresh: force)
+        try await auth.idToken(forceRefresh: force)
       }
+      auth.onBeforeSignOut { await push.signingOut() }
     } else {
       self.config = nil
       self.auth = nil
@@ -65,6 +77,7 @@ final class AppModel {
     guard user?.uid != workspace?.uid else { return }
     workspace?.stop()
     workspace = nil
+    push.signedIn(uid: user?.uid, reader: reader)
     guard let user, let reader else { return }
     let store = WorkspaceStore(uid: user.uid, reader: reader)
     store.start()

@@ -244,8 +244,8 @@ public struct MetricCard: View {
           .redacted(reason: value == nil ? .placeholder : [])
         }
       }
-      .frame(maxWidth: .infinity, alignment: .topLeading)
       .padding(AglynSpace.two)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
       .aglynCardSurface()
       .contentShape(RoundedRectangle(cornerRadius: AglynRadius.card))
     }
@@ -315,6 +315,86 @@ public struct AglynGrid<Content: View>: View {
     ) {
       content
     }
+  }
+}
+
+/// Dashboard cards in rows that always fill the width: as many columns as
+/// fit at `minimum` (at most `maxColumns`), each row's cards sharing its
+/// width, so a row with fewer cards (a lone card, a short last row) stretches
+/// instead of leaving a gap. Cards in a row get the row's height. A card
+/// marked `aglynGridFullWidth()` takes a row of its own. The Android kit's
+/// `DashboardGrid` lays out the same way.
+public struct AglynCardGrid: Layout {
+  let minimum: CGFloat
+  let maxColumns: Int
+  let spacing: CGFloat
+
+  public init(minimum: CGFloat = 160, maxColumns: Int = 3, spacing: CGFloat = AglynSpace.oneAndHalf) {
+    self.minimum = minimum
+    self.maxColumns = max(1, maxColumns)
+    self.spacing = spacing
+  }
+
+  /// How many columns fit in `width`.
+  public func columns(for width: CGFloat) -> Int {
+    min(maxColumns, max(1, Int((width + spacing) / (minimum + spacing))))
+  }
+
+  /// The subview indices of each row.
+  func rows(_ subviews: Subviews, columns: Int) -> [[Int]] {
+    var rows: [[Int]] = []
+    for index in subviews.indices {
+      let full = subviews[index][AglynGridFullWidth.self]
+      if full || columns == 1 || rows.isEmpty || rows[rows.count - 1].count >= columns
+        || subviews[rows[rows.count - 1][0]][AglynGridFullWidth.self]
+      {
+        rows.append([index])
+      } else {
+        rows[rows.count - 1].append(index)
+      }
+    }
+    return rows
+  }
+
+  private func measure(_ width: CGFloat, _ subviews: Subviews) -> [(items: [Int], itemWidth: CGFloat, height: CGFloat)] {
+    rows(subviews, columns: columns(for: width)).map { row in
+      let itemWidth = (width - spacing * CGFloat(row.count - 1)) / CGFloat(row.count)
+      let height = row.map { subviews[$0].sizeThatFits(ProposedViewSize(width: itemWidth, height: nil)).height }.max() ?? 0
+      return (row, itemWidth, height)
+    }
+  }
+
+  public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    guard !subviews.isEmpty else { return .zero }
+    let width = proposal.width ?? (minimum * CGFloat(min(maxColumns, subviews.count)))
+    let rows = measure(width, subviews)
+    let height = rows.reduce(0) { $0 + $1.height } + spacing * CGFloat(max(0, rows.count - 1))
+    return CGSize(width: width, height: height)
+  }
+
+  public func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    var y = bounds.minY
+    for row in measure(bounds.width, subviews) {
+      var x = bounds.minX
+      for index in row.items {
+        subviews[index].place(
+          at: CGPoint(x: x, y: y), anchor: .topLeading,
+          proposal: ProposedViewSize(width: row.itemWidth, height: row.height))
+        x += row.itemWidth + spacing
+      }
+      y += row.height + spacing
+    }
+  }
+}
+
+private struct AglynGridFullWidth: LayoutValueKey {
+  static let defaultValue = false
+}
+
+extension View {
+  /// In an `AglynCardGrid`, gives this card a row of its own.
+  public func aglynGridFullWidth(_ full: Bool = true) -> some View {
+    layoutValue(key: AglynGridFullWidth.self, value: full)
   }
 }
 
