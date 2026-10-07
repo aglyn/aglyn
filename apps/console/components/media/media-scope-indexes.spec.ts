@@ -51,7 +51,7 @@ import {
   listQueryIndexes,
   missingListQueryIndexes,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
-import { MEDIA_BASE_INDEX_FIELDS, MEDIA_LIST_QUERY } from './media-filter'
+import { MEDIA_BASE_INDEX_FIELDS, MEDIA_LIST_QUERY } from '@aglyn/aglyn/app-utils/media-filter'
 
 interface IndexField {
   fieldPath: string

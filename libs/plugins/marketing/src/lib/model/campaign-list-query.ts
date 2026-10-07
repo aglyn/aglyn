@@ -17,12 +17,12 @@
 
 import { nameSearchKey, nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
-import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
-import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListFilterField } from '@aglyn/shared-util-tools/list-query/list-filter'
+import type { ListFilterClause } from '@aglyn/shared-util-tools/list-query/list-filter-codecs'
 import type {
   ListQueryDeclaration,
   ListQueryFilter,
-} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+} from '@aglyn/shared-util-tools/list-query/list-query-plan'
 
 /*
  * WHAT THE MARKETING LISTS ASK FIRESTORE (AGL-3321).

@@ -31,7 +31,7 @@ import {
  * matched over a page already read.
  *
  * Not the members' `hostMemberships` rows the workspace Sites cards read
- * (`utils/site-list-query.ts`): those are one row per member per site, so a
+ * (`@aglyn/aglyn/app-utils/site-list-query`): those are one row per member per site, so a
  * cross-organization list over them would list a site once per person who
  * can reach it. The site document carries the same three keys, stamped by
  * `syncHostProjectionForMembers` — `nameLower`, `searchTokens` and
@@ -65,7 +65,7 @@ import {
  *   Status             Live, Draft and Maintenance are derived from the
  *                      publish map and the customer's own switch, which the
  *                      console's browser-side writers change without any
- *                      mirror — `utils/site-list-query.ts` gives the detail.
+ *                      mirror — `@aglyn/aglyn/app-utils/site-list-query` gives the detail.
  *                      Suspended is the one part of it the list can answer.
  */
 export const STAFF_SITE_LIST_FILTER_FIELDS: readonly ListFilterField[] = [

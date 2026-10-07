@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
+import type { ListFilterField } from '@aglyn/shared-util-tools/list-query/list-filter'
 import type {
   ListQueryDeclaration,
   ListQueryFilter,
   ListQuerySort,
-} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+} from '@aglyn/shared-util-tools/list-query/list-query-plan'
 
 /*
  * WHAT THE SITES CARDS ASK, AND OF WHICH COLLECTION (AGL-3321).

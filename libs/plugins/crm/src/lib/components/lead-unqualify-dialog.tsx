@@ -35,9 +35,10 @@ import { useEffect, useState } from 'react'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 import { useLeadStatusPicklist } from '../hooks/use-lead-status-picklist'
+import { UNQUALIFY_REASON_MAX } from '../model/lead-status-choices'
 
-/** The most a reason may say — shared with the bulk bar's one-reason-for-all (AGL-2662). */
-export const UNQUALIFY_REASON_MAX = 500
+export { UNQUALIFY_REASON_MAX } from '../model/lead-status-choices'
+
 const REASON_MAX = UNQUALIFY_REASON_MAX
 
 export interface LeadUnqualifyDialogProps {

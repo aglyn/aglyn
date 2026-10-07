@@ -65,6 +65,14 @@ export interface RecordShipmentRequest {
    * leaves the order open to more, still cannot be recorded twice.
    */
   idempotencyKey?: string
+  /**
+   * A shipment whose tracking number an active fulfillment of this order
+   * already carries is the same parcel, answered `already` (AGL-3613). For
+   * the doors a shipping tool posts to — ShipStation's ShipNotice, a tracking
+   * file — where the number is the parcel's identity and the same parcel may
+   * have been recorded by hand first.
+   */
+  onceByTracking?: boolean
 }
 
 /**
@@ -227,6 +235,7 @@ export async function recordOrderShipment(
         }
         const delivered = {
           status: 'delivered',
+          updatedAtMs: atMs,
           timeline: CommerceModel.appendOrderEvent(order, 'delivered', undefined, atMs),
         }
         transaction.update(orderRef, delivered)
@@ -238,6 +247,10 @@ export async function recordOrderShipment(
       if (keyedId) {
         const existing = (order.fulfillments ?? []).find((entry) => entry.id === keyedId)
         if (existing) return { outcome: 'already', fulfillment: existing }
+      }
+      if (request.onceByTracking && trackingNumber) {
+        const same = CommerceModel.fulfillmentWithTracking(order, trackingNumber)
+        if (same) return { outcome: 'already', fulfillment: same }
       }
       const named = (request.lineItems ?? []).length > 0
       // A redelivered click, or the second of two admins, on a "fulfil
@@ -298,6 +311,8 @@ export async function recordOrderShipment(
       const shipped = {
         status,
         fulfillments,
+        // What a shipping tool's feed asks (AGL-3613): which orders changed.
+        updatedAtMs: atMs,
         timeline: CommerceModel.appendOrderEvent(
           order,
           status,
@@ -382,6 +397,7 @@ export async function updateFulfillmentTracking(request: {
       fulfillments[index] = next
       transaction.update(orderRef, {
         fulfillments,
+        updatedAtMs: atMs,
         timeline: CommerceModel.appendOrderEvent(
           order,
           'tracking-updated',
@@ -439,6 +455,7 @@ export async function cancelOrderFulfillment(request: {
       transaction.update(orderRef, {
         status,
         fulfillments,
+        updatedAtMs: atMs,
         timeline: CommerceModel.appendOrderEvent(
           order,
           'fulfillment-cancelled',

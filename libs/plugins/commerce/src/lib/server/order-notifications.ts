@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { pluginSmsMessaging } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
+import { resolveSiteTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import {
   resolveHostToken,
   type HostTokenSource,
@@ -514,22 +515,54 @@ async function deliverEmail(
   await meterHostEmail(ref.hostId)
 }
 
+/**
+ * What a text attempt came to: `refused` names why nothing went (null when it
+ * went), and `scheduledForMs` says it was held for the buyer's morning.
+ */
+interface SmsDelivery {
+  refused: string | null
+  scheduledForMs?: number
+}
+
+/**
+ * Sends one order text. A receipt goes at once — the buyer is at the counter
+ * or the checkout waiting for it. Every later moment (shipped, delivered,
+ * refunded, canceled) can fire at any hour, from a carrier scan or a late
+ * packing shift, so it asks the provider to keep quiet hours in the STORE's
+ * zone: the best stand-in the platform has for a buyer whose own zone it was
+ * never told, and right for the local and regional stores most texts come
+ * from. Held texts arrive at 8 AM there.
+ */
 async function deliverSms(
   ref: OrderRef,
   to: string,
   message: ComposedMessage,
   context: string,
-): Promise<string | null> {
+  quiet: { host: Record<string, unknown> } | null,
+): Promise<SmsDelivery> {
   const sms = pluginSmsMessaging()
-  if (!sms?.isConfigured()) return 'Text messages are not configured'
+  if (!sms?.isConfigured()) return { refused: 'Text messages are not configured' }
+  let timeZone: string | null = null
+  if (quiet) {
+    const owner = await getOrgForHost(ref.hostId).catch(() => null)
+    timeZone = resolveSiteTimeZone(
+      (owner?.org ?? null) as { timeZone?: string } | null,
+      quiet.host as { timeZone?: string },
+    )
+  }
   const outcome = await sms.send({
     to,
     body: message.sms,
     hostId: ref.hostId,
     purpose: 'transactional',
     context,
+    ...(timeZone ? { quietHours: { timeZone } } : {}),
   })
-  return outcome.status === 'sent' ? null : outcome.status
+  if (outcome.status !== 'sent') return { refused: outcome.status }
+  return {
+    refused: null,
+    ...(outcome.scheduledForMs ? { scheduledForMs: outcome.scheduledForMs } : {}),
+  }
 }
 
 /** Absolute download links for a receipt's digital lines. */
@@ -661,19 +694,29 @@ export async function notifyOrderBuyer(
         continue
       }
       const context = message.emailKey
+      let held: number | null = null
       try {
         if (target.channel === 'email') {
           await deliverEmail(store, ref, target.to, message, context)
         } else {
-          const refused = await deliverSms(ref, target.to, message, context)
-          if (refused) throw new Error(refused)
+          const sent = await deliverSms(
+            ref,
+            target.to,
+            message,
+            context,
+            event === 'receipt' ? null : { host: store.host },
+          )
+          if (sent.refused) throw new Error(sent.refused)
+          held = sent.scheduledForMs ?? null
         }
         await settleMessage(
           firestore,
           orderRef,
           marker,
           target.channel,
-          message.timelineDetail,
+          held
+            ? `${message.timelineDetail} (held for the morning)`
+            : message.timelineDetail,
         )
         channels.push({ channel: target.channel, outcome: 'sent' })
       } catch (error) {
@@ -756,8 +799,8 @@ export async function sendOrderReceipt(
     if (input.channel === 'email') {
       await deliverEmail(store, ref, emailOf(input.to), message, 'order-receipt')
     } else {
-      const refused = await deliverSms(ref, input.to, message, 'order-receipt')
-      if (refused) return { outcome: 'failed', error: refused }
+      const sent = await deliverSms(ref, input.to, message, 'order-receipt', null)
+      if (sent.refused) return { outcome: 'failed', error: sent.refused }
     }
     await settleMessage(firestore, orderRef, null, input.channel, 'Receipt re-sent')
     return { outcome: 'sent', channel: input.channel }

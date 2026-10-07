@@ -20,7 +20,7 @@ import {
   type ContactSource,
   normalizeContactEmail,
 } from '@aglyn/aglyn'
-import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
+import type { ListFilterRequest } from '@aglyn/shared-util-tools/list-query/list-filter'
 import {
   CONTACTS_LIST_EMAIL_PARAM,
   CONTACTS_LIST_FORM_PARAM,

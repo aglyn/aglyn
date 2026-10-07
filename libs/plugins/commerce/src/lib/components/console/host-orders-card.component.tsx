@@ -75,6 +75,7 @@ import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-quer
 import { useTransferLauncher } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
 import { commerceListFilter } from '../../transfer/list-filter'
 import { COMMERCE_ORDERS_TRANSFER } from '../../transfer/transfer-keys'
+import OrderShippingActions from './order-shipping-actions.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 import {
@@ -745,6 +746,9 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   return (
     <CardDisplay
       header={'Orders'}
+      // Shipping actions live in the card header (AGL-3613): the orders
+      // still to ship for a label tool, and its tracking numbers back.
+      HeaderProps={{ action: <OrderShippingActions hostId={hostId} /> }}
       help={pluginDocsHelp('commerce', {
         anchor: '#orders-screen',
         excerpt:

@@ -16,7 +16,7 @@
  */
 
 import { resolveOrgEntitlements, UNLIMITED } from '@aglyn/aglyn'
-import { describeSiteAllowance } from './host-status'
+import { describeSiteAllowance } from '@aglyn/aglyn/app-utils/host-status'
 
 /**
  * The site-allowance line, against the values the entitlement table really

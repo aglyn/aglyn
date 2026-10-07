@@ -82,6 +82,26 @@ describe('createTwilioSmsProvider', () => {
     })
   })
 
+  it('hands a held text to the Messaging Service scheduler', async () => {
+    withEnv(ENV)
+    const fetch = jest.fn(async () =>
+      new Response(JSON.stringify({ sid: 'SM2', status: 'scheduled' }), { status: 201 }),
+    )
+    const provider = createTwilioSmsProvider({ fetch: fetch as never })
+    const sendAtMs = Date.UTC(2026, 9, 7, 13)
+    expect(
+      await provider.send({ to: '+15555550100', body: 'Shipped', sendAtMs }),
+    ).toEqual({ ok: true, id: 'SM2', segments: 1 })
+    const [, init] = fetch.mock.calls[0] as unknown as [string, RequestInit]
+    expect(Object.fromEntries(new URLSearchParams(String(init.body)))).toEqual({
+      To: '+15555550100',
+      Body: 'Shipped',
+      MessagingServiceSid: 'MG456',
+      ScheduleType: 'fixed',
+      SendAt: '2026-10-07T13:00:00.000Z',
+    })
+  })
+
   it('flags the codes that mean the number cannot be texted', async () => {
     withEnv(ENV)
     const fetch = jest.fn(async () =>
