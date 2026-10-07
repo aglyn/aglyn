@@ -522,7 +522,8 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
 
 - **The workspace.** `readAiPlanCapabilities` in `src/lib/jobs/ai-job-drafts.ts`
   answers every creation kind from the resolved entitlements and the site's counts,
-  in the draft writer's own band arithmetic: `reusableComponents` for a component,
+  in the draft writer's own band arithmetic: `componentsPerHost` alone for a component
+  (Free 1, unlimited from Starter since AGL-3615, live components only),
   `formsPerHost` alone for a saved form (Free 1 and up since AGL-3597), `sharedLayoutsPerHost` and
   `templatesPerHost` with the room each has left, and the plan's datasets. It reads
   only the collections a finite allowance counts. A theme change counts against
@@ -564,14 +565,15 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   (`plan-template-in-section`): each frames a whole screen. No system block changes, so
   the cached prefix is the same bytes. A plan confirmed before these rules still stops
   at the page and scaffold doors, which name such a reference as a component to create.
-- **Inline, where the workspace keeps no reusable components.** A workspace whose plan
-  lacks `reusableComponents` can place no component (it may save one form since
-  AGL-3597, but the page doctrine still keys on the component feature), so there — and
+- **Inline, where the workspace keeps no reusable components.** A workspace whose
+  component allowance is finite (`aiBuildsWithComponents` in `ai-job-drafts.ts`: Free's
+  one since AGL-3615) builds no repeat as a component — one component cannot hold every
+  repeat a plan draws, and the one is the member's to spend — so there — and
   only there — the doctrine builds inline: a form is a Form element the page carries,
   with its Form Fields inside it, and a list's repeated items are drawn in one section.
   Rules 1 and 3 state that exception, the plan rules accept it on those capabilities,
   and the tree rules accept it where `AiDoctrineTreeContext.reusableComponents` is
-  `false`, which the page step sets from the org's entitlement. Loose fields and a
+  `false`, which the page step sets from the same `aiBuildsWithComponents`. Loose fields and a
   form with no field to send are still refused. The tenant renders such a Form as
   authored (only a form bound by `formId` is replaced by its entity's design), and
   `/api/forms/submit` collects a submission with no `formId` under its `formName`,
@@ -1150,8 +1152,9 @@ draft.
 - **Drafts.** `writeAiDraft` writes the component as the host resources
   route's `reusableComponent` entry does: that entry's allow-list
   (`displayName`, `description`, `rootId`, `nodes`, `props`), msgpack nodes
-  and the route's stamps, admitted by the plan's `reusableComponents` feature
-  with the route's own refusal, and counted against no allowance. No version
+  and the route's stamps, counted against the plan's `componentsPerHost` over the
+  site's live components (Free 1, unlimited from Starter, AGL-3615) with the route's
+  own refusal. No version
   is written: the component's page mints the first when a member opens it,
   as it does for a component Use template creates. Nothing places the
   component until a member does.
