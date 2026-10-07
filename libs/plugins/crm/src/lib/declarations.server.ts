@@ -90,6 +90,10 @@ export const crmPersonRecordsService: PluginPersonRecords = {
     const { crmPersonRecords } = await import('./server/person-records')
     return crmPersonRecords.wroteIn(request)
   },
+  async search(request) {
+    const { crmPersonRecords } = await import('./server/person-records')
+    return crmPersonRecords.search(request)
+  },
 }
 
 /**

@@ -25,6 +25,7 @@ import {
   readPluginPeople,
   recordPluginPersonRefund,
   registerPluginPersonRecords,
+  searchPluginPeople,
   type PluginPersonRecords,
 } from './plugin-person-records'
 import { resetPluginServicesForTests } from './plugin-services'
@@ -231,5 +232,43 @@ describe('views and what people wrote', () => {
       { pluginId: 'records' },
     )
     expect(await pluginPeopleWroteIn({ orgId: 'o', records: [{ kind: 'contact', id: 'c-1' }] })).toBeNull()
+  })
+})
+
+describe('searching people by what was typed (AGL-3609)', () => {
+  const SEARCH = { hostId: 'h', text: 'pat', limit: 10 }
+
+  it('answers null while no plugin keeps people, or the one that does keeps no search', async () => {
+    expect(await searchPluginPeople(SEARCH)).toBeNull()
+    registerPluginPersonRecords(owner(), { pluginId: 'records' })
+    expect(await searchPluginPeople(SEARCH)).toBeNull()
+  })
+
+  it('hands the request over whole and answers what the owner found', async () => {
+    const search = jest.fn(async () => [PERSON])
+    registerPluginPersonRecords({ ...owner(), search }, { pluginId: 'records' })
+    expect(await searchPluginPeople(SEARCH)).toEqual([PERSON])
+    expect(search).toHaveBeenCalledWith(SEARCH)
+  })
+
+  it('answers no one for blank text or no room, without asking', async () => {
+    const search = jest.fn(async () => [PERSON])
+    registerPluginPersonRecords({ ...owner(), search }, { pluginId: 'records' })
+    expect(await searchPluginPeople({ ...SEARCH, text: '   ' })).toEqual([])
+    expect(await searchPluginPeople({ ...SEARCH, limit: 0 })).toEqual([])
+    expect(search).not.toHaveBeenCalled()
+  })
+
+  it('lets a failed search reach the caller', async () => {
+    registerPluginPersonRecords(
+      {
+        ...owner(),
+        async search() {
+          throw new Error('index down')
+        },
+      },
+      { pluginId: 'records' },
+    )
+    await expect(searchPluginPeople(SEARCH)).rejects.toThrow('index down')
   })
 })

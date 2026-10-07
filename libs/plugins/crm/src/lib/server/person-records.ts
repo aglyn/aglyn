@@ -23,12 +23,15 @@ import {
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import {
   CRM_COLLECTIONS,
+  CRM_SCOPED_SEARCH_JOIN,
+  CRM_SCOPED_SEARCH_TOKENS_FIELD,
   crmLeadStatus,
   crmViewIsListed,
   isCrmLeadOpen,
   normalizeCrmViewFilters,
 } from '@aglyn/aglyn/app-utils/crm'
 import { dynamicListDimensionsForCrmView } from '@aglyn/aglyn/app-utils/dynamic-list-rule'
+import { NAME_TOKEN_MAX_PREFIX, nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import {
   scopeTokensForHost,
@@ -42,6 +45,7 @@ import type {
   PluginPersonRecord,
   PluginPersonRecordRef,
   PluginPersonRecords,
+  PluginPersonSearchRequest,
   PluginPersonViewPeople,
   PluginPersonViewRequest,
   PluginPersonWroteInRequest,
@@ -146,6 +150,33 @@ async function orgOf(
   const resolved = hostId ? await deps.orgIdForHost(hostId) : null
   if (!resolved) throw new Error(`[crm] no organization to find a person in for host ${hostId || '(none)'}`)
   return resolved
+}
+
+/** The most people one search answers, whatever the caller asks for. */
+export const CRM_PERSON_SEARCH_MAX = 25
+
+/**
+ * The one token a typed search asks the contacts' search index for
+ * (AGL-3609), or `''` for nothing searchable.
+ *
+ * A run of digits and phone punctuation is a phone number, read as its
+ * digits: `crmPhoneSearchWords` stores the whole number, the number without
+ * a country code, its last seven and its last four, so `(555) 123-4567`,
+ * `5551234567` and `4567` all find it. Anything else is a name or an
+ * address, and the LONGEST word asks — it is the most selective one, and a
+ * stored token is a prefix of a word, so `dana@acme.com` and `dana` both
+ * reach the contact. Capped at the twelve characters a token keeps.
+ */
+export function crmPersonSearchWord(text: unknown): string {
+  const raw = typeof text === 'string' ? text.trim() : ''
+  if (!raw) return ''
+  if (/^[\d\s()+.-]+$/.test(raw)) {
+    const digits = raw.replace(/\D/g, '')
+    return digits.length >= 4 ? digits.slice(0, NAME_TOKEN_MAX_PREFIX) : ''
+  }
+  const words = nameSearchKey(raw).split(' ').filter(Boolean)
+  const longest = words.reduce((best, word) => (word.length > best.length ? word : best), '')
+  return longest.slice(0, NAME_TOKEN_MAX_PREFIX)
 }
 
 export function createCrmPersonRecords(deps: CrmPersonRecordsDeps): PluginPersonRecords {
@@ -367,6 +398,32 @@ export function createCrmPersonRecords(deps: CrmPersonRecordsDeps): PluginPerson
         }),
       )
     },
+
+    /**
+     * Contacts the site may see whose name, address, company or phone
+     * starts with the typed word (AGL-3609): ONE query on the scoped search
+     * tokens every contact writer stamps, `array-contains-any` over the
+     * site's scope tokens joined to the word — the same clause the Contacts
+     * list runs under a site, so a record the site cannot see is never
+     * answered and no index beyond the field's own is needed.
+     */
+    async search(request: PluginPersonSearchRequest) {
+      const word = crmPersonSearchWord(request.text)
+      const hostId = String(request.hostId ?? '').trim()
+      const limit = Math.min(CRM_PERSON_SEARCH_MAX, Math.max(0, Math.floor(Number(request.limit) || 0)))
+      if (!word || !hostId || !limit) return []
+      const orgId = await orgOf(deps, request)
+      const tokens = scopeTokensForHost(hostId).map((scope) => `${scope}${CRM_SCOPED_SEARCH_JOIN}${word}`)
+      const snapshot = await deps
+        .firestore()
+        .collection('orgs')
+        .doc(orgId)
+        .collection(STORED_IN[CRM_PERSON_KINDS.contact])
+        .where(CRM_SCOPED_SEARCH_TOKENS_FIELD, 'array-contains-any', tokens)
+        .limit(limit)
+        .get()
+      return snapshot.docs.map((doc) => personOf(CRM_PERSON_KINDS.contact, doc))
+    },
   }
 }
 
@@ -378,4 +435,5 @@ export const crmPersonRecords: Required<PluginPersonRecords> = {
   recordRefund: (request) => recordPersonRefund(request),
   peopleInView: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).peopleInView!(request),
   wroteIn: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).wroteIn!(request),
+  search: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).search!(request),
 }

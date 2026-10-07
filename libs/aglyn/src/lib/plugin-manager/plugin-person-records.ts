@@ -209,6 +209,23 @@ export type PluginPersonViewPeople =
       unsupported?: string[]
     }
 
+/**
+ * People a site may see whose name, address or phone starts with what was
+ * typed (AGL-3609) — a cashier looking a customer up at the register, a
+ * picker anywhere a person is chosen by hand. One word: the owner answers it
+ * from its own search index and never by scanning its records.
+ */
+export interface PluginPersonSearchRequest {
+  /** The site searching: only records it may see are answered. */
+  hostId: string
+  /** The organization, when the caller knows it; the owner reads it off `hostId` otherwise. */
+  orgId?: string | null
+  /** What was typed. Raw: the owner normalizes it, and reads a run of digits as a phone. */
+  text: string
+  /** The most people answered. The owner may answer fewer. */
+  limit: number
+}
+
 /** Records to ask about, by the refs the owner handed out. */
 export interface PluginPersonWroteInRequest {
   orgId: string
@@ -236,6 +253,11 @@ export interface PluginPersonRecords {
    * could not answer. Optional.
    */
   wroteIn?(request: PluginPersonWroteInRequest): Promise<Array<boolean | null>>
+  /**
+   * People a site may see that match one typed word, best first. Optional:
+   * an owner that keeps no search index answers nothing. A read; may throw.
+   */
+  search?(request: PluginPersonSearchRequest): Promise<PluginPersonRecord[]>
 }
 
 export const PLUGIN_PERSON_RECORDS = definePluginServiceContract<PluginPersonRecords>(
@@ -358,4 +380,19 @@ export async function pluginPeopleWroteIn(
     console.error('[person-records] the record system could not say who wrote in', error)
     return null
   }
+}
+
+/**
+ * People a site may see matching what was typed, or `null` when no plugin
+ * keeps people here or the one that does keeps no search — which is not
+ * "nobody matched". Blank text answers no one without asking. A failed read
+ * throws, and the caller decides how to say so.
+ */
+export async function searchPluginPeople(
+  request: PluginPersonSearchRequest,
+): Promise<PluginPersonRecord[] | null> {
+  const resolved = pluginPersonRecords()
+  if (!resolved?.records.search) return null
+  if (!String(request.text ?? '').trim() || !(request.limit > 0)) return []
+  return await resolved.records.search(request)
 }
