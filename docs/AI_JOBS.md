@@ -1563,6 +1563,70 @@ running it.
   ladder lets staff through; the beat has no caller. A reader that cannot answer
   is not a pause, as the lockdown reads fail open.
 
+## Running a guided start locally
+
+The live plan eval (`ai-job-site-plan-live.spec.ts`) covers the plan step only.
+The whole guided start — Sites → Create site → Start with AI → the answers →
+plan, layout, form, pages, SEO, publish → the live site — runs on the emulator
+stack with the real model in one command (AGL-3596):
+
+```bash
+npm run e2e:ai-guided-start:local
+npm run e2e:ai-guided-start:local -- --runs 2 --brief "A bakery in Tulsa" --pages 2
+npm run e2e:ai-guided-start:local -- --app-root ../aglyn-wt-integration   # another checkout
+```
+
+It starts what is not already running: the emulators on a private port set
+(`--offset`, default 23000, unless `FIRESTORE_EMULATOR_HOST` and
+`FIREBASE_AUTH_EMULATOR_HOST` name running ones), the console with
+`serve-emulated.mjs console --live-ai` on 4610 and the tenant on 4500 (the only
+port its middleware routes `<site>.localhost` on). `--console-url` and
+`--tenant-url` reuse running servers, and `--keep` leaves what it started up for
+the next run and prints the command that reuses it. A server that exits before
+it answers (the dev-disk floor refuses to start under 10 GiB free) stops the
+run with its log's tail. A cold compile of both apps takes several minutes. Each run is a brand-new customer: a fresh owner account, a Free
+workspace created through `/api/orgs/create`, and a site created through the
+Sites page, so the empty-site check is the one production makes. The workspace
+carries `release_ai_generative` as a per-org override, because the emulator
+stack has no Remote Config.
+
+Two things production has and the emulator stack did not:
+
+- **The provider key.** `serve-emulated.mjs` blanks every outbound credential
+  (AGL-2828). `--live-ai` (or `AGLYN_EMULATED_LIVE_AI=1`) passes the AI
+  provider keys (`LIVE_AI_CREDENTIALS` in `tools/scripts/lib/emulated-env.mjs`,
+  read from the repo `.env`) and nothing else; billing, email and domains still
+  fail closed. It is refused without `FIRESTORE_EMULATOR_HOST`, so the key only
+  ever reaches a server holding seeded data, and spend is bounded the way
+  production bounds it: a job reserves its credits before its first provider
+  call, and a Free workspace holds a few hundred. The harness's preflight
+  refuses a console holding any other credential, and one holding no AI key.
+- **The beat.** Nothing calls `POST /api/admin/ai-jobs-beat` locally, so a job
+  sat queued after its create door. A `--live-ai` console verifies
+  `CRON_SECRET` from the shell or the well-known `LOCAL_CRON_SECRET`, and
+  `tools/scripts/lib/ai-jobs-beat-pump.mjs` calls the route every 5 s, one beat
+  at a time, while a job is queued, running or parked. By hand:
+  `FIRESTORE_EMULATOR_HOST=… npm run ai-jobs:beat:local -- --origin http://localhost:4610`.
+
+The run watches the "Building your site" page until the job settles, recording
+each distinct row state, then reads the job and the site's documents and loads
+the published pages. `summary.md` and `summary.json` in the output directory
+(`--out`, default `tmp/ai-guided-start/<timestamp>/`) answer: the site was
+empty at creation; every item succeeded, or each failure's message; every
+planned page was generated and sits in a layout whose navigation links it; a
+saved form is bound by `formId`; the site is published and its pages answer
+200; the search titles and descriptions are complete; the credits reserved,
+spent and refunded; whether an active row was on screen whenever the job was
+working, whether the form row was ever the active one, and anything that read
+failed, stopped or an error before the job settled; and whether the header
+names the site. Screenshots of the build page every 20 s and of the live home
+and contact pages at 1440 and 375 wide, with header and footer close-ups, sit
+beside them.
+
+⛔ Run it before promoting a change to the site job, its prompts or its rules,
+after the live plan eval. A run costs a few hundred credits, well under a
+dollar of model time.
+
 ## The `seo` kind
 
 SEO by AI (AGL-2910): `src/lib/jobs/ai-job-seo-step.ts`, its generation call in

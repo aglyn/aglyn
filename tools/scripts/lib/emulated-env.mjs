@@ -81,6 +81,47 @@ export function isOutboundCredential(name) {
   return CREDENTIAL_SHAPE.test(name) && !KEPT_CREDENTIALS.has(name)
 }
 
+/*
+ * THE ONE OPT-IN: A LIVE MODEL ON THE EMULATOR STACK (AGL-3596).
+ *
+ * A guided AI site start is model text held to a dozen strict rules, and a
+ * spec fed hand-written plans cannot show what the model actually writes. The
+ * only place to watch the whole start run before production is this stack,
+ * with the real model behind it. So `--live-ai` (or AGLYN_EMULATED_LIVE_AI=1)
+ * passes the AI provider keys below through, and nothing else: billing, email,
+ * domains and analytics stay empty and fail closed as before.
+ *
+ * Why that is safe:
+ * - The server it reaches is pointed at the emulators, which hold only seeded
+ *   fixtures, so no customer's brief or site content is sent to the provider.
+ *   `serve-emulated.mjs` refuses the flag when no Firestore emulator is named.
+ * - Spend is bounded the way production bounds it: every job reserves its
+ *   credits before its first provider call and can spend no more than it
+ *   reserved, and a Free workspace holds a few hundred credits a month.
+ * - The key is the one the live plan eval already reads from the repo `.env`
+ *   (`ai-job-site-plan-live.spec.ts`).
+ */
+export const LIVE_AI_CREDENTIALS = new Map([
+  ['ANTHROPIC_API_KEY', 'the model provider every AI job step calls'],
+  ['AI_OPENAI_COMPAT_API_KEY', 'the OpenAI-compatible provider, when AI_PROVIDER names it'],
+])
+
+/** The environment variable that asks for {@link LIVE_AI_CREDENTIALS} without the flag. */
+export const LIVE_AI_ENV = 'AGLYN_EMULATED_LIVE_AI'
+
+/**
+ * The cron secret a live-AI console verifies when the shell exported none.
+ * Not a secret: it guards a route on a server that holds nothing but
+ * emulator data, and the local beat pump (`ai-jobs-beat-local.mjs`) has to
+ * know it without reading an env file.
+ */
+export const LOCAL_CRON_SECRET = 'emulated-local-beat'
+
+/** Whether the shell asked for a live model through {@link LIVE_AI_ENV}. */
+export function liveAiFromEnv(env) {
+  return /^(?:1|true|yes|on)$/i.test(String(env?.[LIVE_AI_ENV] ?? '').trim())
+}
+
 /**
  * The env files `nx serve <app>` loads for its default configuration, in the
  * order nx gives them precedence (the first file to define a name wins): the
@@ -132,8 +173,12 @@ export function namesWithValues(envFiles) {
  * step where this differs from nx. Then every outbound credential, from a
  * file or from the launching shell, becomes ''. Present and empty is the
  * state Next will not refill from the app's own env files; absent is not.
+ *
+ * With `liveAi`, the {@link LIVE_AI_CREDENTIALS} keep their value and are
+ * named in `passedThrough`, and CRON_SECRET is the shell's or
+ * {@link LOCAL_CRON_SECRET}.
  */
-export function emulatedServeEnvironment(inherited, envFiles) {
+export function emulatedServeEnvironment(inherited, envFiles, { liveAi = false } = {}) {
   const env = { ...inherited }
   for (const { parsed } of envFiles) {
     for (const [name, value] of Object.entries(parsed)) {
@@ -141,12 +186,20 @@ export function emulatedServeEnvironment(inherited, envFiles) {
     }
   }
   const blanked = []
+  const passedThrough = []
   for (const name of Object.keys(env)) {
     if (!isOutboundCredential(name)) continue
+    if (liveAi && LIVE_AI_CREDENTIALS.has(name)) {
+      if (env[name]) passedThrough.push(name)
+      continue
+    }
     if (env[name]) blanked.push(name)
     env[name] = ''
   }
-  return { env, blanked: blanked.sort() }
+  // A live-AI console answers the local beat pump: the secret the shell
+  // exported, or the well-known local one — never the env file's.
+  if (liveAi && !inherited.CRON_SECRET) env.CRON_SECRET = LOCAL_CRON_SECRET
+  return { env, blanked: blanked.sort(), passedThrough: passedThrough.sort() }
 }
 
 /**
@@ -169,18 +222,20 @@ export function parseProcessEnvironment(text) {
 }
 
 /**
- * The outbound credentials a server environment holds: set in it, or absent
- * from it while an env file defines them. Absent counts because a server
- * fills an undefined variable from its env files after it starts, where `ps`
- * cannot see it; only present and empty proves nothing is held.
+ * The outbound credentials a server environment holds, other than the
+ * `allowed` ones: set in it, or absent from it while an env file defines
+ * them. Absent counts because a server fills an undefined variable from its
+ * env files after it starts, where `ps` cannot see it; only present and empty
+ * proves nothing is held.
  */
-export function heldCredentials(states, fileNames) {
+export function heldCredentials(states, fileNames, allowed = []) {
+  const allow = new Set(allowed)
   const held = new Set()
   for (const [name, state] of states) {
-    if (state === 'set' && isOutboundCredential(name)) held.add(name)
+    if (state === 'set' && isOutboundCredential(name) && !allow.has(name)) held.add(name)
   }
   for (const name of fileNames) {
-    if (!states.has(name) && isOutboundCredential(name)) held.add(name)
+    if (!states.has(name) && isOutboundCredential(name) && !allow.has(name)) held.add(name)
   }
   return [...held].sort()
 }
@@ -244,6 +299,8 @@ const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]'])
  * `{ ok: true, readFrom }`, or `{ ok: false, reason, held? }` where `reason`
  * completes "the <app> server at <origin> ..." and names variables only.
  * A server that cannot be inspected is refused, never assumed clean.
+ * `allowed` names credentials this caller started the server to hold — the
+ * {@link LIVE_AI_CREDENTIALS} of a `--live-ai` console — and nothing else.
  */
 export function credentialPreflight({
   origin,
@@ -252,6 +309,7 @@ export function credentialPreflight({
   listen = listeningPids,
   read = readProcess,
   fileNames,
+  allowed = [],
 }) {
   let url
   try {
@@ -274,7 +332,7 @@ export function credentialPreflight({
     const server = serverEnvironment(pid, read)
     if (server.error) return { ok: false, reason: server.error }
     readFrom.push(server.pid)
-    for (const name of heldCredentials(server.states, names)) held.add(name)
+    for (const name of heldCredentials(server.states, names, allowed)) held.add(name)
   }
   if (held.size > 0) {
     const sorted = [...held].sort()
@@ -288,11 +346,13 @@ export function credentialPreflight({
  * naming the process each environment was read from, or `{ ok: false, detail }`
  * with the refusal for the first server that holds an outbound credential or
  * cannot be inspected. `detail` names variables, never a value.
+ * `options.allow` maps an app to the credentials it may hold, by name.
  */
 export function serversHoldNoCredential(servers, options = {}) {
+  const { allow = {}, ...rest } = options
   const readFrom = []
   for (const [app, origin] of Object.entries(servers)) {
-    const verdict = credentialPreflight({ ...options, origin, app })
+    const verdict = credentialPreflight({ ...rest, origin, app, allowed: allow[app] ?? [] })
     if (!verdict.ok) {
       const remedy = verdict.held
         ? `Start it with \`npm run serve:${app}:emulated\`, which holds every such credential empty; ` +
