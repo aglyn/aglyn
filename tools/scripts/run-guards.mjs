@@ -136,12 +136,17 @@ const REPO_WIDE = new Set([
   'generate:docs-help:check',
   'generate:plugin-manifests:check',
   'generate:realm-host-exports:check',
+  'generate:mobile-theme-tokens:check',
   'sync:next-tsconfigs:check',
   'check:ai-palette',
   // Sweeps every tree that is not a plugin for a plugin's domain: a
   // domain-named file, a vendor literal, a plugin id, a static plugin import
   // (AGL-3080). A new one is refused; the allowlist only shrinks.
   'check:plugin-domain-in-core',
+  // Walks every web tree for an import of mobile code, and every mobile tree
+  // for a reach into web or server code (AGL-3620); a commit to any lib can
+  // flip it, whichever project it belongs to.
+  'check:mobile-isolation',
   'check:manifest-versions',
   // Walk every app's routes and every lib they reach; a cost only a bundler
   // or a graph walk can see, which a green typecheck and green tests miss.

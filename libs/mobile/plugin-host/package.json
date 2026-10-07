@@ -1,0 +1,29 @@
+{
+  "name": "@aglyn/mobile-plugin-host",
+  "version": "1.0.0-beta.230",
+  "private": true,
+  "description": "The mobile plugin surface: registrars, registry, manifest loader and deep-link resolution for the Aglyn mobile apps.",
+  "license": "Apache-2.0",
+  "homepage": "https://aglyn.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aglyn/aglyn.git",
+    "directory": "libs/mobile/plugin-host"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "react": "^19.2.0"
+  },
+  "sideEffects": false
+}

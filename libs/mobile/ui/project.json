@@ -1,0 +1,12 @@
+{
+  "name": "mobile-ui",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/mobile/ui/src",
+  "projectType": "library",
+  "tags": [
+    "scope:mobile",
+    "type:ui"
+  ],
+  "//": "React Native source, compiled and tested by the mobile apps (apps/mobile: npm run typecheck, npm test), never by the root toolchain, which has no React Native (AGL-3620).",
+  "targets": {}
+}

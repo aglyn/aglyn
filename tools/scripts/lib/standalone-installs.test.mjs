@@ -136,8 +136,9 @@ describe('the verdict', () => {
 
 describe('the guard is wired, and reads the real tree', () => {
   it('finds exactly the standalone packages that exist today', () => {
-    // Asserted against git rather than a fixture: if a third one lands, this
-    // is the line that has to be looked at, deliberately.
+    // Asserted against git rather than a fixture: if another one lands, this
+    // is the line that has to be looked at, deliberately. apps/mobile (AGL-3620)
+    // pins React Native's React, and the nx-ci `mobile` job installs it.
     const dirs = execFileSync('git', ['ls-files', '*/package-lock.json'], {
       cwd: repoRoot,
       encoding: 'utf8',
@@ -147,7 +148,7 @@ describe('the guard is wired, and reads the real tree', () => {
       .map((f) => f.replace(/\/package-lock\.json$/, ''))
       .filter((d) => !d.split('/').includes('node_modules'))
       .sort()
-    assert.deepEqual(dirs, ['apps/docs', 'cloud/functions'])
+    assert.deepEqual(dirs, ['apps/docs', 'apps/mobile', 'cloud/functions'])
   })
 
   it('the root package.json still has no workspaces key', () => {

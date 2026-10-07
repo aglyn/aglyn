@@ -92,6 +92,8 @@ export const DEP_CONSTRAINTS = Object.freeze([
       'scope:data',
       'scope:feature',
       'scope:lib',
+      // A plugin's `src/mobile` entry on the mobile foundation (AGL-3620).
+      'scope:mobile',
     ],
   },
   {
@@ -165,7 +167,17 @@ export const DEP_CONSTRAINTS = Object.freeze([
     // plugins share goes through a core plugin-manager seam or down into a
     // shared lib. Today's plugin → plugin edges are the allowlist.
     sourceTag: 'scope:plugin',
-    onlyDependOnLibsWithTags: ['scope:tenant', 'scope:renderer', 'scope:besigner', 'scope:core', 'scope:shared'],
+    // `scope:mobile` for the plugin's `src/mobile` entry alone (AGL-3620):
+    // which FILES may reach it is `check:mobile-isolation`'s, since a
+    // project-level edge cannot tell a plugin's mobile entry from its web one.
+    onlyDependOnLibsWithTags: ['scope:tenant', 'scope:renderer', 'scope:besigner', 'scope:core', 'scope:shared', 'scope:mobile'],
+  },
+  {
+    // `libs/mobile/*` and the mobile apps (AGL-3620): React Native, on the
+    // mobile foundation and generic shared code only. Plugins reach the apps
+    // through the generated mobile manifest, dynamically, never statically.
+    sourceTag: 'scope:mobile',
+    onlyDependOnLibsWithTags: ['scope:mobile', 'scope:shared'],
   },
   {
     sourceTag: 'scope:cli',

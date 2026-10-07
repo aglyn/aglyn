@@ -102,10 +102,17 @@ const TSC = join(root, 'node_modules', '@typescript', 'native', 'bin', 'tsc')
 //   one program with conflicting globals.
 // - tools/: no .ts inputs (scripts are .mjs) -> TS18003.
 // - apps/docs: standalone Docusaurus package with its own TypeScript.
+// - apps/mobile, apps/pos-mobile, libs/mobile: React Native, compiled by each
+//   mobile app's own install (`npm --prefix apps/mobile run typecheck`), which
+//   also covers every plugin's `src/mobile` (AGL-3620). The root install has
+//   no React Native to resolve them against.
 const SKIP = [
   'tsconfig.base.json',
   'tools/',
   'apps/docs/',
+  'apps/mobile/',
+  'apps/pos-mobile/',
+  'libs/mobile/',
 ]
 
 // `.claude` holds agent worktrees — separate checkouts of this same repo, each

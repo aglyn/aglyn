@@ -471,7 +471,7 @@ describe('the real workspace', () => {
 
   it('carries every scope the map names in at least one constraint', () => {
     const sources = new Set(DEP_CONSTRAINTS.map((constraint) => constraint.sourceTag))
-    for (const scope of ['scope:shared', 'scope:core', 'scope:renderer', 'scope:besigner', 'scope:besigner-ui', 'scope:tenant', 'scope:console', 'scope:plugin']) {
+    for (const scope of ['scope:shared', 'scope:core', 'scope:renderer', 'scope:besigner', 'scope:besigner-ui', 'scope:tenant', 'scope:console', 'scope:plugin', 'scope:mobile']) {
       assert.ok(sources.has(scope), scope)
     }
   })

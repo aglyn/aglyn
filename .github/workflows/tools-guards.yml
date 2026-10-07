@@ -929,6 +929,15 @@ jobs:
       - run: npm run test:plugin-domain-in-core
       - run: npm run check:plugin-domain-in-core
 
+      # The native apps never cost the web a byte (AGL-3620): nothing a web
+      # app reaches imports React Native, Expo, libs/mobile or a plugin's
+      # /mobile entry, and nothing the mobile apps bundle reaches MUI, Next,
+      # React DOM, server code, Node built-ins or the DOM, apart from the
+      # proven-pure modules in tools/scripts/mobile-pure-modules.json. The
+      # forced reds run first so a detector that matched nothing cannot pass.
+      - run: npm run test:mobile-isolation
+      - run: npm run check:mobile-isolation
+
       # The AI eval harness (AGL-2937): every golden brief under
       # tools/ai-eval/cases scored offline — the tree validator, the doctrine's
       # rules, the budget, the plan's expected shape and the recorded rubric —
