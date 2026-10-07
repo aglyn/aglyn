@@ -54,9 +54,12 @@ export const GOOGLE_FONT_FILE_ORIGIN = 'https://fonts.gstatic.com'
 /**
  * A font file's path on {@link GOOGLE_FONT_FILE_ORIGIN} below `/s/`, as the
  * route accepts it: `{family}/v{n}/{file}.woff2`. Anything else is refused,
- * so the route can never be used to fetch an arbitrary URL.
+ * so the route can never be used to fetch an arbitrary URL. A file name runs
+ * to 400 characters: a variable family with many axes (Roboto Flex) is named
+ * by an id of about 250, which a 200 cap refused, dropping every face of the
+ * family (AGL-3656).
  */
-const FONT_FILE_PATH = /^[a-z0-9]+\/v\d{1,4}\/[A-Za-z0-9_-]{1,200}\.woff2$/
+const FONT_FILE_PATH = /^[a-z0-9]+\/v\d{1,4}\/[A-Za-z0-9_-]{1,400}\.woff2$/
 
 /** One `@font-face` rule from Google's stylesheet. */
 export interface GoogleFontFace {

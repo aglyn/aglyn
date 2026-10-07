@@ -97,6 +97,11 @@ describe('self-hosted theme fonts (AGL-3485)', () => {
     expect(isSelfHostedFontPath('https://evil/x.woff2')).toBe(false)
   })
 
+  it('accepts the long file ids of a many-axis variable family (AGL-3656)', () => {
+    expect(isSelfHostedFontPath(`robotoflex/v30/${'N'.repeat(250)}.woff2`)).toBe(true)
+    expect(isSelfHostedFontPath(`robotoflex/v30/${'N'.repeat(401)}.woff2`)).toBe(false)
+  })
+
   it('writes every rule on the site origin, swapping, with its range', () => {
     const css = selfHostedFontFaceCss(faces)
     expect(css).not.toContain('gstatic')
