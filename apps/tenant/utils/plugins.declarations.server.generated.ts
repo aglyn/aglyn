@@ -28,6 +28,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-workflows/declarations.server')).registerWorkflowsServerDeclarations()
     ;(await import('@aglyn/plugins-ai/declarations')).registerAiDeclarations()
     ;(await import('@aglyn/plugins-ai/declarations.server')).registerAiServerDeclarations()
+    ;(await import('@aglyn/plugins-fonts/declarations.server')).registerFontsServerDeclarations()
     ;(await import('@aglyn/plugins-sms/declarations.server')).registerSmsServerDeclarations()
     ;(await import('@aglyn/plugins-shipping/declarations.server')).registerShippingServerDeclarations()
     ;(await import('@aglyn/plugins-tax-engines/declarations.server')).registerTaxEnginesServerDeclarations()

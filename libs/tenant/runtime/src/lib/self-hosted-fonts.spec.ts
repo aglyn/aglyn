@@ -16,6 +16,11 @@
  */
 
 import {
+  registerPluginThemeFontCatalog,
+  type ThemeFontFacts,
+} from '@aglyn/aglyn/plugin-manager/plugin-theme-font-catalog'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import {
   resetSelfHostedFontsForTests,
   SELF_HOSTED_FONT_CACHE_CONTROL,
   selfHostedThemeFonts,
@@ -37,6 +42,7 @@ const realFetch = global.fetch
 
 beforeEach(() => {
   resetSelfHostedFontsForTests()
+  resetPluginServicesForTests()
   fetchMock.mockReset()
   global.fetch = fetchMock as never
 })
@@ -60,7 +66,7 @@ describe('selfHostedThemeFonts (AGL-3485)', () => {
     expect(first?.preloads).toEqual(['/api/fonts/inter/v18/lat400.woff2'])
   })
 
-  it('answers null — keep the link — when Google cannot be read', async () => {
+  it('answers null when Google cannot be read and nothing is catalogued', async () => {
     fetchMock.mockRejectedValue(new Error('offline'))
     expect(await selfHostedThemeFonts(THEME)).toBeNull()
     fetchMock.mockResolvedValue(new Response('nope', { status: 500 }))
@@ -68,7 +74,7 @@ describe('selfHostedThemeFonts (AGL-3485)', () => {
     expect(await selfHostedThemeFonts(THEME)).toBeNull()
   })
 
-  it('⛔ never holds a render on a fetch that does not settle — it links the stylesheet', async () => {
+  it('⛔ never holds a render on a fetch that does not settle', async () => {
     // A fetch whose render Next abandoned can answer with a promise that
     // never resolves and that no abort signal reaches. Held across requests,
     // that stalled every page on the instance until the function timed out.
@@ -129,5 +135,142 @@ describe('serveSelfHostedFont (AGL-3485)', () => {
     const res = await serveSelfHostedFont('inter/v18/lat400.woff2')
     expect(res.status).toBe(502)
     expect(res.headers.get('cache-control')).toBe('no-store')
+  })
+})
+
+describe('the loader picks faces, delivery and fallbacks (AGL-3656)', () => {
+  const INTER: ThemeFontFacts = {
+    family: 'Inter',
+    category: 'sans-serif',
+    weights: [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    italics: [400],
+    variableWeights: [100, 900],
+    metrics: { unitsPerEm: 2048, ascent: 1984, descent: -494, lineGap: 0, xWidthAvg: 967 },
+  }
+  const catalog = (facts: ThemeFontFacts) =>
+    registerPluginThemeFontCatalog(
+      { facts: async (family) => (family.toLowerCase() === facts.family.toLowerCase() ? facts : undefined) },
+      { pluginId: 'test' },
+    )
+  const sheet = (weight: string, file: string, style = 'normal') => `/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: ${style};
+  font-weight: ${weight};
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/${file}.woff2) format('woff2');
+  unicode-range: U+0000-00FF;
+}`
+  /** Google, as the per-face and combined requests see it, and file sizes for HEAD. */
+  const google = (sizes: Record<string, number>) => (url: string, init?: RequestInit) => {
+    if (init?.method === 'HEAD') {
+      const file = /\/([^/]+)\.woff2$/.exec(url)?.[1] ?? ''
+      return Promise.resolve(new Response(null, { headers: { 'content-length': String(sizes[file] ?? 0) } }))
+    }
+    const axis = decodeURIComponent(url).split(':').pop()?.split('&')[0] ?? ''
+    const tuples = axis.includes('@') ? axis.split('@')[1].split(';') : []
+    if (tuples.length > 1) {
+      // A variable family asked for several faces: the same file for each.
+      return Promise.resolve(
+        new Response(
+          tuples
+            .map((tuple) => {
+              const [ital, weight] = tuple.includes(',') ? tuple.split(',') : ['0', tuple]
+              return sheet(weight, ital === '1' ? 'varitalic' : 'var', ital === '1' ? 'italic' : 'normal')
+            })
+            .join('\n'),
+        ),
+      )
+    }
+    const [ital, weight] = tuples[0].includes(',') ? tuples[0].split(',') : ['0', tuples[0]]
+    return Promise.resolve(
+      new Response(sheet(weight, `s${ital === '1' ? 'i' : ''}${weight}`, ital === '1' ? 'italic' : 'normal')),
+    )
+  }
+  const BASE = { fontFamily: 'system-ui', h1: { fontWeight: 900 }, body1: { fontWeight: 400 } }
+  const THEME = {
+    fonts: [{ family: 'Inter', source: 'google' as const }],
+    typography: { fontFamily: '"Inter", sans-serif' },
+  }
+
+  it('serves a file per weight when the statics are smaller, with a sized fallback', async () => {
+    catalog(INTER)
+    fetchMock.mockImplementation(google({ var: 120_000, s400: 24_000, s900: 23_000, s300: 22_000, s500: 24_000, s700: 24_000 }))
+    const fonts = await selfHostedThemeFonts(THEME, { baseTypography: { ...BASE, fontWeightLight: 300 } })
+    // Asked one face at a time, so a static instance comes back.
+    const asked = fetchMock.mock.calls.map(([url]) => decodeURIComponent(url))
+    expect(asked).toContain('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap')
+    expect(fonts?.css).toContain("src:url(/api/fonts/inter/v20/s900.woff2) format('woff2');")
+    expect(fonts?.css).toContain("font-style:italic;font-weight:400;")
+    expect(fonts?.css).not.toContain('/var.woff2')
+    expect(fonts?.css).toContain("@font-face{font-family:'Inter Fallback';src:local('Arial')")
+    expect(fonts?.preloads).toEqual(['/api/fonts/inter/v20/s400.woff2', '/api/fonts/inter/v20/s900.woff2'])
+  })
+
+  it('serves the variable file as one range when it is smaller than the statics', async () => {
+    catalog(INTER)
+    fetchMock.mockImplementation(google({ var: 30_000, s400: 24_000, s900: 23_000, s300: 22_000, s500: 24_000, s700: 24_000 }))
+    const fonts = await selfHostedThemeFonts(THEME, { baseTypography: BASE })
+    expect(fonts?.css).toContain("font-weight:300 900;font-display:swap;src:url(/api/fonts/inter/v20/var.woff2)")
+    expect(fonts?.css).not.toContain('/s400.woff2')
+    expect(fonts?.preloads).toEqual(['/api/fonts/inter/v20/var.woff2'])
+  })
+
+  it('still sizes the fallback when Google cannot be read, and never links Google', async () => {
+    catalog(INTER)
+    fetchMock.mockRejectedValue(new Error('offline'))
+    const fonts = await selfHostedThemeFonts(THEME, { baseTypography: BASE })
+    expect(fonts?.css).toMatch(/^@font-face\{font-family:'Inter Fallback';/)
+    expect(fonts?.css).not.toContain('googleapis')
+    expect(fonts?.preloads).toEqual([])
+  })
+
+  it("serves a site's uploaded faces from its media route, versioned", async () => {
+    const fonts = await selfHostedThemeFonts(
+      {
+        fonts: [
+          {
+            family: 'Acme Sans',
+            source: 'custom',
+            category: 'sans-serif',
+            metrics: { unitsPerEm: 1000, ascent: 900, descent: -250, lineGap: 0, xWidthAvg: 470 },
+            faces: [
+              { weight: 400, style: 'normal', src: 'media:org:o1/m1', version: 'abc123' },
+              { weight: 700, style: 'normal', src: 'media:org:o1/m2', version: 'def456', unicodeRange: 'U+0000-00FF' },
+            ],
+          },
+        ],
+        typography: { fontFamily: '"Acme Sans", sans-serif' },
+      },
+      { hostId: 'h1', baseTypography: BASE },
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(fonts?.css).toContain("src:url(/api/media/cdn/org:o1:h1/m1?v=abc123.2) format('woff2');")
+    expect(fonts?.css).toContain('unicode-range:U+0000-00FF;')
+    expect(fonts?.css).toContain("font-family:'Acme Sans Fallback'")
+    expect(fonts?.preloads).toEqual([
+      '/api/media/cdn/org:o1:h1/m1?v=abc123.2',
+      '/api/media/cdn/org:o1:h1/m2?v=def456.2',
+    ])
+  })
+
+  it("loads the base's own face — the brand on an operator host — when the theme names none", async () => {
+    catalog({ ...INTER, family: 'Roboto Flex', italics: [] })
+    fetchMock.mockImplementation(google({}))
+    const fonts = await selfHostedThemeFonts(
+      {},
+      {
+        baseTypography: { ...BASE, fontFamily: '"Roboto Flex", -apple-system' },
+        baseFonts: [{ family: 'Roboto Flex', source: 'google' }],
+      },
+    )
+    expect(decodeURIComponent(fetchMock.mock.calls[0][0])).toContain('family=Roboto+Flex:wght@')
+    expect(fonts?.css).toContain("font-family:'Roboto Flex Fallback'")
+  })
+
+  it('adds nothing for a site on system fonts', async () => {
+    catalog(INTER)
+    expect(await selfHostedThemeFonts({}, { baseTypography: BASE })).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

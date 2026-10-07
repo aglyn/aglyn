@@ -20,7 +20,11 @@
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { searchEngineVerificationMeta } from '@aglyn/aglyn/app-utils/search-engine-verification'
-import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
+import {
+  siteBaseFonts,
+  siteBaseTypography,
+} from '@aglyn/shared-ui-theme/platform-brand'
+import { withMetricFallbacks } from '@aglyn/shared-ui-theme/util/self-hosted-fonts'
 import { selfHostedThemeFonts } from '@aglyn/tenant-runtime/self-hosted-fonts'
 import { preload } from 'react-dom'
 import { parseSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
@@ -72,19 +76,38 @@ export default async function HostLayout({
   const hostRes = await getHostCached(host)
   // default ⊕ marketplace theme ⊕ site overrides (AGL-1021). The default is
   // applied below by HostThemeProvider; these are the upper two layers.
-  const hostTheme = resolveSiteTheme(hostRes.host)
+  const siteTheme = resolveSiteTheme(hostRes.host)
   /**
-   * The theme's Google fonts, served from the site itself (AGL-3485): the
-   * `@font-face` rules inline in the head, every file on this origin, the one
-   * or two faces the first screen paints with preloaded. Linking Google's
-   * stylesheet blocked rendering for ~800 ms on the page Lighthouse measured.
-   * The link stays as the fallback for a render that could not read Google,
-   * so a theme never loses its typeface to a failed fetch.
+   * The theme's fonts, served from the site itself (AGL-3485, AGL-3656): the
+   * `@font-face` rules inline in the head, every file on this origin, each
+   * family at the weights its text styles draw with, and a local fallback
+   * sized to each family so nothing moves when it swaps in. The one or two
+   * faces the first screen paints with are preloaded. Nothing on the page
+   * asks Google for anything: a render that could not read Google goes
+   * without the family, drawing in its sized fallback, rather than linking
+   * Google's stylesheet.
+   *
+   * An operator host whose theme names no family of its own loads the
+   * brand's, which its stack has always named first.
    */
-  const selfHostedFonts = await selfHostedThemeFonts(hostTheme)
-  const fontsHref = selfHostedFonts
-    ? undefined
-    : getGoogleFontsUrl(hostTheme?.fonts)
+  const baseFonts = siteBaseFonts(host, siteTheme)
+  const hostTheme = baseFonts.length
+    ? {
+        ...siteTheme,
+        typography: {
+          ...siteTheme?.typography,
+          fontFamily: withMetricFallbacks(
+            String(siteBaseTypography(host)['fontFamily']),
+            baseFonts.map((font) => font.family),
+          ),
+        },
+      }
+    : siteTheme
+  const selfHostedFonts = await selfHostedThemeFonts(siteTheme, {
+    hostId: hostRes.host?.$id,
+    baseTypography: siteBaseTypography(host),
+    baseFonts,
+  })
   // `preload()` rather than a `<link>` element (AGL-3656): React already
   // emits a preload for a `<link rel="preload">` it renders, and rendered
   // both, every published page asked for its body font twice in its head.
@@ -354,15 +377,6 @@ export default async function HostLayout({
         <style href="aglyn-theme-fonts" precedence="default">
           {selfHostedFonts.css}
         </style>
-      ) : fontsHref ? (
-        <>
-          <link
-            rel="preconnect"
-            href="https://fonts.gstatic.com"
-            crossOrigin="anonymous"
-          />
-          <link rel="stylesheet" href={fontsHref} />
-        </>
       ) : null}
       {children}
       {/* Edit-access admin bar (AGL-1302 follow-on) — renders nothing unless

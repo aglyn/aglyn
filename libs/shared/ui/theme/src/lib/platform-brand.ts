@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
+import type { HostThemeFont } from '@aglyn/shared-data-types'
 import { buildFontFamilyList, FontFamily } from './constants'
 
 /**
  * The platform brand as data with no MUI in it (AGL-3656): which hosts wear
- * it, and the face a site that does not draws with. A published page's
- * server layout reads these, and it is a Server Component, where importing
- * the built themes would pull MUI's React context into the server graph
- * (AGL-405).
+ * it, the face it is set in, and the weights its text styles draw with. A
+ * published page's server layout reads these to load the right fonts, and it
+ * is a Server Component, where importing the built themes would pull MUI's
+ * React context into the server graph (AGL-405).
  */
 
 /**
@@ -67,6 +68,21 @@ export function wearsPlatformBrand(host: string | undefined): boolean {
   )
 }
 
+/** The platform brand's face. */
+export const PLATFORM_BRAND_FONT_FAMILY = 'Roboto Flex'
+
+/**
+ * The brand's face as a theme font: what an operator's own host loads when its
+ * theme names no font of its own. The brand stack has always named it first,
+ * and nothing loaded it, so aglyn.com drew in Roboto Flex on machines that
+ * have it installed and in the system font everywhere else.
+ */
+export const PLATFORM_BRAND_FONT: HostThemeFont = {
+  family: PLATFORM_BRAND_FONT_FAMILY,
+  source: 'google',
+  category: 'sans-serif',
+}
+
 /**
  * The face a customer site draws with until its theme picks one: the
  * visitor's own system font (AGL-3656).
@@ -83,3 +99,66 @@ export const TENANT_SYSTEM_FONT_STACK = buildFontFamilyList(FontFamily.APPLE_SYS
   .filter((family, index, all) => all.indexOf(family) === index)
   .filter((family) => !/roboto flex/i.test(family))
   .join(',')
+
+/**
+ * The weights the platform's text styles draw with — the brand's ramp over
+ * MUI's defaults — and its named weights, in the shape of MUI typography
+ * options. `platform-brand.spec.ts` holds it to the built console theme, so a
+ * change to the ramp there fails until it is made here too.
+ */
+export const PLATFORM_TYPE_RAMP_WEIGHTS: Readonly<Record<string, unknown>> = {
+  fontWeightLight: 300,
+  fontWeightRegular: 400,
+  fontWeightMedium: 500,
+  fontWeightBold: 700,
+  fontWeightSemiBold: 600,
+  fontWeightExtraBold: 800,
+  fontWeightBlack: 900,
+  displayXl: { fontWeight: 900 },
+  h1: { fontWeight: 900 },
+  h2: { fontWeight: 800 },
+  h3: { fontWeight: 700 },
+  h4: { fontWeight: 400 },
+  h5: { fontWeight: 400 },
+  h6: { fontWeight: 500 },
+  subtitle1: { fontWeight: 400 },
+  subtitle2: { fontWeight: 500 },
+  body1: { fontWeight: 400 },
+  body2: { fontWeight: 400 },
+  button: { fontWeight: 500 },
+  caption: { fontWeight: 400 },
+  overline: { fontWeight: 400 },
+  lede: { fontWeight: 400 },
+  bodyCompact: { fontWeight: 400 },
+  micro: { fontWeight: 400 },
+}
+
+/**
+ * The typography a site's theme is layered onto, as far as fonts go: the
+ * brand stack on an operator host, the system stack on a customer's, and the
+ * platform's weights either way.
+ */
+export function siteBaseTypography(host: string | undefined): Record<string, unknown> {
+  return {
+    ...PLATFORM_TYPE_RAMP_WEIGHTS,
+    fontFamily: wearsPlatformBrand(host)
+      ? buildFontFamilyList().join(',')
+      : TENANT_SYSTEM_FONT_STACK,
+  }
+}
+
+/**
+ * The fonts a site's base draws with that its theme does not list: the brand
+ * face on an operator host whose theme names no family of its own, else none.
+ */
+export function siteBaseFonts(
+  host: string | undefined,
+  theme: { fonts?: readonly HostThemeFont[]; typography?: { fontFamily?: string } } | undefined,
+): HostThemeFont[] {
+  if (!wearsPlatformBrand(host)) return []
+  if (theme?.typography?.fontFamily) return []
+  const listed = (theme?.fonts ?? []).some(
+    (font) => font.family?.trim().toLowerCase() === PLATFORM_BRAND_FONT_FAMILY.toLowerCase(),
+  )
+  return listed ? [] : [PLATFORM_BRAND_FONT]
+}

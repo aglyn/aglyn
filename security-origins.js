@@ -575,13 +575,13 @@ function tenantMediaSrcDirective(isProduction, approvedMediaHosts, siteOrigins) 
 /**
  * Web fonts. `data:` covers a font inlined into a stylesheet.
  *
- * `fonts.gstatic.com` is PINNED, and this is measurement rather than
- * generosity: `host-theme.ts` builds a `fonts.googleapis.com/css2` link for
- * any theme that names Google families, and `app/[host]/[scheme]/layout.tsx`
- * preconnects to `fonts.gstatic.com` — which is where the font FILES come
- * from, and so the origin this directive decides on. Enforcing without it
- * would strip the typeface from every themed site on the platform, for a
- * choice its owner made in our own theme editor.
+ * `fonts.gstatic.com` is PINNED. A theme's own fonts no longer need it: since
+ * AGL-3656 the layout links no Google stylesheet, even when it could not read
+ * one, and every theme face is served from the site's own origin
+ * (`/api/fonts`, `/api/media/cdn`). It stays for what an owner authored
+ * outside the theme — a Custom HTML block or an embed that links Google
+ * Fonts itself. Dropping it would strip those typefaces without a word to
+ * the owner who chose them.
  *
  * (The stylesheet at `fonts.googleapis.com` is a `style-src` question, not a
  * `font-src` one. That directive is still unconstrained and is a separate,

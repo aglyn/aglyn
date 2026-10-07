@@ -26,6 +26,7 @@ import type {
 } from '@aglyn/shared-data-types'
 import { objectDeepMergeReplaceArrays } from '@aglyn/shared-util-vendor'
 import type { PaletteOptions, ThemeOptions } from '../../vendor/mui'
+import { themeWebFontFamilies, withMetricFallbacks } from './self-hosted-fonts'
 
 /**
  * Components a host theme may override. Persisted overrides are plain JSON;
@@ -417,11 +418,29 @@ export function hostThemeToThemeOptions(
 
   const { typography } = sanitized
   if (typography?.fontFamily || typography?.variants) {
+    // Each web font's metric-matched fallback is named right after it
+    // (AGL-3656): the published page declares it, sized to the font, so the
+    // text drawn before the font arrives takes the font's box. Where nothing
+    // declares it (the editor's canvas), the name matches no face and the
+    // stack moves on.
+    const webFonts = themeWebFontFamilies(sanitized.fonts)
+    const stack = (value: string | undefined) =>
+      value ? withMetricFallbacks(value, webFonts) : value
+    const variants = typography.variants
+      ? Object.fromEntries(
+          Object.entries(typography.variants).map(([key, variant]) => [
+            key,
+            variant?.fontFamily
+              ? { ...variant, fontFamily: stack(variant.fontFamily) }
+              : variant,
+          ]),
+        )
+      : undefined
     // HostThemeTypographyVariant is a sanitized subset of MUI's
     // TypographyStyleOptions; the missing index signature is by design.
     options.typography = {
-      ...(typography.fontFamily && { fontFamily: typography.fontFamily }),
-      ...typography.variants,
+      ...(typography.fontFamily && { fontFamily: stack(typography.fontFamily) }),
+      ...variants,
     } as ThemeOptions['typography']
   }
 

@@ -123,6 +123,7 @@ changes, because every rule is by tag.
 | `plugins-data` | `@aglyn/plugins-data` | `libs/plugins/data` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-email` | `@aglyn/plugins-email` | `libs/plugins/email` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-events-calendar` | `@aglyn/plugins-events-calendar` | `libs/plugins/events-calendar` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
+| `plugins-fonts` | `@aglyn/plugins-fonts` | `libs/plugins/fonts` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-forms` | `@aglyn/plugins-forms` | `libs/plugins/forms` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-funnels` | `@aglyn/plugins-funnels` | `libs/plugins/funnels` | `scope:plugin` `type:feature` | yes — funnels on a site's Analytics page, over the visits core's journey recorder records | `.`, `./*` |
 | `plugins-inbox` | `@aglyn/plugins-inbox` | `libs/plugins/inbox` | `scope:plugin` `type:feature` | yes | `.`, `./*` |

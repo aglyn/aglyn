@@ -246,6 +246,7 @@
     "check:page-view-rate": "node tools/scripts/check-page-view-rate.mjs",
     "generate:docs-help": "node tools/scripts/generate-docs-help.mjs",
     "generate:docs-help:check": "node tools/scripts/generate-docs-help.mjs --check",
+    "generate:google-fonts-catalog": "node tools/scripts/generate-google-fonts-catalog.mts",
     "generate:plugin-manifests": "node tools/scripts/generate-plugin-manifests.mjs",
     "generate:plugin-manifests:check": "node tools/scripts/generate-plugin-manifests.mjs --check",
     "generate:mobile-theme-tokens": "node tools/scripts/generate-mobile-theme-tokens.mjs",
