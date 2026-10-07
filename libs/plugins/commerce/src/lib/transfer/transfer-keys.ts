@@ -29,6 +29,7 @@
  * | coupons | yes | matched by code; new ones start switched off |
  * | orders | no | an order is the record of a sale, written by checkout alone |
  * | gift cards | yes, by issuing | each row issues a card through the issue path, confirmed by its total; owners and admins only |
+ * | tracking numbers | yes, by shipping | each row is a parcel: it ships what its order still owes, or replaces a shipped order's tracking when the person chooses (AGL-3613) |
  */
 
 export const COMMERCE_PRODUCTS_TRANSFER = 'commerce.products'
@@ -37,6 +38,7 @@ export const COMMERCE_DISCOUNTS_TRANSFER = 'commerce.discounts'
 export const COMMERCE_COUPONS_TRANSFER = 'commerce.coupons'
 export const COMMERCE_GIFT_CARDS_TRANSFER = 'commerce.gift-cards'
 export const COMMERCE_CATEGORIES_TRANSFER = 'commerce.categories'
+export const COMMERCE_TRACKING_TRANSFER = 'commerce.tracking'
 
 /** Every commerce resource key, in the order the hub lists them. */
 export const COMMERCE_TRANSFER_RESOURCES = [
@@ -46,6 +48,7 @@ export const COMMERCE_TRANSFER_RESOURCES = [
   COMMERCE_DISCOUNTS_TRANSFER,
   COMMERCE_COUPONS_TRANSFER,
   COMMERCE_GIFT_CARDS_TRANSFER,
+  COMMERCE_TRACKING_TRANSFER,
 ] as const
 
 /** The resources a file may write; the others are exported only. */
@@ -55,6 +58,7 @@ export const COMMERCE_IMPORTABLE_TRANSFERS: ReadonlySet<string> = new Set([
   COMMERCE_DISCOUNTS_TRANSFER,
   COMMERCE_COUPONS_TRANSFER,
   COMMERCE_GIFT_CARDS_TRANSFER,
+  COMMERCE_TRACKING_TRANSFER,
 ])
 
 /**

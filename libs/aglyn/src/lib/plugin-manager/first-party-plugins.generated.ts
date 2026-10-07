@@ -1114,6 +1114,25 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
     "description": "Every gift card's code, balance and status. An import issues each card, confirmed by the total."
   },
   {
+    "pluginId": "commerce",
+    "key": "commerce.tracking",
+    "label": "Tracking numbers",
+    "singularLabel": "Tracking number",
+    "scope": "host",
+    "kinds": [
+      "records"
+    ],
+    "formats": [
+      "csv",
+      "json",
+      "ndjson"
+    ],
+    "limits": {
+      "maxRows": 5000
+    },
+    "description": "Tracking numbers from a label tool, each recorded as a shipment on the order it names."
+  },
+  {
     "pluginId": "crm",
     "key": "crm.contacts",
     "featureFlag": "crm",

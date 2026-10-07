@@ -407,6 +407,11 @@ export function registerCommerceConsoleApi(): void {
   // through the route above, a label from a shipping plugin.
   registerPluginApiRoute('commerce/returns', returnsHandler)
   registerPluginApiRoute('commerce/supplier-update', supplierUpdateHandler)
+  // Stamps the open orders that predate the shipping fields, before an
+  // export for shipping (AGL-3613).
+  registerPluginApiRoute('commerce/orders-shipping-prepare', async (req, res) =>
+    (await import('./server/orders-shipping-prepare')).ordersShippingPrepareHandler(req, res),
+  )
   // The store's sales as figure tables (AGL-2915), for the AI plugin's
   // insights to read by id rather than by reading orders. The console runs
   // insight jobs, so the console surface registers them.

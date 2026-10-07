@@ -1,7 +1,7 @@
 ---
 sidebar_position: 4
 title: Import and export store data
-description: Bring products in from a file or from Shopify, update them by handle or SKU, move gift cards by issuing each one, and export products, orders, discounts, coupons, gift cards and categories with the fields you choose.
+description: Bring products in from a file or from Shopify, update them by handle or SKU, move gift cards by issuing each one, record shipments from a file of tracking numbers, and export products, orders, discounts, coupons, gift cards and categories with the fields you choose.
 ---
 
 # Import and export store data
@@ -18,8 +18,9 @@ asks how to handle every conflict before anything is written.
 | Categories | **Categories & collections** card | Yes | Yes |
 | Discounts | **Discounts** card | Yes | Yes |
 | Coupons | **Coupons** card | Yes | Yes |
-| Orders | **Orders** tab, **Export orders** | No | Yes |
+| Orders | **Orders** tab, **Export orders** or **Export for shipping** | No | Yes |
 | Gift cards | **Gift cards** card | Yes, by issuing each card | Yes |
+| Tracking numbers | **Orders** tab, **Import tracking** | Yes, by shipping each order | Yes |
 
 You need permission to manage the site's data to import or undo an import.
 Importing gift cards also needs you to be an owner or admin of the workspace,
@@ -62,6 +63,10 @@ Shopify's columns, in Shopify's order, under Shopify's column names
 `Variant Price`, `Image Src` and the rest), so the file can be uploaded to
 Shopify as it is. It leaves out **Status**, because **Published** says the
 same thing, and **Kind**, which Shopify's `Type` column does not mean.
+
+**Export for shipping**, in the Orders card's header, opens the same dialog on the
+orders still to ship, laid out for Pirate Ship, Shippo, EasyPost or any label
+tool. See [Use Pirate Ship with Aglyn](use-pirate-ship.md).
 
 ## Import
 

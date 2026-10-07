@@ -21,6 +21,7 @@ import {
   nameSearchTokens,
 } from '@aglyn/aglyn/app-utils/name-search'
 import { describeOrderDispute, type OrderDisputeTone } from './commerce-dispute'
+import { orderSyncFields } from './order-shipping-export'
 import {
   formatOrderNumber,
   type HostOrder,
@@ -168,10 +169,15 @@ export function orderListFields(
  * An order document with its list fields spread over it — what a creator
  * writes. The document's own `status` and `channel` win where it names them,
  * which every creator does; the rest is derived from it.
+ *
+ * A creator also stamps whether the order ships and when it last changed
+ * (`orderSyncFields`, AGL-3613): the query the shipping export and the
+ * ShipStation feed ask. Those stay OFF `orderListFields`, which the orders
+ * backfill restates field for field — they are not list columns.
  */
 export function withOrderListFields<T extends object>(
   docId: string,
   doc: T,
-): T & OrderListFields {
-  return { ...doc, ...orderListFields(doc, docId) }
+): T & OrderListFields & { requiresShipping: boolean; updatedAtMs?: number } {
+  return { ...doc, ...orderListFields(doc, docId), ...orderSyncFields(doc) }
 }

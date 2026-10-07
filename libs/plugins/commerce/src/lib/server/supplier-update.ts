@@ -300,6 +300,7 @@ export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
         const shipped = {
             status: nextStatus,
             fulfillments: [...(order.fulfillments ?? []), fulfillment],
+            updatedAtMs: Date.now(),
             timeline: CommerceModel.appendOrderEvent(
               order,
               nextStatus,

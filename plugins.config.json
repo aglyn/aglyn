@@ -845,6 +845,25 @@
           "formats": ["csv", "json", "ndjson"],
           "limits": { "maxRows": 2000 },
           "description": "Every gift card's code, balance and status. An import issues each card, confirmed by the total."
+        },
+        {
+          "$comment": "A file of tracking numbers ships the orders it names (AGL-3613): each row is a parcel matched to its order by number, recorded through the order\u2019s own shipment path (the buyer is emailed), once per tracking number. A row for an order with nothing left to ship replaces its tracking only when the person chooses Overwrite. Nothing creates an order. Export lists every shipment with its tracking.",
+          "key": "commerce.tracking",
+          "label": "Tracking numbers",
+          "singularLabel": "Tracking number",
+          "scope": "host",
+          "kinds": [
+            "records"
+          ],
+          "formats": [
+            "csv",
+            "json",
+            "ndjson"
+          ],
+          "limits": {
+            "maxRows": 5000
+          },
+          "description": "Tracking numbers from a label tool, each recorded as a shipment on the order it names."
         }
       ],
       "contributes": {

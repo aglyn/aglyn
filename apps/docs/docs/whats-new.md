@@ -10,7 +10,15 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — checkout on your own site (newest)
+## October 2026 — Pirate Ship and shipping spreadsheets (newest)
+
+- **[Use Pirate Ship with Aglyn](commerce-and-bookings/commerce/use-pirate-ship.md)** —
+  **Export for shipping** on the Orders card writes the orders still to ship as a
+  spreadsheet Pirate Ship, Shippo or EasyPost reads, and **Import tracking** takes the
+  tool's shipment report back: each order is marked shipped and your customer gets the
+  tracking link. A tracking number already on an order is never recorded twice.
+
+## October 2026 — checkout on your own site
 
 - **[In-page checkout](guides/commerce-end-to-end.md#paying-without-leaving-your-site)** —
   shoppers pay on your store instead of being sent to Stripe's page. The Buy and

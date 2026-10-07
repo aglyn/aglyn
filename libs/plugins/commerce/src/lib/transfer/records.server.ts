@@ -40,7 +40,9 @@ import type {
   TransferRevertResult,
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import type { ListQueryDeclaration } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { ORDER_LIST_QUERY } from '../constants/orders-list-query'
+import type { ProductWeights } from '../model/order-shipping-export'
 import {
   CATEGORY_MATCH_KEYS,
   COUPON_MATCH_KEYS,
@@ -104,14 +106,25 @@ export interface RecordsSpec {
   record(id: string, data: Doc, extra: RecordsExtra): Record<string, unknown>
   /** The values a document is found by, per match key. */
   matchValues(id: string, data: Doc): Record<string, unknown>
-  /** What a lookup or export reads once per call, besides the documents. */
-  extra?(firestore: Firestore, ctx: TransferResourceContext, docs: readonly FirebaseFirestore.DocumentSnapshot[]): Promise<RecordsExtra>
+  /**
+   * What a lookup or export reads once per call, besides the documents. An
+   * export names the fields it writes, so a read only some fields need is
+   * skipped when none of them is asked for.
+   */
+  extra?(
+    firestore: Firestore,
+    ctx: TransferResourceContext,
+    docs: readonly FirebaseFirestore.DocumentSnapshot[],
+    fieldIds?: readonly string[],
+  ): Promise<RecordsExtra>
   /** Finds documents by a key's values (at most 30); the id key is read directly. */
   find?: Record<string, (collection: Collection, values: string[]) => FirebaseFirestore.Query>
 }
 
 export type RecordsExtra = {
   productNames?: Record<string, string>
+  /** Each product's variant weights in grams, for the shipping columns (AGL-3613). */
+  weights?: ProductWeights
   categories?: CategoryIndex
 }
 
@@ -141,7 +154,7 @@ async function readPage(
   refuseFilterWithout(spec, options)
   const pageSize = Math.max(1, Math.min(500, options?.pageSize ?? 500))
   const page = await readSourcePage(firestore, sourceFor(spec, firestore, ctx), cursor, options, pageSize)
-  const extra = await (spec.extra ?? noExtra)(firestore, ctx, page.docs)
+  const extra = await (spec.extra ?? noExtra)(firestore, ctx, page.docs, fieldIds)
   const rows = page.docs.map((doc) => {
     const record = spec.record(doc.id, (doc.data() ?? {}) as Doc, extra)
     return Object.fromEntries(fieldIds.map((fieldId) => [fieldId, record[fieldId] ?? null]))
@@ -229,13 +242,26 @@ function exportOnly(spec: RecordsSpec, noun: string, why: string): PluginTransfe
  * ORDERS — exported only
  *=========================================*/
 
+/**
+ * The orders list's query, with the one predicate the list itself never
+ * shows: `requiresShipping`, which the orders card's Export for shipping
+ * asks (AGL-3613) and every creator stamps.
+ */
+const ORDER_EXPORT_QUERY: ListQueryDeclaration = {
+  ...ORDER_LIST_QUERY,
+  fields: [
+    ...ORDER_LIST_QUERY.fields,
+    { column: 'requiresShipping', kind: 'exact', path: 'requiresShipping', operators: ['equals'] },
+  ],
+}
+
 const ORDERS: RecordsSpec = {
   collection: (firestore, ctx) => hostRefOf(firestore, ctx).collection('orders'),
-  source: { declaration: ORDER_LIST_QUERY, order: { path: 'createdAtMs', direction: 'desc' } },
-  record: (id, data, extra) => orderRecord(id, data as StoredOrder, extra.productNames),
+  source: { declaration: ORDER_EXPORT_QUERY, order: { path: 'createdAtMs', direction: 'desc' } },
+  record: (id, data, extra) => orderRecord(id, data as StoredOrder, extra.productNames, extra.weights),
   matchValues: (id) => ({ id }),
   /** A legacy flat row is named by its product, read for that page alone. */
-  async extra(firestore, ctx, docs) {
+  async extra(firestore, ctx, docs, fieldIds) {
     const ids = [
       ...new Set(
         docs
@@ -250,8 +276,48 @@ const ORDERS: RecordsSpec = {
         if (doc.exists && doc.get('name')) productNames[doc.id] = String(doc.get('name'))
       }
     }
-    return { productNames }
+    // The page's products are read for their weights only when a weight
+    // column is written (AGL-3613) — never for an ordinary orders export.
+    const wantsWeight = (fieldIds ?? []).some((fieldId) => fieldId === 'weightOz' || fieldId === 'weightLb' || fieldId === 'weightUnit')
+    return { productNames, ...(wantsWeight ? { weights: await productWeightsFor(firestore, ctx, docs) } : {}) }
   },
+}
+
+/**
+ * The products a page of orders names, by variant weight in grams. One
+ * `getAll` per hundred products.
+ */
+async function productWeightsFor(
+  firestore: Firestore,
+  ctx: TransferResourceContext,
+  docs: readonly FirebaseFirestore.DocumentSnapshot[],
+): Promise<ProductWeights> {
+  const ids = [
+    ...new Set(
+      docs.flatMap((doc) =>
+        ((doc.get('lineItems') as Array<{ productId?: unknown }> | undefined) ?? [])
+          .map((line) => (typeof line?.productId === 'string' ? line.productId : ''))
+          .filter((id) => id && !id.includes('/')),
+      ),
+    ),
+  ]
+  const weights: Record<string, Record<string, number>> = {}
+  const products = hostRefOf(firestore, ctx).collection('products')
+  for (let at = 0; at < ids.length; at += 100) {
+    for (const doc of await firestore.getAll(...ids.slice(at, at + 100).map((id) => products.doc(id)))) {
+      if (!doc.exists) continue
+      const variants = (doc.get('variants') as Array<{ id?: string; weightGrams?: unknown }> | undefined) ?? []
+      const byVariant: Record<string, number> = {}
+      for (const [index, variant] of variants.entries()) {
+        const grams = Number(variant?.weightGrams)
+        if (!Number.isFinite(grams) || grams <= 0) continue
+        if (variant?.id) byVariant[variant.id] = grams
+        if (index === 0) byVariant[''] = grams
+      }
+      if (Object.keys(byVariant).length) weights[doc.id] = byVariant
+    }
+  }
+  return weights
 }
 
 export const ordersTransfer: PluginTransferResource = exportOnly(

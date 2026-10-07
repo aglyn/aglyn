@@ -822,7 +822,7 @@ async function recordDisputeClosed(
           snapshot.id,
         ),
         ...(reversedCents > 0 ? { refundedCents: reversedTotal } : {}),
-        ...(closedTheOrder ? { status: 'refunded' } : {}),
+        ...(closedTheOrder ? { status: 'refunded', updatedAtMs: Date.now() } : {}),
         dispute: settled,
         timeline: CommerceModel.appendOrderEvent(
           order,
@@ -4327,6 +4327,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               customerEmail:
                 object?.customer_details?.email ?? lifted.customerEmail ?? null,
               timeline: CommerceModel.appendOrderEvent(lifted, 'paid'),
+              // A paid draft is new to a shipping tool's feed (AGL-3613).
+              updatedAtMs: Date.now(),
               ...(shippingCents > 0 || stripeTaxCents > 0
                 ? {
                     totals: {
