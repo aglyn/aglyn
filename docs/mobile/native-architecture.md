@@ -217,7 +217,12 @@ A screen gets a `NativePluginContext`, the twin of `MobilePluginContext`:
   REST;
 - `api`;
 - `navigate(screenId, params)`;
-- `openBesigner(path, scope)`, which accepts Besigner paths only; there is no general console-page opener.
+- `openBesigner(path, scope)`, which opens a Besigner page (a path whose last
+  segment is `besigner`) in the app's web view and refuses any other path. A
+  quick action opens a screen or a `besignerPath`, never a console page, and
+  a link no plugin answers resolves to `.besigner` or `.unavailable`, never
+  to a console web page. The web view itself refuses a main-frame navigation
+  off the Besigner and hands the path back to the app's own resolver.
 
 ### Generated native manifest
 
@@ -699,6 +704,35 @@ The SDK flow needs a connection token scoped to the site's Location. That is
 the `commerce/pos-terminal-connection-token` route, which the AGL-3618 lane
 wrote and parked on `reference/rn-pos-mobile-agl3618`. The native POS lands it
 on `main`, because it is server code with nothing RN in it.
+
+### As built (Apple)
+
+- The register is the commerce plugin's Swift package
+  (`libs/plugins/commerce/src/ios`, `AglynCommercePlugin`): `commerce.register`
+  and `commerce.card-readers`, both `.pos`. The same package gives the Aglyn
+  app its store, natively: orders (the orders page's `ORDER_LIST_QUERY` with
+  status chips and search; the detail, with fulfill, deliver and cancel
+  through `fulfill-order` and `cancel-order`), products (`PRODUCT_LIST_QUERY`;
+  the detail), a barcode scan that finds a product (VisionKit's live scanner
+  on iPhone and iPad, a typed or USB-scanned code everywhere), sales (today
+  and the last seven days), Home's two sales cards and its quick actions.
+- The collect sequence (retrieve, collect, confirm), the reader prompts and
+  the error words are in `AglynHardware/DeviceReader.swift`, the twin of the
+  Kotlin `DeviceReader.kt`, tested with a fake `TerminalPaymentPort`.
+  `StripeTerminalCollector` (iOS only) binds the SDK to it. It connects the
+  first reader discovery finds (this iPhone for Tap to Pay, the nearest
+  Bluetooth reader), with the SDK's simulated readers whenever the
+  connection token says test mode. Card-present payments settle on the
+  platform account, so the connection never sets `onBehalfOf`.
+- The Stripe Terminal iOS SDK comes through SPM, pinned `exact: 6.0.0`, as a
+  dependency of the plugin package only, conditional on iOS, so the Mac
+  builds never see it. Both iOS apps link the one plugin manifest, so the
+  Aglyn app carries the framework too, although only `.pos` screens ever
+  construct a reader. Before the first App Store submission the manifest must
+  split per app (or the Aglyn app must declare the same usage strings), since
+  App Review reads the linked frameworks. Aglyn POS declares
+  `NSBluetoothAlwaysUsageDescription` and `NSLocationWhenInUseUsageDescription`.
+  Tap to Pay on a real iPhone also needs Apple's Tap to Pay entitlement (§12).
 
 Peripherals live in the `AglynHardware` / `hardware` module:
 

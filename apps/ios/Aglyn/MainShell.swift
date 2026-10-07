@@ -58,7 +58,7 @@ struct MainShell: View {
     case .home: HomeView()
     case .notifications: NotificationsView()
     case .settings: SettingsView()
-    case .more: ConsoleScreen(path: model.scopedConsolePath("/", scope: .site))
+    case .more: MoreView()
     case .plugin(let screen): PluginScreenView(screenID: screen)
     }
   }
@@ -110,12 +110,11 @@ struct MainShell: View {
             }
           }
         }
-        Section {
-          Label("Console", systemImage: "safari").tag(ShellSection.more)
-          #if os(iOS)
+        #if os(iOS)
+          Section {
             Label("Settings", systemImage: "gearshape").tag(ShellSection.settings)
-          #endif
-        }
+          }
+        #endif
       }
       .navigationTitle(model.brandName)
       #if os(iOS)
@@ -165,5 +164,50 @@ struct ScopeFooter: View {
     .buttonStyle(.plain)
     .accessibilityLabel("Switch workspace or site")
     .accessibilityIdentifier("sidebar-switcher")
+  }
+}
+
+/// Every area the app has a screen for that the tab bar has no room for,
+/// on iPhone: the plugins' site screens, then the app's own.
+struct MoreView: View {
+  @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
+
+  var body: some View {
+    let tabs = Set(model.registry.tabs(for: .aglyn).map(\.screen))
+    let screens = SidebarScreen.all(model).filter { !tabs.contains($0.screen) }
+    List {
+      if !screens.isEmpty {
+        Section(model.workspace?.site?.name ?? "Site") {
+          ForEach(screens) { item in
+            Button {
+              navigation.push(.screen(item.screen, [:]))
+            } label: {
+              AglynRow(item.title, systemImage: item.icon) {
+                Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
+              }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("more-\(item.id)")
+          }
+        }
+      }
+      Section {
+        Button {
+          navigation.select(.notifications)
+        } label: {
+          AglynRow("Notifications", systemImage: "bell")
+        }
+        .buttonStyle(.plain)
+        Button {
+          navigation.select(.settings)
+        } label: {
+          AglynRow("Settings", systemImage: "gearshape")
+        }
+        .buttonStyle(.plain)
+      }
+    }
+    .aglynListBackground()
+    .navigationTitle("More")
   }
 }

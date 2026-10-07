@@ -14,7 +14,8 @@ struct RouteView: View {
   var body: some View {
     switch route {
     case .screen(let id, let params): PluginScreenView(screenID: id, params: params)
-    case .console(let path): ConsoleScreen(path: path)
+    case .besigner(let path): BesignerScreen(path: path)
+    case .unavailable(let path): NotInAppView(path: path)
     }
   }
 }
@@ -49,9 +50,24 @@ struct PluginScreenView: View {
   }
 }
 
-/// A console page in the authenticated WebView, signed in with the app's
-/// own session: the long tail of the console that has no native screen.
-struct ConsoleScreen: View {
+/// A console link the app has no native screen for yet. Console areas are
+/// native screens; the app never opens the console page instead.
+struct NotInAppView: View {
+  @Environment(AppModel.self) private var model
+  let path: String
+
+  var body: some View {
+    AglynEmptyState(
+      "This page is not in the app yet", systemImage: "questionmark.square.dashed",
+      message: "\(model.brandName) opens it here once its screen is built.")
+    .navigationTitle("Not in the app")
+    .accessibilityIdentifier("not-in-app")
+  }
+}
+
+/// The Besigner in the authenticated web view, signed in with the app's own
+/// session: the only web content the apps show. Any other path is refused.
+struct BesignerScreen: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
   let path: String
@@ -68,13 +84,15 @@ struct ConsoleScreen: View {
     Group {
       switch state {
       case .starting:
-        ProgressView("Opening the console")
+        ProgressView("Opening the Besigner")
       case .failed(let message):
-        AglynEmptyState("The console did not open", systemImage: "exclamationmark.triangle", message: message) {
+        AglynEmptyState("The Besigner did not open", systemImage: "exclamationmark.triangle", message: message) {
           Button("Try again") { Task { await start() } }
         }
       case .ready(let cookies):
-        if let config = model.config, let url = ConsoleWebView.url(origin: config.consoleOrigin, path: path) {
+        if DeepLinks.isBesignerPath(path), let config = model.config,
+          let url = ConsoleWebView.url(origin: config.consoleOrigin, path: path)
+        {
           ConsoleWebView(
             url: url, trustedOrigins: [config.consoleOrigin], cookies: cookies.compactMap(\.cookie),
             model: webModel,
@@ -92,13 +110,15 @@ struct ConsoleScreen: View {
                 return nil
               },
             ],
-            info: ["app": .string(model.app == .pos ? "aglyn-pos" : "aglyn")]
+            info: ["app": .string(model.app == .pos ? "aglyn-pos" : "aglyn")],
+            allowsPath: { DeepLinks.isBesignerPath($0) },
+            onRefusedPath: { model.open($0, in: navigation) }
           )
           .ignoresSafeArea(edges: .bottom)
         }
       }
     }
-    .navigationTitle(webModel.title.isEmpty ? "Console" : webModel.title)
+    .navigationTitle(webModel.title.isEmpty ? "Besigner" : webModel.title)
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
     #endif
@@ -116,7 +136,7 @@ struct ConsoleScreen: View {
     state = .starting
     guard let config = model.config, let auth = model.auth,
       let token = try? await auth.idToken(forceRefresh: false) else {
-      state = .failed("Sign in again to open the console.")
+      state = .failed("Sign in again to open the Besigner.")
       return
     }
     switch await ConsoleSession.mint(origin: config.consoleOrigin, idToken: token) {

@@ -6,9 +6,8 @@ import AglynPluginHost
 import AglynUI
 import SwiftUI
 
-/// The site's redirect rules. Read-only in the app; in a wide window the
-/// list sits beside the selected rule's detail. Editing opens the console's
-/// own Redirects page, which owns the validation and the publish role a rule needs.
+/// The site's redirect rules; in a wide window the list sits beside the
+/// selected rule's detail.
 struct RedirectsListScreen: View {
   let context: NativePluginContext
   @State private var model = HostRedirectsModel()
@@ -28,16 +27,6 @@ struct RedirectsListScreen: View {
       }
     }
     .navigationTitle("Redirects")
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          context.openConsolePath("/redirects", scope: .site)
-        } label: {
-          Label("Manage in the console", systemImage: "safari")
-        }
-        .help("Manage in the console")
-      }
-    }
     .task(id: context.hostID) { model.start(context.firestore, hostID: context.hostID) }
     .onDisappear { model.stop() }
   }
@@ -51,10 +40,7 @@ struct RedirectsListScreen: View {
     } else if model.rows.isEmpty {
       AglynEmptyState(
         "No redirects yet", systemImage: RedirectsSymbols.rule,
-        message: "Rules you add in the console show up here."
-      ) {
-        Button("Manage in the console") { context.openConsolePath("/redirects", scope: .site) }
-      }
+        message: "Rules added to this site show up here.")
     } else if selectable {
       List(model.rows, selection: $selection) { row in
         RedirectListRow(row: row).tag(row.id)

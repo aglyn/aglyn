@@ -104,29 +104,17 @@ final class AppModel {
       firestore: reader,
       api: api,
       navigate: { [weak navigation] screen, params in navigation?.push(.screen(screen, params)) },
-      openConsolePath: { [weak self, weak navigation] path, scope in
-        guard let self, let navigation else { return }
-        navigation.push(.console(self.scopedConsolePath(path, scope: scope)))
-      })
-  }
-
-  func scopedConsolePath(_ path: String, scope: ConsolePathScope) -> String {
-    let rest = path.hasPrefix("/") ? path : "/\(path)"
-    switch scope {
-    case .absolute: return rest
-    case .org: return workspace?.org.map { "/\($0.slug)\(rest)" } ?? rest
-    case .site:
-      guard let org = workspace?.org, let site = workspace?.site else { return rest }
-      return "/\(org.slug)/hosts/\(site.subdomain.isEmpty ? site.id : site.subdomain)\(rest)"
-    }
+      openBesigner: { [weak navigation] path in navigation?.push(.besigner(path)) })
   }
 
   /// Opens a console link (universal link, `aglyn://`, a notification's
-  /// link): natively when a plugin answers it, otherwise in the console WebView.
+  /// link): natively when a plugin answers it, a Besigner page in the app's
+  /// web view, and otherwise a note that the app has no screen for it yet.
   func open(_ link: String, in navigation: ShellNavigation) {
     switch registry.resolve(link) {
     case .screen(let screen, let params)?: navigation.push(.screen(screen, params))
-    case .console(let path)?: navigation.push(.console(path))
+    case .besigner(let path)?: navigation.push(.besigner(path))
+    case .unavailable(let path)?: navigation.push(.unavailable(path))
     case nil: break
     }
   }

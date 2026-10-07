@@ -86,62 +86,23 @@ struct HomeView: View {
 
   // MARK: 2. Quick actions
 
-  /// The site's console pages the shell offers beside the plugins' own actions.
-  private struct ShellAction: Identifiable {
-    let id: String
-    let title: String
-    let icon: String
-    let order: Int
-    let path: String
-  }
-
-  private static let shellActions = [
-    ShellAction(id: "shell.pages", title: "Pages", icon: "doc.text", order: 100, path: "/screens"),
-    ShellAction(id: "shell.media", title: "Media", icon: "photo.on.rectangle", order: 200, path: "/media"),
-    ShellAction(id: "shell.analytics", title: "Analytics", icon: "chart.xyaxis.line", order: 300, path: "/analytics"),
-  ]
-
-  private enum Tile: Identifiable {
-    case shell(ShellAction)
-    case plugin(NativeQuickAction)
-
-    var id: String {
-      switch self {
-      case .shell(let action): action.id
-      case .plugin(let action): action.id
-      }
-    }
-    var order: Int {
-      switch self {
-      case .shell(let action): action.order
-      case .plugin(let action): action.order
-      }
-    }
-  }
-
   private var quickActions: some View {
-    let plugin = model.registry.quickActions(for: .aglyn).filter { hasSite || !$0.requiresSite }.map(Tile.plugin)
-    let shell = hasSite ? Self.shellActions.map(Tile.shell) : []
-    let tiles = (shell + plugin).sorted { $0.order != $1.order ? $0.order < $1.order : $0.id < $1.id }
-    return VStack(alignment: .leading, spacing: AglynSpace.oneAndHalf) {
-      AglynSectionHeader("Quick actions")
-      AglynGrid(minimum: 76) {
-        ForEach(tiles) { tile in
-          switch tile {
-          case .shell(let action):
-            QuickActionTile(action.title, systemImage: action.icon) {
-              navigation.push(.console(model.scopedConsolePath(action.path, scope: .site)))
-            }
-            .accessibilityIdentifier("quick-action-\(action.id)")
-          case .plugin(let action):
-            QuickActionTile(action.title, systemImage: action.icon) {
-              if let screen = action.screen {
-                navigation.push(.screen(screen, action.params))
-              } else if let path = action.consolePath {
-                navigation.push(.console(model.scopedConsolePath(path, scope: .site)))
+    let actions = model.registry.quickActions(for: .aglyn).filter { hasSite || !$0.requiresSite }
+    return Group {
+      if !actions.isEmpty {
+        VStack(alignment: .leading, spacing: AglynSpace.oneAndHalf) {
+          AglynSectionHeader("Quick actions")
+          AglynGrid(minimum: 76) {
+            ForEach(actions) { action in
+              QuickActionTile(action.title, systemImage: action.icon) {
+                if let screen = action.screen {
+                  navigation.push(.screen(screen, action.params))
+                } else if let path = action.besignerPath, let context = model.context(for: navigation) {
+                  context.openBesigner(path)
+                }
               }
+              .accessibilityIdentifier("quick-action-\(action.id)")
             }
-            .accessibilityIdentifier("quick-action-\(action.id)")
           }
         }
       }
@@ -163,10 +124,7 @@ struct HomeView: View {
             "Published pages", systemImage: "doc.text",
             value: site.loaded ? pages.map(String.init) ?? "0" : nil,
             caption: pages == 0 ? "Nothing published yet" : pages == 1 ? "page visitors can open" : "pages visitors can open",
-            actionLabel: "Manage pages", failed: site.failed ? "Could not load this site." : nil
-          ) {
-            navigation.push(.console(model.scopedConsolePath("/screens", scope: .site)))
-          }
+            failed: site.failed ? "Could not load this site." : nil)
           .accessibilityIdentifier("glance-pages")
         }
         MetricCard(
