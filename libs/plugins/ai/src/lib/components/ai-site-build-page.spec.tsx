@@ -226,6 +226,8 @@ describe('a guided start that put the site live (AGL-3596)', () => {
     await open(done(SITE_PUBLISH))
     expect(await screen.findByRole('heading', { name: 'Your site is live' })).toBeTruthy()
     expect(screen.queryByText(/drafts/)).toBeNull()
+    // The shared notice every new site goes live with, address and all (AGL-3663).
+    expect(screen.getByText('groomer.aglyn.app/')).toBeTruthy()
     const view = screen.getByRole('link', { name: 'View your site' })
     expect(view.getAttribute('href')).toBe('https://groomer.aglyn.app/')
     expect(view.getAttribute('target')).toBe('_blank')
