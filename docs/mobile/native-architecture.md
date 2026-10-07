@@ -445,6 +445,13 @@ must not hand-copy them. `tools/scripts/generate-native-contracts.mjs`
   `orderPaidCents` and `apportionCents`. Each platform ports them once, in its
   shared kit, and replays every case, so a native screen formats a number,
   amount or time exactly as the console does.
+- Apple: `ContractValues.shared` reads `contracts.generated.json`, bundled
+  with `AglynContracts` through a link in `Sources/AglynContracts/Resources`.
+  The formatters and rules live in `AglynContracts` (`OrderFormatters.swift`,
+  whole cents as `Int`); `planListQuery`, the name-search normalizers and
+  `ListQueryPlan.apply(to:limit:)` (the plan on a Firebase `Query`) live in
+  `AglynCore/ListQuery`. `AglynContractsTests` and `AglynCoreTests` replay the
+  case files from `libs/native/contracts` by path.
 
 ## 6. Notification catalog
 

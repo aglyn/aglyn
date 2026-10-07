@@ -64,7 +64,17 @@ if (staged) {
     .split('\0')
     .filter(Boolean)
     .filter(isSwept)
-  for (const path of paths) files.push({ path, text: git(['show', `:${path}`]) })
+  // A staged symlink's blob is its target path, not JSON; the file it points
+  // at is swept under its own name.
+  const links = new Set(
+    git(['ls-files', '--stage', '-z'])
+      .split('\0')
+      .filter((entry) => entry.startsWith('120000 '))
+      .map((entry) => entry.slice(entry.indexOf('\t') + 1)),
+  )
+  for (const path of paths) {
+    if (!links.has(path)) files.push({ path, text: git(['show', `:${path}`]) })
+  }
 } else {
   const paths = git(['ls-files', '-z']).split('\0').filter(Boolean).filter(isSwept).sort()
   for (const path of paths) {

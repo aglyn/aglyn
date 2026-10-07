@@ -24,16 +24,20 @@ let package = Package(
     .target(
       name: "AglynCore",
       dependencies: [
+        "AglynContracts",
         .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
         .product(name: "FirebaseFirestore", package: "firebase-ios-sdk"),
       ]
     ),
     .target(name: "AglynUI", resources: [.process("Resources")]),
-    .target(name: "AglynContracts"),
+    // contracts.generated.json is a link to libs/native/contracts, so the
+    // bundled values are always the generated ones.
+    .target(name: "AglynContracts", resources: [.copy("Resources/contracts.generated.json")]),
     .target(name: "AglynHardware"),
     .target(name: "AglynWebView", dependencies: ["AglynCore"]),
     .target(name: "AglynPluginHost", dependencies: ["AglynCore", "AglynUI", "AglynWebView"]),
-    .testTarget(name: "AglynCoreTests", dependencies: ["AglynCore"]),
+    .testTarget(name: "AglynContractsTests", dependencies: ["AglynContracts"]),
+    .testTarget(name: "AglynCoreTests", dependencies: ["AglynCore", "AglynContracts"]),
     .testTarget(name: "AglynPluginHostTests", dependencies: ["AglynPluginHost", "AglynWebView"]),
   ]
 )
