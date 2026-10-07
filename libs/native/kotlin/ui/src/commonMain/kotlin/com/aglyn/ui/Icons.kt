@@ -42,6 +42,31 @@ import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.automirrored.outlined.Launch
 import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.CardGiftcard
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.ClearAll
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Contactless
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Keyboard
+import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Payments
+import androidx.compose.material.icons.outlined.Percent
+import androidx.compose.material.icons.outlined.Print
+import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Remove
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Sell
+import androidx.compose.material.icons.outlined.ShoppingBasket
+import androidx.compose.material.icons.outlined.Sms
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -91,6 +116,33 @@ object AglynIcons {
     "info" to Icons.Outlined.Info,
     "logout" to Icons.AutoMirrored.Outlined.Logout,
     "launch" to Icons.AutoMirrored.Outlined.Launch,
+    "search" to Icons.Outlined.Search,
+    "qr_code_scanner" to Icons.Outlined.QrCodeScanner,
+    "add" to Icons.Outlined.Add,
+    "remove" to Icons.Outlined.Remove,
+    "delete" to Icons.Outlined.DeleteOutline,
+    "shopping_basket" to Icons.Outlined.ShoppingBasket,
+    "payments" to Icons.Outlined.Payments,
+    "card_giftcard" to Icons.Outlined.CardGiftcard,
+    "contactless" to Icons.Outlined.Contactless,
+    "print" to Icons.Outlined.Print,
+    "mail" to Icons.Outlined.MailOutline,
+    "sms" to Icons.Outlined.Sms,
+    "close" to Icons.Outlined.Close,
+    "check" to Icons.Outlined.Check,
+    "keyboard" to Icons.Outlined.Keyboard,
+    "sell" to Icons.Outlined.Sell,
+    "percent" to Icons.Outlined.Percent,
+    "history" to Icons.Outlined.History,
+    "refresh" to Icons.Outlined.Refresh,
+    "schedule" to Icons.Outlined.Schedule,
+    "wifi_off" to Icons.Outlined.WifiOff,
+    "more_vert" to Icons.Outlined.MoreVert,
+    "pause" to Icons.Outlined.PauseCircle,
+    "barcode" to Icons.Outlined.QrCodeScanner,
+    "tune" to Icons.Outlined.Tune,
+    "clear_all" to Icons.Outlined.ClearAll,
+    "bookmark" to Icons.Outlined.BookmarkBorder,
   )
 
   fun named(name: String?): ImageVector = byName[name] ?: Icons.Outlined.Extension
