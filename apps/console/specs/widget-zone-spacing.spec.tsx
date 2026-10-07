@@ -354,6 +354,7 @@ describe('every zone says how it places its widgets', () => {
       'besignerToolbar',
       'besignerInspector',
       'seoFields',
+      'themeEditorFonts',
       'consoleDock',
       'consoleTopBar',
     ]) {

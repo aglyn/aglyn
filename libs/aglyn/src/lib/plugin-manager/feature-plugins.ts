@@ -845,6 +845,18 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   hostTheme: 'hostTheme',
   /**
+   * Inside the theme editor's Typography card (AGL-3656): the control that
+   * chooses the site's fonts. Props: {@link ConsoleThemeEditorFontsZoneProps}
+   * — the site, the editor's draft, and `updateDraft`, which changes the
+   * draft as any of the editor's own controls does.
+   *
+   * A widget here edits the draft and never writes: the editor's Save keeps
+   * the change and Discard drops it, with the preview beside it following
+   * every step. With no widget the editor offers its own short list of
+   * fonts, so a workspace without a fonts plugin can still choose one.
+   */
+  themeEditorFonts: 'themeEditorFonts',
+  /**
    * The staff overview, among its platform-wide cards (AGL-3080). No props:
    * the overview is about the platform, not one org, so a widget here reads
    * what its plugin holds across every workspace through its own staff
@@ -1451,6 +1463,19 @@ export interface ConsoleHostThemeZoneProps {
    * the editor has saved or discarded it.
    */
   proposeDraft: (theme: HostTheme, key: string) => void
+}
+
+/** What the `themeEditorFonts` zone hands each widget (AGL-3656). */
+export interface ConsoleThemeEditorFontsZoneProps {
+  /** The site whose theme is being edited; `null` on an editor that names none. */
+  hostId: string | null
+  /** The editor's draft: the saved theme with every unsaved edit on it. */
+  draft: HostTheme
+  /**
+   * Changes the draft. The updater gets the draft as it is when the change
+   * applies, so two edits in one tick both land.
+   */
+  updateDraft: (updater: (draft: HostTheme) => HostTheme) => void
 }
 
 /**

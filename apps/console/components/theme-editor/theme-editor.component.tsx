@@ -37,7 +37,6 @@ import {
 } from '@mui/material'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import dynamic from 'next/dynamic'
-import Head from 'next/head'
 import { stableStringify } from '@aglyn/aglyn/app-utils/artifact-provenance'
 import { useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
@@ -75,6 +74,7 @@ import {
   writeThemeColor,
   writeToolbarHeight,
 } from './theme-editor.constants'
+import ThemeFontControl from './theme-font-control.component'
 import ThemePreview from './theme-preview.component'
 
 const JsonEditor = dynamic<JsonEditorProps>(
@@ -339,14 +339,16 @@ export function ThemeEditor(props: ThemeEditorProps) {
 
   return (
     <Grid container spacing={3}>
+      {/* The draft's fonts, for the preview. A stylesheet `<link>` with a
+          `precedence` is hoisted into the head by React itself: `next/head`,
+          which this used, renders nothing under the App Router, so the
+          preview drew every font choice in the fallback face (AGL-3656). */}
       {previewFontsHref ? (
-        <Head>
-          <link
-            key="theme-editor-fonts"
-            rel="stylesheet"
-            href={previewFontsHref}
-          />
-        </Head>
+        <link
+          rel="stylesheet"
+          href={previewFontsHref}
+          precedence="theme-editor-fonts"
+        />
       ) : null}
       <Grid size={{ xs: 12, md: 6 }}>
         <Stack spacing={3}>
@@ -421,27 +423,35 @@ export function ThemeEditor(props: ThemeEditorProps) {
                 'Choose the heading and body font families and base sizing your whole site inherits.',
             })}
           >
-            <TextField
-              select
-              fullWidth
-              size="small"
-              label={FONT_FAMILY_FIELD.label}
-              value={activeFontFamily}
-              onChange={handleFontChange}
-            >
-              {/* The inherited stack is a long CSS font list; its first family
-                  names what "Theme default" actually gives you. */}
-              <MenuItem value={SYSTEM_FONT_VALUE}>
-                {INHERITED_FONT_FAMILY
-                  ? `Theme default (${INHERITED_FONT_FAMILY})`
-                  : 'Theme default'}
-              </MenuItem>
-              {GOOGLE_FONT_OPTIONS.map((option) => (
-                <MenuItem key={option.family} value={option.family}>
-                  {`${option.family} (${option.category})`}
-                </MenuItem>
-              ))}
-            </TextField>
+            {/* The fonts plugin's picker where the workspace has it
+                (AGL-3656), else the editor's own short list. */}
+            <ThemeFontControl
+              draft={draft}
+              updateDraft={setDraft}
+              fallback={
+                <TextField
+                  select
+                  fullWidth
+                  size="small"
+                  label={FONT_FAMILY_FIELD.label}
+                  value={activeFontFamily}
+                  onChange={handleFontChange}
+                >
+                  {/* The inherited stack is a long CSS font list; its first
+                      family names what "Theme default" actually gives you. */}
+                  <MenuItem value={SYSTEM_FONT_VALUE}>
+                    {INHERITED_FONT_FAMILY
+                      ? `Theme default (${INHERITED_FONT_FAMILY})`
+                      : 'Theme default'}
+                  </MenuItem>
+                  {GOOGLE_FONT_OPTIONS.map((option) => (
+                    <MenuItem key={option.family} value={option.family}>
+                      {`${option.family} (${option.category})`}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              }
+            />
           </CardDisplay>
 
           <CardDisplay
