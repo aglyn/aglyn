@@ -98,6 +98,37 @@ export interface AutomationRunZoneProps {
 export const HOST_AUTOMATIONS_ZONE =
   definePluginZone<HostAutomationsZoneProps>('hostAutomations')
 
+/**
+ * The workspace's Org automations section, in its card's header (AGL-3603):
+ * another way to start an org automation, drawn for a member who may write
+ * them. `triggers` and `steps` are what an org automation may start on and
+ * hold — this plugin's own lists, handed over so a widget never restates
+ * them. `propose` opens an automation in the section's editor as a NEW one,
+ * unsaved and switched off, and answers `false` when the editor cannot take
+ * it. A widget here writes nothing: the editor's Save, through the section's
+ * route, is the write.
+ */
+export interface OrgAutomationsZoneProps {
+  orgId: string
+  triggers: readonly string[]
+  steps: readonly string[]
+  propose: (automation: OrgAutomationProposal) => boolean
+}
+
+/** An automation a widget proposes to the Org automations editor. */
+export interface OrgAutomationProposal {
+  name: string
+  trigger: {
+    event: string
+    conditions?: ReadonlyArray<{ field: string; op: string; value?: string }>
+    combinator?: 'and' | 'or'
+  }
+  steps: ReadonlyArray<Record<string, unknown> & { type: string }>
+}
+
+export const ORG_AUTOMATIONS_ZONE =
+  definePluginZone<OrgAutomationsZoneProps>('orgAutomations')
+
 export const AUTOMATION_EDITOR_ZONE =
   definePluginZone<AutomationEditorZoneProps>('automationEditor')
 
