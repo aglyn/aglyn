@@ -18,6 +18,7 @@
  */
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import type { ConsoleWidgetEntitlementProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import type { ConsoleHostAutomationsZoneProps } from './ai-automation-zones'
 import { mdiCreation } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -37,6 +38,7 @@ import {
 } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { openAiJobs } from './ai-jobs-store'
+import { AiUpsellButton } from './ai-upsell-dialog.component'
 import { aiJobProblem, useAiJobRun, useAiJobsVerdict } from './use-ai-job-run'
 
 /**
@@ -206,13 +208,24 @@ export function AiAutomationBriefDialog(props: AiAutomationBriefDialogProps) {
 
 /**
  * Renders nothing until the jobs route has answered for this workspace, and
- * nothing when it says the feature is not this workspace's.
+ * nothing when it says the feature is not this workspace's — except on a plan
+ * that could buy the AI add-on (AGL-3601), where the shell mounts it with
+ * `entitled={false}` and the same button opens the add-on's dialog.
  */
-export function AiDescribeAutomationButton({ hostId, orgId, openAction }: ConsoleHostAutomationsZoneProps) {
+export function AiDescribeAutomationButton({
+  hostId,
+  orgId,
+  openAction,
+  entitled,
+  upgrade,
+}: ConsoleHostAutomationsZoneProps & ConsoleWidgetEntitlementProps) {
   const { data: user } = useUser()
   const verdict = useAiJobsVerdict(user, orgId)
   const [open, setOpen] = useState(false)
 
+  if (verdict === 'upsell' && entitled === false && upgrade) {
+    return <AiUpsellButton kind="workflow" upgrade={upgrade} />
+  }
   if (verdict !== 'ready') return null
   return (
     <>
