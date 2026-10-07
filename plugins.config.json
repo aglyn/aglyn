@@ -397,8 +397,13 @@
       },
       "mobile": {
         "$comment": "AGL-3621: the Aglyn app's store screens. Orders (list, detail, fulfill, refund, receipt print and share), products (list, edit, camera photos to the DAM, stock), barcode scan, and the sales and traffic dashboard; list and detail split side by side on tablets.",
+        "android": {
+          "$comment": "AGL-3652: the Aglyn POS register (item grid, basket, checkout, receipt), its card readers panel and today's bookings at the counter; the Aglyn app's store screens open the console's pages until their native versions land.",
+          "package": "com.aglyn.plugins.commerce",
+          "register": "registerCommerceNative"
+        },
         "contributes": {
-          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales"],
+          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers"],
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
           "widgets": ["commerce.today", "commerce.sales-trend"],
           "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],

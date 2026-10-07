@@ -28,5 +28,8 @@ kotlin {
       api(project(":native-plugin-host"))
       for (id in pluginIds) implementation(project(":plugin-$id"))
     }
+    commonTest.dependencies {
+      implementation(kotlin("test"))
+    }
   }
 }
