@@ -175,7 +175,7 @@ describe('the org profile card', () => {
 
 describe('the default-sharing card on its new home', () => {
   it('posts the chosen scope to the settings route', async () => {
-    render(<OrgDefaultSharingCard />)
+    render(<OrgDefaultSharingCard kind="data" />)
     fireEvent.mouseDown(screen.getByRole('combobox'))
     fireEvent.click(
       screen.getByRole('option', {
@@ -192,7 +192,7 @@ describe('the default-sharing card on its new home', () => {
 
   it('shows the value stored on the ORG DOCUMENT, not the membership', () => {
     mockOrgDoc = { ...mockOrgDoc, defaultResourceScope: 'host' }
-    const { container } = render(<OrgDefaultSharingCard />)
+    const { container } = render(<OrgDefaultSharingCard kind="data" />)
     // The select's own form value, not its rendered label.
     expect(
       (container.querySelector('input') as HTMLInputElement | null)?.value,
@@ -206,9 +206,52 @@ describe('the default-sharing card on its new home', () => {
     // back at `currentOrg`, this fixture makes it say `host` and this test
     // is the one that notices.
     mockMembership = { ...mockMembership, defaultResourceScope: 'host' }
-    const { container } = render(<OrgDefaultSharingCard />)
+    const { container } = render(<OrgDefaultSharingCard kind="data" />)
     expect(
       (container.querySelector('input') as HTMLInputElement | null)?.value,
     ).toBe('org')
+  })
+})
+
+/**
+ * Media and datasets were one field and one card until AGL-3662. The media
+ * card writes its own field, and shows the dataset value only while its own
+ * is unset — which is what the upload routes stamp from.
+ */
+describe('the media card is its own setting', () => {
+  it('posts the media field, never the dataset one', async () => {
+    render(<OrgDefaultSharingCard kind="media" />)
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    fireEvent.click(
+      screen.getByRole('option', {
+        name: /only the site they were created in/i,
+      }),
+    )
+
+    await waitFor(() => expect(mockRequests).toHaveLength(1))
+    expect(mockRequests[0]).toEqual({
+      action: 'set-default-media-scope',
+      defaultMediaScope: 'host',
+    })
+  })
+
+  it('shows its own value over the dataset one', () => {
+    mockOrgDoc = {
+      ...mockOrgDoc,
+      defaultResourceScope: 'host',
+      defaultMediaScope: 'org',
+    }
+    const { container } = render(<OrgDefaultSharingCard kind="media" />)
+    expect(
+      (container.querySelector('input') as HTMLInputElement | null)?.value,
+    ).toBe('org')
+  })
+
+  it('inherits the dataset value while its own is unset', () => {
+    mockOrgDoc = { ...mockOrgDoc, defaultResourceScope: 'host' }
+    const { container } = render(<OrgDefaultSharingCard kind="media" />)
+    expect(
+      (container.querySelector('input') as HTMLInputElement | null)?.value,
+    ).toBe('host')
   })
 })

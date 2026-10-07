@@ -5,7 +5,7 @@
   "tags": ["scope:app", "scope:mobile", "type:app"],
   "//": "The Aglyn and Aglyn POS apps for iPhone, iPad and Mac (SwiftUI), built by xcodebuild (README.md).",
   "targets": {
-    "build": {
+    "build-native": {
       "executor": "nx:run-commands",
       "cache": false,
       "options": {

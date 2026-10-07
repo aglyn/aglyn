@@ -45,10 +45,14 @@ rates come from, for every site in the workspace. By default these are
 Aglyn's own accounts, marked **Discounted rates**. A switch on each row turns
 that carrier on or off.
 
-If you have your own negotiated UPS or FedEx account, choose **Connect your
-own account** and enter the account number, a contact and the account's
-address. UPS then asks you to sign in at UPS; a row that still needs it shows
-**Sign-in needed** or **Reconnect needed**. Labels bought on your own account
+If you have your own negotiated carrier account, choose **Connect your own
+account** and pick the carrier. Which carriers are listed depends on the
+shipping provider behind your labels. For UPS and FedEx you enter the account
+number, a contact and the account's address, and UPS then asks you to sign in
+at UPS; a row that still needs it shows **Sign-in needed** or **Reconnect
+needed**. Other carriers, such as DHL Express or Canada Post, ask for the
+credentials that carrier issued you, which are passed to the provider to
+connect the account and not kept by Aglyn. Labels bought on your own account
 are billed to you by the carrier, so Aglyn charges nothing for them.
 
 ## Shipping labels

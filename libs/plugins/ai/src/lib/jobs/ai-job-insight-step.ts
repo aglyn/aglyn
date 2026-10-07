@@ -30,6 +30,7 @@ import {
   type AiInsightSurface,
   type AiInsightTable,
 } from '../model/ai-insight'
+import { aiHostPublishContext, aiSiteStatusTable } from '../model/ai-host-publish-context'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
@@ -90,7 +91,8 @@ import { registerAiJobStep } from './ai-jobs'
  *
  * ## What reaches the model
  *
- * The question, the names and descriptions of the readers, the tables, and
+ * The question, the names and descriptions of the readers, the tables, the
+ * site's publish state (published or not, its address, its pages' paths), and
  * for a datasets question the names of the datasets the member may see with
  * their fields' names and types. A table holds counts, sums and rates labeled
  * by a page path, a referring site, a form's, a service's, a product's or a
@@ -134,6 +136,7 @@ export const AI_INSIGHT_RULES = [
   '- Name nobody, and write no email address or phone number.',
   '- Plain sentences: no markdown, no headings, no lists.',
   '- When the tables cannot answer part of the question, say so in gap in one sentence with no numbers; otherwise gap is null.',
+  '- Whether the site is published, and its address, come only from the Site status table. Page views and visitors never show whether a site is live: never say or suggest a site is not live, not launched or not published because of its traffic.',
   '- Write in the language of the question.',
 ].join('\n')
 
@@ -287,7 +290,12 @@ export const runAiJobInsightStep: AiJobStepRunner = async (context: AiJobStepCon
   if (!read.tables.length && !digest) read = await readAiInsightTables(readers, defaultReads(readers, days), base)
   if (read.refusals.length) console.warn('ai insight reads refused', { jobId: job.$id, refusals: read.refusals })
   if (!read.tables.length) return stop(AI_INSIGHT_NO_TABLES_COPY)
-  const { tables } = read
+  // A site's question is told whether the site is live, so traffic is never
+  // read as launch status. Appended, so the readers' refs stay as they were.
+  const tables =
+    !digest && site.host
+      ? [...read.tables, aiSiteStatusTable(aiHostPublishContext(site.host), `t${read.tables.length + 1}`)]
+      : read.tables
 
   // 2. The answer, and at most one re-ask.
   let messages: AiMessage[] = [{ role: 'user', content: aiInsightAnswerPrompt(question, tables) }]

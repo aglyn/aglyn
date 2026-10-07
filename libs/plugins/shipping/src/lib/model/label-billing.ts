@@ -37,6 +37,8 @@ export type LabelBillingMethod =
   | 'usage_invoice'
   /** The merchant's own carrier account paid; nothing to recover. */
   | 'carrier_account'
+  /** The merchant's own Easyship or Sendcloud account paid (AGL-3632); nothing to recover. */
+  | 'own_account'
   /** A test-mode label: nothing was charged by anyone. */
   | 'test'
 

@@ -183,11 +183,20 @@ async function handler(request: Request): Promise<Response> {
     // as. Retroactively narrowing an org's library from a settings toggle
     // would break live pages with no confirmation, which is exactly what
     // AGL-1044/1045's per-resource flow exists to prevent.
-    if (body?.action === 'set-default-resource-scope') {
-      const value = String(body?.defaultResourceScope ?? '')
+    //
+    // Two fields with one shape (AGL-3662): `defaultResourceScope` for new
+    // datasets, `defaultMediaScope` for new uploads and folders.
+    const defaultScopeField =
+      body?.action === 'set-default-resource-scope'
+        ? 'defaultResourceScope'
+        : body?.action === 'set-default-media-scope'
+          ? 'defaultMediaScope'
+          : null
+    if (defaultScopeField) {
+      const value = String(body?.[defaultScopeField] ?? '')
       if (value !== 'org' && value !== 'host') {
         return Response.json(
-          { error: 'defaultResourceScope must be "org" or "host"' },
+          { error: `${defaultScopeField} must be "org" or "host"` },
           { status: 400 },
         )
       }
@@ -196,7 +205,7 @@ async function handler(request: Request): Promise<Response> {
         .firestore()
         .collection('orgs')
         .doc(orgId)
-        .set({ defaultResourceScope: value }, { merge: true })
+        .set({ [defaultScopeField]: value }, { merge: true })
       return Response.json({ ok: true }, { status: 200 })
     }
 

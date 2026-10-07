@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import type { AiJobKind, AiJobStatus, AiJobSummary } from './ai-jobs.types'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+import type { AiJobItemLedger, AiJobKind, AiJobReview, AiJobStatus, AiJobSummary } from './ai-jobs.types'
 
 /**
  * What a member reads when a plan could not be made (AGL-3594): one plain
@@ -135,4 +136,73 @@ export function aiSiteStarterFallbackOffered(
   if (job.outputs.some((output) => output.resource !== 'seo')) return false
   if (job.status === 'failed' || job.status === 'canceled') return true
   return job.status === 'needs_review' && job.review?.reason === 'doctrine'
+}
+
+/**
+ * What a customer reads when an answer still broke a building rule after its
+ * re-ask (AGL-3596), in place of the doctrine's own sentence. "Rule 12
+ * (Responsive by the theme's breakpoints): Every child of a Grid container…"
+ * is what the re-ask is told and what staff read; shown to the person who
+ * asked for a site, it reads as the product breaking. The rule's words stay
+ * on the job (`review.detail`, an item's `failure.detail`) for staff.
+ */
+export const AI_DOCTRINE_REFUSED_COPY = `${PLATFORM_BRAND_NAME} AI couldn’t build this cleanly, so we stopped rather than give you something broken.`
+
+/** The same, for a page. */
+export const AI_DOCTRINE_REFUSED_PAGE_COPY = `${PLATFORM_BRAND_NAME} AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page.`
+
+/** How the doctrine's refusal sentence starts (`aiDoctrineNeedsInputMessage`). */
+const AI_DOCTRINE_REFUSAL_LEAD = 'This could not be built within the building rules.'
+
+/** Whether a sentence is the doctrine's own words: its refusal, or a rule cited by number. */
+export function aiIsDoctrineRuleText(text: string | null | undefined): boolean {
+  if (!text) return false
+  return text.startsWith(AI_DOCTRINE_REFUSAL_LEAD) || /\bRule \d+ \(/.test(text)
+}
+
+/**
+ * A sentence a customer may read: the doctrine's own words become the plain
+ * refusal, a page's when the thing refused is a page; anything else stands.
+ */
+export function aiCustomerSafeCopy<T extends string | null | undefined>(text: T, options: { page?: boolean } = {}): T | string {
+  if (!aiIsDoctrineRuleText(text)) return text
+  return options.page ? AI_DOCTRINE_REFUSED_PAGE_COPY : AI_DOCTRINE_REFUSED_COPY
+}
+
+/**
+ * A doctrine review as a customer reads it (AGL-3596): a message in the
+ * doctrine's own words becomes the plain refusal, and those words move to
+ * `detail`, which only staff are shown. A review written before the step did
+ * this itself reads the same as one written after.
+ */
+export function aiCustomerSafeReview<T extends Pick<AiJobReview, 'reason' | 'message'> & { detail?: string }>(
+  review: T,
+  options: { page?: boolean } = {},
+): T {
+  if (review.reason !== 'doctrine' || !aiIsDoctrineRuleText(review.message)) return review
+  return { ...review, message: aiCustomerSafeCopy(review.message, options), detail: review.detail ?? review.message }
+}
+
+/**
+ * A build item's failure as a customer reads it (AGL-3596): a building rule
+ * still broken reads as the plain refusal, a page's for a page, and its
+ * checks' own sentence (`detail`) is left off.
+ */
+export function aiCustomerSafeItem<T extends Pick<AiJobItemLedger, 'op' | 'failure'>>(row: T): T {
+  const failure = row.failure
+  if (!failure) return row
+  const { detail: _detail, ...rest } = failure
+  const doctrine = failure.reason === 'doctrine-refused' || aiIsDoctrineRuleText(failure.message)
+  if (!doctrine && _detail === undefined) return row
+  return {
+    ...row,
+    failure: {
+      ...rest,
+      message: doctrine
+        ? row.op === 'page'
+          ? AI_DOCTRINE_REFUSED_PAGE_COPY
+          : AI_DOCTRINE_REFUSED_COPY
+        : failure.message,
+    },
+  }
 }

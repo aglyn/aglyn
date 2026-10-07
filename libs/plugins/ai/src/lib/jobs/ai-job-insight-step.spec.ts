@@ -282,6 +282,35 @@ describe('asking', () => {
 })
 
 describe('the weekly digest', () => {
+  it('tells a site’s question whether the site is live, so traffic is never read as launch status', async () => {
+    // A starter site, published a minute ago, with no visits yet.
+    const site = hostDocs['hosts/host-1'] as Record<string, unknown>
+    site['screens'] = { home: '/' }
+    try {
+      mockRunAiRequest
+        .mockResolvedValueOnce(called(AI_INSIGHT_READ_TOOL_NAME, { reads: [{ reader: 'traffic.summary', days: 14, params: [] }] }))
+        .mockResolvedValueOnce(
+          called(AI_INSIGHT_ANSWER_TOOL_NAME, {
+            insights: [{ text: 'Your site is already published at https://acme.aglyn.app.', cites: [{ table: 't2', rows: [0, 1] }] }],
+            gap: null,
+          }),
+        )
+      const { writes } = await run({ brief: 'Is this the number of days until my website is published?' })
+      expect(AI_JOB_INSIGHT_SYSTEM[0].text).toContain('never say or suggest a site is not live')
+      const answer = mockRunAiRequest.mock.calls[1][0].messages[0].content as string
+      // Appended after the readers' tables, so their handles are unchanged.
+      expect(answer).toContain('t1 · Traffic (Analytics)')
+      expect(answer).toContain('t2 · Site status (Pages)')
+      expect(answer).toContain('0: Published | Yes: visitors can open the site now')
+      expect(answer).toContain('1: Address | https://acme.aglyn.app')
+      const record = writes[0].value as unknown as AiInsightRecord
+      expect(record.insights.map((insight) => insight.text)).toEqual(['Your site is already published at https://acme.aglyn.app.'])
+      expect(record.tables.map((table) => table.reader)).toEqual(['traffic.summary', 'site.status'])
+    } finally {
+      delete site['screens']
+    }
+  })
+
   it('makes no read call: code reads the digest’s readers', async () => {
     mockRunAiRequest.mockResolvedValueOnce(
       called(AI_INSIGHT_ANSWER_TOOL_NAME, { insights: [{ text: 'Page views rose 14.7%.', cites: [{ table: 't1', rows: [0] }] }], gap: null }),
@@ -291,6 +320,8 @@ describe('the weekly digest', () => {
     expect(mockRunAiRequest.mock.calls[0][0].tools[0].name).toBe(AI_INSIGHT_ANSWER_TOOL_NAME)
     const record = writes[0].value as unknown as AiInsightRecord
     expect(record).toMatchObject({ surface: 'digest', week: '2026-W38', days: 7, question: 'Weekly insights for Acme' })
+    // A digest reports the week's figures; the site's status is not one of them.
+    expect(record.tables.map((table) => table.reader)).not.toContain('site.status')
   })
 })
 

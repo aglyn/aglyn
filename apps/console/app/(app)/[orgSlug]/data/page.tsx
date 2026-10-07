@@ -25,6 +25,7 @@ import PluginWidgetSlot from '../../../../components/plugin-widget-slot.componen
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
+import OrgDefaultSharingCard from '../../../../components/media/org-default-sharing-card.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
@@ -118,11 +119,17 @@ const OrgData: NextPageWithLayout<Record<string, never>> = () => {
                   : null}
               </Alert>
             ) : (
-              <PluginWidgetSlot
-                slot="orgData"
-                orgId={currentOrg.$id}
-                org={org}
-              />
+              <>
+                {/* What a dataset created on a site's Data page starts
+                    shared with (AGL-3662) — set apart from media's, which
+                    is on the organization Media page. */}
+                <OrgDefaultSharingCard kind="data" />
+                <PluginWidgetSlot
+                  slot="orgData"
+                  orgId={currentOrg.$id}
+                  org={org}
+                />
+              </>
             )}
           </FeatureGate>
         ) : null}

@@ -190,6 +190,7 @@ jest.mock('@aglyn/aglyn/server', () => {
     // document, or scoped a new contact org-wide, would pass this file while
     // shipping the leak.
     ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/consent-groups'),
+    crmDefaultScopeOf: jest.requireActual('../../../../../../aglyn/src/lib/app-utils/crm').crmDefaultScopeOf,
     ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/marketing-consent'),
     // The real campaign coercion, for the same reason: a fake that skipped
     // the dedupe or the cap would let this file pass while the writer grew a

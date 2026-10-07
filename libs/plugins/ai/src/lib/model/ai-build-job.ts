@@ -523,6 +523,7 @@ export function aiBuildRetryLedger(
         failure: null,
         note: null,
         degradedBy: [],
+        settledAt: null,
       }
     }
     if (row.status === 'degraded' && downstream.has(row.slot) && row.outputs.length) {

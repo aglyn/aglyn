@@ -74,6 +74,11 @@ describe('the entry’s words', () => {
 describe('the scope', () => {
   it('is the org token where the default was widened, else the consent group’s sites, else the site', () => {
     assert.deepEqual(scopeTokens({ defaultResourceScope: 'org' }, 'h1'), ['org'])
+    assert.deepEqual(
+      scopeTokens({ defaultResourceScope: 'org', crm: { defaultRecordScope: 'host' } }, 'h1'),
+      ['host:h1'],
+    )
+    assert.deepEqual(scopeTokens({ crm: { defaultRecordScope: 'org' } }, 'h1'), ['org'])
     const org = { consentGroups: { g1: { name: 'Main', hostIds: ['h2', 'h1'] } } }
     assert.deepEqual(scopeTokens(org, 'h1'), ['host:h1', 'host:h2'])
     assert.deepEqual(scopeTokens(org, 'h9'), ['host:h9'])

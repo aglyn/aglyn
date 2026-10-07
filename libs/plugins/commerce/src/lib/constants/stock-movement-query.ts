@@ -73,4 +73,5 @@ export const STOCK_MOVEMENT_REASON_LABEL: Readonly<Record<InventoryAdjustmentRea
   correction: 'Correction',
   damage: 'Damaged',
   cancellation: 'Order canceled',
+  sync: 'Count synced',
 }

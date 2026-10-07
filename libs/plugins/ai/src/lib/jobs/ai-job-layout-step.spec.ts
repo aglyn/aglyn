@@ -437,7 +437,9 @@ describe('the layout step', () => {
     expect(outcome.estCostUsd).toBe(0.04)
     expect(outcome.review).toEqual({
       reason: 'doctrine',
-      message: expect.stringContaining('Rule 7'),
+      // The rule's own words are staff reading; the customer reads the plain refusal (AGL-3596).
+      message: 'Aglyn AI couldn’t build this cleanly, so we stopped rather than give you something broken.',
+      detail: expect.stringContaining('Rule 7'),
       findings: [
         { rule: 7, code: 'plan-reuse-not-placed', message: expect.stringContaining('"Main navigation"') },
         {

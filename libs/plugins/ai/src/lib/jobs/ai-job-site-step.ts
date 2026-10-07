@@ -44,6 +44,7 @@ import {
   AI_SITE_EMAIL_TYPE,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
+  aiSiteNameSentence,
   aiSitePagesRefusal,
   aiSitePlanRefusal,
   aiSiteSubmissions,
@@ -385,6 +386,10 @@ export function aiSiteResolvedRef(ref: string | null, built: BuiltRefs): string 
  * guided start writes it into the brief itself, but an agency batch's brief
  * is a member's own sentence and may never mention it, and a theme, a layout
  * or a form asked to serve nobody in particular serves nobody in particular.
+ *
+ * The name is said twice (AGL-3596): as a field, and as the instruction to use
+ * it as written. A layout told only "a dog groomer in Austin" put a business
+ * name of its own in the header and the footer.
  */
 export function aiSiteBriefLines(
   brief: string,
@@ -399,6 +404,7 @@ export function aiSiteBriefLines(
     inputs.brand ? `brand: ${inputs.brand}` : '',
   ].filter(Boolean)
   lines.push(`Site — ${site.join('; ')}.`)
+  if (inputs.businessName) lines.push(aiSiteNameSentence(inputs.businessName))
   return lines
 }
 

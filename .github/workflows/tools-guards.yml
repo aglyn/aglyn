@@ -504,6 +504,13 @@ jobs:
       # decisions surfaces here or nowhere. Pure node, no network.
       - run: npm run test:emulated-env
 
+      # test:ai-guided-start-local  The local guided AI start (AGL-3596): the
+      # beat pump that stands in for Cloud Scheduler on the emulator stack,
+      # and the verdicts the run reports (an active row while working, a
+      # failure shown mid-run, a cut search title, a bound form). The run
+      # itself needs a live model and never runs in CI. Pure node.
+      - run: npm run test:ai-guided-start-local
+
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs

@@ -34,6 +34,7 @@ import type {
   AiJobReview,
   AiJobReviewOutlineNode,
 } from '../model/ai-jobs.types'
+import { AI_DOCTRINE_REFUSED_COPY, AI_DOCTRINE_REFUSED_PAGE_COPY, aiIsDoctrineRuleText } from '../model/ai-job-failure-copy'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import { isAiUnreadToken } from '../model/ai-template-subjects'
 import { aiAnswerTree, type AiGenerationSpend, type AiValidatedTree } from '../runtime/ai-doctrine'
@@ -416,17 +417,28 @@ export function aiDoctrineReviewOutline(
  * entries it names, and an outline of those parts of the answer it was found
  * in (AGL-3078), so why a job stopped can be read back from the job once the
  * answer itself is gone.
+ *
+ * The doctrine's own sentence ("Rule 12 (Responsive by the theme's
+ * breakpoints): ...") is never what the customer reads (AGL-3596): it rides
+ * as `detail`, for staff, and `message` is the plain refusal, a page's when
+ * `page` says the refused thing is one, followed by `then` when given.
  */
-export function aiDoctrineReview(result: {
-  message: string
-  violations: readonly AiDoctrineViolation[]
-  /** The refused answer, whose nodes the findings name by id; outlined, never kept. */
-  answer?: Record<string, unknown> | null
-}): AiJobReview {
+export function aiDoctrineReview(
+  result: {
+    message: string
+    violations: readonly AiDoctrineViolation[]
+    /** The refused answer, whose nodes the findings name by id; outlined, never kept. */
+    answer?: Record<string, unknown> | null
+  },
+  options: { page?: boolean; then?: string } = {},
+): AiJobReview {
   const outline = aiDoctrineReviewOutline(result.answer, result.violations)
+  const ruleText = aiIsDoctrineRuleText(result.message)
+  const plain = ruleText ? (options.page ? AI_DOCTRINE_REFUSED_PAGE_COPY : AI_DOCTRINE_REFUSED_COPY) : result.message
   return {
     reason: 'doctrine',
-    message: result.message,
+    message: options.then ? `${plain} ${options.then}` : plain,
+    ...(ruleText ? { detail: result.message } : {}),
     findings: result.violations.map(({ rule, code, message, nodeIds, paths }) => ({
       rule,
       code,

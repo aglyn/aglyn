@@ -126,7 +126,11 @@ function consentGroupSiteIds(org, raw) {
 
 /** `crmScopeTokens(org, consentGroupForHost(org, hostId))`, restated. */
 export function scopeTokens(org, hostId) {
-  if (org?.defaultResourceScope === 'org') return ['org']
+  // `crmDefaultScopeOf`: the CRM's own default, then the dataset one (AGL-3662).
+  const crmDefault = ['org', 'host'].includes(org?.crm?.defaultRecordScope)
+    ? org.crm.defaultRecordScope
+    : org?.defaultResourceScope
+  if (crmDefault === 'org') return ['org']
   for (const group of Object.values(readConsentGroups(org))) {
     if (group.hostIds.includes(hostId)) return group.hostIds.map((id) => `host:${id}`)
   }

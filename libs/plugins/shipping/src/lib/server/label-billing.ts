@@ -100,6 +100,11 @@ export async function planLabelBilling(input: {
   if (input.config.testMode) {
     return { method: 'test', chargeCents: 0, markupPct: 0 }
   }
+  // The merchant's own Easyship or Sendcloud account (AGL-3632): the
+  // platform there billed the merchant, and Aglyn paid nothing to recover.
+  if (input.config.ownAccount) {
+    return { method: 'own_account', chargeCents: 0, markupPct: 0 }
+  }
   if (input.merchantCarrierAccount) {
     return { method: 'carrier_account', chargeCents: 0, markupPct: 0 }
   }
@@ -189,7 +194,7 @@ export async function chargeLabel(input: {
     currency: input.currency,
     month: monthOf(atMs),
   }
-  if (input.plan.method === 'test' || input.plan.method === 'carrier_account') {
+  if (input.plan.method === 'test' || input.plan.method === 'carrier_account' || input.plan.method === 'own_account') {
     return { ...base, method: input.plan.method, state: 'not_billed' }
   }
   if (input.plan.chargeCents <= 0) {

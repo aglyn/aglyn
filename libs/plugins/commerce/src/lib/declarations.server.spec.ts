@@ -25,6 +25,7 @@ import {
   pluginProductCatalog,
 } from '@aglyn/aglyn/plugin-manager/plugin-product-catalog'
 import { resolvePluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { pluginStockLevels } from '@aglyn/aglyn/plugin-manager/plugin-stock-levels'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerCommerceServerDeclarations } from './declarations.server'
@@ -54,6 +55,11 @@ describe('registerCommerceServerDeclarations', () => {
     registerCommerceServerDeclarations()
     expect(pluginProductCatalog()).toBeDefined()
     expect(resolvePluginServices(PLUGIN_PRODUCT_CATALOG)[0]?.pluginId).toBe(BUNDLE_ID)
+  })
+
+  it('applies counts other warehouses report through the stock-levels seam (AGL-3634)', () => {
+    registerCommerceServerDeclarations()
+    expect(typeof pluginStockLevels()?.setAvailable).toBe('function')
   })
 
   it('registers again without refusing itself', () => {

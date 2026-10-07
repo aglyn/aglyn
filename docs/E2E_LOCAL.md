@@ -60,7 +60,9 @@ covers Stripe, Vercel, Resend and the GA4 API secret, and by default any new
 `*_API_KEY`, `*_TOKEN` or `*_SECRET`. Next never replaces an inherited
 variable, even an empty one, so a flow that reaches billing, email or domains
 fails closed instead of calling the real service. The startup line names what
-was blanked. What stays, and why, is `KEPT_CREDENTIALS` in
+was blanked. One opt-in keeps a credential: `--live-ai` passes the AI provider
+keys and nothing else, only beside an emulator (see "The guided AI site start"
+below). What stays, and why, is `KEPT_CREDENTIALS` in
 `tools/scripts/lib/emulated-env.mjs`: the Firebase service account (the Admin
 SDK does not start without it) and the secrets the app uses only to sign and
 verify its own requests. A port passes through as before:
@@ -329,6 +331,22 @@ and the harness marks those inconclusive when it finds a dev server.
 What it cannot exercise locally, and does not claim to: Vercel's edge,
 wildcard DNS, wildcard TLS. Knobs: `SMOKE_CONSOLE_URL`, `SMOKE_TENANT_PORT`,
 `SMOKE_TIMEOUT_MS`, `SMOKE_RUN_ID`, `E2E_CHROME_PATH`.
+
+## The guided AI site start, with the real model (AGL-3596)
+
+```bash
+npm run e2e:ai-guided-start:local                       # starts what is not running
+npm run e2e:ai-guided-start:local -- --app-root <checkout> --runs 2
+```
+
+The one emulated run that holds a live credential: the console is started with
+`serve-emulated.mjs console --live-ai`, which passes the AI provider keys from
+the repo `.env` through and still blanks billing, email and domains, and a local
+beat pump stands in for Cloud Scheduler's call to `/api/admin/ai-jobs-beat`.
+Each run creates a fresh owner, Free workspace and site, drives Start with AI
+through the real UI, watches the build page, then checks the documents and the
+published `<site>.localhost:4500` pages. What it asserts, why the key is safe
+here and every option: docs/AI_JOBS.md, "Running a guided start locally".
 
 ## The three bugs this setup fixed (July 2026)
 

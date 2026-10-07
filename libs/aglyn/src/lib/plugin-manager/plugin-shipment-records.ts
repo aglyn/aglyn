@@ -104,6 +104,12 @@ export interface PluginShippableRecord {
   /** The rate the customer chose at checkout, when it was a carrier's. */
   chosenService?: { serviceKey?: string; label?: string; amountCents?: number }
   createdAtMs?: number
+  /**
+   * Whether the record was paid in a payment provider's test mode (AGL-3634):
+   * no money moved, so nothing real may be sent for it. Absent when the
+   * seller does not know, which reads as live.
+   */
+  testMode?: boolean
 }
 
 /** A shipment to write. */

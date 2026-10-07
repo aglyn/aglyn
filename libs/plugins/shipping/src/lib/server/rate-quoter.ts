@@ -25,7 +25,8 @@ import type {
 import { defaultPackage, type ShippingHostSettings } from '../model/shipping-settings'
 import { serviceAllowed, serviceCatalog } from '../model/service-catalog'
 import { openShippingAccount } from './account-store'
-import { readShippingConfig } from './config'
+import { isShippingSurfaceConfigured } from './config'
+import { readShipperHqCredentials, resolveOrgShippingConfig, shipperHq } from './own-accounts'
 import { quoteCacheKey, readCachedQuotes, writeCachedQuotes } from './quote-cache'
 import { readHostSettings, resolveShipFrom } from './settings-store'
 import { resolveShippingSite } from './site-context'
@@ -63,10 +64,14 @@ export function packParcels(
 
 export const shippingRateQuoter: PluginShippingRateQuoter = {
   async available(hostId) {
-    const configured = readShippingConfig()
-    if (!configured.configured) return false
+    if (!isShippingSurfaceConfigured()) return false
     const site = await resolveShippingSite(hostId)
     if (!site) return false
+    // The merchant's ShipperHQ rules (AGL-3632) price checkout on their own:
+    // the origins are ShipperHQ's, so no platform or ship-from is needed.
+    if (await readShipperHqCredentials(site.orgId)) return true
+    const configured = await resolveOrgShippingConfig(site.orgId)
+    if (!configured.configured) return false
     const account = await openShippingAccount(site.orgId, configured.config).catch(() => null)
     if (!account) return false
     const settings = await readHostSettings(site.orgId, hostId)
@@ -74,17 +79,36 @@ export const shippingRateQuoter: PluginShippingRateQuoter = {
   },
 
   async quote(request) {
-    const configured = readShippingConfig()
-    if (!configured.configured) throw new Error('shipping is not configured')
     const site = await resolveShippingSite(request.hostId)
     if (!site) throw new Error('shipping is not available for this site')
     const settings = await readHostSettings(site.orgId, request.hostId)
+    const parcels = packParcels(request.parcels, settings)
+    const shipperHqConnection = await readShipperHqCredentials(site.orgId)
+    if (shipperHqConnection) {
+      const key = quoteCacheKey({ ...request, parcels }, 'shipperhq')
+      const cached = await readCachedQuotes(key)
+      if (cached) return cached
+      const answer = await shipperHq().quote(shipperHqConnection.cacheKey, shipperHqConnection.credentials, {
+        to: request.to,
+        parcels,
+        currency: request.currency,
+        valueCents: request.valueCents,
+        ...(request.signal ? { signal: request.signal } : {}),
+      })
+      // ShipperHQ's rules decide what is offered, so the site's own service
+      // narrowing (a list of platform services) does not apply; the
+      // seller's, by its rate's service keys, still does.
+      const quotes = answer.quotes.filter((quote) => serviceAllowed(quote.serviceKey, [], request.services))
+      await writeCachedQuotes(key, { orgId: site.orgId, hostId: request.hostId }, quotes)
+      return quotes
+    }
+    const configured = await resolveOrgShippingConfig(site.orgId)
+    if (!configured.configured) throw new Error('shipping is not configured')
     const from = await resolveShipFrom(request.hostId, settings)
     if (!from) throw new Error('the site has no address to ship from')
     const account = await openShippingAccount(site.orgId, configured.config)
     if (!account) throw new Error('the workspace has no shipping account')
-    const parcels = packParcels(request.parcels, settings)
-    const key = quoteCacheKey({ ...request, parcels })
+    const key = quoteCacheKey({ ...request, parcels }, configured.config.providerId)
     const cached = await readCachedQuotes(key)
     if (cached) return cached
     const quote = await configured.config.provider.quoteRates(account, {
@@ -115,16 +139,23 @@ export const shippingRateQuoter: PluginShippingRateQuoter = {
     return quotes
   },
 
-  async listServices() {
-    const configured = readShippingConfig()
+  async listServices(hostId) {
+    if (!isShippingSurfaceConfigured()) return []
+    const site = await resolveShippingSite(hostId)
+    if (!site) return []
+    // ShipperHQ's methods are the merchant's own, named in ShipperHQ: there
+    // is no list to narrow checkout to, so every one is offered.
+    if (await readShipperHqCredentials(site.orgId)) return []
+    const configured = await resolveOrgShippingConfig(site.orgId)
     return configured.configured ? serviceCatalog(configured.config.providerId) : []
   },
 
   async validateAddress(hostId: string, address: PluginShippingAddress): Promise<PluginShippingAddressCheck> {
-    const configured = readShippingConfig()
-    if (!configured.configured) return { verdict: 'unknown', messages: [] }
+    if (!isShippingSurfaceConfigured()) return { verdict: 'unknown', messages: [] }
     const site = await resolveShippingSite(hostId)
     if (!site) return { verdict: 'unknown', messages: [] }
+    const configured = await resolveOrgShippingConfig(site.orgId)
+    if (!configured.configured) return { verdict: 'unknown', messages: [] }
     const account = await openShippingAccount(site.orgId, configured.config)
     if (!account) return { verdict: 'unknown', messages: [] }
     return configured.config.provider.validateAddress(account, address)

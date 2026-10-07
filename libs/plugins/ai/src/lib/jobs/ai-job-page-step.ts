@@ -229,12 +229,11 @@ export const AI_JOB_PAGE_CREATION_EMPTY_COPY =
   'Part of this page could not be built. Describe the page again.'
 
 /**
- * What a page refused on its last pass tells the member beside the rules it
- * broke (AGL-3143). The draft is reported with the review, and mending what
- * the findings name in it is what lets the next pass finish the job.
+ * What a page refused on its last pass tells the member after the plain
+ * refusal (AGL-3143, AGL-3596). The draft is reported with the review, and
+ * mending its layout in the editor is what lets the next pass finish the job.
  */
-export const AI_JOB_PAGE_REFUSED_DRAFT_COPY =
-  'The draft is yours to open: mend what these name in it, then try again.'
+export const AI_JOB_PAGE_REFUSED_DRAFT_COPY = 'The draft is yours to open: fix its layout in the editor, then try again.'
 
 /**
  * The most passes a page job may take (AGL-3031): every creation the plan
@@ -652,11 +651,14 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         // review names is mended in the draft, and the next pass then passes.
         return aiUnspentOutcome(model, {
           outputs: reports,
-          review: aiDoctrineReview({
-            message: `${aiDoctrineNeedsInputMessage(violations)} ${AI_JOB_PAGE_REFUSED_DRAFT_COPY}`,
-            violations,
-            answer: { tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page } },
-          }),
+          review: aiDoctrineReview(
+            {
+              message: aiDoctrineNeedsInputMessage(violations),
+              violations,
+              answer: { tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page } },
+            },
+            { page: true, then: AI_JOB_PAGE_REFUSED_DRAFT_COPY },
+          ),
         })
       }
       let spent: AiJobStepOutcome = aiUnspentOutcome(model)
@@ -791,7 +793,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     })
     const spent = aiGenerationSpent(result)
     if (result.status === 'refused') return { ...spent, refused: true }
-    if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
+    if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result, { page: true }) }
 
     if (!written) {
       const draft = await writeAiDraft(firestore, {
