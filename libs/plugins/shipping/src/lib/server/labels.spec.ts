@@ -25,6 +25,10 @@ import {
   type PluginTrackingUpdate,
 } from '@aglyn/aglyn/plugin-manager/plugin-shipment-records'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import {
+  registerPluginFulfillmentProvider,
+  type PluginFulfillmentHold,
+} from '@aglyn/aglyn/plugin-manager/plugin-fulfillment-providers'
 import { randomBytes } from 'node:crypto'
 import { createMemoryFirestore, type MemoryFirestore } from '../testing/memory-firestore'
 import { shippingAccountDocId, writeDebitConsent } from './account-store'
@@ -218,6 +222,49 @@ describe('rating an order', () => {
       ['rate_own', true],
     ])
     expect(quote.to.email).toBe('ann@example.com')
+  })
+})
+
+describe('units an outside fulfiller holds (AGL-3634)', () => {
+  const network = (holds: () => Promise<PluginFulfillmentHold[]>) =>
+    registerPluginFulfillmentProvider({ id: 'network', label: 'ShipBob', holds: async () => holds() }, { pluginId: 'networks' })
+  const held = (lineIndex: number, quantity: number): PluginFulfillmentHold => ({
+    providerId: 'network',
+    providerLabel: 'ShipBob',
+    lineIndex,
+    quantity,
+    state: 'accepted',
+  })
+
+  it('leaves the held units off the label', async () => {
+    network(async () => [held(0, 2)])
+    const quote = await quoteAndConsent()
+    expect(quote.lines).toEqual([{ lineIndex: 1, quantity: 1 }])
+  })
+
+  it('says who is shipping it when everything left is held', async () => {
+    network(async () => [held(0, 2), held(1, 1)])
+    await expect(quoteAndConsent()).rejects.toMatchObject({
+      status: 409,
+      message: 'Everything left on this order is being shipped by ShipBob.',
+    })
+  })
+
+  it('stops rather than guess when a fulfiller cannot answer', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    network(async () => {
+      throw new Error('offline')
+    })
+    await expect(quoteAndConsent()).rejects.toMatchObject({ status: 503 })
+  })
+
+  it('refuses a buy whose lines a fulfiller took after the quote', async () => {
+    const quote = await quoteAndConsent()
+    network(async () => [held(0, 1)])
+    await expect(
+      buyLabel(actor(), config(), { recordId: 'order-1', shipmentId: quote.shipmentId, rateId: 'rate_cheap', attemptKey: 'attempt-held' }),
+    ).rejects.toMatchObject({ status: 409, message: 'Some of these items are now being shipped by ShipBob. Get rates again.' })
+    expect(shippoCalls.filter((call) => call.url.endsWith('/transactions'))).toHaveLength(0)
   })
 })
 
