@@ -98,5 +98,9 @@
   "sales-channels": {
     "baseline": 2705,
     "budget": 4096
+  },
+  "marketing-platforms": {
+    "baseline": 5107,
+    "budget": 7168
   }
 }

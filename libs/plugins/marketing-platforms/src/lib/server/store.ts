@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
   EVENT_MAX_ATTEMPTS,
@@ -277,7 +278,7 @@ export function createFirestoreConnectionStore(firestore: () => any): Connection
 
     async appendLog(id, entry) {
       const log = connections().doc(id).collection(MARKETING_PLATFORM_LOG_SUBCOLLECTION)
-      await log.add(entry)
+      await log.doc(createResourceUid()).set(entry)
       // Kept short: the page shows the latest, and a failing connection
       // writes a row every attempt.
       const stale = await log.orderBy('atMs', 'desc').offset(LOG_ROWS_KEPT).limit(50).get()
