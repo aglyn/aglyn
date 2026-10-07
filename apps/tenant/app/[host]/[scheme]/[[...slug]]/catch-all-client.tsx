@@ -564,6 +564,19 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     )
   }
 
+  // The holding page (AGL-3594): a site that routes no page yet.
+  if (props.holdingPage && !nodes) {
+    const name = String((props.data?.host as { displayName?: unknown } | undefined)?.displayName ?? '').trim()
+    return (
+      <div style={{ maxWidth: 480, margin: '15vh auto', padding: 24, textAlign: 'center' }}>
+        <h1 style={{ fontSize: 28 }}>{name || 'Coming soon'}</h1>
+        <p style={{ opacity: 0.8 }}>
+          {name ? 'This site is coming soon. Check back shortly.' : 'This site is on its way. Check back shortly.'}
+        </p>
+      </div>
+    )
+  }
+
   // Maintenance mode without an assigned 503 screen (AGL-131), and the
   // lockdown notice (AGL-1501) when the loader says the outage is a staff
   // lockdown — per-reason title/copy, optional support contact and window.

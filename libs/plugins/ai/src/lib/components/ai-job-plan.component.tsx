@@ -23,6 +23,8 @@ import {
 } from '../model/ai-build-plan'
 import type { AiJobReview, AiJobSummary } from '../model/ai-jobs.types'
 import { aiJobPlanCreditEstimate } from '../model/ai-site-job'
+import { aiSiteStarterFallbackOffered } from '../model/ai-job-failure-copy'
+import { AiSiteStarterFallback } from './ai-site-starter-fallback.component'
 import { Box, Button, Collapse, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 
@@ -235,6 +237,8 @@ export function AiJobPlan({
           {review.reason === 'plan' ? 'Confirm plan' : 'Try again'}
         </Button>
       )}
+      {/* A guided start that did not work out can take the starter instead (AGL-3594). */}
+      {waiting && aiSiteStarterFallbackOffered(job) && <AiSiteStarterFallback job={job} />}
     </Box>
   )
 }

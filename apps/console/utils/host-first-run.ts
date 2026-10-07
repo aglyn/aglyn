@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { isFirstPublishedRoute } from '@aglyn/aglyn/app-utils/analytics-events'
+import { isFirstPublishedRoute, trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 /**
  * Whether the `hostFirstRun` zone has anything to offer on this site — that
@@ -59,10 +60,17 @@ import { isFirstPublishedRoute } from '@aglyn/aglyn/app-utils/analytics-events'
  */
 export function hostIsBlankSite(
   host:
-    | { screens?: Record<string, unknown>; defaultHomeScreenId?: string }
+    | {
+        screens?: Record<string, unknown>
+        defaultHomeScreenId?: string
+        starterProvisionedAt?: unknown
+      }
     | null
     | undefined,
 ): boolean {
+  // A site that took the starter for the guided start (AGL-3594) has chosen,
+  // on every browser at once; one born with it has not, and is still offered.
+  if (host?.starterProvisionedAt) return false
   return isFirstPublishedRoute(host?.screens, host?.defaultHomeScreenId)
 }
 
@@ -111,5 +119,38 @@ export function rememberHostStartedBlank(hostId: string): void {
   } catch {
     // A browser that will not store the choice re-offers the start, which is
     // an offer and not a demand.
+  }
+}
+
+/**
+ * Asks for the site's starter (AGL-3594): `POST /api/hosts/starter`, which
+ * writes the published Home page and its layout on a site born for the guided
+ * AI start, and does nothing on any other. What `startBlank` does after it
+ * remembers the choice.
+ *
+ * The starter Home is PUBLISHED, so when the route says it wrote one this
+ * reports `site_published` with `first_publish: true` — the site's first
+ * live page, which a server-provisioned site never reported before. Only
+ * then: a no-op published nothing. Never throws; a refusal or an outage
+ * leaves the site as it was, and the person on the blank setup page.
+ */
+export async function requestStarterSite(
+  user: Parameters<typeof authorizedFetch>[0],
+  hostId: string,
+): Promise<boolean> {
+  if (!hostId) return false
+  try {
+    const response = await authorizedFetch(user, '/api/hosts/starter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hostId }),
+    })
+    if (!response.ok) return false
+    const payload = (await response.json().catch(() => null)) as { provisioned?: boolean } | null
+    if (payload?.provisioned !== true) return false
+    trackEvent('site_published', { first_publish: true })
+    return true
+  } catch {
+    return false
   }
 }

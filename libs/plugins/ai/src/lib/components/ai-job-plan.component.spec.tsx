@@ -21,7 +21,24 @@
  * already confirmed is being spent, not decided.
  */
 
-import { fireEvent, render, screen } from '@testing-library/react'
+const mockFetch = jest.fn()
+const mockTrack = jest.fn()
+const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  __esModule: true,
+  useUser: () => ({ data: mockUser }),
+}))
+jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
+  __esModule: true,
+  authorizedFetch: (...args: unknown[]) => mockFetch(...args),
+}))
+jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
+  __esModule: true,
+  trackEvent: (...args: unknown[]) => mockTrack(...args),
+}))
+
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { aiSiteStarterFallbackOffered } from '../model/ai-job-failure-copy'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import { AI_SITE_PASS_CREDITS, aiPlanCreditEstimate } from '../model/ai-site-job'
 import { AiJobPlan, aiJobReviewDetails, aiPlanEmbedLine } from './ai-job-plan.component'
@@ -277,5 +294,41 @@ describe('a planned third-party player, read with its cost before it is confirme
     }
     render(<AiJobPlan job={job({ plan })} onResume={() => undefined} />)
     expect(screen.getByText(/Embeds a YouTube player on \/about/).textContent).toContain('whether or not they press play')
+  })
+})
+
+describe('a guided start that did not work out offers the starter instead (AGL-3594)', () => {
+  const REFUSED = job({
+    plan: null,
+    review: { reason: 'doctrine', message: 'Something went wrong planning your site. Try again.', findings: [] },
+  })
+
+  it('is offered for a site job that failed, was canceled or stopped on a refused step, while it built nothing', () => {
+    expect(aiSiteStarterFallbackOffered(REFUSED)).toBe(true)
+    expect(aiSiteStarterFallbackOffered({ ...REFUSED, status: 'failed', review: null })).toBe(true)
+    expect(aiSiteStarterFallbackOffered({ ...REFUSED, status: 'canceled', review: null })).toBe(true)
+    // A plan to confirm, a job that built something, a running job or another kind: no.
+    expect(aiSiteStarterFallbackOffered(job())).toBe(false)
+    expect(aiSiteStarterFallbackOffered({ ...REFUSED, outputs: [{ resource: 'screen', id: 's', hostId: 'host-1', label: 'Home' }] as never })).toBe(false)
+    expect(aiSiteStarterFallbackOffered({ ...REFUSED, status: 'running' })).toBe(false)
+    expect(aiSiteStarterFallbackOffered({ ...REFUSED, kind: 'page' })).toBe(false)
+  })
+
+  it('asks the console for the starter and says so, reporting the first publish once', async () => {
+    mockFetch.mockReset()
+    mockTrack.mockReset()
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ provisioned: true, screenId: 'scrHome' }) })
+    render(<AiJobPlan job={REFUSED} onResume={jest.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Use the starter site instead' }))
+    await screen.findByText(/now has the starter home page/)
+    expect(mockFetch.mock.calls[0][1]).toBe('/api/hosts/starter')
+    expect(JSON.parse(mockFetch.mock.calls[0][2].body)).toEqual({ hostId: 'host-1' })
+    await waitFor(() => expect(mockTrack).toHaveBeenCalledWith('site_published', { first_publish: true }))
+    expect(mockTrack).toHaveBeenCalledTimes(1)
+  })
+
+  it('is not offered beside a plan waiting to be confirmed', () => {
+    render(<AiJobPlan job={job()} onResume={jest.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Use the starter site instead' })).toBeNull()
   })
 })

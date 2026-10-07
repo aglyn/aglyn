@@ -262,6 +262,15 @@ function buildMetadata(props: Props): Metadata {
       robots: { index: false },
     }
   }
+  // The holding page (AGL-3594) is a site with nothing on it yet: kept out
+  // of search, as the maintenance notice is, so the first thing an index
+  // holds for the address is the home page that replaces it.
+  if (props.holdingPage) {
+    return {
+      title: titleFor({ name: 'Coming soon' }),
+      robots: { index: false, follow: false },
+    }
+  }
   if (props.memberScreen) {
     return {
       title: titleFor({ name: 'Members only' }),
@@ -764,7 +773,7 @@ function buildMetadata(props: Props): Metadata {
  * maintenance, members-only) emit nothing, matching the old markup.
  */
 function buildJsonLd(props: Props): string[] {
-  if (props.membershipPage || props.maintenanceFallback || props.memberScreen) {
+  if (props.membershipPage || props.maintenanceFallback || props.memberScreen || props.holdingPage) {
     return []
   }
   const host = props.data?.host as any

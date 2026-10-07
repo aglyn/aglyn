@@ -52,6 +52,9 @@ import {
  * the limiter and quietly change which refusals cost a token.
  */
 
+/** The per-site plugin opt-ins a new site is born with (see the host write in `claimHostForOrg`). */
+export const NEW_SITE_ENABLED_PLUGINS: readonly string[] = [ACCOUNTS_PLUGIN_ID]
+
 export interface SubdomainConflict {
   /** Alternatives that are themselves free — `name-2`, `name-<year>`, … */
   suggestions: string[]
@@ -103,6 +106,17 @@ export interface ClaimHostInput {
    * because a stale copy is exactly what makes a create-time quota racy.
    */
   org?: FirebaseFirestore.DocumentData | undefined
+  /**
+   * Whether the site is born with the starter — its published Home page and
+   * the header and footer layout it renders inside (AGL-3497). `true` when
+   * absent. The console passes `false` when the site's creator will be
+   * offered the guided AI start (AGL-3594, `guidedStartOffered`): that site
+   * is born with no page, and gets the starter only when the person leaves the
+   * guided start for it, through `provisionStarterSite`. The theme and the
+   * site-wide SEO are written either way — a site with a theme and a
+   * description is no less blank, and the guided start keeps both.
+   */
+  starter?: boolean
 }
 
 /**
@@ -220,6 +234,82 @@ export function defaultSiteWrites(siteName: string): {
   }
 }
 
+/** The starter's documents: its Home page and first version, its layout and first version. */
+function queueStarterPages(
+  tx: FirebaseFirestore.Transaction,
+  hostRef: FirebaseFirestore.DocumentReference,
+  hostId: string,
+  home: ReturnType<typeof defaultSiteWrites>,
+): void {
+  const homeRef = hostRef.collection('screens').doc(home.screenId)
+  tx.set(homeRef, home.screen)
+  tx.set(homeRef.collection('versions').doc(home.versionId), home.version)
+  const layoutRef = hostRef.collection('layouts').doc(home.layoutId)
+  tx.set(layoutRef, home.layout)
+  tx.set(
+    layoutRef.collection('versions').doc(home.layoutVersionId),
+    { ...home.layoutVersion, hostId },
+  )
+}
+
+export interface ProvisionStarterResult {
+  /** No site has this id. */
+  missing?: boolean
+  /** The starter was written now: its published Home page answers `/`. */
+  provisioned: boolean
+  /** The Home page written, when `provisioned`. */
+  screenId?: string
+}
+
+/**
+ * Gives a site the starter it was born without (AGL-3594): the published
+ * Home page at `/`, named `defaultHomeScreenId` as a placeholder the owner's
+ * own home page replaces, and the header and footer layout it renders inside.
+ * What leaving the guided start for "a blank site" means, and what a guided
+ * start that did not work out falls back to.
+ *
+ * Idempotent and transactional, and it never takes anything from a site:
+ * a site that already routes a page, already names a placeholder, or holds
+ * any page or layout document at all — a draft the guided start wrote, a
+ * page somebody made — is left exactly as it is and answers `provisioned:
+ * false`. Two calls racing commit at most one starter, because each reads the
+ * same documents the other would write.
+ */
+export async function provisionStarterSite(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+): Promise<ProvisionStarterResult> {
+  const hostRef = firestore.collection('hosts').doc(hostId)
+  return firestore.runTransaction(async (tx): Promise<ProvisionStarterResult> => {
+    const [host, screens, layouts] = await Promise.all([
+      tx.get(hostRef),
+      tx.get(hostRef.collection('screens').limit(1)),
+      tx.get(hostRef.collection('layouts').limit(1)),
+    ])
+    if (!host.exists) return { missing: true, provisioned: false }
+    const routing = host.get('screens')
+    const routed =
+      routing && typeof routing === 'object' && Object.keys(routing as object).length > 0
+    if (routed || host.get('defaultHomeScreenId') || !screens.empty || !layouts.empty) {
+      return { provisioned: false }
+    }
+    const home = defaultSiteWrites(String(host.get('displayName') ?? '') || 'My site')
+    tx.update(hostRef, {
+      [`screens.${home.screenId}`]: home.path,
+      defaultHomeScreenId: home.screenId,
+      // The site has chosen: the guided start is not offered again.
+      starterProvisionedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      // A site born before its theme or listing existed gets them too; one
+      // that has its own keeps it.
+      ...(host.get('theme') ? {} : { theme: home.host.theme }),
+      ...(host.get('seo') ? {} : { seo: home.host.seo }),
+      updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+    })
+    queueStarterPages(tx, hostRef, hostId, home)
+    return { provisioned: true, screenId: home.screenId }
+  })
+}
+
 /**
  * Counts, claims and creates, in one transaction (AGL-2063).
  *
@@ -241,6 +331,7 @@ export async function claimHostForOrg(
   input: ClaimHostInput,
 ): Promise<ClaimHostResult> {
   const { firestore, orgId, displayName, subdomain, org } = input
+  const starter = input.starter !== false
   const hostId = createResourceUid()
   const preCount = (
     await firestore.collection('hosts').where('orgId', '==', orgId).count().get()
@@ -296,13 +387,15 @@ export async function claimHostForOrg(
       orgId,
       // Born routed (AGL-3408): the home page written below answers `/` from
       // the site's first request, where an empty map answered with the 404.
-      screens: { [home.screenId]: home.path },
+      // A site born for the guided start (AGL-3594) has no page yet, and the
+      // tenant answers its `/` with a holding page until it does.
+      screens: starter ? { [home.screenId]: home.path } : {},
       // Which screen is the platform's placeholder rather than the owner's
       // page. A starter applied later may take `/` from it, and the
       // `first_publish` dimension does not count it — never any other screen.
       // Cleared the moment a starter takes the root, or the owner publishes
       // this page themselves (AGL-3478).
-      defaultHomeScreenId: home.screenId,
+      ...(starter ? { defaultHomeScreenId: home.screenId } : {}),
       // Born themed and described (AGL-3497): the site's own theme, so the
       // theme library files it as "Site theme", and the site-wide title,
       // description and sharing image a search result or a shared link shows.
@@ -320,7 +413,7 @@ export async function claimHostForOrg(
        * marked default-off is marked so because it must not be on until
        * somebody asks, and spreading the set here would ask on their behalf.
        */
-      enabledPlugins: [ACCOUNTS_PLUGIN_ID],
+      enabledPlugins: [...NEW_SITE_ENABLED_PLUGINS],
       // Stored `false`, never left out: the staff Sites list filters
       // Suspended by equality on it, and a query cannot find a document by a
       // field it lacks. The console's `suspended-flag.ts` names its other writers.
@@ -328,15 +421,7 @@ export async function claimHostForOrg(
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
-    const homeRef = hostRef.collection('screens').doc(home.screenId)
-    tx.set(homeRef, home.screen)
-    tx.set(homeRef.collection('versions').doc(home.versionId), home.version)
-    const layoutRef = hostRef.collection('layouts').doc(home.layoutId)
-    tx.set(layoutRef, home.layout)
-    tx.set(
-      layoutRef.collection('versions').doc(home.layoutVersionId),
-      { ...home.layoutVersion, hostId },
-    )
+    if (starter) queueStarterPages(tx, hostRef, hostId, home)
     // The claim itself. `set(…, { merge: true })` deep-merges the map, so this
     // adds one key without disturbing the org's other fields — and it is what
     // makes a concurrent create see this site on its retry. `registerOrgHost`

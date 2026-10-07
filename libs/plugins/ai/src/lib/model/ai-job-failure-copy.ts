@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AiJobKind } from './ai-jobs.types'
+import type { AiJobKind, AiJobSummary } from './ai-jobs.types'
 
 /**
  * What a member reads when a plan could not be made (AGL-3594): one plain
@@ -81,4 +81,23 @@ export function aiPlanRetryRefusal(input: { creditsLeft: number; planCredits: nu
   const left = Math.max(0, Math.floor(input.creditsLeft))
   if (left >= input.planCredits) return null
   return `You have ${left} AI ${left === 1 ? 'credit' : 'credits'} left this month, and a plan needs up to ${input.planCredits}. Your credits refresh next month, or upgrade for more.`
+}
+
+/** The guided start's way back to the starter (AGL-3594). */
+export const AI_SITE_STARTER_FALLBACK_LABEL = 'Use the starter site instead'
+
+/**
+ * Whether a job is a guided start that did not work out and can still be
+ * traded for the starter (AGL-3594): a site job that failed, was canceled, or
+ * stopped for a person on a refused step — never one waiting on its plan,
+ * which is a plan to confirm — and that has built nothing, since the starter
+ * is written only to a site with no page or layout.
+ */
+export function aiSiteStarterFallbackOffered(
+  job: Pick<AiJobSummary, 'kind' | 'status' | 'hostId' | 'outputs' | 'review'>,
+): boolean {
+  if (job.kind !== 'site' || !job.hostId) return false
+  if (job.outputs.length > 0) return false
+  if (job.status === 'failed' || job.status === 'canceled') return true
+  return job.status === 'needs_review' && job.review?.reason === 'doctrine'
 }

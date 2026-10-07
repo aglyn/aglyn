@@ -1116,16 +1116,26 @@ export interface ConsoleHostFirstRunZoneProps {
   /** The site's subdomain, which is what a console URL names a site by. */
   host: string | null
   /**
-   * Leaves the guided start for the blank site the person already has: this
-   * same page, with nothing created and nothing begun. The shell records the
-   * choice for this site and draws the zone no more.
+   * Leaves the guided start for a blank site: this same page, with nothing
+   * begun. The shell records the choice for this site, draws the zone no more,
+   * and gives a site born for the guided start its starter — the published
+   * Home page and layout every other new site is born with (AGL-3594).
    *
    * Required of every widget on this zone, drawn where its questions start
    * rather than after them, and — for a widget that takes the screen — what
-   * every way of dismissing it does. See `hostFirstRun` in
-   * {@link CONSOLE_WIDGET_SLOTS}.
+   * every way of dismissing it does BEFORE it has started anything. See
+   * `hostFirstRun` in {@link CONSOLE_WIDGET_SLOTS}.
    */
   startBlank: () => void
+  /**
+   * Closes the zone after its widget STARTED the site some other way — a
+   * guided start whose job is running (AGL-3594). The shell records that the
+   * site was asked and draws the zone no more, and writes no starter: the
+   * site's pages are the job's to build. A widget that started nothing calls
+   * `startBlank` instead. Optional, so a shell that predates it still closes
+   * the zone through `startBlank`.
+   */
+  leave?: () => void
 }
 
 /**

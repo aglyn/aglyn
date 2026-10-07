@@ -268,6 +268,26 @@ describe('the skip', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(mockStartBlank).toHaveBeenCalledTimes(1)
   })
+
+  it('closes through `leave` once a site has been started, so no starter is written over the job (AGL-3594)', async () => {
+    const leave = jest.fn()
+    await openCard({ leave })
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    mockFetch.mockResolvedValueOnce(json({ job: { id: 'job-1', kind: 'site', status: 'queued' } }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await screen.findByText(/Your site is being planned/)
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(leave).toHaveBeenCalledTimes(1)
+    expect(mockStartBlank).not.toHaveBeenCalled()
+  })
+
+  it('leaves for the blank site — the starter — before anything is started, even where the shell offers `leave`', async () => {
+    const leave = jest.fn()
+    await openCard({ leave })
+    fireEvent.click(screen.getByRole('button', { name: 'Skip and start blank' }))
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+    expect(leave).not.toHaveBeenCalled()
+  })
 })
 
 /**

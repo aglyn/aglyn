@@ -119,6 +119,7 @@ export function AiSiteStartCard({
   hostId,
   orgId,
   startBlank,
+  leave,
 }: ConsoleHostFirstRunZoneProps) {
   const { data: user } = useUser()
   // Held in a ref so a request reads WHO is signed in, never the identity of
@@ -205,6 +206,10 @@ export function AiSiteStartCard({
 
   if (verdict !== 'ready') return null
 
+  // Before a job is started every way out is the blank site, which writes the
+  // starter (AGL-3594); after, it only closes — the job builds the site.
+  const exit = started ? (leave ?? startBlank) : startBlank
+
   const estimate = freeTaste
     ? aiFreeSiteCreditEstimate(answers.pages)
     : aiSiteCreditEstimate(answers.pages, {
@@ -212,7 +217,7 @@ export function AiSiteStartCard({
       })
 
   return (
-    <Dialog open fullScreen onClose={startBlank} aria-labelledby={TITLE_ID}>
+    <Dialog open fullScreen onClose={exit} aria-labelledby={TITLE_ID}>
       {/*
         The way out, before anything it is a way out of. On a narrow screen it
         is the HEADING that gives way — the bar's one elastic element, so the
@@ -228,7 +233,7 @@ export function AiSiteStartCard({
           <IconButton
             edge="start"
             color="inherit"
-            onClick={startBlank}
+            onClick={exit}
             aria-label="Close the guided start"
           >
             <MdiIcon path={ICON_VARIANT_CLOSE.path} />
@@ -243,7 +248,7 @@ export function AiSiteStartCard({
             {'Start this site with AI'}
           </Typography>
           <Divider sx={{ height: 28, m: 0.5 }} orientation="vertical" />
-          <Button color="inherit" onClick={startBlank}>
+          <Button color="inherit" onClick={exit}>
             {started ? 'Close' : 'Skip and start blank'}
           </Button>
         </Toolbar>

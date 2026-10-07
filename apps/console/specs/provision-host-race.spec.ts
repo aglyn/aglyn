@@ -63,7 +63,11 @@
 
 import { resolvePluginSiteState } from '@aglyn/aglyn'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
-import { claimHostForOrg, findSubdomainConflict } from '../utils/server/provision-host'
+import {
+  claimHostForOrg,
+  findSubdomainConflict,
+  provisionStarterSite,
+} from '../utils/server/provision-host'
 
 const mockDocs = new Map<string, Record<string, unknown>>()
 let mockRegisterCalls: Array<[string, string, string]> = []
@@ -103,7 +107,8 @@ function query(collection: string, filters: Array<[string, unknown]>): any {
     [...source.entries()]
       .filter(
         ([path]) =>
-          path.startsWith(`${collection}/`) && path.split('/').length === 2,
+          path.startsWith(`${collection}/`) &&
+          path.split('/').length === collection.split('/').length + 1,
       )
       .map(([path, data]) => ({ path, data }))
       .filter((doc) => filters.every(([field, value]) => doc.data[field] === value))
@@ -150,6 +155,7 @@ function mockCollectionRef(path: string): any {
     doc: (id: string) => mockDocRef(`${path}/${id}`),
     where: (field: string, _op: string, value: unknown) =>
       query(path, [[field, value]]),
+    limit: () => query(path, []),
     count: () => query(path, []).count(),
   }
 }
@@ -180,6 +186,19 @@ const mockFirestore: any = {
           options?: { merge?: boolean },
         ) => {
           buffered.push([ref.path, data, options?.merge === true])
+        },
+        // A field update with dotted map paths, as the Admin SDK reads them.
+        update: (ref: { path: string }, data: Record<string, unknown>) => {
+          const next: Record<string, unknown> = {}
+          for (const [field, value] of Object.entries(data)) {
+            const [head, ...rest] = field.split('.')
+            if (!rest.length) next[head] = value
+            else {
+              const prior = (next[head] ?? mockDocs.get(ref.path)?.[head] ?? {}) as Record<string, unknown>
+              next[head] = { ...prior, [rest.join('.')]: value }
+            }
+          }
+          buffered.push([ref.path, next, true])
         },
       }
       const result = await work(tx)
@@ -515,5 +534,74 @@ describe('the guard is the TRANSACTION\'s read, not the pre-check (AGL-2465)', (
     expect(quota.allowed).toBe(false)
     expect(quota.conflict).toBeFalsy()
     expect(quota.limit).toBe(1)
+  })
+})
+
+describe('a site born for the guided AI start, and its starter on request (AGL-3594)', () => {
+  async function bare(displayName = 'Dog Groomer') {
+    const claim = await claimHostForOrg({
+      firestore: mockFirestore,
+      orgId: ORG,
+      displayName,
+      subdomain: SUB,
+      org: mockDocs.get(`orgs/${ORG}`),
+      starter: false,
+    })
+    return claim.hostId as string
+  }
+  const docsOf = (hostId: string, kind: string) =>
+    [...mockDocs.keys()].filter((path) => path.startsWith(`hosts/${hostId}/${kind}/`) && path.split('/').length === 4)
+
+  it('is born with no page and no layout, its theme and listing kept, and no placeholder named', async () => {
+    const hostId = await bare()
+    const host = mockDocs.get(`hosts/${hostId}`)
+    expect(host['screens']).toEqual({})
+    expect(host['defaultHomeScreenId']).toBeUndefined()
+    expect(host['theme']).toBeTruthy()
+    expect(host['seo']).toBeTruthy()
+    expect([docsOf(hostId, 'screens'), docsOf(hostId, 'layouts')]).toEqual([[], []])
+  })
+
+  it('gets the starter once: its published Home at / named as the placeholder, its layout, and the choice recorded', async () => {
+    const hostId = await bare()
+    const first = await provisionStarterSite(mockFirestore, hostId)
+    expect(first.provisioned).toBe(true)
+    const host = mockDocs.get(`hosts/${hostId}`)
+    expect(host['screens']).toEqual({ [first.screenId as string]: '/' })
+    expect(host['defaultHomeScreenId']).toBe(first.screenId)
+    expect(host['starterProvisionedAt']).toBe('NOW')
+    expect(mockDocs.get(`hosts/${hostId}/screens/${first.screenId}`)).toMatchObject({ slug: '/', publishedAt: 'NOW' })
+    expect(docsOf(hostId, 'layouts')).toHaveLength(1)
+    // Idempotent: the second call writes nothing.
+    const second = await provisionStarterSite(mockFirestore, hostId)
+    expect(second).toEqual({ provisioned: false })
+    expect([docsOf(hostId, 'screens'), docsOf(hostId, 'layouts')].map((rows) => rows.length)).toEqual([1, 1])
+  })
+
+  it('two requests racing commit one starter', async () => {
+    const hostId = await bare()
+    const results = await Promise.all([
+      provisionStarterSite(mockFirestore, hostId),
+      provisionStarterSite(mockFirestore, hostId),
+    ])
+    expect(results.filter((result) => result.provisioned)).toHaveLength(1)
+    expect(docsOf(hostId, 'screens')).toHaveLength(1)
+  })
+
+  it('takes nothing from a site that has a page or a layout already, or was born with the starter', async () => {
+    const hostId = await bare()
+    mockDocs.set(`hosts/${hostId}/screens/aiDraftHome`, { displayName: 'Home', slug: '/' })
+    expect(await provisionStarterSite(mockFirestore, hostId)).toEqual({ provisioned: false })
+    expect(mockDocs.get(`hosts/${hostId}`)?.['defaultHomeScreenId']).toBeUndefined()
+    const born = await provision('born-with-starter')
+    expect(await provisionStarterSite(mockFirestore, born.hostId as string)).toEqual({ provisioned: false })
+    expect(await provisionStarterSite(mockFirestore, 'no-such-site')).toEqual({ missing: true, provisioned: false })
+  })
+
+  it('is still born with the starter when nothing says otherwise — every door but the guided start’s', async () => {
+    const result = await provision('api-site')
+    const host = mockDocs.get(`hosts/${result.hostId}`)
+    expect(Object.values(host['screens'] as object)).toEqual(['/'])
+    expect(host['starterProvisionedAt']).toBeUndefined()
   })
 })
