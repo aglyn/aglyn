@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
   EVENT_MAX_ATTEMPTS,
   LOG_ROWS_KEPT,
@@ -130,7 +131,7 @@ export function emptyConnection(input: {
     accountName: null,
     listId: null,
     lists: [],
-    tag: 'Aglyn',
+    tag: PLATFORM_BRAND_NAME,
     syncContacts: true,
     syncEvents: true,
     sealedToken: null,

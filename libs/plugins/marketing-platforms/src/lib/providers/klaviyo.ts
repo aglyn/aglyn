@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { ProviderError, providerRequest, type ProviderHttp } from './http'
 import {
   e164OrNull,
@@ -47,6 +48,8 @@ import {
 const PROVIDER = 'Klaviyo'
 const BASE = 'https://a.klaviyo.com/api'
 export const KLAVIYO_REVISION = '2024-10-15'
+/** Full URL rather than a path: the events endpoint, spelled whole. */
+const KLAVIYO_EVENTS_URL = 'https://a.klaviyo.com/api/events/'
 const JOB_MAX = 1000
 const PROFILE_PAGE = 100
 const MAX_PAGES = 20
@@ -109,7 +112,7 @@ export function createKlaviyoProvider(http: ProviderHttp): MarketingProvider {
       data: {
         type: consent === 'SUBSCRIBED' ? 'profile-subscription-bulk-create-job' : 'profile-subscription-bulk-delete-job',
         attributes: {
-          ...(consent === 'SUBSCRIBED' ? { custom_source: 'Aglyn' } : {}),
+          ...(consent === 'SUBSCRIBED' ? { custom_source: PLATFORM_BRAND_NAME } : {}),
           profiles: {
             data: emails.map((email) => ({
               type: 'profile',
@@ -224,7 +227,7 @@ export function createKlaviyoProvider(http: ProviderHttp): MarketingProvider {
         properties['TrackingURL'] = event.tracking.url
       }
       const send = (name: string, uniqueId: string, value: number, extra: Record<string, unknown>) =>
-        call(credential, 'POST', '/events/', {
+        call(credential, 'POST', KLAVIYO_EVENTS_URL, {
           data: {
             type: 'event',
             attributes: {

@@ -18,6 +18,7 @@
 'use client'
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { StatusChip, type StatusTone } from '@aglyn/shared-ui-jsx/components/status-chip.component'
@@ -278,7 +279,7 @@ function ProviderCard(props: {
             <ConnectionDetails connection={connection} busy={busy} onUpdate={update} />
           ) : !connecting ? (
             <Typography variant="body2" color="text.secondary">
-              {`Not connected. Connect your own ${info.label} account with ${offer?.apiKey ? 'its API key' : 'your sign-in'}; Aglyn never asks for your password.`}
+              {`Not connected. Connect your own ${info.label} account with ${offer?.apiKey ? 'its API key' : 'your sign-in'}; ${PLATFORM_BRAND_NAME} never asks for your password.`}
             </Typography>
           ) : null}
         </Stack>

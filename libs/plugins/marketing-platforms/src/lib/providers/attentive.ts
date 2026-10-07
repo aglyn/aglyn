@@ -41,6 +41,9 @@ import {
 
 const PROVIDER = 'Attentive'
 const BASE = 'https://api.attentivemobile.com/v1'
+/** The event endpoints, spelled whole. */
+const PURCHASE_EVENT_URL = 'https://api.attentivemobile.com/v1/events/ecommerce/purchase'
+const CUSTOM_EVENT_URL = 'https://api.attentivemobile.com/v1/events/custom'
 
 function headers(credential: ProviderCredential): Record<string, string> {
   return { Authorization: `Bearer ${credential.token}`, 'Content-Type': 'application/json', Accept: 'application/json' }
@@ -55,7 +58,13 @@ export const ATTENTIVE_CUSTOM_EVENTS: Readonly<Record<Exclude<MarketingEventName
 
 export function createAttentiveProvider(http: ProviderHttp): MarketingProvider {
   const call = (credential: ProviderCredential, method: 'GET' | 'POST', path: string, body?: unknown) =>
-    providerRequest(http, { provider: PROVIDER, method, url: `${BASE}${path}`, headers: headers(credential), body })
+    providerRequest(http, {
+      provider: PROVIDER,
+      method,
+      url: path.startsWith('https://') ? path : `${BASE}${path}`,
+      headers: headers(credential),
+      body,
+    })
 
   return {
     id: 'attentive',
@@ -90,7 +99,7 @@ export function createAttentiveProvider(http: ProviderHttp): MarketingProvider {
       const occurredAt = new Date(event.occurredAtMs).toISOString()
       const user = { email: event.email }
       if (event.name === 'order.paid') {
-        await call(credential, 'POST', '/events/ecommerce/purchase', {
+        await call(credential, 'POST', PURCHASE_EVENT_URL, {
           items: event.items.map((item) => ({
             productId: item.productId ?? item.name,
             productVariantId: item.variantId ?? item.productId ?? item.name,
@@ -104,7 +113,7 @@ export function createAttentiveProvider(http: ProviderHttp): MarketingProvider {
         })
         return
       }
-      await call(credential, 'POST', '/events/custom', {
+      await call(credential, 'POST', CUSTOM_EVENT_URL, {
         type: ATTENTIVE_CUSTOM_EVENTS[event.name],
         properties: {
           orderId: event.orderId,
