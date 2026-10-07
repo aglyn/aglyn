@@ -135,6 +135,7 @@ const PLUGIN_TOPICS = {
   aiCrm: '/ai/crm-by-ai',
   aiExperiments: '/ai/ab-tests-with-ai',
   aiMarketing: '/ai/marketing-with-ai',
+  aiLogic: '/ai/logic-with-ai',
   aiProducts: '/ai/products-with-ai',
   aiSeo: '/building-sites/seo/seo-by-ai',
   aiMonitoring: '/staff-console/ai-monitoring',

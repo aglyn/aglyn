@@ -70,6 +70,8 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import WhereUsedDialog from './where-used-dialog.component'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import { HOST_LOGIC_ZONE, type LogicProposal } from './logic-zones'
 import {
   fetchWhereUsed,
   summarizeDependents,
@@ -255,6 +257,9 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
   const { rows: readVariables, truncated: variablesTruncated } =
     ceilingedWindow<any>(variableDocs, VARIABLE_CEILING)
   const [draft, setDraft] = useState<VariableDraft | null>(null)
+
+  /** The shell's zone renderer (AGL-3603); `null` outside the console shell. */
+  const ExtensionZone = useConsoleWidgetSlot()
   /**
    * The editor has been opened at least once in this session.
    *
@@ -368,6 +373,26 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
     }
   }, [firestore, hostId, variableCountEpoch])
   const variableCount = serverVariableCount ?? variables.length
+  /*
+   * Opens a variable another plugin proposed (AGL-3603) as Add variable opens
+   * one — the plan's cap asked first — unsaved. Save is the only write.
+   */
+  const propose = useCallback(
+    (proposal: LogicProposal) => {
+      if (proposal.kind !== 'variable') return false
+      const quota = checkQuota(org, 'variablesPerHost', variableCount)
+      if (!quota.allowed) {
+        enqueueSnackbar(`Variable limit reached (${quota.limit}) — upgrade in Billing`, {
+          variant: 'warning',
+          persist: false,
+        })
+        return false
+      }
+      setDraft({ id: null, ...proposal.variable, workflowId: '', workflowName: '' })
+      return true
+    },
+    [org, variableCount, enqueueSnackbar],
+  )
 
   const validName = VARIABLE_NAME_PATTERN.test(draft?.name ?? '')
   // Case-insensitive (AGL-185): names must stay unambiguous for legacy
@@ -524,6 +549,18 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
     <CardDisplay
       header={'Variables'}
       help={pluginDocsHelp('bindings', { anchor: '#typed-variables' })}
+      // Another way to start a variable (AGL-3603), in the card's header.
+      actions={
+        ExtensionZone ? (
+          <ExtensionZone
+            slot={HOST_LOGIC_ZONE.id}
+            hostId={hostId}
+            orgId={org?.$id}
+            kind="variable"
+            propose={propose}
+          />
+        ) : null
+      }
       contentGutterX
       contentGutterY
     >

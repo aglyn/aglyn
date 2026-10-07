@@ -1,0 +1,58 @@
+{
+  "id": "logic-explain-shipping-quote",
+  "kind": "logic",
+  "brief": "Explain the function shippingQuote.",
+  "framing": null,
+  "inventory": null,
+  "logic": {
+    "variables": [
+      { "name": "free_shipping_over", "type": "number", "value": "75" },
+      { "name": "flat_rate", "type": "number", "value": "6" }
+    ],
+    "functions": ["shippingQuote"],
+    "saved": {
+      "name": "shippingQuote",
+      "parameters": [
+        { "name": "order_total", "type": "number", "required": true },
+        { "name": "weight_kg", "type": "number", "required": true }
+      ],
+      "variables": [{ "name": "quote", "type": "number" }],
+      "operations": [
+        {
+          "if": { "left": "order_total", "comparator": ">=", "right": "free_shipping_over" },
+          "then": [{ "set": "quote", "expression": "0" }],
+          "otherwise": [{ "set": "quote", "expression": "flat_rate + weight_kg * 2" }]
+        }
+      ],
+      "returnValue": "quote"
+    }
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference explanation written by hand: what goes in, the one condition, and what comes out.",
+      "plan": null,
+      "answer": {
+        "summary": "It quotes shipping for an order: nothing when the order reaches the free-shipping amount, otherwise the flat rate plus 2 for every kilo.",
+        "points": [
+          "It is given the order total and the parcel's weight in kilos.",
+          "When the order total is at least the site's free-shipping amount, the quote is 0.",
+          "Otherwise the quote is the site's flat rate plus 2 for each kilo, and that is what it returns."
+        ],
+        "suggestions": []
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 5, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "No summary, so a person reads nothing first.",
+      "answer": { "summary": "", "points": ["It is given the order total."], "suggestions": [] },
+      "fails": ["readable"]
+    }
+  ]
+}

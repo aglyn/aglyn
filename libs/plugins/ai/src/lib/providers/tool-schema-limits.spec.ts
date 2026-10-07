@@ -53,6 +53,7 @@ import { assistBuildTool } from '../server/assist-build'
 import { aiComponentTool } from '../tools/ai-component-tool'
 import { AI_CRM_EMAIL_TOOL, AI_CRM_MAPPING_TOOL, aiCrmRecordTool } from '../tools/ai-crm-tool'
 import { aiExperimentExplainTool, aiExperimentVariantsTool } from '../tools/ai-experiment-tool'
+import { aiLogicFunctionTool, aiLogicVariableTool } from '../tools/ai-logic-tool'
 import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_CATALOG_TOOL, AI_CATEGORIES_TOOL, AI_PRODUCT_COPY_TOOL } from '../tools/ai-products-tool'
@@ -181,6 +182,12 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
     'screen variants': () => [aiExperimentVariantsTool('screen')],
     'email variants': () => [aiExperimentVariantsTool('email')],
     explain: () => [aiExperimentExplainTool()],
+  },
+  // Logic by AI (AGL-3603): a function, a variable, or an explanation.
+  'jobs/ai-job-logic-step.ts': {
+    function: () => [aiLogicFunctionTool()],
+    variable: () => [aiLogicVariableTool()],
+    explain: () => [aiWorkflowExplanationTool()],
   },
   'jobs/ai-job-text-step.ts': { text: () => [] },
   // Overlay copy (AGL-3603), a text job answered through one tool: a bar's

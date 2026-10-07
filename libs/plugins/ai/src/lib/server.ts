@@ -35,6 +35,7 @@ import { registerAiSiteJob } from './jobs/ai-job-site-step'
 import { registerAiBuildJob } from './jobs/ai-job-build-step'
 import { registerAiBuildCapabilities } from './jobs/ai-build-capabilities'
 import { registerAiWorkflowJob } from './jobs/ai-job-workflow-step'
+import { registerAiLogicJob } from './jobs/ai-job-logic-step'
 import { registerAiInsightJob } from './jobs/ai-job-insight-step'
 import { registerAiFigureReaders } from './insights/ai-figure-readers'
 import { registerAiTextGenerator } from './server/plugin-text-generation'
@@ -122,6 +123,9 @@ function registerAiJobKinds(): void {
   // Automations drafted from a description, and explained, whose drafts the
   // workflows plugin writes on the resource-draft seam (AGL-2919).
   registerAiWorkflowJob()
+  // Site functions and variables proposed from a description, and functions
+  // explained, as proposals the logic editor opens unsaved (AGL-3603).
+  registerAiLogicJob()
   // Product copy, and a store's products, categories and discounts from a
   // brief, as proposals the commerce plugin's surfaces apply (AGL-2916).
   registerAiProductsJob()

@@ -2687,6 +2687,55 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
   `release_ai_generative`; `assist-anthropic-subprocessor-gate.spec.ts`
   records both.
 
+## The logic kind
+
+AGL-3603. A site's Functions & Variables, by AI
+(`libs/plugins/ai/src/lib/jobs/ai-job-logic-step.ts`,
+`model/ai-logic-job.ts`, `tools/ai-logic-tool.ts`).
+
+- **Modes.** `inputs.mode` is `function` (a new function from a description,
+  or — with `functionId` — a saved function changed or fixed), `variable`
+  (one site variable) or `explain` (a saved function, in plain words). A job
+  created with no mode proposes a function.
+- **What the model is shown.** One cached rules block for all three answers
+  — the evaluator's grammar, built from `FUNCTION_BUILTIN_NAMES`; a
+  variable's stored forms; how to explain — on the `fields` doctrine scope.
+  The user turn carries the site's variables by name, type and value (60
+  listed, each value cut to 120 characters), the site's function names and,
+  for a change or an explanation, an outline of the saved function's own
+  definition. Functions and variables are core documents, read through the
+  Admin SDK in the logic page's window of 100 (`jobs/ai-logic-records.ts`).
+- **What is kept.** `submit_function` is held by `checkAiLogicFunction`:
+  names to `VARIABLE_NAME_PATTERN` and unique; a new function's name not the
+  site's already; every expression through `expressionSyntaxError`; every
+  assignment to the function's own parameters and locals, never a site
+  variable; every name read (`functionReferencedNames`) its own or a listed
+  site variable; `returnValue` its own; and one `evaluateHostFunction` run
+  with each parameter at a starting value and the site variables it reads as
+  `functionGlobals`. `submit_variable` is held by `checkAiLogicVariable` to
+  its type's stored form (a JSON object for a dictionary, a JSON list for a
+  collection). A failing answer is re-asked naming what failed.
+- **What it writes: nothing.** A function or a variable rides on a `logic`
+  output as `proposal` (`{ kind: 'function', functionId, definition }` or
+  `{ kind: 'variable', variable }`); an explanation is a `text` output. The
+  logic plugin's editors open a proposal unsaved, asking the plan's
+  `functionsPerHost` / `variablesPerHost` cap first for a new one, and the
+  editor's Save is the write.
+- **Admission.** A site of the job's org with the logic plugin on for it and
+  past its release flag; a change or an explanation also needs the function it
+  names to exist.
+- **Where a member starts one.** Widgets the AI plugin registers in the zones
+  the logic plugin hosts (`components/ai-logic.component.tsx`): Create with AI
+  in the Functions and Variables card headers (`hostLogic`); Explain it,
+  Change with AI and Fix with AI in a saved function's editor
+  (`logicFunctionEditor`); and Fix with AI on a broken reference an ACTION
+  holds (`logicReferenceIssue`), which starts a `workflow` job in `revise`
+  mode rather than a logic job. Each is gated by `aiGenerative` and
+  `ai.generate` and asks the jobs route once before it shows anything.
+- **Routing.** `job.logic` runs on the balanced tier with adaptive thinking
+  and a 3,000-token ceiling; its golden briefs are under
+  `tools/ai-eval/cases/logic`.
+
 ## The insight kind
 
 `insight` (AGL-2915) answers a question about a site's or a workspace's own figures, and makes

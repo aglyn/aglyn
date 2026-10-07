@@ -421,6 +421,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/staff-console/lockdown',
     title: 'Lockdown',
   },
+  logicWithAi: {
+    path: '/ai/logic-with-ai',
+    title: 'Functions and variables with AI',
+  },
   longFormMarkdown: {
     path: '/building-sites/besigner/long-form-markdown',
     title: 'Long documents in markdown',
@@ -852,6 +856,7 @@ export const DOCS_HELP_ANCHORS = {
   leads: ['#what-makes-a-lead', '#what-a-lead-holds', '#lead-source-filled-in', '#adding-a-lead-by-hand', '#the-leads-list', '#lead-statuses', '#filter-the-leads', '#working-a-lead-from-the-row', '#several-leads-at-once', '#import-from-csv', '#who-owns-a-lead', '#a-leads-page', '#email-state', '#converting-a-lead', '#unqualifying-a-lead', '#erasing-the-person', '#who-can-do-this', '#related'],
   liveCoEditing: ['#whos-here', '#presence-colors', '#per-version-rooms', '#presence-in-lists', '#not-a-lock', '#editing-together', '#saving-together', '#when-a-save-is-refused', '#local-draft-recovery', '#the-save-button-always-answers', '#related'],
   lockdown: ['#what-a-lockdown-does', '#reasons-and-the-notice', '#read-only-mode', '#what-reads-keep-working-does-and-does-not-cover', '#read-only-timing', '#read-only-evidence', '#read-only-revocation-evidence', '#a-gentler-lock-never-softens-a-stricter-one', '#enforcement', '#maintenance-windows-and-expiry', '#who-keeps-access-the-un-panic-invariant', '#feature-scope', '#ai-pause', '#signups-also-refuses-account-creation--if-the-valve-is-armed', '#domain-scope', '#device-scope', '#asset-quarantine--one-file-not-the-site-that-serves-it', '#which-digest', '#quarantine-keys', '#quarantine-audiences', '#disabled-files-page', '#deny-list', '#quarantine-curl', '#quarantine-history', '#tenant-api-coverage', '#analytics-beacon', '#owner-notices', '#no-other-mail', '#ban-mail', '#appeals', '#email-the-owners', '#resend-owner-notice', '#cancel-billing', '#cancel-billing-defaults', '#what-a-cancellation-does-and-what-it-never-does', '#a-cancel-that-fails-does-not-undo-the-lock', '#pause-site-money', '#pause-renewals', '#pause-payouts', '#lock-listings', '#pause-site-money-lift', '#reading-the-result', '#operating-it', '#never-take-a-lock-or-a-lift-on-trust', '#what-a-caller-is-told', '#drill-provenance', '#production-drill-blocked', '#verifying-a-lockdown-on-the-wire', '#what-the-audit-row-records', '#the-live-dunning-schedule-has-not-been-read-agl-2430', '#what-the-live-dashboard-did-say-once-someone-opened-it-agl-2430', '#-include-a-link-for-customers-to-manage-their-subscriptions-stays-off', '#the-billing-recovery-path-must-survive-a-billing-lock'],
+  logicWithAi: ['#function', '#variable', '#change', '#broken-references', '#what-is-sent', '#who-can-use-it', '#related'],
   longFormMarkdown: ['#the-markdown-element', '#what-the-markdown-supports', '#links-that-survive-a-rename', '#the-table-of-contents-element', '#how-it-finds-the-markdown', '#heading-links', '#related'],
   maintenance: ['#is-the-job-still-running', '#running-a-job-by-hand', '#the-jobs', '#audit-archive', '#plugin-artifact-reaper', '#plugin-verdict-re-verification', '#jobs-that-live-elsewhere', '#related'],
   maintenanceMode: ['#turn-it-on', '#tips', '#related'],

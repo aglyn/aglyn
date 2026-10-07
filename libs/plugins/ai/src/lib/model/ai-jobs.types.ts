@@ -73,6 +73,7 @@ export type AiJobKind =
   | 'crm'
   | 'onboarding'
   | 'workflow'
+  | 'logic'
   | 'text'
   | 'theme'
   | 'build'
@@ -95,6 +96,7 @@ export const AI_JOB_KINDS: readonly AiJobKind[] = [
   'crm',
   'onboarding',
   'workflow',
+  'logic',
   'text',
   'theme',
   'build',
@@ -241,6 +243,7 @@ export type AiJobOutputResource =
   | 'crm'
   /** A draft another plugin wrote for a build (AGL-3616), named by `draftResource`. */
   | 'draft'
+  | 'logic'
 
 /**
  * One thing a job wrote. Addressed by resource and id so the console can
@@ -264,6 +267,10 @@ export type AiJobOutputResource =
  * step, an email draft, or an import's column matches. The CRM's own task
  * form, stage route, composer and import drawer are the writes, and a person
  * makes each of them, or does not.
+ *
+ * A `logic` output is a proposal too (AGL-3603): a site function or variable
+ * the Functions & Variables editor opens unsaved. Saving it is the editor's
+ * write, which a person makes, or does not.
  */
 export interface AiJobOutput {
   resource: AiJobOutputResource

@@ -603,6 +603,7 @@ export type AiStepKind =
   | 'job.form'
   | 'job.insight'
   | 'job.layout'
+  | 'job.logic'
   | 'job.template'
   | 'job.page'
   | 'job.products'
@@ -644,6 +645,11 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   // A layout or a page template is one structured tree held to every
   // building rule; the fast tier re-asks more than it saves.
   'job.layout': 'balanced',
+  // A site function or variable (AGL-3603): a small structured answer held
+  // to the evaluator's grammar, the names it may read and a first run, whose
+  // judgment is turning a description into conditions and arithmetic; the
+  // fast tier re-asks more than it saves.
+  'job.logic': 'balanced',
   'job.template': 'balanced',
   // A page section (AGL-2907) is held to the whole page's building rules on
   // every pass, for the same reason.
