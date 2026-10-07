@@ -93,6 +93,8 @@
       "@aglyn/plugins-workflows/*": ["./libs/plugins/workflows/src/lib/*"],
       "@aglyn/plugins-redirects": ["./libs/plugins/redirects/src/index.ts"],
       "@aglyn/plugins-redirects/*": ["./libs/plugins/redirects/src/lib/*"],
+      "@aglyn/plugins-shipping": ["./libs/plugins/shipping/src/index.ts"],
+      "@aglyn/plugins-shipping/*": ["./libs/plugins/shipping/src/lib/*"],
       "@aglyn/plugins-themes": ["./libs/plugins/themes/src/index.ts"],
       "@aglyn/plugins-themes/*": ["./libs/plugins/themes/src/lib/*"],
       "@aglyn/plugins-sms": ["./libs/plugins/sms/src/index.ts"],

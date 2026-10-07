@@ -152,6 +152,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-themes'),
   },
   {
+    id: 'shipping',
+    apiPrefixes: ["shipping"],
+    register: {"console":"registerShippingConsole"},
+    contributes: {"console":{"slots":["commerceSettings","orderDetail","ordersBulk","productEditor","orgBillingUsage"]}},
+    load: () => import('@aglyn/plugins-shipping'),
+  },
+  {
     id: 'funnels',
     apiPrefixes: ["funnels"],
     register: {"console":"registerFunnelsConsole"},

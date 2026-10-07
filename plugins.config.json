@@ -2617,6 +2617,58 @@
       "contributes": {}
     },
     {
+      "id": "shipping",
+      "package": "@aglyn/plugins-shipping",
+      "register": {
+        "console": "registerShippingConsole",
+        "consoleApi": "registerShippingConsoleApi",
+        "serverDeclarations": "registerShippingServerDeclarations",
+        "subprocessors": "shippingSubprocessors",
+        "usageAxes": "shippingUsageAxes"
+      },
+      "apiPrefixes": [
+        "shipping"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A tracking number's workspace, site and record, so a provider's webhook finds what it is about (AGL-3612). Top level, so org erasure removes them by orgId.",
+          "name": "shippingTrackers",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "Carrier quotes kept ten minutes, and the quote a label is bought from (AGL-3612).",
+          "name": "shippingQuoteCache",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 20,
+        "$comment": "Carrier rates at checkout, labels, tracking and address checks for the commerce plugin's orders (AGL-3612), through core's shipping-rate and shipment-record seams; it never imports commerce. On for every workspace like AI, off for a site only when that site says so, and no release flag: every surface hides itself until the deployment names a provider (SHIPPO_API_TOKEN or EASYPOST_API_KEY, with SHIPPING_TOKEN_KEY).",
+        "label": "Shipping",
+        "alwaysOnForWorkspace": true,
+        "description": "Carrier rates at checkout, shipping labels and tracking for physical orders.",
+        "requires": [
+          "commerce"
+        ],
+        "siteOff": {
+          "stops": "Switching Shipping off for this site stops live carrier rates at its checkout, which falls back to the site’s own shipping rates, and removes label buying from its orders.",
+          "keeps": "Labels already bought, their tracking and their charges are kept, and Shipping keeps working on the workspace’s other sites."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "orderDetail",
+            "ordersBulk",
+            "productEditor",
+            "orgBillingUsage"
+          ]
+        }
+      }
+    },
+    {
       "id": "video-delivery",
       "package": "@aglyn/plugins-video-delivery",
       "register": {

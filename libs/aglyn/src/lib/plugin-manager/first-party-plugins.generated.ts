@@ -180,6 +180,19 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     "description": "Sales, refunds, fees and payouts posted to QuickBooks Online or Xero.",
     "releaseFlag": "release_accounting"
   },
+  {
+    "id": "shipping",
+    "label": "Shipping",
+    "alwaysOnForWorkspace": true,
+    "description": "Carrier rates at checkout, shipping labels and tracking for physical orders.",
+    "requires": [
+      "commerce"
+    ],
+    "siteOff": {
+      "stops": "Switching Shipping off for this site stops live carrier rates at its checkout, which falls back to the site’s own shipping rates, and removes label buying from its orders.",
+      "keeps": "Labels already bought, their tracking and their charges are kept, and Shipping keeps working on the workspace’s other sites."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -203,6 +216,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "redirects": "routes",
   "workflows": "routes",
   "accounting": "console-only",
+  "shipping": "console-only",
 }
 
 /**
@@ -2077,6 +2091,7 @@ export const PLUGIN_USAGE_METERS_DECLARED: readonly ResolvedPluginUsageMeter[] =
   {"pluginId":"data","id":"dataset-storage"},
   {"pluginId":"ai","id":"assist"},
   {"pluginId":"sms","id":"sms-texts"},
+  {"pluginId":"shipping","id":"shipping-labels"},
 ]
 
 /**
@@ -2092,6 +2107,16 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "outreach",
     "name": "outreachLinks",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "shipping",
+    "name": "shippingTrackers",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "shipping",
+    "name": "shippingQuoteCache",
     "orgField": "orgId"
   },
 ]

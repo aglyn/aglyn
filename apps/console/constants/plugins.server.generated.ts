@@ -95,6 +95,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-sms/server'),
   },
   {
+    id: 'shipping',
+    apiPrefixes: ["shipping"],
+    register: {"consoleApi":"registerShippingConsoleApi"},
+    load: () => import('@aglyn/plugins-shipping/server'),
+  },
+  {
     id: 'funnels',
     apiPrefixes: ["funnels"],
     register: {"consoleApi":"registerFunnelsConsoleApi"},
