@@ -24,6 +24,7 @@ import {
 import type { AiJobReview, AiJobSummary } from '../model/ai-jobs.types'
 import { aiJobCreditEstimate } from '../model/ai-build-job'
 import { aiBuildOpNoun } from '../model/ai-build-progress'
+import { aiJobConfirmingOwnPlan } from '../model/ai-job-activity'
 import { aiSiteStarterFallbackOffered } from '../model/ai-job-failure-copy'
 import { AiSiteStarterFallback } from './ai-site-starter-fallback.component'
 import { Box, Button, Checkbox, Collapse, FormControlLabel, Stack, Typography } from '@mui/material'
@@ -126,7 +127,8 @@ export function AiJobPlan({
       : isAiPlanNewRef(ref)
         ? ref.slice('new:'.length)
         : (plan?.labels[ref] ?? ref)
-  const waiting = job.status === 'needs_review' && review !== null
+  // A plan the machine is confirming itself is not one to confirm (AGL-3596).
+  const waiting = job.status === 'needs_review' && review !== null && !aiJobConfirmingOwnPlan(job)
   // The guard rail (AGL-2911): what the plan is estimated to cost is read
   // before it is confirmed, not after it has been spent. An estimate, and
   // said to be one — the plan's own passes at the nominal credits a step
