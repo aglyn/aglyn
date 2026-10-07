@@ -103,14 +103,23 @@ export interface AccountingProvider {
   /**
    * The consent address. A confidential client's authorization-code flow:
    * the client secret redeems the code, and the signed, single-use `state`
-   * is what binds the redirect to the member who started it.
+   * is what binds the redirect to the member who started it. An aggregator
+   * (Codat) makes the workspace's record at this step, so it may answer
+   * asynchronously and reads the workspace it is for.
    */
-  authorizeUrl(input: { state: string; redirectUri: string }): string
+  authorizeUrl(input: {
+    state: string
+    redirectUri: string
+    orgId: string
+    orgName: string | null
+  }): string | Promise<string>
   exchangeCode(input: {
     code: string
     redirectUri: string
     /** QuickBooks hands the company id back beside the code. */
     realmId?: string | null
+    /** The workspace finishing the connect, which an aggregator checks its record against. */
+    orgId?: string | null
   }): Promise<{ tokens: AccountingTokenSet; tenants: AccountingTenant[] }>
   refresh(refreshToken: string): Promise<AccountingTokenSet>
   /** Revokes the grant. Never throws for a grant that is already gone. */

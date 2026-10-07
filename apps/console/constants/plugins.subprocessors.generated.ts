@@ -112,7 +112,17 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
   },
   {
     pluginId: 'accounting',
-    subprocessors: [],
+    subprocessors: [
+      {
+        host: "api.codat.io",
+        entity: "Codat Limited",
+        region: "United Kingdom",
+        purpose: "Connecting a merchant's accounting software the platform does not connect directly (such as QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books and Wave) and posting their sales, refunds, fees and payouts to it",
+        publishedOn: "2026-10-07",
+        reason: "The Codat adapter (`libs/plugins/accounting/src/lib/server/providers/codat.ts`): one Codat company per workspace, tagged with the workspace's id, made when a member starts a connect; reads of the linked ledger's company details, chart of accounts and tax rates for the mapping; and writes of the workspace's direct incomes, direct costs, transfers or journals, and one walk-in customer and one fee supplier, through Codat into the linked software. The company is deleted on disconnect or erasure. Reached only while `CODAT_API_KEY` and `ACCOUNTING_TOKEN_KEY` are set.",
+        dataReceived: "The workspace's name and id, as its Codat company. The workspace's own sales as ledger documents: per order, its number, date, line descriptions, quantities and prices, shipping, discount, sales tax and total, with the buyer's name and email address in the document's note; per refund, its amount and the order it reverses; per sale, the platform's fee; per Stripe payout, its amount and date. In daily-summary mode, one journal of the day's totals instead of the per-order documents. The platform's own API key authenticates; Codat holds the credentials to the merchant's software. Nothing about a site visitor who did not buy, and no card data.",
+      },
+    ],
     hosts: [
       {
         host: "quickbooks.api.intuit.com",
@@ -161,6 +171,12 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         disposition: "no-request",
         reason: "Xero's consent page, built by the Xero adapter's `authorizeUrl` and opened by the member's own browser to grant access to their own organization. No server of ours requests it.",
         dataReceived: "Nothing from our servers. The browser carries the OAuth client id, the scopes, the redirect address and a signed state.",
+      },
+      {
+        host: "link.codat.io",
+        disposition: "no-request",
+        reason: "Codat Link, whose address the Codat adapter's `authorizeUrl` answers and the member's own browser opens to pick their accounting software and sign in to it. No server of ours requests it.",
+        dataReceived: "Nothing from our servers. The browser carries the Codat company's id and a signed state; what the member types there goes to Codat.",
       },
     ],
     uses: [

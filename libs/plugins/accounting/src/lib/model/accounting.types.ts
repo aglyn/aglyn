@@ -27,8 +27,12 @@
  * `accounting/status` and `accounting/log`.
  */
 
-/** The ledgers a workspace can connect. */
-export const ACCOUNTING_PROVIDERS = ['quickbooks', 'xero'] as const
+/**
+ * The ledgers a workspace can connect. `codat` is the aggregator (AGL-3636)
+ * that reaches the rest — QuickBooks Desktop, NetSuite, Sage, FreshBooks,
+ * Zoho Books, Wave — and the connection names the software it linked.
+ */
+export const ACCOUNTING_PROVIDERS = ['quickbooks', 'xero', 'codat'] as const
 export type AccountingProviderId = (typeof ACCOUNTING_PROVIDERS)[number]
 
 export function isAccountingProviderId(value: unknown): value is AccountingProviderId {
@@ -39,6 +43,12 @@ export function isAccountingProviderId(value: unknown): value is AccountingProvi
 export const ACCOUNTING_PROVIDER_LABELS: Readonly<Record<AccountingProviderId, string>> = {
   quickbooks: 'QuickBooks Online',
   xero: 'Xero',
+  codat: 'Accounting software',
+}
+
+/** A provider as it reads inside a sentence: "Reconnect your accounting software." */
+export function accountingProviderName(provider: AccountingProviderId): string {
+  return provider === 'codat' ? 'your accounting software' : ACCOUNTING_PROVIDER_LABELS[provider]
 }
 
 /** `orgs/{orgId}/accountingConnections/{provider}`: one per provider, one active. */
