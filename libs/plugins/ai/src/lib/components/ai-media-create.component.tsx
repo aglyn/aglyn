@@ -28,8 +28,12 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
+  IconButton,
   LinearProgress,
   MenuItem,
+  Radio,
+  RadioGroup,
   Stack,
   TextField,
   ToggleButton,
@@ -37,31 +41,45 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { aiMediaCreditsPerPicture } from '../model/ai-media-credits'
 import {
   AI_IMAGE_ASPECT_RATIOS,
   AI_IMAGE_MAX_COUNT,
   AI_IMAGE_PROMPT_MAX_CHARS,
+  AI_SVG_MAX_COLORS,
+  AI_SVG_STYLES,
+  aiImagePhotosOffered,
   type AiImageAspectRatio,
+  type AiImageMode,
+  type AiSvgStyle,
 } from '../providers/image-contract'
 
 /**
- * "Create with AI" in Media (AGL-3602): pictures from a description, added
- * to the library that is open, through the `mediaLibrary` zone beside Upload
+ * "Create with AI" in Media (AGL-3602): pictures from a description, added to
+ * the library that is open, through the `mediaLibrary` zone beside Upload
  * media and in the library's empty state.
  *
- * Renders nothing until the door has answered for this workspace: the shell
- * decided the plan, the member's permission and the plugin's enablement
- * before mounting it, and whether this deployment has an image provider, and
- * whether the generative release is on, are the door's to say. A 404 or a 403
- * there is this control staying absent.
+ * It draws from the shell's gates alone — the plan, the member's
+ * `ai.generate`, the plugin being on for the workspace and the site — and asks
+ * no server anything until someone creates a picture: the door decides then,
+ * and the dialog says what it decided. Two modes: an Illustration (an SVG the
+ * text AI draws, wherever text AI runs) and, where the deployment makes them,
+ * a Photo.
  */
 
-/** What the door's GET answers when the button may show. */
-export interface AiMediaImageVerdict {
-  model: { id: string; label: string }
-  aspectRatios: readonly string[]
-  maxCount: number
-  creditsPerImage: number
+/** Where the shell sends a reader to buy what the plan lacks (AGL-3601). */
+export interface AiMediaUpgrade {
+  billingHref: string
+  canManageBilling: boolean
+}
+
+export interface AiMediaCreateButtonProps extends ConsoleMediaLibraryZoneProps {
+  /**
+   * `false` when the shell mounted this as its own upsell: the plan lacks AI
+   * generation and an add-on would grant it. Absent means entitled.
+   */
+  entitled?: boolean
+  upgrade?: AiMediaUpgrade
 }
 
 /** The words each shape is offered in. */
@@ -73,76 +91,68 @@ const ASPECT_LABELS: Record<AiImageAspectRatio, string> = {
   '9:16': 'Tall',
 }
 
-/** The sentence the estimate reads as, before anything is spent. */
-export function aiMediaCreditEstimate(count: number, creditsPerImage: number): string {
-  const pictures = count === 1 ? '1 picture' : `${count} pictures`
-  return `${pictures} uses ${(count * creditsPerImage).toLocaleString()} AI credits (${creditsPerImage.toLocaleString()} each). A picture the safety filter holds back is not charged.`
+/** The words each kind of illustration is offered in. */
+export const AI_SVG_STYLE_LABELS: Record<AiSvgStyle, string> = {
+  illustration: 'Illustration',
+  icon: 'Icon',
+  pattern: 'Pattern',
+  logo: 'Logo mark',
 }
 
-type Verdict = { state: 'checking' } | { state: 'hidden' } | { state: 'ready'; door: AiMediaImageVerdict }
+/** The sentence the estimate reads as, before anything is spent. */
+export function aiMediaCreditEstimate(mode: AiImageMode, count: number): string {
+  const each = aiMediaCreditsPerPicture(mode)
+  const pictures = count === 1 ? '1 picture' : `${count} pictures`
+  return (
+    `${pictures} uses about ${(count * each).toLocaleString()} AI credits ` +
+    `(about ${each.toLocaleString()} each). A picture that is held back or does not come out is not charged.`
+  )
+}
 
-export function AiMediaCreateButton({
-  hostId,
-  orgId,
-  library,
-  folderId,
-  onCreated,
-}: ConsoleMediaLibraryZoneProps) {
-  const { data: user } = useUser()
-  // Held in a ref so the probe keys on WHO is signed in, never on the
-  // identity of the object that says so.
-  const userRef = useRef(user)
-  userRef.current = user
-  const uid = user?.uid ?? null
-  const [verdict, setVerdict] = useState<Verdict>({ state: 'checking' })
+export function AiMediaCreateButton(props: AiMediaCreateButtonProps) {
+  const { orgId, entitled, upgrade } = props
   const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    if (!orgId || !uid) return
-    let active = true
-    void (async () => {
-      try {
-        const response = await authorizedFetch(
-          userRef.current,
-          `/api/ai/media/images?orgId=${encodeURIComponent(orgId)}`,
-        )
-        const payload = response.ok ? await response.json().catch(() => null) : null
-        if (!active) return
-        setVerdict(
-          payload && typeof payload.creditsPerImage === 'number'
-            ? { state: 'ready', door: payload as AiMediaImageVerdict }
-            : { state: 'hidden' },
-        )
-      } catch {
-        if (active) setVerdict({ state: 'hidden' })
-      }
-    })()
-    return () => {
-      active = false
-    }
-  }, [orgId, uid])
-
-  if (verdict.state !== 'ready' || !orgId) return null
+  if (!orgId) return null
+  const button = (
+    <Button
+      size="small"
+      variant="outlined"
+      startIcon={<MdiIcon path={mdiCreation.path} />}
+      onClick={() => setOpen(true)}
+    >
+      {'Create with AI'}
+    </Button>
+  )
+  if (entitled === false) {
+    if (!upgrade) return null
+    return (
+      <>
+        {button}
+        <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="xs">
+          <DialogTitle>{'Create images with AI'}</DialogTitle>
+          <DialogContent>
+            <Typography>
+              {upgrade.canManageBilling
+                ? 'Creating pictures and illustrations comes with the AI add-on.'
+                : 'Creating pictures and illustrations comes with the AI add-on. Ask an owner or admin of this workspace to add it.'}
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpen(false)}>{'Close'}</Button>
+            {upgrade.canManageBilling ? (
+              <Button variant="contained" href={upgrade.billingHref}>
+                {'See the AI add-on'}
+              </Button>
+            ) : null}
+          </DialogActions>
+        </Dialog>
+      </>
+    )
+  }
   return (
     <>
-      <Button
-        size="small"
-        variant="outlined"
-        startIcon={<MdiIcon path={mdiCreation.path} />}
-        onClick={() => setOpen(true)}
-      >
-        {'Create with AI'}
-      </Button>
-      <AiMediaCreateDialog
-        open={open}
-        onClose={() => setOpen(false)}
-        door={verdict.door}
-        orgId={orgId}
-        hostId={hostId}
-        library={library}
-        folderId={folderId}
-        onCreated={onCreated}
-      />
+      {button}
+      <AiMediaCreateDialog {...props} orgId={orgId} open={open} onClose={() => setOpen(false)} />
     </>
   )
 }
@@ -151,14 +161,12 @@ export interface AiMediaCreateDialogProps
   extends Pick<ConsoleMediaLibraryZoneProps, 'hostId' | 'library' | 'folderId' | 'onCreated'> {
   open: boolean
   onClose: () => void
-  door: AiMediaImageVerdict
   orgId: string
 }
 
 export function AiMediaCreateDialog({
   open,
   onClose,
-  door,
   orgId,
   hostId,
   library,
@@ -168,17 +176,22 @@ export function AiMediaCreateDialog({
   const { data: user } = useUser()
   const userRef = useRef(user)
   userRef.current = user
+  const photos = aiImagePhotosOffered()
+  const [mode, setMode] = useState<AiImageMode>(photos ? 'photo' : 'illustration')
+  const [style, setStyle] = useState<AiSvgStyle>('illustration')
+  // The site theme's colors need a site; the organization's library names none.
+  const [paletteSource, setPaletteSource] = useState<'theme' | 'custom'>(hostId ? 'theme' : 'custom')
+  const [colors, setColors] = useState<string[]>(['#1a73e8', '#fbbc04'])
   const [prompt, setPrompt] = useState('')
   const [aspectRatio, setAspectRatio] = useState<AiImageAspectRatio>('1:1')
   const [count, setCount] = useState(1)
   const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState<{ severity: 'error' | 'warning' | 'success'; text: string } | null>(null)
+  const [notice, setNotice] = useState<{ severity: 'error' | 'warning'; text: string } | null>(null)
 
   useEffect(() => {
     if (open) setNotice(null)
   }, [open])
 
-  const maxCount = Math.max(1, Math.min(AI_IMAGE_MAX_COUNT, door.maxCount))
   const create = useCallback(async () => {
     const description = prompt.trim()
     if (!description) return
@@ -193,9 +206,17 @@ export function AiMediaCreateDialog({
           library,
           hostId,
           folderId,
+          mode,
           prompt: description,
           aspectRatio,
           count,
+          ...(mode === 'illustration'
+            ? {
+                style,
+                palette:
+                  paletteSource === 'theme' ? { source: 'theme' } : { source: 'custom', colors },
+              }
+            : {}),
         }),
       })
       const payload = await response.json().catch(() => null)
@@ -211,15 +232,15 @@ export function AiMediaCreateDialog({
       }
       const ids: string[] = Array.isArray(payload?.mediaIds) ? payload.mediaIds : []
       onCreated(ids)
-      const held = Number(payload?.filtered ?? 0) + Number(payload?.failed ?? 0)
-      if (held > 0) {
+      const missing = Number(payload?.filtered ?? 0) + Number(payload?.failed ?? 0)
+      if (missing > 0) {
         setNotice({
           severity: 'warning',
           text:
             `Added ${ids.length} of ${count} to the library. ` +
             (payload?.warning
               ? String(payload.warning)
-              : 'The rest were held back by the safety filter and were not charged.'),
+              : 'The rest were held back and were not charged.'),
         })
         return
       }
@@ -230,23 +251,66 @@ export function AiMediaCreateDialog({
     } finally {
       setBusy(false)
     }
-  }, [prompt, orgId, library, hostId, folderId, aspectRatio, count, onCreated, onClose])
+  }, [prompt, orgId, library, hostId, folderId, mode, aspectRatio, count, style, paletteSource, colors, onCreated, onClose])
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
       <DialogTitle>{'Create images with AI'}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
+          {photos ? (
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={mode}
+              onChange={(_event, next) => {
+                if (next) setMode(next)
+              }}
+              aria-label="What to make"
+              disabled={busy}
+            >
+              <ToggleButton value="photo">{'Photo'}</ToggleButton>
+              <ToggleButton value="illustration">{'Illustration or icon'}</ToggleButton>
+            </ToggleButtonGroup>
+          ) : null}
+          {mode === 'illustration' ? (
+            <TextField
+              select
+              size="small"
+              label="Kind"
+              value={style}
+              onChange={(event) => setStyle(event.target.value as AiSvgStyle)}
+              disabled={busy}
+              sx={{ maxWidth: 240 }}
+              helperText={
+                style === 'logo'
+                  ? 'A simple symbol, without lettering. Not a real brand’s logo.'
+                  : style === 'pattern'
+                    ? 'A seamless background that tiles.'
+                    : 'Drawn as an SVG, sharp at any size.'
+              }
+            >
+              {AI_SVG_STYLES.map((value) => (
+                <MenuItem key={value} value={value}>
+                  {AI_SVG_STYLE_LABELS[value]}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : null}
           <TextField
-            label="Describe the picture"
-            placeholder="A sunlit bakery counter with fresh sourdough loaves, warm morning light"
+            label={mode === 'photo' ? 'Describe the picture' : 'Describe what to draw'}
+            placeholder={
+              mode === 'photo'
+                ? 'A sunlit bakery counter with fresh sourdough loaves, warm morning light'
+                : 'A friendly delivery van with a parcel, simple and flat'
+            }
             value={prompt}
             onChange={(event) => setPrompt(event.target.value.slice(0, AI_IMAGE_PROMPT_MAX_CHARS))}
             multiline
             minRows={3}
             autoFocus
             disabled={busy}
-            helperText="Pictures of children are not made. The description becomes each picture's alt text."
+            helperText="The description becomes each picture's alt text, which you can edit."
           />
           <Stack spacing={0.5}>
             <Typography variant="body2" color="text.secondary">
@@ -263,15 +327,71 @@ export function AiMediaCreateDialog({
               disabled={busy}
               sx={{ flexWrap: 'wrap' }}
             >
-              {AI_IMAGE_ASPECT_RATIOS.filter((ratio) => door.aspectRatios.includes(ratio)).map(
-                (ratio) => (
-                  <ToggleButton key={ratio} value={ratio} aria-label={`${ASPECT_LABELS[ratio]} ${ratio}`}>
-                    {`${ASPECT_LABELS[ratio]} ${ratio}`}
-                  </ToggleButton>
-                ),
-              )}
+              {AI_IMAGE_ASPECT_RATIOS.map((ratio) => (
+                <ToggleButton key={ratio} value={ratio} aria-label={`${ASPECT_LABELS[ratio]} ${ratio}`}>
+                  {`${ASPECT_LABELS[ratio]} ${ratio}`}
+                </ToggleButton>
+              ))}
             </ToggleButtonGroup>
           </Stack>
+          {mode === 'illustration' ? (
+            <Stack spacing={1}>
+              <RadioGroup
+                value={paletteSource}
+                onChange={(event) => setPaletteSource(event.target.value as 'theme' | 'custom')}
+                aria-label="Colors"
+              >
+                <FormControlLabel
+                  value="theme"
+                  control={<Radio size="small" />}
+                  label="Use my site's theme colors"
+                  disabled={busy || !hostId}
+                />
+                <FormControlLabel
+                  value="custom"
+                  control={<Radio size="small" />}
+                  label="Choose colors"
+                  disabled={busy}
+                />
+              </RadioGroup>
+              {paletteSource === 'custom' ? (
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                  {colors.map((color, index) => (
+                    <Stack key={index} direction="row" sx={{ alignItems: 'center' }}>
+                      <TextField
+                        type="color"
+                        size="small"
+                        value={color}
+                        onChange={(event) =>
+                          setColors((current) =>
+                            current.map((value, at) => (at === index ? event.target.value : value)),
+                          )
+                        }
+                        disabled={busy}
+                        slotProps={{ htmlInput: { 'aria-label': `Color ${index + 1}` } }}
+                        sx={{ width: 64 }}
+                      />
+                      {colors.length > 1 ? (
+                        <IconButton
+                          size="small"
+                          aria-label={`Remove color ${index + 1}`}
+                          onClick={() => setColors((current) => current.filter((_value, at) => at !== index))}
+                          disabled={busy}
+                        >
+                          {'×'}
+                        </IconButton>
+                      ) : null}
+                    </Stack>
+                  ))}
+                  {colors.length < AI_SVG_MAX_COLORS ? (
+                    <Button size="small" onClick={() => setColors((current) => [...current, '#333333'])} disabled={busy}>
+                      {'Add a color'}
+                    </Button>
+                  ) : null}
+                </Stack>
+              ) : null}
+            </Stack>
+          ) : null}
           <TextField
             select
             size="small"
@@ -281,14 +401,14 @@ export function AiMediaCreateDialog({
             disabled={busy}
             sx={{ maxWidth: 160 }}
           >
-            {Array.from({ length: maxCount }, (_unused, index) => index + 1).map((value) => (
+            {Array.from({ length: AI_IMAGE_MAX_COUNT }, (_unused, index) => index + 1).map((value) => (
               <MenuItem key={value} value={value}>
                 {value}
               </MenuItem>
             ))}
           </TextField>
           <Typography variant="body2" color="text.secondary">
-            {aiMediaCreditEstimate(count, door.creditsPerImage)}
+            {aiMediaCreditEstimate(mode, count)}
           </Typography>
           {busy ? (
             <Stack spacing={1}>

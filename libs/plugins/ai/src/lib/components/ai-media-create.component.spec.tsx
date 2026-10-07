@@ -18,11 +18,13 @@
 /**
  * "Create with AI" in Media (AGL-3602), as the media library's zone draws it.
  *
- * - It is on the `mediaLibrary` zone behind the generative widgets' gates.
- * - It stays absent until its door says this deployment makes pictures.
- * - The dialog says what the pictures will cost before anything is spent,
- *   sends the description, shape, count, library and folder, and hands the
- *   library the new assets.
+ * - It is on the `mediaLibrary` zone behind the generative widgets' gates,
+ *   and it draws from those alone: no request is made until someone creates.
+ * - The dialog offers Photo only where the deployment makes photos, and
+ *   Illustration everywhere; it says what the pictures will cost before
+ *   anything is spent, sends what the door reads, and hands the library the
+ *   new assets.
+ * - Mounted as its own upsell, it opens the add-on instead.
  */
 
 import { CONSOLE_WIDGET_SLOTS, listConsoleWidgets } from '@aglyn/aglyn'
@@ -39,22 +41,16 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 
 import { AI_PLUGIN_ID } from '../constants'
+import { aiMediaCreditsPerPicture } from '../model/ai-media-credits'
 import { registerAiConsole } from '../plugin'
-import { aiMediaCreditEstimate } from './ai-media-create.component'
+import { aiMediaCreditEstimate, type AiMediaCreateButtonProps } from './ai-media-create.component'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
-
-const VERDICT = {
-  model: { id: 'imagen-4.0-generate-001', label: 'Imagen 4' },
-  aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16'],
-  maxCount: 4,
-  creditsPerImage: 60,
-}
 
 let mockFetch: jest.Mock
 const onCreated = jest.fn()
 
-const zoneProps = (patch: Partial<ConsoleMediaLibraryZoneProps> = {}): ConsoleMediaLibraryZoneProps => ({
+const zoneProps = (patch: Partial<AiMediaCreateButtonProps> = {}): AiMediaCreateButtonProps => ({
   hostId: 'host-1',
   orgId: 'org-1',
   library: 'host',
@@ -69,6 +65,8 @@ function widget() {
   return entry.widget
 }
 
+const Widget = () => widget().Component as ComponentType<AiMediaCreateButtonProps>
+
 beforeAll(() => {
   registerAiConsole()
 })
@@ -77,7 +75,15 @@ beforeEach(() => {
   mockFetch = jest.fn()
   global.fetch = mockFetch as unknown as typeof fetch
   onCreated.mockReset()
+  delete process.env.NEXT_PUBLIC_AI_IMAGE_PHOTOS
 })
+
+async function open(props = zoneProps()) {
+  const Component = Widget()
+  render(<Component {...props} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+  return screen.getByRole('dialog')
+}
 
 describe('the zone entry', () => {
   it('is on the media library’s zone, gated as the generative widgets are', () => {
@@ -89,77 +95,128 @@ describe('the zone entry', () => {
     })
   })
 
-  it('draws nothing while the door says no image provider is configured', async () => {
-    const Widget = widget().Component as ComponentType<ConsoleMediaLibraryZoneProps>
-    mockFetch.mockResolvedValueOnce(json({ error: 'Not found' }, 404))
-    const { container } = render(<Widget {...zoneProps()} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
-    expect(String(mockFetch.mock.calls[0][0])).toBe('/api/ai/media/images?orgId=org-1')
-    expect(container.textContent).toBe('')
+  it('draws at once and asks no server anything until someone creates', async () => {
+    const dialog = await open()
+    expect(within(dialog).getByText('Create images with AI')).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('opens the add-on, not the dialog, when the shell mounted it as its own upsell', async () => {
+    const dialog = await open(
+      zoneProps({ entitled: false, upgrade: { billingHref: '/acme/billing#add-ons', canManageBilling: true } }),
+    )
+    expect(within(dialog).getByText(/comes with the AI add-on/)).toBeTruthy()
+    expect(within(dialog).getByRole('link', { name: 'See the AI add-on' }).getAttribute('href')).toBe(
+      '/acme/billing#add-ons',
+    )
+    expect(within(dialog).queryByLabelText('Describe what to draw')).toBeNull()
   })
 })
 
-describe('the dialog', () => {
-  async function open(props = zoneProps()) {
-    const Widget = widget().Component as ComponentType<ConsoleMediaLibraryZoneProps>
-    mockFetch.mockResolvedValueOnce(json(VERDICT))
-    render(<Widget {...props} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
-    return screen.getByRole('dialog')
-  }
-
-  it('says what the pictures cost before anything is spent', async () => {
+describe('the modes', () => {
+  it('offers only Illustration where the deployment makes no photos', async () => {
     const dialog = await open()
-    expect(within(dialog).getByText(aiMediaCreditEstimate(1, 60))).toBeTruthy()
-    expect(aiMediaCreditEstimate(3, 60)).toMatch(/^3 pictures uses 180 AI credits \(60 each\)/)
+    expect(within(dialog).queryByRole('button', { name: 'Photo' })).toBeNull()
+    expect(within(dialog).getByLabelText('Describe what to draw')).toBeTruthy()
+    expect(within(dialog).getByText(aiMediaCreditEstimate('illustration', 1))).toBeTruthy()
   })
 
-  it('sends the description, shape, count, library and folder, and hands back the new assets', async () => {
+  it('offers Photo first where it does, and switches to Illustration', async () => {
+    process.env.NEXT_PUBLIC_AI_IMAGE_PHOTOS = 'on'
+    const dialog = await open()
+    expect(within(dialog).getByLabelText('Describe the picture')).toBeTruthy()
+    expect(within(dialog).getByText(aiMediaCreditEstimate('photo', 1))).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Illustration or icon' }))
+    expect(within(dialog).getByLabelText('Describe what to draw')).toBeTruthy()
+    expect(within(dialog).getByText(aiMediaCreditEstimate('illustration', 1))).toBeTruthy()
+  })
+
+  it('estimates a photo at about 108 credits and an illustration at about 18', () => {
+    expect(aiMediaCreditsPerPicture('photo')).toBe(108)
+    expect(aiMediaCreditsPerPicture('illustration')).toBe(18)
+    expect(aiMediaCreditEstimate('photo', 3)).toMatch(/^3 pictures uses about 324 AI credits \(about 108 each\)/)
+  })
+})
+
+describe('creating', () => {
+  it('sends a photo’s description, shape, count, library and folder, and hands back the new assets', async () => {
+    process.env.NEXT_PUBLIC_AI_IMAGE_PHOTOS = 'on'
     const dialog = await open()
     fireEvent.change(within(dialog).getByLabelText('Describe the picture'), {
       target: { value: 'A red barn at dawn' },
     })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Wide 16:9' }))
-    mockFetch.mockResolvedValueOnce(json({ mediaIds: ['m1', 'm2'], filtered: 0, failed: 0, credits: 60 }))
+    mockFetch.mockResolvedValueOnce(json({ mediaIds: ['m1', 'm2'], filtered: 0, failed: 0, credits: 216 }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith(['m1', 'm2']))
-    const [url, init] = mockFetch.mock.calls[1]
+    const [url, init] = mockFetch.mock.calls[0]
     expect(url).toBe('/api/ai/media/images')
     expect(JSON.parse(init.body)).toEqual({
       orgId: 'org-1',
       library: 'host',
       hostId: 'host-1',
       folderId: 'folder-9',
+      mode: 'photo',
       prompt: 'A red barn at dawn',
       aspectRatio: '16:9',
       count: 1,
     })
   })
 
+  it('sends an illustration’s kind and the site theme’s colors', async () => {
+    const dialog = await open()
+    fireEvent.change(within(dialog).getByLabelText('Describe what to draw'), {
+      target: { value: 'A delivery van' },
+    })
+    mockFetch.mockResolvedValueOnce(json({ mediaIds: ['m1'], filtered: 0, failed: 0, credits: 18 }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(['m1']))
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toMatchObject({
+      mode: 'illustration',
+      style: 'illustration',
+      palette: { source: 'theme' },
+    })
+  })
+
+  it('sends the person’s own colors in the organization library, which has no site theme', async () => {
+    const dialog = await open(zoneProps({ hostId: null, library: 'org' }))
+    expect((within(dialog).getByLabelText("Use my site's theme colors") as HTMLInputElement).disabled).toBe(true)
+    fireEvent.change(within(dialog).getByLabelText('Describe what to draw'), {
+      target: { value: 'A leaf icon' },
+    })
+    mockFetch.mockResolvedValueOnce(json({ mediaIds: ['m1'], filtered: 0, failed: 0, credits: 18 }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(onCreated).toHaveBeenCalled())
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body).palette).toEqual({
+      source: 'custom',
+      colors: ['#1a73e8', '#fbbc04'],
+    })
+  })
+
   it('says a refusal in the door’s words and keeps the description', async () => {
     const dialog = await open()
-    fireEvent.change(within(dialog).getByLabelText('Describe the picture'), {
+    fireEvent.change(within(dialog).getByLabelText('Describe what to draw'), {
       target: { value: 'Something odd' },
     })
-    mockFetch.mockResolvedValueOnce(
-      json({ error: 'The image service declined this description.', reason: 'safety' }, 422),
-    )
+    mockFetch.mockResolvedValueOnce(json({ error: 'That is a real company’s logo.', reason: 'safety' }, 422))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
-    expect(await within(dialog).findByText('The image service declined this description.')).toBeTruthy()
-    expect((within(dialog).getByLabelText('Describe the picture') as HTMLTextAreaElement).value).toBe(
+    expect(await within(dialog).findByText('That is a real company’s logo.')).toBeTruthy()
+    expect((within(dialog).getByLabelText('Describe what to draw') as HTMLTextAreaElement).value).toBe(
       'Something odd',
     )
     expect(onCreated).not.toHaveBeenCalled()
   })
 
-  it('says how many were added when the filter held some back', async () => {
+  it('says how many were added when some did not come out', async () => {
     const dialog = await open()
-    fireEvent.change(within(dialog).getByLabelText('Describe the picture'), {
-      target: { value: 'Two dogs' },
-    })
-    mockFetch.mockResolvedValueOnce(json({ mediaIds: ['m1'], filtered: 1, failed: 0, credits: 60 }))
+    fireEvent.change(within(dialog).getByLabelText('Describe what to draw'), { target: { value: 'Two dogs' } })
+    fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'How many' }))
+    fireEvent.click(await screen.findByRole('option', { name: '2' }))
+    mockFetch.mockResolvedValueOnce(
+      json({ mediaIds: ['m1'], filtered: 1, failed: 0, credits: 18, warning: 'This one’s on us.' }),
+    )
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
-    expect(await within(dialog).findByText(/Added 1 of 1 to the library/)).toBeTruthy()
+    expect(await within(dialog).findByText(/Added 1 of 2 to the library\. This one’s on us\./)).toBeTruthy()
     expect(onCreated).toHaveBeenCalledWith(['m1'])
   })
 })
