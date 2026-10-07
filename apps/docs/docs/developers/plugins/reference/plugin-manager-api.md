@@ -1405,6 +1405,54 @@ handler, a cron or the billing webhook runs — and
 `tax-profile-is-registered.spec.ts` in each app runs the real registrars and
 holds the real rule, because a plugin's own spec may not import the owner.
 
+### An outside tax engine — `registerPluginTaxEngine`
+
+The same module carries a second slot, for a merchant who calculates tax in a
+service of their own (an Avalara AvaTax or TaxJar account). One plugin answers
+for every outside engine and dispatches to whichever one a site connected; a
+plugin that charges asks it for a quote, within a deadline, and prices the sale
+its usual way when the answer does not come.
+
+```ts
+import {
+  quotePluginTaxEngine,
+  registerPluginTaxEngine,
+} from '@aglyn/aglyn/plugin-manager/plugin-tax-profile'
+
+// the engine's plugin, from its server declarations
+registerPluginTaxEngine({
+  status: (hostId) => readConnection(hostId),
+  quote: (request) => askTheVendor(request), // throws on any failure
+  validateAddress: (hostId, address) => resolveWithTheVendor(hostId, address),
+})
+
+// a plugin that charges
+const outcome = await quotePluginTaxEngine({
+  hostId, currency: 'usd', channel: 'online',
+  lines: [{ id: 'line-0', productId, quantity: 1, amountCents: 4_500 }],
+  shipTo: { line1, city, region: 'TX', postalCode, country: 'US' },
+  customer: { email },
+})
+if (!outcome.ok) {
+  // `unavailable`, `timeout` or `error`: price it the way you did before,
+  // and flag the sale so the merchant sees the engine was not asked.
+}
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginTaxEngine(engine, { pluginId? })` | A slot: one plugin answers for outside engines. |
+| `pluginTaxEngine()` | The engine's plugin, or `null`. Unlike the tax profile, an empty slot is a normal state. |
+| `quotePluginTaxEngine(request, { timeoutMs? })` | Never throws and never waits past the deadline (`PLUGIN_TAX_ENGINE_QUOTE_TIMEOUT_MS`, 5 s): `{ ok: true, quote }`, or `{ ok: false, reason, message }` with `reason` one of `unavailable`, `timeout`, `error`. |
+| `engine.quote(request)` | `{ provider, providerLabel, taxCents, lines: [{ id, taxCents }], shippingTaxCents, sandbox }`, integer cents. A line marked `exempt` answers zero. No `shipTo` taxes at the site's own address, which is right for an in-person sale. |
+| `engine.status(hostId)` | `{ connected, provider?, providerLabel?, sandbox? }`. |
+| `engine.validateAddress(hostId, address)` | `{ valid, normalized, messages }`: the engine's own reading of an address, for a plugin that wants one checked. |
+
+Recording a paid sale with the engine, and reversing it on a refund, is not on
+the contract. The seller already raises `order.paid`, `order.refunded` and
+`order.cancelled` as domain events with retries, so the engine's plugin
+subscribes to those and the seller never learns that anything was recorded.
+
 ## Sales on the operator's tax return — `plugin-tax-return-sources`
 
 The operator of a deployment files a sales tax return for the sales it

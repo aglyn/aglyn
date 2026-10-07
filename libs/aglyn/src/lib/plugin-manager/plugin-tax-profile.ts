@@ -134,3 +134,219 @@ export function pluginTaxProfile(): PluginTaxProfile {
   }
   return entry.impl
 }
+
+/**
+ * AN OUTSIDE TAX ENGINE, answering for a merchant who connected one
+ * (AGL-3631).
+ *
+ * The tax profile above is the merchant's own flat arithmetic. Some merchants
+ * calculate tax in a service of their own — an Avalara AvaTax or TaxJar
+ * account, under their own registrations — and want the plugin that charges
+ * to ask that service instead of a rate table. This contract is that
+ * question, asked the same way whichever service answers it:
+ *
+ * - {@link PluginTaxEngine.status} — whether a site has an engine connected
+ *   and which one;
+ * - {@link PluginTaxEngine.quote} — the tax on a basket, by line, for a
+ *   destination (or the site's own address for an in-person sale);
+ * - {@link PluginTaxEngine.validateAddress} — the engine's own reading of an
+ *   address, for a plugin that wants it checked before it ships or taxes.
+ *
+ * Recording a paid sale with the engine, and reversing it on a refund or a
+ * cancellation, is NOT asked here. The seller's plugin already announces
+ * those facts as domain events (`order.paid`, `order.refunded`,
+ * `order.cancelled`), with retries, so the engine's plugin subscribes to them
+ * and the seller never has to know an engine records anything.
+ *
+ * ## A slot, and an empty one is an answer
+ *
+ * One plugin owns outside engines; it dispatches to whichever service a site
+ * connected. Unlike the tax profile, an empty slot is a normal state — most
+ * deployments carry no engine — so {@link pluginTaxEngine} answers `null`,
+ * and a caller that wanted one prices the sale its usual way and says so.
+ *
+ * ## The engine is slow and outside, so the caller holds a deadline
+ *
+ * {@link quotePluginTaxEngine} never throws and never waits past its
+ * deadline: a checkout that hung on a vendor would lose the sale, and one
+ * that failed outright would lose it too. It answers what happened —
+ * `unavailable`, `timeout` or `error` — so the caller can fall back to the
+ * tax path it had before, flag the order, and log why.
+ */
+
+/** A postal address as a tax engine reads it. `country` is ISO-3166 alpha-2. */
+export interface PluginTaxAddress {
+  line1?: string
+  line2?: string
+  city?: string
+  /** State, province or region code, e.g. `TX`. */
+  region?: string
+  postalCode?: string
+  country: string
+}
+
+/** One taxable line of a basket. Money is integer cents in the request's currency. */
+export interface PluginTaxEngineLine {
+  /** The caller's own id for the line, echoed back on the answer. */
+  id: string
+  /** The product the line sells, so the engine's plugin can find its tax code. */
+  productId?: string
+  variantId?: string
+  sku?: string
+  description?: string
+  quantity: number
+  /** The line's total after any discount on it, EXCLUSIVE of tax. */
+  amountCents: number
+  /** A tax code the caller already holds; otherwise the engine's plugin supplies one. */
+  taxCode?: string
+  /** A line the seller marked tax-exempt: quoted at zero whatever the engine says. */
+  exempt?: boolean
+}
+
+/** What a caller asks an engine. */
+export interface PluginTaxEngineQuoteRequest {
+  hostId: string
+  /** ISO 4217, lower or upper case. */
+  currency: string
+  /** Where the sale happens: `pos` is in person, taxed at the site's own address. */
+  channel: 'online' | 'pos' | 'invoice'
+  lines: readonly PluginTaxEngineLine[]
+  /**
+   * A discount on the whole basket, spread by the engine's plugin across the
+   * lines that are not exempt. Line-level discounts are already inside each
+   * line's `amountCents`.
+   */
+  discountCents?: number
+  /** Shipping charged, when the caller wants it quoted. */
+  shippingCents?: number
+  /** The destination. Absent or `null`, the engine taxes at the site's own address. */
+  shipTo?: PluginTaxAddress | null
+  /** The buyer, so an exemption the merchant recorded for them applies. */
+  customer?: { email?: string | null; id?: string | null }
+}
+
+/** One line of an answer. */
+export interface PluginTaxEngineQuoteLine {
+  id: string
+  taxCents: number
+}
+
+/** What an engine answered. Every figure is integer cents. */
+export interface PluginTaxEngineQuote {
+  /** The engine's id, e.g. `avalara`. */
+  provider: string
+  /** Its name in the merchant's words, e.g. `Avalara AvaTax`. */
+  providerLabel: string
+  taxCents: number
+  lines: readonly PluginTaxEngineQuoteLine[]
+  shippingTaxCents: number
+  /** Whether the answer came from the engine's test environment. */
+  sandbox: boolean
+}
+
+/** Whether a site has an engine connected. */
+export interface PluginTaxEngineStatus {
+  connected: boolean
+  provider?: string
+  providerLabel?: string
+  sandbox?: boolean
+}
+
+/** An engine's reading of an address. */
+export interface PluginTaxAddressValidation {
+  valid: boolean
+  /** The address as the engine normalized it, when it could. */
+  normalized: PluginTaxAddress | null
+  /** What the engine said about it, in its own words. */
+  messages: readonly string[]
+}
+
+export interface PluginTaxEngine {
+  status(hostId: string): Promise<PluginTaxEngineStatus>
+  /** THROWS on any failure: no connection, a refusal, a network error. */
+  quote(request: PluginTaxEngineQuoteRequest): Promise<PluginTaxEngineQuote>
+  /** THROWS when no engine is connected for the site or the engine fails. */
+  validateAddress(
+    hostId: string,
+    address: PluginTaxAddress,
+  ): Promise<PluginTaxAddressValidation>
+}
+
+export const PLUGIN_TAX_ENGINE = definePluginServiceContract<PluginTaxEngine>(
+  'core.tax-engine',
+  { multiple: false },
+)
+
+/** Registers the plugin that answers for outside tax engines. */
+export function registerPluginTaxEngine(
+  engine: PluginTaxEngine,
+  options?: { pluginId?: string },
+): void {
+  registerPluginService(PLUGIN_TAX_ENGINE, engine, {
+    ...(options?.pluginId ? { pluginId: options.pluginId } : {}),
+  })
+}
+
+/** The engine's plugin, or `null` when no plugin registered one. */
+export function pluginTaxEngine(): PluginTaxEngine | null {
+  return resolvePluginServices(PLUGIN_TAX_ENGINE)[0]?.impl ?? null
+}
+
+/** How long a quote may take before the caller prices the sale without it. */
+export const PLUGIN_TAX_ENGINE_QUOTE_TIMEOUT_MS = 5_000
+
+/** What {@link quotePluginTaxEngine} came to. */
+export type PluginTaxEngineQuoteOutcome =
+  | { ok: true; quote: PluginTaxEngineQuote }
+  | {
+      ok: false
+      /** No engine plugin, or none connected for the site. */
+      reason: 'unavailable' | 'timeout' | 'error'
+      message: string
+    }
+
+/**
+ * Asks the engine for a quote within a deadline. Never throws: see the
+ * module note on why the caller, not the engine, holds the clock.
+ */
+export async function quotePluginTaxEngine(
+  request: PluginTaxEngineQuoteRequest,
+  options: { timeoutMs?: number } = {},
+): Promise<PluginTaxEngineQuoteOutcome> {
+  const engine = pluginTaxEngine()
+  if (!engine) {
+    return {
+      ok: false,
+      reason: 'unavailable',
+      message: 'no tax engine plugin is registered',
+    }
+  }
+  const timeoutMs = Math.max(1, options.timeoutMs ?? PLUGIN_TAX_ENGINE_QUOTE_TIMEOUT_MS)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<PluginTaxEngineQuoteOutcome>((resolve) => {
+    timer = setTimeout(
+      () =>
+        resolve({
+          ok: false,
+          reason: 'timeout',
+          message: `the tax engine did not answer within ${timeoutMs} ms`,
+        }),
+      timeoutMs,
+    )
+  })
+  const asked = Promise.resolve()
+    .then(() => engine.quote(request))
+    .then(
+      (quote): PluginTaxEngineQuoteOutcome => ({ ok: true, quote }),
+      (error: unknown): PluginTaxEngineQuoteOutcome => ({
+        ok: false,
+        reason: 'error',
+        message: String((error as Error)?.message ?? error).slice(0, 300),
+      }),
+    )
+  try {
+    return await Promise.race([asked, deadline])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
