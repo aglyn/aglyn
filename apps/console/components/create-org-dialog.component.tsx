@@ -21,6 +21,7 @@ import { generateOrgSlug } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { firstTouchField } from '../utils/account-acquisition'
 import {
   Button,
   Dialog,
@@ -99,7 +100,13 @@ export function CreateOrgDialog(props: CreateOrgDialogProps) {
       const response = await authorizedFetch(user, '/api/orgs/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), slug: slug.trim() }),
+        // The first touch, for the server's acquisition backstop: a sign-up
+        // whose own page never recorded one creates its first workspace here.
+        body: JSON.stringify({
+          name: name.trim(),
+          slug: slug.trim(),
+          ...firstTouchField(),
+        }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload?.orgId) {

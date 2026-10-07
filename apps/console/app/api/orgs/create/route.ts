@@ -37,6 +37,8 @@ import {
   recordSignupRefusal,
 } from '@aglyn/tenant-data-admin'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
+import { readFirstTouchCookie } from '@aglyn/shared-util-first-touch'
+import { recordSignUpAcquisition } from '@aglyn/tenant-data-admin/server/account-acquisition'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
@@ -196,6 +198,30 @@ async function handler(request: Request): Promise<Response> {
           },
         },
       )
+    }
+
+    /*
+     * Where the account came from, if its sign-up page never said (AGL-3674).
+     *
+     * The workspace copies its creator's acquisition record at birth, so this
+     * is the last moment a missing one can still reach it. The sign-up page
+     * records it first; a page torn down by a navigation before that call
+     * went out records nothing, and without this the workspace would carry
+     * `unknown` for good. The writer refuses anything but a brand-new
+     * self-serve account and never restates a record, so for every other
+     * caller this writes nothing. Best-effort: attribution must never stand
+     * between a person and their workspace.
+     */
+    if (!isImpersonationSession(decoded)) {
+      await recordSignUpAcquisition({
+        uid: decoded.uid,
+        provider: String(decoded.firebase?.sign_in_provider ?? '') || null,
+        email: decoded.email ?? null,
+        touch: body?.touch ?? readFirstTouchCookie(headers.cookie ?? null),
+        headers: request.headers,
+      }).catch((error) => {
+        console.error('[orgs/create] acquisition backstop failed', error)
+      })
     }
 
     const orgId = await createOrganization({

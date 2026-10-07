@@ -17,6 +17,7 @@
 
 'use client'
 
+import type { SignUpAcquisitionDoor } from '@aglyn/aglyn/app-utils/account-acquisition'
 import { readFirstTouch } from '@aglyn/shared-util-first-touch'
 import { pageFirstTouchRuntime } from '@aglyn/shared-util-first-touch/first-touch-page'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -28,6 +29,15 @@ export function currentFirstTouch(): unknown {
   } catch {
     return null
   }
+}
+
+/**
+ * The first touch as a request-body field, or nothing when there is none —
+ * for the requests that carry it beside their own payload.
+ */
+export function firstTouchField(): { touch?: unknown } {
+  const touch = currentFirstTouch()
+  return touch ? { touch } : {}
 }
 
 /** How long a sign-up door waits for its attribution before moving on. */
@@ -47,6 +57,10 @@ export const ACCOUNT_ACQUISITION_TIMEOUT_MS = 5_000
  * creation at all, so calling it for a returning Google account is harmless:
  * the server writes nothing.
  *
+ * `door` names which of the provider's doors this was — the Google popup or
+ * the redirect — and nothing more: the server takes the provider from the
+ * token, so it can only ever pick between that provider's own doors.
+ *
  * Best-effort by contract, like every write beside the sign-up: a record that
  * could not be written must never read as a sign-up that failed. And never a
  * sign-up that STALLS: the door awaits this, so an answer that does not come
@@ -55,6 +69,7 @@ export const ACCOUNT_ACQUISITION_TIMEOUT_MS = 5_000
  */
 export async function rememberAccountAcquisition(
   user: { getIdToken: () => Promise<string> } | null | undefined,
+  options: { door?: SignUpAcquisitionDoor } = {},
 ): Promise<void> {
   if (!user) return
   const deadline = new AbortController()
@@ -67,7 +82,7 @@ export async function rememberAccountAcquisition(
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ touch }),
+        body: JSON.stringify({ touch, door: options.door }),
         signal: deadline.signal,
       },
       { timeoutMs: ACCOUNT_ACQUISITION_TIMEOUT_MS },
