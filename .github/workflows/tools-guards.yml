@@ -504,6 +504,13 @@ jobs:
       # decisions surfaces here or nowhere. Pure node, no network.
       - run: npm run test:emulated-env
 
+      # test:ai-guided-start-local  The local guided AI start (AGL-3596): the
+      # beat pump that stands in for Cloud Scheduler on the emulator stack,
+      # and the verdicts the run reports (an active row while working, a
+      # failure shown mid-run, a cut search title, a bound form). The run
+      # itself needs a live model and never runs in CI. Pure node.
+      - run: npm run test:ai-guided-start-local
+
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs
@@ -928,6 +935,15 @@ jobs:
       # fixture runs first so a detector that matched nothing cannot pass.
       - run: npm run test:plugin-domain-in-core
       - run: npm run check:plugin-domain-in-core
+
+      # The native apps never cost the web a byte (AGL-3620, AGL-3651): no web
+      # file or tsconfig reaches apps/ios, apps/android, libs/native or a
+      # plugin's src/ios|src/android, nothing there points outside the native
+      # trees, and every module the native generators read proves pure on
+      # tools/scripts/mobile-pure-modules.json. The forced reds run first so a
+      # detector that matched nothing cannot pass.
+      - run: npm run test:mobile-isolation
+      - run: npm run check:mobile-isolation
 
       # The AI eval harness (AGL-2937): every golden brief under
       # tools/ai-eval/cases scored offline — the tree validator, the doctrine's

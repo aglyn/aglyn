@@ -47,6 +47,7 @@ import { ID as PRODUCT_REVIEWS_ID } from './product-reviews'
 import { ID as RELATED_PRODUCTS_ID } from './related-products'
 import { readLocalWishlist, toggleWishlist } from './wishlist'
 import { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
+import { CheckoutReturnNotice } from './checkout-return-notice'
 
 /**
  * The Payment Element (AGL-1944), behind a lazy boundary rather than a plain
@@ -196,6 +197,10 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     // "not asked" — the field appearing is the server's answer, not a guess.
     const [shipTo, setShipTo] = useState('')
     const [shipCountries, setShipCountries] = useState<string[] | null>(null)
+    // Live carrier rates price by postal code (AGL-3612): asked only when the
+    // store prices that way and the server says so.
+    const [shipPostal, setShipPostal] = useState('')
+    const [askPostal, setAskPostal] = useState(false)
     const [added, setAdded] = useState(false)
     const [wishlisted, setWishlisted] = useState(false)
     const [notifyEmail, setNotifyEmail] = useState('')
@@ -214,6 +219,8 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const [nativeCheckout, setNativeCheckout] = useState<{
       clientSecret: string
       publishableKey: string
+      /** The wallets the merchant hid (AGL-3629). */
+      wallets?: CommerceModel.StorefrontCheckoutWallets
     } | null>(null)
 
     const slug = slugProp || slugFromLocation()
@@ -332,7 +339,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       // key, and the server replays the original full-price session — a quoted
       // number that is not the number charged, which is the whole defect class
       // this path has been cleared of.
-    }, [resolved?.id, variant?.id, quantity, billing, shipTo, coupon])
+    }, [resolved?.id, variant?.id, quantity, billing, shipTo, shipPostal, coupon])
 
     const handleBuy = async () => {
       if (!hostId || !resolved || !variant || status === 'sending') return
@@ -362,6 +369,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             // country's rates AND restricts the session to addresses in it,
             // so naming a cheap zone here cannot ship a parcel anywhere else.
             ...(shipTo ? { shippingCountry: shipTo } : {}),
+            ...(shipPostal.trim() ? { shippingPostalCode: shipPostal.trim() } : {}),
             // The server resolves this against the discounts hub first and the
             // legacy coupons second, and refuses a code it cannot apply with a
             // reason — never a silent full-price charge.
@@ -394,6 +402,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
           setNativeCheckout({
             clientSecret: String(payload.clientSecret),
             publishableKey: String(payload.publishableKey),
+            wallets: CommerceModel.readStorefrontCheckoutWallets(payload.wallets),
           })
           setStatus('idle')
           return
@@ -420,6 +429,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
           return
         }
         if (payload?.needsShippingCountry) {
+          if (payload?.needsShippingPostalCode) setAskPostal(true)
           setShipCountries(
             (payload.shippingCountries as string[] | undefined)?.length
               ? (payload.shippingCountries as string[])
@@ -532,6 +542,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
           ...nodeSx,
         ]}
       >
+        <CheckoutReturnNotice hostId={hostId} siteFetch={siteFetch} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           {galleryImage ? (
             <Box
@@ -734,7 +745,8 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 // cannot succeed (AGL-2019).
                 status === 'unconfigured' ||
                 // Asked but unanswered: the server would only refuse again.
-                (shipCountries !== null && !shipTo)
+                (shipCountries !== null && !shipTo) ||
+                (askPostal && !shipPostal.trim())
               }
               onClick={handleBuy}
               sx={{ flex: 1 }}
@@ -756,7 +768,15 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               <StorefrontPaymentElement
                 clientSecret={nativeCheckout.clientSecret}
                 publishableKey={nativeCheckout.publishableKey}
+                wallets={nativeCheckout.wallets}
                 payLabel={buyLabel || (subscribing ? 'Subscribe' : 'Pay now')}
+                // An expired or unloadable session is replaced, never
+                // replayed: the old attempt key would hand back the dead one.
+                onRestart={() => {
+                  attemptKey.current = ''
+                  setNativeCheckout(null)
+                  void handleBuy()
+                }}
                 // Cancelling drops the form and leaves the session open —
                 // deliberately. The shopper may come back to the same
                 // attempt key, and an abandoned session is what the AGL-323
@@ -783,6 +803,18 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 </MenuItem>
               ))}
             </TextField>
+          ) : null}
+          {askPostal ? (
+            <TextField
+              label="Postal code"
+              value={shipPostal}
+              onChange={(event) => setShipPostal(event.target.value)}
+              size="small"
+              fullWidth
+              helperText="Carrier rates depend on the postal code"
+              slotProps={{ htmlInput: { autoComplete: 'shipping postal-code', maxLength: 12 } }}
+              sx={{ mb: 2 }}
+            />
           ) : null}
           {status === 'ask' || status === 'unconfigured' ? (
             <Alert severity="info" sx={{ mb: 2 }}>

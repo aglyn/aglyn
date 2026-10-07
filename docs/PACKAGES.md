@@ -45,7 +45,8 @@ hold and the new axis sits beside them.
 | `scope:besigner-ui` | `besigner-ui`, `besigner`, `renderer`, `core`, `shared` | The designer's React surface. |
 | `scope:tenant` | `tenant`, `renderer`, `core`, `shared` | The runtime that serves a published site, and the tenant app shell. Plugins reach it only through the loader manifests. |
 | `scope:console` | everything above, plugins only dynamically | The console app. |
-| `scope:plugin` | `tenant`, `renderer`, `besigner`, `core`, `shared` | A feature plugin. Never another plugin; never the designer UI. Its domain lives here and nowhere else — what it imports from the layers below it is generic, never its own model wearing a lower layer's tag. |
+| `scope:plugin` | `tenant`, `renderer`, `besigner`, `core`, `shared` | A feature plugin. Never another plugin; never the designer UI. Its domain lives here and nowhere else — what it imports from the layers below it is generic, never its own model wearing a lower layer's tag. Its native screens live in `src/ios` (a Swift package) and `src/android` (a Kotlin module), reached only through the generated native manifest (AGL-3651). |
+| `scope:mobile` | `mobile` only | The native apps and their foundation: Swift and Kotlin projects that import no TypeScript project. What they share with TypeScript is generated from the proven-pure modules in `tools/scripts/mobile-pure-modules.json`, and `check:mobile-isolation` holds the file level both ways: no web file or tsconfig reaches a native tree, and no native file reaches outside one. |
 | `scope:cli` | `cli`, `core`, `shared` | The command-line client. |
 
 The `type:` axis is the same rule the `scope:data|ui|util|feature` tags
@@ -113,6 +114,7 @@ changes, because every rule is by tag.
 
 | project | npm name | root | tags | consumer | entry points |
 | -- | -- | -- | -- | -- | -- |
+| `plugins-accounting` | `@aglyn/plugins-accounting` | `libs/plugins/accounting` | `scope:plugin` `type:feature` | no — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/plugins-accounting --publish`, then `trust:packages --set`); QuickBooks Online and Xero sync of commerce sales, refunds, fees and payouts | `.`, `./*` |
 | `plugins-ai` | `@aglyn/plugins-ai` | `libs/plugins/ai` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-bookings` | `@aglyn/plugins-bookings` | `libs/plugins/bookings` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-calculator` | `@aglyn/plugins-calculator` | `libs/plugins/calculator` | `scope:plugin` `type:feature` | no — the source of the Calculators marketplace bundle, installed from the marketplace | `.`, `./*` |
@@ -121,15 +123,23 @@ changes, because every rule is by tag.
 | `plugins-data` | `@aglyn/plugins-data` | `libs/plugins/data` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-email` | `@aglyn/plugins-email` | `libs/plugins/email` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-events-calendar` | `@aglyn/plugins-events-calendar` | `libs/plugins/events-calendar` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
+| `plugins-fonts` | `@aglyn/plugins-fonts` | `libs/plugins/fonts` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-forms` | `@aglyn/plugins-forms` | `libs/plugins/forms` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-funnels` | `@aglyn/plugins-funnels` | `libs/plugins/funnels` | `scope:plugin` `type:feature` | yes — funnels on a site's Analytics page, over the visits core's journey recorder records | `.`, `./*` |
 | `plugins-inbox` | `@aglyn/plugins-inbox` | `libs/plugins/inbox` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-logic` | `@aglyn/plugins-logic` | `libs/plugins/logic` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-marketing` | `@aglyn/plugins-marketing` | `libs/plugins/marketing` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
+| `plugins-marketing-platforms` | `@aglyn/plugins-marketing-platforms` | `libs/plugins/marketing-platforms` | `scope:plugin` `type:feature` | no — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/plugins-marketing-platforms --publish`, then `trust:packages --set`); two-way contact and consent sync with a merchant's own Mailchimp, Klaviyo, Omnisend or Attentive account, through core's person-records seam and site consent module, and order events through commerce's domain events | `.`, `./*` |
+| `plugins-fulfillment-networks` | `@aglyn/plugins-fulfillment-networks` | `libs/plugins/fulfillment-networks` | `scope:plugin` `type:feature` | no — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/plugins-fulfillment-networks --publish`, then `trust:packages --set`); routes commerce's paid orders to a merchant's own ShipBob or Amazon Multi-Channel Fulfillment account through commerce's domain events, writes shipments and tracking back through core's shipment-records seam, publishes what a network holds on core's fulfillment-providers seam and sets stock counts through core's stock-levels seam | `.`, `./*` |
 | `plugins-marketplace` | `@aglyn/plugins-marketplace` | `libs/plugins/marketplace` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-mui` | `@aglyn/plugins-mui` | `libs/plugins/mui` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-outreach` | `@aglyn/plugins-outreach` | `libs/plugins/outreach` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
+| `plugins-post-purchase` | `@aglyn/plugins-post-purchase` | `libs/plugins/post-purchase` | `scope:plugin` `type:feature` | no — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/plugins-post-purchase --publish`, then `trust:packages --set`); AfterShip tracking, Route package protection and Narvar for commerce's orders, with the merchant's own accounts, through core's `core.checkout-extras`, `core.tracking-pages` and `core.shipment-records` contracts and commerce's order events by name | `.`, `./*` |
 | `plugins-redirects` | `@aglyn/plugins-redirects` | `libs/plugins/redirects` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
+| `plugins-sales-channels` | `@aglyn/plugins-sales-channels` | `libs/plugins/sales-channels` | `scope:plugin` `type:feature` | no — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/plugins-sales-channels --publish`, then `trust:packages --set`); product feeds for Google, Meta, TikTok, Pinterest, Snapchat and Microsoft, read through core's `core.product-catalog` contract and answering commerce's old feed address through `core.catalog-feed` | `.`, `./*` |
+| `plugins-shipping` | `@aglyn/plugins-shipping` | `libs/plugins/shipping` | `scope:plugin` `type:feature` | no — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/plugins-shipping --publish`, then `trust:packages --set`); carrier rates, labels and tracking for commerce's orders, through core's `core.shipping-rate-quoter` and `core.shipment-records` contracts | `.`, `./*` |
+| `plugins-sms` | `@aglyn/plugins-sms` | `libs/plugins/sms` | `scope:plugin` `type:feature` | no — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/plugins-sms --publish`, then `trust:packages --set`); text messages behind core's `core.messaging.sms` contract, Twilio adapter | `.`, `./*` |
+| `plugins-tax-engines` | `@aglyn/plugins-tax-engines` | `libs/plugins/tax-engines` | `scope:plugin` `type:feature` | no — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/plugins-tax-engines --publish`, then `trust:packages --set`); a merchant's own Avalara AvaTax or TaxJar account behind core's `core.tax-engine` contract, recording through commerce's order events | `.`, `./*` |
 | `plugins-themes` | `@aglyn/plugins-themes` | `libs/plugins/themes` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-video-delivery` | `@aglyn/plugins-video-delivery` | `libs/plugins/video-delivery` | `scope:plugin` `type:feature` | yes — library video served from Cloudflare R2 through a Worker, behind core's `core.media-delivery` contract | `.`, `./*` |
 | `plugins-workflows` | `@aglyn/plugins-workflows` | `libs/plugins/workflows` | `scope:plugin` `type:feature` | yes — the Automation section and the automation engine | `.`, `./*` |
@@ -164,7 +174,7 @@ marked where it sits.
 | `shared-ui-color-picker` | `@aglyn/shared-ui-color-picker` | `libs/shared/ui/color-picker` | `scope:shared` `type:ui` | `.`, `./*` |
 | `shared-ui-email-campaigns` | `@aglyn/shared-ui-email-campaigns` | `libs/shared/ui/email-campaigns` | `scope:shared` `type:ui` | `.`, `./*` — the bulk-send reporting math (`model/send-report`: a send's counters, a rate with its denominator named, the link rollup), divided by every plugin that mails in bulk. The campaign model it once held is the Marketing plugin's (AGL-3080); see [Violations](#violations). |
 | `shared-ui-json-editor` | `@aglyn/shared-ui-json-editor` | `libs/shared/ui/json-editor` | `scope:shared` `type:ui` | `.`, `./*` |
-| `shared-ui-jsx` | `@aglyn/shared-ui-jsx` | `libs/shared/ui/jsx` | `scope:shared` `type:ui` | `.`, `./*` — also the one list-table filter path every plugin's lists use: `./components/list-table.component`, `./const/list-filter`, `./const/list-grid-filter`, `./hooks/use-list-grid-filter`, `./const/list-query-plan`, `./components/list-query-notices.component`, `./components/list-filter-chips.component` (AGL-3317, AGL-3321) |
+| `shared-ui-jsx` | `@aglyn/shared-ui-jsx` | `libs/shared/ui/jsx` | `scope:shared` `type:ui` | `.`, `./*` — also the one list-table filter path every plugin's lists use: `./components/list-table.component`, `./const/list-filter`, `./const/list-grid-filter`, `./hooks/use-list-grid-filter`, `./const/list-query-plan` (both re-export `@aglyn/shared-util-tools/list-query/*`), `./components/list-query-notices.component`, `./components/list-filter-chips.component` (AGL-3317, AGL-3321) |
 | `shared-ui-jsx-forms` | `@aglyn/shared-ui-jsx-forms` | `libs/shared/ui/jsx-forms` | `scope:shared` `type:ui` | `.`, `./*` |
 | `shared-ui-next` | `@aglyn/shared-ui-next` | `libs/shared/ui/next` | `scope:shared` `type:ui` | `.`, `./*` |
 | `shared-ui-snackstack` | `@aglyn/shared-ui-snackstack` | `libs/shared/ui/snackstack` | `scope:shared` `type:ui` | `.`, `./*` |
@@ -179,8 +189,31 @@ marked where it sits.
 | `shared-util-next` | `@aglyn/shared-util-next` | `libs/shared/util/next` | `scope:shared` `type:util` | `.`, `./*` |
 | `shared-util-rest-api` | `@aglyn/shared-util-rest-api` | `libs/shared/util/rest-api` | `scope:shared` `type:util` | `.`, `./*` |
 | `shared-util-timestamp` | `@aglyn/shared-util-timestamp` | `libs/shared/util/timestamp` | `scope:shared` `type:util` | `.`, `./*` |
-| `shared-util-tools` | `@aglyn/shared-util-tools` | `libs/shared/util/tools` | `scope:shared` `type:util` | `.`, `./*` |
+| `shared-util-tools` | `@aglyn/shared-util-tools` | `libs/shared/util/tools` | `scope:shared` `type:util` | `.`, `./*` — also the pure list filter grammar under `./list-query/*` (`list-filter`, `list-query-plan`, `list-filter-codecs`, `list-filter-sentence`, `list-query-refusals`): no React, no MUI, so the native app plans the same Firestore queries the console does (AGL-3622) |
 | `shared-util-vendor` | `@aglyn/shared-util-vendor` | `libs/shared/util/vendor` | `scope:shared` `type:util` | `.`, `./*` |
+
+### Native (Kotlin)
+
+The Kotlin Multiplatform foundation of the native Android and JVM desktop apps
+(AGL-3652, AGL-3653). Kotlin and Gradle, built by `apps/android`'s Gradle root;
+not npm packages, and no web toolchain reads it. Native code never imports web
+or server code: it shares only generated files (tokens, contracts, the plugin
+manifest) with TypeScript.
+
+| project | npm name | root | tags | entry points |
+| -- | -- | -- | -- | -- |
+| `native-kotlin` | none (Gradle modules, not npm) | `libs/native/kotlin` | `scope:mobile` `type:feature` | Gradle modules `core` (config, auth and Firestore seams, console API client, workspace store), `ui` (Material 3 theme from the generated tokens, the shared component kit, adaptive layouts), `plugin-host` (registrar, registry, deep links), `webview` (the authenticated console view), `shell` (the Aglyn and Aglyn POS shells), `contracts` (generated), `hardware` (POS peripherals) |
+
+### Native (Apple)
+
+The Swift foundation of the native iOS, iPadOS and macOS apps (AGL-3651,
+AGL-3653; `docs/mobile/native-architecture.md`). Swift packages built and
+tested by `xcodebuild`, not npm packages: no web toolchain reads them, and
+plugins reach the apps only through the generated `apps/ios/PluginManifest`.
+
+| project | npm name | root | tags | what it holds |
+| -- | -- | -- | -- | -- |
+| `native-apple` | none (Swift package `AglynKit`, not npm) | `libs/native/apple` | `scope:mobile` `type:feature` | Swift products `AglynCore` (config, Firebase auth, Firestore reader, workspace and site store, console API client, deep links, console sessions), `AglynUI` (generated theme tokens and typography, Roboto Flex, brand artwork, the shared component kit, adaptive layouts), `AglynWebView` (the authenticated console view and its bridge), `AglynPluginHost` (registrar, registry, loader), `AglynContracts` (generated), `AglynHardware` (POS peripherals) |
 
 ### Apps and deploy units
 
@@ -193,6 +226,8 @@ would need from `apps/console` has moved into libs — see the rules below.
 | `console` | `apps/console` | `scope:app` `scope:console` | The console and, under its staff routes, the staff console. |
 | `tenant` | `apps/tenant` | `scope:app` `scope:tenant` | The shell that serves published sites on the tenant runtime. |
 | `docs` | `apps/docs` | `scope:app` `scope:public` | The documentation site; standalone, not a package. |
+| `ios` | `apps/ios` | `scope:app` `scope:mobile` `type:app` | The Aglyn and Aglyn POS apps for iPhone, iPad and Mac (SwiftUI, one Xcode project); not a package. |
+| `android` | `apps/android` | `scope:app` `scope:mobile` `type:app` | Aglyn (`com.aglyn.app`) and Aglyn POS (`com.aglyn.pos`) for Android, and both on the JVM desktop (Windows); the Gradle root for every Kotlin module; not a package. |
 | `cloud-functions` | `cloud/functions` | `scope:app` | Cloud Functions; a deploy unit, not a package. |
 | `console-e2e` | `apps/console-e2e` | `scope:app` `scope:e2e` | End-to-end suites; not a package. |
 | `tenant-e2e` | `apps/tenant-e2e` | `scope:app` `scope:e2e` | End-to-end suites; not a package. |

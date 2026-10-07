@@ -20,15 +20,18 @@ import {
   contactContainerFieldPath,
   normalizeContainerIds,
 } from '@aglyn/aglyn/app-utils/container-membership'
-import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
+import { normalizeContactEmail, readContactFacet } from '@aglyn/aglyn/app-utils/contacts'
 import {
   CRM_COLLECTIONS,
+  CRM_SCOPED_SEARCH_JOIN,
+  CRM_SCOPED_SEARCH_TOKENS_FIELD,
   crmLeadStatus,
   crmViewIsListed,
   isCrmLeadOpen,
   normalizeCrmViewFilters,
 } from '@aglyn/aglyn/app-utils/crm'
 import { dynamicListDimensionsForCrmView } from '@aglyn/aglyn/app-utils/dynamic-list-rule'
+import { NAME_TOKEN_MAX_PREFIX, nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import {
   scopeTokensForHost,
@@ -36,12 +39,16 @@ import {
   visibleToHost,
 } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type {
+  PluginPersonChange,
+  PluginPersonChangesPage,
+  PluginPersonChangesRequest,
   PluginPersonFileRequest,
   PluginPersonFindRequest,
   PluginPersonReadRequest,
   PluginPersonRecord,
   PluginPersonRecordRef,
   PluginPersonRecords,
+  PluginPersonSearchRequest,
   PluginPersonViewPeople,
   PluginPersonViewRequest,
   PluginPersonWroteInRequest,
@@ -56,7 +63,7 @@ import {
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { restampCrmListFieldsAt } from '@aglyn/tenant-data-admin/server/crm-records'
 import { collectDynamicListCandidates } from '@aglyn/tenant-data-admin/server/dynamic-list-materialize'
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { recordPersonRefund } from './person-refund'
 
 /**
@@ -147,6 +154,63 @@ async function orgOf(
   if (!resolved) throw new Error(`[crm] no organization to find a person in for host ${hostId || '(none)'}`)
   return resolved
 }
+
+/** The most people one search answers, whatever the caller asks for. */
+export const CRM_PERSON_SEARCH_MAX = 25
+
+/**
+ * The one token a typed search asks the contacts' search index for
+ * (AGL-3609), or `''` for nothing searchable.
+ *
+ * A run of digits and phone punctuation is a phone number, read as its
+ * digits: `crmPhoneSearchWords` stores the whole number, the number without
+ * a country code, its last seven and its last four, so `(555) 123-4567`,
+ * `5551234567` and `4567` all find it. Anything else is a name or an
+ * address, and the LONGEST word asks — it is the most selective one, and a
+ * stored token is a prefix of a word, so `dana@acme.com` and `dana` both
+ * reach the contact. Capped at the twelve characters a token keeps.
+ */
+export function crmPersonSearchWord(text: unknown): string {
+  const raw = typeof text === 'string' ? text.trim() : ''
+  if (!raw) return ''
+  if (/^[\d\s()+.-]+$/.test(raw)) {
+    const digits = raw.replace(/\D/g, '')
+    return digits.length >= 4 ? digits.slice(0, NAME_TOKEN_MAX_PREFIX) : ''
+  }
+  const words = nameSearchKey(raw).split(' ').filter(Boolean)
+  const longest = words.reduce((best, word) => (word.length > best.length ? word : best), '')
+  return longest.slice(0, NAME_TOKEN_MAX_PREFIX)
+}
+
+/**
+ * A contacts walk's cursor (AGL-3639): the last contact's `updatedAt` to the
+ * nanosecond, and its id for the tie. Opaque to every caller; a millisecond
+ * alone would answer a contact written later in the same millisecond twice.
+ */
+export function encodeContactChangesCursor(updatedAt: unknown, id: string): string | null {
+  const stamp = updatedAt as { seconds?: unknown; nanoseconds?: unknown } | null
+  const seconds = Number(stamp?.seconds)
+  const nanoseconds = Number(stamp?.nanoseconds ?? 0)
+  if (!Number.isFinite(seconds) || !Number.isFinite(nanoseconds) || !id) return null
+  return `${Math.trunc(seconds)}.${Math.trunc(nanoseconds)}.${id}`
+}
+
+/** Reads a cursor this module handed out, or `null` for anything else. */
+export function decodeContactChangesCursor(
+  cursor: string | null | undefined,
+): { seconds: number; nanoseconds: number; id: string } | null {
+  const match = /^(\d{1,12})\.(\d{1,9})\.([A-Za-z0-9_-]{1,200})$/.exec(String(cursor ?? ''))
+  if (!match) return null
+  return { seconds: Number(match[1]), nanoseconds: Number(match[2]), id: match[3] }
+}
+
+const millisOf = (value: unknown): number => {
+  const stamp = value as { toMillis?: () => number } | null
+  return typeof stamp?.toMillis === 'function' ? stamp.toMillis() : 0
+}
+
+const integerOrNull = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : null
 
 export function createCrmPersonRecords(deps: CrmPersonRecordsDeps): PluginPersonRecords {
   return {
@@ -333,6 +397,60 @@ export function createCrmPersonRecords(deps: CrmPersonRecordsDeps): PluginPerson
     },
 
     /**
+     * The contacts a site may see, oldest change first (AGL-3639): the walk a
+     * connector copies people out by. On the Contacts list's own index
+     * (`visibleTo` array-contains-any, `updatedAt` ascending), with the id as
+     * the tie-break. A contact the site sees only through a sharing grant is
+     * read and stepped over — another holder's person is not this site's to
+     * export — and the cursor still moves past it. The profile is the site's
+     * consent group's facet, never another holder's.
+     */
+    async changedSince(request: PluginPersonChangesRequest): Promise<PluginPersonChangesPage> {
+      const hostId = String(request.hostId ?? '').trim()
+      if (!hostId) return { people: [], next: null }
+      const orgId = await orgOf(deps, request)
+      const groupId = await deps.groupIdForHost(hostId)
+      const after = decodeContactChangesCursor(request.after)
+      let query = deps
+        .firestore()
+        .collection('orgs')
+        .doc(orgId)
+        .collection(STORED_IN[CRM_PERSON_KINDS.contact])
+        .where('visibleTo', 'array-contains-any', scopeTokensForHost(hostId))
+        .orderBy('updatedAt', 'asc')
+        .orderBy(FieldPath.documentId(), 'asc')
+      if (after) {
+        query = query.startAfter(new Timestamp(after.seconds, after.nanoseconds), after.id)
+      }
+      const snapshot = await query.limit(Math.max(1, Math.min(500, request.limit))).get()
+      const people: PluginPersonChange[] = []
+      let next: string | null = null
+      for (const doc of snapshot.docs) {
+        const data = (doc.data() ?? {}) as Record<string, unknown>
+        next = encodeContactChangesCursor(data['updatedAt'], doc.id) ?? next
+        if (seenOnlyThroughGrant(data, hostId)) continue
+        const email = normalizeContactEmail(data['email'])
+        if (!email) continue
+        const facet = readContactFacet(data, groupId)
+        people.push({
+          kind: CRM_PERSON_KINDS.contact,
+          id: doc.id,
+          email,
+          data,
+          changedAtMs: millisOf(data['updatedAt']),
+          profile: {
+            name: typeof facet.name === 'string' && facet.name.trim() ? facet.name.trim() : null,
+            phone: typeof facet.phone === 'string' && facet.phone.trim() ? facet.phone.trim() : null,
+            tags: Array.isArray(facet.tags) ? facet.tags.filter((tag) => typeof tag === 'string') : [],
+            lifetimeValueCents: integerOrNull(facet.ltvCents),
+            ordersCount: integerOrNull(facet.ordersCount),
+          },
+        })
+      }
+      return { people, next }
+    },
+
+    /**
      * Whether each person has ever written in: an inbound email on their
      * timeline, filed on the contact, or on the lead while they were one
      * (AGL-3234). One keyed query each; a failed one is unknown.
@@ -367,6 +485,32 @@ export function createCrmPersonRecords(deps: CrmPersonRecordsDeps): PluginPerson
         }),
       )
     },
+
+    /**
+     * Contacts the site may see whose name, address, company or phone
+     * starts with the typed word (AGL-3609): ONE query on the scoped search
+     * tokens every contact writer stamps, `array-contains-any` over the
+     * site's scope tokens joined to the word — the same clause the Contacts
+     * list runs under a site, so a record the site cannot see is never
+     * answered and no index beyond the field's own is needed.
+     */
+    async search(request: PluginPersonSearchRequest) {
+      const word = crmPersonSearchWord(request.text)
+      const hostId = String(request.hostId ?? '').trim()
+      const limit = Math.min(CRM_PERSON_SEARCH_MAX, Math.max(0, Math.floor(Number(request.limit) || 0)))
+      if (!word || !hostId || !limit) return []
+      const orgId = await orgOf(deps, request)
+      const tokens = scopeTokensForHost(hostId).map((scope) => `${scope}${CRM_SCOPED_SEARCH_JOIN}${word}`)
+      const snapshot = await deps
+        .firestore()
+        .collection('orgs')
+        .doc(orgId)
+        .collection(STORED_IN[CRM_PERSON_KINDS.contact])
+        .where(CRM_SCOPED_SEARCH_TOKENS_FIELD, 'array-contains-any', tokens)
+        .limit(limit)
+        .get()
+      return snapshot.docs.map((doc) => personOf(CRM_PERSON_KINDS.contact, doc))
+    },
   }
 }
 
@@ -378,4 +522,6 @@ export const crmPersonRecords: Required<PluginPersonRecords> = {
   recordRefund: (request) => recordPersonRefund(request),
   peopleInView: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).peopleInView!(request),
   wroteIn: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).wroteIn!(request),
+  search: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).search!(request),
+  changedSince: (request) => createCrmPersonRecords(defaultCrmPersonRecordsDeps()).changedSince!(request),
 }

@@ -204,9 +204,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   flagLookalikeCustomDomain: (...args: unknown[]) => mockFlagLookalike(...args),
 }))
 
+const mockRunPluginEventHandlers = jest.fn(async (..._args: unknown[]) => ({
+  handled: 1,
+  failed: [] as string[],
+}))
+
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   TENANT_APEX: 'aglyn.app',
+  // CAPTURED (AGL-3629): plugins hear about a connected domain.
+  runPluginEventHandlers: (...args: unknown[]) => mockRunPluginEventHandlers(...args),
   checkEntitlement: (...args: unknown[]) => mockCheckEntitlement(...args),
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
@@ -571,6 +578,42 @@ describe('a successful POST is not a serving domain (AGL-1913)', () => {
  * stopped at the 400 would pass against a guard that refuses the name and then
  * attaches it anyway.
  */
+describe('plugins hear about the connected domain (AGL-3629)', () => {
+  beforeEach(() => mockRunPluginEventHandlers.mockClear())
+
+  it('raises host.domain.attached once the claim and the attach land', async () => {
+    seedHost('mine')
+    const response = await POST(post({ hostId: 'mine', domain: 'example.com' }))
+    expect(response.status).toBe(200)
+    expect(mockRunPluginEventHandlers).toHaveBeenCalledWith('host.domain.attached', {
+      orgId: 'org-1',
+      hostId: 'mine',
+      domain: 'example.com',
+    })
+  })
+
+  it('raises nothing for a domain another site holds', async () => {
+    seedHost('mine')
+    seedHost('theirs', { cname: 'example.com' })
+    const response = await POST(post({ hostId: 'mine', domain: 'example.com' }))
+    expect(response.status).toBe(409)
+    expect(mockRunPluginEventHandlers).not.toHaveBeenCalled()
+  })
+
+  it('raises nothing when the hosting provider refused the name', async () => {
+    seedHost('mine')
+    mockProjectDomainStatus.mockResolvedValue({
+      state: 'not-attached',
+      domain: 'example.com',
+      verification: [],
+      conflicts: [],
+    })
+    const response = await POST(post({ hostId: 'mine', domain: 'example.com' }))
+    expect(response.status).toBe(409)
+    expect(mockRunPluginEventHandlers).not.toHaveBeenCalled()
+  })
+})
+
 describe('the claim covers every name Vercel holds (AGL-1430)', () => {
   /** Vercel's answer for a name already on this project. */
   function seedNameAlreadyOnOurProject() {

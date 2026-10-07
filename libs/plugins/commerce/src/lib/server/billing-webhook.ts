@@ -75,8 +75,18 @@ import {
 } from './promotion-hold'
 import { flagOrderRestock } from './restock-flag'
 import { storefrontTaxModeOf } from './storefront-tax'
+import { taxEngineStampFromMetadata } from '../model/commerce-tax-engine'
 import { recordStorefrontTax } from './storefront-tax-record'
 import { enqueueSupplierDelivery } from './supplier-outbox'
+import { notifyOrderBuyer, onlineReceiptExtras } from './order-notifications'
+import { ORDER_PAID_EVENT, ORDER_REFUNDED_EVENT } from '../model/order-events'
+import {
+  checkoutExtrasCents,
+  decodeCheckoutExtrasMetadata,
+} from '@aglyn/aglyn/plugin-manager/plugin-checkout-extras'
+import { raiseOrderEvent } from './order-events'
+import { handlePosStripeEvent } from './pos-terminal'
+import { notifyPosSaleCompleted } from './pos-sale'
 
 /**
  * Assigns unassigned license keys for a digital product (AGL-308):
@@ -412,7 +422,20 @@ async function findOrderForDispute(
   // different facts at the point they happen, and only one of them is ours to
   // fix.
   if (!matches) return { kind: 'unresolved', reason: 'missing-index' }
-  if (matches.empty) return { kind: 'not-ours' }
+  if (matches.empty) {
+    // A register sale paid with SEVERAL cards keeps every charge in
+    // `paymentIntentIds` and none in `paymentIntentId` (AGL-3607).
+    const split = await firebaseAdmin
+      .app()
+      .firestore()
+      .collectionGroup('orders')
+      .where('paymentIntentIds', 'array-contains', paymentIntentId)
+      .limit(2)
+      .get()
+      .catch(() => null)
+    if (split?.docs.length === 1) return { kind: 'order', snapshot: split.docs[0] }
+    return { kind: 'not-ours' }
+  }
   if (matches.docs.length > 1) {
     console.error(
       'Dispute matched more than one order; reversing none',
@@ -804,7 +827,7 @@ async function recordDisputeClosed(
           snapshot.id,
         ),
         ...(reversedCents > 0 ? { refundedCents: reversedTotal } : {}),
-        ...(closedTheOrder ? { status: 'refunded' } : {}),
+        ...(closedTheOrder ? { status: 'refunded', updatedAtMs: Date.now() } : {}),
         dispute: settled,
         timeline: CommerceModel.appendOrderEvent(
           order,
@@ -2120,6 +2143,13 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     return
   }
 
+  // THE REGISTER'S CARD PAYMENTS (AGL-3607): Terminal reader actions, register
+  // PaymentIntents and register QR pages. Each names one payment on an open
+  // sale and is settled by re-reading Stripe in `pos-terminal.ts`; every other
+  // event falls through untouched.
+  const posPayment = await handlePosStripeEvent({ type, object })
+  if (posPayment) return { claimed: true, hostId: posPayment.hostId }
+
   // A DEAD SESSION GIVES ITS RESERVATIONS BACK (AGL-2453).
   //
   // Stripe expires a Checkout Session 24 hours after creation, and emits this
@@ -2958,6 +2988,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           }
           return true
         })
+        // Other plugins and the merchant's webhooks hear of the sale (AGL-3611); keyed, so a redelivery raises it once.
+        await raiseOrderEvent(ORDER_PAID_EVENT, { hostId: invoiceHostId, orderId: invoiceId, key: 'paid' })
         // THE SALES TAX COMES BACK TO THE PLATFORM (AGL-1956), and like the
         // stop below it runs BEFORE the `recorded` short-circuit: a cycle
         // already on the ledger is exactly the cycle whose reversal may still
@@ -3519,6 +3551,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // transaction for the notices below (AGL-3432). The document id is
         // the Stripe session id, which appears nowhere in the console.
         let cartOrderNumber: number | undefined
+        // The optional lines the buyer took (AGL-3635), read back off the
+        // session they were charged on; never re-quoted here.
+        const cartExtras = decodeCheckoutExtrasMetadata(object?.metadata)
         const created = await firestore.runTransaction(async (transaction) => {
           const [existing, counter] = await Promise.all([
             transaction.get(orderRef),
@@ -3534,7 +3569,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const totals = CommerceModel.computeCheckoutSessionTotals(
             lineItems,
             object,
-            { feeCents: Number(feeCents ?? 0) },
+            { feeCents: Number(feeCents ?? 0), extrasCents: checkoutExtrasCents(cartExtras) },
           )
           // With the fields the orders list queries by (AGL-3321).
           transaction.set(orderRef, CommerceModel.withOrderListFields(orderRef.id, {
@@ -3543,6 +3578,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             channel: 'online',
             lineItems,
             totals,
+            ...(cartExtras.length ? { extras: cartExtras } : {}),
             // WHICH TAX THIS SALE CARRIED (AGL-2451). `totals.taxCents` above
             // says how much; this says who computed it, which is the fact that
             // decides whose registration the money is held under. The same
@@ -3554,6 +3590,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               object,
               Number(object?.metadata?.taxCents ?? 0),
             ),
+            // The outside tax service that priced it, or that it fell back
+            // to the store's own rates (AGL-3631). `taxMode` above stays the
+            // regime; this names who did the arithmetic.
+            ...taxEngineStampFromMetadata(object?.metadata),
             timeline: [
               { atMs: Date.now(), event: 'paid' },
               ...(unresolvedLines.length
@@ -3692,9 +3732,13 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             .set({ licenseKeys: licenseKeysByProduct }, { merge: true })
             .catch(() => undefined)
         }
+        // Other plugins and the merchant's webhooks hear of the sale (AGL-3611); keyed, so a redelivery raises it once.
+        await raiseOrderEvent(ORDER_PAID_EVENT, { hostId: String(hostId), orderId: orderRef.id, key: 'paid' })
         // Branded receipt (AGL-296): env-gated like every outbound email.
         const buyerEmailForReceipt = object?.customer_details?.email
-        if (isEmailConfigured() && buyerEmailForReceipt) {
+        // The store's receipt switch and the status link (AGL-3610).
+        const receiptExtras = await onlineReceiptExtras(String(hostId), String(object.id))
+        if (isEmailConfigured() && buyerEmailForReceipt && receiptExtras.enabled) {
           const receiptSettings = await hostRef
             .collection('settings')
             .doc('store')
@@ -3709,6 +3753,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 `${line.quantity}× ${line.name}${
                   line.variantLabel ? ` (${line.variantLabel})` : ''
                 } — $${((line.unitAmountCents * line.quantity) / 100).toFixed(2)}`,
+            )
+            .concat(
+              // Optional lines the buyer took (AGL-3635), as charged.
+              cartExtras.map((extra) => `${extra.label} — $${(extra.amountCents / 100).toFixed(2)}`),
             )
             .join('\n')
           // The keys assigned above the gate (AGL-2149); the receipt only
@@ -3763,6 +3811,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               // built-in copy always renders (AGL-3370), so a footer that is
               // only in the fallback text above never reaches a buyer.
               'store.receiptFooter': receiptFooter,
+              ...receiptExtras.tokens,
             },
           )
           await sendEmail({
@@ -4295,6 +4344,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               customerEmail:
                 object?.customer_details?.email ?? lifted.customerEmail ?? null,
               timeline: CommerceModel.appendOrderEvent(lifted, 'paid'),
+              // A paid draft is new to a shipping tool's feed (AGL-3613).
+              updatedAtMs: Date.now(),
               ...(shippingCents > 0 || stripeTaxCents > 0
                 ? {
                     totals: {
@@ -4353,6 +4404,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
         if (flipped) {
           const order = paidOrder as unknown as CommerceModel.HostOrder
+          // A legacy register QR sale is a register sale completing (AGL-3607).
+          if (order.channel === 'pos') {
+            await notifyPosSaleCompleted({
+              hostId: String(hostId),
+              orderId: String(orderId),
+              order: { ...order, status: 'paid' },
+            })
+          }
           // Discounts engine redemptions (AGL-305), for this branch's BOTH
           // tenants: a console draft order and a POS card sale, which carry the
           // same `commerce-draft` metadata type. The cart branch has settled
@@ -4436,6 +4495,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               },
             })
           }
+          // The receipt a payment link or a POS card sale never sent (AGL-3610).
+          await notifyOrderBuyer({ hostId: String(hostId), orderId: String(orderId) }, 'receipt', { email: draftEmail })
+          await raiseOrderEvent(ORDER_PAID_EVENT, { hostId: String(hostId), orderId: String(orderId), key: 'paid' })
           if (productId) {
             const productRef = hostRef
               .collection('products')
@@ -4651,6 +4713,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               object,
               Number(object?.metadata?.taxCents ?? 0),
             ),
+            // The outside tax service that priced it, or that it fell back
+            // to the store's own rates (AGL-3631). `taxMode` above stays the
+            // regime; this names who did the arithmetic.
+            ...taxEngineStampFromMetadata(object?.metadata),
             timeline: [{ atMs: Date.now(), event: 'paid' }],
             paymentIntentId: String(object?.payment_intent ?? '') || null,
             checkoutSessionId: String(object.id),
@@ -4956,6 +5022,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               'exists, so the redemption is uncounted against its limit.',
           })
         }
+        // Other plugins and the merchant's webhooks hear of the sale (AGL-3611); keyed, so a redelivery raises it once.
+        await raiseOrderEvent(ORDER_PAID_EVENT, { hostId: String(hostId), orderId: orderRef.id, key: 'paid' })
         // Receipt + seller notification (AGL-96): env-gated like every
         // other outbound email; failures never fail the webhook.
         if (isEmailConfigured()) {
@@ -4965,7 +5033,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const amount = (Number(object?.amount_total ?? 0) / 100).toFixed(2)
           const buyerEmail = object?.customer_details?.email
           const orderTotal = `$${amount}`
-          if (buyerEmail) {
+          // The store's receipt switch and the status link (AGL-3610).
+          const receiptExtras = await onlineReceiptExtras(String(hostId), String(object.id))
+          if (buyerEmail && receiptExtras.enabled) {
             // The store's own Receipt footer, as the cart receipt carries it
             // (AGL-3432).
             const receiptFooter = String(
@@ -4993,6 +5063,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 'order.total': orderTotal,
                 'order.ref': String(object.id),
                 'store.receiptFooter': receiptFooter,
+                ...receiptExtras.tokens,
               },
             )
             await sendEmail({
@@ -5093,6 +5164,26 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     const snapshot = lookup.snapshot
     const hostId = String(snapshot.ref.parent.parent?.id ?? '')
     const external = await recordExternalRefund(snapshot.ref, object)
+    if (external && hostId) {
+      // A Stripe Dashboard refund is a refund to every subscriber too
+      // (AGL-3645): accounting books it and the merchant's webhooks hear it,
+      // as they do a console refund. Keyed by the charge's refunded total,
+      // which the record above only ever advances once per amount.
+      const latestRefund = (object?.refunds?.data ?? [])[0]
+      await raiseOrderEvent(ORDER_REFUNDED_EVENT, {
+        hostId,
+        orderId: snapshot.id,
+        key: `external-refund:${String(object?.id ?? paymentIntentId)}:${Number(object?.amount_refunded ?? 0)}`,
+        extra: {
+          refund: {
+            id: latestRefund?.id ? String(latestRefund.id) : null,
+            amountCents: external.newCents,
+            lineItemIds: [],
+            full: external.fullyRefunded,
+          },
+        },
+      })
+    }
     if (external && hostId && snapshot.ref.parent.parent) {
       const outcome = await applyExternalRefundToGiftCards({
         firestore: firebaseAdmin.app().firestore(),

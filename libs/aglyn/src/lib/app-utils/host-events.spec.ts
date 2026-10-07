@@ -52,6 +52,16 @@ describe('host events', () => {
       'dealStageChanged',
       'dealWon',
       'dealLost',
+      'orderPaid',
+      'orderFulfilled',
+      'orderDelivered',
+      'orderRefunded',
+      'orderCancelled',
+      'returnRequested',
+      'returnApproved',
+      'returnDeclined',
+      'returnReceived',
+      'returnRefunded',
       'funnelLeft',
     ])
     expect(HOST_EVENTS.find((event) => event.type === 'pageView')?.pluginId).toBeUndefined()

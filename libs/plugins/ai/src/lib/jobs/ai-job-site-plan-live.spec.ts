@@ -52,18 +52,21 @@ const LIVE = process.env['AGLYN_LIVE_AI'] === '1' && Boolean(process.env['ANTHRO
 const NOW = new Date()
 const FREE_ORG: Partial<AglynOrgBilling> & { ownerUid: string } = { plan: 'free', ownerUid: 'owner-1' }
 
-/** Briefs as people answer the guided start: a business, who it is for, a look, two pages. */
-const BRIEFS: ReadonlyArray<{ businessType: string; audience: string; starter: string }> = [
-  { businessType: 'a neighborhood dog groomer in Austin that takes grooming appointments', audience: 'local dog owners who want a regular groom', starter: 'business' },
-  { businessType: 'a family dental practice', audience: 'parents booking check-ups for their kids', starter: 'business' },
-  { businessType: 'a wedding photographer', audience: 'engaged couples comparing photographers', starter: 'portfolio' },
-  { businessType: 'a roofing contractor', audience: 'homeowners after a storm', starter: 'business' },
-  { businessType: 'a yoga studio with drop-in classes', audience: 'beginners nervous about their first class', starter: 'landing' },
-  { businessType: 'a bakery that sells cakes to order', audience: 'people planning a birthday', starter: 'shop-physical' },
-  { businessType: 'a nonprofit food bank', audience: 'volunteers and donors', starter: 'business' },
-  { businessType: 'a freelance bookkeeper', audience: 'small business owners behind on their books', starter: 'business' },
-  { businessType: 'a mobile car detailing service', audience: 'busy commuters', starter: 'landing' },
-  { businessType: 'a guitar teacher', audience: 'adults who always wanted to learn', starter: 'business' },
+/**
+ * Briefs as people answer the guided start: a business, who it is for, a look,
+ * two pages — and the site's own name, which the create door adds (AGL-3596).
+ */
+const BRIEFS: ReadonlyArray<{ businessName: string; businessType: string; audience: string; starter: string }> = [
+  { businessName: 'Hillside Dog Grooming', businessType: 'a neighborhood dog groomer in Austin that takes grooming appointments', audience: 'local dog owners who want a regular groom', starter: 'business' },
+  { businessName: 'Maple Street Dental', businessType: 'a family dental practice', audience: 'parents booking check-ups for their kids', starter: 'business' },
+  { businessName: 'Ana Ruiz Photography', businessType: 'a wedding photographer', audience: 'engaged couples comparing photographers', starter: 'portfolio' },
+  { businessName: 'Summit Roofing', businessType: 'a roofing contractor', audience: 'homeowners after a storm', starter: 'business' },
+  { businessName: 'Still Point Yoga', businessType: 'a yoga studio with drop-in classes', audience: 'beginners nervous about their first class', starter: 'landing' },
+  { businessName: 'Crumb & Co', businessType: 'a bakery that sells cakes to order', audience: 'people planning a birthday', starter: 'shop-physical' },
+  { businessName: 'Eastside Food Bank', businessType: 'a nonprofit food bank', audience: 'volunteers and donors', starter: 'business' },
+  { businessName: 'Ledgerly Books', businessType: 'a freelance bookkeeper', audience: 'small business owners behind on their books', starter: 'business' },
+  { businessName: 'Gleam Mobile Detailing', businessType: 'a mobile car detailing service', audience: 'busy commuters', starter: 'landing' },
+  { businessName: 'Fretwork Lessons', businessType: 'a guitar teacher', audience: 'adults who always wanted to learn', starter: 'business' },
 ]
 
 function siteJob(inputs: Record<string, unknown>, index: number): AiJob {
@@ -114,6 +117,8 @@ describeLive("a guided start's plan from the real model", () => {
           refused: outcome['uncredited'] === true || outcome['refused'] === true,
           findings: (review?.findings ?? []).map((finding) => `${finding.code}: ${finding.message}`),
           estCostUsd: Number(outcome['estCostUsd'] ?? 0),
+          // Reported, not held: whether the plan's own words carry the name (AGL-3596).
+          named: JSON.stringify(outcome['plan'] ?? null).includes(brief.businessName),
         }
       }),
     )

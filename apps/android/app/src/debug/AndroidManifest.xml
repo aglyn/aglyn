@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- The local emulator stack is plain http on the host computer. -->
+  <application android:networkSecurityConfig="@xml/network_security_config" />
+</manifest>

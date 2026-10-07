@@ -27,12 +27,14 @@ import {
 } from '@aglyn/aglyn/server'
 import { operatorAlertForNotificationType } from '@aglyn/aglyn/plugin-manager/operator-alerts'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import { notificationPushEnabled } from '@aglyn/aglyn/app-utils/notification-push'
 import { FieldValue } from 'firebase-admin/firestore'
 import { withoutMailWithheldAccounts } from './account-mail'
 import { findUserByUidAcrossPools, listStaffUidsAcrossPools } from './auth-pools'
 import { filterSuppressedEmails } from './email-suppression'
 import { meterOrgEmail, meterPlatformEmail } from './email-metering'
 import firebaseAdmin from './firebase-admin'
+import { mobilePushEnabled, mobilePushSenders } from './mobile-push-switch'
 import { listOrgMembers } from './organizations'
 import {
   loadSystemEmail,
@@ -287,6 +289,7 @@ export async function notifyUsers(
     const batch = db.batch()
     let count = 0
     const mailTo: string[] = []
+    const pushTo: string[] = []
     for (const userDoc of userDocs) {
       const settings = userDoc.get(NOTIFICATION_SETTINGS_FIELD) as
         | NotificationSettings
@@ -315,6 +318,10 @@ export async function notifyUsers(
         )
         count += 1
       }
+      // The mobile push channel (AGL-3620); unanswered, it follows the feed.
+      if (notificationPushEnabled(settings, payload.type, scope, legacy)) {
+        pushTo.push(userDoc.id)
+      }
       if (
         notificationChannelEnabled(settings, 'email', payload.type, scope, legacy) &&
         !options.skipEmailFor?.includes(userDoc.id)
@@ -323,6 +330,21 @@ export async function notifyUsers(
       }
     }
     if (count > 0) await batch.commit()
+    /*
+     * The push after the commit for the same reason as the email below:
+     * every registered transport is handed the recipients whose preferences
+     * say push, unless the deployment has pulled the kill switch. A failing
+     * transport is logged and never stops the email or another transport.
+     */
+    if (pushTo.length && mobilePushEnabled()) {
+      for (const send of mobilePushSenders()) {
+        try {
+          await send(pushTo, payload, { db })
+        } catch (error) {
+          console.error('push delivery failed', error)
+        }
+      }
+    }
     /*
      * THE EMAIL AFTER THE COMMIT, and not inside its `try`.
      *

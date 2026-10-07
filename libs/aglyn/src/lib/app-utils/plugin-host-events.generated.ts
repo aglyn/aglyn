@@ -23,6 +23,16 @@ export type PluginHostEventType =
   | 'dealStageChanged'
   | 'dealWon'
   | 'dealLost'
+  | 'orderPaid'
+  | 'orderFulfilled'
+  | 'orderDelivered'
+  | 'orderRefunded'
+  | 'orderCancelled'
+  | 'returnRequested'
+  | 'returnApproved'
+  | 'returnDeclined'
+  | 'returnReceived'
+  | 'returnRefunded'
   | 'funnelLeft'
 
 export const PLUGIN_HOST_EVENTS: readonly HostEventDeclaration[] = [
@@ -191,6 +201,155 @@ export const PLUGIN_HOST_EVENTS: readonly HostEventDeclaration[] = [
       "contactId",
       "companyId",
       "lostReason"
+    ]
+  },
+  {
+    "pluginId": "commerce",
+    "type": "orderPaid",
+    "order": 140,
+    "label": "Order paid",
+    "payloadKeys": [
+      "orderId",
+      "orderNumber",
+      "status",
+      "channel",
+      "email",
+      "name",
+      "totalCents",
+      "currency"
+    ]
+  },
+  {
+    "pluginId": "commerce",
+    "type": "orderFulfilled",
+    "order": 141,
+    "label": "Order fulfilled",
+    "payloadKeys": [
+      "orderId",
+      "orderNumber",
+      "status",
+      "email",
+      "name",
+      "totalCents",
+      "fulfillmentId",
+      "carrier",
+      "trackingNumber",
+      "trackingUrl"
+    ]
+  },
+  {
+    "pluginId": "commerce",
+    "type": "orderDelivered",
+    "order": 142,
+    "label": "Order delivered",
+    "payloadKeys": [
+      "orderId",
+      "orderNumber",
+      "status",
+      "email",
+      "name",
+      "totalCents"
+    ]
+  },
+  {
+    "pluginId": "commerce",
+    "type": "orderRefunded",
+    "order": 143,
+    "label": "Order refunded",
+    "payloadKeys": [
+      "orderId",
+      "orderNumber",
+      "status",
+      "email",
+      "name",
+      "totalCents",
+      "refundCents",
+      "fullRefund"
+    ]
+  },
+  {
+    "pluginId": "commerce",
+    "type": "orderCancelled",
+    "order": 144,
+    "label": "Order canceled",
+    "payloadKeys": [
+      "orderId",
+      "orderNumber",
+      "status",
+      "email",
+      "name",
+      "totalCents"
+    ]
+  },
+  {
+    "pluginId": "commerce",
+    "type": "returnRequested",
+    "order": 145,
+    "label": "Return requested",
+    "payloadKeys": [
+      "orderId",
+      "orderNumber",
+      "email",
+      "name",
+      "returnId",
+      "returnStatus"
+    ]
+  },
+  {
+    "pluginId": "commerce",
+    "type": "returnApproved",
+    "order": 146,
+    "label": "Return approved",
+    "payloadKeys": [
+      "orderId",
+      "orderNumber",
+      "email",
+      "name",
+      "returnId",
+      "returnStatus"
+    ]
+  },
+  {
+    "pluginId": "commerce",
+    "type": "returnDeclined",
+    "order": 147,
+    "label": "Return declined",
+    "payloadKeys": [
+      "orderId",
+      "orderNumber",
+      "email",
+      "name",
+      "returnId",
+      "returnStatus"
+    ]
+  },
+  {
+    "pluginId": "commerce",
+    "type": "returnReceived",
+    "order": 148,
+    "label": "Return received",
+    "payloadKeys": [
+      "orderId",
+      "orderNumber",
+      "email",
+      "name",
+      "returnId",
+      "returnStatus"
+    ]
+  },
+  {
+    "pluginId": "commerce",
+    "type": "returnRefunded",
+    "order": 149,
+    "label": "Return refunded",
+    "payloadKeys": [
+      "orderId",
+      "orderNumber",
+      "email",
+      "name",
+      "returnId",
+      "returnStatus",
+      "returnRefundCents"
     ]
   },
   {

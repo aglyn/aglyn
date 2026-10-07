@@ -295,6 +295,29 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       "Nothing personal: a request for an already-published public page of a customer site, made by the platform itself — the site's host name, the page path, the probe header and the bypass secret. No visitor, member or customer record.",
   },
 
+  // MARK – Apple Push Notification service
+
+  'api.push.apple.com': {
+    disposition: 'subprocessor',
+    entity: 'Apple Inc.',
+    region: 'United States',
+    purpose: 'Delivery of push notifications to the mobile apps on an iPhone or iPad',
+    publishedOn: '2026-10-07',
+    reason:
+      "APNs' production endpoint, reached over HTTP/2 from `libs/tenant/data/admin/src/lib/server/push-apns.ts` for a device registered with the production environment, when a notification's recipient has a push transport (AGL-3651). The same Apple row the push token declaration below names (AGL-3648).",
+    dataReceived: "The notification's title and body, its deep link, and the device push token.",
+  },
+  'api.sandbox.push.apple.com': {
+    disposition: 'subprocessor',
+    entity: 'Apple Inc.',
+    region: 'United States',
+    purpose: 'Delivery of push notifications to development builds of the mobile apps on an iPhone or iPad',
+    publishedOn: '2026-10-07',
+    reason:
+      "APNs' sandbox endpoint, the same sender's route for a device a development build registered with `apnsEnvironment: 'sandbox'` (AGL-3651).",
+    dataReceived: "The notification's title and body, its deep link, and the device push token.",
+  },
+
   // MARK – Resend
 
   'api.resend.com': {
@@ -494,10 +517,10 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     disposition: 'subprocessor',
     entity: 'Google LLC (Google Fonts)',
     region: 'United States',
-    purpose: 'Serving web fonts to site visitors and to the editor',
-    publishedOn: '2026-08-18',
+    purpose: "Serving web fonts to the site editor and to the payment form in a site's checkout",
+    publishedOn: '2026-10-07',
     reason:
-      'The stylesheet host for the font families a site owner picks in the theme, and for the blog-cover generator.',
+      "The stylesheet host for the font families a site owner picks in the theme: the besigner editor links it, and a published site's server reads it to rebuild the rules on the site's own origin, so a visitor's browser no longer asks it for a theme font (AGL-3656). A visitor's browser still reaches it from the in-page checkout, whose payment fields fetch their face through Stripe.js. Also the blog-cover generator.",
     dataReceived:
       "A visitor's IP address and user-agent, as an unavoidable property of the browser fetching the stylesheet. No account or order data.",
   },
@@ -505,10 +528,10 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     disposition: 'subprocessor',
     entity: 'Google LLC (Google Fonts)',
     region: 'United States',
-    purpose: 'Serving web fonts to site visitors and to the editor',
-    publishedOn: '2026-08-18',
+    purpose: "Serving web fonts to the site editor and to the payment form in a site's checkout",
+    publishedOn: '2026-10-07',
     reason:
-      'The font-file host preconnected from the besigner editor pages and from a published site layout.',
+      "The font-file host preconnected from the besigner editor pages. A published site no longer sends visitors to it (AGL-3656): its server fetches each theme font file once and serves it from the site's own `/api/fonts` route.",
     dataReceived:
       "A visitor's IP address and user-agent. No account or order data.",
   },
@@ -709,6 +732,12 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     disposition: 'no-request',
     reason:
       'XML namespace URIs, in the RSS `atom:` declaration, the admin bar and the icon and image components. A namespace is an identifier that happens to look like a URL.',
+    dataReceived: 'Nothing. No request is made.',
+  },
+  'schemas.android.com': {
+    disposition: 'no-request',
+    reason:
+      "The Android resource namespace URI (`xmlns:android`) in the vector drawables and adaptive icon `tools/scripts/lib/native-brand.mjs` generates for the native Android app (AGL-3651). An identifier inside the XML the build compiles.",
     dataReceived: 'Nothing. No request is made.',
   },
   'ns.adobe.com': {
@@ -1007,6 +1036,28 @@ export const SDK_EGRESS: Record<string, SdkEgress> = {
     dataReceived:
       'Card details, typed directly into fields Stripe serves, plus the device signals Stripe uses for fraud prevention.',
     publishedOn: '2026-08-05',
+  },
+  /**
+   * The native apps receive push straight from the platform's own push
+   * service: Apple's for an iPhone, iPad or Mac, Google's for an Android device.
+   * The token is the collection every registered device push token is stored
+   * in, which any sender reads; Apple's hosts are also declared above.
+   */
+  'Apple Push Notification service': {
+    token: 'MOBILE_DEVICES_COLLECTION',
+    entity: 'Apple Inc.',
+    reason:
+      'Delivery of a push notification to the app on an iPhone, iPad or Mac, to the device push token the app registered.',
+    dataReceived: "The notification's title and body, and the device push token.",
+    publishedOn: '2026-10-07',
+  },
+  'Firebase Cloud Messaging': {
+    token: 'MOBILE_DEVICES_COLLECTION',
+    entity: 'Google LLC (Firebase / Google Cloud)',
+    reason:
+      'Delivery of a mobile push notification to the mobile app on an Android device, to the device push token the app registered.',
+    dataReceived: "The notification's title and body, and the device push token.",
+    publishedOn: '2026-10-07',
   },
   /**
    * App Check's attestation traffic is browser-side and reaches Google's

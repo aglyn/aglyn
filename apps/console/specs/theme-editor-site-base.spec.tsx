@@ -36,6 +36,11 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 jest.mock('@aglyn/shared-ui-color-picker', () => ({ ColorPicker: () => null }))
 jest.mock('../constants/docs-links', () => ({ docsHelp: () => undefined }))
 jest.mock('next/dynamic', () => ({ __esModule: true, default: () => () => null }))
+// The Typography card's font zone (AGL-3656) holds nothing here: these cases
+// are about the editor's colors, and the zone's own spec covers its widgets.
+jest.mock('../components/plugin-widget-slot.component', () => ({
+  useSlotWidgets: () => ({ widgets: [], ready: true }),
+}))
 jest.mock('next/head', () => ({
   __esModule: true,
   default: ({ children }: { children: ReactNode }) => <>{children}</>,

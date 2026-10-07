@@ -234,6 +234,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     caches: true,
     why: "the doctrine, the page rules and the screen palette; one section a pass, so the prefix is read many times over one page",
   },
+  'jobs/ai-job-page-language.ts': {
+    step: 'job.page',
+    caches: true,
+    why: 'the doctrine and the layout language; a whole page is one answer, and a site asks it once a page (AGL-3660)',
+  },
   'jobs/ai-job-theme-step.ts': {
     step: 'job.theme',
     caches: true,
@@ -745,7 +750,10 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // which the tool lists for the conditions it may write.
       // The automation draft is up 31 at AGL-3605: the funnels plugin's "Left a
       // funnel" trigger joins the host events the draft may start on.
-      'workflow-draft': { prefixTokens: 4_744, minimum: 1_024, caches: true, toolsStable: true },
+      // Up 249 at AGL-3611, the order and return triggers the draft may start
+      // on, and 7 for the two steps that ride a larger variant naming its
+      // empty field.
+      'workflow-draft': { prefixTokens: 5_000, minimum: 1_024, caches: true, toolsStable: true },
       'workflow-explain': { prefixTokens: 2_215, minimum: 1_024, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
       'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },
@@ -768,8 +776,10 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'logic-function': { prefixTokens: 1_556, minimum: 1_024, caches: true, toolsStable: true },
       'logic-variable': { prefixTokens: 1_087, minimum: 1_024, caches: true, toolsStable: true },
       'logic-explain': { prefixTokens: 1_077, minimum: 1_024, caches: true, toolsStable: true },
-      'insight-read': { prefixTokens: 883, minimum: 1_024, caches: false, toolsStable: true },
-      'insight-answer': { prefixTokens: 923, minimum: 1_024, caches: false, toolsStable: true },
+      // Both insight requests are up 60 or 61 at AGL-3663: a site's published
+      // state comes only from its Site status table, never from its traffic.
+      'insight-read': { prefixTokens: 944, minimum: 1_024, caches: false, toolsStable: true },
+      'insight-answer': { prefixTokens: 983, minimum: 1_024, caches: false, toolsStable: true },
       // A product's copy, a catalog, and categories with discounts (AGL-2916):
       // the whole doctrine, each generation's rules and its tool, which clear
       // the balanced tier's minimum, so a bulk job reads the prefix once a

@@ -29,8 +29,19 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
+import {
+  CARRIER_POSTAL_CODE_MESSAGE,
+  planCheckoutShippingWithCarriers,
+  type CarrierShippingPlan,
+} from './carrier-shipping'
 import { readCartId } from './cart-cookie'
 import { resolveManualTaxRateId } from './manual-tax-rate'
+import {
+  allocateCentsByWeight,
+  engineLineTaxPercentages,
+  taxEngineSessionMetadata,
+} from '../model/commerce-tax-engine'
+import { quoteSaleTaxWithEngine } from './tax-engine-quote'
 import {
   type PromotionSlotHold,
   holdPromotionSlot,
@@ -43,6 +54,18 @@ import {
   readCheckoutSessionPayload,
   resolveNativeCheckoutMode,
 } from './native-checkout'
+import { ensureCheckoutDomain } from './payment-method-domains'
+import { raiseCheckoutStarted } from './order-events'
+import {
+  checkoutExtrasCents,
+  encodeCheckoutExtrasMetadata,
+  readChosenCheckoutExtras,
+} from '@aglyn/aglyn/plugin-manager/plugin-checkout-extras'
+import { quoteCartExtras, type CheckoutExtrasLine } from './checkout-extras'
+
+/** An option the buyer ticked is no longer offered (AGL-3635). */
+export const CHECKOUT_EXTRA_UNAVAILABLE_MESSAGE =
+  'An option you picked is no longer available. Review your cart and try again.'
 
 /**
  * Cart checkout (AGL-293): the whole cart in one Stripe Checkout
@@ -196,6 +219,10 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
      * second resolution is a second chance to pick a different one.
      */
     const reserveLines: StockHoldLine[] = []
+    /** The basket as `checkout.started` reports it (AGL-3639). */
+    const startedItems: Parameters<typeof raiseCheckoutStarted>[1]['items'] = []
+    /** The basket as an extras offer prices it (AGL-3635). */
+    const extrasLines: CheckoutExtrasLine[] = []
     // Cart checkout never builds subscription sessions — every line bills
     // one-time in `payment` mode (recurring products subscribe through the
     // PDP's direct checkout, AGL-303) — so the buyer-chosen billing field
@@ -256,6 +283,22 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       }
       const unitCents = Math.round(Number(variant.priceUsd) * 100)
       itemsCents += unitCents * line.quantity
+      extrasLines.push({
+        productId: line.productId,
+        name: product.name,
+        ...((variant as { sku?: string }).sku ? { sku: String((variant as { sku?: string }).sku) } : {}),
+        quantity: line.quantity,
+        unitCents,
+        physical: (product.type ?? 'physical') === 'physical',
+      })
+      startedItems.push({
+        productId: line.productId,
+        variantId: variant.id ?? null,
+        name: product.name,
+        sku: (variant as { sku?: string }).sku ?? null,
+        quantity: line.quantity,
+        unitCents,
+      })
       if (product.giftCard) giftCardCents += unitCents * line.quantity
       // What THIS line is worth, so a product-scoped discount can be priced
       // against the lines it actually covers rather than the whole basket
@@ -352,15 +395,30 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       .collection('settings')
       .doc('store')
       .get()
-    const shippingPlan = hasPhysicalLine
-      ? CommerceModel.planCheckoutShipping(
-          storeSettings.get('shipping') as
+    // A live carrier rate (AGL-3612) is quoted here too, before the session,
+    // for the destination the shopper declared; a store with none plans from
+    // its table exactly as before. See `carrier-shipping.ts`.
+    const shippingPlan: CarrierShippingPlan = hasPhysicalLine
+      ? await planCheckoutShippingWithCarriers({
+          hostId,
+          settings: storeSettings.get('shipping') as
             | CommerceModel.ShippingSettings
             | undefined,
-          { subtotalCents: itemsCents, totalGrams },
-          body.shippingCountry,
-        )
+          cart: { subtotalCents: itemsCents, totalGrams },
+          destination: {
+            country: body.shippingCountry,
+            postalCode: body.shippingPostalCode,
+          },
+        })
       : { countries: CommerceModel.CHECKOUT_SHIPPING_COUNTRIES, options: [] }
+    if (shippingPlan.needsPostalCode) {
+      return res.status(400).json({
+        error: CARRIER_POSTAL_CODE_MESSAGE,
+        needsShippingCountry: true,
+        needsShippingPostalCode: true,
+        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+      })
+    }
     // The shopper is asked, then the answer is ENFORCED (AGL-1721): a declared
     // destination narrows `allowed_countries` to itself, so the rate resolved
     // for it is the only one on the session and no other address can be
@@ -394,6 +452,42 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       return res
         .status(409)
         .json({ error: CommerceModel.CART_UNPRICEABLE_SHIPPING_MESSAGE })
+    }
+
+    // OPTIONAL LINES THE BUYER TICKED (AGL-3635) — package protection — asked
+    // of core's checkout-extras seam AGAIN here, never taken from the request:
+    // the body names which offers, the provider names the price. Above the
+    // claim, so a refusal keeps the key. An offer the buyer ticked that is no
+    // longer made refuses rather than selling without it: they asked for
+    // cover, and a parcel that silently has none is the worse surprise.
+    const chosenExtras = readChosenCheckoutExtras(body.extras)
+    const chargedExtras = chosenExtras.length
+      ? (
+          await quoteCartExtras({
+            hostId,
+            lines: extrasLines,
+            destination: { country: body.shippingCountry, postalCode: body.shippingPostalCode },
+          })
+        ).filter((extra) => chosenExtras.includes(extra.id))
+      : []
+    if (chargedExtras.length !== chosenExtras.length) {
+      return res.status(409).json({ error: CHECKOUT_EXTRA_UNAVAILABLE_MESSAGE, extrasChanged: true })
+    }
+    const extrasCents = checkoutExtrasCents(chargedExtras)
+    // Each as its own line after the goods, untaxed (`txcd_00000000`, Stripe's
+    // nontaxable code) and outside every per-line tax, engine and fee loop
+    // below, which read `cart.lines` only: an extra is not goods, so the
+    // platform's take is not charged on it.
+    chargedExtras.forEach((extra, offset) => {
+      const index = cart.lines.length + offset
+      params.set(`line_items[${index}][quantity]`, '1')
+      params.set(`line_items[${index}][price_data][currency]`, 'usd')
+      params.set(`line_items[${index}][price_data][unit_amount]`, String(extra.amountCents))
+      params.set(`line_items[${index}][price_data][product_data][name]`, extra.label.slice(0, 120))
+      params.set(`line_items[${index}][price_data][product_data][tax_code]`, 'txcd_00000000')
+    })
+    for (const [key, value] of Object.entries(encodeCheckoutExtrasMetadata(chargedExtras))) {
+      params.set(`metadata[${key}]`, value)
     }
 
     chargedItemsCents = itemsCents
@@ -818,6 +912,49 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // `application_fee_amount` is fixed at creation), and the manual origin tax
     // rate the lines carry. A store on Stripe Tax is the one residual — its tax
     // is computed inside Stripe after the session is made.
+    // The merchant's own tax service, where they connected one (AGL-3631).
+    // Asked once, here, because the card-cost estimate just below and the
+    // tax lines further down both need its answer. Each line goes over at
+    // what Stripe will tax it at — its amount less its share of the session
+    // coupon, shared the way Stripe shares it — so the rate derived from
+    // the answer reproduces it. Taxed at the store's address, like the store's
+    // own rate: the shopper's address arrives inside Stripe Checkout, after
+    // this session exists. When the service does not answer, the store's
+    // rate stands and the order says so.
+    const cartEngineLines = cart.lines
+      .map((line, index) => {
+        const unitCents = Number(params.get(`line_items[${index}][price_data][unit_amount]`) ?? NaN)
+        return {
+          index,
+          line,
+          amountCents: Number.isFinite(unitCents) ? unitCents * line.quantity : 0,
+        }
+      })
+      .filter((entry) => entry.amountCents > 0)
+    const cartEngineDiscounts = allocateCentsByWeight(
+      Math.max(0, itemsCents - chargedItemsCents),
+      cartEngineLines.map((entry) => entry.amountCents),
+    )
+    const cartEngineNet = cartEngineLines.map(
+      (entry, position) => entry.amountCents - cartEngineDiscounts[position],
+    )
+    const engineTax =
+      chargedItemsCents > 0
+        ? await quoteSaleTaxWithEngine({
+            hostId,
+            settings: (storeSettings.get('tax') ?? {}) as CommerceModel.TaxSettings,
+            channel: 'online',
+            lines: cartEngineLines.map((entry, position) => ({
+              id: String(entry.index),
+              productId: entry.line.productId,
+              ...(entry.line.variantId ? { variantId: entry.line.variantId } : {}),
+              quantity: entry.line.quantity,
+              amountCents: cartEngineNet[position],
+              ...(productsById.get(entry.line.productId)?.taxExempt ? { exempt: true } : {}),
+            })),
+            customerEmail: email || null,
+          })
+        : { quote: null, stamp: null }
     if (chargedItemsCents > 0) {
       const shippingCeilingCents = shippingOptions.reduce(
         (most, option) =>
@@ -837,7 +974,12 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         manualRate && manualRate.pct > 0 ? manualRate.pct : 0
       const chargeCents =
         chargedItemsCents +
-        Math.round((chargedItemsCents * manualTaxPct) / 100) +
+        // Stripe's cost on the extras is a real cost of this charge, passed
+        // through at cost like the rest; no take is added on them (AGL-3635).
+        extrasCents +
+        (engineTax.quote
+          ? engineTax.quote.taxCents
+          : Math.round((chargedItemsCents * manualTaxPct) / 100)) +
         shippingCeilingCents
       feeCents = Math.min(
         chargeCents,
@@ -922,6 +1064,39 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     }
     if (taxDecision.kind === 'stripe-automatic') {
       params.set('automatic_tax[enabled]', 'true')
+    } else if (engineTax.quote) {
+      // The tax service's cents per line as one rate per line (AGL-3631),
+      // applied after the coupon exactly like the store's own rate below. One
+      // Tax Rate per distinct percentage, cached under the host like the
+      // store's, so a store's usual rates are minted once.
+      const engineAnswer = new Map(engineTax.quote.lines.map((line) => [line.id, line.taxCents]))
+      const percentages = engineLineTaxPercentages(
+        cartEngineLines.map((entry, position) => ({
+          amountCents: cartEngineNet[position],
+          taxCents: engineAnswer.get(String(entry.index)) ?? 0,
+        })),
+        0,
+      )
+      for (let position = 0; position < cartEngineLines.length; position++) {
+        const pct = percentages[position]
+        if (pct === null) continue
+        const taxRateId = await resolveManualTaxRateId({
+          hostRef,
+          taxPct: pct,
+          taxLabel: 'Sales tax',
+          headers: stripeKeyHeader(`tax-rate-engine-${Math.round(pct * 10_000)}`),
+        })
+        if (!taxRateId) {
+          // The same visible refusal as the store's own rate: never an
+          // untaxed session.
+          await releaseGiftCardHold()
+          await releasePromotionHolds()
+          await releaseStock()
+          await claim.release()
+          return res.status(502).json({ error: 'Checkout failed' })
+        }
+        params.set(`line_items[${cartEngineLines[position].index}][tax_rates][0]`, taxRateId)
+      }
     } else if (taxSettings.mode === 'manual' && !taxSettings.pricesIncludeTax) {
       // Origin-based, exactly as buy-now resolves it: the cart collects the
       // shopper's address inside Stripe Checkout, so there is no destination
@@ -970,9 +1145,10 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // The site's own page, never a header's say-so (AGL-3363): a caller
     // writes `Referer` and `Host`, and this URL is where Stripe sends the
     // payer — and what the receipt's download links are built from.
+    const returnSite = await readSiteReturnHost(hostRef)
     const backUrl = siteReturnUrl({
       candidates: [String(req.headers.referer ?? ''), `https://${req.headers.host}`],
-      site: await readSiteReturnHost(hostRef),
+      site: returnSite,
       requestHost: String(req.headers.host ?? ''),
     })
     const separator = backUrl.includes('?') ? '&' : '?'
@@ -1007,11 +1183,20 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         accountId: String(accountId),
         feeCents,
         taxOwner: cartTaxOwner,
-        merchantGoodsCents: chargedItemsCents,
+        // The extras are the merchant's to keep and remit (AGL-3635).
+        merchantGoodsCents: chargedItemsCents + extrasCents,
         shippingFloorCents: cartShippingFloorCents,
       }),
     ).forEach(([key, value]) => params.set(key, value))
     params.set('metadata[type]', 'commerce-cart')
+    for (const [key, value] of Object.entries(taxEngineSessionMetadata(engineTax.stamp))) {
+      params.set(key, value)
+    }
+    // The postal code live carrier rates were quoted for (AGL-3612), so the
+    // order can show it beside the address the shopper then entered.
+    if (shippingPlan.quotedPostalCode) {
+      params.set('metadata[shippingQuotePostalCode]', shippingPlan.quotedPostalCode)
+    }
     params.set('metadata[hostId]', hostId)
     params.set('metadata[cartId]', cartId)
     params.set('metadata[feeCents]', String(Math.max(0, feeCents)))
@@ -1025,7 +1210,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         String(
           CommerceModel.platformLiableTransferCents({
             feeCents,
-            merchantGoodsCents: chargedItemsCents,
+            merchantGoodsCents: chargedItemsCents + extrasCents,
             shippingFloorCents: cartShippingFloorCents,
           }),
         ),
@@ -1054,6 +1239,19 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       ),
     )
 
+    // The payment methods the merchant switched off (AGL-3629): exclusions
+    // only, on the hosted page and the in-page one alike.
+    const paymentMethodControls =
+      CommerceModel.resolveStorefrontPaymentMethodControls(
+        CommerceModel.normalizeStorefrontPaymentMethodSettings(
+          storeSettings.get('paymentMethods'),
+        ),
+      )
+    CommerceModel.appendStorefrontPaymentMethodParams(
+      params,
+      paymentMethodControls,
+    )
+
     // The Payment Element (AGL-1944), LAST and touching nothing above it. Every
     // figure the shopper is charged — line prices, the discount coupon, the tax
     // construction, the shipping rates, the fee — was decided before this line
@@ -1069,6 +1267,13 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         `${backUrl}${separator}order=success&session_id={CHECKOUT_SESSION_ID}`,
       )
     }
+    // Apple Pay shows on a registered domain only (AGL-3629): registered
+    // beside the session create, inside a budget, never failing the sale.
+    const domainRegistration = nativeMode.native
+      ? ensureCheckoutDomain({ pageUrl: backUrl, site: returnSite, hostId }).catch(
+          () => null,
+        )
+      : Promise.resolve(null)
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',
       {
@@ -1080,7 +1285,18 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           // existing session for a repeated key instead of opening a second
           // one, covering the window where the claim is written but the
           // response never arrives.
-          ...stripeKeyHeader('session'),
+          // A tax service's answer can differ between two tries under one
+          // key, so the key names it and a changed answer opens a new session
+          // rather than a Stripe parameter mismatch (AGL-3631).
+          // Likewise an extra's price (AGL-3635): a re-quote that moved opens
+          // a new session instead of a parameter mismatch.
+          ...stripeKeyHeader(
+            `${
+              engineTax.stamp
+                ? `session-tax-${engineTax.quote?.taxCents ?? 'own'}-${engineTax.stamp.status}`
+                : 'session'
+            }${extrasCents > 0 ? `-x${extrasCents}` : ''}`,
+          ),
           // Empty on the hosted path (AGL-1944).
           ...nativeCheckoutStripeHeaders(nativeMode),
         },
@@ -1097,8 +1313,13 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // so it moves with the mode (AGL-1944) — otherwise every successful native
     // session reads as a Stripe failure: a 502 at the shopper, a released claim,
     // and a real Checkout Session left open on the merchant's account.
+    await domainRegistration
     const payload = response.ok
-      ? readCheckoutSessionPayload(session, nativeMode)
+      ? readCheckoutSessionPayload(
+          session,
+          nativeMode,
+          paymentMethodControls.wallets,
+        )
       : null
     if (!payload) {
       console.error('Stripe cart checkout error', session.error)
@@ -1142,6 +1363,19 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         createdAtMs: Date.now(),
       })
       .catch(() => undefined)
+    // The fact a merchant's own email platform starts an abandoned-cart flow
+    // from (AGL-3639); nothing subscribes unless a site connected one.
+    if (email) {
+      await raiseCheckoutStarted(String(hostId), {
+        id: String(session.id),
+        email,
+        marketingOptIn,
+        currency: 'usd',
+        itemsCents,
+        resumeUrl: backUrl ?? null,
+        items: startedItems,
+      })
+    }
     await claim.record(200, payload)
     return res.status(200).json(payload)
   } catch (error: any) {

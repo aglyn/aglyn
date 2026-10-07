@@ -307,6 +307,10 @@ back afterwards, so Aglyn asks first.
   where photos are on, and adds it to the folder you have open with alt text. Each picture
   is stored like an upload and costs AI credits — see
   [Create images with AI](../../ai/create-images.md).
+- **Web fonts** (WOFF2) are accepted too. The usual way to add one is
+  [Upload your own font](../../building-sites/theme-builder/edit-your-theme.md#upload-your-own-font)
+  in the theme editor, which checks the font's license, converts a TTF, OTF or WOFF to
+  WOFF2 and stores it here.
 - Documents and archives are stored and served exactly as you uploaded them — nothing
   is opened, extracted or converted. Macro-enabled Office files (`.docm`, `.xlsm`,
   `.pptm`) are not accepted.
@@ -327,6 +331,7 @@ back afterwards, so Aglyn asks first.
 | Documents (Word, Excel, CSV, RTF, text, Markdown, JSON) | 25 MB per file | **Pro and above** |
 | Presentations (PowerPoint) | 50 MB per file | **Pro and above** |
 | ZIP archives | 50 MB per file | **Pro and above** |
+| Web fonts (WOFF2) | 10 MB per file | Every plan |
 | Video | 200 MB per file | **Paused** on every plan |
 
 Any file over 3 MB automatically uses **signed-URL uploads**, so big files go straight to
@@ -546,14 +551,13 @@ Only workspace owners and admins can change sharing.
 
 A new folder or file starts shared with **All sites**, so it appears everywhere the moment
 you create it — or with the site you were working in, if your workspace has been set to
-make new resources site-scoped by default. That default is **Default sharing for new data
-and media**, at the top of the workspace's **Media** page, and it changes nothing that
-already exists. The site you were working in is the one whose **Media** tab you uploaded
+make new media site-scoped by default. That default is **Default sharing for new media**,
+at the top of the workspace's **Media** page, and it changes nothing that already exists. The site you were working in is the one whose **Media** tab you uploaded
 on, or the one you were editing when you opened the media picker. A folder or file
 created on the workspace **Media** page has no site to limit it to, so it starts on **All
-sites** either way. The default applies to new datasets the same way: one created on a
-site's **Data** page follows it, and one created on the organization **Data** page starts
-on **All sites**. If the **Shared with** dialog ever opens on
+sites** either way. New datasets have a default of their own, **Default sharing for new
+datasets** on the organization **Data** page, so files can start on every site while
+datasets start on one, or the other way round. If the **Shared with** dialog ever opens on
 "Not shared with any site", that folder or file has no sharing stored at all: it is hidden
 from every site, and any file inside it turns up under **No folder** there. Pick a value
 and save to fix it.

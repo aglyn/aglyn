@@ -85,7 +85,9 @@ describe('the review a refused answer leaves on its job', () => {
     })
     expect(review).toEqual({
       reason: 'doctrine',
-      message: 'This could not be built within the building rules.',
+      // The doctrine's own sentence is staff reading (AGL-3596).
+      message: 'Aglyn AI couldn’t build this cleanly, so we stopped rather than give you something broken.',
+      detail: 'This could not be built within the building rules.',
       findings: [
         { ...GRID_FINDING },
         { rule: 2, code: 'plan-screen-without-layout', message: 'A screen names no layout.', paths: ['screens[0].layout'] },
@@ -226,5 +228,25 @@ describe('the review a refused answer leaves on its job', () => {
     expect(notes).toContain(
       `${AI_JOB_REVIEW_OUTLINE_MAX_DEPTH} levels below each node a finding names, at most ${AI_JOB_REVIEW_OUTLINE_MAX_NODES} nodes and ${AI_JOB_REVIEW_OUTLINE_MAX_BYTES.toLocaleString('en-US')} bytes as JSON`,
     )
+  })
+})
+
+describe('what a customer reads of a refusal (AGL-3596)', () => {
+  const RULE_TEXT =
+    "This could not be built within the building rules. Rule 12 (Responsive by the theme's breakpoints): Every child of a Grid container is a Grid item."
+
+  it('reads the plain refusal, a page’s for a page, and keeps the rule’s words as detail', () => {
+    const review = aiDoctrineReview({ message: RULE_TEXT, violations: [GRID_FINDING] })
+    expect(review.message).toBe('Aglyn AI couldn’t build this cleanly, so we stopped rather than give you something broken.')
+    expect(review.detail).toBe(RULE_TEXT)
+    const page = aiDoctrineReview({ message: RULE_TEXT, violations: [GRID_FINDING] }, { page: true, then: 'Then try again.' })
+    expect(page.message).toBe('Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page. Then try again.')
+    expect(page.message).not.toMatch(/Rule \d/)
+  })
+
+  it('leaves a sentence written for the customer as it is', () => {
+    const review = aiDoctrineReview({ message: 'This section was too large to build in one pass.', violations: [] })
+    expect(review.message).toBe('This section was too large to build in one pass.')
+    expect(review.detail).toBeUndefined()
   })
 })

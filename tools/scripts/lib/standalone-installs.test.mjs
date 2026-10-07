@@ -136,7 +136,7 @@ describe('the verdict', () => {
 
 describe('the guard is wired, and reads the real tree', () => {
   it('finds exactly the standalone packages that exist today', () => {
-    // Asserted against git rather than a fixture: if a third one lands, this
+    // Asserted against git rather than a fixture: if another one lands, this
     // is the line that has to be looked at, deliberately.
     const dirs = execFileSync('git', ['ls-files', '*/package-lock.json'], {
       cwd: repoRoot,

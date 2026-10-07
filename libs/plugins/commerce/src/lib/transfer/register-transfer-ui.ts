@@ -28,6 +28,7 @@ import {
   COMMERCE_GIFT_CARDS_TRANSFER,
   COMMERCE_ORDERS_TRANSFER,
   COMMERCE_PRODUCTS_TRANSFER,
+  COMMERCE_TRACKING_TRANSFER,
   GIFT_CARD_CONFIRM_STEP_ID,
 } from './transfer-keys'
 
@@ -66,6 +67,7 @@ export function registerCommerceTransferUi(): void {
   registerPluginTransferResourceUi(COMMERCE_CATEGORIES_TRANSFER, { label: 'Product categories' }, owner)
   registerPluginTransferResourceUi(COMMERCE_ORDERS_TRANSFER, { label: 'Orders' }, owner)
   registerPluginTransferResourceUi(COMMERCE_DISCOUNTS_TRANSFER, { label: 'Discounts' }, owner)
+  registerPluginTransferResourceUi(COMMERCE_TRACKING_TRANSFER, { label: 'Tracking numbers' }, owner)
   registerPluginTransferResourceUi(COMMERCE_COUPONS_TRANSFER, { label: 'Coupons' }, owner)
   registerPluginTransferResourceUi(
     COMMERCE_GIFT_CARDS_TRANSFER,

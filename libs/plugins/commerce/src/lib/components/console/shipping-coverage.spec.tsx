@@ -35,7 +35,7 @@
  * is what a merchant would see.
  */
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import ShippingSettingsCard from './shipping-settings-card.component'
 
@@ -44,6 +44,7 @@ const listener: { shipping: unknown } = { shipping: undefined }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
+  useUser: () => ({ data: null }),
   useFirestoreDoc: () => ({
     data: { shipping: listener.shipping },
     status: 'success',
@@ -57,6 +58,16 @@ jest.mock('firebase/firestore', () => ({
   ...jest.requireActual('firebase/firestore'),
   doc: () => ({}),
   setDoc: jest.fn().mockResolvedValue(undefined),
+}))
+
+/** Whether the site can price by carrier (AGL-3612), as the route answers. */
+const carrierAnswer: { available: boolean; services: Array<{ serviceKey: string; label: string }> } = {
+  available: false,
+  services: [],
+}
+
+jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
+  authorizedFetch: jest.fn(async () => ({ ok: true, json: async () => carrierAnswer })),
 }))
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
@@ -74,6 +85,8 @@ const cardText = () => document.body.textContent ?? ''
 beforeEach(() => {
   jest.clearAllMocks()
   listener.shipping = undefined
+  carrierAnswer.available = false
+  carrierAnswer.services = []
 })
 
 describe('ShippingSettingsCard coverage (AGL-1791)', () => {
@@ -276,5 +289,48 @@ describe('ShippingSettingsCard coverage (AGL-1791)', () => {
     // And it clears as soon as the merchant names it.
     fireEvent.change(names[1], { target: { value: 'Express' } })
     expect(cardText()).not.toContain('checkout drops it')
+  })
+})
+
+describe('live carrier rates (AGL-3612)', () => {
+  const zone = { id: 'us', name: 'Domestic', countries: ['US'] }
+
+  it('offers the Carrier rates kind only where the site can quote carriers', async () => {
+    listener.shipping = {
+      zones: [zone],
+      rates: [{ id: 'std', zoneId: 'us', name: 'Standard', kind: 'flat', amountCents: 799 }],
+    }
+    const { unmount } = render(<ShippingSettingsCard hostId="host-1" />)
+    await act(async () => undefined)
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Type' }))
+    expect(screen.queryByRole('option', { name: 'Carrier rates' })).toBeNull()
+    unmount()
+
+    carrierAnswer.available = true
+    render(<ShippingSettingsCard hostId="host-1" />)
+    await act(async () => undefined)
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Type' }))
+    expect(screen.getByRole('option', { name: 'Carrier rates' })).toBeTruthy()
+  })
+
+  it('shows a saved carrier rate’s services, markup, handling and fallback, and asks for a fallback', async () => {
+    carrierAnswer.available = true
+    carrierAnswer.services = [
+      { serviceKey: 'usps:priority', label: 'USPS Priority Mail' },
+      { serviceKey: 'ups:ground', label: 'UPS Ground' },
+    ]
+    listener.shipping = {
+      zones: [zone],
+      rates: [
+        { id: 'std', zoneId: 'us', name: 'Standard', kind: 'flat', amountCents: 799 },
+        { id: 'live', zoneId: 'us', name: 'Carrier', kind: 'carrier', carrier: { services: ['ups:ground'], markupPct: 10 } },
+      ],
+    }
+    render(<ShippingSettingsCard hostId="host-1" />)
+    await waitFor(() => expect(screen.getByLabelText('UPS Ground')).toBeTruthy())
+    expect((screen.getByLabelText('UPS Ground') as HTMLInputElement).checked).toBe(true)
+    expect((screen.getByLabelText('USPS Priority Mail') as HTMLInputElement).checked).toBe(false)
+    expect((screen.getByLabelText('Markup (%)') as HTMLInputElement).value).toBe('10')
+    expect(cardText()).toContain('checkout can’t price without a quote')
   })
 })

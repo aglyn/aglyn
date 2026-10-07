@@ -16,6 +16,7 @@
  */
 
 import {
+  aiBuildActiveSlot,
   aiBuildCanRetry,
   aiBuildItemRefundCopy,
   aiBuildItemRows,
@@ -79,5 +80,70 @@ describe('a build item by item, as every surface shows it (AGL-3616)', () => {
     )
     expect(aiSitePartialCopy({ items, status: 'done' })).toContain('couldn’t be built. The 4 credits')
     expect(aiSitePartialCopy({ items: [items[2]], status: 'done' })).toBeNull()
+  })
+})
+
+/*
+ * The runner settles an item in the write that records its pass and never
+ * marks the one it is on running, so a build mid-way reads every open item as
+ * pending (AGL-3596). The item it is on is the first of them, and it is shown
+ * as building, with a time to count from — never a page of "Waiting" rows.
+ */
+describe('the item a build is on (AGL-3596)', () => {
+  const steps = [
+    { name: 'plan', status: 'done', startedAt: '2026-10-07T17:11:00.000Z', endedAt: null, creditsSpent: 12, error: null },
+    { name: 'generate', status: 'pending', startedAt: '2026-10-07T17:12:08.000Z', endedAt: null, creditsSpent: 0, error: null },
+  ] as never
+  const ledger = (settledAt?: string) => [
+    row({ slot: 'l', op: 'layout', label: 'Main Layout', ...(settledAt ? { settledAt } : {}) }),
+    row({ slot: 'f', op: 'form', label: 'Contact Request Form', ...(settledAt ? { settledAt: '2026-10-07T17:12:20.000Z' } : {}) }),
+    row({ slot: 'p0', op: 'page', label: 'Home', status: 'pending' }),
+    row({ slot: 'p1', op: 'page', label: 'Contact', status: 'pending' }),
+  ]
+
+  it('is the first pending item while the job moves, counted from when the last item settled', () => {
+    for (const status of ['queued', 'running'] as const) {
+      const rows = aiBuildItemRows({ items: ledger('2026-10-07T17:12:15.000Z'), status, steps })
+      expect(rows.map((one) => one.state)).toEqual(['done', 'done', 'active', 'waiting'])
+      expect(rows[2].startedAt).toBe('2026-10-07T17:12:20.000Z')
+      expect(rows.filter((one) => one.startedAt !== undefined)).toHaveLength(1)
+    }
+  })
+
+  it('counts from the build step’s start on a ledger that records no settle', () => {
+    const rows = aiBuildItemRows({ items: ledger(), status: 'running', steps })
+    expect(rows[2]).toMatchObject({ state: 'active', startedAt: '2026-10-07T17:12:08.000Z' })
+  })
+
+  it('keeps the item the ledger marks running, and marks nothing on a job that is not moving', () => {
+    const items = ledger().map((one) => (one.slot === 'p1' ? { ...one, status: 'running' as const } : one))
+    expect(aiBuildActiveSlot({ items, status: 'queued' })).toBe('p1')
+    expect(aiBuildActiveSlot({ items: ledger(), status: 'needs_input' })).toBeNull()
+    expect(aiBuildActiveSlot({ items: ledger(), status: 'done' })).toBeNull()
+    expect(aiBuildItemRows({ items: ledger() }).map((one) => one.state)).toEqual(['done', 'done', 'waiting', 'waiting'])
+  })
+})
+
+/*
+ * The 2026-10-07 production Home page failed on rule 12, and its row read the
+ * rule's own words to the customer (AGL-3596). A ledger written before the
+ * runner kept those words apart reads the same as one written after.
+ */
+describe('a page a building rule stopped, as the customer reads it (AGL-3596)', () => {
+  const RULE = "This could not be built within the building rules. Rule 12 (Responsive by the theme's breakpoints): Every child of a Grid container is a Grid item whose size is full width on a phone."
+  const failure = { ours: true, reason: 'doctrine-refused' as const, message: RULE, detail: RULE }
+
+  it('reads the plain refusal, then what became of its credits; never the rule', () => {
+    const rows = aiBuildItemRows({
+      items: [
+        row({ slot: 'p0', op: 'page', label: 'Home', status: 'failed', creditsSpent: 99, creditsRefunded: 99, failure }),
+        row({ slot: 'f', op: 'form', label: 'Contact', status: 'failed', failure: { ours: true, reason: 'doctrine-refused', message: RULE } }),
+      ],
+    })
+    expect(rows[0].detail).toBe(
+      'Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page. This one’s on us — you weren’t charged. The 99 credits it used are back in your AI credits.',
+    )
+    expect(rows[1].detail).toBe('Aglyn AI couldn’t build this cleanly, so we stopped rather than give you something broken. This one’s on us — you weren’t charged.')
+    expect(rows.map((one) => one.detail).join(' ')).not.toMatch(/Rule \d|building rules/)
   })
 })

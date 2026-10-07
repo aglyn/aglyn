@@ -85,6 +85,12 @@ export interface TransferExportLaunch {
   selection?: readonly string[]
   /** The list's current filter: a name for it, and the value the resource's `readPage` reads. */
   filter?: { label: string; value: unknown }
+  /**
+   * One of the resource's own presets to open on (`TransferResourcePreset.id`)
+   * — a list's "Export for Pirate Ship" — instead of the person's last
+   * choice. An id the resource does not offer is ignored.
+   */
+  preset?: string
 }
 
 /** What a person may do with a resource's records. */

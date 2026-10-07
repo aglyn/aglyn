@@ -140,4 +140,25 @@ describe('the tenant CSP and the storefront Payment Element (AGL-1944)', () => {
       }
     }
   })
+
+  it('lets the in-page checkout reach Stripe and load the theme font (AGL-3606)', async () => {
+    // `connect-src` IS sent, and enforced, unlike `script-src`, so here the
+    // origins must be present today rather than on the day a directive
+    // appears. Stripe.js fetches the `elementsOptions.fonts` stylesheet from
+    // the TOP document (measured), so the theme font in the payment fields
+    // depends on fonts.googleapis.com being allowed here. Address
+    // autocomplete is NOT asserted: it runs inside Stripe's own frame.
+    const headers = await headersFor()
+    const policies = [
+      headers.get('Content-Security-Policy') ?? '',
+      headers.get('Content-Security-Policy-Report-Only') ?? '',
+    ]
+    const connect = policies
+      .map((policy) => directive(policy, 'connect-src'))
+      .find((value) => value !== null)
+    expect(connect).toBeTruthy()
+    expect(connect).toContain('https://api.stripe.com')
+    expect(connect).toContain('https://fonts.googleapis.com')
+    expect(connect).not.toContain('https://maps.googleapis.com')
+  })
 })

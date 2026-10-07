@@ -67,6 +67,12 @@ answer stays under **AI jobs**, where **View answer** opens it again.
 When your figures cannot answer part of a question, the answer says so in one sentence rather
 than filling the gap.
 
+A question asked about a site is also given that site's status, as a **Site status** table an
+insight can cite: whether the site is published, its address, and its published pages. A site
+with no visits yet is still live when it is published, so an answer never reads a lack of
+traffic as a site that has not launched. The window you pick is the period the figures cover,
+not a countdown to anything.
+
 ## Asking about datasets
 
 On a **Data** page, a question can summarize a dataset — how many records it holds, how many

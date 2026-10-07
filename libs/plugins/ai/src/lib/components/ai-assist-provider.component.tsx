@@ -16,11 +16,16 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
 import {
+  canvas,
   checkEntitlement,
+  components,
+  FEATURE_FLAG,
+  FieldComponentType,
   lockdownRefusalText,
+  NodeType,
   parseLockdownRefusal,
+  type NodeSchema,
 } from '@aglyn/aglyn'
 import { portableDefinitionToNested } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 import { AiAssistActionsContext } from './ai-assist-actions-context'
@@ -104,7 +109,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
   const { children } = props
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
-  const [node, setNode] = useState<Aglyn.NodeSchema<any> | null>(null)
+  const [node, setNode] = useState<NodeSchema<any> | null>(null)
   const [instruction, setInstruction] = useState('')
   // Rewrite target (AGL-130): 'children' for text-editable elements, or
   // any text attribute the element's schema declares (alt text, labels…).
@@ -128,14 +133,14 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
   const textTargets = useMemo(() => {
     const schema = node?.componentSchema
     const textEditable =
-      ((schema?.flags?.textEditable ?? Aglyn.FEATURE_FLAG.DISABLED) &
-        Aglyn.FEATURE_FLAG.ENABLED) !==
+      ((schema?.flags?.textEditable ?? FEATURE_FLAG.DISABLED) &
+        FEATURE_FLAG.ENABLED) !==
       0
     const attributes = (schema?.attributes ?? [])
       .filter(
         (field: any) =>
-          field.component === Aglyn.FieldComponentType.TEXT_FIELD ||
-          field.component === Aglyn.FieldComponentType.TEXTAREA,
+          field.component === FieldComponentType.TEXT_FIELD ||
+          field.component === FieldComponentType.TEXTAREA,
       )
       .map((field: any) => ({
         prop: String(field.name),
@@ -147,7 +152,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
   }, [node])
 
   const handleRewrite = useCallback(
-    (target: Aglyn.NodeSchema<any>) => {
+    (target: NodeSchema<any>) => {
       // The permission first (AGL-2927): it is a fact about the reader, and
       // pending asserts nothing here either. The refusal is unreachable
       // through the designer — a refused key publishes no callback — and
@@ -193,7 +198,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
     if (!node || !instruction.trim() || busy) return
     setBusy(true)
     try {
-      const current = (Aglyn.canvas.toJSON().nodes as Record<string, any>)[
+      const current = (canvas.toJSON().nodes as Record<string, any>)[
         node.$id
       ]
       const text =
@@ -236,7 +241,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
           allowDuplicate: true,
         })
       }
-      Aglyn.canvas.updateNodeProps(node, {
+      canvas.updateNodeProps(node, {
         ...current?.props,
         [effectiveTarget]: payload.text,
         // Rich-text elements render `html` over `children`; drop it so the
@@ -352,16 +357,16 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
       // Graft through the preset path: ids regenerate, history is saved,
       // and the subtree lands at the end of the canvas root.
       const stamped = (function stamp(node: any): any {
-        const schema = Aglyn.components.getSchema(node.componentId)
+        const schema = components.getSchema(node.componentId)
         return {
           ...node,
           ...(schema?.pluginId ? { pluginId: schema.pluginId } : {}),
           nodes: (node.nodes ?? []).map(stamp),
         }
       })(nested)
-      Aglyn.canvas.addNodeFromPreset(
-        { type: Aglyn.NodeType.PRESET, data: stamped } as any,
-        Aglyn.canvas.rootNode as any,
+      canvas.addNodeFromPreset(
+        { type: NodeType.PRESET, data: stamped } as any,
+        canvas.rootNode as any,
       )
       setSectionOpen(false)
       enqueueSnackbar('Section added — undo removes it', {

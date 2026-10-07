@@ -46,6 +46,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 import '../declarations'
 import { AI_PLUGIN_ID } from '../constants'
+import type { LazyWidget } from '../lazy-widget'
 import { registerAiConsole } from '../plugin'
 import { AiJobsTopBarIndicator } from './ai-jobs-indicator.component'
 import { publishAiJob, resetAiJobsStoreForTests, useAiJobsOpenRequest } from './ai-jobs-store'
@@ -123,10 +124,11 @@ beforeEach(() => {
 })
 
 describe('the zone', () => {
-  it('is registered on the top bar, gated as the generative widgets are', () => {
+  it('is registered on the top bar, gated as the generative widgets are', async () => {
     registerAiConsole()
     const [entry] = listConsoleWidgets(CONSOLE_WIDGET_SLOTS.consoleTopBar, [AI_PLUGIN_ID])
-    expect(entry?.widget.Component).toBe(AiJobsTopBarIndicator)
+    // Registered lazily (AGL-3649): the stand-in loads this component when drawn.
+    expect(await (entry?.widget.Component as LazyWidget).load()).toBe(AiJobsTopBarIndicator)
     expect(entry?.widget.featureFlag).toBe('aiGenerative')
     expect(entry?.widget.permission).toBe('ai.generate')
   })

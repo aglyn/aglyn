@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AGLYN_CONSOLE_URL</key>
+	<string>$(AGLYN_CONSOLE_URL)</string>
+	<key>AGLYN_FIREBASE_API_KEY</key>
+	<string>$(AGLYN_FIREBASE_API_KEY)</string>
+	<key>AGLYN_FIREBASE_AUTH_DOMAIN</key>
+	<string>$(AGLYN_FIREBASE_AUTH_DOMAIN)</string>
+	<key>AGLYN_FIREBASE_PROJECT_ID</key>
+	<string>$(AGLYN_FIREBASE_PROJECT_ID)</string>
+	<key>AGLYN_FIREBASE_APP_ID</key>
+	<string>$(AGLYN_FIREBASE_APP_ID)</string>
+	<key>AGLYN_FIREBASE_MESSAGING_SENDER_ID</key>
+	<string>$(AGLYN_FIREBASE_MESSAGING_SENDER_ID)</string>
+	<key>AGLYN_FIREBASE_STORAGE_BUCKET</key>
+	<string>$(AGLYN_FIREBASE_STORAGE_BUCKET)</string>
+	<key>AGLYN_AUTH_EMULATOR_HOST</key>
+	<string>$(AGLYN_AUTH_EMULATOR_HOST)</string>
+	<key>AGLYN_FIRESTORE_EMULATOR_HOST</key>
+	<string>$(AGLYN_FIRESTORE_EMULATOR_HOST)</string>
+	<key>AGLYN_GOOGLE_IOS_CLIENT_ID</key>
+	<string>$(AGLYN_GOOGLE_IOS_CLIENT_ID)</string>
+	<key>AGLYN_GOOGLE_WEB_CLIENT_ID</key>
+	<string>$(AGLYN_GOOGLE_WEB_CLIENT_ID)</string>
+	<key>AGLYN_BRAND_NAME</key>
+	<string>$(AGLYN_BRAND_NAME)</string>
+	<key>AGLYN_DEBUG_EMAIL</key>
+	<string>$(AGLYN_DEBUG_EMAIL)</string>
+	<key>AGLYN_DEBUG_PASSWORD</key>
+	<string>$(AGLYN_DEBUG_PASSWORD)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>The camera reads product barcodes so you can find and sell items quickly.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>aglyn</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

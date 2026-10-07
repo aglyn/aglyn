@@ -1563,6 +1563,70 @@ running it.
   ladder lets staff through; the beat has no caller. A reader that cannot answer
   is not a pause, as the lockdown reads fail open.
 
+## Running a guided start locally
+
+The live plan eval (`ai-job-site-plan-live.spec.ts`) covers the plan step only.
+The whole guided start — Sites → Create site → Start with AI → the answers →
+plan, layout, form, pages, SEO, publish → the live site — runs on the emulator
+stack with the real model in one command (AGL-3596):
+
+```bash
+npm run e2e:ai-guided-start:local
+npm run e2e:ai-guided-start:local -- --runs 2 --brief "A bakery in Tulsa" --pages 2
+npm run e2e:ai-guided-start:local -- --app-root ../aglyn-wt-integration   # another checkout
+```
+
+It starts what is not already running: the emulators on a private port set
+(`--offset`, default 23000, unless `FIRESTORE_EMULATOR_HOST` and
+`FIREBASE_AUTH_EMULATOR_HOST` name running ones), the console with
+`serve-emulated.mjs console --live-ai` on 4610 and the tenant on 4500 (the only
+port its middleware routes `<site>.localhost` on). `--console-url` and
+`--tenant-url` reuse running servers, and `--keep` leaves what it started up for
+the next run and prints the command that reuses it. A server that exits before
+it answers (the dev-disk floor refuses to start under 10 GiB free) stops the
+run with its log's tail. A cold compile of both apps takes several minutes. Each run is a brand-new customer: a fresh owner account, a Free
+workspace created through `/api/orgs/create`, and a site created through the
+Sites page, so the empty-site check is the one production makes. The workspace
+carries `release_ai_generative` as a per-org override, because the emulator
+stack has no Remote Config.
+
+Two things production has and the emulator stack did not:
+
+- **The provider key.** `serve-emulated.mjs` blanks every outbound credential
+  (AGL-2828). `--live-ai` (or `AGLYN_EMULATED_LIVE_AI=1`) passes the AI
+  provider keys (`LIVE_AI_CREDENTIALS` in `tools/scripts/lib/emulated-env.mjs`,
+  read from the repo `.env`) and nothing else; billing, email and domains still
+  fail closed. It is refused without `FIRESTORE_EMULATOR_HOST`, so the key only
+  ever reaches a server holding seeded data, and spend is bounded the way
+  production bounds it: a job reserves its credits before its first provider
+  call, and a Free workspace holds a few hundred. The harness's preflight
+  refuses a console holding any other credential, and one holding no AI key.
+- **The beat.** Nothing calls `POST /api/admin/ai-jobs-beat` locally, so a job
+  sat queued after its create door. A `--live-ai` console verifies
+  `CRON_SECRET` from the shell or the well-known `LOCAL_CRON_SECRET`, and
+  `tools/scripts/lib/ai-jobs-beat-pump.mjs` calls the route every 5 s, one beat
+  at a time, while a job is queued, running or parked. By hand:
+  `FIRESTORE_EMULATOR_HOST=… npm run ai-jobs:beat:local -- --origin http://localhost:4610`.
+
+The run watches the "Building your site" page until the job settles, recording
+each distinct row state, then reads the job and the site's documents and loads
+the published pages. `summary.md` and `summary.json` in the output directory
+(`--out`, default `tmp/ai-guided-start/<timestamp>/`) answer: the site was
+empty at creation; every item succeeded, or each failure's message; every
+planned page was generated and sits in a layout whose navigation links it; a
+saved form is bound by `formId`; the site is published and its pages answer
+200; the search titles and descriptions are complete; the credits reserved,
+spent and refunded; whether an active row was on screen whenever the job was
+working, whether the form row was ever the active one, and anything that read
+failed, stopped or an error before the job settled; and whether the header
+names the site. Screenshots of the build page every 20 s and of the live home
+and contact pages at 1440 and 375 wide, with header and footer close-ups, sit
+beside them.
+
+⛔ Run it before promoting a change to the site job, its prompts or its rules,
+after the live plan eval. A run costs a few hundred credits, well under a
+dollar of model time.
+
 ## The `seo` kind
 
 SEO by AI (AGL-2910): `src/lib/jobs/ai-job-seo-step.ts`, its generation call in
@@ -1910,6 +1974,21 @@ the same way, in a Grid with a row direction and no container.
   wrote it: the tree check from the answer it was given, and the page section check from
   the section as it was drawn, since its page check sees the section as the page stores it
   (`writtenNode` on the check's context).
+- **Settled where the answer is known (AGL-3596).** A page section pass sizes a Grid
+  container's items before its page check reads them (`aiSettleGridItems`), since
+  `grid-item-size` has one answer, the size its re-ask would name: an item with no size,
+  or one not full width on a phone, takes that size (or the size the model wrote as an
+  object of breakpoints, such as `{ "xs": 12, "md": 6 }`, where that one is full width on
+  a phone); an element placed straight in a container is wrapped in a new Grid item of
+  that size; a container of several items none of which steps down takes it on every
+  item. A `container` written as the text `"true"` in any case is read as true. A
+  production Home page was refused and refunded after its re-ask for this rule. Every
+  other shape above is still re-asked: a Grid that is not a container may be meant as a
+  row or as a stack, and an item in a Box moves only by changing the Box.
+  The tree check every other kind goes through settles the same shapes on the answer as
+  the model wrote it (`aiSettleWrittenGridItems`), so a layout, a template or a component
+  is held to them alike. `ai-job-page-sections-live.spec.ts` builds guided starts' Home pages through the
+  section pass with the real model (`AGLYN_LIVE_AI=1`).
 - **The goldens are real rows.** `ai-page-briefs.ts` draws every row of cards as a Grid
   container (`"spacing": 3`) of items sized for the row (`span`): the ten briefs'
   component cards, the Free pages' inline cards written out and written once (the
@@ -1917,19 +1996,20 @@ the same way, in a Grid with a row direction and no container.
   roomier cells. The two-person introduction itself keeps its 15 elements with a Stack
   whose direction turns from a column into a row at md. The Free About eval case holds its
   page written out and written once the same way, with a failing control for each
-  refusal: the goldens' old shape and the live page's shape (`grid-not-container`), items
-  sized `"4"` at every width (`grid-item-size`), a container spaced by an sx gap
-  (`grid-gap`), a heading and its lead grouped in a Grid and an intro stacked in a Grid
-  with a column direction (`grid-as-stack`), items wrapped in a Box inside their container
-  (`grid-item-outside-container`) and a container written as the text `"True"`
-  (`grid-container-text`). `ai-eval.spec.ts` holds each Grid control to its own finding.
+  refusal: the goldens' old shape and the live page's shape (`grid-not-container`), a
+  container spaced by an sx gap (`grid-gap`), a heading and its lead grouped in a Grid and
+  an intro stacked in a Grid with a column direction (`grid-as-stack`) and items wrapped in
+  a Box inside their container (`grid-item-outside-container`). `ai-eval.spec.ts` holds
+  each Grid control to its own finding. Its controls for items sized `"4"` at every width
+  and a container written as the text `"True"` were retired when both came to be settled
+  rather than refused (AGL-3596).
 - **What it costs.** The page instructions grow by 72 characters (18 estimated tokens of
   the page-section ledger's prefix), and no credit figure the Free arithmetic quotes
   moves. A Grid item is an element, so a row of cards takes one more element a card:
   written once, one. The shapes AGL-3078 tells apart cost nothing until a rule is broken:
   they are re-ask sentences, and no system block, tool or cached prefix changes.
-  `ai-job-free-page.spec.ts` re-asks the Free page's practice areas for each of the four
-  shapes through the real page step: a section re-asked for any of them costs at most 22
+  `ai-job-free-page.spec.ts` re-asks the Free page's practice areas for each of the three
+  shapes a section pass still re-asks through the real page step: a section re-asked for any of them costs at most 22
   credits, less than the 44 of the largest pass, which the room the arithmetic keeps for
   a re-asked section must exceed.
 
@@ -2043,6 +2123,14 @@ when the hero was written.
   place of a section, and a `scrollTo` there goes nowhere.
 - **Taught by the re-ask alone.** No prompt line and no cached prefix changes: a model
   learns a link may go to a section of the page only when rule 10 refuses one.
+- **Pages built after this one (AGL-3596).** A guided start mints its pages' ids on the
+  plan and builds Home first, so Home's "Book an appointment" had no Contact page to go
+  to and was refused after its re-ask. A site job's page unit now carries the plan's
+  pages (`sitePages`, as the layout does): a section request names them by id in one
+  line of its user message (no cached prefix changes), the palette validator keeps a
+  `screenId` naming one, and a Button or Page Link that names no destination at all, on
+  a site with exactly one page besides its home and this one, goes to that page
+  (`aiPageLinkablePages`). With two or more such pages it is re-asked as before.
 - **Controls.** `ai-job-free-page.spec.ts` runs the recording's two hero answers, kept as
   `AI_FREE_PAGE_HERO_ANSWERS` in `jobs/fixtures/ai-free-page-recording.ts`, through the
   real page step: the first is re-asked, the second is kept, and the page completes with
@@ -2053,8 +2141,8 @@ when the hero was written.
   new code, and the harness reads a page answer's links against the sections of the plan
   it was built from.
 - **What it costs.** The hero's re-ask names the page's four sections, and the Free page's
-  hero re-asked costs 22 credits, within the 44 of the largest pass the room the arithmetic
-  keeps for a re-asked section must exceed.
+  hero re-asked costs 21 credits, within the 44 of the largest pass the room the arithmetic
+  keeps for a re-asked section must exceed. Its cut subhead is settled to its first whole clause before the check (AGL-3596), so the re-ask names only the button.
 
 ### The time budget
 

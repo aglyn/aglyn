@@ -58,11 +58,18 @@ const DOORS = [
   'commerce/src/lib/server/reserve.ts',
   'commerce/src/lib/server/draft-order.ts',
   'commerce/src/lib/server/pos-order.ts',
+  // The register's card tenders (AGL-3607): reader, typed card and QR link.
+  'commerce/src/lib/server/pos-terminal.ts',
   'bookings/src/lib/server.ts',
+  // A booking paid at the counter on the POS card reader (AGL-3654).
+  'bookings/src/lib/server/in-person-payment.ts',
   'marketplace/src/lib/server/checkout.ts',
   // Not a charge, but the same claim one step earlier: publishing a PAID
   // listing tells a seller they are set up to sell (AGL-2471).
   'marketplace/src/lib/server/publish-preconditions.ts',
+  // A label's cost taken from the merchant's balance by an account debit
+  // (AGL-3612): a charge against the connected account itself.
+  'shipping/src/lib/server/label-billing.ts',
 ]
 
 const read = (relative: string) =>

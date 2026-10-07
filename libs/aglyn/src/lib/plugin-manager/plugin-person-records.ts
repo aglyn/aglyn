@@ -209,10 +209,78 @@ export type PluginPersonViewPeople =
       unsupported?: string[]
     }
 
+/**
+ * People a site may see whose name, address or phone starts with what was
+ * typed (AGL-3609) — a cashier looking a customer up at the register, a
+ * picker anywhere a person is chosen by hand. One word: the owner answers it
+ * from its own search index and never by scanning its records.
+ */
+export interface PluginPersonSearchRequest {
+  /** The site searching: only records it may see are answered. */
+  hostId: string
+  /** The organization, when the caller knows it; the owner reads it off `hostId` otherwise. */
+  orgId?: string | null
+  /** What was typed. Raw: the owner normalizes it, and reads a run of digits as a phone. */
+  text: string
+  /** The most people answered. The owner may answer fewer. */
+  limit: number
+}
+
 /** Records to ask about, by the refs the owner handed out. */
 export interface PluginPersonWroteInRequest {
   orgId: string
   records: readonly PluginPersonRecordRef[]
+}
+
+/**
+ * The people one site holds, oldest change first, after a cursor (AGL-3639)
+ * — what a connector that mirrors a workspace's people into another system
+ * walks, once from the start as a backfill and then from where it stopped.
+ */
+export interface PluginPersonChangesRequest {
+  /** The site the people are taken for: only records it may see are answered. */
+  hostId: string
+  orgId?: string | null
+  /**
+   * Where the last page stopped, exactly as the owner handed it out, or
+   * `null` to start from the earliest change. Opaque: only the owner reads
+   * it, so it can hold a change time finer than a millisecond and the id
+   * that breaks a tie, and a walk neither skips a person nor repeats one.
+   */
+  after: string | null
+  /** The most people answered; the owner may answer fewer. */
+  limit: number
+}
+
+/**
+ * A person as a connector copies them out: the platform's own fields on the
+ * record (`data`, read with the platform's readers — the consent basis
+ * above all), and the owner's profile of them as this site holds it, in the
+ * platform's words rather than the owner's storage.
+ */
+export interface PluginPersonChange extends PluginPersonRecord {
+  /** When the record last changed, epoch ms. */
+  changedAtMs: number
+  profile: {
+    name: string | null
+    phone: string | null
+    tags: string[]
+    /** What the person has spent at this site, integer cents, when the owner keeps it. */
+    lifetimeValueCents: number | null
+    ordersCount: number | null
+  }
+}
+
+export interface PluginPersonChangesPage {
+  people: PluginPersonChange[]
+  /**
+   * Where the next page starts — the cursor to store. It moves past every
+   * record the owner READ, including one it left out for the site, so a page
+   * can be empty and still move on. `null` when nothing changed after the
+   * cursor: the walk has reached the latest change, and the caller keeps the
+   * cursor it asked with.
+   */
+  next: string | null
 }
 
 export interface PluginPersonRecords {
@@ -236,6 +304,17 @@ export interface PluginPersonRecords {
    * could not answer. Optional.
    */
   wroteIn?(request: PluginPersonWroteInRequest): Promise<Array<boolean | null>>
+  /**
+   * People a site may see that match one typed word, best first. Optional:
+   * an owner that keeps no search index answers nothing. A read; may throw.
+   */
+  search?(request: PluginPersonSearchRequest): Promise<PluginPersonRecord[]>
+  /**
+   * The people a site holds that changed after a cursor, oldest first.
+   * Optional: an owner that cannot walk its records by change answers
+   * nothing. A failed read throws.
+   */
+  changedSince?(request: PluginPersonChangesRequest): Promise<PluginPersonChangesPage>
 }
 
 export const PLUGIN_PERSON_RECORDS = definePluginServiceContract<PluginPersonRecords>(
@@ -358,4 +437,35 @@ export async function pluginPeopleWroteIn(
     console.error('[person-records] the record system could not say who wrote in', error)
     return null
   }
+}
+
+/**
+ * People a site may see matching what was typed, or `null` when no plugin
+ * keeps people here or the one that does keeps no search — which is not
+ * "nobody matched". Blank text answers no one without asking. A failed read
+ * throws, and the caller decides how to say so.
+ */
+export async function searchPluginPeople(
+  request: PluginPersonSearchRequest,
+): Promise<PluginPersonRecord[] | null> {
+  const resolved = pluginPersonRecords()
+  if (!resolved?.records.search) return null
+  if (!String(request.text ?? '').trim() || !(request.limit > 0)) return []
+  return await resolved.records.search(request)
+}
+
+/**
+ * The people a site holds that changed after a cursor, oldest first, or
+ * `null` when no plugin keeps people here or the one that does cannot walk
+ * them by change. The limit is clamped to 1–500. A failed read throws: a
+ * connector that skipped a page it could not read would advance past people
+ * it never copied.
+ */
+export async function pluginPeopleChangedSince(
+  request: PluginPersonChangesRequest,
+): Promise<PluginPersonChangesPage | null> {
+  const resolved = pluginPersonRecords()
+  if (!resolved?.records.changedSince) return null
+  const limit = Math.min(500, Math.max(1, Math.floor(Number(request.limit) || 0)))
+  return await resolved.records.changedSince({ ...request, limit })
 }

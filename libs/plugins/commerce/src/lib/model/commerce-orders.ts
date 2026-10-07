@@ -24,10 +24,13 @@
  * I/O here.
  */
 
+import type { OrderLineModifier } from './product-modifiers'
 import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 import type { PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import type { ProductType } from './commerce'
 import type { StorefrontTaxMode } from './commerce-tax-decision'
+import { lineRequiresShipping, orderLineFulfillmentStates } from './order-fulfillment'
+import type { OrderPayment } from './commerce-pos'
 
 export type OrderStatus =
   | 'pending'
@@ -59,8 +62,13 @@ export interface OrderLineItem {
   sku?: string
   productType?: ProductType
   quantity: number
-  /** Per-unit price in cents at purchase time. */
+  /** Per-unit price in cents at purchase time, its modifiers included. */
   unitAmountCents: number
+  /**
+   * Choices added at the register (AGL-3607), as sold. Already folded into
+   * `variantLabel` and `unitAmountCents`; kept for reports and reorders.
+   */
+  modifiers?: OrderLineModifier[]
   /** Supplier at purchase time (dropship routing, AGL-289). */
   supplierId?: string
   /** Fulfillment id once this line ships (AGL-288). */
@@ -76,6 +84,36 @@ export interface OrderTotals {
   totalCents: number
   /** Aglyn platform fee (Connect application fee, AGL-278/307). */
   feeCents: number
+  /**
+   * Gratuity taken at the register (AGL-3607), on top of `totalCents` and
+   * never inside it: a tip is the merchant's, not a sale, so it stays out of
+   * revenue figures and out of the platform's take.
+   */
+  tipCents?: number
+  /**
+   * Optional lines the buyer added at checkout from another plugin's offer
+   * (AGL-3635) — package protection — summed. Inside `totalCents`, never in
+   * `itemsCents`: an extra is not goods, so no fulfillment, stock or
+   * platform take reads it.
+   */
+  extrasCents?: number
+}
+
+/**
+ * One optional line the buyer took at checkout (AGL-3635), as core's
+ * checkout-extras seam records it: whose offer it was, what it was called
+ * and what it cost. Never a line item: it does not ship and is never
+ * refunded by line.
+ */
+export interface OrderExtra {
+  /** `{pluginId}.{key}`. */
+  id: string
+  pluginId: string
+  key: string
+  label: string
+  amountCents: number
+  /** The offering plugin's quote id. */
+  quoteRef?: string
 }
 
 export interface OrderAddress {
@@ -99,10 +137,33 @@ export interface OrderTimelineEvent {
 
 export interface OrderFulfillment {
   id: string
+  /** The lines this fulfillment touches; `lines` says how many units of each. */
   lineItemIds: number[]
+  /**
+   * Units per line (AGL-3611). Absent on a fulfillment written before
+   * quantities, which reads as every unit of each line in `lineItemIds`.
+   */
+  lines?: Array<{ lineItemId: number; quantity: number }>
   carrier?: string
   trackingNumber?: string
   trackingUrl?: string
+  /** A shipping label bought for this parcel, when a shipping plugin bought one. */
+  labelUrl?: string
+  /** The shipping plugin's id for that label (AGL-3612), so a retry finds this shipment. */
+  labelRef?: string
+  /**
+   * Where the carrier says the parcel is (AGL-3612): `pre_transit`,
+   * `in_transit`, `out_for_delivery`, `delivered`, `exception` or `returned`,
+   * written by a tracking webhook through the shipment-records seam.
+   */
+  trackingStatus?: string
+  trackingStatusAtMs?: number
+  /** Absent reads as `active`; a cancelled fulfillment ships nothing. */
+  status?: 'active' | 'cancelled'
+  cancelledAtMs?: number
+  updatedAtMs?: number
+  /** Whether the buyer was to be told about this shipment. */
+  notify?: boolean
   atMs: number
 }
 
@@ -269,6 +330,8 @@ export interface OrderUnresolvedLine {
 export interface HostOrder {
   /** Human order number, sequential per host (e.g. #1042). */
   number?: number
+  /** Optional lines the buyer added at checkout (AGL-3635); see {@link OrderExtra}. */
+  extras?: OrderExtra[]
   status: OrderStatus
   channel?: OrderChannel
   /**
@@ -281,6 +344,30 @@ export interface HostOrder {
    * erases the restock.
    */
   locationId?: string
+  /**
+   * The register a POS sale was rung on, and the console user who rang it
+   * (AGL-472, AGL-3607).
+   */
+  registerId?: string
+  cashierId?: string
+  /**
+   * The register shift the sale was rung in (AGL-3609), which the shift's X
+   * and Z reports count it under.
+   */
+  shiftId?: string
+  /**
+   * The person the cashier attached at the register (AGL-3609), as the
+   * person-records seam names them: which record system, and its id there.
+   */
+  customerRecord?: { kind: string; id: string }
+  /**
+   * Every payment toward a register sale (AGL-3607): one per tender, until
+   * the balance due is zero. Read through `orderPayments`, which infers one
+   * payment for an order written before the ledger existed.
+   */
+  payments?: OrderPayment[]
+  /** How the customer asked for their receipt at the register (AGL-3608). */
+  receiptRequest?: { channel: 'email' | 'sms' | 'print' | 'none'; to?: string; atMs: number }
   /**
    * The register discount that was applied, and the member who applied it
    * (AGL-2161). Present only on a POS order that carries a discount.
@@ -326,6 +413,22 @@ export interface HostOrder {
   taxMode?: StorefrontTaxMode
   customerEmail?: string | null
   customerName?: string | null
+  /**
+   * The buyer's phone for order texts (AGL-3610), written only by a flow that
+   * asked for it for that purpose — never copied from a shipping address,
+   * which a buyer gives the carrier, not the store.
+   */
+  customerPhone?: string | null
+  /**
+   * Which buyer messages this order has sent (AGL-3610), keyed by
+   * `buyerNotificationMarker` — the idempotency record `notifyOrderBuyer`
+   * claims in a transaction before it sends, so a retried webhook or a second
+   * click never mails the buyer twice.
+   */
+  buyerNotifications?: Record<
+    string,
+    { state: 'sending' | 'sent'; channel: 'email' | 'sms'; atMs: number }
+  >
   /** Storefront customer id once accounts exist (AGL-294). */
   customerId?: string
   shippingAddress?: OrderAddress
@@ -697,6 +800,12 @@ export interface CheckoutSessionTotalsParts {
    * invisible to `total_details.amount_discount`, so it is added to it.
    */
   pricedInDiscountCents?: number
+  /**
+   * The optional lines the buyer took (AGL-3635). Inside `amount_total` as
+   * ordinary Stripe lines, so the parts only sum to the charge with it
+   * named; recorded only when there is one.
+   */
+  extrasCents?: number
 }
 
 export function computeCheckoutSessionTotals(
@@ -715,9 +824,11 @@ export function computeCheckoutSessionTotals(
       Number(parts?.pricedInDiscountCents ?? 0),
   })
   const amountTotal = Number(session?.amount_total ?? NaN)
+  const extrasCents = wholeCents(parts?.extrasCents)
   return {
     ...totals,
-    totalCents: Number.isFinite(amountTotal) ? amountTotal : totals.totalCents,
+    ...(extrasCents > 0 ? { extrasCents } : {}),
+    totalCents: Number.isFinite(amountTotal) ? amountTotal : totals.totalCents + extrasCents,
   }
 }
 
@@ -1264,12 +1375,12 @@ export function orderContainsProduct(
  * order shipped with one carrier and one tracking number.
  */
 export function coveredLineItemIds(order: Partial<HostOrder>): Set<number> {
+  // Quantity-aware since AGL-3611: a line is covered once every unit of it is
+  // on an active fulfillment, so a line shipped 2 of 5 is still open and a
+  // cancelled fulfillment covers nothing.
   const covered = new Set<number>()
-  for (const fulfillment of order.fulfillments ?? []) {
-    for (const index of fulfillment?.lineItemIds ?? []) {
-      const line = Math.round(Number(index))
-      if (Number.isFinite(line) && line >= 0) covered.add(line)
-    }
+  for (const state of orderLineFulfillmentStates(order)) {
+    if (state.quantity > 0 && state.remainingQuantity === 0) covered.add(state.lineItemId)
   }
   return covered
 }
@@ -1312,7 +1423,9 @@ export function statusAfterFulfilling(
 ): OrderStatus {
   const lines = order.lineItems ?? []
   if (lines.length === 0) return 'fulfilled'
-  return lines.every((_line, index) => covered.has(index))
+  // A digital or service line has nothing to ship (AGL-3611), so it never
+  // holds the order open.
+  return lines.every((line, index) => covered.has(index) || !lineRequiresShipping(line))
     ? 'fulfilled'
     : 'partially_fulfilled'
 }
@@ -1529,7 +1642,12 @@ export function orderNetCents(order: Partial<HostOrder>): number {
       (order as { amountCents?: number }).amountCents ??
       0,
   )
-  return gross - Number((order as { refundedCents?: number }).refundedCents ?? 0)
+  const refunded = Number((order as { refundedCents?: number }).refundedCents ?? 0)
+  // A register tip sits outside `totalCents` (AGL-3607), so a refund that
+  // handed the tip back too must not take the tip out of the SALE's revenue a
+  // second time: what comes off is capped at what the sale itself was.
+  const tipCents = Number(order.totals?.tipCents ?? 0)
+  return gross - (tipCents > 0 ? Math.min(refunded, gross) : refunded)
 }
 
 /** Milliseconds an order was created at, across every writer's field shape. */

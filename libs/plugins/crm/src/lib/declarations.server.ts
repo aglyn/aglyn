@@ -90,6 +90,15 @@ export const crmPersonRecordsService: PluginPersonRecords = {
     const { crmPersonRecords } = await import('./server/person-records')
     return crmPersonRecords.wroteIn(request)
   },
+  async search(request) {
+    const { crmPersonRecords } = await import('./server/person-records')
+    return crmPersonRecords.search(request)
+  },
+  // The walk a connector copies a site's people out by (AGL-3639).
+  async changedSince(request) {
+    const { crmPersonRecords } = await import('./server/person-records')
+    return crmPersonRecords.changedSince(request)
+  },
 }
 
 /**

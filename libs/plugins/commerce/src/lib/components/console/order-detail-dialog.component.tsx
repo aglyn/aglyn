@@ -42,9 +42,30 @@ import {
 } from '@mui/material'
 import { doc, runTransaction, updateDoc } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import {
+  type ConsoleWidgetSlotRenderer,
+  useConsoleWidgetSlot,
+} from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import {
+  consoleOrderZoneOrder,
+  FulfillItemsPanel,
+  FulfillmentList,
+  type FulfillItemsSubmission,
+  toZoneFulfillment,
+} from './order-fulfillment-panel.component'
+import {
+  type ConsoleFulfillmentRequest,
+  type ConsoleOrderZoneFulfillment,
+  ORDER_DETAIL_ZONE,
+  ORDER_FULFILLMENT_ZONE,
+} from './order-zones'
+import { OrderInvoiceButton } from './order-invoice.component'
+import { OrderReceiptResend } from './order-receipt-resend.component'
+import { OrderReturns } from './order-returns.component'
+import { PosReceiptActions } from './pos-ops/pos-receipt-actions.component'
 
 export interface OrderDetailDialogProps {
   hostId: string
@@ -87,6 +108,23 @@ const usd = (cents: number | undefined) =>
   `$${((cents ?? 0) / 100).toFixed(2)}`
 
 /**
+ * A zone hosted in the dialog, drawn again only when what it is handed
+ * changes — the product editor's reasoning (AGL-3423): the shell's renderer
+ * is not memoized, and the dialog redraws on every keystroke in its fields.
+ */
+const HostedZone = memo(function HostedZone(
+  props: { renderer: ConsoleWidgetSlotRenderer; slot: string } & Record<string, unknown>,
+) {
+  const { renderer: Renderer, ...zone } = props
+  return <Renderer {...zone} />
+})
+
+/** A fresh key for one attempt at a write the route dedupes on. */
+const newAttemptKey = () =>
+  globalThis.crypto?.randomUUID?.() ??
+  `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+/**
  * Order detail (AGL-287): timeline, line items, totals, and the actions
  * the status machine allows — fulfill with tracking, refund, cancel, mark
  * delivered (each a server route that re-asks the transition under the
@@ -98,7 +136,8 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const [tracking, setTracking] = useState<{ carrier: string; number: string } | null>(null)
+  const [fulfilling, setFulfilling] = useState(false)
+  const WidgetSlot = useConsoleWidgetSlot()
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -164,10 +203,17 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
    */
   const transition = useCallback(
     async (
-      to: 'fulfilled' | 'delivered',
-      extra: Record<string, string>,
-      copy: { done: string; already: string; subject: string; action: string },
-    ) => {
+      to: 'fulfilled' | 'delivered' | null,
+      extra: Record<string, unknown>,
+      copy: {
+        done: string
+        already: string
+        subject: string
+        action: string
+        partial?: string
+      },
+      headers: Record<string, string> = {},
+    ): Promise<false | Record<string, any>> => {
       if (!orderId) return false
       setBusy(true)
       try {
@@ -178,8 +224,8 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
             '/api/commerce/fulfill-order',
             {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ hostId, orderId, to, ...extra }),
+              headers: { 'Content-Type': 'application/json', ...headers },
+              body: JSON.stringify({ hostId, orderId, ...(to ? { to } : {}), ...extra }),
             },
           )
         } catch (error) {
@@ -199,7 +245,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
             // cancelled) while this dialog was open. The route's message
             // names the state that refused it, and nothing was written.
             enqueueSnackbar(
-              payload?.error ?? `This order can no longer be ${to}`,
+              payload?.error ?? `This order can no longer be ${to ?? 'changed'}`,
               {
                 variant: 'warning',
                 allowDuplicate: true,
@@ -231,11 +277,18 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           }
           return false
         }
-        enqueueSnackbar(payload?.already ? copy.already : copy.done, {
-          variant: 'success',
-          persist: false,
-        })
-        return true
+        enqueueSnackbar(
+          payload?.already
+            ? copy.already
+            : payload?.status === 'partially_fulfilled' && copy.partial
+              ? copy.partial
+              : copy.done,
+          {
+            variant: 'success',
+            persist: false,
+          },
+        )
+        return payload ?? {}
       } finally {
         setBusy(false)
       }
@@ -243,25 +296,138 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     [orderId, user, hostId, enqueueSnackbar],
   )
 
-  const handleFulfill = useCallback(async () => {
-    if (!order || !tracking) return
-    const done = await transition(
-      'fulfilled',
-      {
-        ...(tracking.carrier ? { carrier: tracking.carrier } : {}),
-        ...(tracking.number ? { trackingNumber: tracking.number } : {}),
-      },
-      {
-        done: 'Order fulfilled',
-        already: 'Order was already fulfilled',
-        subject: 'the order was fulfilled',
-        action: 'fulfillment',
-      },
-    )
-    // The refused or unknown case keeps the form open — there is nothing to
-    // celebrate, and the tracking is not yet recorded anywhere.
-    if (done) setTracking(null)
-  }, [order, tracking, transition])
+  /**
+   * One key per shipment attempt (AGL-3611), the refund's shape: a partial
+   * shipment leaves the order open to more, so "already in the target
+   * status" cannot catch its retry — the key does. Retired on a definitive
+   * answer; kept across a network failure or a 5xx, the window it covers.
+   */
+  const fulfillKey = useRef('')
+  useEffect(() => {
+    fulfillKey.current = ''
+  }, [orderId])
+
+  const fulfill = useCallback(
+    async (submission: FulfillItemsSubmission, key: string) => {
+      const payload = await transition(
+        'fulfilled',
+        {
+          ...(submission.lineItems ? { lineItems: submission.lineItems } : {}),
+          ...(submission.carrier ? { carrier: submission.carrier } : {}),
+          ...(submission.trackingNumber ? { trackingNumber: submission.trackingNumber } : {}),
+          ...(submission.trackingUrl ? { trackingUrl: submission.trackingUrl } : {}),
+          ...(submission.labelUrl ? { labelUrl: submission.labelUrl } : {}),
+          ...(submission.notify ? {} : { notify: false }),
+        },
+        {
+          done: 'Order fulfilled',
+          partial: 'Items fulfilled — the rest are still to ship',
+          already: 'Order was already fulfilled',
+          subject: 'the order was fulfilled',
+          action: 'fulfillment',
+        },
+        { 'Idempotency-Key': key },
+      )
+      return payload
+    },
+    [transition],
+  )
+
+  const handleFulfill = useCallback(
+    async (submission: FulfillItemsSubmission) => {
+      if (!order) return false
+      if (!fulfillKey.current) fulfillKey.current = newAttemptKey()
+      const payload = await fulfill(submission, fulfillKey.current)
+      // The refused or unknown case keeps the form open — there is nothing to
+      // celebrate, and the tracking is not yet recorded anywhere.
+      if (payload) {
+        fulfillKey.current = ''
+        setFulfilling(false)
+      }
+      return Boolean(payload)
+    },
+    [order, fulfill],
+  )
+
+  const handleUpdateTracking = useCallback(
+    async (
+      fulfillmentId: string,
+      next: { carrier: string; trackingNumber: string; trackingUrl?: string },
+    ) =>
+      Boolean(
+        await transition(
+          null,
+          { action: 'update-tracking', fulfillmentId, ...next },
+          {
+            done: 'Tracking updated',
+            already: 'Tracking was already up to date',
+            subject: 'the tracking was updated',
+            action: 'tracking update',
+          },
+        ),
+      ),
+    [transition],
+  )
+
+  const handleCancelFulfillment = useCallback(
+    async (fulfillmentId: string) => {
+      const confirmed = await confirm({
+        title: 'Cancel this shipment?',
+        description:
+          'Its items go back to unfulfilled and can be shipped again. The buyer is not told.',
+        confirmationText: 'Cancel shipment',
+        confirmationButtonProps: { color: 'error' },
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!confirmed) return
+      await transition(
+        null,
+        { action: 'cancel-fulfillment', fulfillmentId },
+        {
+          done: 'Shipment canceled',
+          already: 'Shipment was already canceled',
+          subject: 'the shipment was canceled',
+          action: 'shipment cancel',
+        },
+      )
+    },
+    [confirm, transition],
+  )
+
+  /**
+   * A widget's shipment (the zones' `recordFulfillment`): the same route,
+   * keyed by the widget's own attempt key, and a throw with the route's words
+   * when it refuses, so the widget can tell the merchant why.
+   */
+  const recordFulfillment = useCallback(
+    async (request: ConsoleFulfillmentRequest): Promise<ConsoleOrderZoneFulfillment> => {
+      const payload = await fulfill(
+        {
+          ...(request.lineItems ? { lineItems: request.lineItems.map((entry) => ({ ...entry })) } : {}),
+          carrier: String(request.carrier ?? ''),
+          trackingNumber: String(request.trackingNumber ?? ''),
+          ...(request.trackingUrl ? { trackingUrl: request.trackingUrl } : {}),
+          ...(request.labelUrl ? { labelUrl: request.labelUrl } : {}),
+          notify: request.notify !== false,
+        },
+        String(request.idempotencyKey || newAttemptKey()),
+      )
+      if (!payload || !payload.fulfillment || !order) {
+        throw new Error('The shipment was not recorded. Check the order and try again.')
+      }
+      setFulfilling(false)
+      return toZoneFulfillment(order, payload.fulfillment)
+    },
+    [fulfill, order],
+  )
+
+  const zoneOrder = useMemo(
+    () => (order && orderId ? consoleOrderZoneOrder(order, orderId) : null),
+    // `rawOrder` is the snapshot; `order` is derived from it on each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rawOrder, orderId],
+  )
 
   const handleDelivered = useCallback(async () => {
     if (!order) return
@@ -666,6 +832,9 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
   // the order's own withdrawal record rather than of a flag on the check, so a
   // prompt written before line indexes existed reads as the amount-only case
   // it was.
+  const fulfilledByLine = CommerceModel.orderLineFulfillmentStates(order).map(
+    (state) => state.fulfilledQuantity,
+  )
   const restockLinesNamed = Boolean(
     restock?.lines?.length &&
       restock.lines.every(
@@ -736,6 +905,13 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
                 {`${line.quantity}× ${line.name}` +
                   (line.variantLabel ? ` — ${line.variantLabel}` : '')}
               </Typography>
+              {fulfilledByLine[index] ? (
+                <Chip
+                  label={`${fulfilledByLine[index]} of ${line.quantity} fulfilled`}
+                  size="small"
+                  variant="outlined"
+                />
+              ) : null}
               {withdrawn ? (
                 <Chip label="refunded" size="small" color="error" variant="outlined" />
               ) : can('refunded') &&
@@ -770,6 +946,8 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
               [
                 ['Items', totals.itemsCents],
                 ['Shipping', totals.shippingCents],
+                // Optional lines the buyer took at checkout (AGL-3635), by name.
+                ...(order.extras ?? []).map((extra) => [extra.label, extra.amountCents]),
                 ['Tax', totals.taxCents],
                 ['Discount', -totals.discountCents],
                 ['Total', totals.totalCents],
@@ -907,38 +1085,52 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
             {'Add'}
           </Button>
         </Stack>
-        {tracking ? (
-          <Stack direction="row" spacing={1}>
-            <TextField
-              label="Carrier"
-              value={tracking.carrier}
-              onChange={(event) =>
-                setTracking({ ...tracking, carrier: event.target.value })
-              }
-              size="small"
-              sx={{ width: 140 }}
-              placeholder="UPS"
-            />
-            <TextField
-              label="Tracking number"
-              value={tracking.number}
-              onChange={(event) =>
-                setTracking({ ...tracking, number: event.target.value })
-              }
-              size="small"
-              sx={{ flex: 1 }}
-            />
-            <Button
-              size="small"
-              variant="contained"
-              color="primary"
-              disabled={busy}
-              onClick={handleFulfill}
-            >
-              {'Fulfill'}
-            </Button>
-          </Stack>
+        <FulfillmentList
+          order={order}
+          busy={busy}
+          onUpdateTracking={handleUpdateTracking}
+          onCancelFulfillment={handleCancelFulfillment}
+        />
+        {fulfilling ? (
+          <FulfillItemsPanel
+            order={order}
+            busy={busy}
+            onSubmit={handleFulfill}
+            onCancel={() => setFulfilling(false)}
+            renderZone={
+              WidgetSlot && zoneOrder
+                ? (selection, applyTracking) => (
+                    <HostedZone
+                      renderer={WidgetSlot}
+                      slot={ORDER_FULFILLMENT_ZONE.id}
+                      hostId={hostId}
+                      orgId={undefined}
+                      order={zoneOrder}
+                      recordFulfillment={recordFulfillment}
+                      selection={selection}
+                      applyTracking={applyTracking}
+                    />
+                  )
+                : undefined
+            }
+          />
         ) : null}
+        {/*
+          The order zone (AGL-3611): a widget reads the order and records a
+          shipment through `recordFulfillment`, this dialog's own route.
+        */}
+        {WidgetSlot && zoneOrder ? (
+          <HostedZone
+            renderer={WidgetSlot}
+            slot={ORDER_DETAIL_ZONE.id}
+            hostId={hostId}
+            orgId={undefined}
+            order={zoneOrder}
+            recordFulfillment={recordFulfillment}
+          />
+        ) : null}
+        {/* The order's returns and "Start return" (AGL-3611). */}
+        {orderId ? <OrderReturns hostId={hostId} orderId={orderId} order={order} /> : null}
         {order.paymentLinkUrl && order.status === 'pending' ? (
           <Button
             size="small"
@@ -966,6 +1158,13 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           </Button>
         ) : null}
         <Button onClick={handlePackingSlip}>{'Packing slip'}</Button>
+        {orderId ? <OrderInvoiceButton hostId={hostId} orderId={orderId} order={order} /> : null}
+        {orderId ? <OrderReceiptResend hostId={hostId} orderId={orderId} order={order} /> : null}
+        {orderId && order.channel === 'pos' ? (
+          // The register's 80mm receipt, its gift receipt and a reprint on
+          // the register's cloud printer (AGL-3609).
+          <PosReceiptActions hostId={hostId} orderId={orderId} order={order} cloudPrint="reprint" />
+        ) : null}
         {can('cancelled') ? (
           <Button color="error" disabled={busy} onClick={handleCancel}>
             {'Cancel order'}
@@ -1005,11 +1204,11 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
             </Button>
           )
         ) : null}
-        {(can('fulfilled') || can('partially_fulfilled')) && !tracking ? (
+        {(can('fulfilled') || can('partially_fulfilled')) && !fulfilling ? (
           <Button
             variant="contained"
             color="primary"
-            onClick={() => setTracking({ carrier: '', number: '' })}
+            onClick={() => setFulfilling(true)}
           >
             {'Fulfill…'}
           </Button>

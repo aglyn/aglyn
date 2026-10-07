@@ -32,7 +32,7 @@
 
 import { listConsoleWidgets } from '@aglyn/aglyn'
 import type { ConsoleWidgetUpgrade } from '@aglyn/aglyn/plugin-manager/feature-plugins'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ComponentType } from 'react'
 
 const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
@@ -61,6 +61,7 @@ jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
 }))
 
 import { AI_PLUGIN_ID } from '../constants'
+import type { LazyWidget } from '../lazy-widget'
 import { registerAiConsole } from '../plugin'
 import { AI_UPSELL_COPY, aiUpsellOffer, type AiUpsellKind } from './ai-upsell-dialog.component'
 
@@ -140,10 +141,11 @@ describe('every Create with AI entry opts in, and only those', () => {
 })
 
 describe.each(ENTRIES)('$widgetId on a plan without the add-on', ({ zone, widgetId, kind }) => {
-  it('is the same button, drawn at once, and opens the add-on with no request', () => {
+  it('is the same button, drawn at once, and opens the add-on with no request', async () => {
     const Widget = widgetFor(zone, widgetId)
     render(<Widget {...zoneProps} entitled={false} upgrade={OWNER} />)
-    const button = screen.getByRole('button', { name: 'Create with AI' })
+    // At once means with no request; the code itself loads lazily (AGL-3649).
+    const button = await screen.findByRole('button', { name: 'Create with AI' })
     expect(button.querySelector('svg')).toBeTruthy()
     fireEvent.click(button)
 
@@ -165,10 +167,10 @@ describe.each(ENTRIES)('$widgetId on a plan without the add-on', ({ zone, widget
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it('tells a member who cannot buy it to ask an owner or admin, with no link', () => {
+  it('tells a member who cannot buy it to ask an owner or admin, with no link', async () => {
     const Widget = widgetFor(zone, widgetId)
     render(<Widget {...zoneProps} entitled={false} upgrade={MEMBER} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
 
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByText(aiUpsellOffer(false))).toBeTruthy()
@@ -179,17 +181,21 @@ describe.each(ENTRIES)('$widgetId on a plan without the add-on', ({ zone, widget
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it('stays absent when the shell gave it no way to buy it', () => {
+  it('stays absent when the shell gave it no way to buy it', async () => {
     const Widget = widgetFor(zone, widgetId)
     const { container } = render(<Widget {...zoneProps} entitled={false} />)
+    // Absent once its code has loaded (AGL-3649), not merely while it loads.
+    await act(async () => {
+      await (Widget as LazyWidget).load()
+    })
     expect(container.textContent).toBe('')
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it('opens the brief, not the add-on, where the plan includes it', () => {
+  it('opens the brief, not the add-on, where the plan includes it', async () => {
     const Widget = widgetFor(zone, widgetId)
     render(<Widget {...zoneProps} entitled />)
-    fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
     expect(within(screen.getByRole('dialog')).getByRole('textbox')).toBeTruthy()
     expect(mockTrack).not.toHaveBeenCalled()
     expect(mockFetch).not.toHaveBeenCalled()

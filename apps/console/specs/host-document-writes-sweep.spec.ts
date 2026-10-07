@@ -256,6 +256,14 @@ describe("plugins: a console card's write of something a page renders carries th
           'Writes only `settings/store.tax`, which checkout reads per ' +
           'request; no cached page renders the rates.',
       },
+    'libs/plugins/commerce/src/lib/components/console/customer-notifications-card.component.tsx':
+      {
+        writes: /\{\s*buyerNotifications:\s*\{\s*\[key\]:\s*on\s*\}\s*\}/,
+        why:
+          'Writes only `settings/store.buyerNotifications`, which the order ' +
+          'notification sender reads server-side when an order moves; no ' +
+          'cached page renders the switches.',
+      },
   }
 
   const files = sourcesUnder(PLUGINS)

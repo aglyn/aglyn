@@ -36,16 +36,24 @@
  * - signed out → clears the stamp so the next sign-in re-plants promptly;
  * - auth still resolving → does nothing, clears nothing.
  *
+ * And the sign-up doors: a session that has just been created on `/signup`
+ * or `/signin`, or under a sign-up landing hold, is never navigated away —
+ * the door still owes the acquisition record and the workspace.
+ *
  * And the email gate (AGL-2691): a session the blob mint would refuse never
  * spends the day's window, which is the difference between "one wasted POST"
  * and "a brand-new editor gets no hint until tomorrow".
  */
 
-import { render, waitFor } from '@testing-library/react'
+import { act, render, waitFor } from '@testing-library/react'
 import EditHintBounce, {
   EDIT_HINT_BOUNCE_ORIGIN,
   EDIT_HINT_BOUNCE_STAMP_KEY,
 } from '../components/edit-hint-bounce.component'
+import {
+  holdSignUpLanding,
+  releaseSignUpLanding,
+} from '../utils/sign-up-landing-hold'
 
 let mockUser: unknown
 
@@ -75,6 +83,8 @@ describe('EditHintBounce (AGL-1842)', () => {
 
   afterEach(() => {
     jest.restoreAllMocks()
+    act(() => releaseSignUpLanding('spec'))
+    window.history.replaceState(null, '', '/acme/hosts')
   })
 
   it('bounces a signed-in editor through console.aglyn.app, stamping first', async () => {
@@ -101,6 +111,34 @@ describe('EditHintBounce (AGL-1842)', () => {
     expect(
       Number(window.localStorage.getItem(EDIT_HINT_BOUNCE_STAMP_KEY)),
     ).toBeGreaterThan(0)
+  })
+
+  it.each(['/signup', '/signin'])(
+    'never leaves the sign-in door %s, and spends no window there',
+    async (path) => {
+      window.history.replaceState(null, '', path)
+      const getIdTokenResult = jest.fn(signedInUser.getIdTokenResult)
+      mockUser = { ...signedInUser, getIdTokenResult }
+      render(<EditHintBounce navigate={navigate} />)
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(getIdTokenResult).not.toHaveBeenCalled()
+      expect(global.fetch).not.toHaveBeenCalled()
+      expect(navigate).not.toHaveBeenCalled()
+      expect(window.localStorage.getItem(EDIT_HINT_BOUNCE_STAMP_KEY)).toBeNull()
+    },
+  )
+
+  it('waits out a sign-up landing hold, then bounces', async () => {
+    holdSignUpLanding('spec')
+    mockUser = signedInUser
+    render(<EditHintBounce navigate={navigate} />)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(window.localStorage.getItem(EDIT_HINT_BOUNCE_STAMP_KEY)).toBeNull()
+    act(() => releaseSignUpLanding('spec'))
+    await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1))
   })
 
   it('does nothing within the throttle window', async () => {

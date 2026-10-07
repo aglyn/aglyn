@@ -159,6 +159,15 @@ const HAND_ROLLED = new Map([
       'correct branch of the shared emitter would return anyway.',
   ],
   [
+    'libs/plugins/commerce/src/lib/server/pos-terminal.ts',
+    'Each card payment against a register sale (AGL-3607): the sale was ' +
+      'priced by `pos-order.ts`, whose entry above is why its tax is always ' +
+      'the merchant-configured flat rate, and a card payment is a share of ' +
+      'that same total plus a tip that carries no tax at all. The fee is the ' +
+      'card share of the platform take plus the card cost, set at creation ' +
+      'and re-stated at capture once the reader reports a tip.',
+  ],
+  [
     'libs/plugins/commerce/src/lib/server/reserve.ts',
     'A reservation charges the merchant-configured lodging rate as an ' +
       'ordinary line item. `automatic_tax` would compute a GOODS rate on a ' +
@@ -168,6 +177,13 @@ const HAND_ROLLED = new Map([
     'libs/plugins/bookings/src/lib/server.ts',
     'A paid service booking carries the merchant-configured service rate as ' +
       'an ordinary line item and sets no `automatic_tax` by a stated decision.',
+  ],
+  [
+    'libs/plugins/bookings/src/lib/server/in-person-payment.ts',
+    'A booking paid at the counter on the POS card reader is the same service ' +
+      'sale as the entry above: the amount staff typed plus the ' +
+      'merchant-configured service rate, no `automatic_tax`, and the fee a ' +
+      'paid booking carries online, set at creation and kept at capture.',
   ],
   [
     'libs/plugins/marketplace/src/lib/server/checkout.ts',
@@ -184,6 +200,31 @@ const HAND_ROLLED = new Map([
       'the fact by the reversal invariant 4 pins.',
   ],
 ])
+
+/**
+ * Files that send `Stripe-Account` only to READ a connected account, and why.
+ *
+ * Invariant 1 is about where a CHARGE settles. A GET made on a connected
+ * account's behalf collects nothing and moves no settlement, so it does not
+ * touch the posture §10.7 states. An entry holds only while its file stays
+ * read-only: one that gains a POST, a money parameter or `on_behalf_of` fails
+ * invariant 1 again, whatever this list says.
+ */
+const CONNECTED_ACCOUNT_READS = new Map([
+  [
+    'libs/plugins/accounting/src/lib/server/payouts.ts',
+    'Lists the payouts that reached a merchant\'s bank (`GET /v1/payouts`) so ' +
+      'the accounting plugin can post each as a transfer (AGL-3614). Stripe ' +
+      'keeps payouts on the connected account, and this read is the only way ' +
+      'a platform sees them.',
+  ],
+])
+
+/** Whether a file's code is only reads: no write method and no money parameter. */
+export function readsOnly(code) {
+  return !/['"](POST|PUT|PATCH|DELETE)['"]/.test(code) &&
+    !/transfer_data|application_fee|on_behalf_of|amount\]/.test(code)
+}
 
 /**
  * The file that must keep a fixed `transfer_data[amount]` for its HAND_ROLLED
@@ -314,7 +355,9 @@ export function inspect(path, code) {
   const pinsTransfer = emitsFixedTransfer || delegates
 
   // 1. Settlement stays on the platform account.
+  const connectedRead = CONNECTED_ACCOUNT_READS.has(path) && readsOnly(code)
   for (const needle of ['on_behalf_of', 'Stripe-Account']) {
+    if (needle === 'Stripe-Account' && connectedRead) continue
     for (const hit of hits(code, needle)) {
       problems.push({
         invariant: 1,
@@ -480,6 +523,23 @@ function runSelfTest() {
   ok(
     'a real Stripe-Account header IS a violation',
     only("headers: { 'Stripe-Account': accountId }\n", 1).length === 1,
+  )
+
+  // A read of a connected account is not a charge — while it stays a read.
+  const READS = 'libs/plugins/accounting/src/lib/server/payouts.ts'
+  ok(
+    'a listed file that only READS with Stripe-Account is not a violation',
+    only("const r = await get(url, { method: 'GET', headers: { 'Stripe-Account': acct } })\n", 1, READS)
+      .length === 0,
+  )
+  ok(
+    'a listed file that POSTs with Stripe-Account IS a violation',
+    only("await post(url, { method: 'POST', headers: { 'Stripe-Account': acct } })\n", 1, READS)
+      .length === 1,
+  )
+  ok(
+    'an unlisted file reading with Stripe-Account IS a violation',
+    only("await get(url, { method: 'GET', headers: { 'Stripe-Account': acct } })\n", 1).length === 1,
   )
 
   // Invariant 2 — the AGL-1956 defect itself.

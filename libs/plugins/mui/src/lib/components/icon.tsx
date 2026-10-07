@@ -100,7 +100,8 @@ const Icon = forwardRef<HTMLElement, IconProps>((props, ref) => {
       <MdiIcon
         path={icon.path}
         sx={{
-          fontSize: size && size > 0 ? size : 24,
+          // A size stored as text (an AI-built page stores every prop as text) is still pixels.
+          fontSize: Number(size) > 0 ? Number(size) : 24,
           ...(color ? { color } : {}),
         }}
       />

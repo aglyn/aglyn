@@ -40,7 +40,7 @@
 
 import { CONSOLE_WIDGET_SLOTS, listConsoleWidgets } from '@aglyn/aglyn'
 import type { ConsoleHostFirstRunZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentType } from 'react'
 
 // ONE held object for the whole file: a fresh double each render turns the
@@ -68,6 +68,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 
 import { AI_PLUGIN_ID } from '../constants'
+import type { LazyWidget } from '../lazy-widget'
 import { registerAiConsole } from '../plugin'
 import {
   AI_SITE_FREE_PAGES_NOTE,
@@ -257,7 +258,10 @@ describe('whether the guided start is here at all', () => {
   it('asks nothing while the page has not resolved its org', async () => {
     const Widget = widget()
     const { container } = render(<Widget {...zoneProps({ orgId: undefined })} />)
-    await Promise.resolve()
+    // Mounted, not merely loading: the card is registered lazily (AGL-3649).
+    await act(async () => {
+      await (Widget as LazyWidget).load()
+    })
     expect(mockFetch).not.toHaveBeenCalled()
     expectNothingDrawn(container)
   })

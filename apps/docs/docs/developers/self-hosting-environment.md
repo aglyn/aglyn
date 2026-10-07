@@ -410,6 +410,7 @@ the signing secrets, and **Product catalog** → each price → its price id.
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Feature | Runtime | `whsec_…` for the **Connect** destination, which feeds Connect readiness. Unset, those deliveries fail signature verification with `400` behind a green "Active" badge in the Stripe dashboard. |
 | `STRIPE_WEBHOOK_URL` | Optional | Runtime | The endpoint URL the billing health check expects to find registered in your Stripe account. **Default is Aglyn's URL**, so a self-host operator who leaves it unset gets a permanent `endpoint-missing` red on `/api/health/billing`. Must match the URL exactly as Stripe stores it. |
 | `STRIPE_LIVEMODE` | Optional | Runtime | Overrides whether this deployment considers itself the live one. Normally inferred from the key prefix. Exactly `true` or `false` — anything else, `1` included, falls through to inference. |
+| `STRIPE_TERMINAL_LIVE_ENABLED` | Optional | Runtime | Exactly `true` turns on Stripe Terminal card readers for **live** register payments, once Terminal is activated for live payments on your platform Stripe account. With a test key (`sk_test_…`) Stripe's simulated reader works without it. Unset, the register and its settings hide every card-reader control and the server refuses a card-present payment. |
 
 :::danger Localhost with live keys
 `STRIPE_SECRET_KEY` does not know it is on your laptop. If you copy a filled-in
@@ -424,7 +425,7 @@ your dashboard stays green, and the state it drives simply never moves — a
 refund that never revokes an entitlement looks exactly like a healthy
 integration.
 
-Subscribe your platform endpoint to **all fifteen**:
+Subscribe your platform endpoint to **all nineteen**:
 
 ```
 customer.subscription.created
@@ -442,9 +443,19 @@ charge.dispute.closed
 customer.updated
 payment_method.attached
 payment_method.detached
+radar.early_fraud_warning.created
+review.opened
+terminal.reader.action_succeeded
+terminal.reader.action_failed
 ```
 
-The last five serve usage a plugin bills on its own one-off invoices. Without
+`radar.early_fraud_warning.created` and `review.opened` raise fraud signals to
+staff. The two `terminal.reader` events complete a card-reader payment at the
+point-of-sale register; without them a reader payment still completes while the
+register screen is open, because the register checks the reader itself.
+
+`invoice.voided`, `invoice.marked_uncollectible` and the three customer and
+payment-method events serve usage a plugin bills on its own one-off invoices. Without
 `invoice.voided` and `invoice.marked_uncollectible` an unpaid usage invoice
 never ends, so the pause it set on further usage never lifts. Without the
 three customer events nothing notices that the workspace's default payment
@@ -779,6 +790,188 @@ as a link domain — the workspace router owns every name there — and a domain
 whose campaign email already has a provider tracking host on `links.` cannot be
 set up, because both would need the same name.
 
+### Text messages {#sms}
+
+The SMS plugin texts order receipts and order updates through a Twilio
+Messaging Service. Leave all three variables unset and nothing offers a text:
+order notifications go by email only. Set them on the console **and** the
+tenant runtime, since both send order notifications.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `TWILIO_ACCOUNT_SID` | Feature | Runtime | `AC…`, the Twilio account. |
+| `TWILIO_AUTH_TOKEN` | Feature | Runtime | Signs every API call, and verifies the `X-Twilio-Signature` on inbound texts. An unsigned inbound text is refused. |
+| `TWILIO_MESSAGING_SERVICE_SID` | Feature | Runtime | `MG…`, the Messaging Service every text is sent through. Register its sender for A2P 10DLC before texting US numbers. Texts held for quiet hours are scheduled on this service. |
+
+Point the Messaging Service's incoming-message webhook at
+`POST https://<console>/api/sms/inbound`. A reply of STOP is then recorded on
+the platform's own suppression list, which is checked before every send, and
+START lifts it.
+
+### Shipping labels {#shipping}
+
+The Shipping plugin buys carrier labels, quotes live rates at checkout and
+follows parcels through Shippo or EasyPost, one managed account (Shippo) or
+child user (EasyPost) per workspace under your platform credential. Without a
+provider credential **and** the sealing key, the plugin is not configured:
+every card, rate kind and route answers as though it did not exist, and
+checkout uses the seller's own rates. Set the provider variables on the
+console **and** the tenant runtime, because the storefront's cart and
+buy-now ask for rates in the tenant.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `SHIPPO_API_TOKEN` | Feature | Runtime | The platform's Shippo token. Set, Shippo is the provider. |
+| `EASYPOST_API_KEY` | Feature | Runtime | The platform's EasyPost key. The provider when `SHIPPO_API_TOKEN` is unset, or when `SHIPPING_PROVIDER` says `easypost`. |
+| `SHIPPING_PROVIDER` | Optional | Runtime | `easypost` to prefer EasyPost while both credentials are set. Anything else, or unset, prefers Shippo. |
+| `SHIPPING_TOKEN_KEY` | Feature | Runtime | 32 random bytes, base64. Seals every stored account id and child key. A comma-separated list rotates: the first key seals, the rest only open. |
+| `SHIPPO_WEBHOOK_TOKEN` | Feature | Runtime, console | The token Shippo's tracking webhook URL carries as `?token=`. |
+| `SHIPPO_WEBHOOK_HMAC_SECRET` | Optional | Runtime, console | Shippo's HMAC secret. When set, the `Shippo-Auth-Signature` header is verified as well. |
+| `EASYPOST_WEBHOOK_SECRET` | Feature | Runtime, console | The `webhook_secret` EasyPost signs each event with (`X-Hmac-Signature`). |
+
+Point the provider's webhook at `POST https://<console>/api/shipping/webhooks/shippo?token=…`
+or `POST https://<console>/api/shipping/webhooks/easypost`.
+
+### Accounting: QuickBooks Online and Xero {#accounting}
+
+The Accounting plugin posts sales, refunds, fees and payouts to a workspace's
+QuickBooks Online company or Xero organization. A provider is offered only
+when its client id, its client secret and the token key are all set; with
+neither provider configured the Accounting page says nothing can be
+connected. Set these on the **console only**. Together they can write into
+every connected business's books, so the tenant runtime, which serves the
+public internet, must never have them.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `INTUIT_CLIENT_ID` | Feature | Runtime, console | The Intuit developer app's client id. |
+| `INTUIT_CLIENT_SECRET` | Feature | Runtime, console | The Intuit developer app's client secret. |
+| `INTUIT_ENVIRONMENT` | Optional | Runtime, console | `sandbox` (the default) or `production`: which QuickBooks API host the keys open. A development app's keys only open sandbox companies. Any other value leaves QuickBooks unconfigured. |
+| `XERO_CLIENT_ID` | Feature | Runtime, console | The Xero app's client id. |
+| `XERO_CLIENT_SECRET` | Feature | Runtime, console | The Xero app's client secret. |
+| `XERO_SCOPES` | Optional | Runtime, console | Space-separated scopes that replace the default request, for a Xero app made before Xero's granular scopes. |
+| `CODAT_API_KEY` | Feature | Runtime, console | The Codat client's API key. Set, the Accounting page also offers other accounting software (QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books, Wave and the rest Codat reaches), each workspace as one Codat company. |
+| `ACCOUNTING_TOKEN_KEY` | Feature | Runtime, console | 32 random bytes, base64. Seals every stored token. A comma-separated list rotates: the first key seals, the rest only open, and a token opened under an older key is sealed again under the first. |
+
+Register `https://<console>/api/accounting/oauth/callback` as the redirect URI
+in both developer apps. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
+
+For Codat, set the redirect in the Codat Portal under **Settings > Auth flow >
+Redirects** to
+`https://<console>/api/accounting/oauth/callback?code={companyId}&state={state}&statusCode={statusCode}`,
+and turn on the accounting integrations you want to offer under
+**Settings > Integrations > Accounting**. Codat is a subprocessor: publish its
+row before setting the key in production.
+
+### Tax services {#tax-engines}
+
+A merchant can connect their **own** Avalara AvaTax or TaxJar account for the
+sales tax at checkout and the register. The deployment holds no vendor account:
+each merchant brings their own credentials, and the deployment holds only the
+key those credentials are sealed under. Leave it unset and no Tax service card
+appears, checkout and the register tax at each store's own rates, and nothing
+is sent to either vendor. Set it on the console **and** the tenant runtime,
+since checkout asks the service from the tenant and the console records paid
+orders and refunds.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `TAX_ENGINES_TOKEN_KEY` | Feature | Runtime | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored AvaTax license key and TaxJar API token with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a credential opened under an old key is sealed again under the new one the next time its store is taxed. **Losing the key loses every connection**: each merchant connects their account again, and until they do their store taxes at its own rates. |
+
+### Email platforms: Mailchimp, Klaviyo, Omnisend and Attentive {#marketing-platforms}
+
+A site can keep its contacts and their unsubscribes in step with the merchant's
+**own** Mailchimp, Klaviyo or Omnisend account, both ways, and send its orders to
+Klaviyo and Omnisend for their flows. Each merchant connects with their own API
+key, so the deployment needs no vendor account: only the key those keys are
+sealed under. Leave it unset and no Email platforms card appears and
+nothing is sent to any of them. The app registrations are optional: with them,
+a merchant can connect by signing in to the platform instead of pasting a key,
+and with Attentive's partner app, Attentive is offered at all. Set these on the
+**console only**: the sync runs there, and the tenant runtime never opens a
+merchant's credential.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `MARKETING_PLATFORMS_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored API key and OAuth token with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a credential opened under an old key is sealed again under the new one on its next sync. **Losing the key loses every connection**: each merchant connects again. |
+| `MAILCHIMP_CLIENT_ID` | Optional | Runtime, console | The Mailchimp app's client id, for **Connect with Mailchimp**. Without it merchants connect with an API key. |
+| `MAILCHIMP_CLIENT_SECRET` | Optional | Runtime, console | The Mailchimp app's client secret. |
+| `KLAVIYO_CLIENT_ID` | Optional | Runtime, console | The Klaviyo app's client id, for **Connect with Klaviyo**. Without it merchants connect with a private API key. |
+| `KLAVIYO_CLIENT_SECRET` | Optional | Runtime, console | The Klaviyo app's client secret. |
+| `ATTENTIVE_CLIENT_ID` | Optional | Runtime, console | The Attentive partner app's client id. Attentive is offered only with it: its API takes no merchant key. |
+| `ATTENTIVE_CLIENT_SECRET` | Optional | Runtime, console | The Attentive partner app's client secret. |
+
+Register `https://<console>/api/marketing-platforms/oauth/callback` as the
+redirect URI in each app. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
+
+### Fulfillment networks: ShipBob and Amazon Multi-Channel Fulfillment {#fulfillment-networks}
+
+A store can send its paid orders to the merchant's **own** ShipBob or Amazon
+Multi-Channel Fulfillment account, read the shipments and tracking back onto
+the order, and keep its stock counts in step. Neither network takes a key a
+merchant could paste: each needs an app the deployment registers with the
+network, and the merchant signs in to grant it. A network is offered only when
+its app's variables **and** the token key are set; with neither network set, no
+Fulfillment networks card appears and nothing is sent. Set these on the
+**console only**: the job that sends orders runs there, and the tenant runtime
+never opens a grant.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `FULFILLMENT_NETWORKS_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored grant with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`). **Losing the key loses every connection**: each merchant connects again. |
+| `SHIPBOB_CLIENT_ID` | Optional | Runtime, console | The ShipBob developer app's client id. ShipBob is offered only with it and its secret. |
+| `SHIPBOB_CLIENT_SECRET` | Optional | Runtime, console | The ShipBob app's client secret. |
+| `SHIPBOB_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to ShipBob's sandbox, which takes test orders only. Unset is production. |
+| `AMAZON_SP_API_APPLICATION_ID` | Optional | Runtime, console | The selling-partner app's id (`amzn1.sp.solution.…`). Amazon is offered only with it and the two Login with Amazon values below. |
+| `AMAZON_SP_API_LWA_CLIENT_ID` | Optional | Runtime, console | The app's Login with Amazon client id. |
+| `AMAZON_SP_API_LWA_CLIENT_SECRET` | Optional | Runtime, console | The app's Login with Amazon client secret. |
+| `AMAZON_SP_API_REGION` | Optional | Runtime, console | `na` (default), `eu` or `fe`: the Selling Partner API region the deployment's sellers are in. |
+| `AMAZON_SP_API_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to Amazon's sandbox. Unset is production. |
+| `AMAZON_SP_API_DRAFT_APP` | Optional | Runtime, console | `true` while the app is a draft, so the consent page is asked for with `version=beta`. |
+
+Register `https://<console>/api/fulfillment-networks/oauth/callback` as the
+redirect URI in both apps. ShipBob's webhooks are subscribed for each
+connection at `https://<console>/api/fulfillment-networks/webhooks/shipbob`
+with a token of their own; nothing needs registering for them.
+
+---
+
+## Mobile apps and push {#mobile}
+
+The native apps (Aglyn and Aglyn POS, for iOS, iPadOS and macOS from
+`apps/ios`, and for Android and the Windows desktop from `apps/android`) are
+built, not served by your containers. Their settings are **build** settings,
+compiled into the app, so changing one means building and shipping the app
+again. None of them is a secret. On Apple they are xcconfig keys (copy
+`apps/ios/Config/Production.xcconfig.example`); on Android and the desktop
+they are Gradle settings, `-Paglyn.<name>=…` or the `AGLYN_<NAME>`
+environment variable.
+
+| Apple (xcconfig) | Android (Gradle) | Need | Value |
+| --- | --- | --- | --- |
+| `AGLYN_CONSOLE_URL` | `consoleUrl` | Required | Your console origin. Every API call and console page the app opens is on it, and it is the app's universal-link host. Default `https://app.aglyn.com`. |
+| `AGLYN_BRAND_NAME` | — | Optional | The app's name and the product name its copy says. Default `Aglyn`. |
+| `AGLYN_FIREBASE_API_KEY` | `firebaseApiKey` | Required | The Firebase app config of the app you registered in your project, per bundle. |
+| `AGLYN_FIREBASE_AUTH_DOMAIN` | `firebaseAuthDomain` | Required | As above. |
+| `AGLYN_FIREBASE_PROJECT_ID` | `firebaseProjectId` | Required | As above. |
+| `AGLYN_FIREBASE_APP_ID` | `firebaseAppId` | Required | As above. |
+| `AGLYN_FIREBASE_MESSAGING_SENDER_ID` | `firebaseMessagingSenderId` | Optional | As above. |
+| `AGLYN_FIREBASE_STORAGE_BUCKET` | — | Optional | As above. |
+| `AGLYN_GOOGLE_IOS_CLIENT_ID`, `AGLYN_GOOGLE_WEB_CLIENT_ID` | — | Optional | Google sign-in's OAuth client ids. The Google button is hidden until both are set. |
+| `AGLYN_AUTH_EMULATOR_HOST` | `authEmulatorHost` | Development | `host:port` of a local Auth emulator. Never set in a store build. |
+| `AGLYN_FIRESTORE_EMULATOR_HOST` | `firestoreEmulatorHost` | Development | `host:port` of a local Firestore emulator. Never set in a store build. |
+
+The server side of push is configured in your containers:
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `MOBILE_PUSH_ENABLED` | Optional | Runtime, console and tenant | The kill switch for every push sender. `0` stops every push; anything else, or unset, leaves push on. |
+| `APNS_KEY_P8` | Feature | Runtime, console and tenant | Your Apple Push Notification service key (the `.p8` file from your Apple Developer account): its PEM text, or that PEM base64-encoded. Without it, and the two below, iOS and macOS devices are not sent a push, and the server logs that once. A secret. |
+| `APNS_KEY_ID` | Feature | Runtime, console and tenant | The 10-character id of that key. |
+| `APNS_TEAM_ID` | Feature | Runtime, console and tenant | Your Apple Developer team id. |
+
+A person with no registered device is never sent a push. A push carries the notification's title and body, with the device push token, to Apple Push Notification service for an iPhone, iPad or Mac and to Firebase Cloud Messaging for an Android device. The server sends to APNs directly with the key above, and to FCM with the Firebase project credentials it already holds, so FCM needs no variable of its own. If you run your own build of the app, those are your vendors, and your own subprocessor list names them.
+
 ---
 
 ## Analytics and advertising {#analytics}
@@ -1077,6 +1270,29 @@ Aglyn's hosts, so **your** console could never frame **your** sandbox — a blan
 iframe the browser blocks — while its two manifest lookups would arrive at
 Aglyn's marketplace API carrying your listing and host ids and return 404s that
 silently strip every plugin's declared network capability.
+
+### Sales channels: pushing products to Google and Meta {#sales-channels}
+
+Every store's product feeds work with nothing set: Google, Meta, TikTok,
+Pinterest, Snapchat and Microsoft fetch them from the store's own domain. The
+variables below add the optional **API connection** on the Google and Meta
+channel cards, which sends products straight to the merchant's own Merchant
+Center account or Meta catalog when a member clicks **Sync now**. A provider is
+offered only when its two variables and the token key are all set; until then
+its Connect button and its routes do not exist. All six are read by the
+**console** only.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `GOOGLE_MERCHANT_CLIENT_ID` | Feature | Runtime | The client id of a Google Cloud OAuth client of type **Web application**, in a project with the **Merchant API** enabled. Add one authorized redirect URI: `{NEXT_PUBLIC_CONSOLE_URL}/api/sales-channels/connect/callback`. The `content` scope it asks for needs Google's consent-screen verification before anyone outside the project can grant it. Unset, the Google card shows the feed alone. |
+| `GOOGLE_MERCHANT_CLIENT_SECRET` | Feature | Runtime | That client's secret. Unset, the same as the id. |
+| `META_CATALOG_APP_ID` | Feature | Runtime | The app id of a Meta app with **Facebook Login** whose valid OAuth redirect URIs include `{NEXT_PUBLIC_CONSOLE_URL}/api/sales-channels/connect/callback`. It asks for `catalog_management` and `business_management`, which need App Review and business verification before anyone outside the app's roles can grant them. Unset, the Meta card shows the feed alone. |
+| `META_CATALOG_APP_SECRET` | Feature | Runtime | That app's secret. Also signs every Graph call (`appsecret_proof`). Unset, the same as the id. |
+| `META_GRAPH_API_VERSION` | Optional | Runtime | The Graph API version, `vNN.N`. Default `v26.0`; a value in any other shape is ignored. |
+| `SALES_CHANNELS_TOKEN_KEY` | Feature | Runtime | 32 random bytes, base64 (`openssl rand -base64 32`): seals every stored Google refresh token and Meta user token. A comma-separated list rotates — the first key seals, the rest only open. Unset or unusable, neither provider is offered. Losing it means every merchant reconnects. |
+
+The connect also signs its OAuth `state` with `TOKEN_SIGNING_SECRET` (see
+[Secrets](#secrets)); without it, Connect answers `503`.
 
 ---
 

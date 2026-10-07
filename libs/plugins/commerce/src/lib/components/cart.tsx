@@ -50,6 +50,8 @@ import {
   useState,
 } from 'react'
 import { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
+import { CheckoutReturnNotice } from './checkout-return-notice'
+import { CartExtras, useCartExtras } from './cart-extras'
 
 /**
  * The Payment Element (AGL-1944), lazily. Stripe.js and its React wrapper are
@@ -142,6 +144,10 @@ function CartLines(props: {
   // itself the server's answer rather than a guess made here.
   const [shipTo, setShipTo] = useState('')
   const [shipCountries, setShipCountries] = useState<string[] | null>(null)
+  // Live carrier rates price by postal code (AGL-3612): asked only when the
+  // store prices that way and the server says so.
+  const [shipPostal, setShipPostal] = useState('')
+  const [askPostal, setAskPostal] = useState(false)
   // `paused` is its own state, not an `error` with gentler words (AGL-1511):
   // the two need different severities, and a shopper told in red that
   // checkout failed does not read the sentence explaining it did not. `ask` is
@@ -162,6 +168,8 @@ function CartLines(props: {
   const [nativeCheckout, setNativeCheckout] = useState<{
     clientSecret: string
     publishableKey: string
+    /** The wallets the merchant hid (AGL-3629). */
+    wallets?: CommerceModel.StorefrontCheckoutWallets
   } | null>(null)
   /**
    * In-progress quantity edits, keyed by line, as the raw field text
@@ -240,9 +248,12 @@ function CartLines(props: {
       ),
     [cart],
   )
+  // Optional lines another plugin offers (AGL-3635), asked while the cart is shown.
+  const extras = useCartExtras(hostId, cartSignature)
+  const extrasSignature = extras.chosenIds.join(',')
   useEffect(() => {
     attemptKey.current = ''
-  }, [cartSignature, email, coupon, giftCard, shipTo])
+  }, [cartSignature, email, coupon, giftCard, shipTo, shipPostal, extrasSignature])
 
   const handleCheckout = useCallback(async () => {
     if (status === 'sending') return
@@ -273,6 +284,9 @@ function CartLines(props: {
           // addresses to it, so declaring one cannot buy a cheaper zone's
           // rate than the address the shopper then enters (AGL-1721).
           ...(shipTo ? { shippingCountry: shipTo } : {}),
+          ...(shipPostal.trim() ? { shippingPostalCode: shipPostal.trim() } : {}),
+          // Which offers, never their price: the server asks the provider again.
+          ...(extras.chosenIds.length ? { extras: extras.chosenIds } : {}),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -295,6 +309,7 @@ function CartLines(props: {
         setNativeCheckout({
           clientSecret: String(payload.clientSecret),
           publishableKey: String(payload.publishableKey),
+          wallets: CommerceModel.readStorefrontCheckoutWallets(payload.wallets),
         })
         setStatus('idle')
         return
@@ -348,6 +363,14 @@ function CartLines(props: {
       // this is a visitor-facing surface, the 501 bodies differ between the
       // cart and buy-now doors, and one of them could grow a variable name
       // without anyone thinking about who reads it.
+      // An offer the shopper ticked changed or went away (AGL-3635): show
+      // what is offered now and let them decide again.
+      if (payload?.extrasChanged) {
+        extras.reload()
+        setMessage(String(payload?.error ?? ''))
+        setStatus('error')
+        return
+      }
       if (isPaymentsNotConfigured(response.status)) {
         setMessage(storefrontPaymentsNotConfiguredText())
         setStatus('unconfigured')
@@ -357,6 +380,7 @@ function CartLines(props: {
       // price this cart until it knows one (AGL-1721). Reveal the field and
       // let the shopper answer; a store that never sends this never shows it.
       if (payload?.needsShippingCountry) {
+        if (payload?.needsShippingPostalCode) setAskPostal(true)
         setShipCountries(
           (payload.shippingCountries as string[] | undefined)?.length
             ? (payload.shippingCountries as string[])
@@ -379,7 +403,7 @@ function CartLines(props: {
     // subtotal and the OLD lines. The pre-AGL-1591 raw call had the same bug
     // in the `value` alone, where a wrong number is indistinguishable from a
     // right one.
-  }, [hostId, cart, coupon, email, optIn, giftCard, shipTo, status, siteFetch])
+  }, [hostId, cart, coupon, email, optIn, giftCard, shipTo, shipPostal, status, siteFetch, extras.chosenIds, extras.reload])
 
   if (!cart || cart.lines.length === 0) {
     return (
@@ -475,6 +499,12 @@ function CartLines(props: {
         <Typography variant="subtitle2">{'Subtotal'}</Typography>
         <Typography variant="subtitle2">{usd(cart.subtotalCents)}</Typography>
       </Box>
+      <CartExtras
+        offers={extras.offers}
+        chosen={extras.chosen}
+        onToggle={extras.toggle}
+        formatCents={usd}
+      />
       <Typography variant="caption" color="text.secondary">
         {'Shipping and taxes are calculated at checkout.'}
       </Typography>
@@ -533,6 +563,16 @@ function CartLines(props: {
           ))}
         </TextField>
       ) : null}
+      {askPostal ? (
+        <TextField
+          label="Postal code"
+          value={shipPostal}
+          onChange={(event) => setShipPostal(event.target.value)}
+          size="small"
+          helperText="Carrier rates depend on the postal code"
+          slotProps={{ htmlInput: { autoComplete: 'shipping postal-code', maxLength: 12 } }}
+        />
+      ) : null}
       {status === 'paused' || status === 'ask' || status === 'unconfigured' ? (
         <Alert severity="info">{message}</Alert>
       ) : null}
@@ -552,7 +592,8 @@ function CartLines(props: {
           // cannot succeed (AGL-2019).
           status === 'unconfigured' ||
           // Asked but unanswered: the server would only refuse again.
-          (shipCountries !== null && !shipTo)
+          (shipCountries !== null && !shipTo) ||
+          (askPostal && !shipPostal.trim())
         }
         onClick={handleCheckout}
       >
@@ -569,7 +610,16 @@ function CartLines(props: {
           <StorefrontPaymentElement
             clientSecret={nativeCheckout.clientSecret}
             publishableKey={nativeCheckout.publishableKey}
+            wallets={nativeCheckout.wallets}
             payLabel={checkoutLabel || 'Pay now'}
+            defaultEmail={email}
+            // An expired or unloadable session is replaced, never replayed:
+            // the old attempt key would hand back the dead session.
+            onRestart={() => {
+              attemptKey.current = ''
+              setNativeCheckout(null)
+              void handleCheckout()
+            }}
             // The session is left open on cancel, deliberately: it is what the
             // AGL-323 abandoned-cart recovery emails are built on, and expiring
             // it would be a write against the merchant's Stripe account made
@@ -707,6 +757,7 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   if (variant === 'inline') {
     return (
       <Box ref={ref} {...rest}>
+        <CheckoutReturnNotice hostId={hostId} siteFetch={siteFetch} />
         <CartLines
           hostId={hostId}
           cart={cart}
@@ -721,6 +772,7 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
 
   return (
     <Box ref={ref} {...rest} sx={[{ display: 'inline-flex' }, ...nodeSx]}>
+      <CheckoutReturnNotice hostId={hostId} siteFetch={siteFetch} />
       <IconButton aria-label="Cart" onClick={() => setOpen(true)}>
         <Badge badgeContent={cart?.count ?? 0} color="primary">
           <SvgIcon>

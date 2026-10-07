@@ -19,6 +19,8 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 const PosConsolePage = lazy(() => import('./components/console/pos-page.component'))
+/** The customer display (AGL-3608): loads only on the public page that shows it. */
+const PosDisplayPage = lazy(() => import('./components/console/pos-display-page.component'))
 const CommerceGlanceCard = lazy(
   () => import('./components/console/commerce-glance-card.component'),
 )
@@ -34,6 +36,9 @@ import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
 import { registerCommerceRecordLists } from './model/commerce-record-lists'
 import { registerCommerceRecordRoutes } from './model/commerce-record-routes'
 import { registerCommerceZones } from './components/console/product-zones'
+import { registerCommerceOrderZones } from './components/console/order-zones'
+import { registerCommerceReturnZones } from './components/console/return-zones'
+import { registerCommerceStoreZones } from './components/console/store-zones'
 import { registerCommerceTransferUi } from './transfer/register-transfer-ui'
 import { COMMERCE_SEARCH_SOURCES } from './model/commerce-search-sources'
 import { COMMERCE_CONFIG_SCHEMA } from './plugin-config'
@@ -58,6 +63,14 @@ export function registerCommerceConsole(): void {
   // The zones its product editor, products hub and CSV import dialog host,
   // with the props each hands a widget (AGL-2916, AGL-3080).
   registerCommerceZones()
+  // …and the order dialog's two (AGL-3611), where a shipping plugin's widget
+  // buys a label and records the shipment through the dialog's own route.
+  registerCommerceOrderZones()
+  // …and the return dialog's (AGL-3611), where a shipping plugin's widget
+  // buys the buyer a return label and attaches it through this plugin's route.
+  registerCommerceReturnZones()
+  // The orders list's bulk actions and the store's Settings (AGL-3612).
+  registerCommerceStoreZones()
   // Its import and export resources' names and the products wizard's own
   // step (AGL-3531); the server halves register from the console's server
   // declarations.
@@ -72,6 +85,13 @@ export function registerCommerceConsole(): void {
     pluginId: BUNDLE_ID,
     displayName: 'Commerce',
     searchSources: COMMERCE_SEARCH_SOURCES,
+    // The screen a register turns toward its customer (AGL-3608), at
+    // `/kiosk/commerce/pos-display`. No staff session: the device proves
+    // itself with the display token it got by pairing, and
+    // `server/pos-display.ts` refuses every read without one.
+    publicPages: [
+      { path: '/pos-display', title: 'Customer display', Component: PosDisplayPage },
+    ],
     // Dashboard/analytics glance card (AGL-419): rendered through the
     // shell's 'commerceGlance' widget slot.
     widgets: [

@@ -103,7 +103,12 @@ import {
 import type { AiJobItemOutcome } from './ai-job-text-step'
 import { freeAssistAccount, type FreeAssistAccount } from '../usage/assist-free-taste'
 import { aiJobAutoConfirms } from './ai-job-auto-confirm'
-import { AI_SITE_GUIDED_BUILD_FAILED_COPY } from '../model/ai-job-failure-copy'
+import {
+  AI_SITE_GUIDED_BUILD_FAILED_COPY,
+  aiCustomerSafeCopy,
+  aiCustomerSafeItem,
+  aiCustomerSafeReview,
+} from '../model/ai-job-failure-copy'
 import { aiSiteStartInputsOf } from '../model/ai-site-start'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
@@ -685,7 +690,7 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
       startedAt: toIso(step.startedAt as Instant),
       endedAt: toIso(step.endedAt as Instant),
       creditsSpent: step.creditsSpent ?? 0,
-      error: step.error ?? null,
+      error: aiCustomerSafeCopy(step.error ?? null),
     })),
     outputs: job.outputs ?? [],
     creditsReserved: job.creditsReserved ?? 0,
@@ -694,7 +699,8 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
     createdBy: job.createdBy,
     createdAt: toIso(job.createdAt as Instant) ?? new Date(0).toISOString(),
     updatedAt: toIso(job.updatedAt as Instant) ?? new Date(0).toISOString(),
-    error: job.error ?? null,
+    // The doctrine's own words never reach a customer (AGL-3596).
+    error: aiCustomerSafeCopy(job.error ?? null, { page: job.kind === 'page' }),
     running:
       job.status === 'running' &&
       leaseUntil !== null &&
@@ -708,7 +714,7 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
           confirmedBy: job.plan.confirmedBy ?? null,
         }
       : null,
-    review: job.review ?? null,
+    review: job.review ? aiCustomerSafeReview(job.review, { page: job.kind === 'page' }) : null,
     applied: job.applied
       ? {
           at: toIso(job.applied.at as Instant),
@@ -719,7 +725,8 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
       : null,
     ...(job.sitePublish ? { sitePublish: job.sitePublish } : {}),
     ...(job.kind === 'site' ? { siteInputs: aiSiteStartInputsOf(job.inputs) } : {}),
-    ...(job.items?.length ? { items: job.items } : {}),
+    ...(aiJobAutoConfirms(job) ? { autoConfirm: true } : {}),
+    ...(job.items?.length ? { items: job.items.map(aiCustomerSafeItem) } : {}),
     ...(job.orchestration ? { orchestration: job.orchestration } : {}),
     ...(job.kind === 'build' && job.inputs?.['publish'] === true ? { publishAsked: true } : {}),
   }
@@ -922,6 +929,7 @@ export function aiApplyJobItemRecord(
   ledger: readonly AiJobItemLedger[],
   record: AiJobItemRecord,
   credits: number,
+  now?: Date,
 ): AiJobItemLedger[] {
   return ledger.map((row) =>
     row.slot !== record.slot
@@ -936,6 +944,8 @@ export function aiApplyJobItemRecord(
           ...(record.failure !== undefined ? { failure: record.failure } : {}),
           ...(record.note !== undefined ? { note: record.note } : {}),
           ...(record.degradedBy?.length ? { degradedBy: record.degradedBy } : {}),
+          // When it settled, so the next item's row counts from there (AGL-3596).
+          ...(now && record.status !== 'running' && record.status !== 'pending' ? { settledAt: now.toISOString() } : {}),
           outputs: [...(row.outputs ?? []), ...(record.outputs ?? []).filter((id) => !(row.outputs ?? []).includes(id))],
         },
   )
@@ -1053,7 +1063,7 @@ export async function recordStep(
     // A build's item ledger moves with its spend, in this one write (AGL-3616).
     const ledger = input.items ?? job.items ?? null
     const items =
-      ledger && input.item ? aiApplyJobItemRecord(ledger, input.item, input.creditsSpent) : input.items ? ledger : null
+      ledger && input.item ? aiApplyJobItemRecord(ledger, input.item, input.creditsSpent, now) : input.items ? ledger : null
     const settled = input.status !== 'pending'
     const ownsLease = job.lease?.owner === owner
     const parksForReview = Boolean(input.review) && !isAiJobTerminal(job.status)

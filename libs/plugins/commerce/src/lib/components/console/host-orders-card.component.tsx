@@ -75,6 +75,7 @@ import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-quer
 import { useTransferLauncher } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
 import { commerceListFilter } from '../../transfer/list-filter'
 import { COMMERCE_ORDERS_TRANSFER } from '../../transfer/transfer-keys'
+import OrderShippingActions from './order-shipping-actions.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 import {
@@ -89,6 +90,9 @@ import {
   ordersCustomerClause,
 } from '../../constants/orders-list-query'
 import CommerceStatTile from './commerce-stat-tile.component'
+import { bulkFulfillOrders, BULK_FULFILLABLE_STATUSES, describeBulkFulfill } from './bulk-fulfill'
+import { ORDERS_BULK_ZONE } from './store-zones'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import OrderDetailDialog, {
   DISPUTE_COLOR,
 } from './order-detail-dialog.component'
@@ -258,6 +262,10 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   })
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // Rows ticked for a bulk act (AGL-3611); the row click still opens one.
+  const [checkedIds, setCheckedIds] = useState<string[]>([])
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const WidgetSlot = useConsoleWidgetSlot()
   /*
    * An order named in the URL opens in its dialog on arrival (AGL-2622). A
    * contact's timeline names the order that made the person a customer,
@@ -300,6 +308,9 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
      * configured none — is never asked and never sees this field.
      */
     shipCountries?: string[]
+    /** The postal code, once live carrier rates ask for one (AGL-3612). */
+    shipPostal?: string
+    askPostal?: boolean
     busy?: boolean
   } | null>(null)
   const { data: user } = useUser()
@@ -448,6 +459,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
     draft?.quantity,
     draft?.email,
     draft?.shipTo,
+    draft?.shipPostal,
   ])
 
   const handleDraftCreate = useCallback(async () => {
@@ -482,6 +494,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
             // cheaper zone's rate than the address the buyer then enters
             // (AGL-1721).
             ...(draft.shipTo ? { shippingCountry: draft.shipTo } : {}),
+            ...(draft.shipPostal?.trim() ? { shippingPostalCode: draft.shipPostal.trim() } : {}),
           }),
         },
       )
@@ -501,6 +514,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
                   )?.length
                     ? (payload.shippingCountries as string[])
                     : [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+                  ...(payload?.needsShippingPostalCode ? { askPostal: true } : {}),
                 }
               : prev,
           )
@@ -520,6 +534,35 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
       setDraft((prev) => (prev ? { ...prev, busy: false } : prev))
     }
   }, [draft, user, hostId, enqueueSnackbar])
+
+  /*
+   * Bulk "Mark as fulfilled" (AGL-3611): one route call per ticked order, so
+   * each gets its own transition check. Only paid and partially fulfilled
+   * rows count; the button says how many.
+   */
+  const checkedOrders = useMemo(
+    () => orderRows.filter((row: any) => checkedIds.includes(String(row.$id))),
+    [orderRows, checkedIds],
+  )
+  const fulfillableCount = checkedOrders.filter((row: any) =>
+    BULK_FULFILLABLE_STATUSES.includes(String(row.status)),
+  ).length
+  const handleBulkFulfill = useCallback(async () => {
+    if (!checkedOrders.length) return
+    setBulkBusy(true)
+    try {
+      const batchKey =
+        globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const result = await bulkFulfillOrders(user, hostId, checkedOrders as any[], batchKey)
+      enqueueSnackbar(describeBulkFulfill(result), {
+        variant: result.unknown.length ? 'error' : result.refused.length ? 'warning' : 'success',
+        allowDuplicate: true,
+      })
+      if (!result.unknown.length) setCheckedIds([])
+    } finally {
+      setBulkBusy(false)
+    }
+  }, [checkedOrders, user, hostId, enqueueSnackbar])
 
   const selectedOrder =
     loadedOrders.find((order: any) => order.$id === selectedId) ??
@@ -712,6 +755,9 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   return (
     <CardDisplay
       header={'Orders'}
+      // Shipping actions live in the card header (AGL-3613): the orders
+      // still to ship for a label tool, and its tracking numbers back.
+      HeaderProps={{ action: <OrderShippingActions hostId={hostId} /> }}
       help={pluginDocsHelp('commerce', {
         anchor: '#orders-screen',
         excerpt:
@@ -837,6 +883,26 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
             spacing={1}
             sx={{ alignItems: 'center', justifyContent: 'flex-end' }}
           >
+            {checkedIds.length ? (
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={bulkBusy || fulfillableCount === 0}
+                onClick={handleBulkFulfill}
+              >
+                {`Mark as fulfilled (${fulfillableCount})`}
+              </Button>
+            ) : null}
+            {/* Other plugins' bulk actions on the ticked orders (AGL-3612). */}
+            {checkedIds.length && WidgetSlot ? (
+              <WidgetSlot
+                slot={ORDERS_BULK_ZONE.id}
+                hostId={hostId}
+                orgId={undefined}
+                selectedOrderIds={checkedIds}
+                storeName=""
+              />
+            ) : null}
             {/* Only for whom the route takes it (AGL-3554). */}
             {transfer?.can('export', { resource: COMMERCE_ORDERS_TRANSFER, scope: 'host', hostId }) ? (
               <Button size="small" onClick={openExport}>
@@ -865,6 +931,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
             rows={orderRows}
             columns={columns}
             onOpen={(id) => setSelectedId(id)}
+            selectable={{ selected: checkedIds, onChange: setCheckedIds }}
             loading={listStatus === 'loading'}
             /*
              * The grid must NOT also filter, search or sort: the query
@@ -1016,6 +1083,17 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
               ))}
             </TextField>
           ) : null}
+          {draft?.askPostal ? (
+            <TextField
+              label="Postal code"
+              value={draft?.shipPostal ?? ''}
+              onChange={(event) =>
+                setDraft((prev) => (prev ? { ...prev, shipPostal: event.target.value } : prev))
+              }
+              size="small"
+              helperText="This store prices shipping by carrier, which needs the postal code."
+            />
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
@@ -1027,7 +1105,8 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
               draft?.busy ||
               // Once asked, the answer is required: retrying without one is
               // refused again, so the button would only look broken.
-              Boolean(draft?.shipCountries?.length && !draft?.shipTo)
+              Boolean(draft?.shipCountries?.length && !draft?.shipTo) ||
+              Boolean(draft?.askPostal && !draft?.shipPostal?.trim())
             }
             onClick={handleDraftCreate}
           >

@@ -34,7 +34,7 @@ import {
   SITE_LIST_DECLARATION,
   SITE_LIST_INDEX_BASE,
   siteListBase,
-} from './site-list-query'
+} from '@aglyn/aglyn/app-utils/site-list-query'
 
 const INDEX_FILE = JSON.parse(
   readFileSync(

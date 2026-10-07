@@ -56,6 +56,28 @@ export interface ConsoleProductDraft {
   mediaUrls: string[]
   seoTitle: string
   seoDescription: string
+  /**
+   * What one unit ships as (AGL-3612): packed size and customs facts, as the
+   * editor holds them. A side nobody set is `null`.
+   */
+  shipping: {
+    lengthCm: number | null
+    widthCm: number | null
+    heightCm: number | null
+    hsCode: string
+    originCountry: string
+  }
+  /**
+   * What shopping channels ask of it (AGL-3637), as the editor holds it. A
+   * field nobody entered is `''`.
+   */
+  channel: {
+    brand: string
+    gtin: string
+    mpn: string
+    condition: '' | 'new' | 'refurbished' | 'used'
+    googleProductCategory: string
+  }
 }
 
 /**
@@ -70,6 +92,28 @@ export interface ConsoleProductCopyValues {
   optionNames?: string[]
   seoTitle?: string
   seoDescription?: string
+  /**
+   * Packed size and customs facts (AGL-3612), merged over the product's; a
+   * side set to `null` is cleared.
+   */
+  shipping?: Partial<{
+    lengthCm: number | null
+    widthCm: number | null
+    heightCm: number | null
+    hsCode: string
+    originCountry: string
+  }>
+  /**
+   * Shopping-channel facts (AGL-3637), merged over the product's; a field
+   * set to `''` is cleared.
+   */
+  channel?: Partial<{
+    brand: string
+    gtin: string
+    mpn: string
+    condition: '' | 'new' | 'refurbished' | 'used'
+    googleProductCategory: string
+  }>
 }
 
 /**

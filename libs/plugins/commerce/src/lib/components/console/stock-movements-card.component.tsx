@@ -264,6 +264,7 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
                 {[
                   row.orderId ? `order ${row.orderId}` : null,
                   row.locationId ? `at ${row.locationId}` : null,
+                  row.source ? `counted by ${row.source}` : null,
                 ]
                   .filter(Boolean)
                   .join(' · ') || '—'}

@@ -81,7 +81,8 @@ beforeEach(() => {
 async function open(props = zoneProps()) {
   const Component = Widget()
   render(<Component {...props} />)
-  fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+  // Registered lazily (AGL-3649): the button draws once its code has loaded.
+  fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
   return screen.getByRole('dialog')
 }
 

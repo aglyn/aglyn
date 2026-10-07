@@ -44,6 +44,7 @@ import {
   AI_SITE_EMAIL_TYPE,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
+  aiSiteNameSentence,
   aiSitePagesRefusal,
   aiSitePlanRefusal,
   aiSiteSubmissions,
@@ -61,6 +62,7 @@ import { aiOriginJobId, aiRecordedJobDraftId } from './ai-job-draft-ids'
 import { readAiDraftNodes } from './ai-job-drafts'
 import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePagesOfPlan } from './ai-job-layout-site-pages'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
+import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import { aiJobPublishesSite, aiPublishGuidedSite } from './ai-site-publish'
 import { aiConfirmedPlan, aiUnspentOutcome } from './ai-job-generation'
 import {
@@ -384,6 +386,10 @@ export function aiSiteResolvedRef(ref: string | null, built: BuiltRefs): string 
  * guided start writes it into the brief itself, but an agency batch's brief
  * is a member's own sentence and may never mention it, and a theme, a layout
  * or a form asked to serve nobody in particular serves nobody in particular.
+ *
+ * The name is said twice (AGL-3596): as a field, and as the instruction to use
+ * it as written. A layout told only "a dog groomer in Austin" put a business
+ * name of its own in the header and the footer.
  */
 export function aiSiteBriefLines(
   brief: string,
@@ -398,6 +404,7 @@ export function aiSiteBriefLines(
     inputs.brand ? `brand: ${inputs.brand}` : '',
   ].filter(Boolean)
   lines.push(`Site — ${site.join('; ')}.`)
+  if (inputs.businessName) lines.push(aiSiteNameSentence(inputs.businessName))
   return lines
 }
 
@@ -548,9 +555,18 @@ export function aiSiteUnitJob(
   const unitInputs: Record<string, unknown> = { ...job.inputs, originJobId: aiOriginJobId(job) }
   // The layout is built before the pages, so it is told them (AGL-3596): their
   // ids are minted on the plan, and the platform writes the header's links.
-  if (job.kind === 'site' && unit.kind === 'layout') {
-    const pages = aiLayoutSitePagesOfPlan(plan.screens)
+  // A page is told them too, so its buttons may go to a page built after it.
+  if (job.kind === 'site' && (unit.kind === 'layout' || unit.kind === 'page')) {
+    // A guided start links every page the person asked for (AGL-3660).
+    const pages = aiLayoutSitePagesOfPlan(plan.screens, { guided: true })
     if (pages.length) unitInputs[AI_LAYOUT_SITE_PAGES_INPUT] = pages
+  }
+  // A site's pages and its layout are designed in the layout language and
+  // compiled (AGL-3660), and a page is told which page places the site's form.
+  if (unit.kind === 'layout' || unit.kind === 'page') {
+    unitInputs[AI_LAYOUT_LANGUAGE_INPUT] = true
+    const formPage = aiLayoutFormPageOfPlan(plan)
+    if (formPage) unitInputs[AI_LAYOUT_FORM_PAGE_INPUT] = formPage
   }
   return {
     ...job,

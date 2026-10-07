@@ -17,6 +17,9 @@
 
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { notifyOrderBuyer } from './order-notifications'
+import { ORDER_CANCELLED_EVENT } from '../model/order-events'
+import { raiseOrderEvent } from './order-events'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import {
   capRestockLines,
@@ -158,6 +161,26 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
           body: { error: `Orders in "${order.status}" cannot cancel` },
         }
       }
+      // An OPEN register sale that has taken money (AGL-3607) is voided at
+      // the register, which hands each payment back first. Cancelling it here
+      // would mark it cancelled with a card charge, a gift card debit or a
+      // room charge still standing.
+      if (
+        order.status === 'pending' &&
+        CommerceModel.orderPayments(order).some(
+          (payment) => payment.status === 'succeeded' || payment.status === 'pending',
+        ) &&
+        Array.isArray(order.payments)
+      ) {
+        return {
+          status: 409,
+          body: {
+            error:
+              'This register sale has payments on it. Void it at the register, ' +
+              'which hands each payment back first.',
+          },
+        }
+      }
 
       // A POS CARD order's decrement happens in the webhook that pays it —
       // and before AGL-1825 it did not happen AT ALL: the paying branch's
@@ -292,6 +315,8 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
       const units = releasedLines.reduce((sum, line) => sum + line.quantity, 0)
       const patch: Record<string, unknown> = {
         status: 'cancelled',
+        // What a shipping tool's feed asks to learn of the cancel (AGL-3613).
+        updatedAtMs: atMs,
         timeline: CommerceModel.appendOrderEvent(
           order,
           'cancelled',
@@ -362,6 +387,11 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
           { hostId, orderId, sessionId: expireSessionId },
         )
       }
+    }
+    // The buyer is told (AGL-3610) — only by the request that cancelled it.
+    if (outcome.status === 200 && !(outcome.body as { alreadyCancelled?: boolean }).alreadyCancelled) {
+      await notifyOrderBuyer({ hostId, orderId }, 'cancelled')
+      await raiseOrderEvent(ORDER_CANCELLED_EVENT, { hostId, orderId, key: 'cancelled' })
     }
     return res.status(outcome.status).json(outcome.body)
   } catch (error) {

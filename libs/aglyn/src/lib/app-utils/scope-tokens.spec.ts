@@ -16,6 +16,7 @@
  */
 
 import {
+  defaultMediaScopeOf,
   defaultScopeForNewResource,
   describeScope,
   grantedScopeTokens,
@@ -366,6 +367,16 @@ describe('scopeCovers (AGL-1044)', () => {
 
   it('does not cover when the source reaches further', () => {
     expect(scopeCovers(['host:a'], ['host:a', 'host:b'])).toBe(false)
+  })
+})
+
+describe('defaultMediaScopeOf (AGL-3662)', () => {
+  it('is the media value when set, the dataset value until then', () => {
+    expect(defaultMediaScopeOf({ defaultMediaScope: 'org', defaultResourceScope: 'host' })).toBe('org')
+    expect(defaultMediaScopeOf({ defaultMediaScope: 'host', defaultResourceScope: 'org' })).toBe('host')
+    expect(defaultMediaScopeOf({ defaultResourceScope: 'host' })).toBe('host')
+    expect(defaultMediaScopeOf({})).toBeUndefined()
+    expect(defaultMediaScopeOf(undefined)).toBeUndefined()
   })
 })
 

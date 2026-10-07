@@ -156,11 +156,17 @@ redundant `docs.aglyn.com` row would have been the other way to get this wrong.
 
 ⛔ **`stripe.com` IS NOT ON THE UNWANTED-REFERRAL LIST, AND CHECKOUT LEAVES THE
 SITE.** Found 2026-08-25. The list is a single `Referral domain contains
-aglyn.com`, which covers every first-party subdomain and nothing else. But
-embedded checkout (`release_native_checkout`) is **`{"enabled": false,
-"rolloutPercent": 0}` in LIVE Remote Config with no conditional overrides** — so
-both the storefront cart and the console's own plan purchase still redirect to
-**`checkout.stripe.com`** and come back.
+aglyn.com`, which covers every first-party subdomain and nothing else. At the
+time, in-page checkout (`release_native_checkout`) was off in live Remote Config,
+so the storefront cart and the console's plan purchase both redirected to
+**`checkout.stripe.com`** and came back.
+
+_Updated 2026-10-06 (AGL-3606):_ the console's plan purchase no longer uses
+Stripe Checkout at all, and in-page storefront checkout is released to every
+workspace, so a storefront purchase normally stays on the merchant's domain. The
+round trip through a Stripe domain still happens for a payment method that
+redirects to a bank or wallet, and for the hosted fallback when the flag is off
+for an org — so the fix below is still load-bearing.
 
 That return is a cross-domain referral. GA4 starts a **new session with
 source/medium `stripe.com / referral`**, which overwrites the acquisition source

@@ -501,6 +501,14 @@ export const DOCS_HELP_TOPICS = {
     path: '/staff-console/operator-alerts',
     title: 'Operator alerts',
   },
+  orderNotifications: {
+    path: '/commerce-and-bookings/commerce/order-notifications',
+    title: 'Order emails & status page',
+  },
+  ordersAndReturns: {
+    path: '/commerce-and-bookings/commerce/orders-and-returns',
+    title: 'Fulfillment, returns and webhooks',
+  },
   orgAutomations: {
     path: '/marketing-and-automation/workflows-and-actions/org-automations',
     title: 'Org automations',
@@ -528,6 +536,14 @@ export const DOCS_HELP_TOPICS = {
   pos: {
     path: '/commerce-and-bookings/commerce/pos-and-reservations',
     title: 'POS & reservations',
+  },
+  posHardware: {
+    path: '/commerce-and-bookings/commerce/pos-hardware',
+    title: 'POS hardware',
+  },
+  posOperations: {
+    path: '/commerce-and-bookings/commerce/pos-operations',
+    title: 'Running the register',
   },
   productsWithAi: {
     path: '/ai/products-with-ai',
@@ -584,6 +600,10 @@ export const DOCS_HELP_TOPICS = {
   runAnAgencyWorkspace: {
     path: '/guides/run-an-agency-workspace',
     title: 'Run an agency workspace',
+  },
+  salesChannels: {
+    path: '/commerce-and-bookings/commerce/sales-channels',
+    title: 'Sales channels',
   },
   salesTaxReturn: {
     path: '/staff-console/sales-tax-return',
@@ -644,6 +664,10 @@ export const DOCS_HELP_TOPICS = {
   sharing: {
     path: '/content-and-data/crm/sharing',
     title: 'Share records across sites',
+  },
+  shipping: {
+    path: '/commerce-and-bookings/commerce/shipping',
+    title: 'Shipping',
   },
   siteBackupAndPackages: {
     path: '/building-sites/site-backup-and-packages',
@@ -729,6 +753,18 @@ export const DOCS_HELP_TOPICS = {
     path: '/enterprise/uptime-and-status',
     title: 'Availability & status',
   },
+  usePirateShip: {
+    path: '/commerce-and-bookings/commerce/use-pirate-ship',
+    title: 'Use Pirate Ship with Aglyn',
+  },
+  useShippingeasy: {
+    path: '/commerce-and-bookings/commerce/use-shippingeasy',
+    title: 'Use ShippingEasy with Aglyn',
+  },
+  useShipstation: {
+    path: '/commerce-and-bookings/commerce/use-shipstation',
+    title: 'Use ShipStation with Aglyn',
+  },
   versionsAndPublishing: {
     path: '/building-sites/screens-and-layouts/versions-and-publishing',
     title: 'Versions & scheduled publishing',
@@ -796,7 +832,7 @@ export const DOCS_HELP_ANCHORS = {
   bulkActions: ['#exports', '#contacts', '#the-contacts-file', '#companies', '#deals', '#tasks', '#leads', '#at-the-organization-level', '#when-a-row-cannot-be-changed', '#adding-people-to-an-audience', '#related'],
   catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#slugs', '#merchant-center-feed', '#related'],
   comingSoonLaunch: ['#1-build-the-coming-soon-page', '#the-notify-me-form', '#2-make-it-the-home-page', '#3-keep-everything-else-out-of-search', '#while-nothing-is-ready-the-site-wide-switch', '#once-youre-launching-page-by-page-per-screen-visibility', '#4-collect-the-signups', '#5-launch-day-reverse-every-step', '#6-verify-it-actually-worked', '#related'],
-  commerce: ['#products-hub', '#inventory', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#shipping--taxes', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#dropshipping', '#related'],
+  commerce: ['#products-hub', '#inventory', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#payment-methods', '#shipping--taxes', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#dropshipping', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#related'],
   companies: ['#the-companies-list', '#create-a-company', '#the-lists-behind-the-choices', '#a-companys-page', '#contacts-at-a-company', '#linked-on-capture', '#import', '#export', '#deleting-a-company', '#who-can-see-a-company', '#files', '#related'],
   components: ['#promote', '#insert-instances', '#properties', '#declare-them', '#make-a-property-conditional', '#use-them', '#save-then-publish', '#fill-them-in-per-page', '#restyle-one-instance', '#override-an-attribute-on-one-instance', '#retrofit-duplicated-sections', '#detach', '#nesting', '#used-by', '#manage', '#duplicate', '#reusable-email-blocks', '#make-a-header-or-footer', '#add-one-to-an-email', '#change-a-block-in-one-email', '#emails-you-have-not-designed', '#email-theme-colors', '#copy--paste-vs-reusable-components', '#tips', '#related'],
@@ -825,7 +861,7 @@ export const DOCS_HELP_ANCHORS = {
   downgradingAndCanceling: ['#when-changes-take-effect', '#downgrading-to-a-lower-plan', '#pending-downgrade', '#keep-my-current-plan', '#what-changes-on-a-downgrade', '#canceling-your-subscription', '#the-cancel-dialog', '#deleting-a-single-site', '#deleting-your-organization', '#related'],
   dragDropHierarchy: ['#where-you-can-drag', '#what-a-drag-does', '#drop-zones-edges-vs-center', '#containers-vs-leaf-elements', '#containers-accept-children', '#leaf-elements-dont--dropping-on-one-makes-a-sibling', '#adding-a-new-element', '#when-a-drop-is-rejected', '#moving-an-element-without-dragging', '#multi-drag', '#tips', '#related'],
   editFromTheLiveSite: ['#who-sees-it', '#on-your-aglynapp-address', '#on-your-own-domain', '#the-bar', '#hide-it', '#what-it-never-does', '#good-to-know', '#related'],
-  editYourTheme: ['#open-the-editor', '#choose-a-theme', '#set-colors-and-fonts', '#style-components', '#it-follows-you-into-the-besigner', '#change-it-with-ai', '#tips', '#related'],
+  editYourTheme: ['#open-the-editor', '#choose-a-theme', '#set-colors-and-fonts', '#fonts', '#download-size', '#pairings', '#upload-your-own-font', '#style-components', '#it-follows-you-into-the-besigner', '#change-it-with-ai', '#tips', '#related'],
   elementCatalog: ['#finding-an-element', '#element-search', '#element-detail', '#layout', '#the-pages-main-landmark', '#every-container-can-be-a-semantic-element', '#light-or-dark-whatever-the-visitor-picked', '#which-link-groups-want-to-be-a-nav', '#header-and-footer-for-your-site-chrome', '#grid', '#surface', '#accordion', '#navigation', '#where-a-link-opens', '#linking-to-a-collection-listing', '#link-container', '#tabs', '#tabs-that-go-to-another-screen', '#pagination', '#text', '#data-display', '#media', '#image', '#image-list', '#forms', '#commerce', '#members', '#input', '#related'],
   emailCampaigns: ['#send-a-campaign', '#campaigns-belong-to-the-organization', '#organization-emails-page', '#campaigns-group-emails', '#filter-the-lists', '#what-belongs-to-a-campaign', '#who-the-email-comes-from', '#sending-domains', '#account-email-always-sends', '#marketing-needs-a-domain', '#two-ways-to-get-a-domain', '#a-domain-we-set-up-is-a-request', '#domain-states', '#senders', '#send-a-test', '#preview-the-email', '#monthly-send-cap', '#personalize-with-merge-tags', '#recipient-count', '#who-a-campaign-is-allowed-to-reach', '#schedule-a-send', '#held-for-review', '#duplicate-an-email', '#email-lists', '#manual-lists', '#list-members', '#add-to-a-list', '#import-a-list', '#export-a-list', '#remove-from-a-list', '#lists-built-from-a-rule', '#experiments', '#experiments-across-sites', '#opens--clicks', '#the-campaign-report', '#per-contact-engagement', '#which-links-were-clicked', '#revenue-from-a-campaign', '#how-a-visit-is-credited', '#utm-labels', '#who-it-reached', '#conversions', '#compliance', '#list-unsubscribe', '#topics', '#preference-page', '#consent-groups', '#consent-group-create', '#consent-group-join', '#consent-group-leave', '#consent-group-rename', '#consent-group-progress', '#frequency-opt-down', '#double-opt-in', '#consent-group-confirmation', '#marketing-mail', '#frequency-cap', '#suppressions', '#add-a-suppression', '#import-export-suppressions', '#platform-suppressions', '#related'],
   emailTemplates: ['#templates-and-snippets', '#merge-fields', '#saving', '#managing-templates', '#duplicate-a-template', '#shared-or-personal', '#over-the-rest-api', '#related'],
@@ -880,13 +916,17 @@ export const DOCS_HELP_ANCHORS = {
   multiSelect: ['#select-multiple', '#move-the-whole-selection', '#what-the-inspector-shows', '#tips', '#related'],
   onboardingDeepLinks: ['#the-contract', '#what-the-console-does-with-it', '#rules-this-parser-follows-and-why', '#known-gap'],
   operatorAlerts: ['#channels', '#settings', '#alert-list', '#health', '#render-monitor', '#self-hosting'],
+  orderNotifications: ['#customer-emails', '#tracking-links', '#turning-emails-off', '#changing-the-wording-and-colors', '#order-status-page', '#resend-receipt', '#text-messages', '#related'],
+  ordersAndReturns: ['#fulfillment', '#invoices', '#returns', '#buyer-requests', '#run-a-return', '#order-webhooks', '#what-your-endpoint-receives', '#check-the-signature', '#answer-quickly-and-retries', '#related'],
   orgAutomations: ['#what-an-org-automation-is', '#create-one', '#triggers', '#steps', '#pause-it-on-one-site', '#waiting-switching-off-and-deleting', '#every-sites-own-automations', '#related'],
   passwordAScreen: ['#steps', '#password-vs-members-only', '#related'],
   platformHealth: ['#three-states-never-two', '#the-probes', '#serving', '#backups--exports', '#rate-limiters', '#signup-volume', '#email-delivery', '#mail-gateway-ledger', '#csp-violations', '#sharing-scope-drift', '#pending-erasures', '#people-waiting-beside-the-workspaces', '#idempotency-claims', '#resolved-server-config', '#when-the-configured-text-does-not-mean-what-it-says', '#values-are-never-shown', '#re-checking', '#related'],
   pluginConfig: ['#layers', '#declare', '#field-types', '#read', '#no-schema', '#resolution', '#console-ui', '#api', '#related'],
-  pluginManagerApi: ['#console-extensions--feature-plugins', '#loading--plugin-loader', '#server-apis--api-plugins-server-only', '#customer-rest-api-resources--api-v1-resources-data-layer-console-server', '#site-pipeline--site-runtime-site-page-hooks-server-for-hooks', '#stylesheets--plugin-styles', '#billing--billing-webhook-hooks-server', '#service-contracts--plugin-services', '#zones-a-plugin-hosts--plugin-zones', '#host-subcollections--plugin-host-collections', '#creating-a-document--resource-and-plugin-host-resources', '#in-the-site-backup--siteexport-and-plugin-site-export', '#site-backup-sections--plugin-site-bundle-server', '#import-and-export--plugin-transfer-resources', '#sitemap-sections--plugin-sitemap-sections', '#sitemap-readers--plugin-sitemap-readers', '#pages-a-publish-refreshes--plugin-live-paths-server', '#the-record-a-page-is-drawn-for--page-record-sources-console', '#documents-authored-in-the-besigner--besigner-documents', '#entity-pickers--plugin-entity-pickers', '#container-kinds--plugin-containers', '#record-addresses--plugin-record-routes', '#record-pages-for-a-server--plugin-record-pages', '#record-cards--plugin-record-cards-server', '#record-indexes--plugin-record-index-server', '#visitor-doors--plugin-visitor-doors', '#intake-gates--plugin-intake-gates-server', '#what-depends-on-a-thing--plugin-dependents-server', '#record-lists--plugin-record-lists-console', '#record-counts--plugin-record-counts-console', '#the-tenants-tax-rule--plugin-tax-profile-server', '#sales-on-the-operators-tax-return--plugin-tax-return-sources', '#earnings-on-the-operators-revenue-report--plugin-revenue-sources', '#installed-templates--plugin-template-sources', '#installable-artifact-types--plugin-artifact-types-server', '#recurring-charges--plugin-recurring-charges-server', '#contact-capture--plugin-contact-capture-server', '#conversion-credit--plugin-conversion-credit-server', '#the-kill-switch--plugin-revocations-server', '#send-tallies--plugin-send-tallies-server', '#people--plugin-person-records-server', '#record-timeline--plugin-record-timeline-server', '#text-generation--plugin-text-generation-server', '#media-delivery--media-delivery-provider-server', '#site-analytics-tags--analytics-provider', '#notification-categories-and-digests--notifications', '#interaction-steps--site-interactions', '#step-checks--interaction-step-checks', '#placeholders--draft-placeholders', '#server-steps--plugin-server-steps-server', '#interaction-recipes--interaction-recipes', '#host-events--host-events', '#computed-variables--computed-variables-server', '#platform-events--plugin-events-server', '#site-beacons--plugin-site-beacons-server', '#usage-meters--plugin-usage-meters-server', '#account-erasure--plugin-user-erasure-server', '#workspace-erasure--plugin-org-erasure-server', '#person-erasure--plugin-person-erasure-server', '#consent-group-changes--plugin-consent-group-change-server', '#subscription-topics--subscriptiontopics-app-utilssubscription-topics', '#email-streams--plugin-email-streams-server', '#lead-conversion--plugin-lead-conversion-server', '#console-jobs--plugin-console-crons-server', '#usage-alerts--plugin-managerusage-alert-contributors', '#activity-actions--plugin-activity-actions', '#billing-and-access-keys--plugin-entitlements', '#typed-entitlement-keys--plugin-entitlement-keys', '#plan-figures--plugin-plan-entitlements', '#usage-axes--plugin-usage-axes', '#enablement-flags-config-fields-permissions-jobs', '#remote-bundles--realm-plugins-isomorphic-realm-server-server', '#sandbox--plugin-bridge'],
+  pluginManagerApi: ['#console-extensions--feature-plugins', '#loading--plugin-loader', '#server-apis--api-plugins-server-only', '#customer-rest-api-resources--api-v1-resources-data-layer-console-server', '#site-pipeline--site-runtime-site-page-hooks-server-for-hooks', '#stylesheets--plugin-styles', '#billing--billing-webhook-hooks-server', '#service-contracts--plugin-services', '#zones-a-plugin-hosts--plugin-zones', '#host-subcollections--plugin-host-collections', '#creating-a-document--resource-and-plugin-host-resources', '#in-the-site-backup--siteexport-and-plugin-site-export', '#site-backup-sections--plugin-site-bundle-server', '#import-and-export--plugin-transfer-resources', '#sitemap-sections--plugin-sitemap-sections', '#sitemap-readers--plugin-sitemap-readers', '#pages-a-publish-refreshes--plugin-live-paths-server', '#the-record-a-page-is-drawn-for--page-record-sources-console', '#documents-authored-in-the-besigner--besigner-documents', '#entity-pickers--plugin-entity-pickers', '#container-kinds--plugin-containers', '#record-addresses--plugin-record-routes', '#record-pages-for-a-server--plugin-record-pages', '#record-cards--plugin-record-cards-server', '#record-indexes--plugin-record-index-server', '#visitor-doors--plugin-visitor-doors', '#intake-gates--plugin-intake-gates-server', '#what-depends-on-a-thing--plugin-dependents-server', '#record-lists--plugin-record-lists-console', '#record-counts--plugin-record-counts-console', '#the-tenants-tax-rule--plugin-tax-profile-server', '#an-outside-tax-engine--registerplugintaxengine', '#sales-on-the-operators-tax-return--plugin-tax-return-sources', '#earnings-on-the-operators-revenue-report--plugin-revenue-sources', '#installed-templates--plugin-template-sources', '#installable-artifact-types--plugin-artifact-types-server', '#recurring-charges--plugin-recurring-charges-server', '#contact-capture--plugin-contact-capture-server', '#conversion-credit--plugin-conversion-credit-server', '#the-kill-switch--plugin-revocations-server', '#send-tallies--plugin-send-tallies-server', '#people--plugin-person-records-server', '#record-timeline--plugin-record-timeline-server', '#text-generation--plugin-text-generation-server', '#media-delivery--media-delivery-provider-server', '#site-analytics-tags--analytics-provider', '#notification-categories-and-digests--notifications', '#interaction-steps--site-interactions', '#step-checks--interaction-step-checks', '#placeholders--draft-placeholders', '#server-steps--plugin-server-steps-server', '#interaction-recipes--interaction-recipes', '#host-events--host-events', '#computed-variables--computed-variables-server', '#platform-events--plugin-events-server', '#plugin-events--plugin-domain-events-server', '#commerces-order-and-return-events', '#site-beacons--plugin-site-beacons-server', '#usage-meters--plugin-usage-meters-server', '#account-erasure--plugin-user-erasure-server', '#workspace-erasure--plugin-org-erasure-server', '#person-erasure--plugin-person-erasure-server', '#consent-group-changes--plugin-consent-group-change-server', '#subscription-topics--subscriptiontopics-app-utilssubscription-topics', '#email-streams--plugin-email-streams-server', '#lead-conversion--plugin-lead-conversion-server', '#console-jobs--plugin-console-crons-server', '#usage-alerts--plugin-managerusage-alert-contributors', '#activity-actions--plugin-activity-actions', '#billing-and-access-keys--plugin-entitlements', '#typed-entitlement-keys--plugin-entitlement-keys', '#plan-figures--plugin-plan-entitlements', '#usage-axes--plugin-usage-axes', '#enablement-flags-config-fields-permissions-jobs', '#remote-bundles--realm-plugins-isomorphic-realm-server-server', '#sandbox--plugin-bridge'],
   plugins: ['#install--upgrade', '#browse-card', '#whats-included', '#what-the-badges-on-a-listing-mean', '#how-plugins-run', '#when-one-plugin-depends-on-another', '#a-dependency-that-is-off-for-one-site', '#configure', '#configure-site', '#publish-your-own', '#related'],
-  pos: ['#registers', '#the-register', '#platform-fees-at-the-register', '#selling-past-the-count', '#when-something-disconnects', '#reservations', '#related'],
+  pos: ['#registers', '#the-register', '#modifiers', '#selling-past-the-count', '#taking-payment', '#platform-fees-at-the-register', '#when-something-disconnects', '#tips', '#receipts', '#card-readers', '#customer-display', '#reservations', '#related'],
+  posHardware: ['#recommended-kit', '#card-readers', '#receipt-printers', '#add-a-printer', '#what-prints', '#your-logo-on-the-receipt', '#status', '#cash-drawer', '#barcode-scanning', '#label-printers', '#product-labels', '#shipping-labels', '#customer-display-tablet', '#related'],
+  posOperations: ['#shifts-and-the-cash-drawer', '#what-the-reports-show', '#shift-history', '#requiring-a-shift', '#who-rang-it', '#staff-pins', '#customers-at-the-register', '#returns-and-exchanges', '#refund-limits-and-manager-approval', '#printed-receipts', '#related'],
   productsWithAi: ['#write-a-products-copy', '#write-copy-for-many-products', '#when-you-import-products', '#propose-a-first-catalog', '#propose-categories-and-discounts', '#what-the-copy-never-says', '#what-is-sent-to-the-ai-provider', '#who-can-use-it', '#related'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#tips', '#related'],
   publisherHandbook: ['#before-your-first-publish', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#rules-an-email-starter-has-to-meet', '#publishing-a-version', '#before-you-publish', '#review-what-happens-after-you-publish', '#the-two-badges-and-what-each-one-promises', '#asking-to-be-verified', '#testing-a-version-before-it-is-approved', '#watching-your-own-submission', '#disabled-versions', '#private-plugins', '#authoring-your-listing', '#what-your-listing-can-say-about-aglyn', '#versioning--updates', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#getting-paid', '#low-prices-and-processing'],
@@ -901,6 +941,7 @@ export const DOCS_HELP_ANCHORS = {
   responsiveStyling: ['#style-per-breakpoint', '#mute-a-style', '#interaction-states', '#you-can-see-the-state-while-you-style-it', '#fields-you-dont-touch-keep-inheriting', '#states-and-breakpoints-combine', '#focus-state', '#box-stylers', '#spacing-side-names', '#spacing-units', '#spacing-steps', '#spacing-custom-amounts', '#unit-px', '#unit-rem', '#unit-em', '#unit-percent', '#unit-ch', '#unit-viewport', '#unit-small-viewport', '#style-groups', '#borders-without-css', '#picking-a-font', '#gradient-backgrounds', '#visibility-per-device-band', '#scheme-scoped-colors', '#pin-a-color-scheme', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
   revenue: ['#the-two-bases', '#how-each-org-is-treated', '#the-gap', '#where-the-money-came-from', '#gross-versus-net', '#three-costs-the-page-flags-but-does-not-net-out', '#rows-that-need-attention', '#related'],
   runAnAgencyWorkspace: ['#the-model', '#step-1-plan', '#step-2-templates', '#step-3-access', '#step-4-domains', '#step-5-backups', '#step-6-billing', '#step-7-automate', '#checklist', '#related'],
+  salesChannels: ['#turn-on-a-channel', '#keep-the-address-private', '#what-each-product-sends', '#brand-barcode-and-category', '#shipping', '#check-your-products', '#how-fresh-the-feed-is', '#earlier-merchant-center-address', '#turn-off', '#related'],
   salesTaxReturn: ['#choosing-the-period', '#rows-that-need-attention', '#which-rows', '#rows-that-are-excluded-rather-than-flagged', '#where-this-deployment-files', '#tax-filing-precedence', '#tax-filing-secrecy', '#the-figures', '#taxable-purchases', '#refunds', '#aglyns-own-sales-by-jurisdiction', '#facilitated-sales-by-buyer-state', '#exporting-the-working-papers', '#related'],
   sandboxSecurity: ['#a-separate-origin', '#per-manifest-network-policy', '#when-you-cant-declare-the-origin', '#pinned-immutable-artifacts', '#what-this-means-when-you-build', '#related'],
   saveATemplate: ['#start-from-a-template', '#where-to-find-it', '#save-your-site-as-a-template', '#saving-a-single-page-instead', '#tips', '#related'],
@@ -908,7 +949,7 @@ export const DOCS_HELP_ANCHORS = {
   screensAndLayouts: ['#which-one-do-you-want', '#related'],
   securityAndCompliance: ['#what-it-covers', '#contract-documents', '#legal-reacceptance', '#why-the-gaps-are-listed-first', '#reporting-a-vulnerability'],
   selfHosting: ['#the-short-version', '#the-full-runbook', '#who-runs-this-install', '#your-dmca-position-is-your-own', '#addresses', '#tenant-domain', '#tenant-host-cname', '#console-url', '#console-host', '#aglyn-standalone', '#reverse-proxy', '#platform-brand', '#optional-keys', '#scheduled-jobs', '#issue-reports', '#request-geo', '#bucket-cors', '#docs-build', '#honest-limits', '#related'],
-  selfHostingEnvironment: ['#build-vs-runtime', '#firebase', '#firebase-client', '#firebase-admin', '#firebase-unused', '#firestore-storage', '#addresses', '#proxy', '#xff', '#geo', '#secrets', '#sso', '#auth-settings', '#stripe', '#stripe-webhook-events', '#stripe-prices', '#billing-switches', '#email', '#email-provider', '#sequences', '#sequences-microsoft', '#sequences-link-domains', '#analytics', '#first-touch', '#assist', '#video-delivery', '#cron', '#plugins', '#plugin-loader', '#operator', '#brand', '#tax', '#tax-collection', '#tax-filing', '#tax-what-to-do', '#caching', '#domains', '#domains-wildcard', '#domains-webhook', '#domains-vercel', '#domains-custom', '#vercel', '#docs-build', '#image-set', '#build-stamp', '#internal', '#related'],
+  selfHostingEnvironment: ['#build-vs-runtime', '#firebase', '#firebase-client', '#firebase-admin', '#firebase-unused', '#firestore-storage', '#addresses', '#proxy', '#xff', '#geo', '#secrets', '#sso', '#auth-settings', '#stripe', '#stripe-webhook-events', '#stripe-prices', '#billing-switches', '#email', '#email-provider', '#sequences', '#sequences-microsoft', '#sequences-link-domains', '#sms', '#shipping', '#accounting', '#tax-engines', '#marketing-platforms', '#fulfillment-networks', '#mobile', '#analytics', '#first-touch', '#assist', '#video-delivery', '#cron', '#plugins', '#plugin-loader', '#sales-channels', '#operator', '#brand', '#tax', '#tax-collection', '#tax-filing', '#tax-what-to-do', '#caching', '#domains', '#domains-wildcard', '#domains-webhook', '#domains-vercel', '#domains-custom', '#vercel', '#docs-build', '#image-set', '#build-stamp', '#internal', '#related'],
   seo: ['#per-screen-seo', '#how-a-page-title-is-built', '#variables-so-a-title-is-not-a-copy-of-your-site-name', '#site-wide-defaults', '#every-icon-size-is-generated-for-you', '#your-sites-install-details-the-web-app-manifest', '#what-language-your-site-says-it-is-in', '#seo-check', '#target-keywords', '#check-one-page', '#search-engine-visibility', '#the-whole-site', '#a-single-page', '#verify-your-site-with-google-search-console', '#sitemap--robots', '#one-index-one-file-per-section', '#social-cards', '#what-each-kind-of-page-emits', '#structured-data', '#local-businesses', '#ai-agents', '#markdown-for-any-page', '#llmstxt', '#openapijson', '#well-knownapi-catalog', '#crawler-access', '#analytics-integration', '#related'],
   seoByAi: ['#write-a-pages-listing', '#write-a-products-listing', '#fix-what-the-seo-check-finds', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],
   sequences: ['#what-it-is-for', '#sent-from-your-own-mailbox', '#where-it-lives', '#self-hosted', '#connect-a-mailbox', '#send-as', '#daily-cap', '#mailbox-status', '#auto-pause', '#mailbox-actions', '#link-domains', '#compliance-settings', '#allowed-countries', '#do-not-contact-domains', '#import-export-do-not-contact', '#sequences', '#build-a-sequence', '#count-opens', '#send-a-test', '#sequence-status', '#enroll', '#start-at-step', '#mail-gateways', '#cold-contacts', '#enrollments', '#person-history', '#curate', '#sending', '#what-stops-a-sequence', '#unsubscribe', '#related'],
@@ -916,6 +957,7 @@ export const DOCS_HELP_ANCHORS = {
   serviceAndLocationPagesFromADataset: ['#1-model-the-data', '#2-design-the-template', '#3-make-it-the-record-template', '#4-link-to-the-pages', '#what-visitors-and-search-engines-get', '#when-records-go-away', '#locations-team-members-portfolio', '#related'],
   settings: ['#companies', '#create-companies-from-work-email-domains', '#default-owner', '#assignment-rules', '#round-robin', '#email-templates', '#email-capture', '#your-sending-addresses', '#recipes', '#related'],
   sharing: ['#what-a-shared-record-looks-like', '#share-a-record-by-hand', '#several-records-at-once', '#sharing-rules', '#access-read-only-or-read-and-edit', '#sharing-is-not-consent', '#who-can-do-this', '#related'],
+  shipping: ['#zones-and-rates', '#where-parcels-ship-from', '#carrier-accounts', '#shipping-labels'],
   siteBackupAndPackages: ['#what-a-package-carries', '#download-a-backup', '#export-items', '#import-a-package', '#1-upload', '#2-items', '#3-missing-items', '#4-changes', '#5-review', '#6-import', '#undo-an-import', '#moving-a-site-to-another-of-your-sites'],
   siteProtection: ['#where-these-controls-live', '#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#the-layout-built-in-pages-use', '#configure-it', '#related'],
@@ -937,6 +979,9 @@ export const DOCS_HELP_ANCHORS = {
   transferHub: ['#what-you-can-move', '#export-records', '#import-records', '#1-upload', '#2-columns', '#3-values', '#4-matching', '#5-conflicts', '#6-dry-run', '#7-import', '#8-results', '#export-a-package', '#import-a-package', '#resume-an-import-you-left', '#undo-an-import', '#history'],
   troubleshooting: ['#checklist', '#verified-but-not-serving', '#the-site-loads-for-some-people-and-not-others', '#still-stuck', '#related'],
   uptimeAndStatus: ['#the-status-page', '#there-is-no-committed-uptime-percentage', '#where-the-platform-runs', '#reporting-an-outage'],
+  usePirateShip: ['#export', '#labels', '#import', '#related'],
+  useShippingeasy: ['#before-you-start', '#connect', '#what-is-sent', '#ship', '#manage', '#troubleshooting', '#related'],
+  useShipstation: ['#connect', '#what-imports', '#ship', '#manage', '#troubleshooting', '#related'],
   versionsAndPublishing: ['#the-versions-dialog', '#publish--roll-back', '#scheduled-publishing', '#plan-requirements', '#related'],
   video: ['#video-source', '#video-preload', '#video-captions', '#video-lightbox', '#video-wistia', '#video-play-from-a-button', '#video-seo', '#related'],
   views: ['#the-views-control', '#a-view-is-a-link', '#filters', '#filters-on-the-contacts-list', '#filters-on-the-other-lists', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],

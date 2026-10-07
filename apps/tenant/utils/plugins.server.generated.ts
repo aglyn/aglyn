@@ -54,6 +54,7 @@ export const TENANT_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
   },
   {
     id: 'redirects',
+    apiPrefixes: ["redirects"],
     register: {"tenantApi":"registerRedirectsApi"},
     load: () => import('@aglyn/plugins-redirects/server'),
   },
@@ -62,5 +63,11 @@ export const TENANT_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     apiPrefixes: ["hooks","automations"],
     register: {"tenantApi":"registerWorkflowsApi"},
     load: () => import('@aglyn/plugins-workflows/server'),
+  },
+  {
+    id: 'sales-channels',
+    apiPrefixes: ["sales-channels"],
+    register: {"tenantApi":"registerSalesChannelsApi"},
+    load: () => import('@aglyn/plugins-sales-channels/server'),
   },
 ]

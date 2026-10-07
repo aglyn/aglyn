@@ -1,0 +1,145 @@
+{
+  "$comment": "Workspace TypeScript modules the native generators may read (AGL-3620, AGL-3651): the contracts, theme and catalog generators refuse any other. check-mobile-isolation admits each one only while its own imports are pure: listed modules, platform-neutral packages, no DOM, no Node built-in, nothing web- or server-only. The list grows only with that proof; a module that mixes pure and web code is split, never listed.",
+  "modules": [
+    {
+      "path": "libs/aglyn/src/lib/app-utils/host-naming.ts",
+      "why": "Reached by organizations: site naming and slug rules over strings."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/mobile-push.ts",
+      "why": "The push device registry shape, Expo token check, tap data and the account-scope push switch (AGL-3620); no imports at all."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/name-search.ts",
+      "why": "Name-search token normalizers, so an app list search matches the console's search index (AGL-3621)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/organizations.ts",
+      "why": "Whether a member reaches the whole workspace and the scope tokens their reads are admitted by, read by the app's org access (AGL-3622)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/payment-risk.ts",
+      "why": "An order's payment-risk signals and their pure summaries; the native contracts emit the order's paymentRisk from it (AGL-3651)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/platform-brand.ts",
+      "why": "Reached by payment-risk: the platform brand name constants, no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "why": "Reached by organizations: the scope token grammar (org, host, consent group)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/site-wide-outbox.ts",
+      "why": "Reached by the Commerce app's product writes: the site-wide outbox document shape and keys."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/stripe-deployment-mode.ts",
+      "why": "Reached by the commerce model: test or live mode from a plain value, no Stripe SDK."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/tenant-apex.ts",
+      "why": "Reached by host-naming: the tenant apex domain constants."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/constants/orders-list-query.ts",
+      "why": "The orders list query declaration the console grid plans with; the Commerce app screens (AGL-3621) plan the same Firestore query from it."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/constants/product-list-query.ts",
+      "why": "The products list query declaration, shared by the console grid and the Commerce app screens (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
+      "why": "Which buyer emails an order has sent, read by the app's order detail (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
+      "why": "Whether an open dispute blocks a refund, the rule the app's order actions share with the refund route (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
+      "why": "The order record shape and its pure helpers, read by the Commerce app order and sales screens (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
+      "why": "The register's payment ledger, display and receipt shapes and their pure helpers, imports nothing; the native contracts emit an order's payments from it (AGL-3651)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-receipt.ts",
+      "why": "The receipt data an order makes, so the app's printed and shared receipt matches the register's (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce.ts",
+      "why": "The product, collection and store shapes, read by the Commerce app product screens (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/product-channel.ts",
+      "why": "A product's shopping-channel facts (brand, GTIN, MPN, condition, category) and their normalizing, imports nothing; commerce.ts stages them in the product editor (AGL-3637)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/product-modifiers.ts",
+      "why": "A product's register modifiers and their validation, imports nothing; commerce.ts checks them when a product is stored (AGL-3607)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/order-figures.ts",
+      "why": "Integer-cent order totals, so the app's sales figures match the console's to the cent (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "why": "Fulfillment state of an order line, reached by the app's order screens (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/smart-collection-reads.ts",
+      "why": "Smart-collection membership reads over product data, shared with the app's product screens (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/tracking-url.ts",
+      "why": "Carrier tracking-link templates over a tracking number, no I/O (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/printing/print-document.ts",
+      "why": "The receipt print layout as plain ops, which the app renders to a printable page (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/printing/render-text.ts",
+      "why": "The print layout as plain text, for the app's share sheet (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/redirects/src/lib/model/redirects.ts",
+      "why": "The redirect rule's shape and evaluation order, shared by the console page, the tenant serve path and the Redirects mobile screen."
+    },
+    {
+      "path": "libs/shared/ui/jsx/src/lib/const/list-query-plan.ts",
+      "why": "The console's list-plan entry the Commerce app's list page imports; it re-exports the pure list-query grammar (AGL-3622)."
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/hosted-page-screen.ts",
+      "why": "Reached by the redirects model: string screens over a destination URL, no I/O."
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/outbound-phishing-screen.ts",
+      "why": "Reached by the redirects model: pattern tables and pure functions over text."
+    },
+    {
+      "path": "libs/shared/util/tools/src/lib/linear-regex.ts",
+      "why": "Reached by the redirects model: a linear-time regular-expression engine, plain TypeScript."
+    },
+    {
+      "path": "libs/shared/util/tools/src/lib/list-query/list-filter-codecs.ts",
+      "why": "The list filter option and clause shapes and their codecs over the pure filter grammar; the native contracts emit the option shape the list declarations' choices use (AGL-3651)."
+    },
+    {
+      "path": "libs/shared/util/tools/src/lib/list-query/list-filter-sentence.ts",
+      "why": "The pure list filter sentence (AGL-3622), reached by the planner."
+    },
+    {
+      "path": "libs/shared/util/tools/src/lib/list-query/list-filter.ts",
+      "why": "The pure list filter grammar (AGL-3622), reached by the planner."
+    },
+    {
+      "path": "libs/shared/util/tools/src/lib/list-query/list-query-plan.ts",
+      "why": "The pure list query planner (AGL-3622): a list filter becomes the same Firestore constraints on web and native."
+    }
+  ]
+}

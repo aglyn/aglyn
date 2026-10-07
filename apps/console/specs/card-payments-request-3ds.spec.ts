@@ -80,7 +80,27 @@ function creators(): string[] {
     .sort()
 }
 
+/**
+ * Creators whose every PaymentIntent is `card_present`: the card is in a
+ * Stripe Terminal reader, chip or tap, so there is no 3-D Secure to request
+ * and `payment_method_options[card]` names a type the intent does not take.
+ * Held below to that claim: the file must ask for `card_present` and must
+ * not offer the online `card` type anywhere.
+ */
+const CARD_PRESENT_ONLY: Record<string, string> = {
+  'libs/plugins/bookings/src/lib/server/in-person-payment.ts':
+    'A booking paid in person on the native POS app\'s reader (AGL-3654).',
+}
+
 describe('3-D Secure is requested by every card payment, at one seam', () => {
+  it('exempts only creators that really take the card in a reader', () => {
+    for (const file of Object.keys(CARD_PRESENT_ONLY)) {
+      const source = readFileSync(resolve(REPO_ROOT, file), 'utf8')
+      expect([file, /['"]card_present['"]/.test(source)]).toEqual([file, true])
+      expect([file, /['"]card['"]/.test(source)]).toEqual([file, false])
+    }
+  })
+
   it('finds the payment creators it is meant to guard', () => {
     // Pinned so a regex that stops matching cannot pass vacuously.
     const found = creators()
@@ -101,6 +121,7 @@ describe('3-D Secure is requested by every card payment, at one seam', () => {
   it('every creator builds its params through the shared helper', () => {
     const offenders = creators().filter((file) => {
       const source = readFileSync(resolve(REPO_ROOT, file), 'utf8')
+      if (file in CARD_PRESENT_ONLY) return false
       return !/\b(checkoutSessionCardAuthenticationParams|cardAuthenticationParams)\(/.test(
         source,
       )
@@ -192,6 +213,14 @@ const PAYMENT_DOORS: Record<string, DoorClass> = {
   'libs/plugins/commerce/src/lib/server/pos-order.ts': {
     surface: 'signed-in',
     why: 'a register operator rings it up on the console surface',
+  },
+  'libs/plugins/commerce/src/lib/server/pos-terminal.ts': {
+    surface: 'signed-in',
+    why: 'a register operator takes the card through commerce/pos-payment, behind authorizePosStaff',
+  },
+  'libs/plugins/bookings/src/lib/server/in-person-payment.ts': {
+    surface: 'signed-in',
+    why: "a site admin or editor takes the booking's card on the POS reader, behind the in-person gate",
   },
   'libs/plugins/marketplace/src/lib/server/checkout.ts': {
     surface: 'signed-in',

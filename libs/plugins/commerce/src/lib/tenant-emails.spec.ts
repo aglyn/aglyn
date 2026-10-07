@@ -142,4 +142,61 @@ describe('commerce site emails name the store and say only what is true (AGL-343
         'Coffee at this address.',
     )
   })
+
+  it('shipped: names the store and the order, and drops the tracking line when there is none (AGL-3610)', () => {
+    const merge = {
+      'order.number': '#1042',
+      'shipment.summary': '2× House Blend',
+      'shipment.carrier': 'UPS',
+      'shipment.trackingNumber': '1Z1',
+      'shipment.remaining': '',
+      'order.statusUrl': 'https://northwind.example/order-status?o=o&t=t',
+    }
+    const tracked = render('order-shipped', {
+      ...merge,
+      'shipment.tracking': 'Tracking: UPS 1Z1 — https://www.ups.com/track?tracknum=1Z1',
+    })
+    expect(tracked).toContain('Northwind Coffee shipped items from order #1042.')
+    expect(tracked).toContain('Tracking: UPS 1Z1')
+    expect(tracked).toContain(
+      'Track your order: https://northwind.example/order-status?o=o&t=t',
+    )
+    const untracked = render('order-shipped', { ...merge, 'shipment.tracking': '' })
+    expect(untracked).not.toContain('Tracking')
+    expect(untracked).not.toMatch(/\n\s*\n\s*\n/)
+  })
+
+  it('refunded, delivered and canceled each name the store and the order (AGL-3610)', () => {
+    const link = { 'order.number': '#7', 'order.statusUrl': 'https://northwind.example/s' }
+    expect(
+      render('order-refunded', {
+        ...link,
+        'refund.amount': '$12.00',
+        'refund.summary': '',
+        'refund.note': 'The rest of your order is unchanged.',
+      }),
+    ).toContain('Northwind Coffee refunded $12.00 on order #7.')
+    expect(render('order-delivered', { ...link, 'order.summary': '1× Mug' })).toContain(
+      'Northwind Coffee marked order #7 as delivered.',
+    )
+    const canceled = render('order-cancelled', {
+      ...link,
+      'order.summary': '1× Mug',
+      'cancel.note': '',
+    })
+    expect(canceled).toContain('Northwind Coffee canceled order #7.')
+    expect(canceled).not.toMatch(/refunded|will be refunded/)
+  })
+
+  it('receipt: links the order status page (AGL-3610)', () => {
+    expect(
+      render('order-receipt', {
+        'order.summary': '1× Mug — $10.00',
+        'order.total': '$10.00',
+        'order.ref': 'cs_1',
+        'store.receiptFooter': '',
+        'order.statusUrl': 'https://northwind.example/s',
+      }),
+    ).toContain('View your order: https://northwind.example/s')
+  })
 })

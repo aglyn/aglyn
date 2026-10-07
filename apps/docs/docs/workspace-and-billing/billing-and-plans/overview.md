@@ -647,9 +647,10 @@ and a 0% tier still takes 0%.
 
 **In-person sales carry the same rate.** The fee is charged on the sale, not on the
 tender, so a cash sale or a charge-to-room sale at the register is priced exactly like
-a card sale. Card sales have the fee deducted from the Stripe payout; cash and
-room-charge sales have no payout to deduct from, so their fees are added to your next
-monthly invoice as a usage line. See
+a card sale. Card payments have the fee deducted from the Stripe payout; cash, gift-card
+and room-charge payments have no payout to deduct from, so their fees are added to your
+next monthly invoice as a usage line. A split sale does each part its own way, and tips
+carry no platform fee. See
 [POS &amp; reservations](../../commerce-and-bookings/commerce/pos-and-reservations.md#platform-fees-at-the-register).
 
 - **Annual billing** — a toggle on the plan cards; annual billing is the discounted

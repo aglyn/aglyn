@@ -49,12 +49,66 @@ jest.mock('@stripe/stripe-js', () => ({
 /** What `useCheckoutElements()` reports; each test may move it off success. */
 let checkoutState: any
 
+/** The provider's options as last mounted — where the appearance rides. */
+let providerOptions: any
+/** The Payment Element's options as last mounted — where `wallets` rides. */
+let paymentElementOptions: any
+/** The Shipping Address Element's `onChange`, so a test can type an address. */
+let shippingAddressOnChange: ((event: any) => void) | undefined
+
 jest.mock('@stripe/react-stripe-js/checkout', () => ({
   // A pass-through provider: the real one boots Stripe.js against the network.
-  CheckoutElementsProvider: ({ children }: any) => children,
-  PaymentElement: () => <div data-testid="stripe-payment-element" />,
+  CheckoutElementsProvider: ({ children, options }: any) => {
+    providerOptions = options
+    return children
+  },
+  PaymentElement: ({ options }: any) => {
+    paymentElementOptions = options
+    return <div data-testid="stripe-payment-element" />
+  },
+  ShippingAddressElement: ({ onChange }: any) => {
+    shippingAddressOnChange = onChange
+    return <div data-testid="stripe-shipping-address-element" />
+  },
   useCheckoutElements: () => checkoutState,
 }))
+
+const amount = (minorUnitsAmount: number) => ({
+  minorUnitsAmount,
+  amount: `$${(minorUnitsAmount / 100).toFixed(2)}`,
+})
+
+/**
+ * A session in the shape Stripe.js hands `useCheckoutElements()` — the
+ * actions and the session state on one object. The server put an email on it
+ * (the cart's `customer_email`) unless a test says otherwise.
+ */
+function session(overrides: Record<string, any> = {}) {
+  return {
+    confirm: confirmMock,
+    updateEmail: updateEmailMock,
+    updateShippingOption: updateShippingOptionMock,
+    updateShippingAddress: updateShippingAddressMock,
+    email: 'shopper@example.com',
+    status: { type: 'open' },
+    tax: { status: 'ready' },
+    shippingOptions: [],
+    shipping: null,
+    total: {
+      subtotal: amount(5000),
+      discount: amount(0),
+      shippingRate: amount(0),
+      taxExclusive: amount(0),
+      taxInclusive: amount(0),
+      total: amount(5000),
+    },
+    ...overrides,
+  }
+}
+
+const updateEmailMock = jest.fn()
+const updateShippingOptionMock = jest.fn()
+const updateShippingAddressMock = jest.fn()
 
 import {
   StorefrontPaymentElement,
@@ -78,8 +132,17 @@ function mount(props: Partial<Record<string, any>> = {}) {
 }
 
 beforeEach(() => {
-  checkoutState = { type: 'success', checkout: { confirm: confirmMock } }
+  checkoutState = { type: 'success', checkout: session() }
   confirmMock.mockReset()
+  updateEmailMock.mockReset()
+  updateEmailMock.mockResolvedValue({ type: 'success' })
+  updateShippingOptionMock.mockReset()
+  updateShippingOptionMock.mockResolvedValue({ type: 'success' })
+  updateShippingAddressMock.mockReset()
+  updateShippingAddressMock.mockResolvedValue({ type: 'success' })
+  providerOptions = undefined
+  paymentElementOptions = undefined
+  shippingAddressOnChange = undefined
   loadStripeMock.mockClear()
   __resetStripePromises()
   ;(global as any).fetch = fetchSpy
@@ -204,8 +267,23 @@ describe('the browser cannot fulfil', () => {
       .replace(/^\s*\/\/.*$/gm, '')
     expect(code).not.toMatch(/onSuccess|onPaid|onComplete|onFulfil/)
     expect(code).not.toMatch(/fetch\(|siteFetch|XMLHttpRequest|sendBeacon/)
-    // The only Stripe call it may make is the confirm itself.
-    expect(code.match(/checkout\.\w+\(/g) ?? []).toEqual(['checkout.confirm('])
+    // The Stripe calls it may make: the confirm itself, and the session
+    // updates that fill in what the hosted page used to ask for (AGL-3606).
+    // Every one of them goes to Stripe and none of them reports anything.
+    const calls = new Set(
+      (code.match(/checkout\s*\.\s*(\w+)\(/g) ?? []).map((call) =>
+        call.replace(/\s/g, ''),
+      ),
+    )
+    expect(calls.has('checkout.confirm(')).toBe(true)
+    for (const call of calls) {
+      expect([
+        'checkout.confirm(',
+        'checkout.updateEmail(',
+        'checkout.updateShippingOption(',
+        'checkout.updateShippingAddress(',
+      ]).toContain(call)
+    }
   })
 })
 
@@ -242,14 +320,279 @@ describe('a checkout session Stripe cannot load', () => {
     expect(confirmMock).not.toHaveBeenCalled()
   })
 
-  it('holds the pay button until the session has loaded', () => {
+  it('offers a fresh session when one is wired, instead of a dead end', () => {
+    checkoutState = { type: 'error', error: { message: 'expired' } }
+    const onRestart = jest.fn()
+    mount({ onRestart })
+    fireEvent.click(screen.getByRole('button', { name: 'Start checkout again' }))
+    expect(onRestart).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers no pay button until the session has loaded', () => {
     checkoutState = { type: 'loading' }
     mount()
-    const pay = screen.getByRole('button', {
-      name: 'Pay $53.35',
-    }) as HTMLButtonElement
-    expect(pay.disabled).toBe(true)
-    fireEvent.click(pay)
+    expect(screen.queryByRole('button', { name: 'Pay $53.35' })).toBeNull()
+    expect(screen.getByRole('progressbar')).toBeTruthy()
     expect(confirmMock).not.toHaveBeenCalled()
+  })
+
+  it('an EXPIRED session says nothing was charged and restarts on request', () => {
+    // The session can expire while the form is open (24 hours, or sooner on a
+    // replayed attempt). Its confirm would fail; a fresh one is what the
+    // shopper needs, and it must be a new attempt, which the caller mints.
+    checkoutState = {
+      type: 'success',
+      checkout: session({ status: { type: 'expired' } }),
+    }
+    const onRestart = jest.fn()
+    mount({ onRestart })
+    expect(screen.getByRole('alert').textContent).toContain('Nothing was charged')
+    expect(screen.queryByTestId('stripe-payment-element')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Start checkout again' }))
+    expect(onRestart).toHaveBeenCalledTimes(1)
+  })
+
+  it('a session already PAID offers no second payment and no restart', () => {
+    checkoutState = {
+      type: 'success',
+      checkout: session({
+        status: { type: 'complete', paymentStatus: 'paid' },
+      }),
+    }
+    mount({ onRestart: jest.fn() })
+    expect(screen.getByRole('status').textContent).toContain('already paid')
+    expect(screen.queryByRole('button', { name: 'Pay $53.35' })).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Start checkout again' }),
+    ).toBeNull()
+  })
+})
+
+describe('email is required (AGL-3606)', () => {
+  it('shows the email the server put on the session, read-only', () => {
+    mount()
+    expect(screen.getByText('Receipt to shopper@example.com')).toBeTruthy()
+    expect(screen.queryByRole('textbox', { name: /email/i })).toBeNull()
+  })
+
+  it('refuses to confirm without an email when the session has none', async () => {
+    checkoutState = { type: 'success', checkout: session({ email: null }) }
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Pay $53.35' }))
+    await waitFor(() =>
+      expect(
+        screen.getByText('Enter your email for the receipt.'),
+      ).toBeTruthy(),
+    )
+    expect(confirmMock).not.toHaveBeenCalled()
+    expect(updateEmailMock).not.toHaveBeenCalled()
+  })
+
+  it('sends the typed email to the session BEFORE confirming', async () => {
+    checkoutState = { type: 'success', checkout: session({ email: null }) }
+    const order: string[] = []
+    updateEmailMock.mockImplementation(async () => {
+      order.push('updateEmail')
+      return { type: 'success' }
+    })
+    confirmMock.mockImplementation(async () => {
+      order.push('confirm')
+      return { type: 'success' }
+    })
+    mount()
+    fireEvent.change(screen.getByRole('textbox', { name: /email/i }), {
+      target: { value: ' buyer@example.com ' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Pay $53.35' }))
+    await waitFor(() => expect(confirmMock).toHaveBeenCalled())
+    expect(updateEmailMock).toHaveBeenCalledWith('buyer@example.com')
+    expect(order).toEqual(['updateEmail', 'confirm'])
+  })
+
+  it('shows Stripe\'s email rejection and does not confirm', async () => {
+    checkoutState = { type: 'success', checkout: session({ email: null }) }
+    updateEmailMock.mockResolvedValue({
+      type: 'error',
+      error: { code: 'invalidEmail', message: 'Your email is invalid.' },
+    })
+    mount()
+    fireEvent.change(screen.getByRole('textbox', { name: /email/i }), {
+      target: { value: 'nope' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Pay $53.35' }))
+    await waitFor(() =>
+      expect(screen.getByText('Your email is invalid.')).toBeTruthy(),
+    )
+    expect(confirmMock).not.toHaveBeenCalled()
+    expect(
+      (screen.getByRole('button', { name: 'Pay $53.35' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false)
+  })
+
+  it('prefills the field from what the storefront already has', () => {
+    checkoutState = { type: 'success', checkout: session({ email: null }) }
+    mount({ defaultEmail: 'known@example.com' })
+    expect(
+      (screen.getByRole('textbox', { name: /email/i }) as HTMLInputElement)
+        .value,
+    ).toBe('known@example.com')
+  })
+})
+
+describe('shipping appears only when the session ships (AGL-3606)', () => {
+  const options = [
+    { id: 'shr_std', displayName: 'Standard', ...amount(799), currency: 'usd', deliveryEstimate: null },
+    { id: 'shr_exp', displayName: 'Express', ...amount(1999), currency: 'usd', deliveryEstimate: null },
+  ]
+
+  it('mounts no address form and no picker for a store that does not ship', () => {
+    mount()
+    expect(screen.queryByTestId('stripe-shipping-address-element')).toBeNull()
+    expect(screen.queryByRole('radiogroup')).toBeNull()
+    expect(screen.queryByText('Shipping')).toBeNull()
+  })
+
+  it('mounts the address form and lists the session\'s own options', () => {
+    checkoutState = {
+      type: 'success',
+      checkout: session({
+        shippingOptions: options,
+        shipping: { shippingOption: options[0], taxAmounts: null },
+      }),
+    }
+    mount()
+    expect(screen.getByTestId('stripe-shipping-address-element')).toBeTruthy()
+    expect(
+      (screen.getByRole('radio', { name: 'Standard — $7.99' }) as HTMLInputElement)
+        .checked,
+    ).toBe(true)
+    expect(screen.getByRole('radio', { name: 'Express — $19.99' })).toBeTruthy()
+  })
+
+  it('selects through updateShippingOption', async () => {
+    checkoutState = {
+      type: 'success',
+      checkout: session({
+        shippingOptions: options,
+        shipping: { shippingOption: options[0], taxAmounts: null },
+      }),
+    }
+    mount()
+    fireEvent.click(screen.getByRole('radio', { name: 'Express — $19.99' }))
+    await waitFor(() =>
+      expect(updateShippingOptionMock).toHaveBeenCalledWith('shr_exp'),
+    )
+  })
+
+  it('pre-selects the first rate when the session has none selected', async () => {
+    checkoutState = {
+      type: 'success',
+      checkout: session({ shippingOptions: options, shipping: null }),
+    }
+    mount()
+    await waitFor(() =>
+      expect(updateShippingOptionMock).toHaveBeenCalledWith('shr_std'),
+    )
+    expect(updateShippingOptionMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-prices on a COMPLETE address only, once it settles', async () => {
+    jest.useFakeTimers()
+    try {
+      checkoutState = {
+        type: 'success',
+        checkout: session({
+          shippingOptions: options,
+          shipping: { shippingOption: options[0], taxAmounts: null },
+        }),
+      }
+      mount()
+      const value = {
+        name: 'Ada Buyer',
+        address: { line1: '1 Main St', city: 'Austin', state: 'TX', postal_code: '78701', country: 'US' },
+      }
+      shippingAddressOnChange?.({ complete: false, value })
+      jest.advanceTimersByTime(1000)
+      expect(updateShippingAddressMock).not.toHaveBeenCalled()
+      shippingAddressOnChange?.({ complete: true, value })
+      shippingAddressOnChange?.({ complete: true, value })
+      jest.advanceTimersByTime(1000)
+      expect(updateShippingAddressMock).toHaveBeenCalledTimes(1)
+      expect(updateShippingAddressMock).toHaveBeenCalledWith(value)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+})
+
+describe('the live total comes from the session (AGL-3606)', () => {
+  it('shows subtotal, shipping, tax and total as Stripe computed them', () => {
+    const option = { id: 'shr_std', displayName: 'Standard', ...amount(799), currency: 'usd', deliveryEstimate: null }
+    checkoutState = {
+      type: 'success',
+      checkout: session({
+        shippingOptions: [option],
+        shipping: { shippingOption: option, taxAmounts: null },
+        total: {
+          subtotal: amount(5000),
+          discount: amount(0),
+          shippingRate: amount(799),
+          taxExclusive: amount(413),
+          taxInclusive: amount(0),
+          total: amount(6212),
+        },
+      }),
+    }
+    mount()
+    const summary = screen.getByTestId('storefront-checkout-total').textContent
+    expect(summary).toContain('Subtotal$50.00')
+    expect(summary).toContain('Shipping$7.99')
+    expect(summary).toContain('Tax$4.13')
+    expect(summary).toContain('Total$62.12')
+  })
+
+  it('says tax waits on the address instead of showing a zero', () => {
+    checkoutState = {
+      type: 'success',
+      checkout: session({ tax: { status: 'requires_shipping_address' } }),
+    }
+    mount()
+    expect(
+      screen.getByTestId('storefront-checkout-total').textContent,
+    ).toContain('Calculated from your address')
+  })
+})
+
+describe('the form wears the site theme (AGL-3606)', () => {
+  it('passes an appearance built from the theme to the provider', () => {
+    mount()
+    const appearance = providerOptions?.elementsOptions?.appearance
+    expect(appearance).toBeTruthy()
+    // The default MUI theme's tokens — what a storefront without a custom
+    // theme renders under — reach Stripe as variables.
+    expect(appearance.variables.colorPrimary).toBe('#1976d2')
+    expect(appearance.variables.borderRadius).toBe('4px')
+    expect(appearance.variables.fontFamily).toContain('Roboto')
+    expect(providerOptions.elementsOptions.fonts).toEqual([
+      {
+        cssSrc: expect.stringContaining('fonts.googleapis.com/css2?family=Roboto'),
+      },
+    ])
+    expect(providerOptions.clientSecret).toBe('cs_test_1_secret_abc')
+  })
+})
+
+describe('the wallets the merchant hid (AGL-3629)', () => {
+  it('passes nothing when the merchant hid nothing, so every wallet the device supports shows', () => {
+    mount()
+    expect(paymentElementOptions).toBeUndefined()
+  })
+
+  it('hands the Payment Element the wallets option the checkout answered with', () => {
+    mount({ wallets: { applePay: 'never', googlePay: 'auto', link: 'never' } })
+    expect(paymentElementOptions).toEqual({
+      wallets: { applePay: 'never', googlePay: 'auto', link: 'never' },
+    })
   })
 })

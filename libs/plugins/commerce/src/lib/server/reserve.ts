@@ -458,6 +458,15 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
           }
         : {}),
     })
+    // The merchant's payment method choices hold for a stay too (AGL-3629).
+    CommerceModel.appendStorefrontPaymentMethodParams(
+      params,
+      CommerceModel.resolveStorefrontPaymentMethodControls(
+        CommerceModel.normalizeStorefrontPaymentMethodSettings(
+          storeSnapshot.get('paymentMethods'),
+        ),
+      ),
+    )
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',
       {

@@ -16,24 +16,22 @@
  */
 
 import {
-  EMAIL_STATE_LABELS,
-  EMAIL_STATE_STATUSES,
   CRM_LEAD_STATUS_LABELS,
   CRM_LEAD_OPEN_STATUSES,
   CRM_LEAD_SCOPED_CAMPAIGNS_FIELD,
   CRM_LEAD_SOURCE_DIRECTION_FIELD,
   CRM_LEAD_STATUSES,
-  type EmailStateStatus,
   type CrmLeadStatus,
   type CrmPicklist,
   crmLeadSourceKey,
   crmPicklistKey,
-} from '@aglyn/aglyn'
-import type { CrmViewFilterClause } from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/crm'
+import { EMAIL_STATE_LABELS, EMAIL_STATE_STATUSES, type EmailStateStatus } from '@aglyn/aglyn/app-utils/email-state'
+import type { CrmViewFilterClause } from '@aglyn/aglyn/app-utils/crm'
 import { SCOPED_SEARCH_JOIN } from '@aglyn/aglyn/app-utils/name-search'
-import type { ListFilterField, ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
-import { type ListGridFilterCodec, listSelectCodec } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import type { ListQueryDeclaration, ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import type { ListFilterField, ListFilterRequest } from '@aglyn/shared-util-tools/list-query/list-filter'
+import { type ListGridFilterCodec, listSelectCodec } from '@aglyn/shared-util-tools/list-query/list-filter-codecs'
+import type { ListQueryDeclaration, ListQuerySort } from '@aglyn/shared-util-tools/list-query/list-query-plan'
 import {
   CRM_LIST_SEARCH,
   type CrmClauseAsked,

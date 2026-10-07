@@ -102,11 +102,7 @@ const TSC = join(root, 'node_modules', '@typescript', 'native', 'bin', 'tsc')
 //   one program with conflicting globals.
 // - tools/: no .ts inputs (scripts are .mjs) -> TS18003.
 // - apps/docs: standalone Docusaurus package with its own TypeScript.
-const SKIP = [
-  'tsconfig.base.json',
-  'tools/',
-  'apps/docs/',
-]
+const SKIP = ['tsconfig.base.json', 'tools/', 'apps/docs/']
 
 // `.claude` holds agent worktrees — separate checkouts of this same repo, each
 // with its own copy of every tsconfig and no `node_modules`. Walking them made

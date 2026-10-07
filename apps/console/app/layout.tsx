@@ -21,10 +21,15 @@ import { TITLE_TEMPLATE } from './page-title'
 // Deep import (not the barrel) so this Server Component doesn't pull the theme
 // lib's createContext HOCs into the RSC graph (AGL-405).
 import { APP_EMOTION_CACHE_OPTIONS } from '@aglyn/shared-ui-theme/util/emotion-cache'
+import {
+  robotoFlexFontFaceCss,
+  robotoFlexPreloadUrls,
+} from '@aglyn/shared-ui-theme/util/roboto-flex'
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter'
 import type { Metadata, Viewport } from 'next'
 import { headers } from 'next/headers'
 import type { ReactNode } from 'react'
+import { preload } from 'react-dom'
 import Providers from './providers'
 import '../public/_static/styles/styles.css'
 
@@ -151,6 +156,12 @@ import WebVitalsReporter from '../components/web-vitals-reporter.component'
 
 export const dynamic = 'force-dynamic'
 
+// The brand face, served from this origin (AGL-3655). The theme's stack names
+// "Roboto Flex" first; these rules are what make that name resolve on a
+// machine that does not have it installed. Built once per server, not per
+// request: they never change between requests.
+const ROBOTO_FLEX_CSS = robotoFlexFontFaceCss()
+
 export default async function RootLayout({
   children,
 }: {
@@ -171,8 +182,24 @@ export default async function RootLayout({
   // prop; `force-dynamic` above already puts every render inside a request,
   // so `headers()` costs nothing it was not already paying.
   const nonce = (await headers()).get('x-nonce') ?? undefined
+  // Only the Latin file: it is the one every page paints with. The
+  // Latin-Extended file is fetched by `unicode-range` when a page needs it.
+  for (const href of robotoFlexPreloadUrls()) {
+    preload(href, {
+      as: 'font',
+      type: 'font/woff2',
+      crossOrigin: 'anonymous',
+      fetchPriority: 'high',
+    })
+  }
   return (
     <html lang="en">
+      <head>
+        {/* Plain rules, not `next/font`: next/font renames the family to a
+            hash, and the theme's stack, the theme editor's "Theme default"
+            and the native apps all name it "Roboto Flex". */}
+        <style dangerouslySetInnerHTML={{ __html: ROBOTO_FLEX_CSS }} />
+      </head>
       <body>
         <AppRouterCacheProvider options={APP_EMOTION_CACHE_OPTIONS}>
           <Providers nonce={nonce}>

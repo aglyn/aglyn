@@ -47,8 +47,11 @@ import {
   AI_SIMILAR_PAGES_MIN,
   aiDoctrineViolationText,
   detectPublishIntent,
+  aiSettleCutHeadings,
+  aiSettleDisagreeingNodes,
   aiSettlePlanLayouts,
   aiSettlePlanRefs,
+  aiSettleWrittenGridItems,
   validateAiBuildPlan,
   validateAiDoctrineTree,
   type AiCopyFraming,
@@ -284,6 +287,12 @@ export const AI_DOCTRINE_KIND_SCOPE: Readonly<Record<string, AiDoctrineScope>> =
   // Logic by AI (AGL-3603): a function's or a variable's values, which the
   // logic editor takes, composing nothing.
   logic: 'fields',
+  // The layout language (AGL-3660): a page or a site's frame designed in a
+  // short form the compiler turns into the tree, which the compiler — not the
+  // model — holds to the building rules. The language's own instructions say
+  // what the writing rules ask of its words.
+  'layout-page': 'fields',
+  'layout-frame': 'fields',
 }
 
 /** The scope for a kind; `documents` unless the kind names another. */
@@ -599,7 +608,10 @@ export function aiDoctrineTreeCheck(
   otherPages: readonly AiDoctrineTree[] = [],
 ): AiGenerationCheck<AiValidatedTree> {
   return (answer) => {
-    const input = aiAnswerTree(answer)
+    // A child named and never written, an element held by nothing, a heading
+    // whose first clause fits its ceiling and a Grid container's unsized items
+    // are settled where each has one reading before the tree is read (AGL-3596).
+    const input = aiSettleWrittenGridItems(aiSettleCutHeadings(aiSettleDisagreeingNodes(aiAnswerTree(answer))))
     const report = validateAiDoctrineTree(input, kind, context, otherPages)
     if (!report.tree || !report.score) {
       return { value: null, violations: report.violations }

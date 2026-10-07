@@ -14,6 +14,13 @@
       "description": "Sequences (AGL-2974): one-to-one email sequences from a rep's own connected mailbox, logged in the CRM. OFF by default, staff preview only. It also needs the outreach entitlement, which no plan carries, so a customer gets it only by a per-org override.",
       "valueType": "JSON"
     },
+    "release_accounting": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "Accounting (AGL-3614): QuickBooks Online and Xero sync of commerce sales, refunds, fees and payouts. OFF by default; turn on only once the console has an Intuit or Xero app's credentials.",
+      "valueType": "JSON"
+    },
     "release_bookings": {
       "defaultValue": {
         "value": "{\"enabled\":true,\"rolloutPercent\":0}"
@@ -107,9 +114,9 @@
     },
     "release_native_checkout": {
       "defaultValue": {
-        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+        "value": "{\"enabled\":true,\"rolloutPercent\":0,\"note\":\"Released to every workspace 2026-10-06 (AGL-3606)\"}"
       },
-      "description": "Pay for a plan without leaving the console - Stripe embedded Checkout instead of a redirect. OFF by default until a real card has been through it.",
+      "description": "In-page storefront checkout: shoppers pay on the merchant's site (Payment Element) instead of checkout.stripe.com. Released to every workspace 2026-10-06 (AGL-3606). Off returns every storefront to the redirect.",
       "valueType": "JSON"
     },
     "release_edit_bar": {

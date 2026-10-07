@@ -23,6 +23,7 @@ import type {
 } from '@aglyn/aglyn/server'
 import { saleProcessingCostCents } from '@aglyn/aglyn/server'
 import { posOrderHandler } from './pos-order'
+import { defaultPosOpsDeps, mintPosAssertion } from './pos-ops-gate'
 
 /**
  * POS order idempotency (AGL-1691).
@@ -2553,5 +2554,190 @@ describe('a variant nobody has priced yet at the register (AGL-2916)', () => {
     }
     expect(orderDocs()).toHaveLength(0)
     expect(stripeCalls).toHaveLength(0)
+  })
+})
+
+/**
+ * AN OPEN SALE (AGL-3607): priced exactly like every tender, written pending
+ * with an empty ledger and the sale's take, and no money moved.
+ */
+describe('the open tender (AGL-3607)', () => {
+  it('writes a pending sale with an empty ledger, the take and no Stripe call', async () => {
+    {
+      const result = await post({ payment: 'open' })
+      expect(result.status).toBe(200)
+      expect(result.body).toMatchObject({ dueCents: 400 })
+      const order = orderDocs()[0]
+      expect(order).toMatchObject({
+        status: 'pending',
+        channel: 'pos',
+        registerId: 'register-1',
+        cashierId: 'cashier-1',
+        payments: [],
+        posFeeOrgId: 'org-1',
+      })
+      expect(order?.posTakeFeeCents).toBe(order?.totals?.feeCents)
+      expect(stripeCalls).toHaveLength(0)
+    }
+  })
+
+  it('records the tender on a single-tender cash sale', async () => {
+    await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(orderDocs()[0]?.payments).toEqual([
+      expect.objectContaining({
+        method: 'cash',
+        amountCents: 400,
+        status: 'succeeded',
+        cashTenderedCents: 500,
+        changeCents: 100,
+      }),
+    ])
+  })
+})
+
+describe('what a register sale carries (AGL-3609)', () => {
+  it("stamps the register's open shift, so the X and Z reports count the sale", async () => {
+    docs.set('hosts/host-1/registers/register-1', {
+      ...docs.get('hosts/host-1/registers/register-1'),
+      openShiftId: 'shift-9',
+    })
+    await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(orderDocs()[0]).toMatchObject({ shiftId: 'shift-9', cashierId: 'cashier-1' })
+  })
+
+  it('refuses the sale when the site requires an open shift and none is', async () => {
+    mockPluginSettings = { posRequireOpenShift: true }
+    const result = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(result.status).toBe(409)
+    expect(result.body).toEqual({ error: 'Open a shift on this register before ringing a sale.' })
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('attaches the customer the lookup found, and takes their email for the sale', async () => {
+    await post({
+      payment: 'cash',
+      cashReceivedCents: 500,
+      customer: { kind: 'crm', id: 'rec_1', name: 'Dana Diaz', email: 'Dana@Example.com', phone: '555' },
+    })
+    const order = orderDocs()[0]
+    expect(order).toMatchObject({
+      customerEmail: 'dana@example.com',
+      customerName: 'Dana Diaz',
+      customerRecord: { kind: 'crm', id: 'rec_1' },
+    })
+    expect(order).not.toHaveProperty('customerPhone')
+  })
+
+  it('records the cashier a PIN switched in, on the sale, its payment and its discount', async () => {
+    process.env.TOKEN_SIGNING_SECRET = 'test-signing-secret'
+    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'editor', 'cashier-2': 'editor' } })
+    const { token } = mintPosAssertion(defaultPosOpsDeps(), {
+      hostId: 'host-1',
+      registerId: 'register-1',
+      memberUid: 'cashier-2',
+      purpose: 'cashier',
+    })
+    await post({ payment: 'cash', cashReceivedCents: 500, discountPct: 10, cashierAssertion: token })
+    const order = orderDocs()[0]
+    expect(order).toMatchObject({ cashierId: 'cashier-2', discountBy: 'cashier-2' })
+    expect(order?.payments?.[0]?.cashierId).toBe('cashier-2')
+    delete process.env.TOKEN_SIGNING_SECRET
+  })
+})
+
+describe('register modifiers are priced by the server (AGL-3607)', () => {
+  beforeEach(() => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Flat white',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 4, inventory: null }],
+      modifierGroups: [
+        {
+          id: 'milk',
+          name: 'Milk',
+          min: 1,
+          max: 1,
+          options: [
+            { id: 'whole', name: 'Whole milk', priceCents: 0 },
+            { id: 'oat', name: 'Oat milk', priceCents: 75 },
+          ],
+        },
+        {
+          id: 'extras',
+          name: 'Extras',
+          min: 0,
+          max: 2,
+          options: [
+            { id: 'shot', name: 'Extra shot', priceCents: 100 },
+            { id: 'syrup', name: 'Vanilla', priceCents: 50 },
+            { id: 'cream', name: 'Cream', priceCents: 50 },
+          ],
+        },
+      ],
+    })
+  })
+
+  it('adds each chosen option to the unit price and names it on the line', async () => {
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 2000,
+      lines: [
+        {
+          productId: 'product-1',
+          quantity: 2,
+          modifiers: [
+            { groupId: 'milk', optionId: 'oat' },
+            { groupId: 'extras', optionId: 'shot' },
+          ],
+          // A register naming its own price is ignored.
+          unitAmountCents: 1,
+        },
+      ],
+    })
+    expect(result.status).toBe(200)
+    const line = (orderDocs()[0]?.lineItems as any[])[0]
+    expect(line).toMatchObject({
+      unitAmountCents: 575,
+      quantity: 2,
+      variantLabel: 'Oat milk, Extra shot',
+      modifiers: [
+        { groupId: 'milk', optionId: 'oat', group: 'Milk', name: 'Oat milk', priceCents: 75 },
+        { groupId: 'extras', optionId: 'shot', group: 'Extras', name: 'Extra shot', priceCents: 100 },
+      ],
+    })
+    expect((orderDocs()[0]?.totals as any).itemsCents).toBe(1150)
+  })
+
+  it.each([
+    ['a required group left empty', [], 'Choose milk'],
+    ['a choice the product does not offer', [{ groupId: 'milk', optionId: 'soy' }], 'no longer offered'],
+    [
+      'more choices than the group allows',
+      [
+        { groupId: 'milk', optionId: 'whole' },
+        { groupId: 'extras', optionId: 'shot' },
+        { groupId: 'extras', optionId: 'syrup' },
+        { groupId: 'extras', optionId: 'cream' },
+      ],
+      'at most 2',
+    ],
+    [
+      'one choice twice',
+      [
+        { groupId: 'milk', optionId: 'oat' },
+        { groupId: 'milk', optionId: 'oat' },
+      ],
+      'picked twice',
+    ],
+  ])('refuses %s, before any sale is written', async (_case, modifiers, message) => {
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 2000,
+      lines: [{ productId: 'product-1', quantity: 1, modifiers }],
+    })
+    expect(result.status).toBe(400)
+    expect(String(result.body.error)).toContain(message)
+    expect(orderDocs()).toHaveLength(0)
   })
 })

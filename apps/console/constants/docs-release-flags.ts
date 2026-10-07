@@ -109,30 +109,6 @@ export interface FlagDocPage {
 export const FLAG_DOC_PAGES: Partial<
   Record<ReleaseFlagKey, readonly FlagDocPage[]>
 > = {
-  // AGL-1132 / AGL-1944. This flag was excused as undocumentable while it was
-  // console-only: "you are taken to Stripe to pay" stayed true either way, so
-  // there was nothing for a customer to read. AGL-1944 changed that. The
-  // STOREFRONT half is a merchant-visible change to how their own shoppers
-  // buy — the card form opens on their pages instead of Stripe's — and a
-  // merchant deciding whether to ask for it needs to know what does and does
-  // not change about a sale. So the excuse no longer holds and the flag moves
-  // here.
-  release_native_checkout: [
-    {
-      path: 'docs/guides/commerce-end-to-end.md',
-      // Windowed on the mention rather than the top of the page: this guide
-      // covers the whole commerce flow and only one SECTION of it is flagged.
-      // A bare /rolling out/ would keep matching some unrelated paragraph long
-      // after this disclosure came down.
-      disclosure: [
-        /### Paying without leaving your site[\s\S]{0,900}\*\*Rolling out\.\*\*[\s\S]{0,200}off by default/,
-      ],
-      checkNoPriceClaim: false,
-      priceClaimNote:
-        'An aggregate guide: it opens with a `:::info Plan availability` admonition for COMMERCE itself, which is shipped and paid-for and has nothing to do with this flag. A whole-file price check here would fail on that admonition forever, and defanging it would remove the guard from the pages that need it.',
-    },
-  ],
-
   // AGL-2974. The flag closes the Sequences console hub and its API routes
   // together, and the one page about it is ABOUT the feature, so it takes the
   // admonition treatment, whole-file. No plan carries the entitlement either,
@@ -311,6 +287,24 @@ export const FLAG_DOC_PAGES: Partial<
       checkNoPriceClaim: false,
       priceClaimNote:
         'The theme editor page opens with a `:::info Plan availability` admonition for the editor itself, which ships on every plan and has nothing to do with this flag.',
+    },
+  ],
+
+  // AGL-3614. The flag closes the organization's Accounting tab, and each of
+  // the two guides is ABOUT connecting one ledger to it, so both take the
+  // admonition, whole-file. They are also `unlisted: true` until the flag is
+  // on, which keeps them out of the sidebar and the help registry; the
+  // disclosure is what covers a reader who arrives by direct link.
+  release_accounting: [
+    {
+      path: 'docs/commerce-and-bookings/commerce/connect-quickbooks-online.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/commerce-and-bookings/commerce/connect-xero.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
     },
   ],
 }

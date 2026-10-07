@@ -114,7 +114,7 @@ afterEach(() => {
 async function openDialog(zone: string, title: string) {
   const Widget = widgetFor(zone)
   render(<Widget {...zoneProps} />)
-  fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
   const dialog = screen.getByRole('dialog')
   expect(within(dialog).getByText(title)).toBeTruthy()
   return dialog
@@ -170,10 +170,11 @@ describe('the entries are registered on the lists an email job fills', () => {
     ])
   })
 
-  it('draws at once and asks nothing of a server until it is used (AGL-3601)', () => {
+  it('draws at once and asks nothing of a server until it is used (AGL-3601)', async () => {
     const Widget = widgetFor('hostEmailTemplates')
     render(<Widget {...zoneProps} />)
-    expect(screen.getByRole('button', { name: 'Create with AI' })).toBeTruthy()
+    // At once means with no request; the code itself loads lazily (AGL-3649).
+    expect(await screen.findByRole('button', { name: 'Create with AI' })).toBeTruthy()
     expect(mockFetch).not.toHaveBeenCalled()
   })
 })

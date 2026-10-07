@@ -845,6 +845,18 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   hostTheme: 'hostTheme',
   /**
+   * Inside the theme editor's Typography card (AGL-3656): the control that
+   * chooses the site's fonts. Props: {@link ConsoleThemeEditorFontsZoneProps}
+   * — the site, the editor's draft, and `updateDraft`, which changes the
+   * draft as any of the editor's own controls does.
+   *
+   * A widget here edits the draft and never writes: the editor's Save keeps
+   * the change and Discard drops it, with the preview beside it following
+   * every step. With no widget the editor offers its own short list of
+   * fonts, so a workspace without a fonts plugin can still choose one.
+   */
+  themeEditorFonts: 'themeEditorFonts',
+  /**
    * The staff overview, among its platform-wide cards (AGL-3080). No props:
    * the overview is about the platform, not one org, so a widget here reads
    * what its plugin holds across every workspace through its own staff
@@ -1453,6 +1465,19 @@ export interface ConsoleHostThemeZoneProps {
   proposeDraft: (theme: HostTheme, key: string) => void
 }
 
+/** What the `themeEditorFonts` zone hands each widget (AGL-3656). */
+export interface ConsoleThemeEditorFontsZoneProps {
+  /** The site whose theme is being edited; `null` on an editor that names none. */
+  hostId: string | null
+  /** The editor's draft: the saved theme with every unsaved edit on it. */
+  draft: HostTheme
+  /**
+   * Changes the draft. The updater gets the draft as it is when the change
+   * applies, so two edits in one tick both land.
+   */
+  updateDraft: (updater: (draft: HostTheme) => HostTheme) => void
+}
+
 /**
  * The zones on the STAFF pages (AGL-2939): the staff overview, the staff org
  * page, its detail zone, and the staff user page.
@@ -1917,6 +1942,48 @@ export interface ConsoleStaffPage {
   Component: ComponentType<ConsoleStaffPageProps>
 }
 
+/** What the console's generic public route hands a public page. */
+export interface ConsolePublicPageProps {
+  /** The plugin that registered the page, the URL's first segment after `/kiosk`. */
+  pluginId: PluginId
+  /** The page's own path, as it registered it (`/display`). */
+  path: string
+}
+
+/**
+ * A full-screen console page that needs NO staff session (AGL-3608): served
+ * at `/kiosk/{pluginId}{path}` by the console's generic public route, outside
+ * the workspace shell, with only the console theme around it.
+ *
+ * The case is a device a business sets down in front of the public — a
+ * screen facing a customer, a sign-in tablet at a front desk — which is
+ * nobody's console session and must never become one. The shell draws no
+ * nav, no workspace, no org switcher and no plugin providers here, and the
+ * route loads this one plugin's console bundle and nothing else.
+ *
+ * Neither the extension's `featureFlag` nor its `permission` applies: there is
+ * no member to ask. The page proves itself to its own API routes — a pairing
+ * code exchanged for a device token, say — and every read it makes must be
+ * refused server-side without that proof. Treat everything the page renders
+ * as visible to whoever is standing in front of the device.
+ *
+ * The plugin also declares each path in its manifest as
+ * `contributes.console.publicRoutes`, which is what lets the route load the
+ * bundle only for a path that exists. First-party plugins only: the route
+ * reads the console's generated manifest, never a marketplace install.
+ */
+export interface ConsolePublicPage {
+  /**
+   * The path beneath `/kiosk/{pluginId}`, with its leading slash
+   * (`/display`). Matched exactly. It is in URLs saved on devices — treat it
+   * as persisted.
+   */
+  path: string
+  /** The browser tab's title, which is also what a home-screen shortcut shows. */
+  title: string
+  Component: ComponentType<ConsolePublicPageProps>
+}
+
 export interface ConsoleExtension {
   pluginId: PluginId
   displayName: string
@@ -2002,6 +2069,12 @@ export interface ConsoleExtension {
    * Neither `featureFlag` nor `permission` applies to them.
    */
   staffPages?: readonly ConsoleStaffPage[]
+  /**
+   * Full-screen pages that need no staff session (AGL-3608) — see
+   * {@link ConsolePublicPage}. Neither `featureFlag` nor `permission` applies
+   * to them.
+   */
+  publicPages?: readonly ConsolePublicPage[]
   /**
    * App-level providers the shell mounts around every console page
    * (AGL-419) — e.g. the marketplace plugin's AI-assist provider.
@@ -2317,6 +2390,58 @@ export function resolveConsoleStaffPage(
       `[aglyn] staff page "/admin/${id}" is claimed by more than one plugin ` +
         `(${owners.join(', ')}); refusing to guess which one owns it. ` +
         "Change one plugin's staff page id.",
+    )
+    return undefined
+  }
+  return matches[0]
+}
+
+/** A public page flattened with its owning extension's id. */
+export interface ConsolePublicPageEntry extends ConsolePublicPage {
+  pluginId: PluginId
+}
+
+/** `pos-display`, `/pos-display/` and `/pos-display` all name `/pos-display`. */
+export function normalizeConsolePublicPath(path: string): string {
+  return `/${String(path ?? '').split('/').filter(Boolean).join('/')}`
+}
+
+/** Every registered public page, in registration order. */
+export function listConsolePublicPages(
+  enabledPluginIds?: readonly PluginId[],
+): ConsolePublicPageEntry[] {
+  return listConsoleExtensions(enabledPluginIds).flatMap((extension) =>
+    (extension.publicPages ?? []).map((page) => ({
+      ...page,
+      path: normalizeConsolePublicPath(page.path),
+      pluginId: extension.pluginId,
+    })),
+  )
+}
+
+/**
+ * The public page at `/kiosk/{pluginId}{path}` (AGL-3608), or `undefined`.
+ *
+ * Scoped to the ONE plugin the URL names, because the registry is a
+ * session-wide union (AGL-758): a device that once loaded another plugin
+ * must not have that plugin answer a path in this one's namespace. Two
+ * extensions of the same plugin claiming one path resolve to nothing and
+ * say so, the rule {@link resolveConsoleStaffPage} applies to ids.
+ */
+export function resolveConsolePublicPage(
+  pluginId: PluginId,
+  path: string,
+): ConsolePublicPageEntry | undefined {
+  if (!pluginId) return undefined
+  const wanted = normalizeConsolePublicPath(path)
+  if (wanted === '/') return undefined
+  const matches = listConsolePublicPages([pluginId]).filter(
+    (page) => page.path === wanted,
+  )
+  if (matches.length > 1) {
+    console.error(
+      `[aglyn] public page "/kiosk/${pluginId}${wanted}" is registered more ` +
+        'than once; refusing to guess which one to serve.',
     )
     return undefined
   }

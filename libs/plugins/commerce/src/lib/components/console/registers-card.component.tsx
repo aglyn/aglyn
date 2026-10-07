@@ -23,8 +23,6 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, Chip, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import {
   collection,
-  deleteDoc,
-  doc,
   getCountFromServer,
   limit,
   query,
@@ -35,7 +33,9 @@ import {
   useFirestoreCollection,
   useHostResourceApi,
   useOrgPlan,
+  useUser,
 } from '@aglyn/tenant-feature-instance'
+import { posReadersCall } from './pos/pos-api'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface RegistersCardProps {
@@ -58,6 +58,7 @@ export interface RegistersCardProps {
 export function RegistersCard(props: RegistersCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const createHostResource = useHostResourceApi()
@@ -201,12 +202,23 @@ export function RegistersCard(props: RegistersCardProps) {
         .then(() => true)
         .catch(() => false)
       if (!confirmed) return
-      await deleteDoc(doc(firestore, 'hosts', hostId, 'registers', register.$id))
+      // On the server (AGL-3617): the rules have refused a client delete of a
+      // register since AGL-1775, so this button failed for every merchant.
+      // The route also signs out the register's customer displays.
+      try {
+        await posReadersCall(user, { action: 'remove-register', hostId, registerId: register.$id })
+      } catch (error: any) {
+        enqueueSnackbar(error?.message ?? 'Could not remove the register', {
+          variant: 'warning',
+          persist: false,
+        })
+        return
+      }
       // A HARD delete, so the slot really is freed on both sides — the
       // one-shot aggregate has to be told (AGL-1716/AGL-1738).
       setRegisterCountEpoch((epoch) => epoch + 1)
     },
-    [confirm, firestore, hostId],
+    [confirm, user, hostId, enqueueSnackbar],
   )
 
   const locationName = (id: string) =>

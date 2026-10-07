@@ -20,6 +20,7 @@
   "libs/plugins/bookings/src/lib/components/booking.tsx": 2,
   "libs/plugins/commerce/src/lib/components/account.tsx": 2,
   "libs/plugins/commerce/src/lib/components/cart.tsx": 3,
+  "libs/plugins/commerce/src/lib/components/console/pos-ops/pos-receipt.ts": 2,
   "libs/plugins/commerce/src/lib/components/gate.tsx": 2,
   "libs/plugins/commerce/src/lib/components/gated-video.tsx": 2,
   "libs/plugins/commerce/src/lib/components/member-feed.tsx": 2,
@@ -48,7 +49,7 @@
   "libs/plugins/mui/src/lib/components/card.tsx": 4,
   "libs/plugins/mui/src/lib/components/container.ts": 3,
   "libs/plugins/mui/src/lib/components/custom-html.tsx": 2,
-  "libs/plugins/mui/src/lib/components/data-table.tsx": 2,
+  "libs/plugins/mui/src/lib/components/data-table.tsx": 1,
   "libs/plugins/mui/src/lib/components/drawer.tsx": 3,
   "libs/plugins/mui/src/lib/components/grid.tsx": 2,
   "libs/plugins/mui/src/lib/components/icon.tsx": 2,
@@ -56,7 +57,7 @@
   "libs/plugins/mui/src/lib/components/image.tsx": 2,
   "libs/plugins/mui/src/lib/components/inline-text.tsx": 3,
   "libs/plugins/mui/src/lib/components/language-switcher.tsx": 2,
-  "libs/plugins/mui/src/lib/components/layout-slot.tsx": 2,
+  "libs/plugins/mui/src/lib/components/layout-slot.tsx": 1,
   "libs/plugins/mui/src/lib/components/link-box.tsx": 1,
   "libs/plugins/mui/src/lib/components/markdown.tsx": 4,
   "libs/plugins/mui/src/lib/components/nav-menu.tsx": 3,
@@ -86,5 +87,6 @@
   "tools/e2e/capture-docs-screenshots.mjs": 5,
   "tools/e2e/render-readme-composites.mjs": 13,
   "tools/scripts/backfill-scheme-dark.mjs": 2,
-  "tools/scripts/generate-blog-covers.mjs": 5
+  "tools/scripts/generate-blog-covers.mjs": 5,
+  "tools/scripts/lib/native-brand.mjs": 2
 }

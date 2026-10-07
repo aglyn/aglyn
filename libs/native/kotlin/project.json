@@ -1,0 +1,27 @@
+{
+  "name": "native-kotlin",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "tags": [
+    "scope:mobile",
+    "type:feature"
+  ],
+  "targets": {
+    "build-native": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "apps/android",
+        "command": "./gradlew :native-core:assemble :native-ui:assemble :native-plugin-host:assemble :native-webview:assemble :native-shell:assemble"
+      }
+    },
+    "test-native": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "apps/android",
+        "command": "./gradlew desktopTest"
+      }
+    }
+  }
+}

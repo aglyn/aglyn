@@ -169,7 +169,7 @@ afterEach(() => {
 async function openDialog(entry: Entry) {
   const Widget = widgetFor(entry.zone)
   render(<Widget {...zoneProps()} />)
-  fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
   const dialog = screen.getByRole('dialog')
   expect(within(dialog).getByText(entry.title)).toBeTruthy()
   return dialog
@@ -269,17 +269,19 @@ describe('each entry is on its own page’s zone, gated as the page entry is', (
 
 describe('the button is drawn at once (AGL-3601)', () => {
   describe.each(ENTRIES)('on $zone', (entry) => {
-    it('draws on the first render and asks nothing of a server to do it', () => {
+    it('draws without asking anything of a server to do it', async () => {
       const Widget = widgetFor(entry.zone)
       render(<Widget {...zoneProps()} />)
-      expect(screen.getByRole('button', { name: 'Create with AI' })).toBeTruthy()
+      // No request stands between the zone and the button; its code loads
+      // lazily (AGL-3649), so the button is awaited, not read on first render.
+      expect(await screen.findByRole('button', { name: 'Create with AI' })).toBeTruthy()
       expect(mockFetch).not.toHaveBeenCalled()
     })
 
-    it('draws while the page has not resolved its org, and still asks nothing', () => {
+    it('draws while the page has not resolved its org, and still asks nothing', async () => {
       const Widget = widgetFor(entry.zone)
       render(<Widget {...zoneProps({ orgId: undefined })} />)
-      expect(screen.getByRole('button', { name: 'Create with AI' })).toBeTruthy()
+      expect(await screen.findByRole('button', { name: 'Create with AI' })).toBeTruthy()
       expect(mockFetch).not.toHaveBeenCalled()
     })
 

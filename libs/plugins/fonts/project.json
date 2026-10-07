@@ -1,0 +1,30 @@
+{
+  "name": "plugins-fonts",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/plugins/fonts/src",
+  "projectType": "library",
+  "tags": ["aglyn:addons", "scope:plugin", "type:feature"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/plugins/fonts",
+        "main": "libs/plugins/fonts/src/index.ts",
+        "tsConfig": "libs/plugins/fonts/tsconfig.lib.json",
+        "assets": ["libs/plugins/fonts/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/fonts"],
+      "options": {
+        "jestConfig": "libs/plugins/fonts/jest.config.ts"
+      }
+    }
+  }
+}

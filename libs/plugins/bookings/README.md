@@ -40,7 +40,7 @@ This package is a first-party Aglyn plugin. It is loaded through Aglyn's plugin 
 `@aglyn/plugins-bookings/server` imports `firebase-admin` and is kept out of the client entry point.
 
 - `registerBookingsApi()` (the `tenantApi` surface) registers the site-facing routes `bookings/slots` (open slots for a service, a page of `BOOKING_SLOT_PAGE_DAYS` whole days at a time; `from` asks for the page its `nextFromMs` named) and `bookings/book` (take a booking; a paid service goes through Stripe Checkout).
-- `registerBookingsConsoleApi()` (the `consoleApi` surface) registers `bookings/reminders`, `bookings/refund` and `bookings/booking-analytics`, a handler on the platform billing webhook that confirms paid bookings, and a bookings-by-service figure reader.
+- `registerBookingsConsoleApi()` (the `consoleApi` surface) registers `bookings/reminders`, `bookings/refund`, `bookings/check-in`, `bookings/reschedule`, `bookings/in-person-payment` (a booking paid at the counter on the native Aglyn POS app's card reader) and `bookings/booking-analytics`, a handler on the platform billing webhook that confirms paid bookings, and a bookings-by-service figure reader.
 - Loading the module registers two scheduled plugin jobs: `expire-stale-holds` and `booking-reminders` (a reminder email about a day before a confirmed booking). This is why `package.json` lists `./src/lib/server.*` under `sideEffects`.
 
 Routes are served by the host app's API dispatcher under `/api/`, for example `/api/bookings/slots`.

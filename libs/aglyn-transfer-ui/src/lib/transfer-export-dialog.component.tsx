@@ -120,6 +120,8 @@ export interface TransferExportDialogProps {
   selection?: readonly string[]
   /** The list's current filter, when one is applied: what the server reads and how to name it. */
   filter?: { label: string; value: unknown }
+  /** A resource preset to open on, over the person's last choice; ignored when the resource has none by that id. */
+  preset?: string
   /** Saves the file; defaults to a browser download. */
   download?(result: TransferExportResponse): void
   onExported?(result: TransferExportResponse): void
@@ -149,7 +151,7 @@ export function downloadTransferFile(fileName: string, body: Blob): void {
 }
 
 export function TransferExportDialog(props: TransferExportDialogProps) {
-  const { open, onClose, client, resource, selection, filter } = props
+  const { open, onClose, client, resource, selection, filter, preset } = props
   const [info, setInfo] = useState<TransferResourceInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [presetId, setPresetId] = useState<string>('reimportable')
@@ -218,7 +220,12 @@ export function TransferExportDialog(props: TransferExportDialogProps) {
                 : 'filter'
               : 'all',
         )
-        if (last?.fieldIds?.length) {
+        const asked = preset ? (loaded.resourcePresets ?? []).find((entry) => entry.id === preset) : undefined
+        if (asked) {
+          setPresetId(asked.id)
+          setFieldIds(resolveTransferPreset(built, asked, loadedHints).fieldIds)
+          setUnknown([])
+        } else if (last?.fieldIds?.length) {
           const resolved = resolveTransferFieldSelection(built, last.fieldIds)
           setPresetId(last.presetId ?? CUSTOM_SELECTION)
           setFieldIds(resolved.fieldIds)
@@ -242,7 +249,7 @@ export function TransferExportDialog(props: TransferExportDialogProps) {
     return () => {
       live = false
     }
-  }, [open, client, resource, selectionCount, hasFilter, filterKey])
+  }, [open, client, resource, selectionCount, hasFilter, filterKey, preset])
 
   const choosePreset = (id: string) => {
     if (!catalog) return

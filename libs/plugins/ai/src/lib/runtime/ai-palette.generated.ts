@@ -3606,6 +3606,36 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     presets: ['Newsletter signup'],
   },
+  'order-status': {
+    pluginId: 'commerce',
+    kind: 'element',
+    category: 'Commerce',
+    displayName: 'Order status',
+    summary:
+      'A buyer’s order, shipments and tracking, opened from the link in their order emails.',
+    acceptsChildren: false,
+    propsSchema: {
+      type: 'object',
+      properties: {
+        heading: {
+          type: 'string',
+          maxLength: 200,
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    propRoles: {
+      heading: 'text',
+    },
+    propFields: {
+      heading: 'text-field',
+    },
+    textLimits: {
+      heading: 200,
+    },
+    presets: ['Order status'],
+  },
   product: {
     pluginId: 'mui',
     kind: 'element',
@@ -3925,6 +3955,36 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       reserveLabel: 200,
     },
     presets: ['Reservation widget'],
+  },
+  'return-request': {
+    pluginId: 'commerce',
+    kind: 'element',
+    category: 'Commerce',
+    displayName: 'Return request',
+    summary:
+      'The buyer’s return form for one order, opened from their account or the order’s status page.',
+    acceptsChildren: false,
+    propsSchema: {
+      type: 'object',
+      properties: {
+        heading: {
+          type: 'string',
+          maxLength: 200,
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    propRoles: {
+      heading: 'text',
+    },
+    propFields: {
+      heading: 'text-field',
+    },
+    textLimits: {
+      heading: 200,
+    },
+    presets: ['Return request'],
   },
   reusableInstance: {
     pluginId: 'mui',
@@ -4452,6 +4512,7 @@ export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = {
       'video',
       'videoEmbed',
     ],
+    codeOnly: ['icon'],
   },
   email: {
     root: 'div',
@@ -4514,6 +4575,7 @@ export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = {
       'video',
       'videoEmbed',
     ],
+    codeOnly: ['icon', 'muiDrawer', 'muiDrawerToggle'],
   },
   component: {
     root: 'div',

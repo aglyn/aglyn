@@ -42,6 +42,9 @@ export const DATA_TABLE_ID: Aglyn.ComponentId = 'dataTable'
 /** What a screen reader announces on reaching the grid's scroll box. */
 const TABLE_REGION_LABEL = 'Table'
 
+// The component and its preset show the same drawer glyph.
+const TABLE_ICON = { path: mdiTable.path, sx: { color: '#0288d1' } }
+
 export interface DataTableProps {
   /**
    * The grid, pipe-delimited, one row per line — and its column alignment,
@@ -185,7 +188,7 @@ export const dataTableSchema: Aglyn.ComponentSchema<DataTableProps> = {
   description:
     'A grid of rows and columns — a feature matrix, a spec sheet, a comparison.',
   category: Aglyn.ComponentCategory.BLOCKS,
-  icon: { path: mdiTable.path, sx: { color: '#0288d1' } },
+  icon: TABLE_ICON,
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
   attributes: [
     {
@@ -219,7 +222,7 @@ export const dataTablePresets: Aglyn.PresetSchema[] = [
     pluginId: BUNDLE_ID,
     description: 'Comparison grid with a header row',
     category: Aglyn.ComponentCategory.BLOCKS,
-    icon: { path: mdiTable.path, sx: { color: '#0288d1' } },
+    icon: TABLE_ICON,
     data: {
       $id: null,
       componentId: DATA_TABLE_ID,

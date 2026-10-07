@@ -39,6 +39,11 @@ jest.mock('@aglyn/tenant-runtime/compose-screen-nodes', () => ({
   __esModule: true,
   default: (...args: unknown[]) => mockCompose(...args),
 }))
+// The order-status page's layout lookup (AGL-3610) reads Next's cache; this
+// spec never reaches it.
+jest.mock('@aglyn/tenant-runtime/built-in-page-layout', () => ({
+  resolveBuiltInPageLayoutId: async () => null,
+}))
 jest.mock('@aglyn/tenant-runtime/get-screen', () => ({
   __esModule: true,
   default: (...args: unknown[]) => mockGetScreen(...args),

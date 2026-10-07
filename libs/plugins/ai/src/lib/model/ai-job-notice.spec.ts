@@ -102,6 +102,44 @@ describe('a finished job', () => {
     expect(someDrafts.body).toBe('Your pages are published, except one that stayed a draft. Open it to see why.')
   })
 
+  /** The 2026-10-07 production guided start: Home failed on our side and was given back; Contact was built and put live. */
+  const item = (slot: string, op: string, label: string, status: string, extra: Record<string, unknown> = {}) =>
+    ({ slot, op, label, status, attempt: 1, creditsSpent: 0, creditsRefunded: 0, outputs: [], ...extra }) as never
+  const PARTIAL = [
+    item('l', 'layout', 'Main Layout', 'succeeded'),
+    item('f', 'form', 'Contact Request Form', 'succeeded'),
+    item('p0', 'page', 'Home', 'failed', { creditsSpent: 99, creditsRefunded: 99, failure: { ours: true, reason: 'doctrine-refused', message: 'x' } }),
+    item('p1', 'page', 'Contact', 'succeeded'),
+  ]
+  const BUILT_ONE = 'Built 1 of 2 pages. Home couldn’t be built — that one’s on us, you weren’t charged for it. The 99 credits it used are back in your AI credits. Try again builds only what failed.'
+
+  it('says what a partly built live site could not build, as a warning (AGL-3596)', () => {
+    const published = [{ id: 'contact', label: 'Contact', path: '/contact' }]
+    const notice = aiJobNotice(source({ items: PARTIAL, sitePublish: { published, drafts: [] } }), 'done')
+    expect(notice.type).toBe('content.aiJobDone')
+    expect(notificationLevel(notice)).toBe('warning')
+    expect(notice.title).toBe('Your site is live, but part of it wasn’t built')
+    expect(notice.body).toBe(`${BUILT_ONE} What was built is published.`)
+    const withDraft = aiJobNotice(
+      source({ items: PARTIAL, sitePublish: { published, drafts: [{ id: 'about', label: 'About', reason: 'Taken.' }] } }),
+      'done',
+    )
+    expect(withDraft.body).toBe(`${BUILT_ONE} What was built is published, except one that stayed a draft.`)
+    // Every item built: the good news, as it was.
+    const whole = aiJobNotice(source({ items: PARTIAL.map((one) => ({ ...(one as object), status: 'succeeded' }) as never), sitePublish: { published, drafts: [] } }), 'done')
+    expect(notificationLevel(whole)).toBe('success')
+    expect(whole.title).toBe('Your site is live')
+  })
+
+  it('says what a partly built draft site and a partly built build could not build (AGL-3596)', () => {
+    const drafts = aiJobNotice(source({ items: PARTIAL, sitePublish: { published: [], drafts: [] } }), 'done')
+    expect(notificationLevel(drafts)).toBe('warning')
+    expect(drafts.body).toBe(`${BUILT_ONE} Everything it built is an unpublished draft until you publish it.`)
+    const build = aiJobNotice(source({ kind: 'build', items: PARTIAL }), 'done')
+    expect(notificationLevel(build)).toBe('warning')
+    expect(build.body).toBe('3 of 4 built; 1 failed. Everything it built is an unpublished draft until you publish it.')
+  })
+
   it('keeps the drafts wording when nothing was published', () => {
     const notice = aiJobNotice(source({ outputs: [screen('home')], sitePublish: { published: [], drafts: [] } }), 'done')
     expect(notice.title).toBe('Your site’s draft pages are ready')
@@ -146,5 +184,16 @@ describe('a job that stopped', () => {
     expect(parked.body).toContain('This one’s on us — you weren’t charged. The 6 credits it used are back in your AI credits.')
     // Nothing given back, nothing promised.
     expect(aiJobNotice(source({ error: 'It stopped.', creditsSpent: 6 }), 'failed').body).toBe('It stopped.')
+  })
+})
+
+describe('a building rule never reaches the notification (AGL-3596)', () => {
+  const RULE = "This could not be built within the building rules. Rule 16 (Third-party players are named in the plan): The page embeds a player the plan does not list."
+
+  it('says the plain refusal for a job parked on a rule, and for one that stopped on one', () => {
+    const parked = aiJobNotice(source({ kind: 'page', review: { reason: 'doctrine', message: RULE }, error: RULE }), 'needs-review')
+    expect(parked.body).toBe("Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page.")
+    const stopped = aiJobNotice(source({ kind: 'form', error: RULE }), 'failed')
+    expect(stopped.body).toBe("Aglyn AI couldn’t build this cleanly, so we stopped rather than give you something broken.")
   })
 })

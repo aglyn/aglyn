@@ -19,6 +19,7 @@
 import type * as Aglyn from '@aglyn/aglyn'
 import {
   checkEntitlement,
+  defaultMediaScopeOf,
   defaultScopeForNewResource,
   describeScope,
   folderDepth,
@@ -217,7 +218,7 @@ import {
   mediaQuery,
   type MediaSort,
   mediaSortOf,
-} from './media-filter'
+} from '@aglyn/aglyn/app-utils/media-filter'
 import {
   mediaListColumns,
   mediaSortFromModel,
@@ -672,7 +673,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     () =>
       orgId
         ? defaultScopeForNewResource({
-            defaultResourceScope: (org as any)?.defaultResourceScope,
+            defaultResourceScope: defaultMediaScopeOf(org as any),
             hostId: forHostId ?? null,
           })
         : null,

@@ -48,6 +48,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-outreach/server'),
   },
   {
+    id: 'accounting',
+    apiPrefixes: ["accounting"],
+    register: {"consoleApi":"registerAccountingConsoleApi"},
+    load: () => import('@aglyn/plugins-accounting/server'),
+  },
+  {
     id: 'data',
     register: {"consoleApi":"registerDataConsoleApi"},
     load: () => import('@aglyn/plugins-data/server'),
@@ -71,6 +77,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-marketing/server'),
   },
   {
+    id: 'redirects',
+    apiPrefixes: ["redirects"],
+    register: {"consoleApi":"registerRedirectsConsoleApi"},
+    load: () => import('@aglyn/plugins-redirects/server'),
+  },
+  {
     id: 'workflows',
     apiPrefixes: ["hooks","automations"],
     register: {"consoleApi":"registerWorkflowsConsoleApi"},
@@ -81,6 +93,54 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     apiPrefixes: ["ai","assist"],
     register: {"consoleApi":"registerAiConsoleApi"},
     load: () => import('@aglyn/plugins-ai/server'),
+  },
+  {
+    id: 'fonts',
+    apiPrefixes: ["fonts"],
+    register: {"consoleApi":"registerFontsConsoleApi"},
+    load: () => import('@aglyn/plugins-fonts/server'),
+  },
+  {
+    id: 'sms',
+    apiPrefixes: ["sms"],
+    register: {"consoleApi":"registerSmsConsoleApi"},
+    load: () => import('@aglyn/plugins-sms/server'),
+  },
+  {
+    id: 'shipping',
+    apiPrefixes: ["shipping"],
+    register: {"consoleApi":"registerShippingConsoleApi"},
+    load: () => import('@aglyn/plugins-shipping/server'),
+  },
+  {
+    id: 'post-purchase',
+    apiPrefixes: ["post-purchase"],
+    register: {"consoleApi":"registerPostPurchaseConsoleApi"},
+    load: () => import('@aglyn/plugins-post-purchase/server'),
+  },
+  {
+    id: 'tax-engines',
+    apiPrefixes: ["tax-engines"],
+    register: {"consoleApi":"registerTaxEnginesConsoleApi"},
+    load: () => import('@aglyn/plugins-tax-engines/server'),
+  },
+  {
+    id: 'marketing-platforms',
+    apiPrefixes: ["marketing-platforms"],
+    register: {"consoleApi":"registerMarketingPlatformsConsoleApi"},
+    load: () => import('@aglyn/plugins-marketing-platforms/server'),
+  },
+  {
+    id: 'fulfillment-networks',
+    apiPrefixes: ["fulfillment-networks"],
+    register: {"consoleApi":"registerFulfillmentNetworksConsoleApi"},
+    load: () => import('@aglyn/plugins-fulfillment-networks/server'),
+  },
+  {
+    id: 'sales-channels',
+    apiPrefixes: ["sales-channels"],
+    register: {"consoleApi":"registerSalesChannelsConsoleApi"},
+    load: () => import('@aglyn/plugins-sales-channels/server'),
   },
   {
     id: 'funnels',
