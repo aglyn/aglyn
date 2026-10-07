@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import ConfirmationProviderComponent from '@aglyn/shared-ui-jsx/components/confirmation-provider.component'
+import { fireEvent, render as renderBare, screen, waitFor, within } from '@testing-library/react'
+import type { ReactElement } from 'react'
 import { SALES_CHANNELS_API_ROUTES } from '../constants/bundle-common'
 import { ChannelConnection } from './channel-connection.component'
 import type { ConnectionState, SalesChannelsState } from './sales-channels-api'
@@ -26,6 +28,9 @@ import { SalesChannelsCard } from './sales-channels-card.component'
  * phase 2): invisible unless the state route lists the provider, and once
  * listed, connect, choose a target, sync, disconnect and reconnect.
  */
+
+/** The console mounts the shared confirmation provider above every widget. */
+const render = (ui: ReactElement) => renderBare(<ConfirmationProviderComponent>{ui}</ConfirmationProviderComponent>)
 
 const request = jest.fn()
 const enqueueSnackbar = jest.fn()

@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import ConfirmationProviderComponent from '@aglyn/shared-ui-jsx/components/confirmation-provider.component'
+import { fireEvent, render as renderBare, screen, waitFor, within } from '@testing-library/react'
+import type { ReactElement } from 'react'
 import { SALES_CHANNELS_API_ROUTES } from '../constants/bundle-common'
 import { ProductChannelFields } from './product-channel-fields.component'
 import type { SalesChannelsState } from './sales-channels-api'
@@ -27,6 +29,9 @@ import { SalesChannelsCard } from './sales-channels-card.component'
  * steps and what its feed leaves out — and the channel fields in the
  * product editor.
  */
+
+/** The console mounts the shared confirmation provider above every widget. */
+const render = (ui: ReactElement) => renderBare(<ConfirmationProviderComponent>{ui}</ConfirmationProviderComponent>)
 
 const request = jest.fn()
 const enqueueSnackbar = jest.fn()
@@ -86,6 +91,53 @@ describe('SalesChannelsCard', () => {
     expect(google.getByText(/Paste the feed URL below/)).toBeTruthy()
     expect(within(screen.getByTestId('sales-channel-meta')).queryByLabelText('Meta feed address')).toBeNull()
     expect(screen.getByText(/earlier Merchant Center address still works/)).toBeTruthy()
+    expect(google.getByText('On')).toBeTruthy()
+    expect(google.getByText('Not read yet')).toBeTruthy()
+    expect(within(screen.getByTestId('sales-channel-tiktok')).getByText('CSV feed')).toBeTruthy()
+  })
+
+  it('copies a feed address from its field', async () => {
+    const writeText = jest.fn(async () => undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+    request.mockResolvedValueOnce(state())
+    render(<SalesChannelsCard hostId="host-1" />)
+    await screen.findByTestId('sales-channels-card')
+    fireEvent.click(screen.getByRole('button', { name: 'Copy google feed address' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(URL_GOOGLE))
+    expect(enqueueSnackbar).toHaveBeenCalledWith('Feed address copied', expect.anything())
+  })
+
+  it('pages a long list of products a feed leaves out', async () => {
+    request.mockResolvedValueOnce(state())
+    render(<SalesChannelsCard hostId="host-1" />)
+    await screen.findByTestId('sales-channels-card')
+    const products = Array.from({ length: 12 }, (_, n) => ({
+      productId: `p${n}`,
+      productName: `Candle ${String(n).padStart(2, '0')}`,
+      excludedOffers: 1,
+      offers: 1,
+      issues: [{ field: 'image_link', severity: 'error', message: 'Add a photo: every channel requires one.' }],
+    }))
+    request.mockResolvedValueOnce({
+      offers: 12,
+      partial: false,
+      store: [],
+      channels: ['google', 'meta', 'tiktok', 'pinterest', 'snapchat', 'microsoft'].map((channel) => ({
+        channel,
+        listed: 0,
+        excluded: 12,
+        warned: 0,
+        truncated: false,
+        products: channel === 'google' ? products : [],
+      })),
+    })
+    fireEvent.click(screen.getByText('Check products'))
+    const google = within(screen.getByTestId('sales-channel-google'))
+    expect(await google.findByText('Candle 09')).toBeTruthy()
+    expect(google.queryByText('Candle 10')).toBeNull()
+    fireEvent.click(google.getByRole('button', { name: /next page/i }))
+    expect(google.getByText('Candle 11')).toBeTruthy()
+    expect(within(screen.getByTestId('sales-channel-meta')).getByText('Every product is listed as it is.')).toBeTruthy()
   })
 
   it('switches a feed on through the route and shows its new address', async () => {
@@ -116,10 +168,11 @@ describe('SalesChannelsCard', () => {
     request.mockResolvedValueOnce(state())
     render(<SalesChannelsCard hostId="host-1" />)
     await screen.findByTestId('sales-channels-card')
-    fireEvent.click(within(screen.getByTestId('sales-channel-google')).getByText('Replace address'))
+    fireEvent.click(screen.getByRole('button', { name: 'Replace address' }))
+    const dialog = await screen.findByRole('dialog')
     expect(request).toHaveBeenCalledTimes(1)
     request.mockResolvedValueOnce({ channel: { ...state().channels[0], url: URL_GOOGLE.replace('TOKEN', 'NEW') } })
-    fireEvent.click(screen.getByRole('button', { name: 'Replace' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Replace' }))
     await waitFor(() =>
       expect(request).toHaveBeenLastCalledWith(SALES_CHANNELS_API_ROUTES.rotate, {
         body: { hostId: 'host-1', channel: 'google' },
@@ -155,9 +208,10 @@ describe('SalesChannelsCard', () => {
     })
     fireEvent.click(screen.getByText('Check products'))
     const google = within(screen.getByTestId('sales-channel-google'))
-    expect(await google.findByText('1 listed · 1 left out · 0 with suggestions')).toBeTruthy()
-    fireEvent.click(google.getByText('Show products'))
-    expect(google.getByText('No Photo — left out')).toBeTruthy()
+    expect(await google.findByText('1 listed')).toBeTruthy()
+    expect(google.getByText('1 left out')).toBeTruthy()
+    expect(google.getByText('No Photo')).toBeTruthy()
+    expect(google.getByText('Left out')).toBeTruthy()
     expect(google.getByText('Add a photo: every channel requires one.')).toBeTruthy()
   })
 

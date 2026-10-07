@@ -18,16 +18,12 @@
 'use client'
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { StatusChip } from '@aglyn/shared-ui-jsx/components/status-chip.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
   MenuItem,
   Stack,
   TextField,
@@ -101,7 +97,7 @@ export function ChannelConnection(props: ChannelConnectionProps) {
   const { enqueueSnackbar } = useSnackbar()
   const [connection, setConnection] = useState<ConnectionState | null>(entry?.connection ?? null)
   const [busy, setBusy] = useState<'connect' | 'sync' | 'select' | 'disconnect' | null>(null)
-  const [confirm, setConfirm] = useState(false)
+  const { confirm } = useConfirmationContext()
   const outcome = useConnectOutcome(entry?.provider)
   useEffect(() => setConnection(entry?.connection ?? null), [entry?.connection])
 
@@ -151,12 +147,22 @@ export function ChannelConnection(props: ChannelConnectionProps) {
       )
     })
 
-  const disconnect = () =>
-    run('disconnect', async () => {
+  const disconnect = async () => {
+    // The shared confirm resolves on confirm and rejects on cancel.
+    const ok = await confirm({
+      title: `Disconnect ${labels.service}?`,
+      description: `Products already sent stay in ${labels.service} until you remove them there. The feed address keeps working.`,
+      confirmationText: 'Disconnect',
+      confirmationButtonProps: { color: 'warning', variant: 'contained' },
+    })
+      .then(() => true)
+      .catch(() => false)
+    if (!ok) return
+    await run('disconnect', async () => {
       await request(SALES_CHANNELS_API_ROUTES.disconnect, { body: { hostId, provider } })
       setConnection(null)
-      setConfirm(false)
     })
+  }
 
   const expiresAtMs = connection?.tokenExpiresAtMs
   const reconnectDue = Boolean(expiresAtMs && expiresAtMs - Date.now() < RECONNECT_WINDOW_MS)
@@ -180,7 +186,7 @@ export function ChannelConnection(props: ChannelConnectionProps) {
       >
         {busy === 'sync' ? 'Syncing…' : 'Sync now'}
       </Button>
-      <Button color="warning" onClick={() => setConfirm(true)} disabled={busy !== null}>
+      <Button color="warning" onClick={() => void disconnect()} disabled={busy !== null}>
         {'Disconnect'}
       </Button>
     </Stack>
@@ -201,6 +207,19 @@ export function ChannelConnection(props: ChannelConnectionProps) {
       contentGutterY
     >
       <Stack spacing={1.5} data-testid={`sales-channel-connection-${provider}`}>
+        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+          <StatusChip
+            label={!connection ? 'Not connected' : reconnectDue ? 'Reconnect needed' : 'Connected'}
+            tone={!connection ? 'neutral' : reconnectDue ? 'warning' : 'success'}
+          />
+          {connection && result ? (
+            <StatusChip
+              label={result.failed ? `${result.failed} refused in the last sync` : 'Last sync complete'}
+              tone={result.failed ? 'error' : 'success'}
+              variant="outlined"
+            />
+          ) : null}
+        </Stack>
         {outcome ? (
           <Alert severity={OUTCOMES[outcome].severity}>{OUTCOMES[outcome].message(labels.service)}</Alert>
         ) : null}
@@ -248,20 +267,6 @@ export function ChannelConnection(props: ChannelConnectionProps) {
           </Stack>
         ) : null}
       </Stack>
-      <Dialog open={confirm} onClose={() => setConfirm(false)}>
-        <DialogTitle>{`Disconnect ${labels.service}?`}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            {`Products already sent stay in ${labels.service} until you remove them there. The feed address keeps working.`}
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirm(false)}>{'Cancel'}</Button>
-          <Button color="warning" variant="contained" disabled={busy !== null} onClick={() => void disconnect()}>
-            {'Disconnect'}
-          </Button>
-        </DialogActions>
-      </Dialog>
     </CardDisplay>
   )
 }

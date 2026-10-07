@@ -17,18 +17,20 @@
 'use client'
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { CopyField } from '@aglyn/shared-ui-jsx/components/copy-field.component'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { StatusChip } from '@aglyn/shared-ui-jsx/components/status-chip.component'
+import { useClientPagination } from '@aglyn/shared-ui-jsx/hooks/use-client-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  FormControlLabel,
   Link,
+  List,
+  ListItem,
+  ListItemText,
   MenuItem,
   Stack,
   Switch,
@@ -293,8 +295,8 @@ function ChannelCard(props: {
   const { hostId, channel, state, canEnable, diagnostics, legacy, connect, onChange, onLegacyRetired } = props
   const request = useSalesChannelsFetch()
   const { enqueueSnackbar } = useSnackbar()
+  const { confirm } = useConfirmationContext()
   const [busy, setBusy] = useState(false)
-  const [confirm, setConfirm] = useState<'rotate' | 'legacy' | null>(null)
 
   const run = async (work: () => Promise<void>) => {
     setBusy(true)
@@ -307,6 +309,12 @@ function ChannelCard(props: {
     }
   }
 
+  /** The shared confirm resolves on confirm and rejects on cancel. */
+  const confirmed = (options: Parameters<typeof confirm>[0]) =>
+    confirm(options)
+      .then(() => true)
+      .catch(() => false)
+
   const toggle = (enabled: boolean) =>
     run(async () => {
       const answer = await request<{ channel: ChannelState }>(SALES_CHANNELS_API_ROUTES.channel, {
@@ -315,30 +323,41 @@ function ChannelCard(props: {
       onChange(answer.channel)
     })
 
-  const rotate = () =>
-    run(async () => {
+  const rotate = async () => {
+    const ok = await confirmed({
+      title: 'Replace the feed address?',
+      description: `The current address stops working at once, and ${channel.label} stops receiving updates until you paste the new one.${
+        channel.id === 'google' ? ' The earlier Merchant Center address stops too.' : ''
+      }`,
+      confirmationText: 'Replace',
+      confirmationButtonProps: { color: 'warning', variant: 'contained' },
+    })
+    if (!ok) return
+    await run(async () => {
       const answer = await request<{ channel: ChannelState }>(SALES_CHANNELS_API_ROUTES.rotate, {
         body: { hostId, channel: channel.id },
       })
       onChange(answer.channel)
       if (channel.id === 'google') onLegacyRetired()
-      setConfirm(null)
       enqueueSnackbar(`New ${channel.label} feed address ready. Paste it into ${channel.label}.`, {
         variant: 'success',
       })
     })
+  }
 
-  const retireLegacy = () =>
-    run(async () => {
+  const retireLegacy = async () => {
+    const ok = await confirmed({
+      title: 'Turn off the earlier address?',
+      description:
+        'Merchant Center stops receiving updates from the earlier address at once. Do this after it reads the new address.',
+      confirmationText: 'Turn off',
+      confirmationButtonProps: { color: 'warning', variant: 'contained' },
+    })
+    if (!ok) return
+    await run(async () => {
       await request(SALES_CHANNELS_API_ROUTES.legacy, { body: { hostId } })
       onLegacyRetired()
-      setConfirm(null)
     })
-
-  const copy = (url: string) => {
-    void navigator.clipboard?.writeText(url).then(() =>
-      enqueueSnackbar('Feed address copied', { variant: 'success', persist: false }),
-    )
   }
 
   return (
@@ -349,60 +368,57 @@ function ChannelCard(props: {
       subheader={channel.reach}
       HeaderProps={{
         action: (
-          <FormControlLabel
-            label={state.enabled ? 'On' : 'Off'}
-            control={
-              <Switch
-                checked={state.enabled}
-                disabled={busy || (!state.enabled && !canEnable)}
-                onChange={(event) => void toggle(event.target.checked)}
-                slotProps={{ input: { 'aria-label': `${channel.label} feed` } }}
-              />
-            }
-          />
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            {state.enabled ? (
+              <Button size="small" color="warning" disabled={busy || !state.url} onClick={() => void rotate()}>
+                {'Replace address'}
+              </Button>
+            ) : null}
+            <Switch
+              checked={state.enabled}
+              disabled={busy || (!state.enabled && !canEnable)}
+              onChange={(event) => void toggle(event.target.checked)}
+              slotProps={{ input: { 'aria-label': `${channel.label} feed` } }}
+            />
+          </Stack>
         ),
       }}
       contentGutterX
       contentGutterY
     >
       <Stack spacing={1.5} data-testid={`sales-channel-${channel.id}`}>
-        {state.enabled && state.url ? (
-          <Stack spacing={1}>
-            <TextField
-              label={`${channel.label} feed address`}
-              value={state.url}
-              size="small"
-              slotProps={{ input: { readOnly: true } }}
-              onFocus={(event) => event.target.select()}
-              helperText={
-                state.lastFetchAtMs
-                  ? `Last read ${formatTime(state.lastFetchAtMs)}.`
-                  : `${channel.label} has not read this feed yet.`
-              }
+        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+          <StatusChip label={state.enabled ? 'On' : 'Off'} tone={state.enabled ? 'success' : 'neutral'} />
+          {state.enabled ? (
+            <StatusChip
+              label={state.lastFetchAtMs ? `Last read ${formatTime(state.lastFetchAtMs)}` : 'Not read yet'}
+              tone={state.lastFetchAtMs ? 'info' : 'warning'}
+              variant="outlined"
             />
-            <Stack direction="row" spacing={1}>
-              <Button size="small" onClick={() => copy(state.url as string)}>
-                {'Copy address'}
-              </Button>
-              <Button size="small" color="warning" disabled={busy} onClick={() => setConfirm('rotate')}>
-                {'Replace address'}
-              </Button>
-            </Stack>
-          </Stack>
-        ) : state.enabled ? (
-          <Typography variant="body2" color="text.secondary">
-            {'The address appears once the site has a web address.'}
-          </Typography>
+          ) : null}
+          <StatusChip label={FORMAT_LABELS[channel.format]} variant="outlined" />
+        </Stack>
+        {state.enabled && state.url ? (
+          <CopyField
+            label={`${channel.label} feed address`}
+            value={state.url}
+            onCopied={() => enqueueSnackbar('Feed address copied', { variant: 'success', persist: false })}
+            onCopyFailed={() =>
+              enqueueSnackbar('Your browser blocked copying. Select the address and copy it.', { variant: 'warning' })
+            }
+          />
         ) : (
           <Typography variant="body2" color="text.secondary">
-            {`Turn the feed on to get the address ${channel.label} reads.`}
+            {state.enabled
+              ? 'The address appears once the site has a web address.'
+              : `Turn the feed on to get the address ${channel.label} reads.`}
           </Typography>
         )}
         {legacy?.active && legacy.url ? (
           <Alert
             severity="info"
             action={
-              <Button color="inherit" size="small" disabled={busy} onClick={() => setConfirm('legacy')}>
+              <Button color="inherit" size="small" disabled={busy} onClick={() => void retireLegacy()}>
                 {'Turn off'}
               </Button>
             }
@@ -429,72 +445,83 @@ function ChannelCard(props: {
         <ChannelConnection hostId={hostId} entry={connect} />
         {diagnostics ? <ChannelDiagnosticsView diagnostics={diagnostics} /> : null}
       </Stack>
-      <Dialog open={confirm !== null} onClose={() => setConfirm(null)}>
-        <DialogTitle>{confirm === 'legacy' ? 'Turn off the earlier address?' : 'Replace the feed address?'}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            {confirm === 'legacy'
-              ? 'Merchant Center stops receiving updates from the earlier address at once. Do this after it reads the new address.'
-              : `The current address stops working at once, and ${channel.label} stops receiving updates until you paste the new one.${
-                  channel.id === 'google' ? ' The earlier Merchant Center address stops too.' : ''
-                }`}
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirm(null)}>{'Cancel'}</Button>
-          <Button
-            color="warning"
-            variant="contained"
-            disabled={busy}
-            onClick={() => void (confirm === 'legacy' ? retireLegacy() : rotate())}
-          >
-            {confirm === 'legacy' ? 'Turn off' : 'Replace'}
-          </Button>
-        </DialogActions>
-      </Dialog>
     </CardDisplay>
   )
 }
 
+const FORMAT_LABELS: Readonly<Record<SalesChannelDefinition['format'], string>> = {
+  rss: 'XML feed',
+  csv: 'CSV feed',
+  tsv: 'Tab-separated feed',
+}
+
 function ChannelDiagnosticsView(props: { diagnostics: ChannelDiagnostics }) {
   const { diagnostics } = props
-  const [open, setOpen] = useState(false)
-  const summary = `${diagnostics.listed} listed · ${diagnostics.excluded} left out · ${diagnostics.warned} with suggestions`
+  const pagination = useClientPagination(diagnostics.products, { pageSize: 10 })
   return (
-    <Stack spacing={1}>
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        <Typography variant="body2">{summary}</Typography>
-        {diagnostics.products.length ? (
-          <Button size="small" onClick={() => setOpen(!open)}>
-            {open ? 'Hide products' : 'Show products'}
-          </Button>
-        ) : null}
+    <Stack spacing={1} data-testid="channel-diagnostics">
+      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+        <StatusChip label={`${diagnostics.listed} listed`} tone="success" variant="outlined" />
+        <StatusChip
+          label={`${diagnostics.excluded} left out`}
+          tone={diagnostics.excluded ? 'error' : 'neutral'}
+          variant="outlined"
+        />
+        <StatusChip
+          label={`${diagnostics.warned} with suggestions`}
+          tone={diagnostics.warned ? 'warning' : 'neutral'}
+          variant="outlined"
+        />
       </Stack>
-      {open
-        ? diagnostics.products.map((product) => (
-            <Stack key={product.productId} spacing={0.25}>
-              <Typography variant="subtitle2">
-                {product.excludedOffers
-                  ? `${product.productName} — left out${product.offers > 1 ? ` (${product.excludedOffers} of ${product.offers})` : ''}`
-                  : product.productName}
-              </Typography>
-              {product.issues.map((issue) => (
-                <Typography
-                  key={`${issue.field}:${issue.message}`}
-                  variant="body2"
-                  color={issue.severity === 'error' ? 'error' : 'text.secondary'}
-                >
-                  {issue.message}
-                </Typography>
-              ))}
-            </Stack>
-          ))
-        : null}
-      {open && diagnostics.truncated ? (
-        <Typography variant="body2" color="text.secondary">
-          {'More products have suggestions than are listed here.'}
-        </Typography>
-      ) : null}
+      {diagnostics.products.length ? (
+        <>
+          <List dense disablePadding>
+            {pagination.pageItems.map((product) => (
+              <ListItem key={product.productId} divider disableGutters sx={{ alignItems: 'flex-start' }}>
+                <ListItemText
+                  primary={
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <span>{product.productName}</span>
+                      {product.excludedOffers ? (
+                        <StatusChip
+                          label={
+                            product.offers > 1
+                              ? `${product.excludedOffers} of ${product.offers} left out`
+                              : 'Left out'
+                          }
+                          tone="error"
+                        />
+                      ) : (
+                        <StatusChip label="Listed" tone="success" variant="outlined" />
+                      )}
+                    </Stack>
+                  }
+                  secondary={product.issues.map((issue) => (
+                    <Typography
+                      key={`${issue.field}:${issue.message}`}
+                      component="span"
+                      variant="body2"
+                      color={issue.severity === 'error' ? 'error' : 'text.secondary'}
+                      sx={{ display: 'block' }}
+                    >
+                      {issue.message}
+                    </Typography>
+                  ))}
+                  slotProps={{ secondary: { component: 'div' } }}
+                />
+              </ListItem>
+            ))}
+          </List>
+          <ListPagination {...pagination.paginationProps} />
+          {diagnostics.truncated ? (
+            <Typography variant="body2" color="text.secondary">
+              {'More products have suggestions than are listed here.'}
+            </Typography>
+          ) : null}
+        </>
+      ) : (
+        <EmptyStateComponent compact label="Every product is listed as it is." />
+      )}
     </Stack>
   )
 }
