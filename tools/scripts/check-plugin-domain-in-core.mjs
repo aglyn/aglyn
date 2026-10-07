@@ -161,7 +161,7 @@ export const VENDOR_LITERALS = [
 export const PLUGIN_COLLECTIONS = {
   ai: ['assistExchanges', 'assistSignals', 'assistUsage'],
   bookings: ['bookings', 'services'],
-  commerce: ['products', 'productCategories', 'orders', 'carts', 'checkouts', 'coupons', 'discounts', 'giftCards', 'inventoryAdjustments', 'licenseKeys', 'reservations', 'restockAlerts', 'stockHolds', 'suppliers'],
+  commerce: ['products', 'productCategories', 'orders', 'carts', 'checkouts', 'coupons', 'discounts', 'giftCards', 'inventoryAdjustments', 'licenseKeys', 'reservations', 'restockAlerts', 'stockHolds', 'suppliers', 'printers', 'printJobs'],
   crm: ['contacts', 'leads', 'companies', 'pipelines', 'deals', 'crmTasks', 'crmActivities', 'contactFields', 'crmViews', 'crmEmailTemplates', 'crmPicklists'],
   data: ['datasets'],
   email: ['emailTopics', 'listMembers'],

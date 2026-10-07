@@ -89,6 +89,7 @@ import { memberPostHandler } from './server/member-post'
 import { orderAnalyticsHandler } from './server/order-analytics'
 import { checkoutStatusHandler } from './server/checkout-status'
 import { posOrderHandler } from './server/pos-order'
+import { printersHandler } from './server/printers'
 import {
   processAbandonedHandler,
   scanAbandonedCheckouts,
@@ -357,6 +358,29 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('membership/admin-remove', membershipAdminRemoveHandler)
   registerPluginApiRoute('commerce/member-post', memberPostHandler)
   registerPluginApiRoute('commerce/pos-order', posOrderHandler)
+  // A register's cloud receipt printers and the jobs a manager sends them
+  // (AGL-3619), and the two doors the printers themselves poll. The doors are
+  // MACHINE routes: a printer is no member and names no site cookie, so it
+  // authenticates with the per-printer secret in its URL and its own device id,
+  // and the route asks the plan before it hands over a job. Loaded with the
+  // first poll, so a console that has no printers never imports them.
+  registerPluginApiRoute('commerce/printers', printersHandler)
+  registerPluginApiRoute(
+    'commerce/cloudprnt/:hostId/:printerId/:secret',
+    {
+      web: async (request, context) =>
+        (await import('./server/printer-poll')).cloudPrntRoute(request, context),
+    },
+    { machine: true },
+  )
+  registerPluginApiRoute(
+    'commerce/epson-sdp/:hostId/:printerId/:secret',
+    {
+      web: async (request, context) =>
+        (await import('./server/printer-poll')).epsonServerDirectPrintRoute(request, context),
+    },
+    { machine: true },
+  )
   registerPluginApiRoute('commerce/process-abandoned', processAbandonedHandler)
   registerPluginApiRoute('commerce/process-restock', processRestockHandler)
   registerPluginApiRoute('commerce/refund', refundHandler)

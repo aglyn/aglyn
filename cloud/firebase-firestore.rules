@@ -3468,13 +3468,22 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials', 'recordPages']) &&
+              'siteMemberCredentials', 'recordPages', 'printers',
+              'printJobs']) &&
             // The org Inbox's collection-group read (AGL-3303) lists EVERY
             // `formSubmissions` collection, at any depth, filed under the org
             // a row names, so none may be minted beneath another name here.
             !string(document).matches('.*/formSubmissions/[^/]+')));
         // More names on all THREE lists, each server-written with no client
         // writer to break:
+        //
+        //  - `printers` and `printJobs` (AGL-3619): a register's cloud receipt
+        //    printers and their queue. A printer's `deviceId` and
+        //    `secretVersion` are what its poll URL is checked against, and a
+        //    job decides what a printer prints and whether a cash drawer opens,
+        //    so `/api/commerce/printers` and the printers' own poll routes are
+        //    the only writers. READ stays with the catch-all for the Hardware
+        //    card's status and recent jobs; neither holds a secret.
         //
         //  - `recordPages` (AGL-3475): a site's record templates. A binding
         //    decides which page serves `/{base}/…` for every record of a
@@ -3586,7 +3595,8 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials', 'recordPages'])));
+              'siteMemberCredentials', 'recordPages', 'printers',
+              'printJobs'])));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -3637,7 +3647,7 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-              'recordPages'])));
+              'recordPages', 'printers', 'printJobs'])));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only
