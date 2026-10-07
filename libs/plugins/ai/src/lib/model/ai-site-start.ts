@@ -251,3 +251,59 @@ export function aiSiteStartInputs(
     welcomeEmail: answers.welcomeEmail,
   }
 }
+
+/** The site inputs a guided start's answers become, by name: what a summary carries back (AGL-3596). */
+export const AI_SITE_START_INPUT_KEYS = [
+  'businessType',
+  'audience',
+  'starter',
+  'pages',
+  'businessName',
+  'city',
+  'brand',
+  'submissions',
+  'welcomeEmail',
+] as const
+
+/** A site job's scalar inputs, and nothing else its inputs carry; `null` when it has none. */
+export function aiSiteStartInputsOf(
+  inputs: Readonly<Record<string, unknown>> | null | undefined,
+): Record<string, unknown> | null {
+  if (!inputs) return null
+  const kept: Record<string, unknown> = {}
+  for (const key of AI_SITE_START_INPUT_KEYS) {
+    const value = inputs[key]
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') kept[key] = value
+  }
+  return Object.keys(kept).length ? kept : null
+}
+
+/**
+ * A failed start's answers, back as the questions hold them (AGL-3596), so
+ * Try again reopens the guided start filled in for the person to adjust:
+ * the inverse of {@link aiSiteStartInputs}. Read defensively — an answer the
+ * questions no longer offer goes back to its default — and held to the
+ * workspace's page band. `null` when the inputs say no kind of site at all.
+ */
+export function aiSiteStartAnswersFromInputs(
+  inputs: Readonly<Record<string, unknown>> | null | undefined,
+  options: { freeTaste?: boolean } = {},
+): AiSiteStartAnswers | null {
+  const text = (key: string) => (typeof inputs?.[key] === 'string' ? (inputs[key] as string).trim() : '')
+  const siteType = text('businessType')
+  if (!siteType) return null
+  const band = aiSitePagesBand(options.freeTaste)
+  const pages = typeof inputs?.['pages'] === 'number' ? Math.round(inputs['pages'] as number) : AI_SITE_START_ANSWERS.pages
+  const starter = text('starter')
+  const submissions = text('submissions')
+  return {
+    siteType,
+    audience: text('audience'),
+    example: AI_SITE_START_EXAMPLES.some((entry) => entry.id === starter) ? starter : null,
+    pages: Math.min(band.max, Math.max(band.min, pages)),
+    submissions: (AI_SITE_SUBMISSIONS as readonly string[]).includes(submissions)
+      ? (submissions as AiSiteSubmissions)
+      : AI_SITE_START_ANSWERS.submissions,
+    welcomeEmail: options.freeTaste ? false : inputs?.['welcomeEmail'] !== false,
+  }
+}

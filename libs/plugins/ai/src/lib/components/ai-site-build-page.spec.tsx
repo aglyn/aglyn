@@ -40,6 +40,18 @@ jest.mock('./ai-job-events', () => ({
   followAiJobEvents: (...args: unknown[]) => mockFollow(...args),
 }))
 jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({ __esModule: true, trackEvent: jest.fn() }))
+jest.mock('next/navigation', () => ({
+  __esModule: true,
+  ...jest.requireActual('next/navigation'),
+  useRouter: () => ({ push: jest.fn() }),
+  usePathname: () => '/acme/hosts/groomer/ai-jobs/job-1',
+}))
+const mockFetch = jest.fn()
+jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
+  __esModule: true,
+  ...jest.requireActual('@aglyn/shared-util-http/authorized-token'),
+  authorizedFetch: (...args: unknown[]) => mockFetch(...args),
+}))
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
@@ -118,7 +130,7 @@ describe('the progress a site job shows (AGL-3594)', () => {
     expect(aiSiteBuildCreditsLine(job())).toBe('Credits used so far: 9')
     expect(aiSiteBuildCreditsLine(job({ status: 'done', creditsSpent: 180 }))).toBe('This site used 180 credits.')
     expect(aiSiteBuildCreditsLine(job({ status: 'failed', creditsSpent: 35, refundedCredits: 35 }))).toBe(
-      'Nothing was charged — we refunded 35 credits.',
+      'This one’s on us — you weren’t charged. The 35 credits it used are back in your AI credits.',
     )
   })
 })
@@ -164,7 +176,7 @@ describe('Building your site (AGL-3594)', () => {
     }))
     expect(await screen.findByRole('heading', { name: 'Your site was not built' })).toBeTruthy()
     expect(screen.getByText('Something went wrong planning your site. Try again.')).toBeTruthy()
-    expect(screen.getByText('Nothing was charged — we refunded 35 credits.')).toBeTruthy()
+    expect(screen.getByText('This one’s on us — you weren’t charged. The 35 credits it used are back in your AI credits.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Use the starter site instead' })).toBeTruthy()
   })
 
@@ -313,5 +325,67 @@ describe('a job that is not a site names what it makes (AGL-3596)', () => {
       heading: 'Your site is ready',
       lede: 'Your new pages are drafts. Publish them when you’re happy.',
     })
+  })
+})
+
+describe('a guided start that failed on our side (AGL-3596)', () => {
+  /** The 2026-10-06 production job: plan done, the layout refused, 102 credits all given back. */
+  const FAILED = () =>
+    job({
+      status: 'failed',
+      running: false,
+      plan: {
+        ...PLAN,
+        create: [
+          { kind: 'layout', name: 'Dog Grooming Layout', why: 'The frame.', duplicateOf: null, fields: ['header', 'nav', 'footer'] },
+          { kind: 'form', name: 'Grooming Inquiry Form', why: 'Inquiries.', duplicateOf: null, fields: [] },
+        ],
+      } as never,
+      steps: [
+        { name: 'plan', status: 'done', startedAt: null, endedAt: null, creditsSpent: 13, error: null },
+        { name: 'generate', status: 'failed', startedAt: null, endedAt: null, creditsSpent: 89, error: null },
+      ],
+      outputs: [{ resource: 'seo', id: 'site:listing', hostId: 'host-1', label: 'Listing', proposal: {} }] as never,
+      error: 'Something went wrong building your site, and it was not built.',
+      creditsSpent: 102,
+      refundedCredits: 102,
+      siteInputs: { businessType: 'dog grooming salon', audience: 'dog owners in Hillside', starter: 'business', pages: 2, submissions: 'inbox', welcomeEmail: false },
+    } as never)
+  const REFUNDED = 'This one’s on us — you weren’t charged. The 102 credits it used are back in your AI credits.'
+
+  it('names the step that failed — the layout, never the first page', () => {
+    expect(aiSiteBuildRows(FAILED()).map((row) => [row.label, row.state])).toEqual([
+      ['Planning your pages', 'done'],
+      ['Building the header and footer: Dog Grooming Layout', 'failed'],
+      ['Building the form: Grooming Inquiry Form', 'waiting'],
+      ['Writing page 1 of 2: Home', 'waiting'],
+      ['Writing page 2 of 2: Book', 'waiting'],
+    ])
+  })
+
+  it('says what failed, that it cost nothing, and offers Try again on its own answers and the starter site', async () => {
+    mockFetch.mockReset().mockResolvedValue({ ok: true, status: 200, json: async () => ({ jobs: [], freeTaste: true }) })
+    await open(FAILED())
+    expect(await screen.findByRole('heading', { name: 'Your site was not built' })).toBeTruthy()
+    expect(screen.getByText('Something went wrong building your site, and it was not built.')).toBeTruthy()
+    expect(screen.queryByText(/The plan is ready/)).toBeNull()
+    expect(screen.getByText(REFUNDED)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Use the starter site instead' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    // The guided start reopens on its questions, filled in with what the person answered.
+    expect(await screen.findByDisplayValue('dog grooming salon')).toBeTruthy()
+    expect(screen.getByDisplayValue('dog owners in Hillside')).toBeTruthy()
+  })
+
+  it('keeps following a job that parks for an instant, so its credits and state are the job’s last', async () => {
+    mockFollow.mockReset()
+    mockFollow.mockImplementation(async (_u: unknown, _o: string, _i: string, signal: AbortSignal, onJob: (next: AiJobSummary) => void) => {
+      onJob(job({ status: 'needs_review', running: false, creditsSpent: 13, review: { reason: 'plan', message: 'The plan is ready.', findings: [] } } as never))
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      // A page that stopped following on the park has aborted by now.
+      if (!signal.aborted) onJob(FAILED())
+    })
+    render(<AiSiteBuildPage hostId="host-1" segments={['job-1']} basePath="/acme/hosts/groomer/ai-jobs" entitled />)
+    expect(await screen.findByText(REFUNDED)).toBeTruthy()
   })
 })

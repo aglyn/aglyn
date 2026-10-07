@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AiJobKind, AiJobSummary } from './ai-jobs.types'
+import type { AiJobKind, AiJobStatus, AiJobSummary } from './ai-jobs.types'
 
 /**
  * What a member reads when a plan could not be made (AGL-3594): one plain
@@ -83,6 +83,40 @@ export function aiPlanRetryRefusal(input: { creditsLeft: number; planCredits: nu
   return `You have ${left} AI ${left === 1 ? 'credit' : 'credits'} left this month, and a plan needs up to ${input.planCredits}. Your credits refresh next month, or upgrade for more.`
 }
 
+/**
+ * What a guided site start that failed on our side says (AGL-3596): one plain
+ * sentence, never a rule. Whether its credits came back is said beside it, from
+ * the job's own record (`aiJobRefundCopy`).
+ */
+export const AI_SITE_GUIDED_BUILD_FAILED_COPY = 'Something went wrong building your site, and it was not built.'
+
+/** What a person's own cancel says about its credits: they paid for what ran until then. */
+export const AI_JOB_CANCELED_CREDITS_COPY = 'You paid for what was spent up to then.'
+
+/**
+ * What every surface that shows a stopped job says about its credits
+ * (AGL-3596), read off the job's RECORDED give-back (`refundedCredits`),
+ * never worked out again: a failure on our side that gave its credits back
+ * says so plainly, and a person's own cancel says they paid for what ran.
+ * `null` where there is nothing to say — a job still working, done, or one
+ * that stopped without a give-back.
+ */
+export function aiJobRefundCopy(
+  job: { status: AiJobStatus } & Partial<Pick<AiJobSummary, 'refundedCredits' | 'creditsSpent'>>,
+): string | null {
+  const refunded = Math.max(0, Math.floor(job.refundedCredits ?? 0))
+  if (refunded > 0) {
+    const credits = `${refunded} ${refunded === 1 ? 'credit' : 'credits'}`
+    const back = refunded === 1 ? 'is' : 'are'
+    const whole = refunded >= Math.floor(job.creditsSpent ?? 0)
+    return whole
+      ? `This one’s on us — you weren’t charged. The ${credits} it used ${back} back in your AI credits.`
+      : `This one’s on us — you weren’t charged for the part that failed. The ${credits} it used ${back} back in your AI credits.`
+  }
+  if (job.status === 'canceled' && (job.creditsSpent ?? 0) > 0) return AI_JOB_CANCELED_CREDITS_COPY
+  return null
+}
+
 /** The guided start's way back to the starter (AGL-3594). */
 export const AI_SITE_STARTER_FALLBACK_LABEL = 'Use the starter site instead'
 
@@ -97,7 +131,8 @@ export function aiSiteStarterFallbackOffered(
   job: Pick<AiJobSummary, 'kind' | 'status' | 'hostId' | 'outputs' | 'review'>,
 ): boolean {
   if (job.kind !== 'site' || !job.hostId) return false
-  if (job.outputs.length > 0) return false
+  // The site's listing proposal rides out with the first unit and builds nothing (AGL-3596).
+  if (job.outputs.some((output) => output.resource !== 'seo')) return false
   if (job.status === 'failed' || job.status === 'canceled') return true
   return job.status === 'needs_review' && job.review?.reason === 'doctrine'
 }

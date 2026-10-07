@@ -83,7 +83,7 @@ import {
   WORKFLOW_MAX_STEPS,
 } from '../model/workflows'
 import { describeStepOutcome } from '../model/step-outcomes'
-import { type HostWebhook, WEBHOOK_URL_PATTERN } from '../model/webhooks'
+import type { HostWebhook } from '../model/webhooks'
 import { eventRunSuspension } from './site-suspension'
 import { triggeredDocsForEvent } from './triggered-docs'
 import { resolveStepEmailMerge, stepEmailMergeContext } from './email-merge'
@@ -587,8 +587,7 @@ async function runServerStep(
         hookDoc.get('deletedAt') ||
         hook.enabled === false ||
         hook.direction !== 'outbound' ||
-        !hook.url ||
-        !WEBHOOK_URL_PATTERN.test(hook.url)
+        !hook.url
       ) {
         return failed(`unknown webhook "${step.webhookName || step.webhookId}"`)
       }
@@ -602,11 +601,24 @@ async function runServerStep(
         : ''
       // Two quick retries — serverless-friendly; longer retry queues
       // are a follow-up.
+      //
+      // The hook's URL is tenant-typed and the step runs on any visitor's
+      // form submission, so it goes out through the configured-URL fetch
+      // (AGL-3363), never a bare `fetch`: https only, the name resolved to
+      // PUBLIC addresses with the socket pinned to the one checked, and no
+      // redirect followed — a 3xx is a failed delivery. That is what refuses
+      // `[::1]`, `[::ffff:127.0.0.1]`, a decimal `2130706433`, a name that
+      // resolves inward, and a public host answering `302` to the metadata
+      // endpoint, none of which a pattern over the URL text can see.
+      //
+      // Loaded here, not at the top: see `webhook-delivery.ts`.
+      const { describeConfiguredUrlRefusal, fetchConfiguredPublicUrl } =
+        await import('./webhook-delivery')
       let delivered = false
       let lastStatus: number | undefined
       for (let attempt = 0; attempt < 3 && !delivered; attempt += 1) {
         try {
-          const response = await fetch(hook.url, {
+          const result = await fetchConfiguredPublicUrl(hook.url, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -615,8 +627,15 @@ async function runServerStep(
             body,
             signal: AbortSignal.timeout(5000),
           })
-          lastStatus = response.status
-          delivered = response.ok
+          if ('refusal' in result) {
+            // A refusal is the URL's, not the network's: retrying it would
+            // only re-resolve the same answer.
+            return failed(
+              `webhook "${step.webhookName || step.webhookId}" refused: ${describeConfiguredUrlRefusal(result.refusal)}`,
+            )
+          }
+          lastStatus = result.status
+          delivered = result.status >= 200 && result.status < 300
         } catch {
           // Retry below.
         }

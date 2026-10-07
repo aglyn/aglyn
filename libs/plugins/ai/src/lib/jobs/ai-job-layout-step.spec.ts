@@ -74,6 +74,7 @@ jest.mock('./ai-jobs', () => ({
 }))
 
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
+import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import type { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
@@ -455,6 +456,81 @@ describe('the layout step', () => {
       })),
     })
     expect(commits).toEqual([])
+  })
+
+  describe('a site scaffold’s layout, built before its pages (AGL-3596)', () => {
+    /** The production plan: a layout of header, nav and footer, two pages it builds next. */
+    const SITE_PLAN: AiJobPlan = {
+      ...PLAN,
+      create: [{ ...PLAN.create[0], name: 'Dog Grooming Layout', fields: ['header', 'nav', 'footer'] }],
+    }
+    const SITE_PAGES = [
+      { id: 'pgHome01', label: 'Home', slug: '/' },
+      { id: 'pgContact1', label: 'Contact', slug: 'contact' },
+    ]
+    /** What the model answered on 2026-10-06, twice: a nav region with nothing in it. */
+    const EMPTY_NAV_TREE = {
+      rootId: 'root',
+      nodes: {
+        root: { componentId: 'div', nodes: ['header', 'slot', 'footer'] },
+        header: { componentId: 'muiAppBar', props: { position: 'static', color: 'default' }, nodes: ['bar'] },
+        bar: { componentId: 'muiToolbar', nodes: ['brand', 'navRegion'] },
+        brand: { componentId: 'muiTypography', props: { variant: 'h6', component: 'p', children: 'Hillside Dog Grooming' } },
+        navRegion: { componentId: 'section', props: { element: 'nav', ariaLabel: 'Main navigation' } },
+        slot: { componentId: 'layoutSlot' },
+        footer: { componentId: 'section', props: { element: 'footer' }, nodes: ['tagline'] },
+        tagline: { componentId: 'muiTypography', props: { variant: 'body2', children: 'Calm, gentle grooming in Hillside.' } },
+      },
+    }
+    const siteLayoutJob = (inputs: Record<string, unknown>) => ({
+      plan: SITE_PLAN,
+      inputs: { originJobId: 'job-site', ...inputs },
+    })
+    const storedNodes = (id: string) => {
+      const layout = mockDocs.get(`hosts/host-1/layouts/${id}`) as { versionId: string }
+      const version = mockDocs.get(`hosts/host-1/layouts/${id}/versions/${layout.versionId}`) as { nodes: unknown }
+      return decodeStoredNodes<Record<string, unknown>>(version.nodes as never)
+    }
+
+    it('writes the header’s links to the planned pages into the nav the model left empty, and keeps it', async () => {
+      mockRunAiRequest.mockResolvedValue(treeAnswer(EMPTY_NAV_TREE))
+      const outcome = await createAiJobLayoutStep()(context(siteLayoutJob({ sitePages: SITE_PAGES })))
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+      expect(outcome.review).toBeUndefined()
+      expect(outcome.outputs).toHaveLength(1)
+      const written = JSON.stringify(storedNodes(LAYOUT_ID))
+      expect(written).toContain('pgHome01')
+      expect(written).toContain('pgContact1')
+      // The model is told the platform writes the navigation, and to leave nothing empty for it.
+      const prompt = mockRunAiRequest.mock.calls[0][0].messages[0].content as string
+      expect(prompt).toContain('Home (/), Contact (/contact)')
+      expect(prompt).toContain('leave no empty element')
+    })
+
+    it('adds a nav row to the Toolbar Content when the model built none, so the plan’s nav region is built', async () => {
+      const withoutNav = {
+        ...EMPTY_NAV_TREE,
+        nodes: {
+          ...Object.fromEntries(Object.entries(EMPTY_NAV_TREE.nodes).filter(([id]) => id !== 'navRegion')),
+          bar: { componentId: 'muiToolbar', nodes: ['brand'] },
+        },
+      }
+      mockRunAiRequest.mockResolvedValue(treeAnswer(withoutNav))
+      const outcome = await createAiJobLayoutStep()(context(siteLayoutJob({ sitePages: SITE_PAGES })))
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+      expect(outcome.review).toBeUndefined()
+      expect(JSON.stringify(storedNodes(LAYOUT_ID))).toContain('pgContact1')
+    })
+
+    it('still refuses an empty nav in a layout no scaffold fills: rule 16 is not relaxed', async () => {
+      mockRunAiRequest.mockResolvedValue(treeAnswer(EMPTY_NAV_TREE))
+      const outcome = await createAiJobLayoutStep()(context({ plan: SITE_PLAN }))
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+      expect(outcome.review).toMatchObject({
+        reason: 'doctrine',
+        findings: [expect.objectContaining({ rule: 16, code: 'empty-container', nodeIds: ['navRegion'] })],
+      })
+    })
   })
 
   it('keeps a layout that places the site’s navigation component in its header', async () => {

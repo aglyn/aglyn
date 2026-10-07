@@ -135,8 +135,11 @@ describe('a site’s AI jobs', () => {
     expect(within(rows[0]).getByText('Page')).toBeTruthy()
     expect(within(rows[0]).getByText('Failed')).toBeTruthy()
     expect(within(rows[0]).getByText('A pricing page')).toBeTruthy()
-    // Refunded in full: no credits on the row.
-    expect(within(rows[0]).queryByText(/credits/)).toBeNull()
+    // Refunded in full: no charge on the row, and the row says so (AGL-3596).
+    expect(within(rows[0]).queryByText(/^\d+ credits/)).toBeNull()
+    expect(
+      within(rows[0]).getByText('This one’s on us — you weren’t charged. The 35 credits it used are back in your AI credits.'),
+    ).toBeTruthy()
     expect(within(rows[1]).getByText('Site')).toBeTruthy()
     expect(within(rows[1]).getByText('Done')).toBeTruthy()
     expect(within(rows[1]).getByText(/180 credits/)).toBeTruthy()
