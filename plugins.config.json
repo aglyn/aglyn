@@ -2759,6 +2759,37 @@
       }
     },
     {
+      "id": "post-purchase",
+      "package": "@aglyn/plugins-post-purchase",
+      "register": {
+        "console": "registerPostPurchaseConsole",
+        "consoleApi": "registerPostPurchaseConsoleApi",
+        "serverDeclarations": "registerPostPurchaseServerDeclarations",
+        "subprocessors": "postPurchaseSubprocessors"
+      },
+      "apiPrefixes": ["post-purchase"],
+      "catalog": {
+        "order": 25,
+        "$comment": "AfterShip tracking, Route package protection and Narvar for the commerce plugin's orders (AGL-3635), each with the merchant's own account, through core's checkout-extras and tracking-pages seams and commerce's order events by name; it never imports commerce. No `requires` edge, for shipping's reason: a workspace cannot switch it off, so it runs only on a site where commerce is on (site-context.ts). On for every workspace, off for a site only when that site says so, and no release flag: every surface hides itself until the deployment sets POST_PURCHASE_VENDORS and POST_PURCHASE_TOKEN_KEY.",
+        "label": "Tracking and protection",
+        "alwaysOnForWorkspace": true,
+        "description": "Parcel tracking through AfterShip, package protection at checkout through Route, and Narvar order tracking, with the store's own accounts.",
+        "siteOff": {
+          "stops": "Switching Tracking and protection off for this site stops offering package protection in its cart, following new parcels and sending new orders to Narvar.",
+          "keeps": "Protection already bought stays open with Route, connected accounts stay connected, and it keeps working on the workspace's other sites."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "orderDetail"
+          ]
+        }
+      }
+    },
+    {
       "id": "tax-engines",
       "package": "@aglyn/plugins-tax-engines",
       "register": {

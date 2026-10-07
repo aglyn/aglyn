@@ -898,6 +898,20 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Post-purchase (AGL-3635): one site's AfterShip, Route and Narvar
+      // switches with the credentials its merchant connected, sealed under
+      // POST_PURCHASE_TOKEN_KEY, and what each service was told about an
+      // order — the Route policy a buyer paid for, the parcels followed.
+      // Server-written AND server-read: the plugin's routes serve what the
+      // console shows. A client that could write the settings could point a
+      // store's protection premium at someone else's account.
+      match /postPurchaseHostSettings/{hostId} {
+        allow read, write: if false;
+      }
+      match /postPurchaseOrders/{recordId} {
+        allow read, write: if false;
+      }
+
       // Outreach (AGL-2974): the mailboxes reps connect, the sequences they
       // send and each prospect's enrollment in one. Read through
       // `canReadOutreach()` above.

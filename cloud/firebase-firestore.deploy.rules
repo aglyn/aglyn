@@ -905,6 +905,20 @@ allow read, write: if false;
 
 
 
+match /postPurchaseHostSettings/{hostId} {
+allow read, write: if false;
+}
+match /postPurchaseOrders/{recordId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
 
 
 

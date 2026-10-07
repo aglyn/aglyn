@@ -84,6 +84,12 @@ export interface OrderStatusView {
     totalCents: number
     refundedCents: number
   }
+  /**
+   * Optional lines the buyer took at checkout (AGL-3635) — "Package
+   * protection" — by the name and price their receipt states. Optional so
+   * an answer from before this field reads as none.
+   */
+  extras?: Array<{ label: string; amountCents: number }>
   shipments: OrderStatusShipment[]
   steps: OrderStatusStep[]
   actions: OrderStatusAction[]
@@ -204,6 +210,9 @@ export function buildOrderStatusView(input: {
       totalCents,
       refundedCents: Number(order.refundedCents ?? 0) || 0,
     },
+    extras: (order.extras ?? [])
+      .filter((extra) => extra && Number(extra.amountCents) > 0)
+      .map((extra) => ({ label: String(extra.label || 'Extra'), amountCents: Number(extra.amountCents) })),
     shipments,
     steps,
     actions: input.actions ?? [],
