@@ -45,13 +45,16 @@ fun AglynShell(
   navigator: ShellNavigator = remember { ShellNavigator() },
   /** A debug launch's request to sign in with the build's test credentials at once. */
   autoSignIn: Boolean = false,
+  /** A link to open once signed in: a tapped notification's, or an App Link / aglyn:// URL. */
+  pendingLink: String? = null,
+  onLinkOpened: () -> Unit = {},
 ) {
   AglynTheme {
     val auth by services.auth.state.collectAsState()
     when (val state = auth) {
       AuthState.Restoring -> Loading()
       AuthState.SignedOut -> SignInScreen(services, autoSignIn)
-      is AuthState.SignedIn -> SignedInShell(services, navigator, state.user.uid)
+      is AuthState.SignedIn -> SignedInShell(services, navigator, state.user.uid, pendingLink, onLinkOpened)
     }
   }
 }
@@ -65,7 +68,8 @@ internal fun Loading() {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
-private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, uid: String) {
+private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, uid: String, pendingLink: String?, onLinkOpened: () -> Unit) {
+  LaunchedEffect(uid) { services.push.register(uid) }
   val workspace by services.workspace.state.collectAsState()
   val version by services.registry.version.collectAsState()
   val widthClass = currentWidthClass()
@@ -100,6 +104,13 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
       navigator.push(Route.Screen(screenId))
     } else if (navigator.top == ShellNavigator.MORE) {
       navigator.select(ShellNavigator.HOME)
+    }
+  }
+
+  LaunchedEffect(pendingLink, workspace.ready) {
+    if (pendingLink != null && workspace.ready) {
+      context.openLink(pendingLink)
+      onLinkOpened()
     }
   }
 

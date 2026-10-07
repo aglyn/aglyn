@@ -78,6 +78,7 @@ fun PosShell(services: ShellServices, autoSignIn: Boolean = false) {
 
 @Composable
 private fun PosSignedIn(services: ShellServices, uid: String) {
+  androidx.compose.runtime.LaunchedEffect(uid) { services.push.register(uid) }
   val workspace by services.workspace.state.collectAsState()
   var confirmed by remember(uid) { mutableStateOf(services.prefs.get(posStoreKey(uid))) }
   val scope = rememberCoroutineScope()
@@ -94,7 +95,7 @@ private fun PosSignedIn(services: ShellServices, uid: String) {
         services.prefs.set(posStoreKey(uid), chosen.id)
         confirmed = chosen.id
       },
-      onSignOut = { scope.launch { services.auth.signOut() } },
+      onSignOut = { scope.launch { services.signOut() } },
     )
     else -> Till(services, uid, workspace) {
       services.prefs.set(posStoreKey(uid), null)
@@ -231,7 +232,7 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
           IconButton(onClick = onSwitchStore, modifier = Modifier.testTag("switch-store")) {
             Icon(AglynIcons.named("storefront"), contentDescription = "Switch store")
           }
-          IconButton(onClick = { scope.launch { services.auth.signOut() } }) {
+          IconButton(onClick = { scope.launch { services.signOut() } }) {
             Icon(AglynIcons.named("logout"), contentDescription = "Sign out")
           }
         },

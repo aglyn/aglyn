@@ -37,7 +37,15 @@ class ShellServices(
   val debugSignIn: Pair<String, String>? = null,
   /** The register's printers, card reader and scanner; none in the Aglyn app. */
   val peripherals: com.aglyn.hardware.Peripherals = com.aglyn.hardware.NoPeripherals,
-)
+  /** This install's push registration; desktop has none in v1. */
+  val push: com.aglyn.core.PushRegistrar = com.aglyn.core.NoPush,
+) {
+  /** Removes this install's device row, then signs out, so no push follows the person out. */
+  suspend fun signOut() {
+    (auth.state.value as? com.aglyn.core.AuthState.SignedIn)?.let { push.unregister(it.user.uid) }
+    auth.signOut()
+  }
+}
 
 /** Where the shell is: a top-level destination plus a stack of pushed routes. */
 sealed interface Route {

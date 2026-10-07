@@ -26,6 +26,7 @@ class AglynPosApplication : Application() {
         firestoreEmulatorHost = BuildConfig.FIRESTORE_EMULATOR_HOST,
       ),
       manifest = NativePlugins.entries,
+      appVersion = BuildConfig.VERSION_NAME,
       debugSignIn = if (BuildConfig.DEBUG && BuildConfig.DEBUG_EMAIL.isNotEmpty()) {
         BuildConfig.DEBUG_EMAIL to BuildConfig.DEBUG_PASSWORD
       } else {

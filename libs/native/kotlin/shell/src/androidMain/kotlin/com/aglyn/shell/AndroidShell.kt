@@ -6,6 +6,7 @@ import com.aglyn.core.AglynConfig
 import com.aglyn.core.AglynEnv
 import com.aglyn.core.AndroidFirebase
 import com.aglyn.core.ConsoleApiClient
+import com.aglyn.core.FcmPushRegistrar
 import com.aglyn.core.FirebaseAuthSession
 import com.aglyn.core.FirebaseFirestoreReader
 import com.aglyn.core.SharedPreferencesStore
@@ -32,6 +33,7 @@ object AndroidShell {
     manifest: List<NativePluginManifestEntry>,
     debugSignIn: Pair<String, String>? = null,
     peripherals: com.aglyn.hardware.Peripherals = com.aglyn.hardware.NoPeripherals,
+    appVersion: String? = null,
   ): ShellServices {
     val config = AglynConfig.read(env, if (app == NativeApp.POS) AglynAppId.POS else AglynAppId.AGLYN)
     config.problems().forEach { android.util.Log.w("Aglyn", it) }
@@ -55,6 +57,7 @@ object AndroidShell {
       console = { path, onExit -> ConsoleView(config.consoleOrigin, path, auth, config.brandName, onExit) },
       debugSignIn = debugSignIn,
       peripherals = peripherals,
+      push = com.aglyn.core.FcmPushRegistrar(firebase, prefs, config.app, appVersion),
     )
   }
 }

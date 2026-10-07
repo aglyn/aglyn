@@ -210,7 +210,7 @@ internal fun SettingsScreen(services: ShellServices) {
     )
     HorizontalDivider()
     Column(Modifier.padding(space(2f)).widthIn(max = 480.dp).fillMaxWidth()) {
-      OutlinedButton(onClick = { scope.launch { services.auth.signOut() } }, modifier = Modifier.fillMaxWidth().testTag("sign-out")) {
+      OutlinedButton(onClick = { scope.launch { services.signOut() } }, modifier = Modifier.fillMaxWidth().testTag("sign-out")) {
         Text("Sign out")
       }
     }

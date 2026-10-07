@@ -35,6 +35,7 @@ kotlin {
       implementation(libs.kotlinx.coroutines.play.services)
       api(libs.firebase.auth)
       api(libs.firebase.firestore)
+      api(libs.firebase.messaging)
     }
     named("desktopTest") {
       dependencies {
