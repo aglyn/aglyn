@@ -34,7 +34,7 @@ class FunctionCasesTest {
   @Test
   fun everyFunctionHasCases() {
     assertEquals("UTC", root.getValue("timeZone").jsonPrimitive.content)
-    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch")))
+    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund")))
   }
 
   @Test
@@ -96,9 +96,30 @@ class FunctionCasesTest {
   }
 
   @Test
+  fun orderLineFulfillmentStatesCases() = cases("orderLineFulfillmentStates").forEach { (args, result) ->
+    val expected = result.jsonArray.map {
+      val row = it.jsonObject
+      OrderLineFulfillmentState(
+        lineItemId = row.getValue("lineItemId").jsonPrimitive.long.toInt(),
+        quantity = row.getValue("quantity").jsonPrimitive.long,
+        fulfilledQuantity = row.getValue("fulfilledQuantity").jsonPrimitive.long,
+        remainingQuantity = row.getValue("remainingQuantity").jsonPrimitive.long,
+        requiresShipping = row.getValue("requiresShipping").jsonPrimitive.boolean,
+      )
+    }
+    assertEquals(expected, orderLineFulfillmentStates(order(args[0])), args.toString())
+  }
+
+  @Test
+  fun orderDisputeBlocksRefundCases() = cases("orderDisputeBlocksRefund").forEach { (args, result) ->
+    assertEquals(result.jsonPrimitive.boolean, orderDisputeBlocksRefund(order(args[0])), args.toString())
+  }
+
+  @Test
   fun contractValuesDecode() {
     assertEquals("Online", Contracts.orderChannelLabels["online"])
     assertTrue(Contracts.orderListQuery.fields.isNotEmpty())
+    assertEquals(ListFilterClause(field = "disputeKey", op = "equals", value = "open"), Contracts.openDisputeClause)
   }
 
   @Test

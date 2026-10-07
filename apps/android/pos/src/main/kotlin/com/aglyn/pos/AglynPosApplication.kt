@@ -4,7 +4,7 @@ import android.app.Application
 import com.aglyn.core.AglynEnv
 import com.aglyn.hardware.StaticPeripherals
 import com.aglyn.pluginhost.NativeApp
-import com.aglyn.plugins.manifest.NativePlugins
+import com.aglyn.plugins.manifest.NativePluginManifest
 import com.aglyn.shell.AndroidShell
 import com.aglyn.pos.terminal.PermissionGate
 import com.aglyn.pos.terminal.StripeTerminalCollector
@@ -38,7 +38,7 @@ class AglynPosApplication : Application() {
         authEmulatorHost = BuildConfig.AUTH_EMULATOR_HOST,
         firestoreEmulatorHost = BuildConfig.FIRESTORE_EMULATOR_HOST,
       ),
-      manifest = NativePlugins.entries,
+      manifest = NativePluginManifest.entries,
       appVersion = BuildConfig.VERSION_NAME,
       debugSignIn = if (BuildConfig.DEBUG && BuildConfig.DEBUG_EMAIL.isNotEmpty()) {
         BuildConfig.DEBUG_EMAIL to BuildConfig.DEBUG_PASSWORD

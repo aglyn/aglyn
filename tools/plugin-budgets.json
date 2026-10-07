@@ -106,5 +106,9 @@
   "fonts": {
     "baseline": 4059,
     "budget": 5120
+  },
+  "post-purchase": {
+    "baseline": 3128,
+    "budget": 4096
   }
 }

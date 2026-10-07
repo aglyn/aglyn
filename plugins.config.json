@@ -415,7 +415,7 @@
         "contributes": {
           "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers"],
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
-          "widgets": ["commerce.today", "commerce.sales-trend"],
+          "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship"],
           "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
           "deepLinks": ["commerce.orders-page", "commerce.products-page"]
         }
@@ -2231,6 +2231,7 @@
       "mobile": {
         "$comment": "AGL-3620: the sample mobile registration. The site's rules as a native list (a split view on tablets), a dashboard count, a quick action, and the console's Redirects page opening natively from a link or a notification.",
         "ios": { "module": "AglynRedirectsPlugin", "register": "registerRedirectsNative" },
+        "android": { "package": "com.aglyn.plugins.redirects", "register": "registerRedirectsNative" },
         "contributes": {
           "screens": ["redirects.list"],
           "widgets": ["redirects.summary"],
@@ -2773,10 +2774,10 @@
         "$comment": "AfterShip tracking, Route package protection and Narvar for the commerce plugin's orders (AGL-3635), each with the merchant's own account, through core's checkout-extras and tracking-pages seams and commerce's order events by name; it never imports commerce. No `requires` edge, for shipping's reason: a workspace cannot switch it off, so it runs only on a site where commerce is on (site-context.ts). On for every workspace, off for a site only when that site says so, and no release flag: every surface hides itself until the deployment sets POST_PURCHASE_VENDORS and POST_PURCHASE_TOKEN_KEY.",
         "label": "Tracking and protection",
         "alwaysOnForWorkspace": true,
-        "description": "Parcel tracking through AfterShip, package protection at checkout through Route, and Narvar order tracking, with the store's own accounts.",
+        "description": "Order tracking and package protection.",
         "siteOff": {
-          "stops": "Switching Tracking and protection off for this site stops offering package protection in its cart, following new parcels and sending new orders to Narvar.",
-          "keeps": "Protection already bought stays open with Route, connected accounts stay connected, and it keeps working on the workspace's other sites."
+          "stops": "Stops protection and tracking for new orders.",
+          "keeps": "Bought protection stays in force."
         },
         "publishedSiteImpact": "console-only"
       },

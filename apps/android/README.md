@@ -131,9 +131,8 @@ Release builds take no emulator host and default the console to
 A plugin's native screens live in `libs/plugins/<id>/src/android`, a KMP module
 whose registrar registers the ids its `mobile.contributes` block declares in
 `plugins.config.json`. `npm run generate:plugin-manifests` writes the manifest
-and properties files from the plugin's `mobile.android` block. Until a plugin's
-block lands, `native-plugins.properties` and `NativePlugins.kt` carry it, and a
-generated entry always wins.
+and properties files from the plugin's `mobile.android` block; the apps load
+`NativePluginManifest.entries` and nothing else.
 
 ## What Zach owes
 
