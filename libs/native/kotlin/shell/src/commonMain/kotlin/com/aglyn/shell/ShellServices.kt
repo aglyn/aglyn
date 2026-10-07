@@ -35,6 +35,8 @@ class ShellServices(
   val console: @Composable (path: String, onExit: () -> Unit) -> Unit,
   /** Test credentials a debug build fills the sign-in form with; null in release. */
   val debugSignIn: Pair<String, String>? = null,
+  /** The register's printers, card reader and scanner; none in the Aglyn app. */
+  val peripherals: com.aglyn.hardware.Peripherals = com.aglyn.hardware.NoPeripherals,
 )
 
 /** Where the shell is: a top-level destination plus a stack of pushed routes. */
@@ -85,6 +87,8 @@ internal class ShellPluginContext(
   override val hostSlug get() = workspace.site?.subdomain?.ifEmpty { null }
   override val firestore get() = services.firestore
   override val api get() = services.api
+  override val peripherals get() = services.peripherals
+  override val deviceStore get() = services.prefs
 
   override fun navigate(screenId: String, params: NativeParams) {
     if (screenId in topLevelScreens && params.isEmpty()) {

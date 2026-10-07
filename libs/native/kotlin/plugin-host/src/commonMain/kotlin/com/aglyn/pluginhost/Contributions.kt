@@ -3,6 +3,7 @@ package com.aglyn.pluginhost
 import androidx.compose.runtime.Composable
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.FirestoreReader
+import com.aglyn.core.KeyValueStore
 import com.aglyn.hardware.NoPeripherals
 import com.aglyn.hardware.Peripherals
 
@@ -49,6 +50,13 @@ interface NativePluginContext {
    * HID scanner. The POS shell binds them; elsewhere there are none.
    */
   val peripherals: Peripherals get() = NoPeripherals
+
+  /**
+   * Small per-install storage for state that belongs to this device, such as
+   * a register's basket surviving a restart. A plugin keys its entries with
+   * its own id (`<pluginId>.…`).
+   */
+  val deviceStore: KeyValueStore
 
   /** Opens a registered screen by id. */
   fun navigate(screenId: String, params: NativeParams = emptyMap())

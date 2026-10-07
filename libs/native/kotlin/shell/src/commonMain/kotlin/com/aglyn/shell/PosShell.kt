@@ -183,6 +183,10 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
   val register = remember(version) {
     services.registry.screens(NativeApp.POS).firstOrNull { it.placement == PosPlacement.REGISTER }
   }
+  // Screens a plugin puts in the register's menu (counter bookings, readers…).
+  val menu = remember(version) {
+    services.registry.screens(NativeApp.POS).filter { it.placement == PosPlacement.MENU }
+  }
   val context = ShellPluginContext(uid, workspace, services, navigator, emptySet())
   val scope = rememberCoroutineScope()
   BackHandler(enabled = navigator.stack.isNotEmpty()) { navigator.back() }
@@ -195,7 +199,11 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
           Column {
             Text(workspace.site?.name ?: "", style = MaterialTheme.typography.titleLarge)
             Text(
-              if (route is Route.Console) "Console" else "Register",
+              when (route) {
+                is Route.Console -> "Console"
+                is Route.Screen -> services.registry.screen(route.screenId)?.title ?: "Register"
+                else -> "Register"
+              },
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -207,6 +215,19 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
           }
         },
         actions = {
+          for (screen in menu) {
+            val open = (route as? Route.Screen)?.screenId == screen.id
+            IconButton(
+              onClick = { if (open) navigator.back() else navigator.push(Route.Screen(screen.id)) },
+              modifier = Modifier.testTag("pos-menu-${screen.id}"),
+            ) {
+              Icon(
+                AglynIcons.named(screen.icon),
+                contentDescription = screen.title,
+                tint = if (open) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
+          }
           IconButton(onClick = onSwitchStore, modifier = Modifier.testTag("switch-store")) {
             Icon(AglynIcons.named("storefront"), contentDescription = "Switch store")
           }
@@ -221,7 +242,7 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
     Box(Modifier.padding(padding).fillMaxSize()) {
       when {
         route is Route.Console -> services.console(route.path) { navigator.back() }
-        route is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, true)
+        route is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, true) { navigator.back() }
         register != null -> register.content(context, emptyMap())
         else -> EmptyState(
           "The register opens here",

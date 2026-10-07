@@ -2,6 +2,9 @@ package com.aglyn.pos
 
 import android.app.Application
 import com.aglyn.core.AglynEnv
+import com.aglyn.hardware.SimulatedCardCollector
+import com.aglyn.hardware.StaticPeripherals
+import com.aglyn.hardware.StripeTerminalSdkCollector
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.plugins.manifest.NativePlugins
 import com.aglyn.shell.AndroidShell
@@ -28,6 +31,11 @@ class AglynPosApplication : Application() {
       } else {
         null
       },
+      // Tap to Pay and Bluetooth readers arrive with the Stripe Terminal SDK;
+      // until then a debug build trains on a simulated reader.
+      peripherals = StaticPeripherals(
+        cardCollector = if (BuildConfig.DEBUG) SimulatedCardCollector() else StripeTerminalSdkCollector(),
+      ),
     )
   }
 }

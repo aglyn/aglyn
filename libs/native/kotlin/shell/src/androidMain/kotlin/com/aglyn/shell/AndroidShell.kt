@@ -31,6 +31,7 @@ object AndroidShell {
     env: AglynEnv,
     manifest: List<NativePluginManifestEntry>,
     debugSignIn: Pair<String, String>? = null,
+    peripherals: com.aglyn.hardware.Peripherals = com.aglyn.hardware.NoPeripherals,
   ): ShellServices {
     val config = AglynConfig.read(env, if (app == NativeApp.POS) AglynAppId.POS else AglynAppId.AGLYN)
     config.problems().forEach { android.util.Log.w("Aglyn", it) }
@@ -53,6 +54,7 @@ object AndroidShell {
       registry = registry,
       console = { path, onExit -> ConsoleView(config.consoleOrigin, path, auth, config.brandName, onExit) },
       debugSignIn = debugSignIn,
+      peripherals = peripherals,
     )
   }
 }
