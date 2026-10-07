@@ -106,7 +106,10 @@ const ThemeStack = withThemeCssVarProvider(
       <PlatformAdvertisingTags nonce={nonce} />
       <LoadingLayoutAppComponent>
         <ConfirmationProviderComponent>
-          <SnackbarProvider>
+          {/* Every toast carries a close button: a reader clears one without
+              waiting out its timer, which on a phone covers the bottom of
+              the page. */}
+          <SnackbarProvider dismissible>
             <HostIdProvider>
               <ConsolePluginsGate>{children}</ConsolePluginsGate>
             </HostIdProvider>

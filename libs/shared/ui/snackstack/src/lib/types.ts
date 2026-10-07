@@ -257,6 +257,13 @@ export interface SharedProps
    * @param {string|number} snackbarId ID of a snackbar
    */
   action?: SnackbarAction
+  /**
+   * A close button after the message (and after any `action`), so a reader
+   * can clear a toast without waiting out its timer. Set on the provider for
+   * every snackbar; a single snackbar can still opt out with `false`.
+   * @default false
+   */
+  dismissible?: boolean
 }
 
 /**
