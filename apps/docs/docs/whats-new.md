@@ -41,7 +41,7 @@ for the how-to.
   and quantities, with no prices.
 - **[Cash drawer](commerce-and-bookings/commerce/pos-hardware.md#cash-drawer)** — a
   drawer plugged into the printer opens on every cash sale, including the cash part of
-  a split payment.
+  a split payment, and when the shift records cash paid in, paid out or dropped.
 - **[Barcode scanning](commerce-and-bookings/commerce/pos-hardware.md#barcode-scanning)** —
   scan with a tablet's or phone's camera at the register and in the product editor,
   and a USB or Bluetooth scanner works even when the search box does not have focus.

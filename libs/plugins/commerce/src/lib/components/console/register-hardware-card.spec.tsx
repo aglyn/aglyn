@@ -22,6 +22,7 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
   printers: [],
   printJobs: [],
   registers: [],
+  terminalReaders: [],
 }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -67,6 +68,7 @@ beforeEach(() => {
   collections['printers'] = []
   collections['printJobs'] = []
   collections['registers'] = []
+  collections['terminalReaders'] = []
 })
 
 describe('the register Hardware card (AGL-3619)', () => {
@@ -168,5 +170,28 @@ describe('the register Hardware card (AGL-3619)', () => {
     expect(seenAgo(NOW - 10_000, NOW)).toBe('just now')
     expect(seenAgo(NOW - 5 * 60_000, NOW)).toBe('5 min ago')
     expect(printerSetupSteps('epson').join(' ')).toMatch(/Server Direct Print/)
+  })
+
+  it('lists the register’s card readers and customer displays, read-only', async () => {
+    collections['terminalReaders'] = [
+      { $id: 'tmr_1', label: 'Counter reader', deviceType: 'stripe_m2', status: 'online', registerId: 'r1' },
+    ]
+    authorizedFetch.mockImplementation((_user: unknown, url: string) =>
+      url === '/api/commerce/pos-display'
+        ? ok({ displays: [{ id: 'd1', label: 'Customer display', lastSeenAtMs: NOW - 30_000 }] })
+        : ok({}),
+    )
+    render(<RegisterHardwareCard hostId="h1" registerId="r1" registerName="Front" />)
+    expect(screen.getByText('Card readers and customer displays')).toBeTruthy()
+    expect(screen.getByText('Counter reader')).toBeTruthy()
+    expect(screen.getByText('Online')).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('Connected')).toBeTruthy())
+    const displayCall = authorizedFetch.mock.calls.find((call) => call[1] === '/api/commerce/pos-display')
+    expect(JSON.parse(displayCall![2].body)).toEqual({ hostId: 'h1', registerId: 'r1', action: 'displays' })
+  })
+
+  it('shows no device section when the register has no reader or display', () => {
+    render(<RegisterHardwareCard hostId="h1" registerId="r1" registerName="Front" />)
+    expect(screen.queryByText('Card readers and customer displays')).toBeNull()
   })
 })

@@ -81,9 +81,13 @@ working at once.
 - **Kitchen tickets**, on a printer set to print them: the order number in large
   type, the time and the register, and each item with its quantity and options,
   with no prices. Put one in the kitchen, at the bar or on the packing bench.
-- **Reprints**: select **Reprint on receipt printer** under the register's last
-  sale, or **Reprint receipt** on any register order under **Commerce → Orders**.
-  A reprint is marked *REPRINT*.
+- **The last sale's receipt**: select **Receipt printer** under the register's
+  last sale when the customer asks for paper after all. It prints once: a receipt
+  that already printed for that sale is not printed again.
+- **Reprints**: open any register order under **Commerce → Orders** and select
+  **Receipt printer**. A reprint is marked *REPRINT*.
+- **X and Z reports**, from the register's shift, on the printer that prints
+  receipts. See [Running the register](pos-operations.md).
 - A **test page** from the Hardware card.
 
 A receipt waits up to 30 minutes for its printer, and a kitchen ticket up to 10. If the printer is off or out of
@@ -115,6 +119,8 @@ printer's settings. The drawer then opens:
 - on every sale paid **in cash**, including a sale paid partly in cash and partly
   by card, as the receipt starts printing (or on its own when that printer does
   not print receipts),
+- when the shift records cash **paid in**, **paid out** or **dropped to the safe**,
+  and when a return is refunded in cash,
 - from **Open drawer** on the Hardware card.
 
 A drawer only opens within two minutes of the sale that asked for it. If the
@@ -160,8 +166,9 @@ the camera.
 
 ### Shipping labels
 
-Shipping labels are 4x6 inch PDFs, which any thermal label printer prints from
-the browser:
+Shipping labels bought through [Pirate Ship](use-pirate-ship.md) or
+[ShipStation](use-shipstation.md) come as 4x6 inch PDFs, which any thermal label
+printer prints from the browser:
 
 1. Install the printer's driver (Rollo, Zebra, DYMO and Brother all provide one
    for Mac and Windows) and load 4x6 labels.
@@ -174,4 +181,5 @@ the browser:
 ## Related
 
 - [POS & reservations](pos-and-reservations.md)
+- [Running the register](pos-operations.md)
 - [Product catalog](catalog.md)

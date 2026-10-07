@@ -50,7 +50,8 @@ import {
 /**
  * The Hardware card for one register (AGL-3619): the cloud receipt printers
  * paired with it, with their live status and recent jobs, and the way to add
- * one — brand, model, MAC or ID — and get the URL to paste into the printer.
+ * one — brand, model, MAC or ID — and get the URL to paste into the printer;
+ * then, read-only, the card readers and customer displays the register uses.
  *
  * Every write goes through `/api/commerce/printers`: the printer documents
  * and the queue are server-written, so this card only reads Firestore.
@@ -442,6 +443,110 @@ export interface RegisterHardwareCardProps {
   registerName: string
 }
 
+type ReaderRow = {
+  $id: string
+  label?: string
+  deviceType?: string
+  status?: string
+  registerId?: string
+}
+type DisplayRow = { id: string; label: string; lastSeenAtMs: number }
+
+/** A customer display that polled within this long is shown as connected. */
+const DISPLAY_CONNECTED_MS = 120_000
+
+/**
+ * The register's other devices, read-only: the Stripe Terminal card readers
+ * assigned to it and the customer displays paired with it. Each is added and
+ * removed where it is set up; this list is the one place a manager sees
+ * everything plugged into the till. Nothing renders when there are none.
+ */
+export function RegisterOtherDevices(props: {
+  hostId: string
+  registerId: string
+  now: number
+}) {
+  const { hostId, registerId, now } = props
+  const firestore = useFirestore()
+  const { data: user } = useUser()
+  const { data: readerDocs } = useFirestoreCollection<ReaderRow>(
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'terminalReaders'),
+        where('registerId', '==', registerId),
+        limit(10),
+      ),
+    [firestore, hostId, registerId],
+    { idField: '$id' },
+  )
+  const [displays, setDisplays] = useState<DisplayRow[]>([])
+  useEffect(() => {
+    if (!user) return
+    let live = true
+    void (async () => {
+      try {
+        const response = await authorizedFetch(user as any, '/api/commerce/pos-display', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostId, registerId, action: 'displays' }),
+        })
+        if (!response.ok) return
+        const answer = (await response.json().catch(() => ({}))) as { displays?: DisplayRow[] }
+        if (live) setDisplays(Array.isArray(answer.displays) ? answer.displays : [])
+      } catch {
+        // Offline: the list stays as it was; the printers above still show.
+      }
+    })()
+    return () => {
+      live = false
+    }
+  }, [user, hostId, registerId])
+  const readers = readerDocs ?? []
+  if (!readers.length && !displays.length) return null
+  return (
+    <>
+      <Divider />
+      <Typography variant="subtitle2">{'Card readers and customer displays'}</Typography>
+      {readers.map((reader) => (
+        <Stack key={reader.$id} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }} noWrap>
+            {reader.label || 'Card reader'}
+            <Typography component="span" variant="caption" color="text.secondary">
+              {` · Card reader${reader.deviceType ? ` · ${reader.deviceType}` : ''}`}
+            </Typography>
+          </Typography>
+          <Chip
+            size="small"
+            variant="outlined"
+            color={reader.status === 'online' ? 'success' : 'default'}
+            label={reader.status === 'online' ? 'Online' : 'Offline'}
+          />
+        </Stack>
+      ))}
+      {displays.map((display) => {
+        const connected = now - display.lastSeenAtMs < DISPLAY_CONNECTED_MS
+        return (
+          <Stack key={display.id} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }} noWrap>
+              {display.label || 'Customer display'}
+              <Typography component="span" variant="caption" color="text.secondary">
+                {` · Customer display · seen ${seenAgo(display.lastSeenAtMs, now)}`}
+              </Typography>
+            </Typography>
+            <Chip
+              size="small"
+              variant="outlined"
+              color={connected ? 'success' : 'default'}
+              label={connected ? 'Connected' : 'Offline'}
+            />
+          </Stack>
+        )
+      })}
+    </>
+  )
+}
+RegisterOtherDevices.displayName = 'RegisterOtherDevices'
+
 export function RegisterHardwareCard(props: RegisterHardwareCardProps) {
   const { hostId, registerId, registerName } = props
   const firestore = useFirestore()
@@ -619,6 +724,7 @@ export function RegisterHardwareCard(props: RegisterHardwareCardProps) {
             ))}
           </>
         ) : null}
+        <RegisterOtherDevices hostId={hostId} registerId={registerId} now={now} />
       </Stack>
 
       <Dialog
