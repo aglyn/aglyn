@@ -223,9 +223,10 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     scopeKind: 'host',
     collection: 'components',
     nameField: 'displayName',
-    // A boolean feature rather than a numeric quota: the free plan turns
-    // reusable components OFF entirely rather than allowing zero of them.
-    featureKey: 'reusableComponents',
+    // A count since AGL-3615 — Free 1, every paid plan unlimited — so a Free
+    // site's one component is findable. It was the `reusableComponents`
+    // flag, which Free lacks and which no longer decides who may have one.
+    entitlementKey: 'componentsPerHost',
     order: 100,
   },
   {

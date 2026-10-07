@@ -233,7 +233,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
    * that a plugin surface needs it too. Answered rather than left to the real
    * hook so the card's quota arithmetic stays real without a network read.
    */
-  useLiveArtifactCount: () => 0,
+  useLiveArtifactCount: () => mockLiveCount,
   writeGuardedBySeed: jest.fn(),
   usePagedCollection: jest.requireActual(
     '../../../libs/tenant/feature/instance/src/lib/hooks/use-paged-collection',
@@ -260,9 +260,13 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
 }))
 
+/** The workspace the card reads its allowance from; Business unless a test says otherwise. */
+let mockOrg: Record<string, unknown> = { $id: 'org-1', plan: 'business' }
+let mockLiveCount = 0
+
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
-  default: () => ({ org: { $id: 'org-1', plan: 'business' }, ready: true }),
+  default: () => ({ org: mockOrg, ready: true }),
 }))
 
 jest.mock('../hooks/use-presence-summary', () => ({
@@ -317,6 +321,8 @@ import {
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 
 beforeEach(() => {
+  mockOrg = { $id: 'org-1', plan: 'business' }
+  mockLiveCount = 0
   mockDocs = seedComponents()
   mockLimitsAsked = []
 })
@@ -530,6 +536,39 @@ describe('a ceilinged read knows when it was cut short (AGL-2501)', () => {
     expect(ceilingedWindow(undefined, 200)).toEqual({
       rows: [],
       truncated: false,
+    })
+  })
+})
+
+/**
+ * The readout's denominator is `componentsPerHost` (AGL-3615): Free 1, every
+ * paid plan unlimited. It was the `reusableComponents` flag, which printed
+ * `0/0` on Free — a plan that now saves one component.
+ */
+describe('the components readout names the plan’s allowance (AGL-3615)', () => {
+  it('reads 1 on Free, the number the create route refuses at', () => {
+    mockOrg = { $id: 'org-1', plan: 'free' }
+    const onQuota = jest.fn()
+    render(<HostComponentsCard hostId="host-1" onQuota={onQuota} />)
+    expect(onQuota).toHaveBeenLastCalledWith({ ready: true, used: 0, limit: 1 })
+  })
+
+  it('counts the live components against it', () => {
+    mockOrg = { $id: 'org-1', plan: 'free' }
+    mockLiveCount = 1
+    const onQuota = jest.fn()
+    render(<HostComponentsCard hostId="host-1" onQuota={onQuota} />)
+    expect(onQuota).toHaveBeenLastCalledWith({ ready: true, used: 1, limit: 1 })
+  })
+
+  it('reads unlimited on a paid plan, as it did when the flag decided', () => {
+    mockOrg = { $id: 'org-1', plan: 'starter', subscription: { status: 'active' } }
+    const onQuota = jest.fn()
+    render(<HostComponentsCard hostId="host-1" onQuota={onQuota} />)
+    expect(onQuota).toHaveBeenLastCalledWith({
+      ready: true,
+      used: 0,
+      limit: Number.POSITIVE_INFINITY,
     })
   })
 })

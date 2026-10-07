@@ -83,7 +83,9 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
       const seed = await componentCreateSeed(values)
       // Component DOC creation is API-only by rule (`allow create: if
       // isStaff()`), same as screens/layouts/templates — the resources route
-      // enforces the reusableComponents entitlement server-side (AGL-473).
+      // enforces the plan's `componentsPerHost` allowance server-side
+      // (AGL-473, a count since AGL-3615), and its refusal is the drawer's
+      // error.
       // This wrote setDoc directly and every click died on a rules denial;
       // the besigner's save-as-reusable path never hit it because it goes
       // through the API.
