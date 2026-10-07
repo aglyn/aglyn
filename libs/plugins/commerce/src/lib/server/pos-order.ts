@@ -47,6 +47,7 @@ import { posMaxDiscountPct } from '../plugin-config'
 import { offlineFeeMonthKey } from './pos-fee-month'
 import { notifyPosSaleCompleted } from './pos-sale'
 import { posSaleStamp } from './pos-sale-stamp'
+import { quoteSaleTaxWithEngine } from './tax-engine-quote'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 
 /**
@@ -539,10 +540,35 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       taxDecision.kind === 'manual'
         ? CommerceModel.resolveTaxRate(taxSettings, taxSettings.origin ?? {})
         : null
-    const taxCents =
+    let taxCents =
       rate && !taxSettings.pricesIncludeTax
         ? CommerceModel.computeTaxCents(itemsCents - discountCents, rate.pct)
         : 0
+    // The merchant's own tax service, where they connected one (AGL-3631):
+    // taxed at the store's ship-from address, as every in-person sale is.
+    // When it does not answer, the store's rate above stands and the order
+    // says so; the cashier is never left waiting on a vendor.
+    const engineTax =
+      taxDecision.kind === 'manual'
+        ? await quoteSaleTaxWithEngine({
+            hostId,
+            settings: taxSettings,
+            channel: 'pos',
+            lines: lineItems.map((line, index) => ({
+              id: String(index),
+              productId: line.productId,
+              ...(line.variantId ? { variantId: line.variantId } : {}),
+              ...(line.sku ? { sku: line.sku } : {}),
+              description: [line.name, line.variantLabel].filter(Boolean).join(' — '),
+              quantity: line.quantity,
+              amountCents: line.unitAmountCents * line.quantity,
+            })),
+            discountCents,
+            customerEmail: customerEmail || null,
+          })
+        : { quote: null, stamp: null }
+    if (engineTax.quote) taxCents = engineTax.quote.taxCents
+    const taxEngineFields = engineTax.stamp ? { taxEngine: engineTax.stamp } : {}
     /*==========================================
      * THE FEE ATTACHES TO THE SALE, NOT TO THE TENDER (AGL-2111).
      *
@@ -784,6 +810,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           lineItems,
           totals: openTotals,
           taxMode: CommerceModel.storefrontTaxModeForDecision(taxDecision, taxCents),
+          ...taxEngineFields,
           posTakeFeeCents: takeFeeCents,
           ...(offlineFeeOrgId ? { posFeeOrgId: offlineFeeOrgId } : {}),
           payments: [],
@@ -886,6 +913,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
             taxDecision,
             taxCents,
           ),
+          ...taxEngineFields,
           ...(feeCents > 0 ? { feeCollection } : {}),
           customerEmail: customerEmail || null,
           timeline: [{ atMs: Date.now(), event: 'pos-card-pending' }],
@@ -1097,6 +1125,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           taxDecision,
           taxCents,
         ),
+        ...taxEngineFields,
         // AGL-2111: the fee is on `totals` for this tender too, and this says
         // it will arrive on the org's Aglyn invoice rather than as a short
         // payout — there is no payout, the merchant kept the cash.

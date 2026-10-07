@@ -75,6 +75,7 @@ import {
 } from './promotion-hold'
 import { flagOrderRestock } from './restock-flag'
 import { storefrontTaxModeOf } from './storefront-tax'
+import { taxEngineStampFromMetadata } from '../model/commerce-tax-engine'
 import { recordStorefrontTax } from './storefront-tax-record'
 import { enqueueSupplierDelivery } from './supplier-outbox'
 import { notifyOrderBuyer, onlineReceiptExtras } from './order-notifications'
@@ -3581,6 +3582,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               object,
               Number(object?.metadata?.taxCents ?? 0),
             ),
+            // The outside tax service that priced it, or that it fell back
+            // to the store's own rates (AGL-3631). `taxMode` above stays the
+            // regime; this names who did the arithmetic.
+            ...taxEngineStampFromMetadata(object?.metadata),
             timeline: [
               { atMs: Date.now(), event: 'paid' },
               ...(unresolvedLines.length
@@ -4696,6 +4701,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               object,
               Number(object?.metadata?.taxCents ?? 0),
             ),
+            // The outside tax service that priced it, or that it fell back
+            // to the store's own rates (AGL-3631). `taxMode` above stays the
+            // regime; this names who did the arithmetic.
+            ...taxEngineStampFromMetadata(object?.metadata),
             timeline: [{ atMs: Date.now(), event: 'paid' }],
             paymentIntentId: String(object?.payment_intent ?? '') || null,
             checkoutSessionId: String(object.id),

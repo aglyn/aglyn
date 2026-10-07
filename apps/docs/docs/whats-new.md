@@ -39,6 +39,25 @@ for the how-to.
   that sells online.
 -->
 
+<!--
+  AGL-3631 — Tax services are built and hidden until a deployment sets
+  TAX_ENGINES_TOKEN_KEY (the key merchants' credentials are sealed under; no
+  vendor account of Aglyn's is needed). This entry is held unpublished, like the
+  guide it links (`unlisted: true`): once the key is set on aglyn.com, remove this
+  comment's markers, move "(newest)" here from the top heading, and delete
+  `unlisted: true` and the "Rolling out" note from
+  commerce-and-bookings/commerce/tax-services.md.
+
+## October 2026 — your own tax service
+
+- **[Avalara AvaTax and TaxJar](commerce-and-bookings/commerce/tax-services.md)** —
+  connect your own AvaTax or TaxJar account and checkout and the register charge the
+  sales tax it calculates, with product tax codes and exempt customers. Paid orders,
+  refunds and register returns are recorded in your account. If the service does not
+  answer in time, the sale is taxed at your own rates and the order says so. You remain
+  responsible for registering, filing and paying your sales tax.
+-->
+
 ## October 2026 — the register takes every payment
 
 - **[Split payments](commerce-and-bookings/commerce/pos-and-reservations.md#taking-payment)** —

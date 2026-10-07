@@ -30,6 +30,8 @@ import {
 } from './carrier-shipping'
 import { readActiveMemberSession } from './membership'
 import { resolveManualTaxRateId } from './manual-tax-rate'
+import { taxEngineSessionMetadata } from '../model/commerce-tax-engine'
+import { quoteSaleTaxWithEngine } from './tax-engine-quote'
 import {
   type PromotionSlotHold,
   holdPromotionSlot,
@@ -463,6 +465,34 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         taxLabel = rate.label || `Tax (${rate.pct}%)`
         taxPct = rate.pct
       }
+    }
+    // The merchant's own tax service, where they connected one (AGL-3631),
+    // for a one-time sale. Taxed at the store's address, like the rate above:
+    // the shopper's address arrives inside Stripe Checkout, after this
+    // session exists. A subscription keeps the store's recurring rate — a
+    // quote taken today does not price next month's renewal. When the service
+    // does not answer, the rate above stands and the order says so.
+    const engineTax =
+      taxSettings.mode === 'manual' && !lifted.taxExempt && !isSubscription
+        ? await quoteSaleTaxWithEngine({
+            hostId,
+            settings: taxSettings,
+            channel: 'online',
+            lines: [
+              {
+                id: '0',
+                productId,
+                ...(variantId ? { variantId } : {}),
+                description: String(lifted.name ?? ''),
+                quantity,
+                amountCents,
+              },
+            ],
+          })
+        : { quote: null, stamp: null }
+    if (engineTax.quote) {
+      taxCents = engineTax.quote.taxCents
+      taxLabel = 'Sales tax'
     }
 
     // Recurring manual tax (AGL-1751). The manual tax cannot ride the
@@ -1050,6 +1080,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       // both would double-count the tax on the recorded sale.
       'metadata[unitAmountCents]': String(listUnitAmountCents),
       'metadata[taxCents]': String(isSubscription ? 0 : taxCents),
+      ...taxEngineSessionMetadata(engineTax.stamp),
       'metadata[discountCents]': String(discountCents),
       ...(appliedCoupon ? { 'metadata[couponCode]': appliedCoupon } : {}),
       ...(appliedDiscountId
@@ -1160,7 +1191,13 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           // one — for subscription mode, instead of a second RECURRING
           // subscription — covering the window where the claim is written
           // but the response never arrives.
-          ...stripeKeyHeader('session'),
+          // A tax service's answer can differ between two tries under one
+          // key (it answered once and timed out once), so the key names the
+          // tax it carries and a changed figure opens a new session rather
+          // than a Stripe parameter mismatch (AGL-3631).
+          ...stripeKeyHeader(
+            engineTax.stamp ? `session-tax-${taxCents}-${engineTax.stamp.status}` : 'session',
+          ),
           // Empty on the hosted path, so its request is byte-identical to the
           // one this handler sent before AGL-1944 (AGL-1944).
           ...nativeCheckoutStripeHeaders(nativeMode),

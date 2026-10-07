@@ -18,6 +18,7 @@
 import { serialize } from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import { fulfillmentLineQuantities } from '../../model/order-fulfillment'
 import { fulfillmentTrackingUrl } from '../../model/tracking-url'
+import { orderTaxEngineView } from '../../model/commerce-tax-engine'
 
 /**
  * The public order shape from an order's data (AGL-3611): the same object the
@@ -66,6 +67,12 @@ export function orderViewFromData(id: string, data: Record<string, any>) {
     // merchant's account, which a ledger posting the sale has to know. An
     // order from before the regime was recorded says `null`, never a guess.
     taxMode: typeof data.taxMode === 'string' && data.taxMode ? data.taxMode : null,
+    // The merchant's own tax service (AGL-3631): which one priced the sale, or
+    // that it was asked and the store's own rates were charged instead
+    // (`status: 'fallback'`). `null` when no service was asked. The regime is
+    // still `taxMode` — a service the merchant connected answers for tax the
+    // merchant remits.
+    taxEngine: orderTaxEngineView(data.taxEngine),
     disputed: Boolean(data.dispute),
     shippingAddress: serialize(data.shippingAddress) ?? null,
     couponCode: data.couponCode ?? null,

@@ -37,6 +37,12 @@ import {
 import { readCartId } from './cart-cookie'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import {
+  allocateCentsByWeight,
+  engineLineTaxPercentages,
+  taxEngineSessionMetadata,
+} from '../model/commerce-tax-engine'
+import { quoteSaleTaxWithEngine } from './tax-engine-quote'
+import {
   type PromotionSlotHold,
   holdPromotionSlot,
   promotionHoldKey,
@@ -839,6 +845,49 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // `application_fee_amount` is fixed at creation), and the manual origin tax
     // rate the lines carry. A store on Stripe Tax is the one residual — its tax
     // is computed inside Stripe after the session is made.
+    // The merchant's own tax service, where they connected one (AGL-3631).
+    // Asked once, here, because the card-cost estimate just below and the
+    // tax lines further down both need its answer. Each line goes over at
+    // what Stripe will tax it at — its amount less its share of the session
+    // coupon, shared the way Stripe shares it — so the rate derived from
+    // the answer reproduces it. Taxed at the store's address, like the store's
+    // own rate: the shopper's address arrives inside Stripe Checkout, after
+    // this session exists. When the service does not answer, the store's
+    // rate stands and the order says so.
+    const cartEngineLines = cart.lines
+      .map((line, index) => {
+        const unitCents = Number(params.get(`line_items[${index}][price_data][unit_amount]`) ?? NaN)
+        return {
+          index,
+          line,
+          amountCents: Number.isFinite(unitCents) ? unitCents * line.quantity : 0,
+        }
+      })
+      .filter((entry) => entry.amountCents > 0)
+    const cartEngineDiscounts = allocateCentsByWeight(
+      Math.max(0, itemsCents - chargedItemsCents),
+      cartEngineLines.map((entry) => entry.amountCents),
+    )
+    const cartEngineNet = cartEngineLines.map(
+      (entry, position) => entry.amountCents - cartEngineDiscounts[position],
+    )
+    const engineTax =
+      chargedItemsCents > 0
+        ? await quoteSaleTaxWithEngine({
+            hostId,
+            settings: (storeSettings.get('tax') ?? {}) as CommerceModel.TaxSettings,
+            channel: 'online',
+            lines: cartEngineLines.map((entry, position) => ({
+              id: String(entry.index),
+              productId: entry.line.productId,
+              ...(entry.line.variantId ? { variantId: entry.line.variantId } : {}),
+              quantity: entry.line.quantity,
+              amountCents: cartEngineNet[position],
+              ...(productsById.get(entry.line.productId)?.taxExempt ? { exempt: true } : {}),
+            })),
+            customerEmail: email || null,
+          })
+        : { quote: null, stamp: null }
     if (chargedItemsCents > 0) {
       const shippingCeilingCents = shippingOptions.reduce(
         (most, option) =>
@@ -858,7 +907,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         manualRate && manualRate.pct > 0 ? manualRate.pct : 0
       const chargeCents =
         chargedItemsCents +
-        Math.round((chargedItemsCents * manualTaxPct) / 100) +
+        (engineTax.quote
+          ? engineTax.quote.taxCents
+          : Math.round((chargedItemsCents * manualTaxPct) / 100)) +
         shippingCeilingCents
       feeCents = Math.min(
         chargeCents,
@@ -943,6 +994,39 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     }
     if (taxDecision.kind === 'stripe-automatic') {
       params.set('automatic_tax[enabled]', 'true')
+    } else if (engineTax.quote) {
+      // The tax service's cents per line as one rate per line (AGL-3631),
+      // applied after the coupon exactly like the store's own rate below. One
+      // Tax Rate per distinct percentage, cached under the host like the
+      // store's, so a store's usual rates are minted once.
+      const engineAnswer = new Map(engineTax.quote.lines.map((line) => [line.id, line.taxCents]))
+      const percentages = engineLineTaxPercentages(
+        cartEngineLines.map((entry, position) => ({
+          amountCents: cartEngineNet[position],
+          taxCents: engineAnswer.get(String(entry.index)) ?? 0,
+        })),
+        0,
+      )
+      for (let position = 0; position < cartEngineLines.length; position++) {
+        const pct = percentages[position]
+        if (pct === null) continue
+        const taxRateId = await resolveManualTaxRateId({
+          hostRef,
+          taxPct: pct,
+          taxLabel: 'Sales tax',
+          headers: stripeKeyHeader(`tax-rate-engine-${Math.round(pct * 10_000)}`),
+        })
+        if (!taxRateId) {
+          // The same visible refusal as the store's own rate: never an
+          // untaxed session.
+          await releaseGiftCardHold()
+          await releasePromotionHolds()
+          await releaseStock()
+          await claim.release()
+          return res.status(502).json({ error: 'Checkout failed' })
+        }
+        params.set(`line_items[${cartEngineLines[position].index}][tax_rates][0]`, taxRateId)
+      }
     } else if (taxSettings.mode === 'manual' && !taxSettings.pricesIncludeTax) {
       // Origin-based, exactly as buy-now resolves it: the cart collects the
       // shopper's address inside Stripe Checkout, so there is no destination
@@ -1034,6 +1118,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       }),
     ).forEach(([key, value]) => params.set(key, value))
     params.set('metadata[type]', 'commerce-cart')
+    for (const [key, value] of Object.entries(taxEngineSessionMetadata(engineTax.stamp))) {
+      params.set(key, value)
+    }
     // The postal code live carrier rates were quoted for (AGL-3612), so the
     // order can show it beside the address the shopper then entered.
     if (shippingPlan.quotedPostalCode) {
@@ -1127,7 +1214,14 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           // existing session for a repeated key instead of opening a second
           // one, covering the window where the claim is written but the
           // response never arrives.
-          ...stripeKeyHeader('session'),
+          // A tax service's answer can differ between two tries under one
+          // key, so the key names it and a changed answer opens a new session
+          // rather than a Stripe parameter mismatch (AGL-3631).
+          ...stripeKeyHeader(
+            engineTax.stamp
+              ? `session-tax-${engineTax.quote?.taxCents ?? 'own'}-${engineTax.stamp.status}`
+              : 'session',
+          ),
           // Empty on the hosted path (AGL-1944).
           ...nativeCheckoutStripeHeaders(nativeMode),
         },
