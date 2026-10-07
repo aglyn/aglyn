@@ -47,6 +47,7 @@ import {
   aiDoctrineScopeFor,
   aiDoctrineSystemBlock,
   aiDoctrineSystemBlocks,
+  aiDoctrineTreeCheck,
   aiDoctrineTreeTool,
   aiNodeTreeContextFromInventory,
   aiSiteInventoryBlock,
@@ -932,5 +933,51 @@ describe('a kind built from no site structure, and an answer that streamed', () 
         'runValidatedGeneration',
       )
     }
+  })
+})
+
+describe('the tree check settles what has one reading before it reads the tree (AGL-3596)', () => {
+  const card = (nodes: Record<string, unknown>) => ({
+    rootId: 'root',
+    nodes: {
+      root: { componentId: 'div', nodes: ['card'] },
+      card: { componentId: 'muiCard', nodes: ['content'] },
+      content: { componentId: 'muiCardContent', nodes: ['title', 'missing'] },
+      title: { componentId: 'muiTypography', props: { variant: 'h3', component: 'h3', children: 'Full groom' } },
+      ...nodes,
+    },
+  })
+
+  it('takes out a child named and never written, and drops an element nothing holds', () => {
+    const check = aiDoctrineTreeCheck('component', { reusableComponents: false })
+    const stray = { componentId: 'muiTypography', props: { variant: 'body1', children: 'Nobody holds this.' } }
+    const result = check({ tree: JSON.stringify(card({ stray })) })
+    const codes = result.violations.map((violation) => violation.code)
+    expect(codes).not.toContain('missing-child')
+    expect(codes).not.toContain('orphan-node')
+    expect(result.value).not.toBeNull()
+    expect(JSON.stringify(result.value?.nodes)).not.toContain('Nobody holds this.')
+  })
+
+  it('sizes a Grid container written as the text "True" and its unsized items, as a page section is', () => {
+    const tile = (title: string) => ({ componentId: 'muiTypography', props: { variant: 'h3', component: 'h3', children: title } })
+    const tree = {
+      rootId: 'root',
+      nodes: {
+        root: { componentId: 'div', nodes: ['row'] },
+        row: { componentId: 'muiGrid', props: { container: 'True', spacing: '3' }, nodes: ['one', 'two', 'loose'] },
+        one: { componentId: 'muiGrid', props: { size: { xs: 12, md: 4 } }, nodes: ['oneTitle'] },
+        two: { componentId: 'muiGrid', nodes: ['twoTitle'] },
+        loose: tile('Nail trim'),
+        oneTitle: tile('Full groom'),
+        twoTitle: tile('Bath and brush'),
+      },
+    }
+    const result = aiDoctrineTreeCheck('component', { reusableComponents: false })({ tree: JSON.stringify(tree) })
+    expect(result.violations.filter((violation) => violation.rule === 12)).toEqual([])
+    const sizes = Object.values(result.value?.nodes ?? {})
+      .map((node) => (node as { props?: Record<string, unknown> }).props?.['size'])
+      .filter(Boolean)
+    expect(sizes).toEqual(['xs:12 md:4', 'xs:12 md:4', 'xs:12 md:4'])
   })
 })

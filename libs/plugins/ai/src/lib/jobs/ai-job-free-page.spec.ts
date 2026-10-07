@@ -591,7 +591,7 @@ describe('one Free page fits the Free taste, end to end', () => {
           nodes['b-box'] = { componentId: 'muiBox', nodes: ['b5'] }
         },
       ],
-      ['is the text "True", not true', (nodes) => (nodes['b7'] = { ...nodes['b7'], props: { container: 'True', spacing: 3 } })],
+      // A container written as the text "True" is settled as true, not re-asked (AGL-3596).
     ]
     const reasked: Array<[string, boolean, boolean]> = []
     let dearest = 0

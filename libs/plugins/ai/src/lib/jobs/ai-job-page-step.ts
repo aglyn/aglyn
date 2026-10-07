@@ -75,6 +75,7 @@ import {
   AI_PAGE_SECTION_TOOL,
   aiEmptyPage,
   aiPageCheckContext,
+  aiPageLinkablePages,
   aiPageRecordNote,
   aiPageRecordTemplate,
   aiPageRecordTokens,
@@ -85,6 +86,7 @@ import {
   aiPageWithSection,
   type AiPageSection,
 } from './ai-job-page-sections'
+import { aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { AI_PLAN_ITEMS_MIN, aiPlanCopiedPageViolations } from './ai-job-plan-conformance'
 import {
   aiCreationUnit,
@@ -221,12 +223,11 @@ export const AI_JOB_PAGE_CREATION_EMPTY_COPY =
   'Part of this page could not be built. Describe the page again.'
 
 /**
- * What a page refused on its last pass tells the member beside the rules it
- * broke (AGL-3143). The draft is reported with the review, and mending what
- * the findings name in it is what lets the next pass finish the job.
+ * What a page refused on its last pass tells the member after the plain
+ * refusal (AGL-3143, AGL-3596). The draft is reported with the review, and
+ * mending its layout in the editor is what lets the next pass finish the job.
  */
-export const AI_JOB_PAGE_REFUSED_DRAFT_COPY =
-  'The draft is yours to open: mend what these name in it, then try again.'
+export const AI_JOB_PAGE_REFUSED_DRAFT_COPY = 'The draft is yours to open: fix its layout in the editor, then try again.'
 
 /**
  * The most passes a page job may take (AGL-3031): every creation the plan
@@ -584,11 +585,15 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const sections = screen.sections.map((section) => section.name)
     // A third-party player the confirmed plan lists for this page is the only one it may embed (AGL-3433).
     const embeds = aiPlanEmbedsFor(plan, { slug: screen.slug })
+    // The site's other pages a link may go to, built or minted on a guided
+    // start's plan, and the one a link that names none can only mean (AGL-3596).
+    const { linkablePages, linkTarget } = aiPageLinkablePages(inventory, aiLayoutSitePages(job.inputs), [screen.id, draftId])
     const context = aiPageCheckContext(inventory, {
       reusableComponents,
       sections,
       embeds,
       recordTokens: aiPageRecordTokens(record),
+      linkablePages,
     })
 
     // ── The last pass: the whole page, its listing, and the draft reported ──
@@ -631,11 +636,14 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         // review names is mended in the draft, and the next pass then passes.
         return aiUnspentOutcome(model, {
           outputs: reports,
-          review: aiDoctrineReview({
-            message: `${aiDoctrineNeedsInputMessage(violations)} ${AI_JOB_PAGE_REFUSED_DRAFT_COPY}`,
-            violations,
-            answer: { tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page } },
-          }),
+          review: aiDoctrineReview(
+            {
+              message: aiDoctrineNeedsInputMessage(violations),
+              violations,
+              answer: { tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page } },
+            },
+            { page: true, then: AI_JOB_PAGE_REFUSED_DRAFT_COPY },
+          ),
         })
       }
       let spent: AiJobStepOutcome = aiUnspentOutcome(model)
@@ -699,7 +707,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       messages: [
         {
           role: 'user',
-          content: aiPageSectionPrompt({ job, plan, screen, index, maxElements, reusableComponents, record }),
+          content: aiPageSectionPrompt({ job, plan, screen, index, maxElements, reusableComponents, record, linkablePages }),
         },
       ],
       tool: AI_PAGE_SECTION_TOOL,
@@ -715,12 +723,13 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         context,
         section: screen.sections[index],
         inventory,
+        linkTarget,
       }),
       ...(signal ? { signal } : {}),
     })
     const spent = aiGenerationSpent(result)
     if (result.status === 'refused') return { ...spent, refused: true }
-    if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
+    if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result, { page: true }) }
 
     if (!written) {
       const draft = await writeAiDraft(firestore, {

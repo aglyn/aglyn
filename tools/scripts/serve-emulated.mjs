@@ -20,6 +20,7 @@
 //
 //   npm run serve:console:emulated                  # port from project.json
 //   npm run serve:tenant:emulated -- --port 4510    # any port
+//   npm run serve:console:emulated -- --live-ai     # + the AI provider key (AGL-3596)
 //
 // The `serve:*:emulated` scripts run this instead of `nx serve <app>` because
 // the nx task runner refills a blanked credential: it loads the env files
@@ -41,10 +42,17 @@ import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { emulatedServeEnvironment, readEnvFiles, serveEnvFiles } from './lib/emulated-env.mjs'
+import {
+  emulatedServeEnvironment,
+  LIVE_AI_CREDENTIALS,
+  liveAiFromEnv,
+  readEnvFiles,
+  serveEnvFiles,
+} from './lib/emulated-env.mjs'
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
-const USAGE = 'Usage: node tools/scripts/serve-emulated.mjs <app> [--port <port>]'
+const ownRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
+const USAGE =
+  'Usage: node tools/scripts/serve-emulated.mjs <app> [--port <port>] [--live-ai] [--root <checkout>]'
 
 function fail(message) {
   console.error(`${message}\n${USAGE}`)
@@ -53,6 +61,8 @@ function fail(message) {
 
 let app
 let portArg
+let rootArg
+let liveAi = liveAiFromEnv(process.env)
 const args = process.argv.slice(2)
 for (let index = 0; index < args.length; index += 1) {
   const arg = args[index]
@@ -61,6 +71,13 @@ for (let index = 0; index < args.length; index += 1) {
     index += 1
   } else if (arg.startsWith('--port=')) {
     portArg = arg.slice('--port='.length)
+  } else if (arg === '--live-ai') {
+    liveAi = true
+  } else if (arg === '--root') {
+    rootArg = args[index + 1]
+    index += 1
+  } else if (arg.startsWith('--root=')) {
+    rootArg = arg.slice('--root='.length)
   } else if (!arg.startsWith('-') && app === undefined) {
     app = arg
   } else {
@@ -70,6 +87,9 @@ for (let index = 0; index < args.length; index += 1) {
   }
 }
 if (!app) fail('No app named.')
+// Another checkout's app, served by this script (AGL-3596): a worktree whose
+// branch predates `--live-ai` is served with it from one that has it.
+const repoRoot = rootArg ? resolve(rootArg) : ownRoot
 
 const projectFile = join(repoRoot, 'apps', app, 'project.json')
 const targets = existsSync(projectFile)
@@ -111,10 +131,24 @@ if (modulesLink?.isSymbolicLink()) {
   }
 }
 
-const { env, blanked } = emulatedServeEnvironment(
+// A live model is the one credential an emulated server may be asked to hold
+// (AGL-3596; lib/emulated-env.mjs says why it is safe). Only beside an
+// emulator: a server with the key and production Firestore would send a
+// customer's site to the provider from a laptop.
+if (liveAi && !process.env.FIRESTORE_EMULATOR_HOST) {
+  fail('--live-ai needs FIRESTORE_EMULATOR_HOST: a live model is passed through only to a server on the emulators.')
+}
+const { env, blanked, passedThrough } = emulatedServeEnvironment(
   process.env,
   readEnvFiles(serveEnvFiles(repoRoot, app)),
+  { liveAi },
 )
+if (liveAi && passedThrough.length === 0) {
+  fail(
+    `--live-ai found no AI provider key (${[...LIVE_AI_CREDENTIALS.keys()].join(', ')}) ` +
+      "in the shell or the env files; put it in the repo's .env.",
+  )
+}
 // `@nx/next:server` exports the port it serves on over any PORT an env file holds.
 env.PORT = String(port)
 
@@ -123,10 +157,11 @@ if (pruned.status !== 0) process.exit(pruned.status ?? 1)
 
 console.log(
   `serve-emulated: ${app} on port ${port}; ${blanked.length} outbound credential(s) set empty` +
-    (blanked.length > 0 ? `: ${blanked.join(', ')}` : ''),
+    (blanked.length > 0 ? `: ${blanked.join(', ')}` : '') +
+    (liveAi ? `; LIVE AI: ${passedThrough.join(', ')} passed through, the beat answers CRON_SECRET` : ''),
 )
 
-const nextBin = createRequire(import.meta.url).resolve('next/dist/bin/next')
+const nextBin = createRequire(join(repoRoot, 'package.json')).resolve('next/dist/bin/next')
 const server = fork(nextBin, ['dev', '--port', String(port)], {
   cwd: join(repoRoot, 'apps', app),
   env,

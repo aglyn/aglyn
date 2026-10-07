@@ -33,6 +33,9 @@ import {
   emulatedServeEnvironment,
   heldCredentials,
   isOutboundCredential,
+  LIVE_AI_CREDENTIALS,
+  liveAiFromEnv,
+  LOCAL_CRON_SECRET,
   parseProcessEnvironment,
   serveEnvFiles,
   serversHoldNoCredential,
@@ -130,6 +133,49 @@ describe('emulatedServeEnvironment', () => {
     for (const [name, value] of Object.entries(inherited)) assert.equal(env[name], value, name)
     assert.deepEqual(blanked, [])
   })
+
+  // The live-AI opt-in (AGL-3596) passes the provider keys and nothing else.
+  const liveFiles = [
+    file({
+      ANTHROPIC_API_KEY: 'placeholder',
+      STRIPE_SECRET_KEY: 'placeholder',
+      RESEND_API_KEY: 'placeholder',
+      CRON_SECRET: 'from-file',
+    }),
+  ]
+
+  it('blanks the AI provider key like any other credential unless live AI is asked for', () => {
+    const { env, blanked, passedThrough } = emulatedServeEnvironment({}, liveFiles)
+    assert.equal(env.ANTHROPIC_API_KEY, '')
+    assert.deepEqual(blanked, ['ANTHROPIC_API_KEY', 'RESEND_API_KEY', 'STRIPE_SECRET_KEY'])
+    assert.deepEqual(passedThrough, [])
+    assert.equal(env.CRON_SECRET, 'from-file')
+  })
+
+  it('with live AI, passes only the AI provider keys through and still blanks billing and email', () => {
+    const { env, blanked, passedThrough } = emulatedServeEnvironment({}, liveFiles, { liveAi: true })
+    assert.equal(env.ANTHROPIC_API_KEY, 'placeholder')
+    assert.equal(env.STRIPE_SECRET_KEY, '')
+    assert.equal(env.RESEND_API_KEY, '')
+    assert.deepEqual(blanked, ['RESEND_API_KEY', 'STRIPE_SECRET_KEY'])
+    assert.deepEqual(passedThrough, ['ANTHROPIC_API_KEY'])
+    for (const name of LIVE_AI_CREDENTIALS.keys()) assert.equal(isOutboundCredential(name), true, name)
+  })
+
+  it("with live AI, verifies the beat with the shell's cron secret or the local one, never the file's", () => {
+    assert.equal(emulatedServeEnvironment({}, liveFiles, { liveAi: true }).env.CRON_SECRET, LOCAL_CRON_SECRET)
+    assert.equal(
+      emulatedServeEnvironment({ CRON_SECRET: 'shell' }, liveFiles, { liveAi: true }).env.CRON_SECRET,
+      'shell',
+    )
+  })
+
+  it('reads the opt-in from AGLYN_EMULATED_LIVE_AI', () => {
+    assert.equal(liveAiFromEnv({ AGLYN_EMULATED_LIVE_AI: '1' }), true)
+    assert.equal(liveAiFromEnv({ AGLYN_EMULATED_LIVE_AI: 'true' }), true)
+    assert.equal(liveAiFromEnv({ AGLYN_EMULATED_LIVE_AI: '0' }), false)
+    assert.equal(liveAiFromEnv({}), false)
+  })
 })
 
 describe('serveEnvFiles', () => {
@@ -175,6 +221,14 @@ describe('heldCredentials', () => {
     ])
     const fromFiles = new Set(['STRIPE_SECRET_KEY', 'RESEND_API_KEY', 'TOKEN_SIGNING_SECRET'])
     assert.deepEqual(heldCredentials(states, fromFiles), ['RESEND_API_KEY', 'VERCEL_TOKEN'])
+  })
+
+  it('leaves out only the credentials the caller allowed', () => {
+    const states = new Map([
+      ['ANTHROPIC_API_KEY', 'set'],
+      ['STRIPE_SECRET_KEY', 'set'],
+    ])
+    assert.deepEqual(heldCredentials(states, new Set(), ['ANTHROPIC_API_KEY']), ['STRIPE_SECRET_KEY'])
   })
 })
 
