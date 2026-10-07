@@ -251,6 +251,62 @@
       ]
     },
     {
+      "collectionGroup": "fulfillmentNetworkConnections",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "inventoryDueAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "fulfillmentNetworkOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nextRunAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "fulfillmentNetworkOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "connectionId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "active",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "fulfillmentNetworkOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "connectionId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "providerOrderId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "marketingPlatformEvents",
       "queryScope": "COLLECTION",
       "fields": [

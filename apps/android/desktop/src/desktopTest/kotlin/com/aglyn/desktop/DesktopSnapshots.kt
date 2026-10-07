@@ -22,8 +22,7 @@ import java.io.File
 /**
  * A development tool, not a test: renders the desktop shells offscreen
  * against the live emulator stack named by -Daglyn.* and writes PNGs of each
- * screen, so desktop screenshots need no screen-recording permission. The
- * Console destination is left out: it opens the system browser.
+ * screen, so desktop screenshots need no screen-recording permission.
  *
  *   ./gradlew :desktop:snapshots -Paglyn.snapshotDir=/path -Paglyn.jvmArgs="-Daglyn.firebaseProjectId=…"
  */

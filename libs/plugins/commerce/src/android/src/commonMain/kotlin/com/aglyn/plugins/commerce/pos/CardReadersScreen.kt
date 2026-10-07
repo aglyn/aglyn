@@ -11,6 +11,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -39,8 +42,8 @@ import com.aglyn.hardware.DeviceReader
 import com.aglyn.hardware.ReaderDiscovery
 import com.aglyn.hardware.deviceReaders
 import com.aglyn.hardware.CardReaderSetupError
-import com.aglyn.pluginhost.ConsoleScope
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.NoticeBanner
@@ -57,8 +60,8 @@ import kotlin.math.roundToInt
 /**
  * The register's card readers: whether this store can take cards at all,
  * this device's own reader (Tap to Pay or Bluetooth, through the Stripe
- * Terminal SDK) and the smart readers on the counter. Readers are paired and
- * named in the console, which owns their registration.
+ * Terminal SDK) and the smart readers on the counter, paired and removed
+ * here through the readers route the console's card uses.
  */
 @Composable
 fun CardReadersScreen(context: NativePluginContext) {
@@ -94,33 +97,19 @@ fun CardReadersScreen(context: NativePluginContext) {
           is Load.Ready -> {
             val value = ready.value
             Check("Card payments offered here", value.available, if (value.testMode) "Test mode: no real cards are charged." else null)
-            Check("Payments set up in the console", value.merchantReady, if (!value.merchantReady) "Finish payments setup in the console before taking cards." else null)
+            Check("Payments set up", value.merchantReady, if (!value.merchantReady) "Finish payments setup before taking cards." else null)
             Check("Store address for card readers", value.locationReady, if (!value.locationReady) "Add the address card readers are used at." else null)
           }
         }
       }
       if (collector != null) DeviceReaderSection(context, hostId, collector, device)
-      SectionCard(
-        "Smart readers",
-        action = { OutlinedButton(onClick = { context.openConsolePath("/pos", ConsoleScope.SITE) }) { Text("Manage in the console") } },
-      ) {
-        val readers = pos?.readers.orEmpty()
-        if (pos == null && readiness is Load.Loading) {
-          SkeletonList(rows = 2)
-        } else if (readers.isEmpty()) {
-          Text("No smart reader is paired with this store. Pair a WisePOS E or S700 in the console's register.")
-        } else {
-          for (reader in readers) {
-            AglynListItem(
-              title = reader.label,
-              supporting = if (reader.livemode) "Live" else "Test mode",
-              icon = AglynIcons.named("point_of_sale"),
-              trailing = { StatusChip(if (reader.online) "Online" else "Offline", if (reader.online) StatusTone.SUCCESS else StatusTone.NEUTRAL) },
-              modifier = Modifier.testTag("reader-${reader.id}"),
-            )
-          }
-        }
-      }
+      SmartReadersSection(
+        api = remember(context.api, hostId) { ConsoleSmartReadersApi(context.api, hostId) },
+        readers = pos?.readers.orEmpty(),
+        loading = pos == null && readiness is Load.Loading,
+        needsAddress = (readiness as? Load.Ready)?.value?.locationReady == false,
+        onChanged = { refresh++ },
+      )
     }
   }
 }
@@ -260,4 +249,118 @@ private fun Check(title: String, ok: Boolean, detail: String?) {
     icon = AglynIcons.named(if (ok) "check_circle" else "warning"),
     trailing = { StatusChip(if (ok) "Ready" else "Needed", if (ok) StatusTone.SUCCESS else StatusTone.WARNING) },
   )
+}
+
+/**
+ * The smart readers on the counter (WisePOS E, S700): pair one with the code
+ * it shows, or remove one. A store with no reader address yet gives it here.
+ */
+@Composable
+private fun SmartReadersSection(
+  api: SmartReadersApi,
+  readers: List<PosSmartReader>,
+  loading: Boolean,
+  needsAddress: Boolean,
+  onChanged: () -> Unit,
+) {
+  val scope = rememberCoroutineScope()
+  var pairing by remember { mutableStateOf(false) }
+  var removing by remember { mutableStateOf<PosSmartReader?>(null) }
+  var busy by remember { mutableStateOf(false) }
+  var error by remember { mutableStateOf<String?>(null) }
+  fun run(call: suspend () -> Unit) {
+    busy = true
+    error = null
+    scope.launch {
+      try {
+        call()
+        pairing = false
+        removing = null
+        onChanged()
+      } catch (failure: Throwable) {
+        if (failure is CancellationException) throw failure
+        error = (failure as? ConsoleApiError)?.takeIf { it.status != 0 }?.message ?: "That did not go through. Check the connection and try again."
+      } finally {
+        busy = false
+      }
+    }
+  }
+
+  SectionCard(
+    "Smart readers",
+    action = { OutlinedButton(onClick = { error = null; pairing = true }, Modifier.testTag("pair-reader")) { Text("Pair a reader") } },
+  ) {
+    if (loading) {
+      SkeletonList(rows = 2)
+    } else if (readers.isEmpty()) {
+      Text("No smart reader is paired with this store. Pair a WisePOS E or S700 with the code it shows.")
+    } else {
+      for (reader in readers) {
+        AglynListItem(
+          title = reader.label,
+          supporting = if (reader.livemode) "Live" else "Test mode",
+          icon = AglynIcons.named("point_of_sale"),
+          trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
+              StatusChip(if (reader.online) "Online" else "Offline", if (reader.online) StatusTone.SUCCESS else StatusTone.NEUTRAL)
+              IconButton(onClick = { error = null; removing = reader }, Modifier.testTag("remove-reader-${reader.id}")) {
+                Icon(AglynIcons.named("delete"), contentDescription = "Remove ${reader.label}")
+              }
+            }
+          },
+          modifier = Modifier.testTag("reader-${reader.id}"),
+        )
+      }
+    }
+  }
+
+  if (pairing) {
+    var code by remember { mutableStateOf("") }
+    var label by remember { mutableStateOf("") }
+    var line1 by remember { mutableStateOf("") }
+    var city by remember { mutableStateOf("") }
+    var state by remember { mutableStateOf("") }
+    var postal by remember { mutableStateOf("") }
+    var country by remember { mutableStateOf("US") }
+    val address = if (needsAddress) ReaderAddress(line1, city, state, postal, country) else null
+    val problem = checkReaderPairing(code, address)
+    ActionDialog(
+      title = "Pair a smart reader",
+      body = "On the reader, open Settings and choose Generate pairing code, then enter the code here.",
+      icon = "point_of_sale",
+      confirmLabel = "Pair reader",
+      confirmEnabled = problem == null,
+      busy = busy,
+      error = error,
+      onDismiss = { if (!busy) pairing = false },
+      onConfirm = { run { api.pair(code, label, address) } },
+    ) {
+      OutlinedTextField(code, { code = it }, label = { Text("Pairing code") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("reader-code"))
+      OutlinedTextField(label, { label = it }, label = { Text("Name (optional)") }, placeholder = { Text("Front counter") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+      if (needsAddress) {
+        Text("Where the reader is used", style = MaterialTheme.typography.labelLarge)
+        OutlinedTextField(line1, { line1 = it }, label = { Text("Street") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(city, { city = it }, label = { Text("City") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+          OutlinedTextField(state, { state = it }, label = { Text("State") }, singleLine = true, modifier = Modifier.weight(1f))
+          OutlinedTextField(postal, { postal = it }, label = { Text("Postal code") }, singleLine = true, modifier = Modifier.weight(1f))
+          OutlinedTextField(country, { country = it.take(2) }, label = { Text("Country") }, singleLine = true, modifier = Modifier.weight(0.7f))
+        }
+      }
+    }
+  }
+
+  removing?.let { reader ->
+    ActionDialog(
+      title = "Remove ${reader.label}?",
+      body = "The reader is unpaired from this store. Pair it again with a new code to use it.",
+      icon = "delete",
+      confirmLabel = "Remove reader",
+      destructive = true,
+      busy = busy,
+      error = error,
+      onDismiss = { if (!busy) removing = null },
+      onConfirm = { run { api.remove(reader.id) } },
+    )
+  }
 }

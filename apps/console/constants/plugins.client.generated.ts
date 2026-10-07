@@ -187,6 +187,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-marketing-platforms'),
   },
   {
+    id: 'fulfillment-networks',
+    apiPrefixes: ["fulfillment-networks"],
+    register: {"console":"registerFulfillmentNetworksConsole"},
+    contributes: {"console":{"slots":["commerceSettings","orderDetail"]}},
+    load: () => import('@aglyn/plugins-fulfillment-networks'),
+  },
+  {
     id: 'sales-channels',
     apiPrefixes: ["sales-channels"],
     register: {"console":"registerSalesChannelsConsole"},

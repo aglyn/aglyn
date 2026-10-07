@@ -2886,6 +2886,52 @@
       }
     },
     {
+      "id": "fulfillment-networks",
+      "package": "@aglyn/plugins-fulfillment-networks",
+      "register": {
+        "console": "registerFulfillmentNetworksConsole",
+        "consoleApi": "registerFulfillmentNetworksConsoleApi",
+        "serverDeclarations": "registerFulfillmentNetworksServerDeclarations",
+        "consoleServerDeclarations": "registerFulfillmentNetworksConsoleServerDeclarations",
+        "subprocessors": "fulfillmentNetworksSubprocessors"
+      },
+      "apiPrefixes": [
+        "fulfillment-networks"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's connection to the merchant's OWN ShipBob or Amazon Multi-Channel Fulfillment account, its grant sealed, with its settings, its last stock count and its log subcollection (AGL-3634). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "fulfillmentNetworkConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One paid order's hand-off to one network: the lines sent, the network's order and the parcels read back (AGL-3634). Written by the order-event intake and the console job.",
+          "name": "fulfillmentNetworkOrders",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 26,
+        "$comment": "Third-party logistics for the commerce plugin's orders (AGL-3634): paid orders routed to the merchant's OWN ShipBob or Amazon Multi-Channel Fulfillment account, shipments and tracking written back through core's shipment-records seam, the units a network holds published on core's fulfillment-providers seam, and stock counts set through core's stock-levels seam; it imports neither commerce nor shipping. Sold with commerce (`features.commerce`), no price of its own. On for every workspace, off for a site only when that site says so, and no release flag: nothing draws until the console holds FULFILLMENT_NETWORKS_TOKEN_KEY and a network's app credentials (SHIPBOB_CLIENT_ID/SECRET, or AMAZON_SP_API_APPLICATION_ID with AMAZON_SP_API_LWA_CLIENT_ID/SECRET).",
+        "label": "Fulfillment networks",
+        "alwaysOnForWorkspace": true,
+        "description": "Paid orders shipped by your own ShipBob or Amazon Multi-Channel Fulfillment account, with tracking back on the order and stock counts in step.",
+        "siteOff": {
+          "stops": "Switching Fulfillment networks off for this site stops its paid orders going to ShipBob or Amazon, and stops their shipments and stock counts coming back.",
+          "keeps": "The connections and every order already sent are kept, and what a network already shipped stays on the order."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "orderDetail"
+          ]
+        }
+      }
+    },
+    {
       "id": "sales-channels",
       "package": "@aglyn/plugins-sales-channels",
       "register": {

@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.viewinterop.AndroidView
 import com.aglyn.core.AuthSession
+import com.aglyn.pluginhost.BesignerPaths
 import com.aglyn.core.defaultHttpClient
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState
@@ -34,14 +35,20 @@ import kotlin.coroutines.resume
 @SuppressLint("SetJavaScriptEnabled")
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-actual fun ConsoleView(
+actual fun BesignerWebView(
   origin: String,
   path: String,
   auth: AuthSession,
   brandName: String,
   onExit: () -> Unit,
+  onConsoleLink: (path: String) -> Unit,
   bridge: ConsoleBridge?,
 ) {
+  // The Besigner is the only web content: any other console page is native.
+  if (!BesignerPaths.isBesignerPath(path)) {
+    LaunchedEffect(path) { onConsoleLink(path) }
+    return
+  }
   val scope = rememberCoroutineScope()
   // One nonce per view; each page load is injected with it.
   val nonce = remember { createBridgeNonce() }
@@ -75,7 +82,7 @@ actual fun ConsoleView(
   BackHandler(enabled = canGoBack) { webView?.goBack() }
 
   when {
-    error != null -> EmptyState("The console did not open", body = error, icon = AglynIcons.named("error"))
+    error != null -> EmptyState("The Besigner did not open", body = error, icon = AglynIcons.named("error"))
     !ready -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     else -> AndroidView(
       modifier = Modifier.fillMaxSize(),
@@ -130,10 +137,14 @@ actual fun ConsoleView(
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
               val url = request.url
-              // Pages on the console stay here; anything else opens in the browser.
-              if (originOf(url.toString()) == originOf(origin)) return false
-              runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url)) }
-              return true
+              return when (val next = besignerNavigation(url.toString(), origin)) {
+                // Besigner pages stay here.
+                BesignerNavigation.Stay -> false
+                // Any other console page is a native screen.
+                is BesignerNavigation.Native -> { onConsoleLink(next.path); true }
+                // Another site opens in the person's browser.
+                BesignerNavigation.External -> { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url)) }; true }
+              }
             }
 
             override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {

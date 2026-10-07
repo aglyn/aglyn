@@ -11,6 +11,7 @@ import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.FirestoreReader
 import com.aglyn.core.WorkspaceStore
 import com.aglyn.core.WorkspaceState
+import com.aglyn.pluginhost.BesignerPaths
 import com.aglyn.pluginhost.ConsoleScope
 import com.aglyn.pluginhost.DeepLinks
 import com.aglyn.pluginhost.NativeApp
@@ -31,8 +32,12 @@ class ShellServices(
   /** Small per-install settings (the POS store this device sells for). */
   val prefs: com.aglyn.core.KeyValueStore,
   val registry: NativePluginRegistry,
-  /** Shows an absolute console path: the authenticated WebView on Android, the browser on desktop. */
-  val console: @Composable (path: String, onExit: () -> Unit) -> Unit,
+  /**
+   * Shows a Besigner page (a whole console path) in the authenticated web
+   * view inside the app, the apps' only web content. [onConsoleLink] hears a
+   * link from it to any other console page, which the shell opens natively.
+   */
+  val besigner: @Composable (path: String, onExit: () -> Unit, onConsoleLink: (String) -> Unit) -> Unit,
   /** Test credentials a debug build fills the sign-in form with; null in release. */
   val debugSignIn: Pair<String, String>? = null,
   /** The register's printers, card reader and scanner; none in the Aglyn app. */
@@ -52,7 +57,10 @@ class ShellServices(
 /** Where the shell is: a top-level destination plus a stack of pushed routes. */
 sealed interface Route {
   data class Screen(val screenId: String, val params: NativeParams = emptyMap()) : Route
-  data class Console(val path: String) : Route
+  /** The Besigner on a whole console path that [com.aglyn.pluginhost.BesignerPaths] accepts. */
+  data class Besigner(val path: String) : Route
+  /** The site's pages, each opening in the Besigner. */
+  data object Pages : Route
   data object Switcher : Route
   data object NotificationSettings : Route
 }
@@ -79,7 +87,6 @@ class ShellNavigator(initialTop: String = HOME) {
     const val HOME = "home"
     const val MORE = "more"
     const val NOTIFICATIONS = "notifications"
-    const val CONSOLE = "console"
     const val SETTINGS = "settings"
     fun screenKey(screenId: String) = "screen:$screenId"
   }
@@ -109,16 +116,35 @@ internal class ShellPluginContext(
     }
   }
 
-  override fun openConsolePath(path: String, scope: ConsoleScope) {
-    navigator.push(Route.Console(scopedConsolePath(path, scope, orgSlug, hostSlug)))
+  override fun openBesigner(path: String, scope: ConsoleScope): Boolean {
+    val whole = scopedConsolePath(path, scope, orgSlug, hostSlug)
+    if (!BesignerPaths.isBesignerPath(whole)) return false
+    navigator.push(Route.Besigner(whole))
+    return true
   }
 
-  /** A link from a notification or an App Link: a native screen when a plugin answers it. */
+  /**
+   * A link from a notification, an App Link or the Besigner: a plugin's native
+   * screen, the Besigner, or (for a console page nothing answers natively yet)
+   * Home. Never a console page.
+   */
   fun openLink(link: String) {
     when (val target = DeepLinks.resolve(link, services.registry.deepLinks())) {
       is NativeLinkTarget.Screen -> navigator.push(Route.Screen(target.screen, target.params))
-      is NativeLinkTarget.Console -> navigator.push(Route.Console(target.path))
+      is NativeLinkTarget.Besigner -> navigator.push(Route.Besigner(target.path))
+      is NativeLinkTarget.Unmatched -> nativeFor(target.path)
       null -> Unit
+    }
+  }
+
+  /** The shell's own native answer to a console page no plugin claims. */
+  private fun nativeFor(path: String) {
+    val rest = DeepLinks.splitConsoleScope(path.substringBefore('?')).rest
+    when {
+      rest == "/screens" || rest.startsWith("/screens/") -> navigator.push(Route.Pages)
+      rest.startsWith("/notifications") -> navigator.select(ShellNavigator.NOTIFICATIONS)
+      rest.startsWith("/settings") -> navigator.select(ShellNavigator.SETTINGS)
+      else -> navigator.select(ShellNavigator.HOME)
     }
   }
 }

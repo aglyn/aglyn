@@ -131,7 +131,7 @@ internal fun MoreScreen(services: ShellServices, context: NativePluginContext) {
       AglynListItem(
         title = action.title,
         icon = AglynIcons.named(action.icon),
-        onClick = { context.navigate(action.screen!!, action.params) },
+        onClick = { context.navigate(action.screen, action.params) },
         modifier = Modifier.testTag("more-${action.id}"),
       )
     }
@@ -148,12 +148,16 @@ internal fun PluginScreenHost(
   onExit: () -> Unit = {},
 ) {
   val screen = services.registry.screen(screenId)
-  val consolePath = screen?.consolePath
   when {
     screen == null -> EmptyState("This page is not available", body = "Update the app to open it.", icon = AglynIcons.named("error"))
     screen.requiresSite && !hasSite -> EmptyState("Pick a site first", body = "This page shows one site's data.", icon = AglynIcons.named("public"))
-    consolePath != null ->
-      services.console(com.aglyn.pluginhost.scopedConsolePath(consolePath, screen.consoleScope, context.orgSlug, context.hostSlug), onExit)
+    screen.upcoming -> EmptyState(
+      "${screen.title} is coming to the app",
+      body = "This part of ${services.config.brandName} is on its way to the app.",
+      icon = AglynIcons.named(screen.icon ?: "extension"),
+      action = { OutlinedButton(onClick = onExit) { Text("Back") } },
+      modifier = Modifier.testTag("upcoming-${screen.id}"),
+    )
     else -> screen.content(context, params)
   }
 }

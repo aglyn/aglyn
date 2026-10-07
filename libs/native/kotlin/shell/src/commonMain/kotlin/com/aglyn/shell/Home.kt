@@ -35,7 +35,6 @@ import com.aglyn.core.WorkspaceState
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.core.siteAddress
-import com.aglyn.pluginhost.ConsoleScope
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.pluginhost.WidgetSize
 import com.aglyn.ui.ActivityRow
@@ -55,13 +54,11 @@ import com.aglyn.ui.StatusTone
 import com.aglyn.ui.WidthClass
 import com.aglyn.ui.space
 
-/** The site's console pages the shell offers as quick actions, beside the plugins' own. */
-private data class ShellAction(val key: String, val title: String, val icon: String, val order: Int, val path: String)
+/** The shell's own native areas it offers as quick actions, beside the plugins' own. */
+private data class ShellAction(val key: String, val title: String, val icon: String, val order: Int, val route: Route)
 
 private val SHELL_ACTIONS = listOf(
-  ShellAction("pages", "Pages", "description", 100, "/screens"),
-  ShellAction("media", "Media", "photo_library", 200, "/media"),
-  ShellAction("analytics", "Analytics", "insights", 300, "/analytics"),
+  ShellAction("pages", "Pages", "description", 100, Route.Pages),
 )
 
 /** How many recent notifications the dashboard reads. */
@@ -94,13 +91,10 @@ internal fun HomeScreen(
 
   val actions = remember(version, hasSite, context.orgSlug, context.hostSlug) {
     val shell = if (hasSite) SHELL_ACTIONS.map { action ->
-      action.order to QuickActionItem(action.key, action.title, action.icon) { context.openConsolePath(action.path, ConsoleScope.SITE) }
+      action.order to QuickActionItem(action.key, action.title, action.icon) { navigator.push(action.route) }
     } else emptyList()
     val plugins = services.registry.quickActions(NativeApp.AGLYN).filter { hasSite || !it.requiresSite }.map { action ->
-      action.order to QuickActionItem(action.id, action.title, action.icon) {
-        val screen = action.screen
-        if (screen != null) context.navigate(screen, action.params) else context.openConsolePath(action.consolePath ?: "/")
-      }
+      action.order to QuickActionItem(action.id, action.title, action.icon) { context.navigate(action.screen, action.params) }
     }
     (shell + plugins).sortedBy { it.first }.map { it.second }
   }
@@ -108,7 +102,7 @@ internal fun HomeScreen(
 
   val glance: List<Pair<GridSpan, @Composable (Modifier) -> Unit>> = buildList {
     if (hasSite) {
-      add(GridSpan.HALF to { modifier -> PagesCard(host, modifier) { context.openConsolePath("/screens", ConsoleScope.SITE) } })
+      add(GridSpan.HALF to { modifier -> PagesCard(host, modifier) { navigator.push(Route.Pages) } })
     }
     add(GridSpan.HALF to { modifier -> UnreadCard(feed, modifier) { navigator.select(ShellNavigator.NOTIFICATIONS) } })
     for (widget in widgets) {

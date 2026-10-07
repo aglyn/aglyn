@@ -12,7 +12,7 @@ import com.aglyn.core.defaultHttpClient
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.pluginhost.NativePluginManifestEntry
 import com.aglyn.pluginhost.NativePluginRegistry
-import com.aglyn.webview.ConsoleView
+import com.aglyn.webview.BesignerWebView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -110,7 +110,7 @@ object DesktopShell {
       workspace = WorkspaceStore(scope, auth, firestore, prefs),
       prefs = prefs,
       registry = registry,
-      console = { path, onExit -> ConsoleView(config.consoleOrigin, path, auth, config.brandName, onExit) },
+      besigner = { path, onExit, onConsoleLink -> BesignerWebView(config.consoleOrigin, path, auth, config.brandName, onExit, onConsoleLink) },
       debugSignIn = debugSignIn,
       peripherals = peripherals,
       writer = firestore,

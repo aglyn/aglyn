@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v10'
+export const LEGAL_DOCUMENT_VERSION = 'v11'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -635,6 +635,34 @@ export interface LegalDocumentManifestEntry {
  * control: the live terms page reproduced its `v9` pin (44131 bytes /
  * `c48915…`) byte for byte before and after publication, and keeps that pin.
  *
+ * v11 (2026-10-07, AGL-3666): the commerce subprocessors.
+ *
+ *   - Privacy §3 names text messaging, shipping and sales tax among what
+ *     subprocessors do, and says commerce features can use Twilio for texts
+ *     to a store's customers about their orders, Shippo or EasyPost for
+ *     shipping rates, labels and tracking, and Avalara or TaxJar, in a
+ *     merchant's own account, for sales tax. §10 says a service a customer
+ *     connects with its own account acts for that customer and is not
+ *     Aglyn's subprocessor.
+ *   - The Subprocessors page lists the five, ahead of their accounts, with a
+ *     change-log entry, and its introduction says shipping services a
+ *     merchant connects with its own account (Easyship, Sendcloud,
+ *     ShipperHQ, ShippingEasy) are not Aglyn subprocessors. DPA §4 names
+ *     shipping, sales tax and order messages by email and text. Neither is
+ *     acceptance-pinned. The Terms and the Cookie Policy are unchanged.
+ *
+ * Privacy, the DPA and their `/legal` index cards move "Last updated" to
+ * October 7, 2026. The wording is recorded in
+ * `Platform Docs/Legal/Proposed/2026-10-07-subprocessors-commerce-vendors/PROPOSAL.md`.
+ *
+ * Publication-first: the Google Doc masters were edited and verified through
+ * the Docs API, the pages were published, the live page confirmed serving the
+ * new text, and only then was privacy captured: 25423 bytes (`006fe7…`),
+ * identical across two requests and a cache-busting query. The Terms did not
+ * change, so they were the control: the live terms page reproduced its `v9`
+ * pin (44131 bytes / `c48915…`) byte for byte before and after publication,
+ * and keeps that pin.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -701,7 +729,7 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '5ae210209452aae20eced261e8da88587153b4aba6aa893df39b7e42877e1cfb',
-    bytes: 25016,
+      '006fe7f39723451976eac3a94d634e3a339a0c7ceb47c50421298a0a515e78f9',
+    bytes: 25423,
   },
 ]
