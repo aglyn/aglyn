@@ -20,6 +20,7 @@ content on the marketing site and is written separately.
 - **ai:** a site's search description is composed within its cap, never cut mid-phrase ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
 - **ai:** a refusal after the re-ask gives back what the job spent, before anyone is told ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
 - **ai:** a site's layout links its planned pages, written by the platform before the check ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **workflows:** a webhook step reaches only public addresses ([AGL-3628](https://linear.app/aglyn/issue/AGL-3628))
 
 ## v1.0.0-beta.228 — 2026-10-07
 
