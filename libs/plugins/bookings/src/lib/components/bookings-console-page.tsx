@@ -28,7 +28,8 @@ import {
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { describePaymentRisk, type PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
-import { type BookingServiceStatus, bookingServiceStatus, type HostBookingService, isBookingReminderDue } from '../model'
+import { type HostBookingService, isBookingReminderDue } from '../model'
+import { type BookingServiceStatus, bookingServiceStatus } from '../model/bookings'
 import {
   BOOKING_FIELD_ASKS,
   type BookingFieldAsk,
