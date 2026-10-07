@@ -278,6 +278,20 @@ public enum HostRedirectKind: String, Codable, CaseIterable, Hashable, Sendable 
   }
 }
 
+public struct ListFilterClause: Codable, Hashable, Sendable {
+  public var field: String
+  public var label: String?
+  public var op: String
+  public var value: String
+
+  public init(field: String, label: String? = nil, op: String, value: String) {
+    self.field = field
+    self.label = label
+    self.op = op
+    self.value = value
+  }
+}
+
 public struct ListFilterField: Codable, Hashable, Sendable {
   public var column: String
   public var containsOrderBy: String?
@@ -949,6 +963,21 @@ public enum OrderStatus: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum OrderStatusColorValue: String, Codable, CaseIterable, Hashable, Sendable {
+  case `default` = "default"
+  case error = "error"
+  case info = "info"
+  case success = "success"
+  case warning = "warning"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct OrderTimelineEvent: Codable, Hashable, Sendable {
   public var atMs: Double
   public var detail: String?
@@ -1173,12 +1202,14 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let listQueryIdPath: String
   public let nameTokenLimit: Int
   public let nameTokenMaxPrefix: Int
+  public let openDisputeClause: ListFilterClause
   public let orderChannelLabels: [String: String]
   public let orderChannelOptions: [ListFilterOption]
   public let orderDisputeOptions: [ListFilterOption]
   public let orderListHeaders: [String: String]
   public let orderListQuery: ListQueryDeclaration
   public let orderListSelectFields: [String]
+  public let orderStatusColor: [String: OrderStatusColorValue]
   public let orderStatusLabels: [String: String]
   public let orderStatusOptions: [ListFilterOption]
   public let productListBase: [ListQueryFilter]
@@ -1193,12 +1224,14 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case listQueryIdPath = "LIST_QUERY_ID_PATH"
     case nameTokenLimit = "NAME_TOKEN_LIMIT"
     case nameTokenMaxPrefix = "NAME_TOKEN_MAX_PREFIX"
+    case openDisputeClause = "OPEN_DISPUTE_CLAUSE"
     case orderChannelLabels = "ORDER_CHANNEL_LABELS"
     case orderChannelOptions = "ORDER_CHANNEL_OPTIONS"
     case orderDisputeOptions = "ORDER_DISPUTE_OPTIONS"
     case orderListHeaders = "ORDER_LIST_HEADERS"
     case orderListQuery = "ORDER_LIST_QUERY"
     case orderListSelectFields = "ORDER_LIST_SELECT_FIELDS"
+    case orderStatusColor = "ORDER_STATUS_COLOR"
     case orderStatusLabels = "ORDER_STATUS_LABELS"
     case orderStatusOptions = "ORDER_STATUS_OPTIONS"
     case productListBase = "PRODUCT_LIST_BASE"

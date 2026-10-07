@@ -44,6 +44,17 @@ fun main() = runBlocking {
     shoot(dir, "aglyn-desktop-switcher", dark, before = { navigator.select(ShellNavigator.HOME); navigator.push(Route.Switcher) }) { AglynShell(aglyn, navigator, dark = it) }
     navigator.select(ShellNavigator.HOME)
   }
+  // The store's orders live on the seeded store site (-Daglyn.snapshotStoreSite).
+  System.getProperty("aglyn.snapshotStoreSite")?.let { site ->
+    aglyn.workspace.selectSite(site)
+    for (dark in listOf(false, true)) {
+      val suffix = if (dark) "-dark" else ""
+      shoot(dir, "aglyn-desktop-orders$suffix", dark, before = { navigator.select(ShellNavigator.screenKey("commerce.orders")) }) { AglynShell(aglyn, navigator, dark = it) }
+      shoot(dir, "aglyn-desktop-order$suffix", dark, before = { navigator.push(Route.Screen("commerce.order", mapOf("order" to "o-1043"))) }) { AglynShell(aglyn, navigator, dark = it) }
+    }
+    shoot(dir, "aglyn-desktop-orders-narrow", false, width = 420, height = 860, before = { navigator.select(ShellNavigator.screenKey("commerce.orders")) }) { AglynShell(aglyn, navigator, dark = it) }
+    shoot(dir, "aglyn-desktop-home-store", false, before = { navigator.select(ShellNavigator.HOME) }) { AglynShell(aglyn, navigator, dark = it) }
+  }
   aglyn.auth.signOut()
   shoot(dir, "aglyn-desktop-sign-in", false) { AglynShell(aglyn, ShellNavigator(), dark = it) }
 

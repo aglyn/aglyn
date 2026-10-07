@@ -823,6 +823,469 @@
         }
       ]
     },
+    "orderDisputeBlocksRefund": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
+      "cases": [
+        {
+          "args": [
+            {}
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "needs_response"
+              }
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "under_review"
+              }
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "warning_needs_response"
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "warning_under_review"
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "won"
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "lost"
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "warning_closed"
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "needs_response",
+                "outcome": "won"
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "needs_response",
+                "closedAtMs": 5
+              }
+            }
+          ],
+          "result": false
+        }
+      ]
+    },
+    "orderLineFulfillmentStates": {
+      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "cases": [
+        {
+          "args": [
+            {}
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "lineItems": [
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 2
+                },
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 1,
+                  "productType": "digital"
+                },
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 3,
+                  "productType": "service"
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "fulfilledQuantity": 0,
+              "lineItemId": 0,
+              "quantity": 2,
+              "remainingQuantity": 2,
+              "requiresShipping": true
+            },
+            {
+              "fulfilledQuantity": 0,
+              "lineItemId": 1,
+              "quantity": 1,
+              "remainingQuantity": 1,
+              "requiresShipping": false
+            },
+            {
+              "fulfilledQuantity": 0,
+              "lineItemId": 2,
+              "quantity": 3,
+              "remainingQuantity": 3,
+              "requiresShipping": false
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "lineItems": [
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 3
+                },
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 2
+                }
+              ],
+              "fulfillments": [
+                {
+                  "id": "f1",
+                  "atMs": 1,
+                  "lineItemIds": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "fulfilledQuantity": 3,
+              "lineItemId": 0,
+              "quantity": 3,
+              "remainingQuantity": 0,
+              "requiresShipping": true
+            },
+            {
+              "fulfilledQuantity": 0,
+              "lineItemId": 1,
+              "quantity": 2,
+              "remainingQuantity": 2,
+              "requiresShipping": true
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "lineItems": [
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 3
+                },
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 2
+                }
+              ],
+              "fulfillments": [
+                {
+                  "id": "f1",
+                  "atMs": 1,
+                  "lineItemIds": [
+                    0
+                  ],
+                  "lines": [
+                    {
+                      "lineItemId": 0,
+                      "quantity": 1
+                    },
+                    {
+                      "lineItemId": 1,
+                      "quantity": 2
+                    }
+                  ]
+                },
+                {
+                  "id": "f2",
+                  "atMs": 2,
+                  "lineItemIds": [
+                    0
+                  ],
+                  "lines": [
+                    {
+                      "lineItemId": 0,
+                      "quantity": 1
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "fulfilledQuantity": 2,
+              "lineItemId": 0,
+              "quantity": 3,
+              "remainingQuantity": 1,
+              "requiresShipping": true
+            },
+            {
+              "fulfilledQuantity": 2,
+              "lineItemId": 1,
+              "quantity": 2,
+              "remainingQuantity": 0,
+              "requiresShipping": true
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "lineItems": [
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 3
+                }
+              ],
+              "fulfillments": [
+                {
+                  "id": "f1",
+                  "atMs": 1,
+                  "lineItemIds": [
+                    0
+                  ],
+                  "status": "cancelled"
+                },
+                {
+                  "id": "f2",
+                  "atMs": 2,
+                  "lineItemIds": [
+                    0
+                  ],
+                  "lines": [
+                    {
+                      "lineItemId": 0,
+                      "quantity": 1
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "fulfilledQuantity": 1,
+              "lineItemId": 0,
+              "quantity": 3,
+              "remainingQuantity": 2,
+              "requiresShipping": true
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "lineItems": [
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 2
+                }
+              ],
+              "fulfillments": [
+                {
+                  "id": "f1",
+                  "atMs": 1,
+                  "lineItemIds": [
+                    0
+                  ],
+                  "lines": [
+                    {
+                      "lineItemId": 0,
+                      "quantity": 5
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "fulfilledQuantity": 2,
+              "lineItemId": 0,
+              "quantity": 2,
+              "remainingQuantity": 0,
+              "requiresShipping": true
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "lineItems": [
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 2.7
+                },
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 0
+                },
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": -1
+                }
+              ],
+              "fulfillments": [
+                {
+                  "id": "f1",
+                  "atMs": 1,
+                  "lineItemIds": [
+                    9,
+                    1
+                  ]
+                },
+                {
+                  "id": "f2",
+                  "atMs": 2,
+                  "lineItemIds": [],
+                  "lines": [
+                    {
+                      "lineItemId": 7,
+                      "quantity": 1
+                    },
+                    {
+                      "lineItemId": 0,
+                      "quantity": 0
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "fulfilledQuantity": 0,
+              "lineItemId": 0,
+              "quantity": 2,
+              "remainingQuantity": 2,
+              "requiresShipping": true
+            },
+            {
+              "fulfilledQuantity": 0,
+              "lineItemId": 1,
+              "quantity": 0,
+              "remainingQuantity": 0,
+              "requiresShipping": true
+            },
+            {
+              "fulfilledQuantity": 0,
+              "lineItemId": 2,
+              "quantity": 0,
+              "remainingQuantity": 0,
+              "requiresShipping": true
+            }
+          ]
+        }
+      ]
+    },
     "orderNetCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "cases": [
