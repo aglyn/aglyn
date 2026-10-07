@@ -23,8 +23,8 @@ its **Analytics** page, and your organization's **Sites** page — or open the *
 on one of these pages and choose **Ask about your numbers** under **AI jobs**:
 
 - a site's dashboard or **Analytics** page — traffic, top pages, where visits came from, forms,
-  bookings, campaigns, A/B tests, store sales, automation runs, and the CRM pipeline and deals
-  closed;
+  bookings, campaigns, A/B tests, announcement bars and popups, store sales, automation runs,
+  and the CRM pipeline and deals closed;
 - a site's **CRM → Reports** page — the same figures, for questions about where people came
   from and what they did;
 - a site's **Marketing** page — campaigns, the conversions they were credited with and the
@@ -38,7 +38,9 @@ on one of these pages and choose **Ask about your numbers** under **AI jobs**:
 
 Pipeline figures count only the deals the site can see: on a site, the deals shared with it;
 on your organization's pages, every deal. Automation runs are counted from the site's run
-history, never from what a run was about.
+history, never from what a run was about. Announcement bars and popups are counted since each
+was made — the views, clicks and dismissals the **Overlays** list shows — whatever window you
+pick.
 
 The **Conversions** section and a campaign's report on the **Marketing** page also carry
 **Ask AI about these numbers** in their header, which opens the same dialog with a question
