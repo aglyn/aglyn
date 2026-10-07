@@ -509,6 +509,32 @@ describe('the layout step', () => {
       expect(prompt).toContain('leave no empty element')
     })
 
+    it('names the site by its own name, and re-asks a footer that invents a phone number the brief never gave', async () => {
+      const withPhone = {
+        ...EMPTY_NAV_TREE,
+        nodes: {
+          ...EMPTY_NAV_TREE.nodes,
+          footer: { componentId: 'section', props: { element: 'footer' }, nodes: ['tagline', 'phone'] },
+          phone: { componentId: 'muiTypography', props: { variant: 'body2', children: 'Call (512) 555-0142' } },
+        },
+      }
+      mockRunAiRequest.mockResolvedValueOnce(treeAnswer(withPhone)).mockResolvedValueOnce(treeAnswer(EMPTY_NAV_TREE))
+      const outcome = await createAiJobLayoutStep()(
+        context(siteLayoutJob({ sitePages: SITE_PAGES, businessName: 'Hillside Dog Grooming' })),
+      )
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+      const reask = mockRunAiRequest.mock.calls[1][0].messages[2].content as string
+      expect(reask).toContain('"(512) 555-0142" is not in the brief')
+      expect(reask).toContain('(nodes phone)')
+      expect(outcome.review).toBeUndefined()
+      const written = JSON.stringify(storedNodes(LAYOUT_ID))
+      expect(written).toContain('{{host.businessName}}')
+      expect(written).not.toContain('Hillside Dog Grooming')
+      expect(written).not.toContain('555-0142')
+      // The layout fills the window, so a short page keeps its footer at the bottom.
+      expect(written).toContain('"minHeight":"100vh"')
+    })
+
     it('adds a nav row to the Toolbar Content when the model built none, so the plan’s nav region is built', async () => {
       const withoutNav = {
         ...EMPTY_NAV_TREE,
