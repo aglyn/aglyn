@@ -352,7 +352,7 @@ describe('copy', () => {
     const texts = Object.values(compiled.tree.nodes)
       .filter((node) => node.componentId === 'muiTypography')
       .map((node) => node.props?.['children'])
-    expect(texts[0]).toBe('Gentle grooming for nervous dogs, senior dogs')
+    expect(texts[0]).toBe('Gentle grooming for nervous dogs')
     expect(texts[1]).toBe('Call [phone number] or 512-555-0199 to book.')
   })
 })

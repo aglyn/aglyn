@@ -230,7 +230,6 @@ const AI_LAYOUT_CLOSE_DRAWER = {
   trigger: { event: 'elementClick', everyTime: true },
   steps: [{ type: 'closeDrawer' }],
 }
-}
 
 /**
  * The footer the design describes, with what every footer owes a visitor
