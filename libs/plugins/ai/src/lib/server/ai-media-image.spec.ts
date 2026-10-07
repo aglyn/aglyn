@@ -74,6 +74,7 @@ jest.mock('../usage/assist-usage', () => ({
 import { AiUpstreamError } from '../providers/contract'
 import { AiImageSafetyRefusal } from '../providers/image-contract'
 import { AI_MEDIA_OURS_COPY, aiImageAltText, aiImageFileName, POST } from './ai-media-image'
+import { AI_MEDIA_RASTER_STYLE_WORDING } from './ai-media-raster-prompt'
 
 /** Every `update` a stored picture's document received, by path. */
 const updates: Array<{ path: string; data: Record<string, unknown> }> = []
@@ -218,6 +219,8 @@ describe('gates and refusals before anything is spent', () => {
     [{ count: 0 }, /between 1 and 4/],
     [{ hostId: '' }, /Open the site/],
     [{ mode: 'illustration', style: 'portrait' }, /illustration, an icon/],
+    [{ mode: 'photo', style: 'portrait' }, /Choose a kind of picture/],
+    [{ mode: 'photo', style: 'icon' }, /Choose a kind of picture/],
     [{ mode: 'illustration', style: 'icon', palette: { source: 'custom', colors: ['red'] } }, /hex values/],
     [{ mode: 'illustration', style: 'icon', palette: { source: 'custom', colors: [] } }, /hex values/],
   ])('refuses %p with a 400 and hands the reservation back', async (patch, message) => {
@@ -295,6 +298,29 @@ describe('photos', () => {
       folderId: 'folder-9',
       data: 'AAAA',
     })
+  })
+
+  it('follows the description with the kind’s style wording, and keeps the description alone as the record', async () => {
+    mockProvider.generate.mockResolvedValue(photos([image('A')]))
+    expect((await POST(post({ ...BODY, style: 'watercolor', count: 1 }))).status).toBe(200)
+    expect(mockProvider.generate).toHaveBeenCalledWith({
+      model: 'gemini-3.1-flash-image',
+      prompt: `a red barn at dawn\n\n${AI_MEDIA_RASTER_STYLE_WORDING.watercolor}`,
+      aspectRatio: '16:9',
+      count: 1,
+    })
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body).fileName).toBe('ai-a-red-barn-at-dawn-1.png')
+    expect(updates[0].data).toMatchObject({
+      alt: 'A red barn at dawn',
+      aiGenerated: { mode: 'photo', style: 'watercolor', prompt: 'a red barn at dawn' },
+    })
+  })
+
+  it('reads a photo request with no kind as a Photo, sent exactly as written', async () => {
+    mockProvider.generate.mockResolvedValue(photos([image('A')]))
+    await POST(post({ ...BODY, count: 1 }))
+    expect(mockProvider.generate.mock.calls[0][0].prompt).toBe('a red barn at dawn')
+    expect(updates[0].data).toMatchObject({ aiGenerated: { style: 'photo' } })
   })
 
   it('sends an org library’s scope, with the site on screen for its default sharing', async () => {

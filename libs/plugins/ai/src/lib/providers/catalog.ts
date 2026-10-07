@@ -416,6 +416,37 @@ export const AI_IMAGE_DEFAULT_MODEL = 'gemini-3.1-flash-image'
 /** The image provider's id: Google's models on Vertex AI. */
 export const AI_IMAGE_VERTEX_PROVIDER_ID = 'google-vertex'
 
+/**
+ * The image providers' rows on the published subprocessor list, kept apart
+ * from `AI_CATALOG_PROVIDERS` for the reason the image catalog is kept apart
+ * from the text one: a settings form offers text providers from that list,
+ * and an image provider answers no conversation. The host is the adapter's
+ * published endpoint (`VERTEX_IMAGE_PUBLISHED_HOST`).
+ *
+ * Google's row is dated to its change-log entry on `/legal/subprocessors`,
+ * published with the Privacy Policy §2 sentence naming Google for image
+ * generation (legal v11).
+ */
+export const AI_IMAGE_CATALOG_PROVIDERS: readonly AiCatalogProvider[] = [
+  {
+    id: AI_IMAGE_VERTEX_PROVIDER_ID,
+    label: 'Google Vertex AI',
+    subprocessor: {
+      entity: 'Google LLC (Google Cloud Vertex AI)',
+      // The global endpoint: Google lists its processing for these models as
+      // multi-region United States and European Union.
+      region: 'United States and European Union',
+      purpose:
+        "AI image generation: creating photos for a customer's media library from a description a user writes",
+      publishedOn: '2026-10-07',
+      reason:
+        "Reached through the AI plugin's Vertex AI image adapter (`libs/plugins/ai/src/lib/providers/vertex-image.ts`) by the Media library's Create with AI door (`libs/plugins/ai/src/lib/server/ai-media-image.ts`) for every kind that is not drawn as SVG, as the platform's own service account. Off unless `AI_IMAGE_VERTEX_PROJECT` names a Google Cloud project; the console offers those kinds only where `NEXT_PUBLIC_AI_IMAGE_PHOTOS` is `on`. The request carries the description and the kind's fixed style wording, the shape and fixed settings, and nothing else.",
+      dataReceived:
+        "The description the user writes and the shape requested, and the generated image returned. No account identifiers, email addresses, or other content of the customer's site.",
+    },
+  },
+]
+
 export const AI_IMAGE_MODEL_CATALOG: readonly AiImageCatalogEntry[] = [
   {
     // The default: Google's own replacement for Imagen 4, which Vertex AI

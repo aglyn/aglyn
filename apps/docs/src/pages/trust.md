@@ -44,6 +44,7 @@ does not exist.
 | **Stripe** | Payments. Card details go directly to Stripe; Aglyn never receives or stores a card number. |
 | **Resend** | Transactional email delivery. |
 | **Anthropic** | AI-assisted features: Aglyn Assist, editor assistance, AI generation, automation explanations, AI insights and AI assistance in the CRM. For CRM assistance it receives the opened record as the CRM shows it, with all of its standard and custom fields, including contact details, notes, timeline and related records — email addresses, phone numbers, postal addresses and marketing consent included. It never receives a password, a sign-in token, an account identifier or a record's internal id. |
+| **Google Cloud Vertex AI** | AI image generation in the media library, for every kind of picture that is not drawn as an SVG. It receives the description a user writes, followed by the kind's fixed style wording, and the shape requested, and returns the generated image. It receives no account identifier, email address or other content of the customer's site. Processing at Google's global endpoint, which Google lists as the United States and the European Union. |
 | **Apple and Google** | Push notifications to the Aglyn mobile apps. Apple Push Notification service (for an iPhone or iPad) and Firebase Cloud Messaging (for an Android device) receive each notification's title and body with the device push token. A person who never signs in to the app on a phone or tablet sends nothing through them. |
 
 The authoritative versions are published, not gated: the

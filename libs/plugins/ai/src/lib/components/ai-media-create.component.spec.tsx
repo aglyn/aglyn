@@ -20,10 +20,11 @@
  *
  * - It is on the `mediaLibrary` zone behind the generative widgets' gates,
  *   and it draws from those alone: no request is made until someone creates.
- * - The dialog offers Photo only where the deployment makes photos, and
- *   Illustration everywhere; it says what the pictures will cost before
- *   anything is spent, sends what the door reads, and hands the library the
- *   new assets.
+ * - The Kind menu lists the vector kinds everywhere and, only where the
+ *   deployment makes them, the Photo, Art and Design kinds in their own
+ *   sections, each with what one costs; it says what the pictures will cost
+ *   before anything is spent, sends what the door reads, and hands the
+ *   library the new assets.
  * - Mounted as its own upsell, it opens the add-on instead.
  */
 
@@ -43,7 +44,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 import { AI_PLUGIN_ID } from '../constants'
 import { aiMediaCreditsPerPicture } from '../model/ai-media-credits'
 import { registerAiConsole } from '../plugin'
-import { aiMediaCreditEstimate, type AiMediaCreateButtonProps } from './ai-media-create.component'
+import {
+  AI_MEDIA_DESCRIBE_COLORS_NOTE,
+  AI_MEDIA_RASTER_SAFETY_NOTE,
+  aiMediaCreditEstimate,
+  type AiMediaCreateButtonProps,
+} from './ai-media-create.component'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -77,6 +83,18 @@ beforeEach(() => {
   onCreated.mockReset()
   delete process.env.NEXT_PUBLIC_AI_IMAGE_PHOTOS
 })
+
+/** Opens the Kind menu and answers its listbox. */
+function openKinds(dialog: HTMLElement) {
+  fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Kind' }))
+  return screen.getByRole('listbox')
+}
+
+/** Chooses a kind by its label. */
+function chooseKind(dialog: HTMLElement, label: string) {
+  const listbox = openKinds(dialog)
+  fireEvent.click(within(listbox).getByText(label))
+}
 
 async function open(props = zoneProps()) {
   const Component = Widget()
@@ -114,21 +132,64 @@ describe('the zone entry', () => {
   })
 })
 
-describe('the modes', () => {
-  it('offers only Illustration where the deployment makes no photos', async () => {
+describe('the kinds', () => {
+  it('lists only the vector kinds, under no headings, where the deployment makes no photos', async () => {
     const dialog = await open()
-    expect(within(dialog).queryByRole('button', { name: 'Photo' })).toBeNull()
     expect(within(dialog).getByLabelText('Describe what to draw')).toBeTruthy()
     expect(within(dialog).getByText(aiMediaCreditEstimate('illustration', 1))).toBeTruthy()
+    const listbox = openKinds(dialog)
+    expect(within(listbox).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Illustrationabout 18 credits',
+      'Iconabout 18 credits',
+      'Patternabout 18 credits',
+      'Logo markabout 18 credits',
+    ])
+    expect(within(listbox).queryByText('Vector')).toBeNull()
+    expect(within(listbox).queryByText('Photo')).toBeNull()
   })
 
-  it('offers Photo first where it does, and switches to Illustration', async () => {
+  it('lists every kind in four sections where it does, Photo first, each with what one costs', async () => {
     process.env.NEXT_PUBLIC_AI_IMAGE_PHOTOS = 'on'
     const dialog = await open()
     expect(within(dialog).getByLabelText('Describe the picture')).toBeTruthy()
     expect(within(dialog).getByText(aiMediaCreditEstimate('photo', 1))).toBeTruthy()
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Illustration or icon' }))
-    expect(within(dialog).getByLabelText('Describe what to draw')).toBeTruthy()
+    const listbox = openKinds(dialog)
+    const headings = Array.from(listbox.querySelectorAll('li.MuiListSubheader-root')).map(
+      (heading) => heading.textContent,
+    )
+    expect(headings).toEqual(['Vector', 'Photo', 'Art', 'Design'])
+    // MUI marks a heading as a read-only option; the kinds are the rest.
+    const options = within(listbox)
+      .getAllByRole('option')
+      .filter((option) => option.getAttribute('aria-readonly') !== 'true')
+      .map((option) => option.textContent)
+    expect(options).toHaveLength(21)
+    expect(options).toContain('Studio product shotabout 108 credits')
+    expect(options).toContain('Watercolorabout 108 credits')
+    expect(options).toContain('Mockupabout 108 credits')
+    expect(options).toContain('Iconabout 18 credits')
+  })
+
+  it('hides the colors for a photo kind and says what may be declined', async () => {
+    process.env.NEXT_PUBLIC_AI_IMAGE_PHOTOS = 'on'
+    const dialog = await open()
+    chooseKind(dialog, 'Food')
+    expect(within(dialog).queryByLabelText("Use my site's theme colors")).toBeNull()
+    expect(within(dialog).getByText(AI_MEDIA_RASTER_SAFETY_NOTE)).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Portrait 3:4' }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('brings a design kind’s shape and suggests naming colors, and an icon its palette', async () => {
+    process.env.NEXT_PUBLIC_AI_IMAGE_PHOTOS = 'on'
+    const dialog = await open()
+    chooseKind(dialog, 'Banner or hero image')
+    expect(within(dialog).getByRole('button', { name: 'Wide 16:9' }).getAttribute('aria-pressed')).toBe('true')
+    expect(within(dialog).getByText(new RegExp(AI_MEDIA_DESCRIBE_COLORS_NOTE))).toBeTruthy()
+    expect(within(dialog).queryByLabelText("Use my site's theme colors")).toBeNull()
+    chooseKind(dialog, 'Icon')
+    expect(within(dialog).getByRole('button', { name: 'Square 1:1' }).getAttribute('aria-pressed')).toBe('true')
+    expect(within(dialog).getByLabelText("Use my site's theme colors")).toBeTruthy()
+    expect(within(dialog).queryByText(AI_MEDIA_RASTER_SAFETY_NOTE)).toBeNull()
     expect(within(dialog).getByText(aiMediaCreditEstimate('illustration', 1))).toBeTruthy()
   })
 
@@ -161,7 +222,23 @@ describe('creating', () => {
       prompt: 'A red barn at dawn',
       aspectRatio: '16:9',
       count: 1,
+      style: 'photo',
     })
+  })
+
+  it('sends a design kind with its shape and no palette', async () => {
+    process.env.NEXT_PUBLIC_AI_IMAGE_PHOTOS = 'on'
+    const dialog = await open()
+    chooseKind(dialog, 'Social post graphic')
+    fireEvent.change(within(dialog).getByLabelText('Describe the picture'), {
+      target: { value: 'Citrus fruit on a bright table' },
+    })
+    mockFetch.mockResolvedValueOnce(json({ mediaIds: ['m1'], filtered: 0, failed: 0, credits: 108 }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(['m1']))
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body)
+    expect(body).toMatchObject({ mode: 'photo', style: 'social', aspectRatio: '1:1' })
+    expect(body.palette).toBeUndefined()
   })
 
   it('sends an illustration’s kind and the site theme’s colors', async () => {

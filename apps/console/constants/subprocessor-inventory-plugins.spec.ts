@@ -64,6 +64,23 @@ describe('plugin-declared subprocessors reach the registry (AGL-2984)', () => {
     })
   })
 
+  it('keeps the Google Cloud Vertex AI row in the derived list, reaching its global endpoint (AGL-3602)', () => {
+    const row = derivePublishedRows().find(
+      (entry) => entry.entity === 'Google LLC (Google Cloud Vertex AI)',
+    )
+    expect(row).toEqual({
+      entity: 'Google LLC (Google Cloud Vertex AI)',
+      purpose:
+        "AI image generation: creating photos for a customer's media library from a description a user writes",
+      region: 'United States and European Union',
+      publishedOn: '2026-10-07',
+      reaches: ['aiplatform.googleapis.com'],
+    })
+    expect(EGRESS_HOSTS['aiplatform.googleapis.com']?.dataReceived).toBe(
+      "The description the user writes and the shape requested, and the generated image returned. No account identifiers, email addresses, or other content of the customer's site.",
+    )
+  })
+
   it('declares every host in the manifest as a subprocessor', () => {
     // The manifest is read, not assumed: the AI plugin's row is in it.
     expect(PLUGIN_SUBPROCESSORS.map((entry) => entry.pluginId)).toContain('ai')

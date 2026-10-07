@@ -31,6 +31,8 @@ import {
   FormControlLabel,
   IconButton,
   LinearProgress,
+  ListItemText,
+  ListSubheader,
   MenuItem,
   Radio,
   RadioGroup,
@@ -40,18 +42,24 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { aiMediaCreditsPerPicture } from '../model/ai-media-credits'
+import {
+  AI_MEDIA_KIND_GROUP_LABELS,
+  AI_MEDIA_KIND_GROUPS,
+  aiMediaKind,
+  aiMediaKindsOffered,
+  type AiMediaKind,
+  type AiMediaKindId,
+} from '../model/ai-media-kinds'
 import {
   AI_IMAGE_ASPECT_RATIOS,
   AI_IMAGE_MAX_COUNT,
   AI_IMAGE_PROMPT_MAX_CHARS,
   AI_SVG_MAX_COLORS,
-  AI_SVG_STYLES,
   aiImagePhotosOffered,
   type AiImageAspectRatio,
   type AiImageMode,
-  type AiSvgStyle,
 } from '../providers/image-contract'
 
 /**
@@ -62,9 +70,9 @@ import {
  * It draws from the shell's gates alone — the plan, the member's
  * `ai.generate`, the plugin being on for the workspace and the site — and asks
  * no server anything until someone creates a picture: the door decides then,
- * and the dialog says what it decided. Two modes: an Illustration (an SVG the
- * text AI draws, wherever text AI runs) and, where the deployment makes them,
- * a Photo.
+ * and the dialog says what it decided. One Kind menu, in sections: Vector
+ * kinds (an SVG the text AI draws, wherever text AI runs) and, where the
+ * deployment makes them, Photo, Art and Design kinds from the image provider.
  */
 
 /** Where the shell sends a reader to buy what the plan lacks (AGL-3601). */
@@ -91,12 +99,36 @@ const ASPECT_LABELS: Record<AiImageAspectRatio, string> = {
   '9:16': 'Tall',
 }
 
-/** The words each kind of illustration is offered in. */
-export const AI_SVG_STYLE_LABELS: Record<AiSvgStyle, string> = {
-  illustration: 'Illustration',
-  icon: 'Icon',
-  pattern: 'Pattern',
-  logo: 'Logo mark',
+/**
+ * What a picture from the image provider may be declined for, as the code
+ * and the provider decide it: Google's filters, and its policies on real
+ * people and brands. A declined picture is never charged.
+ */
+export const AI_MEDIA_RASTER_SAFETY_NOTE =
+  'Pictures of real, identifiable people, celebrities or brands may be declined by the image service. A declined picture is not charged.'
+
+/** The line under the description for a kind whose colors are described rather than picked. */
+export const AI_MEDIA_DESCRIBE_COLORS_NOTE =
+  'To steer the colors, name them in the description, such as navy and coral.'
+
+/** The menu's items: each section's heading, then its kinds with what one costs. */
+function kindMenuItems(kinds: readonly AiMediaKind[]): ReactNode[] {
+  const groups = AI_MEDIA_KIND_GROUPS.filter((group) => kinds.some((kind) => kind.group === group))
+  const item = (kind: AiMediaKind) => (
+    <MenuItem key={kind.id} value={kind.id} sx={{ gap: 2 }}>
+      <ListItemText primary={kind.label} />
+      <Typography variant="caption" color="text.secondary">
+        {`about ${aiMediaCreditsPerPicture(kind.mode).toLocaleString()} credits`}
+      </Typography>
+    </MenuItem>
+  )
+  // One section needs no heading: a deployment without the image provider
+  // lists the vector kinds alone, as it always has.
+  if (groups.length < 2) return kinds.map(item)
+  return groups.flatMap((group) => [
+    <ListSubheader key={`group:${group}`}>{AI_MEDIA_KIND_GROUP_LABELS[group]}</ListSubheader>,
+    ...kinds.filter((kind) => kind.group === group).map(item),
+  ])
 }
 
 /** The sentence the estimate reads as, before anything is spent. */
@@ -177,13 +209,15 @@ export function AiMediaCreateDialog({
   const userRef = useRef(user)
   userRef.current = user
   const photos = aiImagePhotosOffered()
-  const [mode, setMode] = useState<AiImageMode>(photos ? 'photo' : 'illustration')
-  const [style, setStyle] = useState<AiSvgStyle>('illustration')
+  const kinds = useMemo(() => aiMediaKindsOffered(photos), [photos])
+  const [kindId, setKindId] = useState<AiMediaKindId>(photos ? 'photo' : 'illustration')
+  const kind = kinds.find((entry) => entry.id === kindId) ?? kinds[0]
+  const mode = kind.mode
   // The site theme's colors need a site; the organization's library names none.
   const [paletteSource, setPaletteSource] = useState<'theme' | 'custom'>(hostId ? 'theme' : 'custom')
   const [colors, setColors] = useState<string[]>(['#1a73e8', '#fbbc04'])
   const [prompt, setPrompt] = useState('')
-  const [aspectRatio, setAspectRatio] = useState<AiImageAspectRatio>('1:1')
+  const [aspectRatio, setAspectRatio] = useState<AiImageAspectRatio>(kind.aspectRatio)
   const [count, setCount] = useState(1)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ severity: 'error' | 'warning'; text: string } | null>(null)
@@ -191,6 +225,13 @@ export function AiMediaCreateDialog({
   useEffect(() => {
     if (open) setNotice(null)
   }, [open])
+
+  /** A new kind brings its own shape; the person may still change it. */
+  const chooseKind = (next: AiMediaKindId) => {
+    setKindId(next)
+    const chosen = aiMediaKind(next)
+    if (chosen) setAspectRatio(chosen.aspectRatio)
+  }
 
   const create = useCallback(async () => {
     const description = prompt.trim()
@@ -210,9 +251,9 @@ export function AiMediaCreateDialog({
           prompt: description,
           aspectRatio,
           count,
-          ...(mode === 'illustration'
+          style: kind.id,
+          ...(kind.colors === 'palette'
             ? {
-                style,
                 palette:
                   paletteSource === 'theme' ? { source: 'theme' } : { source: 'custom', colors },
               }
@@ -251,67 +292,51 @@ export function AiMediaCreateDialog({
     } finally {
       setBusy(false)
     }
-  }, [prompt, orgId, library, hostId, folderId, mode, aspectRatio, count, style, paletteSource, colors, onCreated, onClose])
+  }, [prompt, orgId, library, hostId, folderId, mode, aspectRatio, count, kind, paletteSource, colors, onCreated, onClose])
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
       <DialogTitle>{'Create images with AI'}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
-          {photos ? (
-            <ToggleButtonGroup
-              size="small"
-              exclusive
-              value={mode}
-              onChange={(_event, next) => {
-                if (next) setMode(next)
-              }}
-              aria-label="What to make"
-              disabled={busy}
-            >
-              <ToggleButton value="photo">{'Photo'}</ToggleButton>
-              <ToggleButton value="illustration">{'Illustration or icon'}</ToggleButton>
-            </ToggleButtonGroup>
-          ) : null}
-          {mode === 'illustration' ? (
-            <TextField
-              select
-              size="small"
-              label="Kind"
-              value={style}
-              onChange={(event) => setStyle(event.target.value as AiSvgStyle)}
-              disabled={busy}
-              sx={{ maxWidth: 240 }}
-              helperText={
-                style === 'logo'
-                  ? 'A simple symbol, without lettering. Not a real brand’s logo.'
-                  : style === 'pattern'
-                    ? 'A seamless background that tiles.'
-                    : 'Drawn as an SVG, sharp at any size.'
-              }
-            >
-              {AI_SVG_STYLES.map((value) => (
-                <MenuItem key={value} value={value}>
-                  {AI_SVG_STYLE_LABELS[value]}
-                </MenuItem>
-              ))}
-            </TextField>
-          ) : null}
+          <TextField
+            select
+            size="small"
+            label="Kind"
+            value={kind.id}
+            onChange={(event) => chooseKind(event.target.value as AiMediaKindId)}
+            disabled={busy}
+            sx={{ maxWidth: 360 }}
+            helperText={kind.hint}
+            slotProps={{
+              select: {
+                renderValue: (value) => aiMediaKind(String(value))?.label ?? String(value),
+                MenuProps: { slotProps: { paper: { sx: { maxHeight: 420 } } } },
+              },
+            }}
+          >
+            {kindMenuItems(kinds)}
+          </TextField>
           <TextField
             label={mode === 'photo' ? 'Describe the picture' : 'Describe what to draw'}
-            placeholder={
-              mode === 'photo'
-                ? 'A sunlit bakery counter with fresh sourdough loaves, warm morning light'
-                : 'A friendly delivery van with a parcel, simple and flat'
-            }
+            placeholder={kind.placeholder}
             value={prompt}
             onChange={(event) => setPrompt(event.target.value.slice(0, AI_IMAGE_PROMPT_MAX_CHARS))}
             multiline
             minRows={3}
             autoFocus
             disabled={busy}
-            helperText="The description becomes each picture's alt text, which you can edit."
+            helperText={
+              kind.colors === 'describe'
+                ? `${AI_MEDIA_DESCRIBE_COLORS_NOTE} The description becomes each picture's alt text, which you can edit.`
+                : "The description becomes each picture's alt text, which you can edit."
+            }
           />
+          {mode === 'photo' ? (
+            <Typography variant="body2" color="text.secondary">
+              {AI_MEDIA_RASTER_SAFETY_NOTE}
+            </Typography>
+          ) : null}
           <Stack spacing={0.5}>
             <Typography variant="body2" color="text.secondary">
               {'Shape'}
@@ -334,7 +359,7 @@ export function AiMediaCreateDialog({
               ))}
             </ToggleButtonGroup>
           </Stack>
-          {mode === 'illustration' ? (
+          {kind.colors === 'palette' ? (
             <Stack spacing={1}>
               <RadioGroup
                 value={paletteSource}

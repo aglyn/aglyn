@@ -1,10 +1,16 @@
 # Subprocessors and Privacy: Create with AI in Media (AGL-3602)
 
-**Status: DRAFT for review. Nothing here is published.** The photo mode of
-**Media → Create with AI** stays switched off in production
-(`AI_IMAGE_VERTEX_PROJECT` and `NEXT_PUBLIC_AI_IMAGE_PHOTOS` unset) until the
-Subprocessors row below and the Privacy change are published. The illustration
-mode uses the existing AI text provider and needs no change to run.
+**Status: APPROVED 2026-10-07 as drafted, with Location "United States and
+European Union" (option 1, the default `global` Vertex AI location).** SUB-1
+and PP-1 are published together as legal v11 with re-acceptance; SUB-2 is not
+applied (see below). The AI catalog declares the SUB-1 row dated 2026-10-07
+(`AI_IMAGE_CATALOG_PROVIDERS` in `libs/plugins/ai/src/lib/providers/catalog.ts`),
+so the subprocessor inventory carries `aiplatform.googleapis.com`.
+
+The image-provider kinds of **Media → Create with AI** (Photo, Art and Design)
+stay switched off in production (`AI_IMAGE_VERTEX_PROJECT` and
+`NEXT_PUBLIC_AI_IMAGE_PHOTOS` unset) until both pages are live. The Vector
+kinds use the existing AI text provider and need no change to run.
 
 ## What the code sends, read from the code
 
@@ -12,7 +18,10 @@ mode uses the existing AI text provider and needs no change to run.
 per picture to `aiplatform.googleapis.com` (Vertex AI, `global` location by
 default), as Aglyn's own service account:
 
-- the description the member typed;
+- the description the member typed, followed by the fixed style wording of
+  the kind chosen (`libs/plugins/ai/src/lib/server/ai-media-raster-prompt.ts`:
+  a photographic genre, an art style or a design asset; none for Photo) —
+  text of ours that carries nothing of the workspace;
 - the shape (one of 1:1, 4:3, 3:4, 16:9, 9:16) and the 1K size;
 - fixed settings: image output only, Google's safety filters at "block some"
   on harassment, hate, sexually explicit and dangerous content.
@@ -59,6 +68,16 @@ for `google-vertex` (`libs/plugins/ai/src/lib/providers/catalog.ts`, the way
 the Anthropic row is declared), so the subprocessor inventory carries the host
 `aiplatform.googleapis.com`, then set the two environment variables.
 
+**Wording note for the publisher (2026-10-07).** The approved purpose cell and
+PP-1 say "photos". The same request now also makes art (a watercolor, a 3D
+render) and design assets (a banner, a social post graphic), which a reader
+would not call photos. Both still describe the recipient and the data exactly;
+if "photos" is changed to "images" (purpose: "creating images for a
+customer's media library from a description a user writes"; PP-1: "For
+creating images other than SVG illustrations in your media library, …"), make
+the same change to `AI_IMAGE_CATALOG_PROVIDERS` and the two specs that pin it
+in the same commit as the v11 pins.
+
 ## PP-1 · Privacy Policy §2 "What AI features send"
 
 §2 speaks of "the provider" as one recipient. Add one sentence after the
@@ -77,6 +96,10 @@ version bump (v11), a re-capture of the live page, and a re-acceptance — the
 pattern AGL-3520 followed for v10.
 
 ## SUB-2 (optional) · Anthropic row
+
+**Not applied with v11.** The draft does not call it required: the Anthropic
+row's "such as" purpose and its data cell (a brief and the theme's colors)
+already cover the SVG kinds. Apply it at the next republish of that row.
 
 The Anthropic purpose cell lists AI generation's outputs with "such as", and
 its data cell already names a brief and the theme's colors. Illustrations are
