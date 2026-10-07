@@ -548,7 +548,8 @@ export function aiSiteUnitJob(
   const unitInputs: Record<string, unknown> = { ...job.inputs, originJobId: aiOriginJobId(job) }
   // The layout is built before the pages, so it is told them (AGL-3596): their
   // ids are minted on the plan, and the platform writes the header's links.
-  if (job.kind === 'site' && unit.kind === 'layout') {
+  // A page is told them too, so its buttons may go to a page built after it.
+  if (job.kind === 'site' && (unit.kind === 'layout' || unit.kind === 'page')) {
     const pages = aiLayoutSitePagesOfPlan(plan.screens)
     if (pages.length) unitInputs[AI_LAYOUT_SITE_PAGES_INPUT] = pages
   }

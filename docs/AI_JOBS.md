@@ -1910,6 +1910,21 @@ the same way, in a Grid with a row direction and no container.
   wrote it: the tree check from the answer it was given, and the page section check from
   the section as it was drawn, since its page check sees the section as the page stores it
   (`writtenNode` on the check's context).
+- **Settled where the answer is known (AGL-3596).** A page section pass sizes a Grid
+  container's items before its page check reads them (`aiSettleGridItems`), since
+  `grid-item-size` has one answer, the size its re-ask would name: an item with no size,
+  or one not full width on a phone, takes that size (or the size the model wrote as an
+  object of breakpoints, such as `{ "xs": 12, "md": 6 }`, where that one is full width on
+  a phone); an element placed straight in a container is wrapped in a new Grid item of
+  that size; a container of several items none of which steps down takes it on every
+  item. A `container` written as the text `"true"` in any case is read as true. A
+  production Home page was refused and refunded after its re-ask for this rule. Every
+  other shape above is still re-asked: a Grid that is not a container may be meant as a
+  row or as a stack, and an item in a Box moves only by changing the Box.
+  The tree check every other kind goes through settles the same shapes on the answer as
+  the model wrote it (`aiSettleWrittenGridItems`), so a layout, a template or a component
+  is held to them alike. `ai-job-page-sections-live.spec.ts` builds guided starts' Home pages through the
+  section pass with the real model (`AGLYN_LIVE_AI=1`).
 - **The goldens are real rows.** `ai-page-briefs.ts` draws every row of cards as a Grid
   container (`"spacing": 3`) of items sized for the row (`span`): the ten briefs'
   component cards, the Free pages' inline cards written out and written once (the
@@ -1917,19 +1932,20 @@ the same way, in a Grid with a row direction and no container.
   roomier cells. The two-person introduction itself keeps its 15 elements with a Stack
   whose direction turns from a column into a row at md. The Free About eval case holds its
   page written out and written once the same way, with a failing control for each
-  refusal: the goldens' old shape and the live page's shape (`grid-not-container`), items
-  sized `"4"` at every width (`grid-item-size`), a container spaced by an sx gap
-  (`grid-gap`), a heading and its lead grouped in a Grid and an intro stacked in a Grid
-  with a column direction (`grid-as-stack`), items wrapped in a Box inside their container
-  (`grid-item-outside-container`) and a container written as the text `"True"`
-  (`grid-container-text`). `ai-eval.spec.ts` holds each Grid control to its own finding.
+  refusal: the goldens' old shape and the live page's shape (`grid-not-container`), a
+  container spaced by an sx gap (`grid-gap`), a heading and its lead grouped in a Grid and
+  an intro stacked in a Grid with a column direction (`grid-as-stack`) and items wrapped in
+  a Box inside their container (`grid-item-outside-container`). `ai-eval.spec.ts` holds
+  each Grid control to its own finding. Its controls for items sized `"4"` at every width
+  and a container written as the text `"True"` were retired when both came to be settled
+  rather than refused (AGL-3596).
 - **What it costs.** The page instructions grow by 72 characters (18 estimated tokens of
   the page-section ledger's prefix), and no credit figure the Free arithmetic quotes
   moves. A Grid item is an element, so a row of cards takes one more element a card:
   written once, one. The shapes AGL-3078 tells apart cost nothing until a rule is broken:
   they are re-ask sentences, and no system block, tool or cached prefix changes.
-  `ai-job-free-page.spec.ts` re-asks the Free page's practice areas for each of the four
-  shapes through the real page step: a section re-asked for any of them costs at most 22
+  `ai-job-free-page.spec.ts` re-asks the Free page's practice areas for each of the three
+  shapes a section pass still re-asks through the real page step: a section re-asked for any of them costs at most 22
   credits, less than the 44 of the largest pass, which the room the arithmetic keeps for
   a re-asked section must exceed.
 
@@ -2043,6 +2059,14 @@ when the hero was written.
   place of a section, and a `scrollTo` there goes nowhere.
 - **Taught by the re-ask alone.** No prompt line and no cached prefix changes: a model
   learns a link may go to a section of the page only when rule 10 refuses one.
+- **Pages built after this one (AGL-3596).** A guided start mints its pages' ids on the
+  plan and builds Home first, so Home's "Book an appointment" had no Contact page to go
+  to and was refused after its re-ask. A site job's page unit now carries the plan's
+  pages (`sitePages`, as the layout does): a section request names them by id in one
+  line of its user message (no cached prefix changes), the palette validator keeps a
+  `screenId` naming one, and a Button or Page Link that names no destination at all, on
+  a site with exactly one page besides its home and this one, goes to that page
+  (`aiPageLinkablePages`). With two or more such pages it is re-asked as before.
 - **Controls.** `ai-job-free-page.spec.ts` runs the recording's two hero answers, kept as
   `AI_FREE_PAGE_HERO_ANSWERS` in `jobs/fixtures/ai-free-page-recording.ts`, through the
   real page step: the first is re-asked, the second is kept, and the page completes with
@@ -2053,8 +2077,8 @@ when the hero was written.
   new code, and the harness reads a page answer's links against the sections of the plan
   it was built from.
 - **What it costs.** The hero's re-ask names the page's four sections, and the Free page's
-  hero re-asked costs 22 credits, within the 44 of the largest pass the room the arithmetic
-  keeps for a re-asked section must exceed.
+  hero re-asked costs 21 credits, within the 44 of the largest pass the room the arithmetic
+  keeps for a re-asked section must exceed. Its cut subhead is settled to its first whole clause before the check (AGL-3596), so the re-ask names only the button.
 
 ### The time budget
 
