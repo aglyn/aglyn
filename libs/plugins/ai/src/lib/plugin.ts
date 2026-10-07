@@ -68,6 +68,7 @@ import AiCrmEmailDraft from './components/ai-crm-email-draft.component'
 import AiCrmImportMapping from './components/ai-crm-import-mapping.component'
 import AiCrmRecordCard from './components/ai-crm-record-card.component'
 import AiDescribePageButton from './components/ai-describe-page.component'
+import AiMediaCreateButton from './components/ai-media-create.component'
 import {
   AiDescribeComponentButton,
   AiDescribeFormButton,
@@ -425,6 +426,18 @@ export function registerAiConsole(): void {
       // And a reusable component from a brief (AGL-3051), beside Templates
       // and Create Component: the component job's first entry point, which
       // had none in the console.
+      // Pictures from a description (AGL-3602): "Create with AI" beside Upload
+      // media in the media library, and in its empty state. Gated as the
+      // other generative widgets are; it asks its own door whether this
+      // deployment has an image provider before it shows anything.
+      {
+        slot: 'mediaLibrary',
+        widgetId: 'ai-media-create',
+        title: 'Create images with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiMediaCreateButton,
+      },
       {
         slot: 'hostComponents',
         widgetId: 'ai-describe-component',
