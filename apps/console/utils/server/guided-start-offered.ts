@@ -22,6 +22,7 @@ import {
   memberHasOrgPermission,
 } from '@aglyn/tenant-data-admin'
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
+import { registerPluginServerDeclarations } from '../../constants/plugins.declarations.server.generated'
 
 /**
  * Will the person creating this site be offered the guided AI start
@@ -56,6 +57,13 @@ export async function guidedStartOffered(input: {
   staff: boolean
 }): Promise<boolean> {
   try {
+    // The permission is the AI plugin's catalog key, which this core route
+    // knows only through the plugins' declarations (AGL-3596). The boot step
+    // registers them per process; registering them here as well, memoized,
+    // means the answer never depends on which module graph booted.
+    await registerPluginServerDeclarations().catch((error: unknown) => {
+      console.error('guided start: plugin declarations failed', { orgId: input.orgId, error })
+    })
     if (!checkEntitlement((input.org ?? {}) as never, 'aiGenerative')) return false
     if (!isHostPluginEnabled(input.org as never, input.host, GUIDED_START_PLUGIN_ID)) return false
     if (!input.staff && !(await isServerReleaseFlagOnForOrg(GUIDED_START_RELEASE_FLAG, input.orgId))) {

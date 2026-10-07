@@ -39,6 +39,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   isServerReleaseFlagOnForOrg: (...args: unknown[]) => mockFlag(...(args as [])),
   memberHasOrgPermission: (...args: unknown[]) => mockPermission(...(args as [])),
 }))
+const mockRegisterDeclarations = jest.fn(async () => undefined)
+jest.mock('../constants/plugins.declarations.server.generated', () => ({
+  __esModule: true,
+  registerPluginServerDeclarations: () => mockRegisterDeclarations(),
+}))
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   __esModule: true,
   authorizedFetch: (...args: unknown[]) => mockFetch(...args),
@@ -71,6 +76,8 @@ beforeEach(() => {
   mockPermission.mockResolvedValue(true)
   mockFetch.mockReset()
   mockTrack.mockReset()
+  mockRegisterDeclarations.mockReset()
+  mockRegisterDeclarations.mockResolvedValue(undefined)
 })
 
 describe('a site is born without the starter only for a creator the guided start will be offered to', () => {
@@ -90,6 +97,41 @@ describe('a site is born without the starter only for a creator the guided start
     // A read that throws is a "no", never an empty site.
     mockFlag.mockRejectedValueOnce(new Error('down'))
     await expect(ask()).resolves.toBe(false)
+  })
+
+  it('decides ai.generate from a core-only context: an owner is offered it (AGL-3596)', async () => {
+    // The production failure: the AI plugin's catalog key was registered in
+    // the boot step's module graph and the create route's own copy of the
+    // catalog never heard of it, so an owner's `ai.generate` read `undefined`
+    // and every guided start was born with the starter. Here the route asks
+    // the real core catalog, and the declaration registers in another copy.
+    const { resolveOrgPermissions } = jest.requireActual<typeof import('@aglyn/aglyn/app-utils/org-permissions')>(
+      '@aglyn/aglyn/app-utils/org-permissions',
+    )
+    mockRegisterDeclarations.mockImplementationOnce(async () => {
+      jest.isolateModules(() => {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const boot = require('@aglyn/aglyn/plugin-manager/plugin-entitlements') as typeof import('@aglyn/aglyn/plugin-manager/plugin-entitlements')
+        boot.registerPluginEntitlements({
+          pluginId: 'ai',
+          orgPermissions: [
+            {
+              key: 'ai.generate',
+              label: 'Generate with AI',
+              description: 'Run AI generation jobs.',
+              roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
+            },
+          ],
+        })
+      })
+    })
+    mockPermission.mockImplementation(async (...args: unknown[]) => {
+      const [, member, permission] = args as [string, never, string]
+      return resolveOrgPermissions(member)[permission] === true
+    })
+    const member = { role: 'owner', allHosts: true, consoleUserType: 'manager' } as never
+    await expect(ask({ member })).resolves.toBe(true)
+    expect(mockRegisterDeclarations).toHaveBeenCalled()
   })
 
   it('lets staff through the flag and the permission, as the jobs route does', async () => {
