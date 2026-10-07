@@ -190,6 +190,7 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
       'tax-engines',
       'sales-channels',
       'marketing-platforms',
+      'fonts',
       'commerce',
     ])
   })
@@ -247,6 +248,7 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
         'tax-engines',
         'sales-channels',
         'marketing-platforms',
+        'fonts',
       ])
       const settingsCalls = (globalThis.fetch as jest.Mock).mock.calls.filter(
         ([url]) => url === '/api/orgs/settings',

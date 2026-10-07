@@ -113,9 +113,9 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // own cards as any other card on it would be.
   hostFirstRun: 'stack',
   hostTheme: 'stack',
-  // The font picker and the font installer inside the theme editor's
-  // Typography card, one under the other.
-  themeEditorFonts: 'stack',
+  // The font picker and the font installer among the theme editor's
+  // Typography fields, which space them.
+  themeEditorFonts: 'bare',
   // The marketplace's cards among the overview's own, as one block.
   staffOverview: 'stack',
   adminOrgDetail: 'stack',
