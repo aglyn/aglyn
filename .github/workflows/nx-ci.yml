@@ -435,6 +435,11 @@ jobs:
       # React Native bundle. A palette change stales them, and the console is
       # not the mobile lib's project.
       - run: npm run generate:mobile-theme-tokens:check
+      # The native apps' Swift and Kotlin tokens come from the same run; their
+      # color parsing and type scale are unit-tested, and the bundled brand
+      # face is pinned by sha256 beside its license.
+      - run: npm run test:native-theme
+      - run: npm run check:native-fonts
       # And the notification catalog the app's push settings list (AGL-3620):
       # a new notification type or category stales it.
       - run: npm run generate:mobile-notification-catalog:check

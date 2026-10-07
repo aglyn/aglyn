@@ -28,15 +28,24 @@
  * again would let the two drift the first time the palette moves. So this
  * reads the RESOLVED console theme — the same `getConsoleTheme(mode)` the
  * console renders with, light and dark — and writes its palette, shape and
- * spacing as plain data into `libs/mobile/ui`. The web theme is unchanged and
+ * spacing as plain data into `libs/mobile/ui`, and the palette, type scale,
+ * shape and spacing as Swift and Kotlin source for the native apps
+ * (./lib/native-theme.mjs). The web theme is unchanged and
  * the web bundles gain nothing. `--check` runs in the guard sweep, so a
  * palette change that skips this script is red before it ships.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  KOTLIN_TOKENS_FILE,
+  kotlinTokensContent,
+  nativeThemeData,
+  SWIFT_TOKENS_FILE,
+  swiftTokensContent,
+} from './lib/native-theme.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 export const TOKENS_FILE = 'libs/mobile/ui/src/lib/tokens.generated.json'
@@ -100,27 +109,38 @@ async function main() {
   const { createJiti } = createRequire(join(ROOT, 'package.json'))('jiti')
   const jiti = createJiti(join(ROOT, 'package.json'), { interopDefault: true, fsCache: false })
   const theme = await jiti.import(join(ROOT, THEME_SOURCE))
-  const content = tokensContent(theme.getConsoleTheme('light'), theme.getConsoleTheme('dark'))
-  const target = join(ROOT, TOKENS_FILE)
+  const light = theme.getConsoleTheme('light')
+  const dark = theme.getConsoleTheme('dark')
+  // The native apps' Swift and Kotlin tokens (docs/mobile/native-architecture.md §7), from the same resolved theme.
+  const native = nativeThemeData(light, dark)
+  const outputs = [
+    { file: TOKENS_FILE, content: tokensContent(light, dark) },
+    { file: SWIFT_TOKENS_FILE, content: swiftTokensContent(native) },
+    { file: KOTLIN_TOKENS_FILE, content: kotlinTokensContent(native) },
+  ]
   if (process.argv.includes('--check')) {
-    let actual = null
-    try {
-      actual = readFileSync(target, 'utf8')
-    } catch {
-      // Absent is drift.
-    }
-    if (actual !== content) {
+    const drifted = outputs.filter(({ file, content }) => {
+      try {
+        return readFileSync(join(ROOT, file), 'utf8') !== content
+      } catch {
+        return true // Absent is drift.
+      }
+    })
+    if (drifted.length) {
       console.error(
-        `${TOKENS_FILE} no longer matches the console theme.\n` +
-          'It is generated. Run: node tools/scripts/generate-mobile-theme-tokens.mjs',
+        `${drifted.map(({ file }) => file).join('\n')}\nno longer match the console theme.\n` +
+          'They are generated. Run: node tools/scripts/generate-mobile-theme-tokens.mjs',
       )
       process.exit(1)
     }
-    console.log(`ok ${TOKENS_FILE}`)
+    for (const { file } of outputs) console.log(`ok ${file}`)
     return
   }
-  writeFileSync(target, content)
-  console.log(`wrote ${TOKENS_FILE}`)
+  for (const { file, content } of outputs) {
+    mkdirSync(dirname(join(ROOT, file)), { recursive: true })
+    writeFileSync(join(ROOT, file), content)
+    console.log(`wrote ${file}`)
+  }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main()

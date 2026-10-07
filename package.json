@@ -249,6 +249,8 @@
     "generate:plugin-manifests:check": "node tools/scripts/generate-plugin-manifests.mjs --check",
     "generate:mobile-theme-tokens": "node tools/scripts/generate-mobile-theme-tokens.mjs",
     "generate:mobile-theme-tokens:check": "node tools/scripts/generate-mobile-theme-tokens.mjs --check",
+    "check:native-fonts": "node tools/scripts/vendor-native-fonts.mjs --check",
+    "test:native-theme": "node --test tools/scripts/lib/native-theme.test.mjs",
     "generate:mobile-notification-catalog": "node tools/scripts/generate-mobile-notification-catalog.mjs",
     "generate:mobile-notification-catalog:check": "node tools/scripts/generate-mobile-notification-catalog.mjs --check",
     "generate:realm-host-exports": "node tools/scripts/generate-realm-host-exports.mjs",

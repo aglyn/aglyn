@@ -383,18 +383,45 @@ defines, and the link resolves through the deep-link grammar.
 ## 7. Theme
 
 `tools/scripts/generate-mobile-theme-tokens.mjs` reads the resolved console
-MUI theme. It is extended to also emit:
+MUI theme and, through `tools/scripts/lib/native-theme.mjs`, also emits:
 
-- `libs/native/apple/Sources/AglynUI/Tokens.generated.swift`:
-  `AglynTokens.light/dark` with each intent (`main`, `contrastText`, `text`,
-  `pressed`), background, text, divider, grey, radius and spacing, as `Color`
-  values parsed from the same strings (`#rrggbb[aa]`, `rgb()`, `rgba()`);
+- `libs/native/apple/Sources/AglynUI/Tokens.generated.swift`: the types
+  `AglynIntent` (`main`, `contrastText`, `text`, `pressed`), `AglynPalette`
+  (each intent, `background: (default:, paper:)`, `text: (primary:,
+  secondary:, disabled:)`, `divider`, `grey: [Int: Color]`) and
+  `AglynTextStyle`, and `AglynTokens` with `light`, `dark`, `radius`,
+  `spacing`, `fontFamily`, `fontPostScriptName`, `fontResource` and
+  `AglynTokens.Typography.h1 … overline`. Colors are parsed at generation
+  time into `Color(.sRGB, red:green:blue:opacity:)` literals. A text style's
+  `font` is `Font.custom(fontPostScriptName, size:relativeTo:)` with its
+  weight, so it scales with Dynamic Type.
 - `libs/native/kotlin/ui/src/commonMain/kotlin/com/aglyn/ui/Tokens.generated.kt`:
-  the same data, plus `lightColorScheme`/`darkColorScheme` mappings.
+  the same `AglynIntent`, `AglynPalette`, `AglynTextStyle` and `AglynTokens`
+  (`RADIUS`, `SPACING`, `FONT_FAMILY`, `FONT_RESOURCE`, `light`, `dark`,
+  `Typography`), plus `AglynLightColorScheme`, `AglynDarkColorScheme`,
+  `aglynTypography(fontFamily)` (sp units, so it follows the font scale)
+  and `AglynShapes`.
 
-The intents map to Material 3 roles as follows: primary → primary, secondary →
-secondary, tertiary → tertiary, error → error, background/paper →
-background/surface. `--check` covers all three outputs.
+The type scale is each MUI variant at its phone size, in points or sp. The
+Material 3 roles take h1–h3 as display, h4–h6 as headline, h6 and
+subtitle1–2 as title, body1, body2 and caption as body, and button, caption
+and overline as label. Intents map onto Material 3 roles: primary → primary,
+secondary → secondary (its readable text color), tertiary → tertiary,
+error → error, background → background and surface, and paper → the
+surface containers. Each container is the intent's fill over the paper, at
+14% in light and 24% in dark, composited at generation time. `--check`
+covers all three outputs.
+
+The brand face is vendored by `tools/scripts/vendor-native-fonts.mjs`
+(`--check` pins both files by sha256): Google's `ofl/robotoflex` variable
+TTF with its `OFL.txt`, at
+`libs/native/apple/Sources/AglynUI/Resources/Fonts/RobotoFlex-Variable.ttf`
+(+ `OFL.txt`) and
+`libs/native/kotlin/ui/src/commonMain/composeResources/font/robotoflex_variable.ttf`
+(+ `composeResources/files/RobotoFlex-OFL.txt`). The Apple app registers
+the face at launch (`CTFontManagerRegisterFontsForURL` on
+`Bundle.module`'s `fontResource`). Compose builds its `FontFamily` from
+`Res.font.robotoflex_variable` and passes it to `aglynTypography`.
 
 ### Brand, type and polish (binding)
 
