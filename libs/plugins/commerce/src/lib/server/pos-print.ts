@@ -16,6 +16,7 @@
  */
 
 import { firebaseAdmin, getOrgForHost, getPluginConfig } from '@aglyn/tenant-data-admin'
+import { findUserByUidAcrossPools } from '@aglyn/tenant-data-admin/server/auth-pools'
 import type { HostOrder } from '../model/commerce-orders'
 import { orderPayments } from '../model/commerce-pos'
 import type { PosCashEventType } from '../model/commerce-pos-ops'
@@ -63,9 +64,11 @@ export function defaultPosPrintDeps(): PosPrintDeps {
       )
     },
     memberName: async (uid) => {
+      // Every pool: a member who signs in through SSO lives in a GCIP tenant
+      // pool, not the project one (AGL-1122).
       try {
-        const user = await firebaseAdmin.app().auth().getUser(uid)
-        return user.displayName || user.email || ''
+        const user = (await findUserByUidAcrossPools(uid))?.record
+        return user?.displayName || user?.email || ''
       } catch {
         return ''
       }

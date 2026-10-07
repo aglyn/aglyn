@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import type { PluginApiRequest } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost, getPluginConfig } from '@aglyn/tenant-data-admin'
+import { findUserByUidAcrossPools } from '@aglyn/tenant-data-admin/server/auth-pools'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { createHmac, timingSafeEqual } from 'crypto'
 import {
@@ -117,9 +118,11 @@ export function defaultPosOpsDeps(): PosOpsDeps {
       return secret
     },
     memberName: async (uid) => {
+      // Every pool: a member who signs in through SSO lives in a GCIP tenant
+      // pool, not the project one (AGL-1122).
       try {
-        const user = await firebaseAdmin.app().auth().getUser(uid)
-        return user.displayName || user.email || 'Staff member'
+        const user = (await findUserByUidAcrossPools(uid))?.record
+        return user?.displayName || user?.email || 'Staff member'
       } catch {
         return 'Staff member'
       }
