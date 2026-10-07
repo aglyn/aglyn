@@ -25,7 +25,14 @@ Open the **Assist** panel on one of these pages and choose **Ask about your numb
   campaigns, A/B tests and store sales;
 - a site's **CRM → Reports** page — the same figures, for questions about where people came
   from and what they did;
+- a site's **Marketing** page — campaigns, the conversions they were credited with and the
+  revenue they earned, beside the traffic, forms and store sales they drove;
 - a site's **Data** page, or your organization's **Data** page — your datasets.
+
+The **Conversions** section and a campaign's report on the **Marketing** page also carry
+**Ask AI about these numbers** in their header, which opens the same dialog with a question
+about what that page shows — see
+[Marketing with AI](../../ai/marketing-with-ai.md#ask-about-these-numbers).
 
 Type your question, pick the window it covers (the last 7, 14, 30 or 90 days), and choose
 **Ask**. Answers usually take about a minute. You can close the dialog while you wait: the
@@ -81,7 +88,7 @@ those the figures support.
 
 - Only totals, counts, rates and labels are sent to the AI provider: page paths, referring
   sites and campaign tags; the names of forms, services, products and A/B tests; the subjects of
-  campaign emails; and for a dataset, its field names and types and, in a breakdown, the values
+  campaign emails, with conversions counted by kind and revenue by currency; and for a dataset, its field names and types and, in a breakdown, the values
   that at least three records share. Email addresses and phone numbers are removed from every
   label before anything is sent.
 - An answer is kept with your workspace for 180 days, like other AI jobs. Only the person who

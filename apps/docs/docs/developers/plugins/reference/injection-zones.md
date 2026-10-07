@@ -104,6 +104,7 @@ importing the host's package:
 | `productImport` | The commerce products import wizard's After import step: options for what happens to the imported products once they land | `hostId`, `orgId`, `count` (products the dry run creates), `options`, `setOption(key, on)` |
 | `hostOverlays` | A site's **Marketing → Overlays** section, the marketing plugin's, beside **New bar** and **New popup** and again in the empty list: another way to start an overlay | `hostId`, `limits` (the longest each copy field may be), `triggers` (the popup triggers, each with its unit and range), `createOverlayDraft(kind, proposal)` — writes the overlay switched off, cut to the limits, and opens it in the editor |
 | `hostCampaigns` | The marketing plugin's **Campaigns** section, a site's or the organization's, beside **Create campaign** and again in the empty list: another way to start a campaign | `hostId` (`null` on the organization's hub), `orgId`, `sites` (on the organization's hub, the sites a campaign could be placed on, each `{ id, name }`; empty under a site) |
+| `marketingInsights` | In the header of the marketing plugin's **Conversions** section and of one campaign's report, beside the page's own actions: the figures in words | `hostId` (the site the figures are one site's: the site picked, or the site a campaign email was sent as; `null` when there is none yet), `subject` (`conversions` \| `campaign`), `campaign` (the campaign's subject line on its report, else `null`) |
 | `overlayEditor` | Among the fields of the marketing plugin's overlay editor: copy proposed for the bar or popup being edited, which the editor's **Save** writes | `hostId`, `overlayId` (empty while new), `kind` (`bar` \| `popup`), `copy` (the copy as the editor holds it), `limits`, `triggers`, `proposeValues(proposal, key)` — fills the fields unsaved |
 
 ## How a zone spaces your widget
@@ -132,9 +133,10 @@ page spaces it there:
 - `productEditor`, `productsHub` and `productImport`: a section the commerce
   plugin places among its product editor's fields, above its catalog table,
   and in its import wizard's After import step.
-- `hostOverlays`, `hostCampaigns` and `overlayEditor`: a control the
-  marketing plugin places beside its New bar and New popup buttons and beside
-  Create campaign, and a section among its overlay editor's fields.
+- `hostOverlays`, `hostCampaigns`, `marketingInsights` and `overlayEditor`: a
+  control the marketing plugin places beside its New bar and New popup
+  buttons, beside Create campaign and in a report's header, and a section
+  among its overlay editor's fields.
 - `recordEmail` and `importMapping`: a section the CRM plugin places under its
   one-to-one composer's message and under an import drawer's or the import
   wizard's column matching.

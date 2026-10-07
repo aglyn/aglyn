@@ -33,6 +33,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { standInConvertedRecordSources } from '../testing/stand-in-record-counts'
+import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 
 /** Rows each paged listener answers, keyed by the query the card built. */
 const pages = new Map<string, { rows: any[]; hasMore: boolean }>()
@@ -663,6 +664,39 @@ describe('the landing-page join', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Bookings' }))
     await waitFor(() => {
       expect(screen.queryByText('Landing pages')).toBeNull()
+    })
+  })
+})
+
+/**
+ * The `marketingInsights` zone (AGL-3603) in the section's header: handed the
+ * site these conversions are one site's, with or without a campaign narrowing
+ * the list.
+ */
+describe('the marketingInsights zone on the Conversions section', () => {
+  it('is handed the site and what the section is about', async () => {
+    const zoneCalls: Array<Record<string, unknown>> = []
+    const ZoneRenderer = (props: { slot: string } & Record<string, unknown>) => {
+      zoneCalls.push(props)
+      return <span>{`widget in ${props.slot}`}</span>
+    }
+    standInConvertedRecordSources()
+    const { CampaignConversionsCard } = await import('./campaign-conversions-card')
+    render(
+      (
+        <ConsoleWidgetSlotContext.Provider value={ZoneRenderer as never}>
+          <CampaignConversionsCard hostId="site1" basePath="/acme/hosts/site/marketing" />
+        </ConsoleWidgetSlotContext.Provider>
+      ) as ReactNode as never,
+    )
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(screen.getByText('widget in marketingInsights')).toBeTruthy()
+    expect(zoneCalls.find((call) => call['slot'] === 'marketingInsights')).toMatchObject({
+      hostId: 'site1',
+      subject: 'conversions',
+      campaign: null,
     })
   })
 })

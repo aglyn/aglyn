@@ -85,6 +85,7 @@ import {
   AiExplainRunFailure,
 } from './components/ai-explain-automation.component'
 import AiCreateCampaignButton from './components/ai-campaign-create.component'
+import AiMarketingInsightButton from './components/ai-marketing-insight.component'
 import {
   AiCreateOverlayButton,
   AiOverlayEditorCard,
@@ -663,6 +664,18 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiCreateCampaignButton,
+      },
+      // The figures in words (AGL-3603), in the header of the Conversions
+      // section and of one campaign's report: the insight dialog the Assist
+      // panel opens, on the Marketing surface, for the site the figures are.
+      // It reads and cites; it changes nothing.
+      {
+        slot: 'marketingInsights',
+        widgetId: 'ai-marketing-insight',
+        title: 'Ask AI about these numbers',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiMarketingInsightButton,
       },
     ],
   })

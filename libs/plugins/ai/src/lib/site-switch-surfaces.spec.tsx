@@ -129,6 +129,9 @@ const SITE_ZONES: readonly string[] = [
   // listed from the workspace's set, and the job it starts still names the
   // site it is placed on, which the jobs route refuses when AI is off there.
   'hostCampaigns',
+  // The figures in words on a report (AGL-3603): the figures are one site's,
+  // and the site's switch decides as it does for the Assist panel's ask.
+  'marketingInsights',
 ]
 
 /** Zones drawn on the WORKSPACE's pages, where no site's switch reaches. */

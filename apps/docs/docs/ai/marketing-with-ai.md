@@ -66,6 +66,30 @@ that list's past campaigns were opened most — see
 the same dialog writes the email design on its own, which you can use once your plan
 sends campaigns. Upgrading is done in **Billing**.
 
+## Ask about these numbers {#ask-about-these-numbers}
+
+The **Conversions** section and each campaign's report carry **Ask AI about these
+numbers** in their header. It opens [Insights](../marketing-and-automation/analytics/insights.md)
+on the site the figures are — on your organization's Conversions section, the site you
+picked; on a campaign's report, the site the email was sent as — with a question about
+what the page shows already in the box. Change it if you like, pick a window, and ask.
+
+The answer reads your site's figures, the same ones these pages show:
+
+- **Campaign conversions** — form submissions, leads, contacts and bookings credited to a
+  campaign in the window, one row each, by the touch that earned the credit: a campaign
+  email, a page filed under a campaign, a labeled link or a sequence email. The rows are
+  never added together, because one visit can make a submission, a lead and a contact.
+  A conversion credited to nothing has no record and is not counted.
+- **Campaign revenue** — for each campaign email sent in the window, the orders credited to
+  it and the gross, refunded and net amounts, one row per currency; different currencies are
+  never added together.
+- Beside those, your campaign emails' delivery and engagement, your A/B tests, your forms,
+  your traffic and your store's sales, where your plan includes them.
+
+Every insight cites the rows its numbers come from. Nothing is changed or sent. The same
+question can be asked from the **Assist** panel anywhere on a site's **Marketing** page.
+
 ## What is sent {#what-is-sent}
 
 For overlay copy: your brief, whether it is a bar or a popup, the triggers the editor
@@ -75,6 +99,10 @@ your figures or your other overlays is sent.
 For a campaign: your brief, the name you gave it and what your site already has — the
 same as [generating an email](../marketing-and-automation/email-campaigns/generate-with-ai.md).
 Your lists, contacts and past send figures are read on the server and are not sent.
+
+For a question about your numbers: the question, the window and the tables of totals the
+answer reads — never a visitor, contact, order or submission. See
+[Insights → Privacy](../marketing-and-automation/analytics/insights.md#privacy).
 
 ## Who can use it {#who-can-use-it}
 

@@ -2665,7 +2665,10 @@ sees a record, and every insight a person reads is traced to the numbers it cite
   `libs/aglyn/src/lib/plugin-manager/plugin-figures.ts` by the plugin that owns its records: the
   commerce plugin's `commerce.sales` and `commerce.products` (`server/order-figures.ts`, on the
   Analytics tab card's own arithmetic in `model/order-figures.ts`), the bookings plugin's
-  `bookings.services`, the marketing plugin's `marketing.campaigns` and `marketing.experiments`,
+  `bookings.services`, the marketing plugin's `marketing.campaigns`, `marketing.experiments`,
+  `marketing.conversions` (attribution records counted by kind and channel over the window,
+  by aggregation only) and `marketing.revenue` (each window send's revenue rollup, one row per
+  currency),
   and the data plugin's `datasets.summary` and `datasets.breakdown` (`server/dataset-figures.ts`,
   from its console-only server declarations). This plugin registers the readers for records the
   platform keeps (`src/lib/insights/ai-figure-readers.ts`): `traffic.summary`, `traffic.pages`,
@@ -2697,11 +2700,13 @@ sees a record, and every insight a person reads is traced to the numbers it cite
   serves it through the jobs read gate to the member who asked, or for a digest to any member who
   reaches its site, while they still reach it.
 - **Admission.** An ask names a surface a person asks from (`analytics`, `datasets`,
-  `crm-reports`), a site of the job's own org where the surface needs one, and at least one reader
+  `crm-reports`, `marketing`), a site of the job's own org where the surface needs one, and at least one reader
   the workspace may read; a `digest` job is refused at the door.
 - **The surface.** The Assist panel's AI jobs offer **Ask about your numbers** on a site's
-  Analytics, Data and CRM Reports pages and the workspace's Data page
-  (`components/ai-insight-dialog.component.tsx`): the question and a window, the answer with each
+  Analytics, Data, CRM Reports and Marketing pages and the workspace's Data page
+  (`components/ai-insight-dialog.component.tsx`), and the marketing plugin's Conversions
+  section and campaign report open the same dialog through their `marketingInsights` zone
+  (AGL-3603), with a question about what the page shows: the question and a window, the answer with each
   insight's cited rows and a link to the page they come from, and the member's weekly-insights
   switch. A job row with an insight output offers **View answer**.
 - **The weekly insights.** `POST /api/admin/ai-insights-digest`

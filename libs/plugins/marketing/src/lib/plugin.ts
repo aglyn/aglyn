@@ -35,6 +35,7 @@ import {
 } from './components/experiment-zones'
 import { HOST_OVERLAYS_ZONE, OVERLAY_EDITOR_ZONE } from './components/overlay-zones'
 import { HOST_CAMPAIGNS_ZONE } from './components/campaign-list-zones'
+import { MARKETING_INSIGHTS_ZONE } from './components/marketing-insight-zones'
 import {
   MARKETING_CONSOLE_SECTIONS,
   MARKETING_ORG_CONSOLE_SECTIONS,
@@ -192,6 +193,11 @@ export function registerMarketingConsole(): void {
     HOST_CAMPAIGNS_ZONE,
     'Start a campaign',
     'On the Campaigns section, a site’s or the organization’s, beside Create campaign and again in the empty list: another way to start a campaign. A widget is handed the site, the organization and, on the organization’s hub, the sites a campaign could be placed on; it writes nothing through the list.',
+  )
+  bareZone(
+    MARKETING_INSIGHTS_ZONE,
+    'A marketing report’s figures, in words',
+    'In the header of the Conversions section and of one campaign’s report, beside the page’s own actions. A widget is handed the site the figures are one site’s and what the report is about, reads the figures this plugin publishes as figure readers, and writes nothing.',
   )
   registerMarketingRecordRoutes()
   // The site's overlays, for another plugin's picker to list (AGL-3080).

@@ -55,6 +55,7 @@ Each capability has its own page, next to the thing it builds:
 | Variants for an A/B test, and its result in words | **Marketing → Experiments** | [A/B tests by AI](ab-tests-with-ai.md) |
 | Announcement bar and popup copy, or a new overlay | **Marketing → Overlays** | [Marketing with AI](marketing-with-ai.md#write-overlay-copy) |
 | What your analytics mean | **Analytics → Insights** | [Insights](../marketing-and-automation/analytics/insights.md) |
+| What your campaigns caused and earned | **Marketing → Conversions**, or a campaign's report | [Marketing with AI](marketing-with-ai.md#ask-about-these-numbers) |
 | A change to the page you have open | The Assist panel, in the Besigner | [Edits in the Besigner](../getting-started/aglyn-assist.md#edits-in-the-besigner) |
 
 Everything in that table follows the same building rules — reuse before creating, your
