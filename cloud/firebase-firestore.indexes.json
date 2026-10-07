@@ -117,6 +117,20 @@
       ]
     },
     {
+      "collectionGroup": "pluginEventOutbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nextAttemptAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "sendingDomains",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
