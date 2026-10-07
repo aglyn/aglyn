@@ -186,6 +186,12 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // an automation of a few steps is about 1,300 characters of JSON with as
   // much again to think in. An explanation caches half as much.
   'job.workflow': { inputTokens: 500, outputTokens: 1_000, cacheReadTokens: 4_500, cacheWriteTokens: 0 },
+  // The logic step (AGL-3603): the fields doctrine, one rules block and the
+  // tool's schema are the cached prefix (1,556 tokens for a function, as
+  // `runtime/ai-prompt-cache.spec.ts` measures it); the site's variables and
+  // the request ride uncached, and a function of a few operations is about
+  // 1,200 characters of JSON with as much again to think in.
+  'job.logic': { inputTokens: 700, outputTokens: 900, cacheReadTokens: 1_500, cacheWriteTokens: 0 },
 }
 
 /** The fewest measured exchanges a median is taken over. */

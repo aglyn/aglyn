@@ -68,7 +68,8 @@ unloaded plugins.
 
 A zone can sit on a plugin's own surface rather than on a console page, such as `hostForms`
 on the forms plugin's Forms page, `hostAutomations`, `automationEditor` and `automationRun`
-on the workflows plugin's Automation page, or `recordInsights`, `recordEmail` and
+on the workflows plugin's Automation page, `hostLogic`, `logicFunctionEditor` and
+`logicReferenceIssue` on the logic plugin's Functions & Variables page, or `recordInsights`, `recordEmail` and
 `importMapping` on the CRM plugin's record pages, one-to-one composer and import drawers, and in the import wizard. A plugin cannot import the console's `PluginWidgetSlot`,
 so the shell hands its renderer down: read it with `useConsoleWidgetSlot()` from
 `@aglyn/aglyn` and draw the zone through it.
@@ -95,6 +96,9 @@ importing the host's package:
 | `hostAutomations` | The workflows plugin's Automation page: on Actions, beside **Add action** and **Recipes**; on Workflows, in the card's header, or its empty state while it has none. Another way to start an automation | `hostId`, `orgId`, `openAction(actionId)` — opens a listed action in the Actions editor (from Workflows, by going to Actions with the action named), and answers `false` for one the list has not read yet |
 | `automationEditor` | Inside the editor of one saved automation, an action or a workflow, on the Automation page | `hostId`, `orgId`, `target` (`{ type: 'action' \| 'workflow', id, name }`, the automation as it is stored), and in an action's editor `openAction(actionId)` — opens another listed action, such as a copy the widget drafted, in its place |
 | `automationRun` | On each failed run in an automation's run history | `hostId`, `orgId`, `target` (as above), `runId` (the run's entry in the site's activity log) |
+| `hostLogic` | The logic plugin's Functions & Variables page, in the header of the Functions card and of the Variables card: another way to start one | `hostId`, `orgId`, `kind` (`'function'` or `'variable'`, the card it is drawn on), `propose(proposal)` — opens a proposal of that kind in the card's editor, unsaved, and answers `false` when it cannot (the plan's cap reached) |
+| `logicFunctionEditor` | Inside the editor of one saved function, on the Functions & Variables page | `hostId`, `orgId`, `target` (`{ id, name }`, the function as it is stored), `propose(proposal)` — replaces what the editor holds, unsaved |
+| `logicReferenceIssue` | On each broken reference the Reference health card lists | `hostId`, `orgId`, `issue` (`{ source, sourceId, sourceName, refType, missing }`) |
 | `productEditor` | The commerce product editor, under a product's description, tags and categories: copy proposed for the fields, which Save product writes | `hostId`, `orgId`, `product` (as the editor holds it), `categories`, `proposeValues(values, key)` — stages copy in the editor as unsaved edits |
 | `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
 | `productImport` | The commerce products import wizard's After import step: options for what happens to the imported products once they land | `hostId`, `orgId`, `count` (products the dry run creates), `options`, `setOption(key, on)` |
@@ -117,6 +121,9 @@ page spaces it there:
 - `hostAutomations`, `automationEditor` and `automationRun`: a control the
   workflows plugin places beside its Actions buttons and in its Workflows
   card's header, in an automation's editor, and on a failed run.
+- `hostLogic`, `logicFunctionEditor` and `logicReferenceIssue`: a control the
+  logic plugin places in its Functions and Variables cards' headers, in a
+  function's editor, and on a broken reference.
 - `siteMember`: a section of a site user's drawer.
 - `besignerInspector` and `seoFields`: a section among a panel's own fields.
 - `besignerPageProperties`: a section of the Page Properties drawer's column.

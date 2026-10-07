@@ -279,6 +279,9 @@ export const AI_DOCTRINE_KIND_SCOPE: Readonly<Record<string, AiDoctrineScope>> =
   'crm-email': 'fields',
   'crm-mapping': 'fields',
   'crm-record': 'fields',
+  // Logic by AI (AGL-3603): a function's or a variable's values, which the
+  // logic editor takes, composing nothing.
+  logic: 'fields',
 }
 
 /** The scope for a kind; `documents` unless the kind names another. */

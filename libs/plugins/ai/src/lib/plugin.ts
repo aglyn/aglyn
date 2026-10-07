@@ -65,6 +65,11 @@ import AiSiteStartCard from './components/ai-site-start-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
 import AiDescribeAutomationButton from './components/ai-describe-automation.component'
 import AiReviseAutomation from './components/ai-revise-automation.component'
+import {
+  AiLogicCreateButton,
+  AiLogicFixReference,
+  AiLogicFunctionTools,
+} from './components/ai-logic.component'
 import AiCrmEmailDraft from './components/ai-crm-email-draft.component'
 import AiCrmImportMapping from './components/ai-crm-import-mapping.component'
 import AiCrmRecordCard from './components/ai-crm-record-card.component'
@@ -450,6 +455,35 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiReviseAutomation,
+      },
+      // Logic by AI (AGL-3603), in the zones the logic plugin hosts on its
+      // Functions & Variables page: Create with AI in the Functions and
+      // Variables card headers, Explain / Change / Fix in a saved function's
+      // editor, and Fix with AI on a broken reference an automation holds.
+      // Each proposal opens unsaved in the logic editor; none is saved here.
+      {
+        slot: 'hostLogic',
+        widgetId: 'ai-describe-logic',
+        title: 'Describe a function or variable',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiLogicCreateButton,
+      },
+      {
+        slot: 'logicFunctionEditor',
+        widgetId: 'ai-logic-function',
+        title: 'This function with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiLogicFunctionTools,
+      },
+      {
+        slot: 'logicReferenceIssue',
+        widgetId: 'ai-logic-fix-reference',
+        title: 'Fix this reference with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiLogicFixReference,
       },
       {
         slot: 'automationRun',

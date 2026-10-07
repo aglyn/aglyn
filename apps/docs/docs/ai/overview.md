@@ -54,6 +54,7 @@ Each capability has its own page, next to the thing it builds:
 | Variants for an A/B test, and its result in words | **Marketing → Experiments** | [A/B tests by AI](ab-tests-with-ai.md) |
 | What your analytics mean | **Analytics → Insights** | [Insights](../marketing-and-automation/analytics/insights.md) |
 | An automation, or a change to one you have | **Automation → Create with AI**, or a saved action's editor | [Automations with AI](automations-with-ai.md) |
+| A site function or variable, or a change to a function | **Logic → Create with AI**, or a saved function's editor | [Functions and variables with AI](logic-with-ai.md) |
 | A change to the page you have open | The Assist panel, in the Besigner | [Edits in the Besigner](../getting-started/aglyn-assist.md#edits-in-the-besigner) |
 
 Everything in that table follows the same building rules — reuse before creating, your

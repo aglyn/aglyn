@@ -92,6 +92,11 @@ const SITE_ZONES: readonly string[] = [
   'hostAutomations',
   'automationEditor',
   'automationRun',
+  // The Functions & Variables page's zones (AGL-3603), which the logic
+  // plugin declares and hosts on a site's page.
+  'hostLogic',
+  'logicFunctionEditor',
+  'logicReferenceIssue',
   // The zones the commerce plugin hosts on a site's products pages
   // (AGL-2916). Plain ids: the commerce plugin declares them, so the
   // catalog names none of them.

@@ -131,6 +131,7 @@ export const DOCS_HELP_EXCERPTS = {
   leads: 'Work the people your site has captured — a status, an owner and notes on every lead — and convert one into a contact, a company and a deal.',
   liveCoEditing: 'See who else is editing, work on the same document together, survive save conflicts, and recover unsaved changes after a crash.',
   lockdown: 'The staff panic button — disable access platform-wide or for one workspace, site, or account, with a real logout and a visitor notice.',
+  logicWithAi: 'Aglyn AI writes a site function or variable from a description, changes or fixes a function you have, explains what one works out, and offers a fix for a broken automation reference. Nothing is saved until you save it.',
   longFormMarkdown: 'Put a whole policy, terms or handbook page on the canvas as one Markdown element, and let a Table of contents element build the "On this page" list from its headings.',
   maintenance: 'The staff maintenance jobs — whether each scheduled job is still running, what a run would do, and how to run one by hand without firing an irreversible sweep by accident.',
   maintenanceMode: 'Temporarily take your site offline behind a designed 503 page.',

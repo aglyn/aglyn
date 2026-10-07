@@ -173,6 +173,8 @@ const AI_OUTPUT_TARGET_TYPES: Record<AiJobOutputResource, AiOutputTargetType> = 
   insight: 'content',
   // A CRM proposal (AGL-2917) writes nothing; the feed files it with content.
   crm: 'content',
+  // A logic proposal (AGL-3603) writes nothing either.
+  logic: 'content',
 }
 
 export function aiOutputTargetType(resource: AiJobOutputResource): AiOutputTargetType {

@@ -54,6 +54,8 @@ import {
 import { AI_JOB_EMAIL_INSTRUCTIONS, AI_JOB_EMAIL_TOOL } from '../jobs/ai-job-email-step'
 import { AI_JOB_FORM_INSTRUCTIONS, AI_JOB_FORM_TOOL } from '../jobs/ai-job-form-step'
 import { AI_JOB_EXPERIMENT_SYSTEM } from '../jobs/ai-job-experiment-step'
+import { AI_JOB_LOGIC_INSTRUCTIONS } from '../jobs/ai-job-logic-step'
+import { aiLogicFunctionTool, aiLogicVariableTool } from '../tools/ai-logic-tool'
 import { AI_JOB_INSIGHT_SYSTEM } from '../jobs/ai-job-insight-step'
 import { AI_JOB_LAYOUT_INSTRUCTIONS } from '../jobs/ai-job-layout-step'
 import { AI_JOB_PAGE_INSTRUCTIONS, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
@@ -236,6 +238,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     step: 'job.workflow',
     caches: true,
     why: 'the doctrine and the automation vocabulary, or the explanation rules; no site inventory block',
+  },
+  'jobs/ai-job-logic-step.ts': {
+    step: 'job.logic',
+    caches: true,
+    why: "one rules block — the grammar, a variable's stored forms and how to explain — so every tool's prefix clears the balanced tier's minimum; the site's variables and the request ride uncached",
   },
   'jobs/ai-job-experiment-step.ts': {
     step: 'job.experiment',
@@ -520,6 +527,38 @@ const REQUESTS: Record<string, Composed> = {
     blocks: () => [...AI_JOB_EXPERIMENT_SYSTEM],
     tools: () => [aiExperimentVariantsTool('screen')],
   },
+  // Logic by AI (AGL-3603): the fields scope, one rules block for all three
+  // answers, and each answer's tool.
+  'logic-function': {
+    door: 'jobs/ai-job-logic-step.ts',
+    step: 'job.logic',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: AI_JOB_LOGIC_INSTRUCTIONS,
+        scope: aiDoctrineScopeFor('logic'),
+      }),
+    tools: () => [aiLogicFunctionTool()],
+  },
+  'logic-variable': {
+    door: 'jobs/ai-job-logic-step.ts',
+    step: 'job.logic',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: AI_JOB_LOGIC_INSTRUCTIONS,
+        scope: aiDoctrineScopeFor('logic'),
+      }),
+    tools: () => [aiLogicVariableTool()],
+  },
+  'logic-explain': {
+    door: 'jobs/ai-job-logic-step.ts',
+    step: 'job.logic',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: AI_JOB_LOGIC_INSTRUCTIONS,
+        scope: aiDoctrineScopeFor('logic'),
+      }),
+    tools: () => [aiWorkflowExplanationTool()],
+  },
   'experiment-explain': {
     door: 'jobs/ai-job-experiment-step.ts',
     step: 'job.experiment',
@@ -700,6 +739,11 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // — or the arms and the verdict — is billed as the request.
       'experiment-variants': { prefixTokens: 987, minimum: 1_024, caches: false, toolsStable: true },
       'experiment-explain': { prefixTokens: 911, minimum: 1_024, caches: false, toolsStable: true },
+      // Logic by AI (AGL-3603): one rules block on the fields scope, so a
+      // function's, a variable's and an explanation's prefix each cache.
+      'logic-function': { prefixTokens: 1_556, minimum: 1_024, caches: true, toolsStable: true },
+      'logic-variable': { prefixTokens: 1_087, minimum: 1_024, caches: true, toolsStable: true },
+      'logic-explain': { prefixTokens: 1_077, minimum: 1_024, caches: true, toolsStable: true },
       'insight-read': { prefixTokens: 883, minimum: 1_024, caches: false, toolsStable: true },
       'insight-answer': { prefixTokens: 923, minimum: 1_024, caches: false, toolsStable: true },
       // A product's copy, a catalog, and categories with discounts (AGL-2916):

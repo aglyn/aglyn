@@ -242,6 +242,7 @@ const KIND_NOUNS: Partial<Record<AiJobKind, string>> = {
   email: 'email',
   campaign: 'campaign',
   workflow: 'automation',
+  logic: 'function',
   theme: 'theme',
   products: 'products',
   experiment: 'experiment',

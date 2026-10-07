@@ -21,6 +21,12 @@ import { lazy } from 'react'
 import HostFunctionsCard from './components/host-functions-card.component'
 import HostVariablesCard from './components/host-variables-card.component'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
+import {
+  HOST_LOGIC_ZONE,
+  LOGIC_FUNCTION_EDITOR_ZONE,
+  LOGIC_REFERENCE_ISSUE_ZONE,
+} from './components/logic-zones'
 
 /** Code-split: the Logic console page only loads when opened. */
 const LogicConsolePage = lazy(() => import('./components/logic-console-page'))
@@ -39,6 +45,42 @@ const WhereUsedDialog = lazy(
  * also drawn in the zone the Automation page hosts for a workflow's usage.
  */
 export function registerLogicConsole(): void {
+  // The zones the Functions & Variables page draws in its own layouts
+  // (AGL-3603): one control in each card's header, one inside a saved
+  // function's editor, one on each broken reference.
+  registerPluginZone(
+    {
+      zone: HOST_LOGIC_ZONE,
+      label: 'Functions & Variables actions',
+      surface: 'console',
+      layout: 'bare',
+      description:
+        'In the header of the Functions card and of the Variables card: another way to start one. `kind` names the card; `propose` opens a proposal of that kind in the card’s editor, unsaved, and answers `false` when it cannot. A widget here writes nothing.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: LOGIC_FUNCTION_EDITOR_ZONE,
+      label: 'A function’s editor',
+      surface: 'console',
+      layout: 'bare',
+      description:
+        'Inside the editor of one saved function. A widget here reads the function as it is stored; `propose` replaces what the editor holds, unsaved, and the editor’s Save is the only write.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: LOGIC_REFERENCE_ISSUE_ZONE,
+      label: 'A broken reference',
+      surface: 'console',
+      layout: 'bare',
+      description:
+        'On each broken reference the Reference health card lists. A widget here reads the issue — what holds the reference, and what it points at that is gone — and changes nothing.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
   Aglyn.registerConsoleExtension({
     // Variables/functions cards (AGL-419): the besigner functions
     // drawer renders them through the 'besignerFunctions' slot.
@@ -80,6 +122,13 @@ export function registerLogicConsole(): void {
     ],
   })
 }
+
+export type {
+  HostLogicZoneProps,
+  LogicFunctionEditorZoneProps,
+  LogicProposal,
+  LogicReferenceIssueZoneProps,
+} from './components/logic-zones'
 
 // Cards consumed directly by the app (the besigner Functions/Variables
 // button opens them in a drawer).
