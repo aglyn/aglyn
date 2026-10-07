@@ -182,7 +182,10 @@ const COLLECTION_NAMES = [...COLLECTION_OWNER.keys()].join('|')
  * `'marketing/experiments'` page key all carry the word and address nothing.
  */
 const COLLECTION_ACCESS = new RegExp(
-  `(?:\\b(?:collection|collectionGroup|doc)\\([^()]*?['"\`](${COLLECTION_NAMES})['"\`]|\\b(?:hosts|orgs)/[^'"\`\\s]*?/(${COLLECTION_NAMES})(?:/|['"\`]))`,
+  // A console route — `/[orgSlug]/hosts/[host]/crm/contacts`, a page a link
+  // opens — names a plugin's page, not its storage, so a path under
+  // `[orgSlug]/` is not read as one.
+  `(?:\\b(?:collection|collectionGroup|doc)\\([^()]*?['"\`](${COLLECTION_NAMES})['"\`]|(?<!\\[orgSlug\\]/)\\b(?:hosts|orgs)/[^'"\`\\s]*?/(${COLLECTION_NAMES})(?:/|['"\`]))`,
   'g',
 )
 /** Generated icon data names thousands of words and addresses no storage. */
@@ -477,6 +480,7 @@ function selfTest() {
     { path: 'apps/console/utils/server/capacity.ts', text: "const snap = await db.collection('hosts').doc(id).collection('products').get()\n" },
     { path: 'libs/tenant/runtime/src/lib/read-it.ts', text: "const ref = doc(firestore, 'hosts', hostId, 'datasets', datasetId)\n" },
     { path: 'apps/console/constants/nav.ts', text: "const href = `${base}/contacts`\nimport { x } from './contacts'\nrow('orders', 'Orders')\n" },
+    { path: 'libs/plugins/inbox/src/lib/route.ts', text: "const page = '/[orgSlug]/hosts/[host]/crm/contacts'\n" },
     { path: 'libs/plugins/commerce/src/lib/server/read.ts', text: "db.collection('products')\n" },
     { path: 'libs/aglyn/src/lib/app-utils/neutral-name.ts', text: 'export const MARKETPLACE_A = 1\nexport function marketplaceB() {}\nexport type MarketplaceC = 1\nexport const other = 2\n' },
     { path: 'libs/aglyn/src/lib/app-utils/plans.ts', text: 'export const seats = 1\nexport const sites = 2\nexport const pages = 3\nexport const members = 4\ninterface Limits {\n  crmEmailsPerDay: number\n}\n' },
@@ -526,6 +530,7 @@ function selfTest() {
   ok('an app reading a plugin’s collection is reported', has('apps/console/utils/server/capacity.ts', 'plugin-collection:commerce'))
   ok('a doc() path into a plugin’s collection is reported', has('libs/tenant/runtime/src/lib/read-it.ts', 'plugin-collection:data'))
   ok('a URL, an import path and a bare quoted word address no storage', !findings.has('apps/console/constants/nav.ts'))
+  ok('a console route under [orgSlug] addresses no storage', !has('libs/plugins/inbox/src/lib/route.ts', 'plugin-collection:crm'))
   ok('the owner reading its own collection is not reported', !findings.has('libs/plugins/commerce/src/lib/server/read.ts'))
   ok('a neutral filename exporting one plugin’s words is reported', has('libs/aglyn/src/lib/app-utils/neutral-name.ts', 'domain-exports:marketplace'))
   ok('one export in a plugin’s words is a declaration, though not most of the file', has('libs/aglyn/src/lib/app-utils/mentions-one.ts', 'domain-declares:marketplace') && !has('libs/aglyn/src/lib/app-utils/mentions-one.ts', 'domain-exports:marketplace'))

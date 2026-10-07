@@ -289,7 +289,7 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     technical: [
       'Route: /[orgSlug]/hosts/[host]/automation/workflows, /automation/actions or /automation/webhooks.',
       'Webhook actions let a workflow call an external endpoint; see the automation docs for the payload shape.',
-      'Actions are documents at hosts/[host]/actions/[actionId]; every run is a row in the site’s activity log.',
+      'Each action is one document stored with the site; every run is a row in the site’s activity log.',
     ],
     actions: [
       orgAction(
@@ -315,13 +315,13 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     plain: [
       'The sections are Contacts, Leads, Companies, Deals, Tasks, Reports, Fields and Settings, in the rail beside the page.',
       'Records belong to the workspace; a site lists the ones shared with it.',
-      'On a contact’s, company’s, deal’s or lead’s page, Aglyn AI can summarize where things stand and suggest a next step; nothing is saved until you save it.',
+      'On a contact’s, company’s, deal’s or lead’s page, AI can summarize where things stand and suggest a next step; nothing is saved until you save it.',
       'In the email composer on a record, Draft the message writes a one-to-one email from what you describe. AI never sends it: you do.',
       'Reports shows the pipeline and where people came from; Ask about your numbers in the Assist panel answers questions about those figures.',
     ],
     technical: [
       'Route: /[orgSlug]/hosts/[host]/crm/[section], with sections contacts, leads, companies, deals, tasks, reports, fields and settings.',
-      'Records live under the organization (orgs/[orgId]/contacts, …/deals and so on) and are shared with a site through their visibleTo scope.',
+      'Records are stored with the organization, one collection per record type, and are shared with a site through their visibleTo scope.',
       'The CRM is included from the Starter plan; on a plan without it every section shows the upgrade notice.',
     ],
     actions: [
@@ -445,7 +445,7 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     ],
     technical: [
       'Route: /[orgSlug]/hosts/[host]/marketing/campaigns; one campaign is .../marketing/campaigns/[campaignId].',
-      'Campaigns and their sends belong to the organization (orgs/[orgId]/emailCampaigns and orgs/[orgId]/campaigns); a site lists the ones placed on it.',
+      'Campaigns and their sends are stored with the organization; a site lists the ones placed on it.',
     ],
     actions: [
       orgAction(
@@ -467,7 +467,7 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     ],
     technical: [
       'Route: /[orgSlug]/hosts/[host]/marketing/overlays.',
-      'Overlays are documents at hosts/[host]/overlays/[overlayId], gated by the marketingOverlays plan entitlement.',
+      'Each overlay is one document stored with the site, gated by the marketingOverlays plan entitlement.',
     ],
     actions: [
       orgAction(
@@ -510,7 +510,7 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     ],
     technical: [
       'Route: /[orgSlug]/hosts/[host]/marketing/experiments.',
-      'Experiments are documents at hosts/[host]/experiments/[experimentId], gated by the abTesting plan entitlement.',
+      'Each experiment is one document stored with the site, gated by the abTesting plan entitlement.',
     ],
     actions: [
       orgAction(
