@@ -30,11 +30,14 @@ import HostCouponsCard from './console/host-coupons-card.component'
 import HostOrdersCard from './console/host-orders-card.component'
 import LocationsCard from './console/locations-card.component'
 import MemberPostsCard from './console/member-posts-card.component'
+import OrderWebhooksCard from './console/order-webhooks-card.component'
 import PaymentsSettingsCard from './console/payments-settings-card.component'
 import ProductsHubCard from './console/products-hub-card.component'
 import RecoveryQueueCard from './console/recovery-queue-card.component'
 import RegistersCard from './console/registers-card.component'
 import ReservationsCard from './console/reservations-card.component'
+import ReturnSettingsCard from './console/return-settings-card.component'
+import ReturnsCard from './console/returns-card.component'
 import ReviewsModerationCard from './console/reviews-moderation-card.component'
 import ShippingSettingsCard from './console/shipping-settings-card.component'
 import StockMovementsCard from './console/stock-movements-card.component'
@@ -95,6 +98,9 @@ function sectionBody(
           ]}
         />
       )
+    case 'returns':
+      // Returns (AGL-3611); `?return={id}` opens one on arrival.
+      return <ReturnsCard hostId={hostId} />
     case 'promotions':
       return (
         <GridItems
@@ -129,6 +135,10 @@ function sectionBody(
             },
             {
               size: { xs: 12 },
+              children: <ReturnSettingsCard hostId={hostId} />,
+            },
+            {
+              size: { xs: 12 },
               children: <CustomerNotificationsCard hostId={hostId} />,
             },
             { size: { xs: 12 }, children: <TaxSettingsCard hostId={hostId} /> },
@@ -139,6 +149,12 @@ function sectionBody(
               children: <ShippingSettingsCard hostId={hostId} />,
             },
             { size: { xs: 12 }, children: <SuppliersCard hostId={hostId} /> },
+            // The store's own endpoints for order events (AGL-3611). Renders
+            // nothing for a person who may not manage them.
+            {
+              size: { xs: 12 },
+              children: <OrderWebhooksCard hostId={hostId} />,
+            },
           ]}
         />
       )

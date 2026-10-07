@@ -214,10 +214,16 @@ snapshots, totals, and a timeline:
 - **Statuses**: pending → paid → fulfilled (or partially) → delivered, with
   cancel/refund exits guarded by a status machine. The seven of them, and the
   labels the console shows, are in [Statuses and channels](#order-statuses).
-- **Fulfill with tracking**, print **packing slips**, add internal notes.
+- **Fulfill with tracking**, in one shipment or several, print **packing slips** and
+  **invoices**, and add internal notes — see
+  [Fulfillment, returns and webhooks](orders-and-returns.md).
 - **Ship with the tools you already use**:
   [Pirate Ship, Shippo or EasyPost](use-pirate-ship.md) work through a
   spreadsheet out and a file of tracking numbers back.
+- **Returns**: buyers ask from their account or the order-status page, and you
+  approve, receive with restock and refund — see
+  [Returns](orders-and-returns.md#returns). **Order webhooks** send each order
+  event to your own systems — see [Order webhooks](orders-and-returns.md#order-webhooks).
 - **Refunds** (full or partial) go through Stripe and reverse the platform
   fee. Refunding needs the **admin** role *and* organization-wide membership —
   a workspace owner or admin, or a member given access to every site. A

@@ -77,6 +77,7 @@ export const PLUGIN_SURFACE_SECTIONS: Readonly<
   products: {
     catalog: 'Catalog',
     orders: 'Orders',
+    returns: 'Returns',
     promotions: 'Promotions',
     reservations: 'Reservations',
     settings: 'Settings',

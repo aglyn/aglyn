@@ -149,6 +149,7 @@ export const DOCS_HELP_EXCERPTS = {
   onboardingDeepLinks: 'The plan-aware signup contract the marketing pricing page links into, and what the console does with it.',
   operatorAlerts: 'Every event an install operator must hear about: which alerts exist, where they go (email and an optional webhook), how staff switch them or batch them daily, and how health checks alert on their own.',
   orderNotifications: 'The emails your customers get about their orders, the private order status page they link to, and how to resend a receipt.',
+  ordersAndReturns: 'Ship an order in parts with tracking links, run returns from request to refund, print invoices, and send order events to your own systems.',
   orgAutomations: 'Write an automation once for the whole organization and run it on the sites you choose, with a pause on each site.',
   passwordAScreen: 'Require a password to view a specific page.',
   platformHealth: 'The staff health board — serving, backups, rate limiters, signup volume, email delivery and CSP violations, with what each red light means and what to do.',

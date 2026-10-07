@@ -242,6 +242,11 @@ export const PLUGIN_DOCS = {
     title: 'Members-only areas',
     excerpt: 'Let visitors sign up as members and gate pages so only members can view them.',
   },
+  ordersAndReturns: {
+    path: '/commerce-and-bookings/commerce/orders-and-returns',
+    title: 'Fulfillment, returns and webhooks',
+    excerpt: 'Ship an order in parts with tracking links, run returns from request to refund, print invoices, and send order events to your own systems.',
+  },
   orgAutomations: {
     path: '/marketing-and-automation/workflows-and-actions/org-automations',
     title: 'Org automations',
@@ -339,6 +344,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#contributes--where-the-plugin-loads', '#config--settings-without-writing-a-settings-screen', '#listing--version-documents', '#review--trust-lifecycle', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#variables-in-copy', '#engagement-stats', '#across-your-sites', '#related'],
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],
+  ordersAndReturns: ['#fulfillment', '#invoices', '#returns', '#buyer-requests', '#run-a-return', '#order-webhooks', '#what-your-endpoint-receives', '#check-the-signature', '#answer-quickly-and-retries', '#related'],
   orgAutomations: ['#what-an-org-automation-is', '#create-one', '#triggers', '#steps', '#pause-it-on-one-site', '#waiting-switching-off-and-deleting', '#every-sites-own-automations', '#related'],
   plugins: ['#install--upgrade', '#browse-card', '#whats-included', '#what-the-badges-on-a-listing-mean', '#how-plugins-run', '#when-one-plugin-depends-on-another', '#a-dependency-that-is-off-for-one-site', '#configure', '#configure-site', '#publish-your-own', '#related'],
   pos: ['#registers', '#the-register', '#platform-fees-at-the-register', '#selling-past-the-count', '#when-something-disconnects', '#reservations', '#related'],

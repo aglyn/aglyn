@@ -33,6 +33,19 @@ for the how-to.
 
 ## October 2026 — checkout on your own site
 
+- **[Returns](commerce-and-bookings/commerce/orders-and-returns.md#returns)** — buyers ask
+  for a return from their account or the order's status page, item by item with a reason, within the window you set.
+  Approve or decline it, mark it received with what goes back in stock and where, and
+  refund the original payment, once. Each step emails the buyer.
+- **[Ship in parts](commerce-and-bookings/commerce/orders-and-returns.md#fulfillment)** —
+  fulfill some units of an order now and the rest later, each shipment with its own
+  carrier tracking link, editable or cancelable.
+- **[Invoices](commerce-and-bookings/commerce/orders-and-returns.md#invoices)** — print an
+  order as an invoice, or save it as a PDF, beside the packing slip.
+- **[Order webhooks](commerce-and-bookings/commerce/orders-and-returns.md#order-webhooks)** —
+  send order and return events to your own systems, signed, retried for about a day, with
+  a delivery log you can resend from.
+
 - **[In-page checkout](guides/commerce-end-to-end.md#paying-without-leaving-your-site)** —
   shoppers pay on your store instead of being sent to Stripe's page. The Buy and
   Checkout buttons open the form in place with everything the order needs: email,

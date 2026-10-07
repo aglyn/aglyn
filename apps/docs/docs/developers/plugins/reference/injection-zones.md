@@ -100,6 +100,7 @@ importing the host's package:
 | `productImport` | The commerce products import wizard's After import step: options for what happens to the imported products once they land | `hostId`, `orgId`, `count` (products the dry run creates), `options`, `setOption(key, on)` |
 | `orderDetail` | The commerce order dialog, above its actions: a widget that reads the order and records a shipment, such as buying a shipping label | `hostId`, `orgId`, `order` (`id`, `number`, `status`, `currency`, the buyer, `shippingAddress`, `lines` with each line's `fulfilledQuantity`, `remainingQuantity` and `requiresShipping`, `fulfillments`, `totals`, `testMode`), `recordFulfillment({ lineItems?, carrier, trackingNumber, trackingUrl?, labelUrl?, notify?, idempotencyKey })` — records a shipment through the dialog's own route and resolves with it |
 | `orderFulfillment` | Inside the order dialog's Fulfill items panel: a widget that fills in the carrier and tracking for the units picked | everything `orderDetail` hands, plus `selection` (the `{ lineItemId, quantity }` units picked in the panel) and `applyTracking({ carrier, trackingNumber, trackingUrl?, labelUrl? })` — fills the panel's fields for the merchant to confirm with Fulfill |
+| `returnDetail` | The commerce return dialog, above its actions: a widget that buys the buyer a return label | `hostId`, `orgId`, `return` (`id`, `status`, `orderId`, `orderNumber`, the buyer, `lines` with `name`, `quantity` and `reason`, `fromAddress` — the order's ship-to, where the parcel comes from — and `returnLabel` or `null`), `attachReturnLabel({ carrier, trackingNumber, labelUrl, trackingUrl? })` — attaches the label through the plugin's own route, which emails it to the buyer when the return is already approved |
 
 ## How a zone spaces your widget
 
@@ -128,6 +129,8 @@ page spaces it there:
   and in its import wizard's After import step.
 - `orderDetail` and `orderFulfillment`: a section the commerce plugin places
   in its order dialog, above the actions and inside the Fulfill items panel.
+- `returnDetail`: a section the commerce plugin places in its return dialog,
+  above the actions.
 - `recordEmail` and `importMapping`: a section the CRM plugin places under its
   one-to-one composer's message and under an import drawer's or the import
   wizard's column matching.

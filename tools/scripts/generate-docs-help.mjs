@@ -176,6 +176,9 @@ const PLUGIN_TOPICS = {
   inviteTeammates: '/workspace-and-billing/teams-and-roles/invite-teammates',
   marketingOverlays: '/marketing-and-automation/marketing-overlays/overview',
   membersOnly: '/workspace-and-billing/teams-and-roles/members-only',
+  // Fulfillment, returns, invoices and order webhooks (AGL-3611): the
+  // Returns section, the Returns settings card and the Order webhooks card.
+  ordersAndReturns: '/commerce-and-bookings/commerce/orders-and-returns',
   // The organization's automations, on the org Automation hub and the site
   // Actions section's panel (AGL-3302).
   orgAutomations: '/marketing-and-automation/workflows-and-actions/org-automations',

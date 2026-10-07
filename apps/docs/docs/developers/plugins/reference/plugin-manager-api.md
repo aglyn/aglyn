@@ -2293,11 +2293,56 @@ can still see an event twice (it succeeded and the record of that did not
 land), so dedupe on the envelope's `id`. A locked site's events wait until
 the lock lifts.
 
-The commerce plugin raises `order.paid`, `order.fulfilled` (once per
-shipment), `order.delivered`, `order.refunded` (once per refund),
-`order.cancelled`, `return.requested` and `return.refunded`. Each payload
-carries `order` in the public API's order shape (`GET /v1/sites/{siteId}/orders/{orderId}`), plus
-`fulfillment`, `refund` or `return` where the event has one.
+### Commerce's order and return events
+
+The commerce plugin declares these events. Their names and payload keys are a
+stable contract: fields are only ever added, never renamed or removed. Each
+payload carries `order` in the public API's order shape
+(`GET /v1/sites/{siteId}/orders/{orderId}`) as it stood once the fact was
+written, with money in integer cents in `order.currency`.
+
+| Event | Raised | Payload beside `order` |
+| --- | --- | --- |
+| `order.paid` | An order was paid: storefront checkout, buy-now, payment link, POS sale (card or cash) or subscription renewal. | — |
+| `order.fulfilled` | Once per shipment recorded, partial or whole. | `fulfillment`: `{ id, lines: [{ lineItemId, quantity }], carrier, trackingNumber, trackingUrl, labelUrl, at }` |
+| `order.delivered` | The order was marked delivered. | — |
+| `order.refunded` | Once per refund, partial or full. | `refund`: `{ id, amountCents, lineItemIds, full }` — what this refund moved |
+| `order.cancelled` | The order was canceled and its stock returned. | — |
+| `return.requested` | A buyer asked for a return, or the store opened one. | `return` |
+| `return.approved` | The store approved a return, or opened one itself. | `return` |
+| `return.declined` | The store declined a return request. | `return` |
+| `return.received` | The returned items arrived. | `return`, with `restock` |
+| `return.refunded` | A return was refunded, through the order's refund. An `order.refunded` for the same money is raised too. | `return`, with `refundCents` |
+
+`return` is `{ id, status, lines: [{ lineItemId, quantity, reason }],
+refundCents, restock }`, where `lineItemId` is the line's index in
+`order.lineItems` and `restock` is `[{ lineItemId, quantity }]` once the parcel
+arrived, else `null`. A subscriber that counts money takes it from
+`order.refunded`, not `return.refunded`, so a returned refund is counted once.
+
+A subscriber restates the shape it reads and subscribes by name:
+
+```ts
+import {
+  definePluginDomainEvent,
+  subscribePluginDomainEvent,
+} from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+
+interface OrderRefunded {
+  order: { id: string; currency: string; totals: { totalCents: number | null } }
+  refund: { id: string | null; amountCents: number; full: boolean }
+}
+
+const ORDER_REFUNDED = definePluginDomainEvent<OrderRefunded>('order.refunded')
+
+subscribePluginDomainEvent(ORDER_REFUNDED, async ({ id, hostId, payload }) => {
+  // `id` is the same on every retry: dedupe on it.
+})
+```
+
+The merchant's own webhooks are one more subscriber to the same events, so a
+store's endpoints receive exactly what a plugin does, signed (see
+[Order webhooks](/commerce-and-bookings/commerce/orders-and-returns#order-webhooks)).
 
 ## Site beacons — `plugin-site-beacons` (`/server`)
 

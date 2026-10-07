@@ -527,6 +527,24 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "mediaScanReason": "Returns (AGL-3611): line indexes, quantities, reasons and a return label link, written only by the returns routes. A return names no image of its own; the order's lines carry the copies, and the order is not scanned for the same reason."
   },
   {
+    "pluginId": "commerce",
+    "name": "orderWebhooks",
+    "mediaScan": "none",
+    "mediaScanReason": "The merchant's outbound order webhook endpoints (AGL-3611): a URL and the event names it takes. Scanning reads every endpoint for a URL that is never a media file."
+  },
+  {
+    "pluginId": "commerce",
+    "name": "orderWebhookSecrets",
+    "mediaScan": "none",
+    "mediaScanReason": "Sealed HMAC signing secrets for the order webhooks (AGL-3611). Reading them for media would put a secret on a scan path to match nothing."
+  },
+  {
+    "pluginId": "commerce",
+    "name": "orderWebhookDeliveries",
+    "mediaScan": "none",
+    "mediaScanReason": "The webhook delivery log (AGL-3611): one row per event per endpoint, expiring after 30 days. A body copies the order, whose image URLs record what was sold rather than use the file, so a match would be wrong, and a busy store holds thousands."
+  },
+  {
     "pluginId": "marketplace",
     "name": "installs"
   },
