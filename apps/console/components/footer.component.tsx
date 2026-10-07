@@ -38,6 +38,7 @@ const FooterComponent = forwardRef<any, FooterProps>((props, ref) => {
         <Divider sx={{ mb: 2 }} />
         <Container dense maxWidth={false}>
           <Stack
+            useFlexGap
             direction="row"
             sx={{
               flexWrap: "wrap",
@@ -63,6 +64,7 @@ const FooterComponent = forwardRef<any, FooterProps>((props, ref) => {
               * reserving its own margin.
               */}
             <Stack
+              useFlexGap
               direction="row"
               component="nav"
               sx={{

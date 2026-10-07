@@ -357,7 +357,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
     >
       <Stack spacing={1.5}>
         {groups.length ? (
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
             {groups.map(({ group, actions }) => {
               const pressed =
                 actionClause?.op === 'isAnyOf' && actionClause.value === groupValue(actions)

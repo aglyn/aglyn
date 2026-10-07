@@ -125,11 +125,11 @@ export interface InlineTextProps {
 /**
  * One run of text inside a sentence (AGL-1235).
  *
- * The gap this fills: `muiTypography` is `textEditable`, therefore a leaf —
- * `nodeAcceptsChildren` reports false, so no span can be nested inside it.
- * A statement whose argument lives in an emphasised phrase ("Aglyn commerce
- * is **part of the platform**") could not be authored at all; the whole line
- * was one flat colour.
+ * The gap this fills: a statement whose argument lives in an emphasised
+ * phrase ("Aglyn commerce is **part of the platform**") — a run of its own
+ * colour or weight inside one line. A Typography can hold elements too
+ * (AGL-3672), but only after its own text, so it cannot put the emphasis
+ * mid-sentence.
  *
  * This is a leaf too, deliberately: the shape that renders correctly is a
  * block container holding SIBLING inline runs, not a nested span. Sibling

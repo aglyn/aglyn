@@ -193,9 +193,20 @@ export function OrgSwitcherNav() {
             }
           />
         }
-        sx={{ textTransform: 'none', fontWeight: 600 }}
+        aria-label={admin ? 'Staff Console' : 'Account'}
+        sx={{
+          textTransform: 'none',
+          fontWeight: 600,
+          whiteSpace: 'nowrap',
+          // On a phone the icon alone holds the place, so the wordmark and
+          // the actions beside it keep one line.
+          minWidth: { xs: 0, sm: 64 },
+          '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 } },
+        }}
       >
-        {admin ? 'Staff Console' : 'Account'}
+        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+          {admin ? 'Staff Console' : 'Account'}
+        </Box>
       </Button>
     )
   }

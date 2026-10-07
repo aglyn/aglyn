@@ -980,7 +980,12 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
             >
               {platformRecord ? (
                 <Stack spacing={2}>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <Stack
+                    useFlexGap
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                  >
                     <Chip label="LOCKED" color="error" size="small" />
                     <Typography variant="body2">
                       {`Reason: ${platformRecord.reason ?? 'manual'}`}
@@ -1011,6 +1016,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     }
                   </Typography>
                   <Stack
+                    useFlexGap
                     direction="row"
                     spacing={1}
                     sx={{ flexWrap: 'wrap', rowGap: 1 }}
@@ -1033,10 +1039,16 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                       slotProps={{ inputLabel: { shrink: true } }}
                     />
                   </Stack>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <Stack
+                    useFlexGap
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                  >
                     <TextField
                       size="small"
                       label={`Type "${PLATFORM_CONFIRM_PHRASE}" to arm`}
+
                       value={platformConfirm}
                       onChange={(event) => setPlatformConfirm(event.target.value)}
                       sx={{ minWidth: 260 }}
@@ -1082,6 +1094,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                   }
                 </Typography>
                 <Stack
+                  useFlexGap
                   direction="row"
                   spacing={1}
                   sx={{ flexWrap: 'wrap', rowGap: 1 }}
@@ -1110,6 +1123,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     )
                     return (
                       <Stack
+                        useFlexGap
                         key={feature}
                         direction="row"
                         spacing={1}
@@ -1226,6 +1240,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                   }
                 </Typography>
                 <Stack
+                  useFlexGap
                   direction="row"
                   spacing={1}
                   sx={{ flexWrap: 'wrap', rowGap: 1 }}
@@ -1424,11 +1439,17 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     </Typography>
                   </Stack>
                 ) : null}
-                <Stack direction="row" spacing={1}>
+                <Stack
+                  useFlexGap
+                  direction="row"
+                  spacing={1}
+                  sx={{ flexWrap: 'wrap' }}
+                >
                   <Button
                     variant="contained"
                     color="error"
                     disabled={busy || notSuper || !targetId.trim()}
+
                     onClick={() =>
                       void act(
                         {
@@ -1510,6 +1531,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                   >
                     <Stack spacing={0.5}>
                       <Stack
+                        useFlexGap
                         direction="row"
                         spacing={1}
                         sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -1599,6 +1621,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                   }
                 </Alert>
                 <Stack
+                  useFlexGap
                   direction="row"
                   spacing={1}
                   sx={{ flexWrap: 'wrap', rowGap: 1 }}
@@ -1660,6 +1683,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     >
                       <Stack spacing={0.5}>
                         <Stack
+                          useFlexGap
                           direction="row"
                           spacing={1}
                           sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -1857,6 +1881,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                 <Stack spacing={1}>
                   {log.map((entry) => (
                     <Stack
+                      useFlexGap
                       key={`${entry.atMs}-${entry.text}`}
                       direction="row"
                       spacing={1}
@@ -1887,6 +1912,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
               contentGutterY
             >
               <Stack
+                useFlexGap
                 direction="row"
                 spacing={1}
                 sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 1 }}
@@ -1910,6 +1936,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                 <Stack spacing={1}>
                   {records.map((record) => (
                     <Stack
+                      useFlexGap
                       key={record.id}
                       direction="row"
                       spacing={1}

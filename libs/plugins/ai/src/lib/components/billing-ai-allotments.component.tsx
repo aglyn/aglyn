@@ -305,7 +305,7 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
           'you at 75%, 80%, 90% and 100%. The workspace’s own credits still stop first.'}
       </Typography>
 
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+      <Stack useFlexGap direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
         <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
           {'Team members'}
         </Typography>
@@ -338,7 +338,7 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
           : {})}
       />
 
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+      <Stack useFlexGap direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
         <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
           {'Sites'}
         </Typography>
@@ -399,7 +399,7 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
       ) : null}
 
       {data.restrictionAvailable ? (
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+        <Stack useFlexGap direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
           <Typography variant="body2" sx={{ flexGrow: 1 }}>
             {'Models for the whole organization: '}
             {restriction?.models?.length

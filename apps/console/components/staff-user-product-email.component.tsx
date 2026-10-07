@@ -175,6 +175,7 @@ export default function StaffUserProductEmail({
         {`Product updates, their answer: ${describeAnswer(answer)}`}
       </Typography>
       <Stack
+        useFlexGap
         direction="row"
         spacing={1}
         sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}

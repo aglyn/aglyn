@@ -545,6 +545,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
       >
         <Stack spacing={2}>
           <Stack
+            useFlexGap
             direction="row"
             spacing={3}
             sx={{ alignItems: 'flex-end', flexWrap: 'wrap', rowGap: 1 }}

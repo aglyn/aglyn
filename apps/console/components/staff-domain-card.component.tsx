@@ -188,6 +188,7 @@ export function StaffDomainCard(props: StaffDomainCardProps) {
       ) : (
         <Stack spacing={1}>
           <Stack
+            useFlexGap
             direction="row"
             spacing={1}
             sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}

@@ -254,7 +254,11 @@ export function StaffSiteContentCard(props: StaffSiteContentCardProps) {
             onChange={(_event, next: ContentTab) => setTab(next)}
             variant="scrollable"
             scrollButtons="auto"
+            // MUI hides scroll buttons on touch screens by default, which
+            // leaves a phone no sign that four of the six tabs are offscreen.
+            allowScrollButtonsMobile
           >
+
             {(Object.keys(TAB_LABELS) as ContentTab[]).map((key) => (
               <Tab key={key} value={key} label={TAB_LABELS[key]} />
             ))}

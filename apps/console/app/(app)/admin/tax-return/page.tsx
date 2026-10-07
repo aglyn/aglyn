@@ -97,7 +97,6 @@ import {
   Stack,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
   TextField,
   Typography,
@@ -125,6 +124,7 @@ import {
   taxReturnRegistration,
   type TaxReturnPayload,
 } from '../../../../utils/tx-return-webfile'
+import StaffTableHead from '../../../../components/staff-table-head.component'
 
 /**
  * ONE FACILITATED-SALES SOURCE on the return (AGL-2163, AGL-3080).
@@ -148,6 +148,7 @@ interface TaxReturnSourceCardProps {
 function LeadCell({ cell }: { cell: TaxReturnSectionCell }) {
   const line = (
     <Stack
+      useFlexGap
       direction="row"
       spacing={1}
       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -199,7 +200,7 @@ function SourceTable({
         </Typography>
       ) : null}
       <ScrollTable size="small">
-        <TableHead>
+        <StaffTableHead>
           <TableRow>
             {table.columns.map((column, index) => (
               <TableCell
@@ -210,7 +211,7 @@ function SourceTable({
               </TableCell>
             ))}
           </TableRow>
-        </TableHead>
+        </StaffTableHead>
         <TableBody>
           {table.rows.length === 0 ? (
             <TableRow>
@@ -540,12 +541,14 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               contentGutterY
             >
               <Stack
+                useFlexGap
                 direction={{ xs: 'column', sm: 'row' }}
                 spacing={2}
-                sx={{ alignItems: { sm: 'center' } }}
+                sx={{ alignItems: { sm: 'center' }, flexWrap: 'wrap' }}
               >
                 <TextField
                   select
+
                   size="small"
                   label="Period"
                   value={period}
@@ -655,6 +658,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                     {verdict.items.map((item) => (
                       <Stack key={item.id} spacing={0.5}>
                         <Stack
+                          useFlexGap
                           direction="row"
                           spacing={1}
                           sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -739,13 +743,13 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                 }}
               >
                 <ScrollTable size="small">
-                  <TableHead>
+                  <StaffTableHead>
                     <TableRow>
                       <TableCell>{'Item'}</TableCell>
                       <TableCell>{'Line'}</TableCell>
                       <TableCell align="right">{'Amount'}</TableCell>
                     </TableRow>
-                  </TableHead>
+                  </StaffTableHead>
                   <TableBody>
                     {filingLines.map((line) => (
                       <TableRow key={line.label}>
@@ -754,6 +758,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                         </TableCell>
                         <TableCell>
                           <Stack
+                            useFlexGap
                             direction="row"
                             spacing={1}
                             sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -1000,7 +1005,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                   'never summed with this.'}
               </Typography>
               <ScrollTable size="small">
-                <TableHead>
+                <StaffTableHead>
                   <TableRow>
                     <TableCell>{'Jurisdiction'}</TableCell>
                     <TableCell align="right">{'Invoices'}</TableCell>
@@ -1016,7 +1021,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                     */}
                     <TableCell align="right">{'Excluded (internal)'}</TableCell>
                   </TableRow>
-                </TableHead>
+                </StaffTableHead>
                 <TableBody>
                   {jurisdictions.length === 0 ? (
                     <TableRow>
@@ -1096,6 +1101,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                           */}
                           {row.taxabilityReasons.length ? (
                             <Stack
+                              useFlexGap
                               direction="row"
                               spacing={0.5}
                               sx={{ flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}

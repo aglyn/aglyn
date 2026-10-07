@@ -223,7 +223,7 @@ export function ContactFieldDrawer(props: ContactFieldDrawerProps) {
 
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
-      <Stack spacing={2} sx={{ width: 360, p: 3 }}>
+      <Stack spacing={2} sx={{ width: 360, maxWidth: '100vw', p: 3 }}>
         <Typography variant="h6">
           {editing ? `Edit ${noun} field` : `New ${noun} field`}
         </Typography>

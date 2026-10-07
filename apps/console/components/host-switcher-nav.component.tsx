@@ -159,19 +159,25 @@ export function HostSwitcherNavComponent() {
         onClick={(event: MouseEvent<HTMLElement>) =>
           setAnchorEl(event.currentTarget)
         }
+        aria-label={`Site: ${label}`}
+        title={label}
         startIcon={<HostIcon host={currentDoc} />}
         endIcon={<MdiIcon path={ICON_VARIANT_MENU_DOWN.path} />}
         sx={{
           maxWidth: 260,
+          // On a phone the site's icon alone holds the place, and the tab
+          // strip beside it gets the width the name took.
+          minWidth: { xs: 0, sm: 64 },
+          px: { xs: 0.5, sm: 1 },
           textTransform: 'none',
+          '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 } },
           '& .MuiButton-endIcon': { marginLeft: 0.25 },
         }}
       >
         <Typography
           variant="inherit"
           noWrap
-          title={label}
-          sx={{ display: 'block', minWidth: 0 }}
+          sx={{ display: { xs: 'none', sm: 'block' }, minWidth: 0 }}
         >
           {label}
         </Typography>

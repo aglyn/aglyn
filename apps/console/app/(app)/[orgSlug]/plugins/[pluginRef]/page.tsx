@@ -415,6 +415,7 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
                 <Typography variant="subtitle2">{'Capabilities'}</Typography>
                 {capabilities.length ? (
                   <Stack
+                    useFlexGap
                     direction="row"
                     spacing={1}
                     sx={{ flexWrap: 'wrap', rowGap: 1 }}
@@ -435,6 +436,7 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
                 </Typography>
                 {networkHosts.length ? (
                   <Stack
+                    useFlexGap
                     direction="row"
                     spacing={1}
                     sx={{ flexWrap: 'wrap', rowGap: 1 }}

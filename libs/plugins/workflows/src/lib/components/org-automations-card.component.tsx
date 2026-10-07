@@ -355,7 +355,7 @@ export function OrgAutomationsCard(props: OrgAutomationsCardProps) {
                   {placementLine(row, mount)}
                 </Typography>
                 {paused.length ? (
-                  <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
+                  <Stack useFlexGap direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
                     {paused.map((hostId) => (
                       <Chip
                         key={hostId}

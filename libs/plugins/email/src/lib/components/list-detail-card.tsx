@@ -197,7 +197,12 @@ export function ListDetailCard(props: ListDetailCardProps) {
 
   const audiencesHref = `${basePath}/audiences`
   const headerActions = (
-    <Stack direction="row" spacing={1}>
+    <Stack
+      direction="row"
+      spacing={1}
+      useFlexGap
+      sx={{ flexWrap: 'wrap' }}
+    >
       <Button
         component={AppLink as any}
         {...({ componentVariant: 'naked', nativeButton: false } as any)}

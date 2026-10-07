@@ -57,6 +57,14 @@ const ViewportArtboard = styled('div', {
   overflow: 'hidden',
   minHeight: '100%',
   padding: theme.spacing(3),
+  // A phone has no width to spare for a gutter: Fluid Responsive (the
+  // default device) then fills the canvas edge to edge, and a pinned device
+  // wider than the screen scrolls sideways at true size rather than being
+  // scaled — a transform would turn every `position: sticky` and `fixed`
+  // inside the page into something else.
+  [theme.breakpoints.down('sm')]: {
+    padding: theme.spacing(1),
+  },
   marginLeft: 'auto',
   marginRight: 'auto',
   display: 'flex',

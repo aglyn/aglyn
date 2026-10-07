@@ -185,9 +185,9 @@ export const MUI_COMPONENT_SOURCES: Readonly<
     schema: 'schema',
     presets: 'presets',
   },
-  // The inline text run (AGL-1235): Typography is `textEditable` and so a
-  // leaf, which left no way to emphasize a phrase inside a sentence — every
-  // statement rendered as one flat color.
+  // The inline text run (AGL-1235): one styled phrase inside a sentence.
+  // Typography also holds elements now (AGL-3672), but a run is still the
+  // element that flows and wraps as part of the line.
   muiInlineText: {
     module: inlineText,
     component: 'default',

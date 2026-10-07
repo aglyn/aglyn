@@ -35,12 +35,14 @@
 import { Menu } from '@base-ui/react/menu'
 import { Menubar } from '@base-ui/react/menubar'
 import { ICON_VARIANT_MENU_DOWN } from '@aglyn/shared-data-enums'
+import { mdiMenu } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import {
   Box,
   Button,
   Divider,
+  IconButton,
   ListItemButton,
   ListItemIcon,
   type ListItemIconProps,
@@ -121,6 +123,12 @@ export interface AppBarMenubarEntryProps {
 
 export interface AppBarMenubarProps {
   entries?: AppBarMenubarEntryProps[]
+  /**
+   * Every entry behind one menu button, each menu a labelled section of it.
+   * For a bar too narrow to hold a row of triggers — the editor on a phone —
+   * where the same commands are still one tap away rather than gone.
+   */
+  compact?: boolean
 }
 
 /**
@@ -375,8 +383,74 @@ const renderEntry = (entry: AppBarMenubarEntryProps, i: number) => {
  * events never reach this document — close the open menu, while a pointer
  * moving between triggers still lands on them.
  */
+const POPUP_SX = {
+  maxHeight: ITEM_HEIGHT * 4.5,
+  width: '30ch',
+  overflowY: 'auto',
+  paddingY: 1,
+  // Paper transitions `box-shadow` by default. Base UI reads a running
+  // transition on the popup as a close animation and waits for
+  // `transitionend` before unmounting — and box-shadow never changes here,
+  // so that event never came: the closed menu stayed on screen holding focus.
+  transition: 'none',
+  filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
+  backgroundColor: 'surface.main',
+} as const
+
+const renderCompact = (entries: AppBarMenubarEntryProps[]) => {
+  const menus = entries.filter((entry) => entry.items?.length)
+  const hasAnyIcon = menus.some((entry) =>
+    entry.items?.some((row) => (row as any)?.icon?.path),
+  )
+  return (
+    <Menu.Root>
+      <Menu.Trigger
+        nativeButton
+        render={<IconButton color="inherit" aria-label="Menu" sx={{ mx: 0.5 }} />}
+      >
+        <MdiIcon path={mdiMenu.path} />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Positioner
+          sideOffset={4}
+          align="start"
+          render={<Box sx={{ zIndex: 'modal' }} />}
+        >
+          <Menu.Popup
+            render={
+              <Paper
+                elevation={0}
+                sx={{ ...POPUP_SX, maxHeight: '70dvh', maxWidth: '90vw' }}
+              />
+            }
+          >
+            {menus.map((entry, entryIndex) => (
+              <Fragment key={entry.key ?? entry.id ?? entryIndex}>
+                {entryIndex > 0 ? (
+                  <Menu.Separator render={<Divider component="div" />} />
+                ) : null}
+                <ListSubheader
+                  component="div"
+                  sx={{ lineHeight: 2.5, bgcolor: 'transparent' }}
+                >
+                  {entry.children}
+                </ListSubheader>
+                {entry.items?.map((row, rowIndex) =>
+                  renderRow(row, rowIndex, hasAnyIcon),
+                )}
+              </Fragment>
+            ))}
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
+  )
+}
+
 export const AppBarMenubarComponent = (props: AppBarMenubarProps) => {
-  const { entries } = props
+  const { entries, compact = false } = props
+
+  if (compact) return renderCompact(entries ?? [])
 
   return (
     <Menubar

@@ -73,7 +73,7 @@ function HostDashboard() {
        * foreign custom domain no other hint can exist (AGL-1842).
        */
       headerRight={
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
           <DashboardCustomizeButton />
           {host ? (
             <AppLink

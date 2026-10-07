@@ -274,7 +274,7 @@ export function PopupCard(props: PopupCardProps) {
             minRows={2}
             fullWidth
           />
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
             <TextField
               label="Image URL (optional)"
               size="small"
@@ -333,7 +333,7 @@ export function PopupCard(props: PopupCardProps) {
               {'Collect emails (submissions land in your Inbox and Contacts)'}
             </Typography>
           </Stack>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
             <TextField
               label="Button label"
               size="small"
@@ -350,7 +350,7 @@ export function PopupCard(props: PopupCardProps) {
               sx={{ flex: 1, minWidth: 180 }}
             />
           </Stack>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
             <TextField
               select
               label="Show"
@@ -390,7 +390,7 @@ export function PopupCard(props: PopupCardProps) {
               sx={{ width: 160 }}
             />
           </Stack>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
             <TextField
               label="Start (optional)"
               size="small"

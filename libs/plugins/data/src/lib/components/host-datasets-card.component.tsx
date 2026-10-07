@@ -1217,7 +1217,12 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               'its records with {{item.field}} bindings.'}
           </Typography>
         ) : (
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            useFlexGap
+            sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+          >
             {/* A scope, not a filter: it picks which collection the table
                 walks, and the grid's own Filters panel narrows within it. */}
             <TextField
@@ -1330,7 +1335,12 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             {'No records yet.'}
           </Typography>
         ) : null}
-        <Stack direction="row" spacing={1}>
+        <Stack
+          direction="row"
+          spacing={1}
+          useFlexGap
+          sx={{ flexWrap: 'wrap' }}
+        >
           <Button
             size="small"
             variant="outlined"

@@ -299,7 +299,7 @@ export default function BillingUsageBudgetCardComponent({
 
   return (
     <Stack spacing={2}>
-      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+      <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
         <Chip
           label={budgetSet ? 'Budget set' : 'No budget set'}
           size="small"
@@ -433,6 +433,7 @@ export default function BillingUsageBudgetCardComponent({
       </Typography>
 
       <Stack
+        useFlexGap
         direction="row"
         spacing={2}
         sx={{ alignItems: 'flex-start', flexWrap: 'wrap', rowGap: 2 }}

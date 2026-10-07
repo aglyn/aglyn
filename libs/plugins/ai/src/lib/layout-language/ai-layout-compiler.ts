@@ -977,7 +977,9 @@ export function destinationProps(
 /**
  * A picture slot: a soft frame at a stock shape showing an icon until the
  * owner places the picture, which then fills it. Its description is its alt
- * text (rule 9), and no source is set: a picture comes from the media library.
+ * text (rule 9), and no source is set here: the compiler stays pure, and
+ * `ai-layout-pictures.ts` fills the slot with a photo the site serves itself
+ * once the page is checked.
  */
 function image(
   scope: SectionScope,

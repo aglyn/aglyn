@@ -710,7 +710,7 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
         contentGutterY
         HeaderProps={{
           action: (
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+            <Stack useFlexGap direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
               {back}
               {primary ? (
                 <Button
@@ -728,7 +728,7 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
         }}
       >
         <Stack spacing={2}>
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
             <Tooltip
               describeChild
               title={recordHref ? `Open the ${kind} in the CRM` : `The ${kind}’s record can’t be linked`}
@@ -775,7 +775,7 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
             </Alert>
           ) : null}
           {figures.anything ? (
-            <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap', rowGap: 2 }} role="group" aria-label="In numbers">
+            <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap', rowGap: 2 }} role="group" aria-label="In numbers">
               <OutreachFigure label="Emails sent" value={dash(figures.emailsSent)} />
               {countOpens ? (
                 <OutreachFigure

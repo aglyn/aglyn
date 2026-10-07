@@ -162,12 +162,18 @@ describe('no registered element addresses the author on a published page (AGL-30
     const leaks: string[] = []
     // An element whose children fill fixed slots (MUI's Accordion is
     // `[summary, ...details]`) cannot render without them, and the besigner
-    // never places one without them.
+    // never places one without them. Text is positional only to tell its
+    // elements from its own words (AGL-3672), and renders empty like
+    // anything else.
     const slotted: string[] = []
 
     for (const entry of MUI_BUNDLE) {
       const id = entry.schema.$id
-      if ((entry.schema.flags?.positionalChildren ?? 0) & Aglyn.FEATURE_FLAG.ENABLED) {
+      const flags = entry.schema.flags
+      if (
+        (flags?.positionalChildren ?? 0) & Aglyn.FEATURE_FLAG.ENABLED &&
+        !((flags?.textEditable ?? 0) & Aglyn.FEATURE_FLAG.ENABLED)
+      ) {
         slotted.push(id)
         continue
       }

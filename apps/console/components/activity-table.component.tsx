@@ -167,7 +167,7 @@ export function ActivityTable(props: ActivityTableProps) {
           </Typography>
         ) : null}
         {toolbar ? (
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
             {toolbar}
           </Stack>
         ) : null}

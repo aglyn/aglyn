@@ -205,7 +205,11 @@ await put(
     orgId,
     role: 'editor',
     displayName: 'Demo Bakery',
+    nameLower: 'demo bakery',
     createdAt: daysAgo(21),
+    // The site switcher's idle list is `orderBy('updatedAt')`, which leaves
+    // out any row without the field — `membershipRow` always stamps it.
+    updatedAt: daysAgo(21),
   },
 )
 // The site's own roster, which the site Users card lists. Shaped as
@@ -422,6 +426,9 @@ await put(
     nameLower: 'downgraded bakery',
     role: 'admin',
     createdAt: daysAgo(60),
+    // As above: without it the switcher reads "No sites yet." over a
+    // workspace whose Sites page lists this one.
+    updatedAt: daysAgo(60),
   },
 )
 // One product, because the draft dialog cannot be filled in without one — the

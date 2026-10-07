@@ -141,7 +141,7 @@ export function CompositionBar({
           )
         })}
       </Stack>
-      <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
+      <Stack useFlexGap direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
         {ordered.map((slice, index) => (
           <Stack
             key={slice.key}

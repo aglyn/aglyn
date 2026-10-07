@@ -340,6 +340,7 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
         <StaffOnly>
           <Stack spacing={3}>
             <Stack
+              useFlexGap
               direction="row"
               spacing={2}
               sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -411,6 +412,7 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                     >
                       <Stack spacing={1.5}>
                         <Stack
+                          useFlexGap
                           direction="row"
                           spacing={1}
                           sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -535,6 +537,7 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
             >
               <Stack spacing={2}>
                 <Stack
+                  useFlexGap
                   direction="row"
                   spacing={2}
                   sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -587,6 +590,7 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                   ) : (
                     <>
                       <Stack
+                        useFlexGap
                         direction="row"
                         spacing={1}
                         sx={{ flexWrap: 'wrap' }}

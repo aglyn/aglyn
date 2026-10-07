@@ -140,6 +140,7 @@ function LogoSlot(props: {
 
   return (
     <Stack
+      useFlexGap
       direction="row"
       spacing={2}
       sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
