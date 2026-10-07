@@ -34,6 +34,10 @@
       "why": "The product, collection and store shapes, read by the Commerce app product screens (AGL-3621)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/product-modifiers.ts",
+      "why": "A product's register modifiers and their validation, imports nothing; commerce.ts checks them when a product is stored (AGL-3607)."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/order-figures.ts",
       "why": "Integer-cent order totals, so the app's sales figures match the console's to the cent (AGL-3621)."
     },
