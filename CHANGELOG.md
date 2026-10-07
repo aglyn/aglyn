@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.229 — 2026-10-07
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.228...v1.0.0-beta.229)
+
+### Fixed
+
+- **ai:** a site's AI jobs list while its index builds, from the org's newest ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** a failed guided start says what failed, that it cost nothing, and reopens its answers ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** a site's search description is composed within its cap, never cut mid-phrase ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** a refusal after the re-ask gives back what the job spent, before anyone is told ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** a site's layout links its planned pages, written by the platform before the check ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+
 ## v1.0.0-beta.228 — 2026-10-07
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.227...v1.0.0-beta.228)
