@@ -17,8 +17,27 @@ and behavior. The apps are:
 
 | app | bundle / package | what it is |
 | -- | -- | -- |
-| **Aglyn** | `com.aglyn.app` | Manages the workspace: sites, team, products, orders, forms, media, analytics, bookings, CRM, emails, inbox and notifications. The Besigner and the long-tail console screens open in an authenticated WebView. There is no native builder. |
+| **Aglyn** | `com.aglyn.app` | Manages the workspace: sites, team, products, orders, forms, media, analytics, bookings, CRM, emails, inbox and notifications. Every console area is a native screen. Only the Besigner opens in a web view, inside the app. There is no native builder. |
 | **Aglyn POS** | `com.aglyn.pos` | The register: fast item picking, Stripe Terminal (Tap to Pay and Bluetooth readers on mobile, smart readers everywhere), tips, receipts and booking payments. |
+
+### Native console, Besigner-only web view (binding, Zach 2026-10-07)
+
+The apps manage the workspace natively. Every console area the Aglyn app
+covers (sites, team, products, orders, forms, media, analytics, bookings, CRM,
+emails, inbox, notifications and settings) is a native screen with native
+reads and writes, never a console page loaded in a web view.
+
+The **Besigner** is the only web content. It opens in an authenticated web
+view *inside* the app, never in the system browser. A console link or
+notification that targets a non-Besigner page goes to the matching native
+screen. If no native screen exists yet, that is a gap to build; it never falls
+back to opening the console web page.
+
+The one exception is OAuth sign-in. Google refuses sign-in from embedded web
+views, so Google sign-in uses the platform's auth sheet
+(`ASWebAuthenticationSession`, Android Custom Tabs, or the desktop
+loopback/PKCE flow below). That sheet only signs the user in; it never shows
+console pages.
 
 Both apps run on phone, tablet and desktop. UI quality is the bar. The iOS and
 macOS apps use SwiftUI with the standard navigation and controls. The Android
@@ -80,7 +99,7 @@ libs/native/apple/                       Swift package "AglynKit" (iOS 17+, macO
   Package.swift
   Sources/AglynCore/                     auth, workspace/site, API client, Firestore reads, push, deep links, config
   Sources/AglynUI/                       theme (Tokens.generated.swift), components, adaptive layout
-  Sources/AglynWebView/                  authenticated console WebView + bridge
+  Sources/AglynWebView/                  authenticated Besigner web view + bridge
   Sources/AglynPluginHost/               registrars, registry, deep-link resolution
   Sources/AglynContracts/                GENERATED contracts (Contracts.generated.swift + JSON resource)
   Sources/AglynHardware/                 POS peripherals: ESC/POS printers, cash drawer, HID scanners (macOS/iPad)
@@ -151,8 +170,8 @@ behavior, and keep its specs' cases.
 | API client | `api-client.ts` | `ConsoleAPIClient` (`URLSession`, async/await): bearer ID token, one forced refresh on 401, GET/idempotent retries on network/502/503/504 with 400·2ⁿ ms backoff, `Idempotency-Key`, `ConsoleAPIError(status, message)` with `consoleErrorMessage` wording | the same, on Ktor client (`OkHttp` engine on Android, `Java` engine on desktop) + kotlinx.serialization |
 | Firestore reads | `live-doc.ts`, `list-query.ts` | Firebase iOS SDK snapshot listeners; `ListQuery` runs the generated list declarations (§5) as SDK constraints, a page at a time plus one probe row | Android: Firebase Android SDK listeners. Desktop: **Firestore REST + gRPC `Listen`** (§4) |
 | workspace + site | `workspace.tsx`, `org-access.ts` | `WorkspaceStore` (`@Observable`): `users/{uid}/orgs`, `users/{uid}/hostMemberships where orgId ==`, persisted pick | `WorkspaceStore` (`StateFlow`), same queries |
-| console WebView | `libs/mobile/webview` | `WKWebView` signed in by POSTing the ID token to `/api/auth/session` (the console's own route; HttpOnly `__session` cookie into `WKHTTPCookieStore`); origin-checked bridge with the same method allowlist as `bridge-protocol.ts`; native back | Android `WebView` + `CookieManager`; desktop: the system browser with a one-time session handoff, because the JVM has no first-party WebView |
-| deep links | `plugin-host/src/lib/deep-links.ts` | the same grammar: strip `/{org}/hosts/{host}`, match registered patterns, otherwise WebView. Universal links on the console origin, plus the `aglyn://` scheme | App Links + `aglyn://`; desktop: `aglyn://` URL handler (macOS via the app, Windows via MSIX protocol registration) |
+| Besigner web view | `libs/mobile/webview` | Besigner paths only. `WKWebView` (iOS, iPadOS, macOS) signed in by POSTing the ID token to `/api/auth/session` (the console's own route; HttpOnly `__session` cookie into `WKHTTPCookieStore`); origin-checked bridge with the same method allowlist as `bridge-protocol.ts`; native back | Android `WebView` + `CookieManager`. Windows: an embedded web view inside the app window, never the system browser. The embedding library (WebView2 or JCEF) needs Zach's dependency approval first. |
+| deep links | `plugin-host/src/lib/deep-links.ts` | the same grammar: strip `/{org}/hosts/{host}`, match registered patterns. A Besigner path opens the Besigner web view; any other unmatched path opens the nearest native screen, never a web page. Universal links on the console origin, plus the `aglyn://` scheme | App Links + `aglyn://`; desktop: `aglyn://` URL handler (macOS via the app, Windows via MSIX protocol registration) |
 | theme | `libs/mobile/ui` + `tokens.generated.json` | `Tokens.generated.swift` (§7), applied through SwiftUI `tint`, semantic colors and `ShapeStyle`s; system fonts and Dynamic Type | `Tokens.generated.kt`, giving a Material 3 `ColorScheme` (light/dark) for `MaterialTheme`. Dynamic color stays off, so the brand palette holds |
 | layout | `useLayout()`, `SplitView` | `NavigationSplitView` on iPad/Mac, `TabView` + `NavigationStack` on iPhone; Mac adds `commands` (menus + shortcuts) and `WindowGroup`s for an order/product in its own window | `NavigationSuiteScaffold` (bar → rail → drawer by window size class) + `ListDetailPaneScaffold`; desktop adds a `MenuBar` with shortcuts and extra windows |
 | push | `apps/mobile/src/shell/push.ts` | APNs directly (§8): register, write `users/{uid}/devices/{installId}`, delete on sign-out, deep-link the tap | FCM directly (§8), same registry; desktop has no push in v1 (§8) |
@@ -198,7 +217,7 @@ A screen gets a `NativePluginContext`, the twin of `MobilePluginContext`:
   REST;
 - `api`;
 - `navigate(screenId, params)`;
-- `openConsolePath(path, scope)`.
+- `openBesigner(path, scope)`, which accepts Besigner paths only; there is no general console-page opener.
 
 ### Generated native manifest
 
