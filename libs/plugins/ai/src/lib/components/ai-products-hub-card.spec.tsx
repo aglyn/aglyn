@@ -82,6 +82,7 @@ jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => ({
 
 import type { ConsoleProductsHubZoneProps } from './ai-product-zones'
 import AiProductsHubCard from './ai-products-hub-card.component'
+import AiCreateProductsButton from './ai-products-create-button.component'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -353,5 +354,62 @@ describe('categories and discounts from a brief', () => {
       { name: 'Free shipping over $50', code: null, kind: 'free_shipping', valuePct: null, valueCents: null, minSubtotalCents: 5_000 },
     ])
     expect((await screen.findByRole('alert')).textContent).toContain('Discounts start switched off')
+  })
+})
+
+/*
+ * "Create with AI" beside Add product and in the empty catalog (AGL-3596),
+ * on the commerce plugin's `productsCreate` zone: a door to this card's
+ * Propose products brief, shown only while the card is here to take it. Its
+ * registration is held with the other doors' in `ai-describe-email.component.spec`.
+ */
+describe('Create with AI beside Add product', () => {
+  it('opens the card’s Propose products brief, which starts the catalog job', async () => {
+    render(
+      <>
+        <AiCreateProductsButton hostId="host-1" orgId={undefined} />
+        <AiProductsHubCard {...props({ products: [] })} />
+      </>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('What does the store sell?'), { target: { value: 'A candle studio' } })
+    mockFetch.mockImplementationOnce(async () => json({ job: catalogJob }))
+    fireEvent.click(screen.getByRole('button', { name: 'Propose products' }))
+    await waitFor(() => expect(posted()).toHaveLength(1))
+    expect(posted()[0]).toEqual({
+      orgId: 'org-1',
+      hostId: 'host-1',
+      kind: 'products',
+      brief: 'A candle studio',
+      inputs: { target: 'catalog' },
+    })
+  })
+
+  it.each([403, 404])('stays absent when the jobs route answers %s, as the card does', async (status) => {
+    mockFetch.mockImplementation(async () => json({ error: 'no' }, status))
+    render(
+      <>
+        <AiCreateProductsButton hostId="host-1" orgId={undefined} />
+        <AiProductsHubCard {...props()} />
+      </>,
+    )
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(screen.queryByRole('button', { name: 'Create with AI' })).toBeNull()
+  })
+
+  it('stays absent with no card on the page, and for another site’s card', async () => {
+    const { unmount } = render(
+      <>
+        <AiCreateProductsButton hostId="host-2" orgId={undefined} />
+        <AiProductsHubCard {...props()} />
+      </>,
+    )
+    await screen.findByRole('button', { name: 'Propose products' })
+    expect(screen.queryByRole('button', { name: 'Create with AI' })).toBeNull()
+    unmount()
+    render(<AiCreateProductsButton hostId="host-1" orgId={undefined} />)
+    expect(screen.queryByRole('button', { name: 'Create with AI' })).toBeNull()
   })
 })

@@ -43,6 +43,7 @@ import {
   aiProductsJobInputs,
   aiProductsProposalOfKind,
 } from '../model/ai-products'
+import { registerAiProductsBriefOpener } from './ai-products-create-button.component'
 import { AiBulkCopyReview, AiCatalogReview, AiCategoriesReview } from './ai-products-proposals.component'
 import { useAiProductsJobs } from './use-ai-products-jobs'
 
@@ -59,6 +60,9 @@ import { useAiProductsJobs } from './use-ai-products-jobs'
  *   set.
  * - **Propose categories and discounts** — from a brief, created as the
  *   catalog and discounts cards create them, every discount switched off.
+ *
+ * "Create with AI" beside Add product and in the empty catalog
+ * (`productsCreate`, AGL-3596) opens the Propose products brief here.
  *
  * An import whose `productImport` option asked for it starts a copy job for
  * the products the import created, as they land. Every write is the hub's
@@ -143,6 +147,13 @@ export function AiProductsHubCard(props: ConsoleProductsHubZoneProps) {
       void startBulk(lastImport.productIds)
     }
   }, [verdict, lastImport, startBulk])
+
+  // "Create with AI" beside Add product (AGL-3596) opens this card's
+  // Propose products brief, offered once the jobs route has said AI is here.
+  useEffect(() => {
+    if (verdict !== 'ready') return
+    return registerAiProductsBriefOpener(hostId, () => setBrief({ kind: 'catalog', text: '' }))
+  }, [verdict, hostId])
 
   const heldNames = useMemo(() => new Set(products.map((product) => nameKey(product.name))), [products])
   const pickerRows = useMemo(

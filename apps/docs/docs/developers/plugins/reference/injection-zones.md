@@ -67,7 +67,8 @@ unloaded plugins.
 ## Zones a plugin hosts
 
 A zone can sit on a plugin's own surface rather than on a console page, such as `hostForms`
-on the forms plugin's Forms page, `hostAutomations`, `automationEditor` and `automationRun`
+on the forms plugin's Forms page, `hostEmailTemplates` on the email plugin's templates
+list, `hostCampaigns` on the marketing plugin's Campaigns, `hostAutomations`, `automationEditor` and `automationRun`
 on the workflows plugin's Automation page, or `recordInsights`, `recordEmail` and
 `importMapping` on the CRM plugin's record pages, one-to-one composer and import drawers, and in the import wizard. A plugin cannot import the console's `PluginWidgetSlot`,
 so the shell hands its renderer down: read it with `useConsoleWidgetSlot()` from
@@ -85,18 +86,21 @@ and the zone draws nothing.
 A plugin that hosts a zone also declares it, with `registerPluginZone` and a token that
 carries the props it hands each widget (see
 [Zones a plugin hosts](./plugin-manager-api.md#zones-a-plugin-hosts--plugin-zones) in the
-plugin-manager reference). The forms, workflows and commerce plugins declare these on
+plugin-manager reference). The forms, email, marketing, workflows and commerce plugins declare these on
 their own surfaces; a widget from another plugin restates the props it reads rather than
 importing the host's package:
 
 | Zone | Where it renders | Props your widget receives |
 | --- | --- | --- |
 | `hostForms` | A site's Forms page, the forms plugin's, beside Create Form: another way to start a form | `hostId`, `orgId` |
+| `hostEmailTemplates` | A site's email templates, the email plugin's, beside **New template** and in the empty list: another way to start an email design | `hostId`, `orgId` |
+| `hostCampaigns` | A site's Campaigns, the marketing plugin's, beside **Create campaign** and in the empty list: another way to start a campaign. Not drawn on the organization's Marketing page | `hostId`, `orgId` |
 | `hostAutomations` | The workflows plugin's Automation page, its Actions, beside **Add action** and **Recipes**: another way to start an automation | `hostId`, `orgId`, `openAction(actionId)` — opens a listed action in the Actions editor, and answers `false` for one the list has not read yet |
 | `automationEditor` | Inside the editor of one saved automation, an action or a workflow, on the Automation page | `hostId`, `orgId`, `target` (`{ type: 'action' \| 'workflow', id, name }`, the automation as it is stored) |
 | `automationRun` | On each failed run in an automation's run history | `hostId`, `orgId`, `target` (as above), `runId` (the run's entry in the site's activity log) |
 | `productEditor` | The commerce product editor, under a product's description, tags and categories: copy proposed for the fields, which Save product writes | `hostId`, `orgId`, `product` (as the editor holds it), `categories`, `proposeValues(values, key)` — stages copy in the editor as unsaved edits |
 | `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
+| `productsCreate` | The commerce products page, beside **Add product** and in the empty catalog: another way to start a product | `hostId`, `orgId` (`undefined`: the page does not know the org; read it from the site) |
 | `productImport` | The commerce products import wizard's After import step: options for what happens to the imported products once they land | `hostId`, `orgId`, `count` (products the dry run creates), `options`, `setOption(key, on)` |
 
 ## How a zone spaces your widget
@@ -113,7 +117,8 @@ page spaces it there:
 - `hostDashboard`, `commerceGlance` and `orgDashboard`: a tile of a dashboard
   grid.
 - `hostScreens`, `hostTemplates`, `hostLayouts`, `hostForms`,
-  `hostComponents` and `besignerToolbar`: a control in a row.
+  `hostEmailTemplates`, `hostCampaigns`, `productsCreate`, `hostComponents` and
+  `besignerToolbar`: a control in a row.
 - `hostAutomations`, `automationEditor` and `automationRun`: a control the
   workflows plugin places beside its Actions buttons, in an automation's
   editor, and on a failed run.

@@ -81,6 +81,10 @@ const SITE_ZONES: readonly string[] = [
   'hostForms',
   // And on its Components page (AGL-3051).
   CONSOLE_WIDGET_SLOTS.hostComponents,
+  // And on its email templates and Campaigns (AGL-3596), zones the email
+  // and marketing plugins declare on a site's pages: plain ids.
+  'hostEmailTemplates',
+  'hostCampaigns',
   CONSOLE_WIDGET_SLOTS.hostSeo,
   CONSOLE_WIDGET_SLOTS.seoFields,
   CONSOLE_WIDGET_SLOTS.hostTheme,
@@ -97,6 +101,7 @@ const SITE_ZONES: readonly string[] = [
   // catalog names none of them.
   'productEditor',
   'productsHub',
+  'productsCreate',
   'productImport',
   // The CRM's record pages, composer and imports (AGL-2917). Under a site
   // they are listed from the site's set; at the organization level, from the

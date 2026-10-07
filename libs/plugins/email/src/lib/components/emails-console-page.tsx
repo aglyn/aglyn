@@ -157,7 +157,11 @@ function sectionBody(
           basePath={basePath}
         />
       ) : (
-        <EmailScreensCard hostId={hostId} basePath={basePath} />
+        <EmailScreensCard
+          hostId={hostId}
+          orgId={typeof org?.['$id'] === 'string' ? org['$id'] : undefined}
+          basePath={basePath}
+        />
       )
     case 'audiences':
       /*

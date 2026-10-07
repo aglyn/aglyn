@@ -14,9 +14,25 @@ same design plus the **draft campaign** that would send it.
 Both are drafts. Nothing is sent, scheduled or queued, and the campaign is
 aimed at nobody until you pick an audience yourself.
 
+## Start it
+
+- **An email design:** on a site's **Emails** page, open **Templates** and press
+  **Create with AI**, beside **New template** (or beside **Create your first template**
+  while the list is empty).
+- **A campaign:** on the site's **Marketing** page, open **Campaigns** and press
+  **Create with AI**, beside **Create campaign**. Or tick **Also draft a campaign that
+  sends it** in the email's dialog.
+
+Write the brief, optionally pick the kind of email, and press **Plan the email** (or
+**Plan the campaign**). A plan comes first: review it in the dialog or in **AI jobs**,
+and confirm it to build. Nothing is written until you do.
+
+Both doors are on a site's own pages. The organization-wide Emails and Marketing pages
+have no **Create with AI**, because a generated email belongs to one site.
+
 ## What you get
 
-**An email design.** It appears under **Marketing → Email** beside the
+**An email design.** It appears on the site's **Emails** page, under **Templates**, beside the
 templates you made by hand, and opens in the besigner exactly as those do.
 Every block is an email block — sections, text, buttons, images, dividers,
 spacers and product cards — so it renders the same way in every mail client.
@@ -27,7 +43,7 @@ alternatives. Change which one leads at any time, or write your own.
 
 **A campaign, when you asked for one.** A draft campaign holding that one
 email, with the subject and preheader already filled in. Open it from
-**Marketing → Campaigns**.
+**Marketing → Campaigns**, or from the finished job.
 
 ## Write the brief
 
@@ -91,10 +107,11 @@ filled. Add any other token yourself in the besigner.
 
 ## Where it runs
 
-Email generation needs AI generation switched on for your workspace, the
-**Email** plugin switched on for the site, and permission to generate.
-Drafting a **campaign** also needs the **Marketing** plugin on and a plan
-that sends campaign email — see [Billing &
+Email generation needs AI generation switched on for your workspace and for the site,
+the **Email** plugin switched on for the site, and permission to generate. Without
+them, **Create with AI** does not appear.
+Drafting a **campaign** also needs the **Marketing** plugin on for the site and a plan
+that sends campaign email — the dialog says so if either is missing — see [Billing &
 Plans](/workspace-and-billing/billing-and-plans/overview). Without that, you
 can still generate email designs.
 

@@ -39,6 +39,7 @@ import {
 } from './components/marketing-console-sections'
 import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { HOST_CAMPAIGNS_ZONE } from './components/campaigns-zones'
 import { StaffOrgEmailCard } from './components/staff-org-email-card.component'
 import { registerMarketingRecordLists } from './model/overlay-record-list'
 import { registerMarketingRecordRoutes } from './model/marketing-record-routes'
@@ -116,6 +117,18 @@ export function registerMarketingConsole(): void {
     // Named rather than left to the loader's marker, because this function is
     // also called directly — by a spec, and by an app that loads the plugin
     // without the loader — and a zone with no owner is refused.
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: HOST_CAMPAIGNS_ZONE,
+      label: 'A site’s Campaigns',
+      surface: 'console',
+      // One item in the list's row of actions, beside Create campaign.
+      layout: 'bare',
+      description:
+        'On a site’s Campaigns, beside Create campaign and in the empty list: another way to start a campaign. A widget here is handed the site and its org and writes nothing through the page.',
+    },
     { pluginId: BUNDLE_ID },
   )
   registerPluginZone(
