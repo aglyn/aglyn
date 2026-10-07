@@ -51,7 +51,9 @@ kotlin {
         implementation(libs.grpc.okhttp)
         implementation(libs.grpc.stub)
         // Its marshaller takes the full protobuf runtime the protos bring; the lite runtime would duplicate it.
-        implementation(libs.grpc.protobuf.lite) { exclude(group = "com.google.protobuf", module = "protobuf-javalite") }
+        implementation(libs.grpc.protobuf.lite.get().let { "${it.module}:${it.version}" }) {
+          exclude(group = "com.google.protobuf", module = "protobuf-javalite")
+        }
         implementation(libs.firestore.protos)
         implementation(libs.protobuf.java.util)
       }

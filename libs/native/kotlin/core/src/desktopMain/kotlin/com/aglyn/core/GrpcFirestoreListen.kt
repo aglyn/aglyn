@@ -49,7 +49,7 @@ class GrpcFirestoreListen(
   private val database = "projects/$projectId/databases/(default)"
   private val documents = "$database/documents"
 
-  private val channel: ManagedChannel = run {
+  private val grpcChannel: ManagedChannel = run {
     val (host, port) = emulatorHost?.let { it.substringBeforeLast(':') to it.substringAfterLast(':').toInt() }
       ?: ("firestore.googleapis.com" to 443)
     OkHttpChannelBuilder.forAddress(host, port)
@@ -79,7 +79,7 @@ class GrpcFirestoreListen(
   }
 
   fun close() {
-    channel.shutdownNow()
+    grpcChannel.shutdownNow()
   }
 
   private fun <T> listen(target: Target.Builder, idToken: String, result: (Map<String, FirestoreDoc>) -> T): Flow<T> = callbackFlow {
@@ -90,7 +90,7 @@ class GrpcFirestoreListen(
       put(RESOURCE_PREFIX, database)
     }
     val requests = ClientCalls.asyncBidiStreamingCall(
-      ClientInterceptors.intercept(channel, MetadataUtils.newAttachHeadersInterceptor(headers)).newCall(LISTEN, CallOptions.DEFAULT),
+      ClientInterceptors.intercept(grpcChannel, MetadataUtils.newAttachHeadersInterceptor(headers)).newCall(LISTEN, CallOptions.DEFAULT),
       object : StreamObserver<ListenResponse> {
         override fun onNext(response: ListenResponse) {
           when (response.responseTypeCase) {
