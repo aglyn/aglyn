@@ -61,6 +61,8 @@
       "@aglyn/mobile-plugin-host": ["./libs/mobile/plugin-host/src/index.ts"],
       "@aglyn/mobile-ui": ["./libs/mobile/ui/src/index.ts"],
       "@aglyn/mobile-webview": ["./libs/mobile/webview/src/index.ts"],
+      "@aglyn/plugins-sales-channels": ["./libs/plugins/sales-channels/src/index.ts"],
+      "@aglyn/plugins-sales-channels/*": ["./libs/plugins/sales-channels/src/lib/*"],
       "@aglyn/plugins-email": ["./libs/plugins/email/src/index.ts"],
       "@aglyn/plugins-email/*": ["./libs/plugins/email/src/lib/*"],
       "@aglyn/plugins-ai": ["./libs/plugins/ai/src/index.ts"],

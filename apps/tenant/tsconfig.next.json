@@ -68,6 +68,12 @@
       "@aglyn/plugins-accounting/*": [
         "../../libs/plugins/accounting/src/lib/*"
       ],
+      "@aglyn/plugins-sales-channels": [
+        "../../libs/plugins/sales-channels/src/index.ts"
+      ],
+      "@aglyn/plugins-sales-channels/*": [
+        "../../libs/plugins/sales-channels/src/lib/*"
+      ],
       "@aglyn/plugins-email": [
         "../../libs/plugins/email/src/index.ts"
       ],

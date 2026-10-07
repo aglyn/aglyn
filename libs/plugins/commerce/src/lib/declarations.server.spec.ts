@@ -20,6 +20,11 @@ import {
   listPluginEventHandlers,
   resetPluginEventHandlersForTests,
 } from '@aglyn/aglyn/plugin-manager/plugin-events'
+import {
+  PLUGIN_PRODUCT_CATALOG,
+  pluginProductCatalog,
+} from '@aglyn/aglyn/plugin-manager/plugin-product-catalog'
+import { resolvePluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerCommerceServerDeclarations } from './declarations.server'
@@ -43,6 +48,12 @@ describe('registerCommerceServerDeclarations', () => {
     registerCommerceServerDeclarations()
     expect(listPluginEventHandlers('host.domain.attached')).toEqual([BUNDLE_ID])
     expect(listPluginEventHandlers('host.domain.released')).toEqual([BUNDLE_ID])
+  })
+
+  it('publishes the store catalog shopping channels read as this plugin’s (AGL-3637)', () => {
+    registerCommerceServerDeclarations()
+    expect(pluginProductCatalog()).toBeDefined()
+    expect(resolvePluginServices(PLUGIN_PRODUCT_CATALOG)[0]?.pluginId).toBe(BUNDLE_ID)
   })
 
   it('registers again without refusing itself', () => {

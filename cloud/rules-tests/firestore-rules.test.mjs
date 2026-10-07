@@ -1619,6 +1619,11 @@ describe('hosts', () => {
       // short PIN's hash to crack offline, a write plants a PIN or lifts a
       // lockout. Named here for the `registers` reason above.
       'posStaffPins',
+      // A site's shopping-channel feeds and connections (AGL-3637). A feed
+      // document holds the token that is the catalog feed's only lock, and a
+      // connection a sealed channel OAuth token; only the sales-channels
+      // routes read or write either.
+      'salesChannels',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -13653,5 +13658,50 @@ describe('ShipStation credentials are server-only (AGL-3613)', () => {
       'a stranger minting a connection for another site',
       setDoc(doc(authed('uid-stranger'), 'commerceShipStationConnections', 'other-host'), { username: 'x' }),
     )
+  })
+})
+
+/**
+ * A site's shopping-channel state (AGL-3637).
+ *
+ * A feed document holds the token that is the only lock on the store's
+ * catalog feed, and a connection holds a sealed OAuth token for a channel's
+ * API. The sales-channels routes are the only reader and writer, so no
+ * client — no member of any role, and not staff — reads or writes one.
+ */
+describe('sales channel feeds and connections are server-only (AGL-3637)', () => {
+  const feedDoc = (db) => doc(db, 'hosts', HOST, 'salesChannels', 'feed-google')
+  const connectionDoc = (db) => doc(db, 'hosts', HOST, 'salesChannels', 'connection-meta')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(feedDoc(db), { channel: 'google', enabled: true, token: 't'.repeat(43) })
+      await setDoc(connectionDoc(db), { provider: 'meta', sealedToken: 'sealed' })
+    })
+  })
+
+  it('no member and no staff reads, lists or writes a feed token or a connection', async () => {
+    const readers = [
+      ['viewer', authed(VIEWER)],
+      ['author', authed(AUTHOR)],
+      ['editor', authed(EDITOR)],
+      ['admin', authed(OWNER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]
+    for (const [role, db] of readers) {
+      await mustDeny(`a ${role} reading a feed token`, getDoc(feedDoc(db)))
+      await mustDeny(`a ${role} reading a channel connection`, getDoc(connectionDoc(db)))
+      await mustDeny(
+        `a ${role} listing the channel state`,
+        getDocs(query(collection(db, 'hosts', HOST, 'salesChannels'), limit(10))),
+      )
+      await mustDeny(
+        `a ${role} planting a feed token`,
+        setDoc(doc(db, 'hosts', HOST, 'salesChannels', 'feed-meta'), { token: 'x', enabled: true }),
+      )
+      await mustDeny(`a ${role} rewriting a feed token`, updateDoc(feedDoc(db), { token: 'x' }))
+      await mustDeny(`a ${role} deleting a connection`, deleteDoc(connectionDoc(db)))
+    }
   })
 })

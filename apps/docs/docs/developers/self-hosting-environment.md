@@ -1197,6 +1197,29 @@ iframe the browser blocks — while its two manifest lookups would arrive at
 Aglyn's marketplace API carrying your listing and host ids and return 404s that
 silently strip every plugin's declared network capability.
 
+### Sales channels: pushing products to Google and Meta {#sales-channels}
+
+Every store's product feeds work with nothing set: Google, Meta, TikTok,
+Pinterest, Snapchat and Microsoft fetch them from the store's own domain. The
+variables below add the optional **API connection** on the Google and Meta
+channel cards, which sends products straight to the merchant's own Merchant
+Center account or Meta catalog when a member clicks **Sync now**. A provider is
+offered only when its two variables and the token key are all set; until then
+its Connect button and its routes do not exist. All six are read by the
+**console** only.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `GOOGLE_MERCHANT_CLIENT_ID` | Feature | Runtime | The client id of a Google Cloud OAuth client of type **Web application**, in a project with the **Merchant API** enabled. Add one authorized redirect URI: `{NEXT_PUBLIC_CONSOLE_URL}/api/sales-channels/connect/callback`. The `content` scope it asks for needs Google's consent-screen verification before anyone outside the project can grant it. Unset, the Google card shows the feed alone. |
+| `GOOGLE_MERCHANT_CLIENT_SECRET` | Feature | Runtime | That client's secret. Unset, the same as the id. |
+| `META_CATALOG_APP_ID` | Feature | Runtime | The app id of a Meta app with **Facebook Login** whose valid OAuth redirect URIs include `{NEXT_PUBLIC_CONSOLE_URL}/api/sales-channels/connect/callback`. It asks for `catalog_management` and `business_management`, which need App Review and business verification before anyone outside the app's roles can grant them. Unset, the Meta card shows the feed alone. |
+| `META_CATALOG_APP_SECRET` | Feature | Runtime | That app's secret. Also signs every Graph call (`appsecret_proof`). Unset, the same as the id. |
+| `META_GRAPH_API_VERSION` | Optional | Runtime | The Graph API version, `vNN.N`. Default `v26.0`; a value in any other shape is ignored. |
+| `SALES_CHANNELS_TOKEN_KEY` | Feature | Runtime | 32 random bytes, base64 (`openssl rand -base64 32`): seals every stored Google refresh token and Meta user token. A comma-separated list rotates — the first key seals, the rest only open. Unset or unusable, neither provider is offered. Losing it means every merchant reconnects. |
+
+The connect also signs its OAuth `state` with `TOKEN_SIGNING_SECRET` (see
+[Secrets](#secrets)); without it, Connect answers `503`.
+
 ---
 
 ## Who runs this install {#operator}

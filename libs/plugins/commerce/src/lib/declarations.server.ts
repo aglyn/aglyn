@@ -27,6 +27,10 @@ import {
   registerPluginShipmentRecords,
   type PluginShipmentRecords,
 } from '@aglyn/aglyn/plugin-manager/plugin-shipment-records'
+import {
+  registerPluginProductCatalog,
+  type PluginProductCatalog,
+} from '@aglyn/aglyn/plugin-manager/plugin-product-catalog'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_OPERATOR_ALERTS } from './constants/operator-alerts'
 import { registerCommerceEventTriggers } from './server/order-event-triggers'
@@ -70,6 +74,8 @@ export function registerCommerceServerDeclarations(): void {
       (await import('./server/payment-method-domains')).onHostDomainReleased(payload),
     { pluginId: BUNDLE_ID },
   )
+  // The store's catalog, as a shopping-channel feed reads it (AGL-3637).
+  registerPluginProductCatalog(lazyCatalog, { pluginId: BUNDLE_ID })
 }
 
 const loadShipmentRecords = async () =>
@@ -80,6 +86,12 @@ const lazyShipmentRecords: PluginShipmentRecords = {
   recordShipment: async (write) => (await loadShipmentRecords()).recordShipment(write),
   recordTracking: async (update) => (await loadShipmentRecords()).recordTracking(update),
   shipFromAddresses: async (hostId) => (await loadShipmentRecords()).shipFromAddresses(hostId),
+}
+
+/** The catalog, with the Admin SDK and the model arriving on the first read. */
+const lazyCatalog: PluginProductCatalog = {
+  store: async (hostId) => (await import('./server/product-catalog')).productCatalog.store(hostId),
+  page: async (request) => (await import('./server/product-catalog')).productCatalog.page(request),
 }
 
 type IndexName = 'productRecordIndex' | 'productCategoryRecordIndex'

@@ -1418,6 +1418,13 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
       hsCode: current.shipping?.hsCode ?? '',
       originCountry: current.shipping?.originCountry ?? '',
     },
+    channel: {
+      brand: current.channel?.brand ?? '',
+      gtin: current.channel?.gtin ?? '',
+      mpn: current.channel?.mpn ?? '',
+      condition: current.channel?.condition ?? '',
+      googleProductCategory: current.channel?.googleProductCategory ?? '',
+    },
   })
   const seoSubject = useContentStable({
     kind: 'product',

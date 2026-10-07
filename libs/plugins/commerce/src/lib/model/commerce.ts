@@ -17,6 +17,7 @@
 
 import { modifierGroupsProblem, type ProductModifierGroup } from './product-modifiers'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
+import { draftProductChannelFacts, type ProductChannelFacts } from './product-channel'
 
 /**
  * Commerce catalog v1 (AGL-276): products with options/variants,
@@ -245,6 +246,12 @@ export interface HostProduct {
   variants: ProductVariant[]
   /** Per-product overrides for PDP meta tags (AGL-299 consumes). */
   seo?: { title?: string; description?: string; imageUrl?: string }
+  /**
+   * What shopping channels ask of the product (AGL-3637): brand, GTIN, MPN,
+   * condition and Google category. Absent means nothing was entered; the
+   * channel feeds fall back to the store's defaults.
+   */
+  channel?: ProductChannelFacts
   /** Supplier for dropship routing (AGL-289). */
   supplierId?: string
   /** Out-of-stock behavior (AGL-281): deny (default) or allow backorder. */
@@ -630,6 +637,11 @@ export interface ProductCopyValues {
    * has; a side set to `null` is cleared.
    */
   shipping?: Partial<ProductShippingFacts>
+  /**
+   * Shopping-channel facts (AGL-3637), merged over what the product has; a
+   * field set to `''` is cleared.
+   */
+  channel?: { [Field in keyof ProductChannelFacts]?: string }
 }
 
 /**
@@ -640,16 +652,24 @@ export interface ProductCopyValues {
  * variant, only when they name each option once with a name of its own.
  */
 export function productCopyPatch(
-  product: Pick<HostProduct, 'options' | 'variants' | 'seo' | 'shipping'>,
+  product: Pick<HostProduct, 'options' | 'variants' | 'seo' | 'shipping'> &
+    Pick<Partial<HostProduct>, 'channel'>,
   values: ProductCopyValues,
-): Partial<Pick<HostProduct, 'description' | 'tags' | 'categoryIds' | 'seo' | 'options' | 'variants' | 'shipping'>> {
+): Partial<
+  Pick<HostProduct, 'description' | 'tags' | 'categoryIds' | 'seo' | 'options' | 'variants' | 'shipping' | 'channel'>
+> {
   const patch: Partial<
-    Pick<HostProduct, 'description' | 'tags' | 'categoryIds' | 'seo' | 'options' | 'variants' | 'shipping'>
+    Pick<HostProduct, 'description' | 'tags' | 'categoryIds' | 'seo' | 'options' | 'variants' | 'shipping' | 'channel'>
   > = {}
   if (values.shipping && typeof values.shipping === 'object') {
     // Stored whole, never `undefined`: the editor's save is a full `setDoc`,
     // which refuses an undefined field. Nothing known is an empty map.
     patch.shipping = draftProductShippingFacts({ ...product.shipping, ...values.shipping }) ?? {}
+  }
+  if (values.channel && typeof values.channel === 'object') {
+    // Stored whole, never `undefined`, for the same reason. Nothing entered
+    // is an empty map. Kept as typed: this runs on every keystroke.
+    patch.channel = draftProductChannelFacts({ ...product.channel, ...values.channel }) ?? {}
   }
   if (typeof values.description === 'string') patch.description = values.description
   if (Array.isArray(values.tags)) {

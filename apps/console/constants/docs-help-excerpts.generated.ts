@@ -177,6 +177,7 @@ export const DOCS_HELP_EXCERPTS = {
   responsiveStyling: 'Style per breakpoint from the artboard preview, use the box stylers, custom classes, and the CSS builder.',
   revenue: 'What Aglyn earned — contracted plan value and settled Stripe cash side by side, the gap between them broken into named causes, and every deduction between gross and net.',
   runAnAgencyWorkspace: 'Set up one Aglyn workspace to build and hand off many client sites — templates, collaborator seats, per-site access, domains, backups and billing.',
+  salesChannels: 'List your products on Google, YouTube, Facebook, Instagram, TikTok, Pinterest, Snapchat and Microsoft Shopping with a product feed for each.',
   salesTaxReturn: 'The quarterly Texas return — pick a period, read the Form 01-114 figures, check the rows that need attention, and export the working papers.',
   sandboxSecurity: 'How sandboxed marketplace plugins are isolated — separate origin, per-manifest CSP, pinned artifacts — and what that means when you write one.',
   saveATemplate: 'Turn a site into a reusable template and install marketplace templates.',

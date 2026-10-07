@@ -59,7 +59,6 @@ import { cartHandler } from './server/cart'
 import { catalogHandler } from './server/catalog'
 import { checkoutHandler } from './server/checkout'
 import { downloadHandler } from './server/download'
-import { feedHandler } from './server/feed'
 import { newsletterHandler } from './server/newsletter'
 import { notifyRestockHandler } from './server/notify-restock'
 import { productHandler } from './server/product'
@@ -304,7 +303,11 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('commerce/catalog', catalogHandler)
   registerPluginApiRoute('commerce/checkout', checkoutHandler, CARD_PAYMENT_DOOR)
   registerPluginApiRoute('commerce/download', downloadHandler)
-  registerPluginApiRoute('commerce/feed', feedHandler)
+  // The pre-channels Google feed address (AGL-299), now written by the
+  // catalog's feed publisher (AGL-3637); the module loads with a fetch.
+  registerPluginApiRoute('commerce/feed', {
+    web: async (request) => (await import('./server/legacy-feed')).legacyFeedRoute(request),
+  })
   registerPluginApiRoute('commerce/newsletter', newsletterHandler)
   registerPluginApiRoute('commerce/notify-restock', notifyRestockHandler)
   // GA-safe order projection for the storefront `purchase` (AGL-1641).

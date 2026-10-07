@@ -478,6 +478,7 @@
               "options",
               "variants",
               "seo",
+              "channel",
               "supplierId",
               "oversellPolicy",
               "taxExempt",
@@ -2760,6 +2761,47 @@
       "contributes": {
         "console": {
           "slots": ["commerceSettings", "orderDetail", "productEditor"]
+        }
+      }
+    },
+    {
+      "id": "sales-channels",
+      "package": "@aglyn/plugins-sales-channels",
+      "register": {
+        "console": "registerSalesChannelsConsole",
+        "tenantApi": "registerSalesChannelsApi",
+        "consoleApi": "registerSalesChannelsConsoleApi",
+        "serverDeclarations": "registerSalesChannelsServerDeclarations",
+        "subprocessors": "salesChannelsSubprocessors"
+      },
+      "apiPrefixes": [
+        "sales-channels"
+      ],
+      "hostCollections": [
+        {
+          "name": "salesChannels",
+          "mediaScan": "none",
+          "mediaScanReason": "A site's shopping-channel state (AGL-3637): one feed document per channel holding the token that locks its URL, the store's defaults for blank product fields, and a sealed OAuth token per API connection. No client reads or writes it, and nothing in it names a library asset."
+        }
+      ],
+      "catalog": {
+        "order": 22,
+        "$comment": "AGL-3637. Product feeds of the commerce catalog for Google (and YouTube), Meta, TikTok, Pinterest, Snapchat and Microsoft, read through core's core.product-catalog contract; it never imports commerce. Like Shipping: on for every workspace, off for a site only when that site says so, no release flag, and it runs only on a site where commerce is on (server/site-gate.ts). Sold with commerce: its entitlement is `features.commerce`. The pre-channels Google address (/api/commerce/feed) is still commerce's route and answers through core.catalog-feed, registered from serverDeclarations. The Google Merchant API and Meta Catalog API connections are hidden until their env vars are set (libs/plugins/sales-channels/README.md).",
+        "label": "Sales channels",
+        "alwaysOnForWorkspace": true,
+        "description": "Product feeds for Google, YouTube, Facebook, Instagram, TikTok, Pinterest, Snapchat and Microsoft Shopping.",
+        "siteOff": {
+          "stops": "Switching Sales channels off for this site stops every product feed it publishes, including the Google Merchant Center address set up before sales channels existed, so channels stop receiving updates.",
+          "keeps": "Each feed's address, its switch and the store's defaults are kept, so switching it back on resumes the same feeds."
+        },
+        "publishedSiteImpact": "routes"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "productEditor"
+          ]
         }
       }
     },

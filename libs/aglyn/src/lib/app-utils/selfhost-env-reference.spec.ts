@@ -127,6 +127,12 @@ const INDIRECT_READS: Record<string, string> = {
   SHIPPO_WEBHOOK_HMAC_SECRET: 'libs/plugins/shipping/src/lib/server/config.ts',
   EASYPOST_WEBHOOK_SECRET: 'libs/plugins/shipping/src/lib/server/config.ts',
   MOBILE_PUSH_ENABLED: 'libs/tenant/data/admin/src/lib/server/mobile-push-switch.ts',
+  GOOGLE_MERCHANT_CLIENT_ID: 'libs/plugins/sales-channels/src/lib/server/connect/config.ts',
+  GOOGLE_MERCHANT_CLIENT_SECRET: 'libs/plugins/sales-channels/src/lib/server/connect/config.ts',
+  META_CATALOG_APP_ID: 'libs/plugins/sales-channels/src/lib/server/connect/config.ts',
+  META_CATALOG_APP_SECRET: 'libs/plugins/sales-channels/src/lib/server/connect/config.ts',
+  META_GRAPH_API_VERSION: 'libs/plugins/sales-channels/src/lib/server/connect/config.ts',
+  SALES_CHANNELS_TOKEN_KEY: 'libs/plugins/sales-channels/src/lib/server/connect/config.ts',
 }
 
 /**

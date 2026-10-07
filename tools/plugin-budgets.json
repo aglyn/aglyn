@@ -94,5 +94,9 @@
   "tax-engines": {
     "baseline": 5387,
     "budget": 7168
+  },
+  "sales-channels": {
+    "baseline": 2705,
+    "budget": 4096
   }
 }

@@ -63,4 +63,10 @@ export const TENANT_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     register: {"tenantApi":"registerWorkflowsApi"},
     load: () => import('@aglyn/plugins-workflows/server'),
   },
+  {
+    id: 'sales-channels',
+    apiPrefixes: ["sales-channels"],
+    register: {"tenantApi":"registerSalesChannelsApi"},
+    load: () => import('@aglyn/plugins-sales-channels/server'),
+  },
 ]

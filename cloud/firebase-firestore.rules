@@ -3467,6 +3467,7 @@ service cloud.firestore {
         allow read: if subcollection != 'siteMemberCredentials' &&
           subcollection != 'orderWebhookSecrets' &&
           subcollection != 'posStaffPins' &&
+          subcollection != 'salesChannels' &&
           (isStaff() || (isHostMember(hostId) &&
             !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
               'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnelJourneys', 'funnelResults'])));
@@ -3584,9 +3585,14 @@ service cloud.firestore {
         //    to crack offline, and a write plants a PIN or lifts a lockout.
         //    /api/commerce/pos-staff-pin is the only reader and writer, so it
         //    joins the `!=` with `siteMemberCredentials`.
+        //  - `salesChannels`, all four (AGL-3637): a feed document holds the
+        //    token that is the only lock on the store's catalog feed, and a
+        //    connection holds a sealed channel OAuth token. The sales-channels
+        //    routes are the only reader and writer, so it joins the `!=`.
         allow create: if subcollection != 'siteMemberCredentials' &&
           subcollection != 'orderWebhookSecrets' &&
-          subcollection != 'posStaffPins' && (isStaff() ||
+          subcollection != 'posStaffPins' &&
+          subcollection != 'salesChannels' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
               'functions', 'workflows', 'services', 'redirects',
@@ -3602,7 +3608,7 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials', 'posStaffPins', 'recordPages', 'printers',
+              'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults']) &&
             // The org Inbox's collection-group read (AGL-3303) lists EVERY
@@ -3745,7 +3751,8 @@ service cloud.firestore {
         //    below re-grants both on `canPublishHostContent`.
         allow update: if subcollection != 'siteMemberCredentials' &&
           subcollection != 'orderWebhookSecrets' &&
-          subcollection != 'posStaffPins' && (isStaff() ||
+          subcollection != 'posStaffPins' &&
+          subcollection != 'salesChannels' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
@@ -3761,7 +3768,7 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials', 'posStaffPins', 'recordPages', 'printers',
+              'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
         // `collections` joins the delete exclusion (AGL-947): a collection
@@ -3802,7 +3809,8 @@ service cloud.firestore {
         // exactly the AGL-2334 `components` argument.
         allow delete: if subcollection != 'siteMemberCredentials' &&
           subcollection != 'orderWebhookSecrets' &&
-          subcollection != 'posStaffPins' && (isStaff() ||
+          subcollection != 'posStaffPins' &&
+          subcollection != 'salesChannels' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components',
               'collections', 'datasets', 'orders', 'registers', 'webhooks',
@@ -3817,7 +3825,7 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-              'posStaffPins', 'recordPages', 'printers', 'printJobs', 'returns',
+              'posStaffPins', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
               'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
       }

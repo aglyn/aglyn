@@ -10,7 +10,21 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — wallets and pay later on your own domain (newest)
+## October 2026 — sell on Google, Meta, TikTok, Pinterest, Snapchat and Microsoft (newest)
+
+- **[Sales channels](commerce-and-bookings/commerce/sales-channels.md)** — a product
+  feed for each of Google (Shopping, free listings and YouTube), Meta (Facebook and
+  Instagram), TikTok, Pinterest, Snapchat and Microsoft Shopping, in the format each
+  channel asks for, under **Products → Settings → Sales channels**. Every variant is
+  listed with its own photo, price in your store's currency, sale price, stock,
+  brand, barcode, part number, condition, Google category and shipping, with no limit
+  on catalog size. Each card has its channel's setup steps and a private address you
+  can replace, and **Check products** lists what each feed leaves out and why.
+- **[Brand, barcode and category](commerce-and-bookings/commerce/sales-channels.md#brand-barcode-and-category)** —
+  a new **Shopping channels** section in the product editor, with store-wide defaults
+  for what a product leaves blank.
+
+## October 2026 — wallets and pay later on your own domain
 
 - **[Payment methods](commerce-and-bookings/commerce/overview.md#payment-methods)** —
   Apple Pay, Google Pay and Link now show on your own domain, because Aglyn registers

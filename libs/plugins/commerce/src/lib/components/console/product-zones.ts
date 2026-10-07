@@ -67,6 +67,17 @@ export interface ConsoleProductDraft {
     hsCode: string
     originCountry: string
   }
+  /**
+   * What shopping channels ask of it (AGL-3637), as the editor holds it. A
+   * field nobody entered is `''`.
+   */
+  channel: {
+    brand: string
+    gtin: string
+    mpn: string
+    condition: '' | 'new' | 'refurbished' | 'used'
+    googleProductCategory: string
+  }
 }
 
 /**
@@ -91,6 +102,17 @@ export interface ConsoleProductCopyValues {
     heightCm: number | null
     hsCode: string
     originCountry: string
+  }>
+  /**
+   * Shopping-channel facts (AGL-3637), merged over the product's; a field
+   * set to `''` is cleared.
+   */
+  channel?: Partial<{
+    brand: string
+    gtin: string
+    mpn: string
+    condition: '' | 'new' | 'refurbished' | 'used'
+    googleProductCategory: string
   }>
 }
 

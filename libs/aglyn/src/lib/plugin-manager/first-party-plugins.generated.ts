@@ -200,6 +200,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "keeps": "The connection, product tax codes and exempt customers are kept, and orders already recorded stay recorded."
     }
   },
+  {
+    "id": "sales-channels",
+    "label": "Sales channels",
+    "alwaysOnForWorkspace": true,
+    "description": "Product feeds for Google, YouTube, Facebook, Instagram, TikTok, Pinterest, Snapchat and Microsoft Shopping.",
+    "siteOff": {
+      "stops": "Switching Sales channels off for this site stops every product feed it publishes, including the Google Merchant Center address set up before sales channels existed, so channels stop receiving updates.",
+      "keeps": "Each feed's address, its switch and the store's defaults are kept, so switching it back on resumes the same feeds."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -225,6 +235,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "accounting": "console-only",
   "shipping": "console-only",
   "tax-engines": "console-only",
+  "sales-channels": "routes",
 }
 
 /**
@@ -373,6 +384,7 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "options",
         "variants",
         "seo",
+        "channel",
         "supplierId",
         "oversellPolicy",
         "taxExempt",
@@ -960,6 +972,12 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "nameField": "name"
       }
     }
+  },
+  {
+    "pluginId": "sales-channels",
+    "name": "salesChannels",
+    "mediaScan": "none",
+    "mediaScanReason": "A site's shopping-channel state (AGL-3637): one feed document per channel holding the token that locks its URL, the store's defaults for blank product fields, and a sealed OAuth token per API connection. No client reads or writes it, and nothing in it names a library asset."
   },
   {
     "pluginId": "funnels",
