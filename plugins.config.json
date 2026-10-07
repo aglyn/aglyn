@@ -395,6 +395,17 @@
         "planEntitlements": "commercePlanEntitlements",
         "starterTemplates": "commerceStarterTemplates"
       },
+      "mobile": {
+        "$comment": "AGL-3621: the Aglyn app's store screens. Orders (list, detail, fulfill, refund, receipt print and share), products (list, edit, camera photos to the DAM, stock), barcode scan, and the sales and traffic dashboard; list and detail split side by side on tablets.",
+        "register": "registerCommerceMobile",
+        "contributes": {
+          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales"],
+          "tabs": ["commerce.orders-tab", "commerce.products-tab"],
+          "widgets": ["commerce.today", "commerce.sales-trend"],
+          "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
+          "deepLinks": ["commerce.orders-page", "commerce.products-page"]
+        }
+      },
       "requiredPersonEraser": true,
       "modules": {
         "site": "site"

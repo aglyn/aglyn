@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
+import type { ListFilterRequest } from '@aglyn/shared-util-tools/list-query/list-filter'
 import { doc, type DocumentData, getDoc } from 'firebase/firestore'
 import {
   OPEN_DISPUTE_CLAUSE,
@@ -23,6 +23,7 @@ import {
   ordersCustomerClause,
 } from '../../lib/constants/orders-list-query'
 import { formatOrderMoney } from '../../lib/model/buyer-notifications'
+import { orderDisputeBlocksRefund } from '../../lib/model/commerce-dispute'
 import {
   canTransitionOrder,
   formatOrderNumber,
@@ -235,7 +236,7 @@ export function orderActions(order: HostOrder): OrderActions {
       (canTransitionOrder(order.status, 'fulfilled') ||
         canTransitionOrder(order.status, 'partially_fulfilled')),
     markDelivered: canTransitionOrder(order.status, 'delivered'),
-    refund: refundable && canTransitionOrder(order.status, 'refunded'),
+    refund: refundable && canTransitionOrder(order.status, 'refunded') && !orderDisputeBlocksRefund(order),
     cancel: canTransitionOrder(order.status, 'cancelled'),
     resendReceipt: order.status !== 'pending' && Boolean(order.customerEmail || order.customerPhone),
   }
@@ -400,10 +401,20 @@ export function proposedRefundCents(detail: Pick<OrderDetail, 'order' | 'refunda
   return Math.min(detail.refundableCents, orderLineRefundCents(detail.order, lineItemIds))
 }
 
-/** Why a refund amount cannot be sent, or null. */
-export function checkRefundAmount(amountCents: number, refundableCents: number): string | null {
+/**
+ * Why a refund amount cannot be sent, or null. Named lines set a floor: the
+ * route refuses an amount below what those lines are worth.
+ */
+export function checkRefundAmount(
+  amountCents: number,
+  refundableCents: number,
+  namedLines?: { order: HostOrder; lineItemIds: readonly number[] },
+): string | null {
   if (!Number.isInteger(amountCents) || amountCents <= 0) return 'Enter an amount above zero'
   if (amountCents > refundableCents) return 'That is more than is left to refund'
+  if (namedLines?.lineItemIds.length && amountCents < orderLineRefundCents(namedLines.order, namedLines.lineItemIds)) {
+    return 'That is less than the items you picked are worth'
+  }
   return null
 }
 

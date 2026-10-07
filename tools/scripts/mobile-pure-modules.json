@@ -30,8 +30,16 @@
       "why": "Which buyer emails an order has sent, read by the app's order detail (AGL-3621)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
+      "why": "Whether an open dispute blocks a refund, the rule the app's order actions share with the refund route (AGL-3621)."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "why": "The order record shape and its pure helpers, read by the Commerce app order and sales screens (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-receipt.ts",
+      "why": "The receipt data an order makes, so the app's printed and shared receipt matches the register's (AGL-3621)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce.ts",
@@ -56,6 +64,14 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/tracking-url.ts",
       "why": "Carrier tracking-link templates over a tracking number, no I/O (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/printing/print-document.ts",
+      "why": "The receipt print layout as plain ops, which the app renders to a printable page (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/printing/render-text.ts",
+      "why": "The print layout as plain text, for the app's share sheet (AGL-3621)."
     },
     {
       "path": "libs/plugins/redirects/src/lib/model/redirects.ts",

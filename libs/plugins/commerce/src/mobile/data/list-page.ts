@@ -23,7 +23,7 @@ import {
   type ListQueryPlan,
   type ListQueryRequest,
   planListQuery,
-} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+} from '@aglyn/shared-util-tools/list-query/list-query-plan'
 import {
   collection,
   documentId,

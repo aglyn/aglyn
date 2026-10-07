@@ -12,6 +12,12 @@ import type { MobilePluginManifest } from '@aglyn/mobile-plugin-host'
 
 export const MOBILE_PLUGIN_MANIFEST: MobilePluginManifest = [
   {
+    id: 'commerce',
+    register: 'registerCommerceMobile',
+    contributes: {"screens":["commerce.order","commerce.orders","commerce.product","commerce.products","commerce.sales","commerce.scan"],"tabs":["commerce.orders-tab","commerce.products-tab"],"widgets":["commerce.sales-trend","commerce.today"],"quickActions":["commerce.new-product","commerce.orders-to-ship","commerce.scan"],"deepLinks":["commerce.orders-page","commerce.products-page"]},
+    load: () => import('@aglyn/plugins-commerce/mobile'),
+  },
+  {
     id: 'redirects',
     register: 'registerRedirectsMobile',
     contributes: {"screens":["redirects.list"],"widgets":["redirects.summary"],"quickActions":["redirects.open"],"deepLinks":["redirects.page"]},

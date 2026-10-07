@@ -19,7 +19,7 @@ import {
   commitWithSiteWideEntryAs,
   releaseSiteWideOutboxEntry,
 } from '@aglyn/aglyn/app-utils/site-wide-outbox'
-import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
+import type { ListFilterRequest } from '@aglyn/shared-util-tools/list-query/list-filter'
 import {
   deleteField,
   doc,
@@ -91,7 +91,7 @@ export interface ProductsListArgs {
   filter: ProductFilterId
   search?: string
   /** A scanned or typed code, matched whole against every variant's barcode or SKU. */
-  code?: { field: 'barcodes' | 'skus'; value: string }
+  code?: { field: ProductCodeField; value: string }
 }
 
 export function productsListRequest(args: ProductsListArgs) {
@@ -159,20 +159,31 @@ export function productsListQuery(context: CommerceMobileContext, args: Products
   }
 }
 
+export type ProductCodeField = 'barcodes' | 'skus'
+
 /**
- * The products a scanned code names: by barcode first, then by SKU — a shelf
- * label may carry either. Live products only, as the list.
+ * The products a scanned code names, and which key named them: by barcode
+ * first, then by SKU — a shelf label may carry either. Live products only,
+ * as the list. Null when the code is unreadable or names nothing.
  */
-export async function findProductsByCode(context: CommerceMobileContext, raw: string): Promise<ProductRow[]> {
+export async function matchProductCode(
+  context: CommerceMobileContext,
+  raw: string,
+): Promise<{ field: ProductCodeField; code: string; rows: ProductRow[] } | null> {
   const code = scannedProductCode(raw)
-  if (!code) return []
+  if (!code) return null
   for (const field of ['barcodes', 'skus'] as const) {
     const page = await productsListQuery(context, { filter: 'all', code: { field, value: code } }).queryFn({
       pageParam: null,
     })
-    if (page.rows.length) return page.rows
+    if (page.rows.length) return { field, code, rows: page.rows }
   }
-  return []
+  return null
+}
+
+/** The products a scanned code names; see `matchProductCode`. */
+export async function findProductsByCode(context: CommerceMobileContext, raw: string): Promise<ProductRow[]> {
+  return (await matchProductCode(context, raw))?.rows ?? []
 }
 
 /** One product, as the editor and the stock sheet read it. */
