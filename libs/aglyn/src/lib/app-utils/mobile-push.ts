@@ -16,8 +16,8 @@
  */
 
 /**
- * The mobile push channel's shapes (AGL-3620), for the server fan-out and the
- * mobile apps alike.
+ * The mobile push channel's shapes (AGL-3620, AGL-3651), for the server
+ * fan-out and the native apps alike.
  *
  * NO IMPORTS, not even types, on purpose: the native apps compile this file
  * with their own compiler, and a type import would drag the core's whole
@@ -30,14 +30,29 @@
 /** `users/{uid}/devices/{installId}`: one row per app install, written by its owner. */
 export const MOBILE_DEVICES_COLLECTION = 'devices'
 
-export type MobileDevicePlatform = 'ios' | 'android'
+export type MobileDevicePlatform = 'ios' | 'android' | 'macos'
 
 /** The two native apps (bundle `com.aglyn.app` and `com.aglyn.pos`). */
 export type MobileDeviceApp = 'aglyn' | 'aglyn-pos'
 
+/** Each app's bundle id: the APNs topic its pushes are addressed to. */
+export const MOBILE_APP_BUNDLES: Readonly<Record<MobileDeviceApp, string>> = {
+  aglyn: 'com.aglyn.app',
+  'aglyn-pos': 'com.aglyn.pos',
+}
+
+/** How a device is reached: Apple's APNs (iOS, macOS) or Google's FCM (Android). */
+export type MobilePushTransport = 'apns' | 'fcm'
+
+/** The APNs environment a device token was minted in; a token only works in its own. */
+export type ApnsEnvironment = 'sandbox' | 'production'
+
 export interface MobileDevice {
-  /** An Expo push token, `ExponentPushToken[…]`. */
+  /** An APNs device token (hex) or an FCM registration token, per `transport`. */
   token: string
+  transport: MobilePushTransport
+  /** APNs only: which gateway the token belongs to. */
+  apnsEnvironment?: ApnsEnvironment
   platform: MobileDevicePlatform
   app: MobileDeviceApp
   appVersion?: string
@@ -51,8 +66,32 @@ export const MOBILE_DEVICE_STALE_MS = 60 * 24 * 60 * 60 * 1000
 /** The most devices one person's push fan-out reads. */
 export const MOBILE_DEVICES_PER_USER = 20
 
+const HEX = /^[0-9A-Fa-f]+$/
+const FCM_TOKEN = /^[A-Za-z0-9_:-]+$/
+
+/** An APNs device token: hex, 64 to 200 characters (the Firestore rules hold the same). */
+export function isApnsDeviceToken(value: unknown): value is string {
+  return typeof value === 'string' && value.length >= 64 && value.length <= 200 && HEX.test(value)
+}
+
+/** An FCM registration token: `[A-Za-z0-9_:-]`, 100 to 4096 characters (the rules hold the same). */
+export function isFcmRegistrationToken(value: unknown): value is string {
+  return typeof value === 'string' && value.length >= 100 && value.length <= 4096 && FCM_TOKEN.test(value)
+}
+
+/** Whether `token` is a token of `transport`'s shape. */
+export function isMobilePushToken(transport: unknown, token: unknown): boolean {
+  if (transport === 'apns') return isApnsDeviceToken(token)
+  if (transport === 'fcm') return isFcmRegistrationToken(token)
+  return false
+}
+
 const EXPO_PUSH_TOKEN = /^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]{8,128}\]$/
 
+/**
+ * The React Native app's Expo token, which the registry no longer accepts
+ * and the fan-out prunes; read only by that app, and removed with it.
+ */
 export function isExpoPushToken(value: unknown): value is string {
   return typeof value === 'string' && EXPO_PUSH_TOKEN.test(value)
 }

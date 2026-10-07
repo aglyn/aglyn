@@ -6725,46 +6725,78 @@ describe('remembered export choices are their owner’s alone (AGL-3525)', () =>
 })
 
 /**
- * The mobile apps' push devices (AGL-3620): `users/{uid}/devices/{id}` holds
- * one install's Expo push token. The app writes it for its signed-in owner;
- * the server fan-out reads it on the Admin SDK. Nobody else reads a token, and
- * a row carries nothing but the registry's own fields.
+ * The native apps' push devices (AGL-3620, AGL-3651): `users/{uid}/devices/{id}`
+ * holds one install's APNs device token or FCM registration token. The app
+ * writes it for its signed-in owner; the server fan-out reads it on the Admin
+ * SDK. Nobody else reads a token, a row carries nothing but the registry's own
+ * fields, and each transport's token is held to its own shape.
  */
-describe('push devices are their owner’s alone, in the registry’s shape (AGL-3620)', () => {
-  const DEVICE = () => ({
-    token: 'ExponentPushToken[abcdefgh1234]',
+describe('push devices are their owner’s alone, in the registry’s shape (AGL-3651)', () => {
+  const APNS_TOKEN = 'a1b2c3d4'.repeat(8)
+  const FCM_TOKEN = `dQw4w9WgXcQ:APA91b${'Fz_-0aZ'.repeat(20)}`
+  const APNS = () => ({
+    token: APNS_TOKEN,
+    transport: 'apns',
+    apnsEnvironment: 'production',
     platform: 'ios',
     app: 'aglyn',
     appVersion: '1.0.0',
     lastSeen: serverTimestamp(),
     createdAt: serverTimestamp(),
   })
+  const FCM = () => ({
+    token: FCM_TOKEN,
+    transport: 'fcm',
+    platform: 'android',
+    app: 'aglyn-pos',
+    lastSeen: serverTimestamp(),
+  })
   const device = (db, uid = OWNER) => doc(db, 'users', uid, 'devices', 'install-1')
+  const put = (data) => setDoc(device(authed(OWNER)), data)
+  const without = (data, key) => Object.fromEntries(Object.entries(data).filter(([k]) => k !== key))
 
-  it('lets the owner register, refresh, read and remove a device', async () => {
-    await mustAllow('the owner registering a device', setDoc(device(authed(OWNER)), DEVICE()))
-    await mustAllow(
-      'the owner refreshing it',
-      setDoc(device(authed(OWNER)), { ...DEVICE(), appVersion: '1.0.1' }),
-    )
+  it('lets the owner register, refresh, read and remove an APNs or FCM device', async () => {
+    await mustAllow('the owner registering an iPhone', put(APNS()))
+    await mustAllow('the owner refreshing it', put({ ...APNS(), appVersion: '1.0.1' }))
+    await mustAllow('a Mac on the sandbox environment', put({ ...APNS(), platform: 'macos', apnsEnvironment: 'sandbox' }))
+    await mustAllow('the longest APNs token', put({ ...APNS(), token: 'f'.repeat(200) }))
+    await mustAllow('an Android device on FCM', put(FCM()))
+    await mustAllow('the longest FCM token', put({ ...FCM(), token: 'a'.repeat(4096) }))
     await mustAllow('the owner reading it', getDoc(device(authed(OWNER))))
     await mustAllow('the owner removing it on sign-out', deleteDoc(device(authed(OWNER))))
   })
 
-  it('refuses anything but an Expo token, a known platform and app, and the server clock', async () => {
-    await mustDeny('a token that is not an Expo token', setDoc(device(authed(OWNER)), { ...DEVICE(), token: 'abc' }))
-    await mustDeny('an unknown platform', setDoc(device(authed(OWNER)), { ...DEVICE(), platform: 'web' }))
-    await mustDeny('an unknown app', setDoc(device(authed(OWNER)), { ...DEVICE(), app: 'other' }))
-    await mustDeny('a field outside the registry', setDoc(device(authed(OWNER)), { ...DEVICE(), admin: true }))
-    await mustDeny('a client-chosen lastSeen', setDoc(device(authed(OWNER)), { ...DEVICE(), lastSeen: 1 }))
+  it('holds each transport to its own token, environment and platform', async () => {
+    await mustDeny('an Expo token', put({ ...APNS(), token: 'ExponentPushToken[abcdefgh1234]' }))
+    await mustDeny('a row with no transport', put(without(APNS(), 'transport')))
+    await mustDeny('an unknown transport', put({ ...APNS(), transport: 'expo' }))
+    await mustDeny('an APNs token that is not hex', put({ ...APNS(), token: 'z'.repeat(64) }))
+    await mustDeny('an APNs token too short', put({ ...APNS(), token: 'a'.repeat(63) }))
+    await mustDeny('an APNs token too long', put({ ...APNS(), token: 'a'.repeat(201) }))
+    await mustDeny('an APNs row without its environment', put(without(APNS(), 'apnsEnvironment')))
+    await mustDeny('an unknown APNs environment', put({ ...APNS(), apnsEnvironment: 'staging' }))
+    await mustDeny('an APNs row from Android', put({ ...APNS(), platform: 'android' }))
+    await mustDeny('an FCM token with a stray character', put({ ...FCM(), token: `${FCM_TOKEN}!` }))
+    await mustDeny('an FCM token too short', put({ ...FCM(), token: 'a'.repeat(99) }))
+    await mustDeny('an FCM token too long', put({ ...FCM(), token: 'a'.repeat(4097) }))
+    await mustDeny('an FCM row carrying an APNs environment', put({ ...FCM(), apnsEnvironment: 'production' }))
+    await mustDeny('an FCM row from an iPhone', put({ ...FCM(), platform: 'ios' }))
+  })
+
+  it('refuses an unknown platform or app, a foreign field and a client clock', async () => {
+    await mustDeny('an unknown platform', put({ ...APNS(), platform: 'web' }))
+    await mustDeny('an unknown app', put({ ...APNS(), app: 'other' }))
+    await mustDeny('a field outside the registry', put({ ...APNS(), admin: true }))
+    await mustDeny('an over-long app version', put({ ...APNS(), appVersion: 'v'.repeat(33) }))
+    await mustDeny('a client-chosen lastSeen', put({ ...APNS(), lastSeen: 1 }))
   })
 
   it('lets nobody else read, write or remove one', async () => {
     await env.withSecurityRulesDisabled(async (context) => {
-      await setDoc(device(context.firestore()), { ...DEVICE() })
+      await setDoc(device(context.firestore()), { ...APNS() })
     })
     await mustDeny('another member reading a token', getDoc(device(authed(OUTSIDER))))
-    await mustDeny('another member overwriting it', setDoc(device(authed(OUTSIDER), OWNER), DEVICE()))
+    await mustDeny('another member overwriting it', setDoc(device(authed(OUTSIDER), OWNER), APNS()))
     await mustDeny('another member removing it', deleteDoc(device(authed(OUTSIDER), OWNER)))
     await mustDeny('a visitor reading it', getDoc(device(anon())))
   })

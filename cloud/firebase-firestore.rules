@@ -4225,18 +4225,31 @@ service cloud.firestore {
         allow read, write: if isSignedIn() && request.auth.uid == userId;
       }
 
-      // The mobile apps' push devices (AGL-3620): one row per install,
-      // written by the app for its signed-in owner, read by the server's
-      // push fan-out. Owner only, and only the registry's own fields, so a
-      // row can never carry anything but an Expo token and where it lives.
+      // The native apps' push devices (AGL-3620, AGL-3651): one row per
+      // install, written by the app for its signed-in owner, read by the
+      // server's push fan-out. Owner only, and only the registry's fields:
+      // an APNs device token (hex, 64-200) from iOS or macOS with the APNs
+      // environment it was minted in, or an FCM registration token
+      // ([A-Za-z0-9_:-], 100-4096) from Android. RE2 caps a repeat at 1000,
+      // so lengths are checked with size(), not in the pattern.
       match /devices/{deviceId} {
         allow read, delete: if isSignedIn() && request.auth.uid == userId;
         allow create, update: if isSignedIn() && request.auth.uid == userId &&
-          request.resource.data.keys().hasOnly(
-            ['token', 'platform', 'app', 'appVersion', 'lastSeen', 'createdAt']) &&
+          request.resource.data.keys().hasOnly(['token', 'transport', 'apnsEnvironment',
+            'platform', 'app', 'appVersion', 'lastSeen', 'createdAt']) &&
           request.resource.data.token is string &&
-          request.resource.data.token.matches('^(ExponentPushToken|ExpoPushToken)\\[[A-Za-z0-9_-]{8,128}\\]$') &&
-          request.resource.data.platform in ['ios', 'android'] &&
+          ((request.resource.data.transport == 'apns' &&
+              request.resource.data.token.size() >= 64 &&
+              request.resource.data.token.size() <= 200 &&
+              request.resource.data.token.matches('^[0-9A-Fa-f]+$') &&
+              request.resource.data.get('apnsEnvironment', '') in ['sandbox', 'production'] &&
+              request.resource.data.platform in ['ios', 'macos']) ||
+            (request.resource.data.transport == 'fcm' &&
+              request.resource.data.token.size() >= 100 &&
+              request.resource.data.token.size() <= 4096 &&
+              request.resource.data.token.matches('^[A-Za-z0-9_:-]+$') &&
+              !('apnsEnvironment' in request.resource.data) &&
+              request.resource.data.platform == 'android')) &&
           request.resource.data.app in ['aglyn', 'aglyn-pos'] &&
           (!('appVersion' in request.resource.data) ||
             (request.resource.data.appVersion is string &&

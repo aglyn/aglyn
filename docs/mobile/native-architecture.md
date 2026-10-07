@@ -533,27 +533,49 @@ token by transport:
 - an FCM registration token: `[A-Za-z0-9_:-]`, 100 to 4096 characters.
 
 An APNs row also carries `apnsEnvironment` (`sandbox`/`production`) and
-`app`. Rules tests cover each transport.
+comes from `ios` or `macos`; an FCM row comes from `android` and carries no
+environment. Every row names its `app` (`aglyn`/`aglyn-pos`). RE2 caps a
+repeat at 1000, so the rules check token lengths with `size()`. Rules tests
+cover each transport. `mobile-push.ts` holds the same checks for the apps
+and the server (`isApnsDeviceToken`, `isFcmRegistrationToken`,
+`isMobilePushToken`), with `MobilePushTransport`, `ApnsEnvironment` and
+`MOBILE_APP_BUNDLES`.
 
-Server side, all of it server-only, in `libs/tenant/data/admin/src/lib/server/`
-next to `mobile-push-switch.ts`:
+Server side, all of it server-only, in `libs/tenant/data/admin/src/lib/server/`:
 
 - `mobile-push-switch.ts` holds the fan-out's hook point: `notifyUsers` hands
   every sender registered with `registerMobilePushSender` the recipients whose
-  preferences say push. The Expo sender (`exp.host`) is already deleted
-  (AGL-3651), so none is registered until the two below.
+  preferences say push, while `MOBILE_PUSH_ENABLED` is not `0`.
+- `native-push.ts` has `registerNativePushSenders()`, which the console's and
+  the tenant's `instrumentation.ts` call at boot. They call it through a
+  relative `utils` file, inside the nodejs branch. It registers one sender,
+  and that sender imports `push-delivery.ts` only when a notification has
+  push recipients.
+- `push-delivery.ts` reads each recipient's devices and prunes the rows the
+  registry no longer accepts: Expo rows, rows with no transport, malformed
+  tokens and unknown apps, and devices not seen for 60 days. It sends one
+  token once, groups the rest by transport, and imports each transport only
+  when a device needs it. It then prunes what the transport reports gone.
 - `push-apns.ts` sends over HTTP/2 (`node:http2`) to
-  `api.push.apple.com` / `api.sandbox.push.apple.com`, with an ES256 provider
-  JWT signed by `node:crypto` from `APNS_KEY_P8`, `APNS_KEY_ID` and
-  `APNS_TEAM_ID`. The topic is the row's bundle (`com.aglyn.app` /
-  `com.aglyn.pos`). It reuses the JWT for up to 50 minutes. A `410` or
-  `BadDeviceToken` prunes the row. With no key, it is skipped and logged once.
-- `push-fcm.ts` uses `firebase-admin` `getMessaging().sendEach`, with the same
-  project credentials the server already holds, so no new secret is needed.
-  `messaging/registration-token-not-registered` prunes the row.
+  `api.push.apple.com`, or to `api.sandbox.push.apple.com` for a sandbox row.
+  It authenticates with an ES256 provider JWT, signed by `node:crypto` from
+  `APNS_KEY_P8` (PEM, or base64 of the PEM or DER), `APNS_KEY_ID` and
+  `APNS_TEAM_ID`, and reuses the JWT for up to 50 minutes (a `403` mints a
+  new one). The topic is the row's bundle (`com.aglyn.app` /
+  `com.aglyn.pos`). The payload is `aps.alert {title, body}` with
+  `sound: default`, and the `MobilePushData` fields sit beside `aps`. A `410`
+  (`Unregistered`), `BadDeviceToken` or `DeviceTokenNotForTopic` prunes the
+  row. With no key, APNs devices are skipped and that is logged once.
+- `push-fcm.ts` uses `firebase-admin` `getMessaging().sendEach` in batches of
+  500. Each message carries `notification`, `data` (the `MobilePushData`)
+  and Android `priority: high`, and is sent with the same project
+  credentials the server already holds, so no new secret is needed.
+  `registration-token-not-registered`, `invalid-registration-token` or
+  `invalid-argument` prunes the row.
 - The kill switch (`mobile-push-switch.ts`) and the per-type preferences apply
   to both transports alike. Apple and Google are the push subprocessors
-  (AGL-3648).
+  (AGL-3648). The `APNS_*` variables are in the self-hosting environment
+  reference.
 
 On desktop, macOS registers for APNs like iOS, with the `macos` platform and
 the same bundle ids. Windows has no push in v1, because WNS needs a Store

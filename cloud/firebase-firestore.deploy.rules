@@ -4229,14 +4229,27 @@ allow read, write: if isSignedIn() && request.auth.uid == userId;
 
 
 
+
+
+
 match /devices/{deviceId} {
 allow read, delete: if isSignedIn() && request.auth.uid == userId;
 allow create, update: if isSignedIn() && request.auth.uid == userId &&
-request.resource.data.keys().hasOnly(
-['token', 'platform', 'app', 'appVersion', 'lastSeen', 'createdAt']) &&
+request.resource.data.keys().hasOnly(['token', 'transport', 'apnsEnvironment',
+'platform', 'app', 'appVersion', 'lastSeen', 'createdAt']) &&
 request.resource.data.token is string &&
-request.resource.data.token.matches('^(ExponentPushToken|ExpoPushToken)\\[[A-Za-z0-9_-]{8,128}\\]$') &&
-request.resource.data.platform in ['ios', 'android'] &&
+((request.resource.data.transport == 'apns' &&
+request.resource.data.token.size() >= 64 &&
+request.resource.data.token.size() <= 200 &&
+request.resource.data.token.matches('^[0-9A-Fa-f]+$') &&
+request.resource.data.get('apnsEnvironment', '') in ['sandbox', 'production'] &&
+request.resource.data.platform in ['ios', 'macos']) ||
+(request.resource.data.transport == 'fcm' &&
+request.resource.data.token.size() >= 100 &&
+request.resource.data.token.size() <= 4096 &&
+request.resource.data.token.matches('^[A-Za-z0-9_:-]+$') &&
+!('apnsEnvironment' in request.resource.data) &&
+request.resource.data.platform == 'android')) &&
 request.resource.data.app in ['aglyn', 'aglyn-pos'] &&
 (!('appVersion' in request.resource.data) ||
 (request.resource.data.appVersion is string &&

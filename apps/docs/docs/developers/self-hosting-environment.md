@@ -921,8 +921,11 @@ means building and shipping the app again. None of them is a secret.
 | `EXPO_PUBLIC_FIRESTORE_EMULATOR_HOST` | Development | Build, app | `host:port` of a local Firestore emulator. Never set in a store build. |
 | `EAS_PROJECT_ID` | Feature | Build, app | Your EAS project id. Without it the app registers no push token, so no device receives a push. |
 | `MOBILE_PUSH_ENABLED` | Optional | Runtime, console and tenant | The kill switch for every push sender. `0` stops every push; anything else, or unset, leaves push on. |
+| `APNS_KEY_P8` | Feature | Runtime, console and tenant | Your Apple Push Notification service key (the `.p8` file from your Apple Developer account): its PEM text, or that PEM base64-encoded. Without it, and the two below, iOS and macOS devices are not sent a push, and the server logs that once. A secret. |
+| `APNS_KEY_ID` | Feature | Runtime, console and tenant | The 10-character id of that key. |
+| `APNS_TEAM_ID` | Feature | Runtime, console and tenant | Your Apple Developer team id. |
 
-A person with no registered device is never sent a push. A push carries the notification's title and body, with the device push token, to Apple Push Notification service for an iPhone or iPad and to Firebase Cloud Messaging for an Android device. If you run your own build of the app, those are your vendors, and your own subprocessor list names them.
+A person with no registered device is never sent a push. A push carries the notification's title and body, with the device push token, to Apple Push Notification service for an iPhone, iPad or Mac and to Firebase Cloud Messaging for an Android device. The server sends to APNs directly with the key above, and to FCM with the Firebase project credentials it already holds, so FCM needs no variable of its own. If you run your own build of the app, those are your vendors, and your own subprocessor list names them.
 
 ---
 

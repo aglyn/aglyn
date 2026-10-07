@@ -17,7 +17,11 @@
 
 import {
   accountPushSwitch,
+  isApnsDeviceToken,
   isExpoPushToken,
+  isFcmRegistrationToken,
+  isMobilePushToken,
+  MOBILE_APP_BUNDLES,
   mobilePushData,
   notificationPushEnabled,
   readMobilePushData,
@@ -54,6 +58,26 @@ describe('the mobile push channel (AGL-3620)', () => {
   it('never narrows a staff notification by the workspace it mentions', () => {
     const settings = { orgs: { 'org-1': { staff: { push: false } } } }
     expect(notificationPushEnabled(settings, 'staff.subscriptionStarted', scope)).toBe(true)
+  })
+
+  it('holds each transport to its own token, as the device rules do', () => {
+    const apns = 'a1b2c3d4'.repeat(8)
+    expect(isApnsDeviceToken(apns)).toBe(true)
+    expect(isApnsDeviceToken('F'.repeat(200))).toBe(true)
+    expect(isApnsDeviceToken('a'.repeat(63))).toBe(false)
+    expect(isApnsDeviceToken('a'.repeat(201))).toBe(false)
+    expect(isApnsDeviceToken('z'.repeat(64))).toBe(false)
+    const fcm = `dQw4w9WgXcQ:APA91b${'Fz_-0aZ'.repeat(20)}`
+    expect(isFcmRegistrationToken(fcm)).toBe(true)
+    expect(isFcmRegistrationToken('a'.repeat(4096))).toBe(true)
+    expect(isFcmRegistrationToken('a'.repeat(99))).toBe(false)
+    expect(isFcmRegistrationToken('a'.repeat(4097))).toBe(false)
+    expect(isFcmRegistrationToken(`${fcm}!`)).toBe(false)
+    expect(isMobilePushToken('apns', apns)).toBe(true)
+    expect(isMobilePushToken('fcm', apns)).toBe(false)
+    expect(isMobilePushToken('expo', 'ExponentPushToken[abcdefgh1234]')).toBe(false)
+    expect(isMobilePushToken(undefined, apns)).toBe(false)
+    expect(MOBILE_APP_BUNDLES).toEqual({ aglyn: 'com.aglyn.app', 'aglyn-pos': 'com.aglyn.pos' })
   })
 
   it('recognizes only Expo push tokens', () => {
