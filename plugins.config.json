@@ -2659,6 +2659,7 @@
           "slots": [
             "commerceSettings",
             "orderDetail",
+            "returnDetail",
             "ordersBulk",
             "productEditor",
             "orgBillingUsage"

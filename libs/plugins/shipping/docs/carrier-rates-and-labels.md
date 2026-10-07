@@ -64,8 +64,12 @@ the carrier and tracking number, and the customer gets the shipped email.
 carrier refunds it, and when it does, the label's charge is given back.
 
 **Return label** buys a label the other way round, from the customer to
-your ship-from address, for units already shipped. Send it to the customer;
-carriers charge most return labels only when they are scanned.
+your ship-from address, for units already shipped. Send it to the customer.
+
+A return the customer asked for has its own **Buy return label** in the
+return's dialog while it is requested or approved: it buys the label for the
+units coming back and attaches it to the return, so the customer can print
+it from the page where they asked for the return.
 
 ## Batch labels
 

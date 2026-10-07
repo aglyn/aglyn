@@ -18,6 +18,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { OrderLabelsWidget, type OrderLabelsWidgetProps } from './order-labels-widget.component'
 import { OrdersBatchWidget } from './orders-batch-widget.component'
+import { ReturnLabelWidget, type ReturnLabelWidgetProps } from './return-label-widget.component'
 import { ProductShippingFields } from './product-shipping-fields.component'
 
 /**
@@ -58,6 +59,16 @@ const ORDER: OrderLabelsWidgetProps['order'] = {
   lines: [{ lineItemId: 0, name: 'Candle', quantity: 2, fulfilledQuantity: 0, remainingQuantity: 2, requiresShipping: true }],
 }
 
+const RETURN: ReturnLabelWidgetProps['return'] = {
+  id: 'ret-1',
+  status: 'approved',
+  orderId: 'order-1',
+  orderNumber: '#1001',
+  lines: [{ lineItemId: 0, name: 'Candle', quantity: 1 }],
+  fromAddress: ORDER.shippingAddress,
+  returnLabel: null,
+}
+
 beforeEach(() => {
   available = false
   request.mockReset()
@@ -71,6 +82,7 @@ describe('hidden until the deployment names a provider', () => {
         <ProductShippingFields hostId="host-1" product={product} proposeValues={jest.fn()} />
         <OrderLabelsWidget hostId="host-1" order={ORDER} />
         <OrdersBatchWidget hostId="host-1" selectedOrderIds={['order-1']} />
+        <ReturnLabelWidget hostId="host-1" return={RETURN} attachReturnLabel={jest.fn()} />
       </>,
     )
     expect(container.innerHTML).toBe('')
@@ -162,6 +174,48 @@ describe('once a provider is configured', () => {
     })
     render(<OrderLabelsWidget hostId="host-1" order={ORDER} />)
     expect(await screen.findByText(/The carrier cannot deliver to this order’s address\. Unknown street/)).toBeTruthy()
+  })
+
+  it('buys a return label from the return dialog and attaches it to the return', async () => {
+    const attachReturnLabel = jest.fn().mockResolvedValue(undefined)
+    request.mockImplementation(async (route: string) => {
+      if (route === 'shipping/settings') return { settings: { packages: [{ id: 'box', name: 'Box', lengthCm: 20, widthCm: 15, heightCm: 10, emptyWeightGrams: 100 }], defaultPackageId: 'box' } }
+      if (route === 'shipping/rates') {
+        return { shipmentId: 'shp_1', weightGrams: 400, messages: [], rates: [{ rateId: 'rate_1', serviceKey: 'usps_ground', carrier: 'USPS', label: 'USPS Ground Advantage', amountCents: 625, currency: 'usd', estimatedDays: 4, badges: ['cheapest'], merchantCarrierAccount: false }] }
+      }
+      if (route === 'shipping/labels/buy') {
+        return { label: { labelId: 'lbl_r', kind: 'return', status: 'purchased', carrier: 'USPS', trackingNumber: 'TRK1', trackingUrl: 'https://t.example/TRK1', labelUrl: 'https://l.example/1.pdf' } }
+      }
+      return {}
+    })
+    const opened = jest.spyOn(window, 'open').mockImplementation(() => null)
+    render(<ReturnLabelWidget hostId="host-1" return={RETURN} attachReturnLabel={attachReturnLabel} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Buy return label' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Get rates' }))
+    await screen.findByText('USPS Ground Advantage')
+    fireEvent.click(screen.getByRole('button', { name: 'Buy label' }))
+    await waitFor(() =>
+      expect(attachReturnLabel).toHaveBeenCalledWith({
+        carrier: 'USPS',
+        trackingNumber: 'TRK1',
+        labelUrl: 'https://l.example/1.pdf',
+        trackingUrl: 'https://t.example/TRK1',
+      }),
+    )
+    const buy = request.mock.calls.find(([route]) => route === 'shipping/labels/buy')
+    expect(buy?.[1].body).toMatchObject({ hostId: 'host-1', recordId: 'order-1', shipmentId: 'shp_1', rateId: 'rate_1' })
+    const rates = request.mock.calls.find(([route]) => route === 'shipping/rates')
+    expect(rates?.[1].body).toMatchObject({ recordId: 'order-1', kind: 'return' })
+    opened.mockRestore()
+  })
+
+  it('offers no return label once one is attached, or once the return is past approval', () => {
+    const { container, rerender } = render(
+      <ReturnLabelWidget hostId="host-1" return={{ ...RETURN, returnLabel: { carrier: 'USPS', trackingNumber: 'T' } }} attachReturnLabel={jest.fn()} />,
+    )
+    expect(container.innerHTML).toBe('')
+    rerender(<ReturnLabelWidget hostId="host-1" return={{ ...RETURN, status: 'received' }} attachReturnLabel={jest.fn()} />)
+    expect(container.innerHTML).toBe('')
   })
 
   it('offers batch labels only while orders are selected', () => {

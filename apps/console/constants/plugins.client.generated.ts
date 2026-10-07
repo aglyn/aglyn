@@ -155,7 +155,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'shipping',
     apiPrefixes: ["shipping"],
     register: {"console":"registerShippingConsole"},
-    contributes: {"console":{"slots":["commerceSettings","orderDetail","ordersBulk","productEditor","orgBillingUsage"]}},
+    contributes: {"console":{"slots":["commerceSettings","orderDetail","returnDetail","ordersBulk","productEditor","orgBillingUsage"]}},
     load: () => import('@aglyn/plugins-shipping'),
   },
   {

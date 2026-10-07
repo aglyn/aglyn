@@ -22,6 +22,7 @@ import { SHIPPING_ENTITLEMENT, SHIPPING_PLUGIN_ID } from './constants/bundle-com
 const ShippingSettingsCard = lazy(() => import('./components/shipping-settings-card.component'))
 const CarrierAccountsCard = lazy(() => import('./components/carrier-accounts-card.component'))
 const OrderLabelsWidget = lazy(() => import('./components/order-labels-widget.component'))
+const ReturnLabelWidget = lazy(() => import('./components/return-label-widget.component'))
 const OrdersBatchWidget = lazy(() => import('./components/orders-batch-widget.component'))
 const ProductShippingFields = lazy(() => import('./components/product-shipping-fields.component'))
 const LabelSpendCard = lazy(() => import('./components/label-spend-card.component'))
@@ -29,8 +30,8 @@ const LabelSpendCard = lazy(() => import('./components/label-spend-card.componen
 /**
  * Shipping's console half (AGL-3612): no page of its own. It fills the
  * zones the commerce plugin hosts — the store's settings, the order dialog,
- * the orders list's bulk actions, the product editor — and the billing
- * page's usage zone. Every widget asks the server whether shipping exists
+ * the return dialog, the orders list's bulk actions, the product editor —
+ * and the billing page's usage zone. Every widget asks the server whether shipping exists
  * for the site before drawing anything, so a deployment with no carrier
  * provider shows no shipping surface at all. Gated on the plans that sell.
  */
@@ -57,6 +58,12 @@ export function registerShippingConsole(): void {
         widgetId: 'shipping-order-labels',
         title: 'Shipping labels',
         Component: OrderLabelsWidget,
+      },
+      {
+        slot: 'returnDetail',
+        widgetId: 'shipping-return-label',
+        title: 'Return label',
+        Component: ReturnLabelWidget,
       },
       {
         slot: 'ordersBulk',
