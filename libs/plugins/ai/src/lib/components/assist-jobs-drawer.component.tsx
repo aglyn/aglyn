@@ -114,6 +114,10 @@ const STATE_COLOR: Record<AiJobActivityState, 'primary' | 'warning'> = {
 /** How long a job AI jobs was opened on stays highlighted. */
 const HIGHLIGHT_MS = 2_500
 
+/** What a job cost the person: what it spent, less what we refunded. */
+function netCredits(job: Pick<AiJobSummary, 'creditsSpent' | 'refundedCredits'>): number {
+  return Math.max(0, (job.creditsSpent ?? 0) - (job.refundedCredits ?? 0))
+}
 
 /**
  * The navigation entry a page job proposes for the page it built (AGL-2907),
@@ -481,7 +485,8 @@ export function AssistJobsDrawer({
                   <Typography variant="caption" color="text.secondary" sx={{ flexGrow: 1 }}>
                     {stepsDone}/{job.steps.length} steps
                     {current ? ` — ${current.name}` : ''}
-                    {job.creditsSpent > 0 ? ` · ${job.creditsSpent} credits` : ''}
+                    {/* Net of what a failure on our side gave back (AGL-3594). */}
+                    {netCredits(job) > 0 ? ` · ${netCredits(job)} credits` : ''}
                   </Typography>
                   {!terminal && (
                     <Button size="small" onClick={() => void cancel(job.id)}>
@@ -560,6 +565,7 @@ export function AssistJobsDrawer({
                   onResume={(target) => void resume(target)}
                   busy={resuming === job.id}
                   staff={isStaff}
+                  user={user}
                 />
               </Box>
             )
