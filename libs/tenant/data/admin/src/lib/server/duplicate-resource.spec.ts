@@ -581,13 +581,27 @@ describe('a component', () => {
     })
   })
 
-  it('needs the reusable components entitlement', async () => {
-    const result = await run('component', { org: FREE })
-    expect(result).toEqual({
+  /*
+   * A copy is a create, met against the same `componentsPerHost` allowance
+   * the create route counts (AGL-3615) — and like the create, not behind
+   * `reusableComponents`, so a Free site is refused for CAPACITY.
+   */
+  it('meets the plan’s component allowance, not the component feature', async () => {
+    expect(recipeFor('component')).toMatchObject({ quotaKey: 'componentsPerHost' })
+    expect(recipeFor('component')?.entitlement).toBeUndefined()
+    // Free holds its one component already: the copy would be its second.
+    expect(await run('component', { org: FREE })).toEqual({
       ok: false,
       status: 403,
-      error: 'This feature is not included in your plan — see Billing',
+      error: 'Your plan includes 1 component — upgrade in Billing for more',
     })
+    // A paid plan's allowance is unlimited: the copy is admitted beside any
+    // number already held.
+    for (let index = 0; index < 30; index += 1) {
+      store.set(`hosts/${HOST}/components/held-${index}`, { displayName: `H${index}` })
+    }
+    const STARTER = { plan: 'starter', subscription: { status: 'active' } }
+    expect((await run('component', { org: STARTER })).ok).toBe(true)
   })
 })
 

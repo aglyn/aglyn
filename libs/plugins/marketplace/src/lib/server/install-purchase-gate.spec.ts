@@ -25,12 +25,12 @@
  */
 
 jest.mock('@aglyn/aglyn/server', () => ({
-  // The REAL `checkEntitlement` against the REAL plan table (AGL-2072): the
-  // route now asks for `reusableComponents` before it asks about payment, and
-  // a stubbed `() => true` here would let this file keep passing if that gate
-  // ever stopped meaning anything. The org below is `starter`, the lowest
-  // plan that includes the feature, so what these tests prove stays the
-  // PURCHASE gate and nothing else.
+  // The REAL `checkQuota` against the REAL plan table (AGL-2072, AGL-3615):
+  // the route asks for the component allowance before it asks about payment,
+  // and a stubbed `() => true` here would let this file keep passing if that
+  // gate ever stopped meaning anything. The org below is `starter`, whose
+  // allowance is unlimited, so what these tests prove stays the PURCHASE gate
+  // and nothing else.
   ...jest.requireActual('@aglyn/aglyn/server'),
   createResourceUid: () => 'component-new',
 }))
@@ -67,6 +67,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     publisherOrg: undefined as Record<string, unknown> | undefined,
   }
   const componentsCollection = {
+    // The allowance count (AGL-3615); Starter's is unlimited.
+    select: () => ({ get: async () => ({ docs: [] }) }),
     where: () => ({
       limit: () => ({ get: async () => ({ empty: true, docs: [] }) }),
     }),
