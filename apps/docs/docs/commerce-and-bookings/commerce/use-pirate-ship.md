@@ -76,12 +76,12 @@ What each row does:
   conflict, and you decide on the **Conflicts** step. **Keep existing** (the
   default) leaves the order as it is. **Overwrite** for Tracking number
   replaces the tracking on its latest shipment.
-- **No order with that number**, or a cancelled, refunded or unpaid order: the
+- **No order with that number**, or a canceled, refunded or unpaid order: the
   row fails and the results say why. A tracking file never creates an order.
 
 You need to be an admin or editor of the site to import tracking numbers.
 **Undo** on the import's results takes back what it recorded: each shipment it
-made is cancelled, and each tracking number it replaced is put back.
+made is canceled, and each tracking number it replaced is put back.
 
 ## Related
 
