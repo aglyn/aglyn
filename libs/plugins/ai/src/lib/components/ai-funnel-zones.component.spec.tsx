@@ -17,13 +17,13 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
-let mockVerdict = 'ready'
+const mockFetch = jest.fn()
 let mockDialogProps: Record<string, unknown> | null = null
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({ useUser: () => ({ data: { uid: 'u1' } }) }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({ MdiIcon: () => null }))
 jest.mock('next/navigation', () => ({ usePathname: () => '/acme/hosts/shop/analytics' }))
-jest.mock('./use-ai-job-run', () => ({ useAiJobsVerdict: () => mockVerdict }))
+jest.mock('@aglyn/shared-util-http/authorized-token', () => ({ authorizedFetch: (...args: unknown[]) => mockFetch(...args) }))
 jest.mock('./ai-insight-dialog.component', () => ({
   AiInsightDialog: (props: Record<string, unknown>) => {
     mockDialogProps = props
@@ -34,15 +34,17 @@ jest.mock('./ai-insight-dialog.component', () => ({
 import { AI_FUNNEL_COPY, AiFunnelAskButton, AiFunnelCreateButton, aiFunnelQuestion } from './ai-funnel-zones.component'
 
 beforeEach(() => {
-  mockVerdict = 'ready'
+  mockFetch.mockReset()
   mockDialogProps = null
 })
 
 describe('funnels by AI (AGL-3605)', () => {
-  it('renders nothing until the jobs route says AI is the workspace’s', () => {
-    mockVerdict = 'checking'
-    const { container } = render(<AiFunnelCreateButton hostId="h1" orgId="o1" propose={jest.fn()} />)
-    expect(container.textContent).toBe('')
+  it('draws at once from the shell’s gates and asks the server nothing until it is used', () => {
+    render(<AiFunnelCreateButton hostId="h1" orgId="o1" propose={jest.fn()} />)
+    render(<AiFunnelAskButton hostId="h1" orgId="o1" funnelName="Pricing" days={30} />)
+    expect(screen.getByText(AI_FUNNEL_COPY.create)).toBeTruthy()
+    expect(screen.getByText(AI_FUNNEL_COPY.ask)).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('hands the description to the card and closes on a draft', async () => {

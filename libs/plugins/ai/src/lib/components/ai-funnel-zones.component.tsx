@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn'
 import { mdiCreation } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -33,7 +34,6 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import { aiInsightSurfaceForPath } from '../model/ai-insight'
 import { AiInsightDialog } from './ai-insight-dialog.component'
-import { useAiJobsVerdict } from './use-ai-job-run'
 
 /**
  * Funnels by AI (AGL-3605), in the two zones the funnels plugin hosts on its
@@ -47,7 +47,11 @@ import { useAiJobsVerdict } from './use-ai-job-run'
  *   with a question about the funnel shown; the insight job reads the
  *   `funnels.*` figures the funnels plugin registers.
  *
- * Neither renders until the jobs route says AI is this workspace's.
+ * Both draw at once from the shell's own gates — the `ai.generate`
+ * permission, the plan's `aiGenerative` feature and the site's AI switch,
+ * all settled before the slot mounts a widget — and ask the server nothing
+ * until they are used: a refusal (the release flag, credits, a lockdown) is
+ * the door's to say, in the dialog, when the description or question is sent.
  */
 
 /** The props the funnels plugin hands `funnelsCreate`, restated: plugins do not import each other. */
@@ -70,7 +74,7 @@ export const AI_FUNNEL_COPY = {
   title: 'Describe a funnel',
   label: 'Which steps should visitors take?',
   placeholder: 'People who read a blog post, then viewed pricing, then booked a consultation',
-  next: 'Aglyn AI drafts the steps from your site’s real pages, forms and products. You review the draft before anything is saved.',
+  next: `${PLATFORM_BRAND_NAME} AI drafts the steps from your site’s real pages, forms and products. You review the draft before anything is saved.`,
   submit: 'Draft the funnel',
   ask: 'Ask AI about this funnel',
 } as const
@@ -80,15 +84,11 @@ export function aiFunnelQuestion(funnelName: string, days: number): string {
   return `In my funnel "${funnelName}" over the last ${days} days, where do visitors drop off most, and what might explain it?`
 }
 
-export function AiFunnelCreateButton({ orgId, propose }: ConsoleFunnelsCreateZoneProps) {
-  const { data: user } = useUser()
-  const verdict = useAiJobsVerdict(user, orgId)
+export function AiFunnelCreateButton({ propose }: ConsoleFunnelsCreateZoneProps) {
   const [open, setOpen] = useState(false)
   const [brief, setBrief] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  if (verdict !== 'ready') return null
 
   const submit = async () => {
     setBusy(true)
@@ -146,11 +146,10 @@ export function AiFunnelCreateButton({ orgId, propose }: ConsoleFunnelsCreateZon
 
 export function AiFunnelAskButton({ hostId, orgId, funnelName, days }: ConsoleFunnelInsightZoneProps) {
   const { data: user } = useUser()
-  const verdict = useAiJobsVerdict(user, orgId)
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
 
-  if (verdict !== 'ready' || !orgId) return null
+  if (!orgId) return null
   const orgSlug = String(pathname ?? '').split('/').filter(Boolean)[0] ?? ''
   const host = aiInsightSurfaceForPath(pathname)?.host ?? null
 
