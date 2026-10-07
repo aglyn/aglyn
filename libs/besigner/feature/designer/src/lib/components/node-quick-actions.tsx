@@ -28,12 +28,15 @@ import { styled } from '@aglyn/shared-ui-theme'
 import {
   Button as MuiButton,
   type ButtonProps,
+  ClickAwayListener,
   Divider,
   Stack,
   type StackProps,
   Tooltip as MuiTooltip,
   TooltipProps,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, useCallback, useState } from 'react'
@@ -64,6 +67,13 @@ const ActionButton = styled(MuiButton)(({ theme }) => ({
   fontSize: theme.typography.pxToRem(16),
   minWidth: 20,
   '&.MuiButtonGroup-grouped': { minWidth: 25 },
+  // A fingertip needs a target several times the size a cursor does; the
+  // strip grows with its buttons, so nothing else has to know.
+  '@media (pointer: coarse)': {
+    minWidth: 32,
+    minHeight: 32,
+    fontSize: theme.typography.pxToRem(20),
+  },
 }))
 
 const LabelAction = forwardRef<any, LabelActionProps>((props, ref) => {
@@ -114,165 +124,182 @@ export const NodeQuickActions = observer(
       // itself.
       clearCanvasContextMenu()
     }, [])
+    const menuShown = moreOpen || requested
+    // Beside the strip there is no room on a phone: a 240px menu to the
+    // right of an element runs off the screen. Below it, the popper slides
+    // it sideways into the window instead.
+    const theme = useTheme()
+    const phone = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true })
     return (
-      <Stack
-        ref={ref}
-        id="aglyn:element-overlay-label"
-        data-aglyn-node={node?.$id}
-        data-aglyn-kind="overlay-label"
-        direction="row"
-        spacing={0.35}
-        divider={
-          <Divider orientation="vertical" variant="fullWidth" flexItem sx={{ opacity: 0.5 }} />
-        }
-        {...rest}
-        sx={[{
-          justifyContent: "flex-start",
-          alignItems: "center",
-          fontSize: 12,
-          lineHeight: 1,
-          fontWeight: 600,
-          letterSpacing: 0.25,
-
-          // pointerEvents: 'none',
-          marginLeft: '-2px',
-
-          marginBottom: '1px',
-          // One slate surface for the whole floating control (AGL-1194).
-          // The strip was `primary.light` while the buttons on it were
-          // `tertiary` — two chrome hues on one control, and an ink colour
-          // paired with a background it no longer sat on. Ink is now the
-          // contrastText OF THIS background, so it follows the scheme
-          // instead of being picked once against the old one.
-          backgroundColor: 'tertiary.main',
-          color: 'tertiary.contrastText',
-          px: 0.5,
-          pl: 0.5,
-          pr: 0.25,
-          py: 0.35
-        }, ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
+      // Hover closes the menu for a mouse; a touch screen has no hover to
+      // leave, so a tap anywhere else is what closes it there.
+      <ClickAwayListener onClickAway={() => menuShown && closeMore()}>
         <Stack
-          direction="column"
-          sx={{
+          ref={ref}
+          id="aglyn:element-overlay-label"
+          data-aglyn-node={node?.$id}
+          data-aglyn-kind="overlay-label"
+          direction="row"
+          spacing={0.35}
+          divider={
+            <Divider orientation="vertical" variant="fullWidth" flexItem sx={{ opacity: 0.5 }} />
+          }
+          {...rest}
+          sx={[{
+            justifyContent: "flex-start",
             alignItems: "center",
-            justifyContent: "center",
-            fontSize: 12
-          }}>
-          <ComponentIconComponent
-            component={node?.componentSchema}
-            node={node}
-            fontSize="inherit"
-          />
-        </Stack>
-        <If condition={variant !== 'actions'}>
-          <Then>
-            <Typography
-              component="div"
-              title={node?.labelShort}
-              sx={{
-                textOverflow: "ellipsis",
-                overflow: "hidden",
-                whiteSpace: "nowrap",
-                fontSize: "inherit",
-                color: "inherit",
-                maxWidth: 100
-              }}>
-              {node?.labelShort}
-            </Typography>
-          </Then>
-          <Else>
-            <Stack
-              direction="row"
-              spacing={0.25}
-              sx={{
-                justifyContent: "flex-start",
-                alignItems: "center"
-              }}>
-              <LabelAction
-                title="move"
-                disableInteractive
-                ButtonProps={{
-                  ...handleProps,
-                  onClick: () => handleAddElementClick(node),
-                }}
-                icon={{ path: ICON_VARIANT_MODIFY_DRAG.path }}
-              >
-                {'move'}
-              </LabelAction>
-              <LabelAction
-                title="Add"
-                disableInteractive
-                ButtonProps={{
-                  onClick: () => handleAddElementClick(node),
-                }}
-                icon={{ path: ICON_VARIANT_MODIFY_ADD.path }}
-              >
-                {'add'}
-              </LabelAction>
-              <LabelAction
-                placement="right"
-                children={'more'}
-                icon={{ path: ICON_VARIANT_SHOW_MORE_VERTICAL.path }}
-                enterDelay={200}
-                leaveDelay={500}
-                open={moreOpen || requested}
-                onOpen={openMore}
-                onClose={closeMore}
-                slotProps={{
-                  popper: {
-                    disablePortal: false,
-                    // Below dialogs/drawers the menu actions open.
-                    sx: { zIndex: (theme) => theme.zIndex.modal - 1 },
-                    /**
-                     * Kept inside the WINDOW, not the document (AGL-1405).
-                     * `rootBoundary: 'document'` let the menu be placed
-                     * below the fold — the document is as tall as whatever
-                     * you put in it, so nothing ever "overflowed" it — and
-                     * the page grew a scrollbar around the menu, which moves
-                     * the editor's own chrome under the reader. The Paper
-                     * caps its height and scrolls, so a menu taller than the
-                     * window is still fully reachable.
-                     *
-                     * The 100px padding went with it: it was reserving a
-                     * margin against a boundary that was never binding, and
-                     * against the real one it would refuse placements that
-                     * fit perfectly well.
-                     */
-                    modifiers: [
-                      {
-                        name: 'flip',
-                        enabled: true,
-                        options: { altBoundary: true, padding: 8 },
-                      },
-                      {
-                        name: 'preventOverflow',
-                        enabled: true,
-                        options: {
-                          altAxis: true,
-                          altBoundary: true,
-                          tether: false,
-                          padding: 8,
+            fontSize: 12,
+            lineHeight: 1,
+            fontWeight: 600,
+            letterSpacing: 0.25,
+
+            // pointerEvents: 'none',
+            marginLeft: '-2px',
+
+            marginBottom: '1px',
+            // One slate surface for the whole floating control (AGL-1194).
+            // The strip was `primary.light` while the buttons on it were
+            // `tertiary` — two chrome hues on one control, and an ink colour
+            // paired with a background it no longer sat on. Ink is now the
+            // contrastText OF THIS background, so it follows the scheme
+            // instead of being picked once against the old one.
+            backgroundColor: 'tertiary.main',
+            color: 'tertiary.contrastText',
+            px: 0.5,
+            pl: 0.5,
+            pr: 0.25,
+            py: 0.35
+          }, ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
+          <Stack
+            direction="column"
+            sx={{
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 12
+            }}>
+            <ComponentIconComponent
+              component={node?.componentSchema}
+              node={node}
+              fontSize="inherit"
+            />
+          </Stack>
+          <If condition={variant !== 'actions'}>
+            <Then>
+              <Typography
+                component="div"
+                title={node?.labelShort}
+                sx={{
+                  textOverflow: "ellipsis",
+                  overflow: "hidden",
+                  whiteSpace: "nowrap",
+                  fontSize: "inherit",
+                  color: "inherit",
+                  maxWidth: 100
+                }}>
+                {node?.labelShort}
+              </Typography>
+            </Then>
+            <Else>
+              <Stack
+                direction="row"
+                spacing={0.25}
+                sx={{
+                  justifyContent: "flex-start",
+                  alignItems: "center"
+                }}>
+                {/* The grip only drags. Touch never opens its tooltip: holding
+                    the grip is how a drag starts there, and a label popping
+                    up under the finger would cover the drop. */}
+                <LabelAction
+                  title="move"
+                  disableInteractive
+                  disableTouchListener
+                  ButtonProps={handleProps}
+                  icon={{ path: ICON_VARIANT_MODIFY_DRAG.path }}
+                >
+                  {'move'}
+                </LabelAction>
+                <LabelAction
+                  title="Add"
+                  disableInteractive
+                  disableTouchListener
+                  ButtonProps={{
+                    onClick: () => handleAddElementClick(node),
+                  }}
+                  icon={{ path: ICON_VARIANT_MODIFY_ADD.path }}
+                >
+                  {'add'}
+                </LabelAction>
+                <LabelAction
+                  placement={phone ? 'bottom' : 'right'}
+                  children={'more'}
+                  icon={{ path: ICON_VARIANT_SHOW_MORE_VERTICAL.path }}
+                  enterDelay={200}
+                  leaveDelay={500}
+                  open={menuShown}
+                  onOpen={openMore}
+                  onClose={closeMore}
+                  // A tap opens the menu outright. MUI's touch path would show
+                  // it only after a long press and then close it 1.5 s after
+                  // the finger lifts, before an item could be chosen.
+                  disableTouchListener
+                  ButtonProps={{ onClick: openMore }}
+                  slotProps={{
+                    popper: {
+                      disablePortal: false,
+                      // Below dialogs/drawers the menu actions open.
+                      sx: { zIndex: (theme) => theme.zIndex.modal - 1 },
+                      /**
+                       * Kept inside the WINDOW, not the document (AGL-1405).
+                       * `rootBoundary: 'document'` let the menu be placed
+                       * below the fold — the document is as tall as whatever
+                       * you put in it, so nothing ever "overflowed" it — and
+                       * the page grew a scrollbar around the menu, which moves
+                       * the editor's own chrome under the reader. The Paper
+                       * caps its height and scrolls, so a menu taller than the
+                       * window is still fully reachable.
+                       *
+                       * The 100px padding went with it: it was reserving a
+                       * margin against a boundary that was never binding, and
+                       * against the real one it would refuse placements that
+                       * fit perfectly well.
+                       */
+                      modifiers: [
+                        {
+                          name: 'flip',
+                          enabled: true,
+                          options: { altBoundary: true, padding: 8 },
                         },
-                      },
-                      {
-                        name: 'arrow',
-                        enabled: true,
-                      },
-                    ],
-                  },
-                  tooltip: {
-                    sx: {
-                      padding: 0,
-                      m: -2,
+                        {
+                          name: 'preventOverflow',
+                          enabled: true,
+                          options: {
+                            altAxis: true,
+                            altBoundary: true,
+                            tether: false,
+                            padding: 8,
+                          },
+                        },
+                        {
+                          name: 'arrow',
+                          enabled: true,
+                        },
+                      ],
                     },
-                  },
-                }}
-                title={<NodeContextMenu node={node} onAction={closeMore} />}
-              />
-            </Stack>
-          </Else>
-        </If>
-      </Stack>
+                    tooltip: {
+                      sx: {
+                        padding: 0,
+                        m: -2,
+                      },
+                    },
+                  }}
+                  title={<NodeContextMenu node={node} onAction={closeMore} />}
+                />
+              </Stack>
+            </Else>
+          </If>
+        </Stack>
+      </ClickAwayListener>
     );
   }),
 )
