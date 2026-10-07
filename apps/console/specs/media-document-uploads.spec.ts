@@ -209,6 +209,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   createResourceUid: () => 'media-1',
   readImageDimensions: () => undefined,
+  defaultMediaScopeOf: () => undefined,
   defaultScopeForNewResource: () => ['org'],
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,

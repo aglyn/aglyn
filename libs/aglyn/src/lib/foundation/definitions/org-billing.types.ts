@@ -1326,6 +1326,14 @@ export interface OrgCrmSettings {
    */
   autoCreateCompanies?: boolean
   /**
+   * What a new contact, company, deal or task starts shared with
+   * (AGL-3662), set apart from datasets and media. `'org'`: every site.
+   * `'host'`: the site it came in on and its consent group. Unset reads the
+   * org's `defaultResourceScope` — see `crmDefaultScopeOf` — and then
+   * `'host'`.
+   */
+  defaultRecordScope?: 'org' | 'host'
+  /**
    * Per-site settings, keyed by host id (AGL-2618). On the ORG document
    * rather than on each host document because the reader is the org-level
    * assignment pass — one read of one document answers every site's default

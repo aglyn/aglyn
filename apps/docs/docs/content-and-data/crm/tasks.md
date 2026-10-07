@@ -15,7 +15,8 @@ Tasks live in the CRM hub at `…/hosts/{site}/crm/tasks` and, over every site a
 `…/{organization}/crm/tasks`; every record page carries its own short list of them. They
 follow the same per-site visibility as the contacts themselves: a task made from one
 site's console is seen from that site (and the sites it shares an audience with), and an
-organization that has widened its default sharing sees every task everywhere. A task is
+organization that has set **Default sharing for new records** to **All sites** sees every
+task everywhere. A task is
 also the one CRM record that can belong to **no site at all** — see
 [Organization tasks](#organization-tasks).
 

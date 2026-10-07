@@ -2471,6 +2471,32 @@ export const ORG_CRM_SETTINGS_FIELD = 'crm'
 /** The dotted path an `update()` writes the auto-create switch by. */
 export const CRM_AUTO_CREATE_COMPANIES_PATH = `${ORG_CRM_SETTINGS_FIELD}.autoCreateCompanies`
 
+/** Where the CRM's default sharing for new records is stored (AGL-3662). */
+export const CRM_DEFAULT_RECORD_SCOPE_PATH = `${ORG_CRM_SETTINGS_FIELD}.defaultRecordScope`
+
+/**
+ * The org's default sharing for new CRM records (AGL-3662): `'org'` shares a
+ * new contact, company, deal or task with every site, `'host'` keeps it to
+ * the site it came in on and the sites that present as one sender with it.
+ *
+ * `crm.defaultRecordScope` when the org has set it. Before AGL-3662 the CRM
+ * read the org's dataset default, `defaultResourceScope`, so an org that set
+ * that to All sites keeps CRM records org-wide until it chooses separately.
+ * Neither set reads `undefined`, which every caller treats as `'host'`.
+ */
+export function crmDefaultScopeOf(
+  orgDocument: Record<string, unknown> | null | undefined,
+): 'org' | 'host' | undefined {
+  const settings = (orgDocument ?? {})[ORG_CRM_SETTINGS_FIELD]
+  const own =
+    settings && typeof settings === 'object' && !Array.isArray(settings)
+      ? (settings as Record<string, unknown>)['defaultRecordScope']
+      : undefined
+  if (own === 'org' || own === 'host') return own
+  const legacy = (orgDocument ?? {})['defaultResourceScope']
+  return legacy === 'org' || legacy === 'host' ? legacy : undefined
+}
+
 /**
  * Whether a capture from a work email domain no visible company carries
  * should CREATE the company. Off unless the org document says `true`: a
@@ -2816,7 +2842,7 @@ export function newAssignmentRuleId(existing: readonly string[]): string {
  * The contact create path's own expression (`upsertHostContact`), lifted
  * here so that a company, a deal or a task created from a site's console
  * lands in exactly the scope a contact captured on that site would: the
- * whole org when the org has chosen `defaultResourceScope: 'org'`, and
+ * whole org when the org's CRM default (`crmDefaultScopeOf`) is `'org'`, and
  * otherwise the sites that present as one sender — which, undeclared, is
  * this site alone. That is the agency's isolation, arrived at with nothing
  * configured, and the reason this is a function rather than a convention
@@ -2831,7 +2857,7 @@ export function crmScopeTokens(
   org: Record<string, unknown> | null | undefined,
   group: ConsentGroup,
 ): ScopeToken[] {
-  return (org ?? {})['defaultResourceScope'] === 'org'
+  return crmDefaultScopeOf(org) === 'org'
     ? [ORG_SCOPE_TOKEN]
     : consentGroupScope(group)
 }

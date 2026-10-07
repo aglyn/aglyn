@@ -289,7 +289,9 @@ export function describeScope(
 /**
  * The scope a newly created resource starts with (AGL-1048).
  *
- * Honours the org's `defaultResourceScope`, but only when a site is
+ * Honours the org's default — `defaultResourceScope` for a dataset,
+ * `defaultMediaScopeOf(org)` for media, passed in the same option — but
+ * only when a site is
  * actually in context: created from the org Media or Data page there is no
  * host to scope to, and inventing one would hide the resource from the
  * page that just created it.
@@ -301,6 +303,27 @@ export function defaultScopeForNewResource(options: {
   return options.defaultResourceScope === 'host' && options.hostId
     ? [hostScopeToken(options.hostId)]
     : [ORG_SCOPE_TOKEN]
+}
+
+/**
+ * The org's default sharing for new MEDIA — uploads and folders (AGL-3662).
+ *
+ * `defaultMediaScope` when the org has set it, otherwise
+ * `defaultResourceScope`: until the two were split one field decided both,
+ * so an org that chose "only the site they were created in" before the split
+ * keeps that choice for media until it sets media on its own. Datasets read
+ * `defaultResourceScope` directly.
+ */
+export function defaultMediaScopeOf(
+  org:
+    | {
+        defaultMediaScope?: 'org' | 'host'
+        defaultResourceScope?: 'org' | 'host'
+      }
+    | null
+    | undefined,
+): 'org' | 'host' | undefined {
+  return org?.defaultMediaScope ?? org?.defaultResourceScope
 }
 
 /**

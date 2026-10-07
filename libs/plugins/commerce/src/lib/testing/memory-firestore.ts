@@ -156,6 +156,15 @@ export class MemoryCollection {
   }
 }
 
+/** What a {@link MemoryDoc} read returns, shaped like a Firestore snapshot. */
+export interface MemoryDocSnapshot {
+  id: string
+  ref: MemoryDoc
+  exists: boolean
+  data: () => Record<string, any> | undefined
+  get: (field: string) => unknown
+}
+
 export class MemoryDoc {
   constructor(
     readonly store: MemoryFirestore,
@@ -170,7 +179,7 @@ export class MemoryDoc {
     return new MemoryCollection(this.store, `${this.path}/${name}`)
   }
 
-  snapshot() {
+  snapshot(): MemoryDocSnapshot {
     const stored = this.store.docs.get(this.path)
     const data = stored ? { ...stored.data } : undefined
     return {
@@ -182,7 +191,7 @@ export class MemoryDoc {
     }
   }
 
-  async get() {
+  async get(): Promise<MemoryDocSnapshot> {
     await tick()
     return this.snapshot()
   }
