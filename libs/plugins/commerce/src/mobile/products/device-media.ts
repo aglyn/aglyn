@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { getMobileConfig } from '@aglyn/mobile-core'
+import { getMobileConfig, mobileBrandName } from '@aglyn/mobile-core'
 import * as ImagePicker from 'expo-image-picker'
 import type { DamTransport, DeviceFile } from '../data/dam-upload'
 import type { MobileApiClient } from '../data/context'
@@ -67,7 +67,7 @@ export async function pickPhoto(source: PhotoSource): Promise<DeviceFile | null>
   if (source === 'camera') {
     const permission = await ImagePicker.requestCameraPermissionsAsync()
     if (!permission.granted) {
-      throw new Error('Camera access is off for Aglyn. Turn it on in Settings to take product photos.')
+      throw new Error(`Camera access is off for ${mobileBrandName()}. Turn it on in Settings to take product photos.`)
     }
   }
   const result =

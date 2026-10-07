@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { mobileBrandName } from '@aglyn/mobile-core'
 import { Button, EmptyState, Icon, Text, useMobileTheme } from '@aglyn/mobile-ui'
 import { CameraView, useCameraPermissions, type BarcodeType } from 'expo-camera'
 import { useRef } from 'react'
@@ -103,11 +104,11 @@ export function BarcodeScanner({
         ) : (
           <EmptyState
             icon="camera-outline"
-            title="Aglyn needs the camera to scan"
+            title={`${mobileBrandName()} needs the camera to scan`}
             body={
               permission.canAskAgain
                 ? 'Allow camera access to read barcodes. Nothing is recorded.'
-                : 'Camera access is off for Aglyn. Turn it on in Settings to scan.'
+                : `Camera access is off for ${mobileBrandName()}. Turn it on in Settings to scan.`
             }
             action={
               permission.canAskAgain ? (
