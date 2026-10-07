@@ -22,6 +22,7 @@ kotlin {
       api(libs.kotlinx.coroutines.core)
       api(libs.kotlinx.serialization.json)
       api(libs.ktor.client.core)
+      api(project(":native-contracts"))
     }
     commonTest.dependencies {
       implementation(kotlin("test"))
@@ -35,10 +36,20 @@ kotlin {
       api(libs.firebase.auth)
       api(libs.firebase.firestore)
     }
+    named("desktopTest") {
+      dependencies {
+        implementation(kotlin("test"))
+      }
+    }
     named("desktopMain") {
       dependencies {
         implementation(libs.ktor.client.java)
       }
     }
   }
+}
+
+// The planner replays the console's own plans from libs/native/contracts.
+tasks.withType<Test>().configureEach {
+  systemProperty("aglyn.contractsDir", rootProject.file("../../libs/native/contracts").absolutePath)
 }
