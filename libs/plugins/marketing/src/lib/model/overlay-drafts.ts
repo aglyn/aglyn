@@ -30,6 +30,12 @@ import type { HostOverlay } from './overlays'
  * person's own site, which they pick.
  */
 
+/**
+ * How many overlays a site's list reads and can reorder (AGL-2501), and so
+ * the most a site keeps before something else may add one (AGL-3616).
+ */
+export const OVERLAY_LIST_CEILING = 50
+
 /** The longest each overlay field a proposal fills may be, in characters. */
 export const OVERLAY_COPY_LIMITS = {
   /** The internal name shown in the overlays list. */
@@ -164,4 +170,42 @@ export function overlayDraftFromProposal(
       frequencyDays: 7,
     },
   }
+}
+
+/**
+ * What is wrong with an overlay draft's content as another plugin hands it
+ * over (AGL-3616), held to the same limits and trigger catalog a proposal is,
+ * but REFUSED rather than cut: a caller that writes a draft through the
+ * marketing plugin's writer is told what to fix. Empty when nothing is.
+ */
+export function overlayDraftContentProblems(content: Readonly<Record<string, unknown>>): string[] {
+  const problems: string[] = []
+  const kind = content['kind']
+  if (kind !== 'bar' && kind !== 'popup') return ['An overlay is a bar or a popup']
+  const fields: OverlayCopyField[] =
+    kind === 'bar' ? ['name', 'text'] : ['name', 'headline', 'body', 'ctaLabel']
+  for (const field of fields) {
+    const value = content[field]
+    if (value === undefined || value === null) continue
+    if (typeof value !== 'string') problems.push(`The ${field} must be text`)
+    else if (value.trim().length > OVERLAY_COPY_LIMITS[field]) {
+      problems.push(`The ${field} is longer than ${OVERLAY_COPY_LIMITS[field]} characters`)
+    }
+  }
+  const required = kind === 'bar' ? 'text' : 'body'
+  if (typeof content[required] !== 'string' || !String(content[required]).trim()) {
+    problems.push(kind === 'bar' ? 'An announcement bar needs its text' : 'A popup needs its body')
+  }
+  if (kind === 'popup' && content['trigger'] !== undefined && content['trigger'] !== null) {
+    const trigger = OVERLAY_POPUP_TRIGGERS.find((entry) => entry.id === content['trigger'])
+    if (!trigger) {
+      problems.push(`A popup opens ${OVERLAY_POPUP_TRIGGERS.map((entry) => entry.id).join(', ')}`)
+    } else if (trigger.unit && content['triggerValue'] !== undefined && content['triggerValue'] !== null) {
+      const value = Number(content['triggerValue'])
+      if (!Number.isFinite(value) || value < trigger.min || value > trigger.max) {
+        problems.push(`The ${trigger.label.toLowerCase()} value must be from ${trigger.min} to ${trigger.max}`)
+      }
+    }
+  }
+  return problems
 }

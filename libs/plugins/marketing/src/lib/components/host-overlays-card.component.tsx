@@ -25,6 +25,7 @@ import {
 import {
   compareOverlayPrecedence,
   OVERLAY_COPY_LIMITS,
+  OVERLAY_LIST_CEILING,
   OVERLAY_POPUP_TRIGGERS,
   overlayCopyFromProposal,
   overlayDraftFromProposal,
@@ -103,7 +104,7 @@ type OverlayDraft = HostOverlay & { $id?: string }
  * handful of banners and popups, and the number exists to bound a pathological
  * collection rather than to bound a normal one.
  */
-const CEILING = 50
+const CEILING = OVERLAY_LIST_CEILING
 
 const EMPTY_BAR: OverlayDraft = {
   kind: 'bar',

@@ -24,6 +24,8 @@ import {
 } from '@aglyn/aglyn/server'
 import { emailEventsHandler } from './server/email-events'
 import { registerMarketingFigureReaders } from './server/marketing-figures'
+import { registerMarketingDraftWriters } from './server/marketing-drafts'
+import { registerMarketingAiCapabilities } from './server/marketing-ai-capabilities'
 import { registerListSendTimeFacts } from './server/list-send-time-facts'
 import { marketingSitePageEnricher } from './server/site-page-enricher'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
@@ -139,6 +141,11 @@ export function registerMarketingConsoleApi(): void {
   // write through it run only on the console, inline and on the beat
   // (AGL-3026).
   registerCampaignDraftWriter()
+  // An overlay (switched off) and an A/B test (stopped) as drafts another
+  // plugin makes through the same seam, and the AI build capabilities that
+  // name them (AGL-3616).
+  registerMarketingDraftWriters()
+  registerMarketingAiCapabilities()
   // Campaign and A/B testing results as figure tables (AGL-2915), for the AI
   // plugin's insights to read by id; the console runs insight jobs.
   registerMarketingFigureReaders(() => firebaseAdmin.app().firestore())
