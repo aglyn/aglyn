@@ -1394,3 +1394,28 @@ describe('the payment link a cancelled order orphans (AGL-2244)', () => {
     expect(storedOrder().status).toBe('cancelled')
   })
 })
+
+/**
+ * An open register sale that has taken money is voided at the register,
+ * which hands each payment back first (AGL-3607); cancelling it here would
+ * leave a card charge standing on a cancelled order.
+ */
+describe('an open register sale with payments (AGL-3607)', () => {
+  it('refuses, and points at the register', async () => {
+    seedTrackedShop({
+      status: 'pending',
+      channel: 'pos',
+      payments: [{ id: 'p', method: 'card_present', amountCents: 500, status: 'succeeded', atMs: 1 }],
+    })
+    const result = await post()
+    expect(result.status).toBe(409)
+    expect(result.body.error).toContain('Void it at the register')
+    expect(storedOrder().status).toBe('pending')
+  })
+
+  it('still cancels an open sale with nothing taken', async () => {
+    seedTrackedShop({ status: 'pending', channel: 'pos', payments: [] })
+    expect((await post()).status).toBe(200)
+    expect(storedOrder().status).toBe('cancelled')
+  })
+})

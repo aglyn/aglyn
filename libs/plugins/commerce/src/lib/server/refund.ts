@@ -368,7 +368,17 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
           'without selecting lines.',
       })
     }
-    const paymentIntentId =
+    // A register sale paid with SEVERAL cards (AGL-3607) has no single
+    // charge to refund: each refund is taken from one card that can cover it.
+    const splitCards = CommerceModel.orderPayments(order).filter(
+      (payment) =>
+        payment.status === 'succeeded' &&
+        CommerceModel.isCardPaymentMethod(payment.method) &&
+        Boolean(payment.paymentIntentId),
+    )
+    const splitRefunds = (order as { paymentRefunds?: Record<string, number> }).paymentRefunds ?? {}
+    let paymentIntentId =
+      (splitCards.length > 1 ? splitCards[0].paymentIntentId : undefined) ??
       order.paymentIntentId ??
       // Legacy rows stored the checkout session as the doc id; resolve
       // the payment intent from Stripe.
@@ -523,6 +533,42 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       })
     }
 
+    if (splitCards.length > 1) {
+      // The card this refund comes off: the first with enough left on it.
+      // A refund larger than any one card refuses with the largest that
+      // fits, rather than splitting money across charges unasked; a part a
+      // customer paid in cash or by gift card is handed back at the till.
+      const capacity = (payment: CommerceModel.OrderPayment) =>
+        payment.amountCents +
+        Number(payment.tipCents ?? 0) -
+        Number(splitRefunds[String(payment.paymentIntentId)] ?? 0)
+      const card = splitCards.find((payment) => capacity(payment) >= refundCents)
+      if (!card) {
+        await firestore
+          .runTransaction(async (transaction) => {
+            const current = Number(
+              (await transaction.get(orderRef)).get('refundedCents') ?? 0,
+            )
+            transaction.set(
+              orderRef,
+              { refundedCents: Math.max(0, current - refundCents) },
+              { merge: true },
+            )
+          })
+          .catch(() => undefined)
+        await claim?.release()
+        const largest = Math.max(0, ...splitCards.map(capacity))
+        return res.status(409).json({
+          error:
+            'This sale was paid with several cards, and no one card has ' +
+            `$${(refundCents / 100).toFixed(2)} left to refund. Refund at most ` +
+            `$${(largest / 100).toFixed(2)} at a time; hand back any part paid ` +
+            'in cash or by gift card at the register.',
+        })
+      }
+      paymentIntentId = String(card.paymentIntentId)
+    }
+
     const refund = await createStripeRefund({
       paymentIntentId: String(paymentIntentId),
       amountCents: refundCents,
@@ -578,6 +624,15 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
           ...(fullyRefunded ? { status: 'refunded' } : {}),
           // What a shipping tool's feed asks to learn of it (AGL-3613).
           updatedAtMs: Date.now(),
+          // Which card a split register sale's refund came off (AGL-3607).
+          ...(splitCards.length > 1
+            ? {
+                paymentRefunds: {
+                  [String(paymentIntentId)]:
+                    firebaseAdmin.firestore.FieldValue.increment(refundCents),
+                },
+              }
+            : {}),
           // The entitlement withdrawal, recorded WITH the money (AGL-2454).
           // `arrayUnion` rather than a written-back array: two admins refunding
           // different lines at once must not erase each other's, and this
