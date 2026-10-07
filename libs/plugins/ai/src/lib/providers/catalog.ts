@@ -339,6 +339,134 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
   },
 ]
 
+/**
+ * The IMAGE models (AGL-3602): every model id the Media library's "Create
+ * with AI" may route to, with a per-picture provider rate and a per-picture
+ * billed rate. Kept apart from `AI_MODEL_CATALOG` because nothing that lists
+ * text models — the model selector, the routing table, the allotments'
+ * allowlists — may ever offer one of these for a conversation.
+ *
+ * ## The two rates, per picture
+ *
+ * `providerUsdPerImage` is Google's published Vertex AI list price per
+ * generated image. `billedUsdPerImage` is what a customer's credits are
+ * charged, at `AI_IMAGE_BILLED_MARKUP` over it: the same ratio the balanced
+ * text tier is billed at over its provider rate (Claude Sonnet 5, $3/$15
+ * billed over $2/$10), so a credit buys the same share of margin whether it
+ * is spent on words or on pictures. A picture is NEVER billed at provider
+ * cost; `billed-rate-is-not-provider-cost.spec.ts` refuses a row that is.
+ *
+ * A credit is $0.001 of billed spend (`ASSIST_CREDIT_COST_USD`), so the
+ * default model's $0.06 is 60 credits a picture and a Free workspace's 300
+ * credits make five.
+ */
+export interface AiImageCatalogEntry {
+  id: string
+  /** The image provider the model is served by. */
+  provider: string
+  label: string
+  /** What the provider bills us for one generated picture. */
+  providerUsdPerImage: number
+  /** What one picture draws from a customer's credits. */
+  billedUsdPerImage: number
+}
+
+/**
+ * The billed rate over the provider rate, per picture: the balanced text
+ * tier's own markup (`claude-sonnet-5`, 3 / 2), restated as a number so an
+ * image row cannot be written at list by accident.
+ */
+export const AI_IMAGE_BILLED_MARKUP = 1.5
+
+/** A per-picture row billed at `AI_IMAGE_BILLED_MARKUP` over its list price. */
+export function aiImageRatesAtMarkup(
+  providerUsdPerImage: number,
+): Pick<AiImageCatalogEntry, 'providerUsdPerImage' | 'billedUsdPerImage'> {
+  return {
+    providerUsdPerImage,
+    billedUsdPerImage: roundUsd(providerUsdPerImage * AI_IMAGE_BILLED_MARKUP),
+  }
+}
+
+/** The image provider's id: Google's models on Vertex AI. */
+export const AI_IMAGE_VERTEX_PROVIDER_ID = 'google-vertex'
+
+export const AI_IMAGE_MODEL_CATALOG: readonly AiImageCatalogEntry[] = [
+  // Vertex AI's list prices per output image (Imagen 4 $0.04, Imagen 4 Fast
+  // $0.02, Imagen 4 Ultra $0.06, Imagen 3 $0.04). Re-read Google's Vertex AI
+  // pricing page before changing a row; both rates move together through
+  // `aiImageRatesAtMarkup`.
+  {
+    id: 'imagen-4.0-generate-001',
+    provider: AI_IMAGE_VERTEX_PROVIDER_ID,
+    label: 'Imagen 4',
+    ...aiImageRatesAtMarkup(0.04),
+  },
+  {
+    id: 'imagen-4.0-fast-generate-001',
+    provider: AI_IMAGE_VERTEX_PROVIDER_ID,
+    label: 'Imagen 4 Fast',
+    ...aiImageRatesAtMarkup(0.02),
+  },
+  {
+    id: 'imagen-4.0-ultra-generate-001',
+    provider: AI_IMAGE_VERTEX_PROVIDER_ID,
+    label: 'Imagen 4 Ultra',
+    ...aiImageRatesAtMarkup(0.06),
+  },
+  {
+    id: 'imagen-3.0-generate-002',
+    provider: AI_IMAGE_VERTEX_PROVIDER_ID,
+    label: 'Imagen 3',
+    ...aiImageRatesAtMarkup(0.04),
+  },
+]
+
+/**
+ * The per-picture rates an unknown image model id is priced at: the dearest
+ * row, on both rates, for the reason `AI_FALLBACK_RATES` gives — an estimate
+ * that errs low is worse than one that errs high.
+ */
+export const AI_IMAGE_FALLBACK_RATES: Pick<
+  AiImageCatalogEntry,
+  'providerUsdPerImage' | 'billedUsdPerImage'
+> = {
+  providerUsdPerImage: Math.max(...AI_IMAGE_MODEL_CATALOG.map((row) => row.providerUsdPerImage)),
+  billedUsdPerImage: Math.max(...AI_IMAGE_MODEL_CATALOG.map((row) => row.billedUsdPerImage)),
+}
+
+/** The image catalog row for a model id, or `undefined` for an unknown id. */
+export function aiImageCatalogEntry(modelId: string): AiImageCatalogEntry | undefined {
+  return AI_IMAGE_MODEL_CATALOG.find((entry) => entry.id === modelId)
+}
+
+/** What the provider charges us for one picture from `modelId`. */
+export function aiImageProviderUsdPerImage(modelId: string): number {
+  return (aiImageCatalogEntry(modelId) ?? AI_IMAGE_FALLBACK_RATES).providerUsdPerImage
+}
+
+/** What one picture from `modelId` draws from a customer's credits. */
+export function aiImageBilledUsdPerImage(modelId: string): number {
+  return (aiImageCatalogEntry(modelId) ?? AI_IMAGE_FALLBACK_RATES).billedUsdPerImage
+}
+
+/**
+ * Usage as the meter prices it: a text exchange's tokens, and, for a door
+ * that makes pictures, how many it delivered. `images` is absent on every
+ * text exchange, which prices exactly as it always did.
+ */
+export type AiMeteredUsage = AiUsage & { images?: number }
+
+/** Pictures on a usage record: whole, finite, non-negative, else 0. */
+function aiImageCount(usage: AiMeteredUsage): number {
+  const value = Number(usage.images ?? 0)
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
+}
+
+function roundUsd(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000
+}
+
 /** The dearest known tier, used when a model id is not in the catalog. */
 export const AI_FALLBACK_RATES: AiTokenRates = aiRatesPerMTok(10, 50)
 
@@ -405,8 +533,11 @@ function priceUsage(usage: AiUsage, rate: AiTokenRates): number {
  * What one exchange COST US, at the serving model's provider rates, rounded
  * to 6dp. Real money, and the only figure a margin may be taken against.
  */
-export function estimateAiProviderCostUsd(usage: AiUsage, modelId: string): number {
-  return priceUsage(usage, aiProviderRatesForModel(modelId))
+export function estimateAiProviderCostUsd(usage: AiMeteredUsage, modelId: string): number {
+  return roundUsd(
+    priceUsage(usage, aiProviderRatesForModel(modelId)) +
+      aiImageCount(usage) * aiImageProviderUsdPerImage(modelId),
+  )
 }
 
 /**
@@ -414,8 +545,11 @@ export function estimateAiProviderCostUsd(usage: AiUsage, modelId: string): numb
  * rates, rounded to 6dp — the figure `assistCreditsFromUsd` turns into
  * credits. At or above `estimateAiProviderCostUsd` for the same exchange.
  */
-export function estimateAiBilledUsd(usage: AiUsage, modelId: string): number {
-  return priceUsage(usage, aiBilledRatesForModel(modelId))
+export function estimateAiBilledUsd(usage: AiMeteredUsage, modelId: string): number {
+  return roundUsd(
+    priceUsage(usage, aiBilledRatesForModel(modelId)) +
+      aiImageCount(usage) * aiImageBilledUsdPerImage(modelId),
+  )
 }
 
 /** Every catalog id a provider serves. */

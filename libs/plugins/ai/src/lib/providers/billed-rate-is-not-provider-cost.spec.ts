@@ -23,7 +23,12 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   AI_FALLBACK_RATES,
+  AI_IMAGE_BILLED_MARKUP,
+  AI_IMAGE_FALLBACK_RATES,
+  AI_IMAGE_MODEL_CATALOG,
   AI_METER_SENTINELS,
+  aiImageBilledUsdPerImage,
+  aiImageProviderUsdPerImage,
   AI_MODEL_CATALOG,
   aiBilledRatesForModel,
   aiProviderRatesForModel,
@@ -395,5 +400,52 @@ describe('the margin the split corrects', () => {
       const realised = ((rate as number) - realisedCostPer1k) / (rate as number)
       expect(`${plan}: ${realised >= floorMargin}`).toBe(`${plan}: true`)
     }
+  })
+})
+
+describe('a picture is billed above what it costs (AGL-3602)', () => {
+  it('bills every image row at the balanced tier’s markup, never at provider cost', () => {
+    const sonnet = AI_MODEL_CATALOG.find((entry) => entry.id === 'claude-sonnet-5')
+    // The image markup IS the text markup, measured rather than restated.
+    expect(AI_IMAGE_BILLED_MARKUP).toBeCloseTo(
+      (sonnet?.billedRates.inputPerToken ?? 0) / (sonnet?.providerRates.inputPerToken ?? 1),
+      9,
+    )
+    expect(AI_IMAGE_MODEL_CATALOG.length).toBeGreaterThan(0)
+    for (const row of AI_IMAGE_MODEL_CATALOG) {
+      expect([row.id, row.billedUsdPerImage > row.providerUsdPerImage]).toEqual([row.id, true])
+      expect([row.id, row.billedUsdPerImage]).toEqual([
+        row.id,
+        Math.round(row.providerUsdPerImage * AI_IMAGE_BILLED_MARKUP * 1_000_000) / 1_000_000,
+      ])
+    }
+  })
+
+  it('pins the default model’s figures: $0.04 to Google, 60 credits to the customer', () => {
+    expect(aiImageProviderUsdPerImage('imagen-4.0-generate-001')).toBe(0.04)
+    expect(aiImageBilledUsdPerImage('imagen-4.0-generate-001')).toBe(0.06)
+    expect(assistCreditsFromUsd(aiImageBilledUsdPerImage('imagen-4.0-generate-001'))).toBe(60)
+  })
+
+  it('prices pictures on the meter’s own estimators, and leaves a text exchange as it was', () => {
+    const none = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
+    expect(estimateAiBilledUsd({ ...none, images: 3 }, 'imagen-4.0-generate-001')).toBe(0.18)
+    expect(estimateAiProviderCostUsd({ ...none, images: 3 }, 'imagen-4.0-generate-001')).toBe(0.12)
+    expect(estimateAiBilledUsd(USAGE, 'claude-sonnet-5')).toBe(
+      estimateAiBilledUsd({ ...USAGE, images: 0 }, 'claude-sonnet-5'),
+    )
+  })
+
+  it('prices an unknown image model at the dearest row, on both rates', () => {
+    expect(aiImageProviderUsdPerImage('imagen-99')).toBe(AI_IMAGE_FALLBACK_RATES.providerUsdPerImage)
+    expect(aiImageBilledUsdPerImage('imagen-99')).toBe(AI_IMAGE_FALLBACK_RATES.billedUsdPerImage)
+    expect(AI_IMAGE_FALLBACK_RATES.billedUsdPerImage).toBe(
+      Math.max(...AI_IMAGE_MODEL_CATALOG.map((row) => row.billedUsdPerImage)),
+    )
+  })
+
+  it('never offers an image model where a text model is chosen', () => {
+    const textIds = new Set(AI_MODEL_CATALOG.map((entry) => entry.id))
+    for (const row of AI_IMAGE_MODEL_CATALOG) expect([row.id, textIds.has(row.id)]).toEqual([row.id, false])
   })
 })
