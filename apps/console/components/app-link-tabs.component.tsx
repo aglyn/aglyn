@@ -68,7 +68,12 @@ function a11yProps(index: number) {
 
 export interface AppLinkTabsProps extends Partial<MuiTabsProps> {
   items?: TabItemProps[]
-  activeTab?: string
+  /**
+   * The selected tab's `href` or `id`. `null` says NO tab is selected — the
+   * caller resolved the path and no tab owns it (an unlisted page, AGL-3596)
+   * — and is honored as such; `undefined` leaves the choice to the pathname.
+   */
+  activeTab?: string | null
 }
 
 export const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>(
@@ -107,6 +112,12 @@ export const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>(
       // check entirely, leaving NO tab selected — so no indicator, and
       // nothing for the scroller to bring into view (AGL-649). Fall through
       // to the pathname when it matches nothing.
+      //
+      // `null` is not stale: it is the caller's verdict that the path belongs
+      // to no tab (AGL-3596). The pathname cannot overrule it, because on a
+      // site the Dashboard's href is a prefix of every path beneath it, and a
+      // page with no tab of its own would read as the Dashboard.
+      if (activeTab === null) return false
       if (typeof activeTab !== 'undefined') {
         const byActive = items.find(
           (i) => activeTab === i?.href || activeTab === i?.id,

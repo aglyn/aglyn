@@ -216,12 +216,37 @@ describe('resolveActiveTab', () => {
       .toBeUndefined()
   })
 
-  it('returns nothing for a segment no tab owns', () => {
+  it('answers "no tab" for a segment no tab owns', () => {
     // An unknown sub-section must leave the strip unselected rather than
-    // fall back to whichever tab happens to be a prefix.
+    // fall back to whichever tab happens to be a prefix. `null`, not
+    // `undefined`: the strip honors `null` and lets `undefined` fall through
+    // to the pathname, where the Dashboard's href prefixes every site path.
     expect(
       resolveActiveTab(`${hostBase}/not-a-tab`, hostBase, hostTabs),
-    ).toBeUndefined()
+    ).toBeNull()
+  })
+
+  it('selects no tab on an unlisted plugin page, nor on a record beneath it (AGL-3596)', () => {
+    const Page = (): null => null
+    registerConsoleExtension({
+      pluginId: 'unlisted-probe',
+      displayName: 'Unlisted probe',
+      navItems: [
+        { label: 'AI jobs', href: '/ai-jobs', unlisted: true, ownsSubtree: true, Component: Page },
+      ],
+    })
+    try {
+      const tabs = hostNavTabItems(ORG, HOST)
+      expect(tabs.some((tab) => tab.href?.endsWith('/ai-jobs'))).toBe(false)
+      expect(resolveActiveTab(`${hostBase}/ai-jobs`, hostBase, tabs)).toBeNull()
+      expect(resolveActiveTab(`${hostBase}/ai-jobs/job-1`, hostBase, tabs)).toBeNull()
+      // The control: the Dashboard is still the bare site's tab.
+      expect(resolveActiveTab(hostBase, hostBase, tabs)).toBe(
+        buildRoute(Route.HOST_DASHBOARD, { orgSlug: ORG, host: HOST }),
+      )
+    } finally {
+      unregisterConsoleExtension('unlisted-probe')
+    }
   })
 })
 
