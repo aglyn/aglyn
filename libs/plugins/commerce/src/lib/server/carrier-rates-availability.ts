@@ -18,6 +18,7 @@
 import { pluginShippingRateQuoter } from '@aglyn/aglyn/plugin-manager/plugin-shipping-rates'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /**
  * `GET commerce/shipping/carrier-rates?hostId` (AGL-3612): whether this site
@@ -38,7 +39,8 @@ export const carrierRatesAvailabilityHandler: PluginApiHandler = async (req, res
   let decoded
   try {
     decoded = await firebaseAdmin.app().auth().verifyIdToken(authorization.slice('Bearer '.length))
-  } catch {
+  } catch (error) {
+    if (!isRefusedIdToken(error)) throw error
     return res.status(401).json({ error: 'Unauthenticated' })
   }
   try {

@@ -25,6 +25,7 @@ import { readShippingConfig, SHIPPING_NOT_CONFIGURED_MESSAGE, type ShippingConfi
 import { isDocumentId } from './db'
 import type { ShippingActor } from './labels'
 import { resolveShippingSite } from './site-context'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /**
  * THE GATE EVERY CONSOLE ROUTE CLIMBS (AGL-3612). The console's dispatcher
@@ -78,7 +79,8 @@ export async function shippingGate(
   let decoded
   try {
     decoded = await firebaseAdmin.app().auth().verifyIdToken(authorization.slice('Bearer '.length))
-  } catch {
+  } catch (error) {
+    if (!isRefusedIdToken(error)) throw error
     return shippingError(401, 'Unauthenticated')
   }
   if (!isEmailVerified(decoded) && !isImpersonationSession(decoded)) {

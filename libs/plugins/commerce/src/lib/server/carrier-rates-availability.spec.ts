@@ -39,7 +39,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         verifyIdToken: async (token: string) => {
           if (token === 'tok-editor') return { uid: 'uid-editor' }
           if (token === 'tok-outsider') return { uid: 'uid-outsider' }
-          throw new Error('auth/argument-error')
+          throw Object.assign(new Error('Decoding Firebase ID token failed.'), { code: 'auth/argument-error' })
         },
       }),
       firestore: () => ({
