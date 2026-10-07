@@ -174,6 +174,18 @@ function armReferenceAnswers(
     if (tool === AI_CATALOG_TOOL_NAME) return toolCall(tool, catalog.candidates[0].answer)
     if (tool === AI_CATEGORIES_TOOL_NAME) return toolCall(tool, categories.candidates[0].answer)
     if (tool === 'submit_layout') return toolCall(tool, { tree: JSON.stringify(FREE_LAYOUT) })
+    // A created layout is designed in the layout language and compiled (AGL-3660).
+    if (tool === 'submit_frame') {
+      return toolCall(tool, {
+        header: { band: 'plain', align: 'start', cols: [], blocks: [] },
+        footer: {
+          band: 'dark',
+          align: 'start',
+          cols: [],
+          blocks: [{ kind: 'text', col: -1, text: 'A practice that answers plainly.', to: '', icon: '', style: 'none', items: [] }],
+        },
+      })
+    }
     if (tool === AI_PAGE_SECTION_TOOL.name) return toolCall(tool, { tree: JSON.stringify(sections.shift()) })
     if (tool === AI_SEO_FIELDS_TOOL_NAME) return toolCall(tool, AI_FREE_PAGE_FIXTURE.seo)
     if (tool === AI_THEME_TOOL_NAME) return toolCall(tool, theme.candidates[0].answer)

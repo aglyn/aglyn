@@ -163,11 +163,9 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
   'jobs/ai-job-email-step.ts': { email: () => [AI_JOB_EMAIL_TOOL, aiInventoryLookupTool()] },
   'jobs/ai-job-form-step.ts': { form: () => [AI_JOB_FORM_TOOL, aiInventoryLookupTool()] },
   'jobs/ai-job-component-step.ts': { component: () => [aiComponentTool(), aiInventoryLookupTool()] },
-  'jobs/ai-job-page-step.ts': {
-    section: () => [AI_PAGE_SECTION_TOOL, aiInventoryLookupTool()],
-    // A whole page in the layout language (AGL-3660).
-    'language page': () => [AI_LAYOUT_PAGE_TOOL, aiInventoryLookupTool()],
-  },
+  'jobs/ai-job-page-step.ts': { section: () => [AI_PAGE_SECTION_TOOL, aiInventoryLookupTool()] },
+  // A whole page in the layout language (AGL-3660), asked by the page step's own pass.
+  'jobs/ai-job-page-language.ts': { 'language page': () => [AI_LAYOUT_PAGE_TOOL, aiInventoryLookupTool()] },
   'jobs/ai-job-crm-step.ts': {
     ...Object.fromEntries(AI_CRM_RECORD_KINDS.map((kind) => [`${kind} record`, () => [aiCrmRecordTool(kind)]])),
     email: () => [AI_CRM_EMAIL_TOOL],

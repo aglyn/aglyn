@@ -784,6 +784,18 @@ describe('a golden page whose plan creates what its site lacks (AGL-3031)', () =
     mockRunAiRequest.mockReset().mockImplementation(async (request: SentRequest) => {
       const tool = (request.tools[0] as { name: string }).name
       if (tool === 'submit_layout') return answer(tool, { tree: JSON.stringify(FIXTURE.layout) })
+      // A created layout is designed in the layout language and compiled (AGL-3660).
+      if (tool === 'submit_frame') {
+        return answer(tool, {
+          header: { band: 'plain', align: 'start', cols: [], blocks: [] },
+          footer: {
+            band: 'dark',
+            align: 'start',
+            cols: [],
+            blocks: [{ kind: 'text', col: -1, text: 'Harbor Roofing repairs and replaces roofs.', to: '', icon: '', style: 'none', items: [] }],
+          },
+        })
+      }
       if (tool === 'submit_form') return answer(tool, { ...FORM.answer, tree: JSON.stringify(FORM.answer.tree) })
       if (tool === 'submit_component') return answer(tool, { tree: JSON.stringify(COMPONENT.answer.tree), props: COMPONENT.answer.props })
       if (tool === 'submit_section') return answer(tool, { tree: JSON.stringify(sections.shift()) })
