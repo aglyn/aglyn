@@ -146,6 +146,9 @@ const AiThemeProposalCard = lazyWidget('AiThemeProposalCard', () =>
 const StaffOrgAiCard = lazyWidget('StaffOrgAiCard', () =>
   import('./components/staff-org-ai-card.component').then((m) => m.default),
 )
+const StaffOrgAiConversations = lazyWidget('StaffOrgAiConversations', () =>
+  import('./components/staff-org-ai-conversations.component').then((m) => m.default),
+)
 const StaffOrgUsageAiCreditsCell = lazyWidget(
   'StaffOrgUsageAiCreditsCell',
   () =>
@@ -536,6 +539,12 @@ export function registerAiConsole(): void {
         widgetId: 'ai-org-usage',
         title: 'AI usage',
         Component: StaffOrgAiCard,
+      },
+      {
+        slot: 'staffOrg',
+        widgetId: 'ai-org-conversations',
+        title: 'AI conversations',
+        Component: StaffOrgAiConversations,
       },
       {
         slot: 'staffUser',
