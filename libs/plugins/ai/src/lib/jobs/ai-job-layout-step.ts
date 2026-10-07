@@ -19,7 +19,7 @@ import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-jobs.types'
-import type { AiSiteInventory } from '../model/ai-site-inventory'
+import { aiHomeScreenIds, type AiSiteInventory } from '../model/ai-site-inventory'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
@@ -68,6 +68,7 @@ import {
   aiUnspentOutcome,
 } from './ai-job-generation'
 import { aiPlanRegionViolations, aiPlannedLayoutRegions } from './ai-job-plan-conformance'
+import { aiLayoutSitePages, aiLayoutSitePagesLines, aiLayoutWithSitePages } from './ai-job-layout-site-pages'
 import type { AiJobStepRunner } from './ai-job-text-step'
 import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
@@ -139,12 +140,19 @@ export const AI_JOB_LAYOUT_INSTRUCTIONS: readonly AiSystemBlock[] = [
  * (`aiCopySourceLines`, AGL-3143 §14).
  */
 export function aiJobLayoutPrompt(
-  job: Pick<AiJob, 'brief'>,
+  job: Pick<AiJob, 'brief'> & Partial<Pick<AiJob, 'inputs'>>,
   plan: AiJobPlan | null,
   name: string,
   source: readonly string[] = [],
 ): string {
-  return [`Layout name: ${name}`, aiJobBriefLine(job), ...aiPlanReferenceLines(plan), ...source].join('\n')
+  return [
+    `Layout name: ${name}`,
+    aiJobBriefLine(job),
+    ...aiPlanReferenceLines(plan),
+    // A scaffold's layout is built before its pages, whose navigation the platform writes (AGL-3596).
+    ...aiLayoutSitePagesLines(aiLayoutSitePages(job.inputs)),
+    ...source,
+  ].join('\n')
 }
 
 /** A component name that says it is the site's navigation; a footer's links are not. */
@@ -352,6 +360,10 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
     const allowance = await aiDraftAllowanceRefusal(firestore, { kind: 'layout', hostId, org })
     if (allowance) return aiUnspentOutcome(model, { review: aiLimitReview(allowance) })
 
+    // The pages a site scaffold builds after this layout (AGL-3596): their
+    // ids are the plan's, so the header links them by id, written by the
+    // platform before the doctrine checks the tree.
+    const sitePages = aiLayoutSitePages(job.inputs)
     const result = await runValidatedGeneration('layout', {
       step: 'job.layout',
       model,
@@ -363,6 +375,13 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
       ...(AI_ROUTING_TABLE['job.layout'].thinking ? { thinking: AI_ROUTING_TABLE['job.layout'].thinking } : {}),
       ...(AI_ROUTING_TABLE['job.layout'].effort ? { effort: AI_ROUTING_TABLE['job.layout'].effort } : {}),
       extend: aiLayoutReuseCheck(inventory, plan),
+      ...(sitePages.length
+        ? {
+            context: { screenIds: [...inventory.screens.map((screen) => screen.id), ...sitePages.map((page) => page.id)] },
+            complete: (tree: unknown) =>
+              aiLayoutWithSitePages(tree, sitePages, { homeScreenIds: aiHomeScreenIds(inventory) }),
+          }
+        : {}),
       ...(signal ? { signal } : {}),
     })
     const spent = aiGenerationSpent(result)
