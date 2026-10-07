@@ -1665,8 +1665,47 @@ export interface ConsoleWidget {
    * part of it. Absent without an upsell, for the reason `permission` gives.
    */
   featureFlag?: keyof OrgFeatureFlags
+  /**
+   * Mount this widget as its own upsell when the ONLY thing missing is the
+   * plan entitlement (AGL-3601).
+   *
+   * Without it a widget whose `featureFlag` the plan lacks is absent, as
+   * above. With it, the shell still mounts it — with `entitled={false}` and
+   * an `upgrade` prop ({@link ConsoleWidgetUpgrade}) — but only when every
+   * other gate passes (the reader's permission, the plugin being on for this
+   * workspace and this site) and the missing flag is one an add-on this
+   * workspace can buy switches on. Where nothing can be bought the widget
+   * stays absent, so the widget never has to decide that itself.
+   *
+   * The widget owns what it draws in that state, and must not open the
+   * feature: the shell has decided the plan does not include it.
+   */
+  showWhenNotEntitled?: boolean
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Component: ComponentType<any>
+}
+
+/**
+ * Where a widget mounted by {@link ConsoleWidget.showWhenNotEntitled} sends a
+ * reader to buy what it lacks. The shell builds it, so no extension supplies a
+ * URL the console's own chrome then renders.
+ */
+export interface ConsoleWidgetUpgrade {
+  /** The workspace's Billing page, at the section that sells add-ons. */
+  billingHref: string
+  /** Whether the reader may buy it (`billing.manage`). */
+  canManageBilling: boolean
+}
+
+/**
+ * The props the shell adds to a widget that declared
+ * {@link ConsoleWidget.showWhenNotEntitled}, beside its zone's own.
+ * `entitled` is `true` when the plan includes the feature, and `upgrade`
+ * is present only when it is `false`.
+ */
+export interface ConsoleWidgetEntitlementProps {
+  entitled?: boolean
+  upgrade?: ConsoleWidgetUpgrade
 }
 
 /**
