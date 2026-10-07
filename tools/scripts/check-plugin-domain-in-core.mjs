@@ -268,8 +268,12 @@ export function domainsDeclared(text) {
   return [...domains].sort()
 }
 
-/** Rule 3. First-party ids that are also plain English are left out on purpose. */
-const AMBIGUOUS_IDS = new Set(['ai', 'data', 'email', 'forms', 'logic', 'mui'])
+/**
+ * Rule 3. First-party ids that are also plain English are left out on purpose.
+ * `sms` is also a URL scheme (`sms:`) that core's link sanitizers allow-list
+ * (AGL-3610), which names no plugin.
+ */
+const AMBIGUOUS_IDS = new Set(['ai', 'data', 'email', 'forms', 'logic', 'mui', 'sms'])
 
 const PLUGIN_IMPORT =
   /from\s+['"](@aglyn\/plugins-[a-z-]+)(?:\/[^'"]*)?['"]|import\(\s*['"](@aglyn\/plugins-[a-z-]+)|(?:\.\.\/)+(libs\/plugins\/[a-z-]+)\//

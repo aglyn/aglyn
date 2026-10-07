@@ -2487,6 +2487,19 @@
       }
     },
     {
+      "id": "sms",
+      "$comment": "AGL-3610: text messages behind core's core.messaging.sms contract (Twilio adapter). Infrastructure, like video-delivery: no catalog entry and no switch. Inert until TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_MESSAGING_SERVICE_SID are set. consoleApi serves Twilio's signed inbound STOP webhook at /api/sms/inbound.",
+      "package": "@aglyn/plugins-sms",
+      "register": {
+        "consoleApi": "registerSmsConsoleApi",
+        "serverDeclarations": "registerSmsServerDeclarations",
+        "subprocessors": "smsSubprocessors",
+        "usageAxes": "smsUsageAxes"
+      },
+      "apiPrefixes": ["sms"],
+      "contributes": {}
+    },
+    {
       "id": "video-delivery",
       "package": "@aglyn/plugins-video-delivery",
       "register": {

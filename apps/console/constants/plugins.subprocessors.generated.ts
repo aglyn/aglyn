@@ -112,4 +112,18 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
       },
     ],
   },
+  {
+    pluginId: 'sms',
+    subprocessors: [
+      {
+        host: "api.twilio.com",
+        entity: "Twilio Inc.",
+        region: "United States",
+        purpose: "Delivery of text messages a site sends its own customers, such as order receipts and shipping updates",
+        publishedOn: "2026-10-06",
+        reason: "The Messages REST API, reached only from the SMS plugin’s Twilio adapter (`libs/plugins/sms/src/lib/twilio-provider.ts`) when a site texts a buyer an order update or a merchant re-sends a receipt by text. Inbound STOP replies arrive from Twilio on a signed webhook.",
+        dataReceived: "The recipient’s phone number and the message text (the store name, order number, amounts, carrier tracking link and order status link). Twilio returns delivery status. No email address, payment detail or account credential is sent.",
+      },
+    ],
+  },
 ]

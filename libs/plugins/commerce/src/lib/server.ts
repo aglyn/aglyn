@@ -84,6 +84,7 @@ import { cancelOrderHandler } from './server/cancel-order'
 import { collectionMembershipHandler } from './server/collection-membership'
 import { draftOrderHandler } from './server/draft-order'
 import { fulfillOrderHandler } from './server/fulfill-order'
+import { orderReceiptSendHandler } from './server/order-receipt-send'
 import { giftCardsHandler } from './server/gift-cards'
 import { memberPostHandler } from './server/member-post'
 import { orderAnalyticsHandler } from './server/order-analytics'
@@ -337,6 +338,10 @@ export function registerCommerceConsoleApi(): void {
   // `PATCH /v1/sites/{id}/orders/{id}` records a shipment through the same
   // transaction (`server/api-v1/orders-and-products.ts`).
   registerPluginApiRoute('commerce/fulfill-order', fulfillOrderHandler)
+  // "Resend receipt" from the order dialog (AGL-3610): by email, or by text
+  // when the platform's SMS provider is configured. Rate-limited per member
+  // and per order.
+  registerPluginApiRoute('commerce/order-receipt-send', orderReceiptSendHandler)
   // Issue / void store credit (AGL-2226). Server-side because the host
   // catch-all in the Firestore rules would otherwise let a client write
   // its own `balanceCents`, which checkout applies as amount-off.

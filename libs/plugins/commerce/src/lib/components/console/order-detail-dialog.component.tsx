@@ -62,6 +62,7 @@ import {
   ORDER_DETAIL_ZONE,
   ORDER_FULFILLMENT_ZONE,
 } from './order-zones'
+import { OrderReceiptResend } from './order-receipt-resend.component'
 
 export interface OrderDetailDialogProps {
   hostId: string
@@ -1150,6 +1151,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           </Button>
         ) : null}
         <Button onClick={handlePackingSlip}>{'Packing slip'}</Button>
+        {orderId ? <OrderReceiptResend hostId={hostId} orderId={orderId} order={order} /> : null}
         {can('cancelled') ? (
           <Button color="error" disabled={busy} onClick={handleCancel}>
             {'Cancel order'}
