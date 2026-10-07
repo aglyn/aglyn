@@ -34,8 +34,9 @@ import { listAiProviders } from './providers/registry'
  * vendor. A provider whose endpoint an operator names carries no row in the
  * catalog, so it contributes nothing here.
  *
- * The image providers follow: each `AI_IMAGE_CATALOG_PROVIDERS` row at the
- * host `AI_IMAGE_PROVIDER_HOSTS` publishes for it.
+ * The image providers follow: each `AI_IMAGE_CATALOG_PROVIDERS` row at
+ * every host `AI_IMAGE_PROVIDER_HOSTS` publishes for it, one row on the
+ * published list reaching all of them.
  */
 
 /** Stands for the provider's `apiKeyEnv` in the catalog wording. */
@@ -58,9 +59,11 @@ export function aiSubprocessors(): PluginSubprocessorDeclaration[] {
     })
   }
   for (const provider of AI_IMAGE_CATALOG_PROVIDERS) {
-    const host = AI_IMAGE_PROVIDER_HOSTS[provider.id]
-    if (!provider.subprocessor || !host) continue
-    declarations.push({ host, ...provider.subprocessor })
+    const wording = provider.subprocessor
+    if (!wording) continue
+    for (const host of AI_IMAGE_PROVIDER_HOSTS[provider.id] ?? []) {
+      declarations.push({ host, ...wording })
+    }
   }
   return declarations
 }

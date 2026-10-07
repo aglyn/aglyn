@@ -56,9 +56,15 @@ const PUBLISHED_ANTHROPIC_ROW = {
     "What the user submits — a question, instruction or brief, with the earlier messages of the same Assist conversation — and the content of the element, post, section or page being worked on, with the generated response. On Pro and above, the organization's name and the console route and host travel with an Assist question. For an edit the assistant proposes in the besigner, an outline of the open page, component or layout: element and component ids, layer names, shortened setting values and the selected element's styles. For a generation job, the site inventory: the names and addresses of its pages and collections, the names of its components, layouts, templates, forms and datasets with their prop and field names, and the theme's summary, colors and fonts. For a theme change, the site's current theme settings and brand colors as hex values, from the organization's brand settings, the site logo in the media library or a public page the brief links to. For features that review or write search information, the text and structure of the pages concerned. For product copy, the store's name, the product's name, type, description, tags, options and search listing, the store's category names, and the product's first media-library photo as a copy at most 768 px on its longer edge with its metadata stripped; never another media file, a price, stock, an order or a customer. For products, categories and discounts proposed from a brief, the store's name and its existing category names. For an automation drafted from a brief, which of CRM, webhooks and bookings the plan includes; for an explanation, the automation's outline (trigger, conditions, each step's text with the names of the lists, campaigns, workflows, webhooks and datasets it uses and whether each exists, and a workflow's function names and expressions) and, for a failed run, its time, steps and recorded errors, with email addresses removed and never the triggering event's data. For an insight, the figure reports available and aggregate tables: traffic with top page paths, referrers and campaign tags; form views and submissions; revenue, orders and best-selling product names; bookings by service; campaign subjects with delivery, open and click rates; A/B test and variant conversions; and, for a dataset the member can see, field names and types, record and fill counts, number ranges and totals grouped by a value at least three records share. Email addresses and phone numbers are removed, and no individual record is sent. For CRM assistance, the opened record as the CRM shows it, with all of its standard and custom fields, including contact details, notes, timeline and related records. An email draft adds the request and the record's merge field names; an import sends the field names and types and each column's header and value kind, never a row. No account identifiers or authentication tokens, and no email address outside an opened CRM record.",
 }
 
+/** The hosts the Google Vertex AI row reaches: global, then the US and EU multi-regions. */
+const VERTEX_HOSTS = [
+  'aiplatform.googleapis.com',
+  'aiplatform.us.rep.googleapis.com',
+  'aiplatform.eu.rep.googleapis.com',
+]
+
 /** The Google Vertex AI row as `/legal/subprocessors` carries it (AGL-3602, legal v11). */
 const PUBLISHED_GOOGLE_VERTEX_ROW = {
-  host: 'aiplatform.googleapis.com',
   entity: 'Google LLC (Google Cloud Vertex AI)',
   region: 'United States and European Union',
   purpose:
@@ -86,13 +92,16 @@ afterEach(() => {
 
 describe('the AI plugin declares its subprocessors (AGL-2984)', () => {
   it('derives exactly the rows the inventory publishes, field for field', () => {
-    expect(aiSubprocessors()).toStrictEqual([PUBLISHED_ANTHROPIC_ROW, PUBLISHED_GOOGLE_VERTEX_ROW])
+    expect(aiSubprocessors()).toStrictEqual([
+      PUBLISHED_ANTHROPIC_ROW,
+      ...VERTEX_HOSTS.map((host) => ({ ...PUBLISHED_GOOGLE_VERTEX_ROW, host })),
+    ])
   })
 
-  it("names the image adapter's global endpoint, whatever location this process is set to", () => {
+  it("names the image adapter's global and multi-region endpoints, never a single region", () => {
     process.env[VERTEX_IMAGE_LOCATION_ENV] = 'us-central1'
     try {
-      expect(aiSubprocessors().map((row) => row.host)).toContain(vertexImageHost('global'))
+      expect(VERTEX_HOSTS).toEqual([vertexImageHost('global'), vertexImageHost('us'), vertexImageHost('eu')])
       expect(aiSubprocessors().map((row) => row.host)).not.toContain(vertexImageHost())
     } finally {
       delete process.env[VERTEX_IMAGE_LOCATION_ENV]
@@ -118,7 +127,7 @@ describe('the AI plugin declares its subprocessors (AGL-2984)', () => {
     expect(provider?.endpointHost).toBe('gateway.example')
     expect(aiSubprocessors().map((row) => row.host)).toEqual([
       anthropicProvider.endpointHost,
-      PUBLISHED_GOOGLE_VERTEX_ROW.host,
+      ...VERTEX_HOSTS,
     ])
   })
 })

@@ -16,7 +16,7 @@
  */
 
 import { AI_IMAGE_VERTEX_PROVIDER_ID } from './catalog'
-import { VERTEX_IMAGE_PUBLISHED_HOST } from './vertex-image-endpoint'
+import { VERTEX_IMAGE_PUBLISHED_HOSTS } from './vertex-image-endpoint'
 
 /**
  * The image providers' published hosts (AGL-3602), by provider id: what the
@@ -25,6 +25,6 @@ import { VERTEX_IMAGE_PUBLISHED_HOST } from './vertex-image-endpoint'
  * which loads the platform's service-account credential and has no business
  * in the manifest generator that reads this.
  */
-export const AI_IMAGE_PROVIDER_HOSTS: Readonly<Record<string, string>> = {
-  [AI_IMAGE_VERTEX_PROVIDER_ID]: VERTEX_IMAGE_PUBLISHED_HOST,
+export const AI_IMAGE_PROVIDER_HOSTS: Readonly<Record<string, readonly string[]>> = {
+  [AI_IMAGE_VERTEX_PROVIDER_ID]: VERTEX_IMAGE_PUBLISHED_HOSTS,
 }

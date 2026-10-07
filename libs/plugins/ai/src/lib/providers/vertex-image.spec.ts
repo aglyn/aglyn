@@ -48,6 +48,7 @@ import {
   vertexImageLocation,
   vertexImageModel,
   vertexImageProject,
+  vertexImageUrl,
 } from './vertex-image'
 
 const ENV = ['AI_IMAGE_VERTEX_PROJECT', 'AI_IMAGE_VERTEX_LOCATION', 'AI_IMAGE_MODEL'] as const
@@ -116,6 +117,15 @@ describe('configuration', () => {
     expect(vertexImageLocation()).toBe('us-central1')
     expect(vertexImageModel()).toBe('gemini-3-pro-image')
     expect(provider(jest.fn()).endpointHost()).toBe('us-central1-aiplatform.googleapis.com')
+  })
+
+  it('sends a multi-region location to its own jurisdictional host, which keeps processing inside it', () => {
+    process.env['AI_IMAGE_VERTEX_LOCATION'] = 'us'
+    expect(vertexImageLocation()).toBe('us')
+    expect(provider(jest.fn()).endpointHost()).toBe('aiplatform.us.rep.googleapis.com')
+    expect(vertexImageUrl('aglyn-main', 'eu', 'gemini-3.1-flash-image')).toBe(
+      'https://aiplatform.eu.rep.googleapis.com/v1/projects/aglyn-main/locations/eu/publishers/google/models/gemini-3.1-flash-image:generateContent',
+    )
   })
 
   it('refuses to call out with no project, before touching the network', async () => {

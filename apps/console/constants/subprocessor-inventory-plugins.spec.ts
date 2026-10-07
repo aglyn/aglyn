@@ -64,7 +64,7 @@ describe('plugin-declared subprocessors reach the registry (AGL-2984)', () => {
     })
   })
 
-  it('keeps the Google Cloud Vertex AI row in the derived list, reaching its global endpoint (AGL-3602)', () => {
+  it('keeps the Google Cloud Vertex AI row in the derived list, reaching its global and multi-region endpoints (AGL-3602)', () => {
     const row = derivePublishedRows().find(
       (entry) => entry.entity === 'Google LLC (Google Cloud Vertex AI)',
     )
@@ -74,7 +74,11 @@ describe('plugin-declared subprocessors reach the registry (AGL-2984)', () => {
         "AI image generation: creating images for a customer's media library from a description a user writes",
       region: 'United States and European Union',
       publishedOn: '2026-10-07',
-      reaches: ['aiplatform.googleapis.com'],
+      reaches: [
+        'aiplatform.eu.rep.googleapis.com',
+        'aiplatform.googleapis.com',
+        'aiplatform.us.rep.googleapis.com',
+      ],
     })
     expect(EGRESS_HOSTS['aiplatform.googleapis.com']?.dataReceived).toBe(
       "The description the user writes and the shape requested, and the generated image returned. No account identifiers, email addresses, or other content of the customer's site.",
