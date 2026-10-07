@@ -218,7 +218,9 @@ snapshots, totals, and a timeline:
   **invoices**, and add internal notes — see
   [Fulfillment, returns and webhooks](orders-and-returns.md).
 - **Ship with the tools you already use**: [ShipStation](use-shipstation.md)
-  imports your orders and sends each shipment back, and
+  imports your orders and sends each shipment back,
+  [ShippingEasy](use-shippingeasy.md) receives each order as it is paid and
+  sends each label back, and
   [Pirate Ship, Shippo or EasyPost](use-pirate-ship.md) work through a
   spreadsheet out and a file of tracking numbers back.
 - **Returns**: buyers ask from their account or the order-status page, and you
@@ -584,6 +586,7 @@ to post tracking back, which fulfills the order. Pro plan and above.
 
 - [Product catalog](catalog.md)
 - [Use ShipStation with Aglyn](use-shipstation.md)
+- [Use ShippingEasy with Aglyn](use-shippingeasy.md)
 - [Use Pirate Ship with Aglyn](use-pirate-ship.md)
 - [Billing & plans](../../workspace-and-billing/billing-and-plans/overview.md)
 - [Bookings & scheduling](../bookings/overview.md)

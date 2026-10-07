@@ -2331,6 +2331,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ShippingEasy connections (AGL-3633), one document per site, keyed by the
+    // host id: the merchant's API key, the API secret SEALED with the secret
+    // box and the store API key, which together create and cancel orders in
+    // the merchant's ShippingEasy account and prove its shipment callbacks;
+    // and under it one record per order sent. Deny ALL client access, staff
+    // included: the console card connects, sends and disconnects through
+    // `commerce/shipping-connectors` on the Admin SDK, and the order events
+    // and the callback route read it server-side.
+    match /commerceShippingEasyConnections/{hostId}/{document=**} {
+      allow read, write: if false;
+    }
+
     // Outreach short tracking links (AGL-3297): what one link in a sent
     // sequence email points at — the org, the enrollment, the step and the
     // destination — keyed by the link's random id. Written by the sending

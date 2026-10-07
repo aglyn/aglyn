@@ -2339,6 +2339,18 @@ allow read, write: if false;
 
 
 
+match /commerceShippingEasyConnections/{hostId}/{document=**} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
 match /outreachLinks/{linkId} {
 allow read, write: if false;
 }
