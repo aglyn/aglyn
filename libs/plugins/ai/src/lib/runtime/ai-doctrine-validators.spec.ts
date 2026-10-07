@@ -49,6 +49,7 @@ import {
   aiFreePageSectionsWithin,
   aiPlanEmbedBriefViolations,
   aiNamesMatch,
+  aiSettleCutHeadings,
   aiSettleDisagreeingNodes,
   aiSettleGridItems,
   aiTreeCopy,
@@ -1576,6 +1577,34 @@ describe('a node map that disagrees with itself is settled where it has one read
   it('returns a map that agrees with itself as it was given', () => {
     const whole = answer({ stack: { componentId: 'muiStack', nodes: ['head'] }, head: heading })
     expect(aiSettleDisagreeingNodes(whole)).toBe(whole)
+  })
+})
+
+describe('a heading past its ceiling is kept to its first whole clause where one fits (AGL-3596)', () => {
+  const headed = (children: string, variant = 'h1') => ({
+    rootId: 'root',
+    nodes: { root: { componentId: 'div', nodes: ['title'] }, title: { componentId: 'muiTypography', props: { variant, children } } },
+  })
+  const titleOf = (input: unknown) => (input as { nodes: { title: { props: { children: string } } } }).nodes.title.props.children
+
+  it('cuts at the last sentence or clause that ends within 120 characters', () => {
+    const clause = 'Free roof inspections for Austin homeowners after a storm, with photos of every shingle we replace and a written estimate'
+    expect(clause.length).toBeGreaterThan(120)
+    expect(titleOf(aiSettleCutHeadings(headed(clause)))).toBe('Free roof inspections for Austin homeowners after a storm')
+    const sentences = 'Gentle dental care for the whole family. Check-ups, cleanings and fillings for kids and parents, booked around school hours.'
+    expect(titleOf(aiSettleCutHeadings(headed(sentences)))).toBe('Gentle dental care for the whole family.')
+  })
+
+  it('leaves a heading with no boundary within, a stub, body copy and a heading that fits for the re-ask or as written', () => {
+    const run = 'A'.repeat(20).split('').map((_, index) => `word${index}`).join(' ') + ' and many more words that keep going past the ceiling'
+    for (const input of [
+      headed(run),
+      headed(`Hi, ${'groomed dogs leave happier than they came in '.repeat(3)}`),
+      headed('A long paragraph, '.repeat(10), 'body1'),
+      headed('Dog grooming in Austin, done gently'),
+    ]) {
+      expect(aiSettleCutHeadings(input)).toBe(input)
+    }
   })
 })
 

@@ -71,6 +71,7 @@ import {
   AI_EMAIL_CLIP_BYTES,
   AI_OUTPUT_BUDGETS,
   AI_OUTPUT_SURFACE,
+  AI_TEXT_LIMITS,
   isHeadlineVariant,
   type AiBudgetMetric,
   type AiLoadEstimate,
@@ -2805,6 +2806,68 @@ export function aiSettleDisagreeingNodes(input: unknown): unknown {
   return changed ? { ...input, nodes } : input
 }
 
+
+/** The fewest words a heading cut at a boundary keeps, so a cut never leaves a stub. */
+const HEADING_CUT_MIN_WORDS = 3
+/** The least share of the ceiling a heading cut at a boundary keeps. */
+const HEADING_CUT_MIN_SHARE = 0.3
+/** Where a sentence ends: its stop is kept. */
+const SENTENCE_END = /[.!?](?=\s)/g
+/** Where a clause ends: the mark is dropped. */
+const CLAUSE_END = /\s*(?:[,;:]|\s[—–-])\s/g
+
+/**
+ * The longest whole part of a heading that fits `limit`: up to the last
+ * sentence that ends within it, else the last clause, or `null` where neither
+ * does, or where what is left is a stub.
+ */
+function headingWithin(line: string, limit: number): string | null {
+  const keeps = (head: string): boolean =>
+    head.split(/\s+/).length >= HEADING_CUT_MIN_WORDS && head.length >= limit * HEADING_CUT_MIN_SHARE
+  for (const [pattern, keepMark] of [
+    [SENTENCE_END, true],
+    [CLAUSE_END, false],
+  ] as const) {
+    let best: string | null = null
+    for (const match of line.matchAll(pattern)) {
+      const head = line.slice(0, (match.index ?? 0) + (keepMark ? match[0].length : 0)).trim()
+      if (head.length > limit) break
+      best = head
+    }
+    if (best !== null && keeps(best)) return best
+  }
+  return null
+}
+
+/**
+ * A heading written past the headline ceiling, settled where it has one
+ * reading (AGL-3596). The palette validator cuts such a line where the
+ * ceiling falls, mid-word, and the check refuses the cut (rule 14,
+ * `copy-cut-at-ceiling`); live guided starts' heroes stopped on it after
+ * their re-ask. A heading whose first sentence or clause ends within the
+ * ceiling is a whole line already, so it is kept to that, its later words
+ * dropped: "Free inspections after a storm, with photos of every shingle we
+ * replace and a written…" becomes "Free inspections after a storm". A heading
+ * with no such boundary, or whose part within is a stub, is left for the
+ * re-ask. Reads and returns the tree as the model wrote it.
+ */
+export function aiSettleCutHeadings(input: unknown): unknown {
+  if (!isRecord(input) || !isRecord(input['nodes'])) return input
+  const limit = Math.min(AI_PALETTE['muiTypography']?.textLimits?.['children'] ?? Infinity, AI_TEXT_LIMITS.headline)
+  let nodes: Record<string, unknown> | null = null
+  for (const [id, node] of Object.entries(input['nodes'])) {
+    if (!isRecord(node) || node['componentId'] !== 'muiTypography' || !isRecord(node['props'])) continue
+    const line = node['props']['children']
+    if (!isHeadlineVariant(node['props']['variant']) || typeof line !== 'string') continue
+    const trimmed = line.trim()
+    if (trimmed.length <= limit || trimmed.includes('{{')) continue
+    const head = headingWithin(trimmed, limit)
+    if (head === null) continue
+    nodes ??= { ...input['nodes'] }
+    nodes[id] = { ...node, props: { ...node['props'], children: head } }
+  }
+  return nodes ? { ...input, nodes } : input
+}
 
 export interface AiDoctrineTreeReport {
   ok: boolean

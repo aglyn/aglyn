@@ -2066,8 +2066,8 @@ when the hero was written.
   new code, and the harness reads a page answer's links against the sections of the plan
   it was built from.
 - **What it costs.** The hero's re-ask names the page's four sections, and the Free page's
-  hero re-asked costs 22 credits, within the 44 of the largest pass the room the arithmetic
-  keeps for a re-asked section must exceed.
+  hero re-asked costs 21 credits, within the 44 of the largest pass the room the arithmetic
+  keeps for a re-asked section must exceed. Its cut subhead is settled to its first whole clause before the check (AGL-3596), so the re-ask names only the button.
 
 ### The time budget
 
