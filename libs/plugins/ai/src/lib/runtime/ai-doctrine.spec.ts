@@ -958,4 +958,26 @@ describe('the tree check settles what has one reading before it reads the tree (
     expect(result.value).not.toBeNull()
     expect(JSON.stringify(result.value?.nodes)).not.toContain('Nobody holds this.')
   })
+
+  it('sizes a Grid container written as the text "True" and its unsized items, as a page section is', () => {
+    const tile = (title: string) => ({ componentId: 'muiTypography', props: { variant: 'h3', component: 'h3', children: title } })
+    const tree = {
+      rootId: 'root',
+      nodes: {
+        root: { componentId: 'div', nodes: ['row'] },
+        row: { componentId: 'muiGrid', props: { container: 'True', spacing: '3' }, nodes: ['one', 'two', 'loose'] },
+        one: { componentId: 'muiGrid', props: { size: { xs: 12, md: 4 } }, nodes: ['oneTitle'] },
+        two: { componentId: 'muiGrid', nodes: ['twoTitle'] },
+        loose: tile('Nail trim'),
+        oneTitle: tile('Full groom'),
+        twoTitle: tile('Bath and brush'),
+      },
+    }
+    const result = aiDoctrineTreeCheck('component', { reusableComponents: false })({ tree: JSON.stringify(tree) })
+    expect(result.violations.filter((violation) => violation.rule === 12)).toEqual([])
+    const sizes = Object.values(result.value?.nodes ?? {})
+      .map((node) => (node as { props?: Record<string, unknown> }).props?.['size'])
+      .filter(Boolean)
+    expect(sizes).toEqual(['xs:12 md:4', 'xs:12 md:4', 'xs:12 md:4'])
+  })
 })

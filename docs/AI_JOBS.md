@@ -1921,7 +1921,9 @@ the same way, in a Grid with a row direction and no container.
   production Home page was refused and refunded after its re-ask for this rule. Every
   other shape above is still re-asked: a Grid that is not a container may be meant as a
   row or as a stack, and an item in a Box moves only by changing the Box.
-  `ai-job-page-sections-live.spec.ts` builds guided starts' Home pages through the
+  The tree check every other kind goes through settles the same shapes on the answer as
+  the model wrote it (`aiSettleWrittenGridItems`), so a layout, a template or a component
+  is held to them alike. `ai-job-page-sections-live.spec.ts` builds guided starts' Home pages through the
   section pass with the real model (`AGLYN_LIVE_AI=1`).
 - **The goldens are real rows.** `ai-page-briefs.ts` draws every row of cards as a Grid
   container (`"spacing": 3`) of items sized for the row (`span`): the ten briefs'
@@ -1930,12 +1932,13 @@ the same way, in a Grid with a row direction and no container.
   roomier cells. The two-person introduction itself keeps its 15 elements with a Stack
   whose direction turns from a column into a row at md. The Free About eval case holds its
   page written out and written once the same way, with a failing control for each
-  refusal: the goldens' old shape and the live page's shape (`grid-not-container`), items
-  sized `"4"` at every width (`grid-item-size`), a container spaced by an sx gap
-  (`grid-gap`), a heading and its lead grouped in a Grid and an intro stacked in a Grid
-  with a column direction (`grid-as-stack`), items wrapped in a Box inside their container
-  (`grid-item-outside-container`) and a container written as the text `"True"`
-  (`grid-container-text`). `ai-eval.spec.ts` holds each Grid control to its own finding.
+  refusal: the goldens' old shape and the live page's shape (`grid-not-container`), a
+  container spaced by an sx gap (`grid-gap`), a heading and its lead grouped in a Grid and
+  an intro stacked in a Grid with a column direction (`grid-as-stack`) and items wrapped in
+  a Box inside their container (`grid-item-outside-container`). `ai-eval.spec.ts` holds
+  each Grid control to its own finding. Its controls for items sized `"4"` at every width
+  and a container written as the text `"True"` were retired when both came to be settled
+  rather than refused (AGL-3596).
 - **What it costs.** The page instructions grow by 72 characters (18 estimated tokens of
   the page-section ledger's prefix), and no credit figure the Free arithmetic quotes
   moves. A Grid item is an element, so a row of cards takes one more element a card:

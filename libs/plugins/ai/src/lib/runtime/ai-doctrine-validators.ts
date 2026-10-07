@@ -1526,7 +1526,10 @@ function writtenGridSizeText(size: unknown): string | null {
  * Box (`grid-item-outside-container`) is moved only by changing the Box.
  *
  * `written` is the node as the model wrote it, by an id of `tree`, as
- * `detectUnresponsiveGrids` reads it. A tree with nothing to settle comes back
+ * `detectUnresponsiveGrids` reads it, for a tree the palette validator has
+ * read; a tree as the model wrote it is read as it stands, which is how the
+ * tree check settles a layout, a template or a component (`aiSettleWrittenGridItems`).
+ * A tree with nothing to settle comes back
  * as the same object, so settling is idempotent. A node that is changed is
  * copied, never edited in place.
  */
@@ -1564,9 +1567,10 @@ export function aiSettleGridItems<T extends AiDoctrineTree>(
   for (const { id } of walkTree(tree)) {
     if (nodes[id].componentId !== GRID) continue
     if (nodes[id].props?.['container'] !== true) {
-      const text = writtenProp(id, 'container')
-      const readsTrue = typeof text === 'string' && text.trim().toLowerCase() === 'true'
-      if (nodes[id].props?.['container'] !== undefined || !readsTrue) continue
+      // Text the palette validator dropped, or, in a tree as the model wrote it, the prop itself.
+      const own = nodes[id].props?.['container']
+      const text = own === undefined ? writtenProp(id, 'container') : own
+      if (typeof text !== 'string' || text.trim().toLowerCase() !== 'true') continue
       ;(edit(id).props as Record<string, unknown>)['container'] = true
     }
     const container = nodes[id]
@@ -1598,7 +1602,7 @@ export function aiSettleGridItems<T extends AiDoctrineTree>(
         continue
       }
       if (!gridItemSpan(nodes[item].props?.['size'], columns).phoneFull) {
-        const own = writtenGridSizeText(writtenProp(item, 'size'))
+        const own = writtenGridSizeText(writtenProp(item, 'size') ?? nodes[item].props?.['size'])
         setSize(item, own !== null && gridItemSpan(own, columns).phoneFull ? own : size)
       }
       settledItems.push(item)
@@ -1607,6 +1611,20 @@ export function aiSettleGridItems<T extends AiDoctrineTree>(
     if (settledItems.length >= 2 && !steps) for (const item of settledItems) setSize(item, size)
   }
   return copied.size ? ({ ...tree, nodes } as T) : tree
+}
+
+/**
+ * `aiSettleGridItems` on a tree as the model wrote it, before the palette
+ * validator reads it (AGL-3596): the tree check every kind but a page section
+ * goes through stores what the validator makes of its answer, so the answer
+ * is settled first. Anything that is no flat node map comes back as it was.
+ */
+export function aiSettleWrittenGridItems(input: unknown): unknown {
+  if (!isRecord(input) || typeof input['rootId'] !== 'string' || !isRecord(input['nodes'])) return input
+  const nodes = Object.fromEntries(Object.entries(input['nodes']).filter(([, node]) => isRecord(node)))
+  const tree = { rootId: input['rootId'], nodes: nodes as unknown as Record<string, AiDoctrineNode> }
+  const settled = aiSettleGridItems(tree)
+  return settled === tree ? input : { ...input, nodes: { ...input['nodes'], ...settled.nodes } }
 }
 
 /** The palette colors a link or a button can take, and a band can be painted in. */
