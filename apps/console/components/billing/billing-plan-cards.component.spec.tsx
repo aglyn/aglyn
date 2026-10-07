@@ -1449,3 +1449,41 @@ describe('a comped tier offers to start its subscription', () => {
     expect(screen.queryByRole('button', { name: /Start your/ })).toBeNull()
   })
 })
+
+/**
+ * Saved forms per site (AGL-3597): the allowance is a ladder now, so every
+ * card states its own rung, read from the plan model rather than typed in,
+ * directly above the submissions band it is most often confused with.
+ */
+describe('the saved-forms-per-site row', () => {
+  const CARDS = [
+    ['Free', 'free'],
+    ['Starter', 'starter'],
+    ['Pro', 'pro'],
+    ['Business', 'business'],
+    ['Agency', 'agency'],
+  ] as const
+
+  const rowFor = (count: number) => `${count} form${count === 1 ? '' : 's'} per site`
+
+  it('states each plan’s own allowance, from the entitlement', () => {
+    renderCards({ plan: undefined })
+    for (const [label, plan] of CARDS) {
+      const expected = rowFor(PLAN_ENTITLEMENTS[plan].formsPerHost)
+      expect([label, within(cardFor(label)).queryAllByText(expected).length]).toEqual([label, 1])
+    }
+    // Free's one form reads singular, the control on the plural above it.
+    expect(within(cardFor('Free')).getByText('1 form per site')).toBeTruthy()
+  })
+
+  it('sits directly above the form submissions row', () => {
+    renderCards({ plan: undefined })
+    for (const [label] of CARDS) {
+      const row = within(cardFor(label)).getByText(/forms? per site$/)
+      expect([label, row.nextElementSibling?.textContent ?? '']).toEqual([
+        label,
+        expect.stringMatching(/form submissions\/mo$/),
+      ])
+    }
+  })
+})

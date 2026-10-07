@@ -725,6 +725,35 @@ describe('a form', () => {
    * gives a form that collects correctly until it is next published, or the
    * reverse.
    */
+  /*
+   * A copy is a create, met against the same `formsPerHost` rung the create
+   * route counts (AGL-3597) — and like the create, not behind
+   * `reusableComponents`, so a Free site is refused for CAPACITY.
+   */
+  it('meets the plan’s saved-form allowance, not the component feature', async () => {
+    expect(recipeFor('form')).toMatchObject({ quotaKey: 'formsPerHost' })
+    expect(recipeFor('form')?.entitlement).toBeUndefined()
+    store.set(`hosts/${HOST}/forms/src`, { displayName: 'Contact', slug: 'contact', nodes: TREE })
+    // Free holds its one form already: the copy would be its second.
+    expect(await run('form', { org: FREE })).toEqual({
+      ok: false,
+      status: 403,
+      error: 'Your plan includes 1 form — upgrade in Billing for more',
+    })
+    // Starter's five: four held, the copy is the fifth.
+    for (let index = 0; index < 3; index += 1) {
+      store.set(`hosts/${HOST}/forms/held-${index}`, { displayName: `H${index}` })
+    }
+    const STARTER = { plan: 'starter', subscription: { status: 'active' } }
+    expect((await run('form', { org: STARTER })).ok).toBe(true)
+    // …and the sixth is refused.
+    expect(await run('form', { org: STARTER })).toMatchObject({
+      ok: false,
+      status: 403,
+      error: 'Your plan includes 5 forms — upgrade in Billing for more',
+    })
+  })
+
   it('rebinds the copied design to the copy, in the document and in the version', async () => {
     const design = (formId: string) => ({
       canvas: { $id: 'canvas', componentId: 'div', nodes: ['formNode'] },

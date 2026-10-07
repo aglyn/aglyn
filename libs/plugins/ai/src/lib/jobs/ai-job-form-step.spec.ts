@@ -104,7 +104,7 @@ import { AI_OUTPUT_BUDGETS } from '../runtime/ai-palette'
 import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import { validateAiSystemBlocks } from '../runtime/ai-runtime'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
-import { AI_DRAFT_ENTITLEMENT_REFUSAL, AI_DRAFT_FIELDS } from './ai-job-drafts'
+import { AI_DRAFT_FIELDS } from './ai-job-drafts'
 import {
   AI_FORM_CONSENT_NODE_ID,
   AI_JOB_FORM_INSTRUCTIONS,
@@ -474,7 +474,13 @@ describe('the form step', () => {
       status: 400,
       error: 'Open the site the form is for before starting the job',
     })
-    expect(await ask('host-1', FREE_ORG)).toEqual({ status: 403, error: AI_DRAFT_ENTITLEMENT_REFUSAL })
+    // A Free site saves one form (AGL-3597): admitted while it has none, refused once it has.
+    expect(await ask('host-1', FREE_ORG)).toBeNull()
+    mockDocs.set('hosts/host-1/forms/frm-only', { displayName: 'Contact' })
+    expect(await ask('host-1', FREE_ORG)).toEqual({
+      status: 403,
+      error: 'Your plan includes 1 forms — upgrade in Billing for more',
+    })
     expect(await ask('host-1', STARTER_ORG)).toBeNull()
   })
 
@@ -567,8 +573,9 @@ describe('the form step', () => {
     expect(commits).toEqual([])
   })
 
-  it('stops for the member, spending nothing, when the site’s plan has no forms', async () => {
+  it('stops for the member, spending nothing, when the site already holds the forms its plan includes', async () => {
     mockDocs.set('orgs/org-1', FREE_ORG)
+    mockDocs.set('hosts/host-1/forms/frm-only', { displayName: 'Contact' })
     const outcome = await createAiJobFormStep()(context())
     expect(mockRunAiRequest).not.toHaveBeenCalled()
     expect(outcome).toEqual({
@@ -577,7 +584,7 @@ describe('the form step', () => {
       estCostUsd: 0,
       model: 'routed-model',
       stopReason: null,
-      review: { reason: 'limit', message: AI_DRAFT_ENTITLEMENT_REFUSAL, findings: [] },
+      review: { reason: 'limit', message: 'Your plan includes 1 forms — upgrade in Billing for more', findings: [] },
     })
   })
 

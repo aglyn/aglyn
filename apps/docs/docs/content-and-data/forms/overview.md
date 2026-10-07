@@ -61,6 +61,24 @@ form's own. To change one of them on one page only, set it on the placed element
 picking the form, or under **Change it on this page only**. That replaces just the
 setting you changed; anything you leave empty still follows the form.
 
+### Saved forms per site
+
+Each plan includes a number of saved forms per site:
+
+| Plan | Saved forms per site |
+| --- | --- |
+| Free | 1 |
+| Starter | 5 |
+| Pro | 25 |
+| Business | 100 |
+| Scale, Advanced, Agency | 500 |
+| Enterprise | 500 by default; more by agreement |
+
+The Forms page shows how many a site has used. The limit applies when you create or
+duplicate a form: at the limit, the next one is refused with a link to upgrade. A site
+that holds more forms than its plan includes, for example after moving to a smaller
+plan, keeps every one of them, and they keep collecting submissions.
+
 ### Monthly allowance per plan
 
 Each tier includes a monthly form-submission allowance, counted per site:

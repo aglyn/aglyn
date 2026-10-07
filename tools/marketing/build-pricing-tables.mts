@@ -280,11 +280,11 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
       { label: 'Actions builder', value: (p) => bool(F(p).actions) },
       { label: 'Appointment bookings', value: (p) => bool(F(p).bookings) },
       /*
-       * One form row, not two. `formsPerHost` is an abuse ceiling identical
-       * on every plan that has forms at all, so a row for it would be eight
-       * matching cells inviting a reader to hunt for a difference that is
-       * not there. What a plan buys on this axis is the submissions band
-       * below, which is tiered and metered.
+       * `formsPerHost` is a ladder since AGL-3597 (Free 1 to 500), and the
+       * live page carries it as "Saved forms per site" directly above this
+       * row, inserted by `tools/scripts/publish-pricing-saved-forms-row.mjs`.
+       * It is not emitted here yet: the reconciler refuses a row the Figma
+       * frame does not have, so it joins this spec when the frame does.
        */
       {
         label: 'Form submissions / mo, per site',

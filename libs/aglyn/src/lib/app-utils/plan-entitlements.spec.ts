@@ -451,10 +451,9 @@ describe('plan entitlements', () => {
       if (key === 'transactionFeePhysicalPct') continue
       if (key === 'transactionFeeDigitalPct') continue
       if (key === 'marketplaceFeePct') continue
-      // Nor is an abuse ceiling. `formsPerHost` is the same finite number on
-      // every plan that has forms, deliberately including this one: it bounds
-      // a collection rather than a tier, and the 2026-08-30 decision withdrew
-      // the ladder. A deal that needs a larger one takes a per-org override.
+      // Nor is the top of the saved-form ladder. `formsPerHost` is
+      // `FORMS_PER_HOST_CEILING` from Scale up, this plan included (AGL-3597).
+      // A deal that needs a larger catalog takes a per-org override.
       if (key === 'formsPerHost') continue
       if (agency[key] === UNLIMITED) {
         expect([key, value]).toEqual([key, UNLIMITED])
@@ -2717,59 +2716,58 @@ describe('a first payment that never completed is not a paid workspace', () => {
   })
 })
 
-describe('the saved-form catalog is one ceiling, not a ladder', () => {
+describe('the saved-form ladder (AGL-3597)', () => {
   const FORM_PLANS = Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]
-  /** Every plan carrying the entitlement the form entity rides. */
-  const PLANS_WITH_FORMS = FORM_PLANS.filter(
-    (plan) => PLAN_ENTITLEMENTS[plan].features?.reusableComponents,
-  )
+  /** The published ladder: what one site may save on each plan. */
+  const LADDER: Record<OrgPlan, number> = {
+    free: 1,
+    starter: 5,
+    pro: 25,
+    business: 100,
+    scale: FORMS_PER_HOST_CEILING,
+    advanced: FORMS_PER_HOST_CEILING,
+    agency: FORMS_PER_HOST_CEILING,
+    enterprise: FORMS_PER_HOST_CEILING,
+  }
 
-  it('resolves to the same number on every plan that has forms at all', () => {
-    // Read as a list rather than a boolean so a failure prints the whole
-    // shape. Eight identical cells is the point: this axis is an abuse
-    // ceiling, and the field does not sell it.
+  it('gives each plan its rung', () => {
+    // Read as a map rather than one boolean so a failure prints the whole
+    // shape, and over every plan the table holds so a new plan is noticed.
     expect(
-      PLANS_WITH_FORMS.map((plan) => PLAN_ENTITLEMENTS[plan].formsPerHost),
-    ).toEqual(PLANS_WITH_FORMS.map(() => FORMS_PER_HOST_CEILING))
+      Object.fromEntries(FORM_PLANS.map((plan) => [plan, PLAN_ENTITLEMENTS[plan].formsPerHost])),
+    ).toEqual(LADDER)
   })
 
-  it('is the number the Decision Log publishes', () => {
+  it('tops out at the number the Decision Log publishes', () => {
     /*
-     * Pinned to its value, not merely to itself. Every other row here reads
+     * Pinned to its value, not merely to itself. The top four plans read
      * `FORMS_PER_HOST_CEILING`, so they all move together when the constant
      * moves and none of them would notice — and this number is a published
-     * packaging fact, generous by construction against Wix's 75 and
-     * Jotform's 100. Changing it is a decision that owes a Decision Log
+     * packaging fact. Changing it is a decision that owes a Decision Log
      * edit, which is what this row makes someone stop and do.
      */
     expect(FORMS_PER_HOST_CEILING).toBe(500)
   })
 
-  it('has more than one plan to have found identical', () => {
-    // The control. A `map` over one entry — or none — matches itself, so the
-    // row above would go green on a plan model that lost seven tiers.
-    expect(PLANS_WITH_FORMS.length).toBeGreaterThan(5)
+  it('climbs with the plan, and never steps down', () => {
+    const order: OrgPlan[] = ['free', 'starter', 'pro', 'business', 'scale', 'advanced', 'agency', 'enterprise']
+    const values = order.map((plan) => PLAN_ENTITLEMENTS[plan].formsPerHost)
+    for (let index = 1; index < values.length; index++) {
+      expect([order[index], values[index] >= values[index - 1]]).toEqual([order[index], true])
+    }
   })
 
-  it('differs on Free alone, and the entitlement is why', () => {
-    // Free is not a cheaper rung of the same ladder: it has no form entity,
-    // so `/api/hosts/resources` refuses on `reusableComponents` before the
-    // count is consulted. Zero is the honest published consequence.
+  it('gives Free its one form without the component feature', () => {
+    // The saved form left `reusableComponents`: Free keeps no components and
+    // still saves a form, which is what lets the AI site start make a real one.
     expect(PLAN_ENTITLEMENTS.free.features?.reusableComponents).toBeFalsy()
-    expect(PLAN_ENTITLEMENTS.free.formsPerHost).toBe(0)
-    expect(
-      FORM_PLANS.filter(
-        (plan) => PLAN_ENTITLEMENTS[plan].formsPerHost !== FORMS_PER_HOST_CEILING,
-      ),
-    ).toEqual(['free'])
+    expect(PLAN_ENTITLEMENTS.free.formsPerHost).toBe(1)
   })
 
   it('is a different dimension from the submissions band', () => {
     // The two are routinely confused, and the confusion is expensive in one
-    // direction: a catalog ceiling read as a submissions cap refuses metered
-    // revenue. The submissions band is tiered and this is flat, so they
-    // disagree nearly everywhere — which is why only one of them is a row on
-    // a price list.
+    // direction: a catalog allowance read as a submissions cap refuses
+    // metered revenue.
     const differing = FORM_PLANS.filter(
       (plan) =>
         PLAN_ENTITLEMENTS[plan].formsPerHost !==
@@ -2778,60 +2776,30 @@ describe('the saved-form catalog is one ceiling, not a ladder', () => {
     expect(differing.length).toBeGreaterThan(FORM_PLANS.length / 2)
   })
 
-  it('caps even the most expensive plan, because it is an abuse ceiling', () => {
-    // Enterprise is uncapped on the dimensions it buys. This is not one of
-    // them, and an unbounded catalog is a storage vector on any tier. A
-    // contract that needs more takes the per-org override below.
+  it('caps even the most expensive plan', () => {
+    // An unbounded catalog is a storage vector on any tier. A contract that
+    // needs more takes the per-org override below.
     expect(PLAN_ENTITLEMENTS.enterprise.formsPerHost).toBe(FORMS_PER_HOST_CEILING)
     expect(isUnlimitedQuota(PLAN_ENTITLEMENTS.enterprise.formsPerHost)).toBe(false)
   })
 
-  it('refuses the create only once the ceiling is spent', () => {
-    const pro = { plan: 'pro', subscription: { status: 'active' } } as any
-    // Under: another form is still creatable while one slot remains.
-    expect(checkQuota(pro, 'formsPerHost', FORMS_PER_HOST_CEILING - 1).allowed).toBe(
-      true,
-    )
-    // At: the next one is not.
-    expect(checkQuota(pro, 'formsPerHost', FORMS_PER_HOST_CEILING).allowed).toBe(false)
-    expect(checkQuota(pro, 'formsPerHost', FORMS_PER_HOST_CEILING).limit).toBe(
-      FORMS_PER_HOST_CEILING,
-    )
-  })
-
-  it('answers identically for every plan, in BOTH directions', () => {
+  it('refuses the create only once the rung is spent, on every plan, in BOTH directions', () => {
     /*
-     * The row that makes the refusal above mean something. A policy module
-     * that answered 0 for every ceiling would pass "the next one is refused"
-     * while refusing the first one too, so the same counts are walked across
-     * every plan and both verdicts are asserted.
+     * A policy module that answered 0 for every allowance would pass "the
+     * next one is refused" while refusing the first one too, so every plan
+     * is walked at none, one under, and at its rung.
      */
-    for (const plan of PLANS_WITH_FORMS) {
+    for (const plan of FORM_PLANS) {
       const org = { plan, subscription: { status: 'active' } } as any
+      const rung = LADDER[plan]
       expect([plan, checkQuota(org, 'formsPerHost', 0).allowed]).toEqual([plan, true])
-      expect([
-        plan,
-        checkQuota(org, 'formsPerHost', FORMS_PER_HOST_CEILING - 1).allowed,
-      ]).toEqual([plan, true])
-      expect([
-        plan,
-        checkQuota(org, 'formsPerHost', FORMS_PER_HOST_CEILING).allowed,
-      ]).toEqual([plan, false])
+      expect([plan, checkQuota(org, 'formsPerHost', rung - 1).allowed]).toEqual([plan, true])
+      expect([plan, checkQuota(org, 'formsPerHost', rung).allowed]).toEqual([plan, false])
+      expect([plan, checkQuota(org, 'formsPerHost', rung).limit]).toEqual([plan, rung])
     }
   })
 
-  it('refuses every form on Free, which has no catalog', () => {
-    // The lower control. Without it "every plan allows one" is satisfied by a
-    // comparison that allows everybody.
-    const free = { plan: 'free' } as any
-    expect(checkQuota(free, 'formsPerHost', 0).allowed).toBe(false)
-    expect(checkQuota(free, 'formsPerHost', 0).limit).toBe(0)
-  })
-
   it('takes a per-org override, so a contract can raise or lower it', () => {
-    // Where a genuinely larger catalog comes from now that no plan is
-    // uncapped: one org, by contract, without moving the ceiling everyone
-    // else is measured against.
     const raised = {
       plan: 'starter',
       subscription: { status: 'active' },
@@ -2855,10 +2823,8 @@ describe('the saved-form catalog is one ceiling, not a ladder', () => {
     /*
      * `JSON.stringify(Infinity)` is `null` and `Number(null)` is `0`, so an
      * uncapped quota needs the `unlimited` flag to survive a route boundary
-     * or it renders as "no forms at all". A finite ceiling on every plan
-     * needs none of that apparatus — asserted rather than assumed, because
-     * the day one plan goes uncapped here this row is what says the flag has
-     * to come with it.
+     * or it renders as "no forms at all". A finite allowance on every plan
+     * needs none of that apparatus.
      */
     const roundTrip = (value: number) => JSON.parse(JSON.stringify({ value })).value
     for (const plan of FORM_PLANS) {
@@ -2866,39 +2832,25 @@ describe('the saved-form catalog is one ceiling, not a ladder', () => {
       expect(Number.isFinite(allowance)).toBe(true)
       expect(roundTrip(allowance)).toBe(allowance)
     }
-    // The hazard itself, so the claim above is a measurement and not a habit.
     expect(roundTrip(UNLIMITED)).toBeNull()
   })
 
-  describe('a ceiling reached takes nothing away', () => {
-    it('does not move when the plan does, so a downgrade strands nothing', () => {
-      // A capacity a customer is told to RELEASE is one a plan change can
-      // strand. This one cannot: the number is the same on both sides of the
-      // downgrade, which is why it is absent from `over-limit.ts`.
-      const before = resolveOrgEntitlements({ plan: 'advanced' } as any)
-      const after = resolveOrgEntitlements({ plan: 'starter' } as any)
-      expect(before.formsPerHost).toBe(FORMS_PER_HOST_CEILING)
-      expect(after.formsPerHost).toBe(before.formsPerHost)
-    })
-
-    it('refuses only the next one, and computes no excess to release', () => {
-      // A catalog can still sit above the ceiling — a contract override
-      // withdrawn, or a ceiling lowered under forms already built. The forms
-      // stay; only the create is refused.
+  describe('a rung spent takes nothing away', () => {
+    it('refuses only the next one after a downgrade, and computes no excess to release', () => {
+      // An Advanced site with 30 forms moves to Starter's 5: the 30 stay, and
+      // only the 31st create is refused. There is nothing to release.
       const starter = { plan: 'starter', subscription: { status: 'active' } } as any
-      const held = checkQuota(starter, 'formsPerHost', FORMS_PER_HOST_CEILING + 30)
+      const held = checkQuota(starter, 'formsPerHost', 30)
       expect(held.allowed).toBe(false)
       expect(held.remaining).toBe(0)
     })
 
-    it('keeps accepting submissions on a site past its catalog ceiling', () => {
+    it('keeps accepting submissions on a site past its allowance', () => {
       // The consequence that costs money if it is wrong. Submissions are
-      // metered revenue on their own band; a catalog ceiling that reached them
-      // would refuse the customer's leads AND our billing.
+      // metered revenue on their own band; a catalog allowance that reached
+      // them would refuse the customer's leads AND our billing.
       const starter = { plan: 'starter', subscription: { status: 'active' } } as any
-      expect(
-        checkQuota(starter, 'formsPerHost', FORMS_PER_HOST_CEILING + 30).allowed,
-      ).toBe(false)
+      expect(checkQuota(starter, 'formsPerHost', 30).allowed).toBe(false)
       expect(checkFormSubmissionQuota(starter, 0).allowed).toBe(true)
       expect(checkFormSubmissionQuota(starter, 199).allowed).toBe(true)
     })

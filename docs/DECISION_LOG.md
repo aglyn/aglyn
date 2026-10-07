@@ -92,6 +92,16 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-10-06 — Saved forms per site: Free 1, Starter 5, Pro 25, Business 100, higher tiers 500 (AGL-3597)
+
+**Packaging moves; no price does.** The saved-form allowance (`formsPerHost`) becomes a ladder. Before, Free carried **0** (the saved form rode the `reusableComponents` entitlement, Starter and up) and every paid plan carried **500**, `FORMS_PER_HOST_CEILING` — a technical ceiling that had been shown to customers as an allowance and listed on no pricing page. This supersedes the 2026-08-30 withdrawal of the forms ladder recorded further down.
+
+- **Decided by:** the account owner, 2026-10-06, on seeing a Starter site offered 500 saved forms — far more than the tier is worth, and on no pricing page. Chose the recommended ladder over a tighter 1/3/10/50 and a looser 1/10/50/200. Free gets 1 so a Free site, and the guided AI site start, can create a real Aglyn Form; components stay Starter and up.
+- **Scope:** pricing, packaging
+- **Evidence:** `PLAN_ENTITLEMENTS.<plan>.formsPerHost` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts` (Free 1, Starter 5, Pro 25, Business 100, Scale/Advanced/Agency/Enterprise `FORMS_PER_HOST_CEILING` = 500); the form entity decoupled from `reusableComponents` in `apps/console/app/api/hosts/resources/route.ts`, `libs/tenant/data/admin/src/lib/server/duplicate-resource.ts` and `AI_DRAFT_BANDS.form` in `libs/plugins/ai/src/lib/jobs/ai-job-drafts.ts`; refused at the create only, so a site already over its new allowance keeps every form (`apps/console/utils/over-limit.ts`); a "forms per site" row on the console plan cards and "Saved forms" on the usage meters; `tools/scripts/publish-pricing-saved-forms-row.mjs` adds the "Saved forms per site" row to `/pricing` (screen `v0clP6xQl-`). Specs: `plan-entitlements.spec.ts`, `forms-allowance-server-enforced.spec.ts`, `free-tier-caps-refuse.spec.ts`, `duplicate-resource.spec.ts`, `billing-plan-cards.component.spec.tsx`, `forms-page-header-actions.spec.tsx`, `ai-job-drafts.spec.ts`. Submissions (`formSubmissionsPerMonth`) are unchanged. AGL-3597.
+
+---
+
 ## 2026-10-06 — Free AI has no account-age hold: a new account may generate at once (AGL-3591)
 
 - **Decided by:** the account owner, 2026-10-06, after a new paid-search sign-up was offered "Start this site with AI" on its first Setup page and the 24-hour hold would have refused "Plan my site": remove the hold — the Free taste is 300 credits, and the refusal was losing new users at their first try.

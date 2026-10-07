@@ -416,7 +416,14 @@ export function HostFormsCard(props: HostFormsCardProps) {
         router.push(formHref(formId))
       } catch (error) {
         console.error(error)
-        setCreateError('Could not create that form')
+        // The route's own words when it refused: a spent `formsPerHost`
+        // allowance answers "Your plan includes N forms — upgrade in Billing
+        // for more", which is the upgrade path a generic failure would hide.
+        setCreateError(
+          error instanceof Error && error.message && error.message !== 'Create failed'
+            ? error.message
+            : 'Could not create that form',
+        )
       } finally {
         setCreating(false)
       }

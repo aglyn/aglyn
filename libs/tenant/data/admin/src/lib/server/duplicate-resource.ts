@@ -212,8 +212,9 @@ const RECIPES: Partial<Record<DuplicableHostResourceKind, KindRecipe>> = {
       'nodes',
     ],
     versionParentField: 'formId',
+    // Counted only: a saved form is not behind `reusableComponents`, the same
+    // as its create at `/api/hosts/resources` (AGL-3597).
     quotaKey: 'formsPerHost',
-    entitlement: 'reusableComponents',
     slug: true,
   },
 }
