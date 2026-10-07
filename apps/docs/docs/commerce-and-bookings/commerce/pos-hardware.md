@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3.5
 title: POS hardware
-description: Card readers, a customer display tablet, receipt and kitchen printers that print from any device with no driver, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels on a label printer.
+description: Card readers, a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels.
 ---
 
 # POS hardware
