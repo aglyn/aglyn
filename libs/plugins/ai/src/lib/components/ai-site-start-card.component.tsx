@@ -153,9 +153,10 @@ const TITLE_ID = 'ai-site-start-title'
 
 /**
  * The takeover's surface, for its paper, its bar and its footer alike: the
- * console page's own background, with no elevation overlay (AGL-3596).
+ * console page's own background (AGL-3596). The paper sits at elevation 0,
+ * which is what keeps MUI's dark-mode elevation overlay off it.
  */
-export const AI_SITE_START_SURFACE_SX = { bgcolor: 'background.default', backgroundImage: 'none' } as const
+export const AI_SITE_START_SURFACE_SX = { bgcolor: 'background.default' } as const
 
 /** The two steps, as the indicator under the header names them. */
 const STEP_LABELS = ['Choose', 'Describe'] as const
@@ -414,11 +415,11 @@ export function AiSiteStartCard({
       onClose={exit}
       aria-labelledby={TITLE_ID}
       // The console's own page surface, in both modes. A Dialog's paper sits
-      // at elevation 24, and in dark mode MUI lightens an elevated paper with
-      // a white overlay (`background-image`), which turned the whole takeover
-      // a washed-out gray; the overlay is for floating surfaces, and this one
-      // fills the screen.
-      slotProps={{ paper: { sx: AI_SITE_START_SURFACE_SX } }}
+      // at elevation 24 by default, and in dark mode MUI lightens an elevated
+      // paper with a white overlay, which turned the whole takeover a
+      // washed-out gray; the overlay is for floating surfaces, and this one
+      // fills the screen, so its paper is flat.
+      slotProps={{ paper: { elevation: 0, sx: AI_SITE_START_SURFACE_SX } }}
     >
       {/*
         The way out, before anything it is a way out of: a slim header on the
