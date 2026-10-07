@@ -60,7 +60,10 @@ export function SecondaryAppBarComponent(props: SecondaryAppBarProps) {
               borderBottomWidth: `1px`,
               borderBottomStyle: 'solid',
               borderBottomColor: 'divider',
-              paddingLeft: { sx: 1, sm: 2 },
+              // `xs`, not `sx`: the typo let the phone gutter fall through to
+              // Toolbar's 16px default, as it once did in the top bar.
+              paddingLeft: { xs: 0.5, sm: 2 },
+              paddingRight: { xs: 0, sm: 2 },
             }}
           >
             {tabBarTitle && (
@@ -82,7 +85,11 @@ export function SecondaryAppBarComponent(props: SecondaryAppBarProps) {
 
                 <Divider
                   orientation="vertical"
-                  sx={{ ml: 1.25, mr: 1, opacity: 0.5 }}
+                  sx={{
+                    ml: { xs: 0.5, sm: 1.25 },
+                    mr: { xs: 0, sm: 1 },
+                    opacity: 0.5,
+                  }}
                   flexItem
                 />
               </Fragment>

@@ -472,7 +472,12 @@ export default function StaffTaxFilingCard() {
                   {blockedReason}
                 </Typography>
               ) : null}
-              <Stack direction="row" spacing={1}>
+              <Stack
+                useFlexGap
+                direction="row"
+                spacing={1}
+                sx={{ flexWrap: 'wrap' }}
+              >
                 <Button
                   variant="contained"
                   onClick={save}
@@ -533,7 +538,12 @@ function IdentifierLine({
   requirement?: string
 }) {
   return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+    <Stack
+      useFlexGap
+      direction="row"
+      spacing={1}
+      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+    >
       <Typography variant="body2">
         {label}:{' '}
         <strong>

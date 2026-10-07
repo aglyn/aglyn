@@ -86,7 +86,14 @@ const HostMedia: NextPageWithLayout<Record<string, never>> = () => {
           contentBordered="all"
         >
           {hasOrgTab ? (
-            <Tabs value={tab} onChange={onTabChange} sx={{ mb: 2 }}>
+            <Tabs
+              value={tab}
+              onChange={onTabChange}
+              variant="scrollable"
+              scrollButtons="auto"
+              allowScrollButtonsMobile
+              sx={{ mb: 2 }}
+            >
               <Tab value="site" label="This site" />
               <Tab value="org" label="Organization (shared)" />
             </Tabs>

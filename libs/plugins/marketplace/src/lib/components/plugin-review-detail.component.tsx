@@ -588,6 +588,7 @@ export function PluginReviewDetail({
                 })} contentGutterX contentGutterY>
                 <Stack spacing={1.5}>
                   <Stack
+                    useFlexGap
                     direction="row"
                     spacing={1}
                     sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -697,6 +698,7 @@ export function PluginReviewDetail({
                     {detail.description || 'No description.'}
                   </Typography>
                   <Stack
+                    useFlexGap
                     direction="row"
                     spacing={1}
                     sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -1045,6 +1047,7 @@ export function PluginReviewDetail({
                     return (
                       <Stack key={item.id} spacing={0.25}>
                         <Stack
+                          useFlexGap
                           direction="row"
                           spacing={1}
                           sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -1160,6 +1163,7 @@ export function PluginReviewDetail({
                         }
                         label={
                           <Stack
+                            useFlexGap
                             direction="row"
                             spacing={1}
                             sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -1201,6 +1205,7 @@ export function PluginReviewDetail({
                         // go through AppLink so the SPA does not full-reload.
                         return (
                           <Stack
+                            useFlexGap
                             direction="row"
                             spacing={2}
                             sx={{ pl: 4, flexWrap: 'wrap' }}
@@ -1259,6 +1264,7 @@ export function PluginReviewDetail({
                 <Stack spacing={2}>
                   <Stack spacing={0.5}>
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={1}
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -1291,6 +1297,7 @@ export function PluginReviewDetail({
                       {`Verdict on v${detail.reviewVersion}`}
                     </Typography>
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={1}
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -1449,6 +1456,7 @@ export function PluginReviewDetail({
                       {'Marketplace listing'}
                     </Typography>
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={1}
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -1619,6 +1627,7 @@ export function PluginReviewDetail({
                   <Stack spacing={0.5}>
                     <Typography variant="subtitle2">{'Step back'}</Typography>
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={1}
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -1750,6 +1759,7 @@ export function PluginReviewDetail({
                   </Alert>
                   {detail.versions.map((entry) => (
                     <Stack
+                      useFlexGap
                       key={entry.version}
                       direction="row"
                       spacing={1}
@@ -1876,6 +1886,7 @@ export function PluginReviewDetail({
                       'installs are refused. Restoring clears both.'}
                   </Typography>
                   <Stack
+                    useFlexGap
                     direction="row"
                     spacing={1}
                     sx={{ alignItems: 'center', flexWrap: 'wrap' }}

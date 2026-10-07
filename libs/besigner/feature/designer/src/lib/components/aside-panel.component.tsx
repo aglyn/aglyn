@@ -52,6 +52,8 @@ import {
   Stack,
   Tab as MuiTab,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import {
@@ -507,6 +509,24 @@ export const AsidePanelComponent = forwardRef<any, AsidePanelComponentProps>(
     const { toggled, tab, size } = panel || {}
     const value = tab || defaultTab
 
+    // Below `md` there is no room for a docked panel beside the canvas, so
+    // the panel overlays it as a temporary drawer instead (AGL-3599): from
+    // its own side on a tablet, and as a bottom sheet on a phone, where a
+    // side drawer would leave a sliver of canvas nobody can use.
+    const theme = useTheme()
+    const compact = useMediaQuery(theme.breakpoints.down('md'), {
+      noSsr: true,
+    })
+    const phone = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true })
+    const handleClose = useCallback(
+      () => setPanel((prev) => ({ ...prev, toggled: false })),
+      [setPanel],
+    )
+    const handleOpen = useCallback(
+      () => setPanel((prev) => ({ ...prev, toggled: true })),
+      [setPanel],
+    )
+
     // The bottom-right corner belongs to this panel while it is open
     // (AGL-2486), so publish how far a viewport-fixed affordance has to
     // stand off to clear it. A console-dock launcher reads this; the console's
@@ -522,8 +542,13 @@ export const AsidePanelComponent = forwardRef<any, AsidePanelComponentProps>(
     // parsed rather than added to: `'375' + 20` is `'37520'`, which is a
     // perfectly valid CSS length and would park the launcher off-screen.
     const panelWidth = Number.parseFloat(String(size ?? ''))
+    // An overlaying drawer owns no corner: it is dismissed before anything
+    // under it is reached.
     const rightInset =
-      panelKey === 'panelRight' && toggled && Number.isFinite(panelWidth)
+      panelKey === 'panelRight' &&
+      toggled &&
+      !compact &&
+      Number.isFinite(panelWidth)
         ? panelWidth + 20
         : null
     useEffect(() => {
@@ -555,6 +580,10 @@ export const AsidePanelComponent = forwardRef<any, AsidePanelComponentProps>(
         size={size}
         open={toggled}
         component="aside"
+        temporary={compact}
+        temporaryAnchor={phone ? 'bottom' : undefined}
+        onClose={handleClose}
+        onOpen={handleOpen}
         {...panelProps}
         {...rest}
       >

@@ -136,7 +136,13 @@ export function NotificationCategoryTable(props: NotificationCategoryTableProps)
         <TableRow>
           <TableCell>{'Category'}</TableCell>
           {channels.map((channel) => (
-            <TableCell key={channel.key} align="center">
+            <TableCell
+              key={channel.key}
+              align="center"
+              // The switch columns hug their one-line headers so the category
+              // column, which wraps, keeps the width.
+              sx={{ whiteSpace: 'nowrap', width: '1%' }}
+            >
               {channel.label}
             </TableCell>
           ))}
@@ -172,6 +178,7 @@ export function NotificationCategoryTable(props: NotificationCategoryTableProps)
                   </IconButton>
                   <Stack spacing={0.25} sx={{ minWidth: 0 }}>
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={1}
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -223,6 +230,7 @@ export function NotificationCategoryTable(props: NotificationCategoryTableProps)
                     <TableRow key={`${category}:${type}`}>
                       <TableCell>
                         <Stack
+                          useFlexGap
                           direction="row"
                           spacing={1}
                           sx={{ alignItems: 'center', flexWrap: 'wrap', pl: 5 }}

@@ -85,7 +85,7 @@ export function AiUsageStrip({ orgId, orgSlug }: AiUsageStripProps) {
       data-testid="ai-usage-strip"
       sx={{ px: 1, py: 0.75, borderRadius: 1, bgcolor: 'action.hover' }}
     >
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}>
+      <Stack useFlexGap direction="row" spacing={1} sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}>
         <Typography variant="caption" sx={{ flexGrow: 1 }}>
           {aiUsageStripMineLabel(meter)}
         </Typography>

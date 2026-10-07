@@ -1024,6 +1024,7 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
                   }
                   label={
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={1}
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}

@@ -39,7 +39,6 @@ import {
   Stack,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
   TextField,
   Typography,
@@ -55,6 +54,7 @@ import {
   type SubscriptionCancelWhen,
 } from '../constants/subscription-cancel'
 import { SuperStaffOnly } from './staff-super-only.component'
+import StaffTableHead from './staff-table-head.component'
 
 /**
  * The card's fragment on the staff org page: what a Stripe fraud signal's
@@ -336,13 +336,13 @@ export default function StaffOrgSubscriptionCard({
         ) : null}
         {rows != null && rows.length > 0 ? (
           <ScrollTable size="small">
-            <TableHead>
+            <StaffTableHead>
               <TableRow>
                 <TableCell>{'Plan'}</TableCell>
                 <TableCell>{'Status'}</TableCell>
                 <TableCell>{'Next renewal'}</TableCell>
               </TableRow>
-            </TableHead>
+            </StaffTableHead>
             <TableBody>
               {rows.map((row) => (
                 <TableRow key={row.id}>

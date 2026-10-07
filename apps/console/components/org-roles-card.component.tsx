@@ -156,7 +156,7 @@ export function OrgRolesCard() {
             'an editor who can also view billing, or an admin without ' +
             'billing access. Assign roles from the members table.'}
         </Typography>
-        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+        <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
           {roles.map((role) => (
             <Chip
               key={role.$id}

@@ -46,9 +46,12 @@ import { useTabParam } from '../hooks/use-tab-param'
 function useRailLayout(forceStacked = false) {
   const theme = useTheme()
   const narrow = useMediaQuery(theme.breakpoints.down('sm'))
-  const stacked = forceStacked || narrow
+  // A vertical rail needs a quarter of the row; on a tablet that is ~180px
+  // and its labels wrap word by word, so the strip stays on top until `md`.
+  const stacked = useMediaQuery(theme.breakpoints.down('md')) || forceStacked
   return {
     stacked,
+    narrow,
     /** Props every rail passes to its `Tabs`/`TabList`. */
     tabsProps: {
       orientation: stacked ? ('horizontal' as const) : ('vertical' as const),
@@ -101,7 +104,7 @@ export interface HubTabsProps {
  */
 export function HubTabs(props: HubTabsProps) {
   const { tabs, navHeader = 'Navigation', lazy = false } = props
-  const { tabsProps } = useRailLayout()
+  const { narrow, tabsProps } = useRailLayout()
   /*
    * The SHARED resolver, not a second reading of the same parameter
    * (AGL-2486). This rail used to hold the incoming id in `useState`, which
@@ -152,13 +155,19 @@ export function HubTabs(props: HubTabsProps) {
       <GridItems
         // A navigation column beside its content, not a set of cards.
         masonry={false}
-        spacing={3}
+        spacing={{ xs: 2, sm: 3 }}
         items={[
           {
-            size: { xs: 12, sm: 3 },
+            size: { xs: 12, md: 3 },
             children: (
-              <CardDisplay header={navHeader}>
-                <TabList {...tabsProps} onChange={handleChange}>
+              // On a phone the strip says what it is on its own; a
+              // "Navigation" title above it is the first 60px of the screen.
+              <CardDisplay header={narrow ? undefined : navHeader}>
+                <TabList
+                  {...tabsProps}
+                  aria-label={navHeader}
+                  onChange={handleChange}
+                >
                   {tabs.map((item) => (
                     <Tab key={item.id} value={item.id} label={item.label} />
                   ))}
@@ -167,7 +176,7 @@ export function HubTabs(props: HubTabsProps) {
             ),
           },
           {
-            size: { xs: 12, sm: 9 },
+            size: { xs: 12, md: 9 },
             children: (
               <>
                 {tabs.map((item) => (
@@ -321,7 +330,7 @@ function LockedSectionLabel(props: { label: string }) {
 
 export function HubSections(props: HubSectionsProps) {
   const { sections, children, navHeader = 'Navigation', wide = false } = props
-  const { tabsProps } = useRailLayout(wide)
+  const { narrow, tabsProps } = useRailLayout(wide)
   const shown = useMemo(
     () => sections.filter((section) => section.visible !== false),
     [sections],
@@ -332,12 +341,12 @@ export function HubSections(props: HubSectionsProps) {
     <GridItems
       // The same navigation-beside-content split as above.
       masonry={false}
-      spacing={3}
+      spacing={{ xs: 2, sm: 3 }}
       items={[
         {
-          size: wide ? { xs: 12 } : { xs: 12, sm: 3 },
+          size: wide ? { xs: 12 } : { xs: 12, md: 3 },
           children: (
-            <CardDisplay header={navHeader}>
+            <CardDisplay header={narrow ? undefined : navHeader}>
               {/*
                 * `Tabs`, not `TabList`: there is no `TabContext` here because
                 * there are no panels to bind to — the content is a routed
@@ -345,7 +354,11 @@ export function HubSections(props: HubSectionsProps) {
                 * cannot find warns on every render and parks the indicator on
                 * whichever tab happens to be first.
                 */}
-              <Tabs {...tabsProps} value={activeHref ?? false}>
+              <Tabs
+                {...tabsProps}
+                aria-label={navHeader}
+                value={activeHref ?? false}
+              >
                 {shown.map((section) => (
                   <Tab
                     key={section.href}
@@ -368,7 +381,7 @@ export function HubSections(props: HubSectionsProps) {
             </CardDisplay>
           ),
         },
-        { size: wide ? { xs: 12 } : { xs: 12, sm: 9 }, children },
+        { size: wide ? { xs: 12 } : { xs: 12, md: 9 }, children },
       ]}
     />
   )

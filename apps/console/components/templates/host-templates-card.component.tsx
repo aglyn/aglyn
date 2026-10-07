@@ -823,7 +823,7 @@ export function HostTemplatesCard({
                 'A template is a saved starting point for a page or layout. Create one, or save one from a page you have already built.',
               noRowsAction:
                 onCreate || emptyActions ? (
-                  <Stack direction="row" spacing={1}>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                     {emptyActions}
                     {onCreate ? (
                       <Button variant="contained" onClick={onCreate}>

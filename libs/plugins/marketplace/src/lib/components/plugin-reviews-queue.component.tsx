@@ -255,6 +255,7 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
       }}
     >
       <Stack
+        useFlexGap
         direction="row"
         spacing={1}
         sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -290,6 +291,7 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
       */}
           <Stack spacing={3}>
             <Stack
+              useFlexGap
               direction="row"
               spacing={1}
               sx={{ alignItems: 'center', flexWrap: 'wrap' }}

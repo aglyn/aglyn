@@ -284,6 +284,7 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
           >
             <Stack spacing={1.5}>
               <Stack
+                useFlexGap
                 direction="row"
                 spacing={1}
                 sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}

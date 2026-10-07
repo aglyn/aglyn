@@ -264,7 +264,7 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
               select: {
                 multiple: true,
                 renderValue: (selected: unknown) => (
-                  <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+                  <Stack useFlexGap direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
                     {(selected as string[]).map((id) => (
                       <Chip
                         key={id}
@@ -378,6 +378,7 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
                   renderValue: (selected: unknown) =>
                     (selected as string[]).length ? (
                       <Stack
+                        useFlexGap
                         direction="row"
                         spacing={0.5}
                         sx={{ flexWrap: 'wrap' }}

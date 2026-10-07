@@ -323,6 +323,7 @@ export function ListingReviews({
                     </Avatar>
                     <Stack spacing={0.25} sx={{ flex: 1, minWidth: 0 }}>
                       <Stack
+                        useFlexGap
                         direction="row"
                         spacing={1}
                         sx={{ alignItems: 'center', flexWrap: 'wrap' }}

@@ -178,7 +178,7 @@ export function SourceConversionCard(props: SourceConversionCardProps) {
       }}
     >
       <Stack spacing={2}>
-        <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+        <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
           <ReportStatTile
             label={'Captured'}
             value={captured.value !== null ? captured.value.toLocaleString() : null}

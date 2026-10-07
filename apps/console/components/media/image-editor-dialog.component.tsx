@@ -298,6 +298,7 @@ export function ImageEditorDialog(props: ImageEditorDialogProps) {
             </Typography>
           ) : null}
           <Stack
+            useFlexGap
             direction="row"
             spacing={1}
             sx={{ flexWrap: 'wrap', justifyContent: 'center', rowGap: 1 }}
@@ -336,6 +337,7 @@ export function ImageEditorDialog(props: ImageEditorDialogProps) {
             />
           </Stack>
           <Stack
+            useFlexGap
             direction="row"
             spacing={1}
             sx={{ flexWrap: 'wrap', justifyContent: 'center', rowGap: 1 }}

@@ -288,6 +288,7 @@ function TargetPicker(props: {
   return (
     <Stack spacing={0.5} sx={{ flex: 1 }}>
       <Stack
+        useFlexGap
         direction="row"
         spacing={1}
         sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -436,6 +437,7 @@ function EventParamsEditor(props: {
         </Stack>
       ))}
       <Stack
+        useFlexGap
         direction="row"
         spacing={1}
         sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -1384,6 +1386,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
               // How the page moves (AGL-2867). A visitor who asks for reduced
               // motion is scrolled instantly whatever is chosen here.
               <Stack
+                useFlexGap
                 direction="row"
                 spacing={2}
                 sx={{ alignItems: 'flex-start', flexWrap: 'wrap', pl: 0.5 }}
@@ -1444,6 +1447,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
               // visibility step on the same target cancels a pending one)
               // and, for steps that can SHOW, self-dismissal.
               <Stack
+                useFlexGap
                 direction="row"
                 spacing={2}
                 sx={{ alignItems: 'center', flexWrap: 'wrap', pl: 0.5 }}

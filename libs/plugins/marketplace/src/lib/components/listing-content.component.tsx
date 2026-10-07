@@ -286,6 +286,7 @@ function ListingChangelog({
         {entries.map((entry, index) => (
           <Stack key={entry.version} spacing={1}>
             <Stack
+              useFlexGap
               direction="row"
               spacing={1}
               sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -1348,6 +1349,7 @@ export function MarketplaceListingContent({
                           }}
                         />
                         <Stack
+                          useFlexGap
                           direction="row"
                           spacing={1}
                           sx={{ alignItems: 'center', flexWrap: 'wrap' }}

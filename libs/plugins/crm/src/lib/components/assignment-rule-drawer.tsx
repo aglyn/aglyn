@@ -150,7 +150,7 @@ export function AssignmentRuleDrawer(props: AssignmentRuleDrawerProps) {
 
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
-      <Stack spacing={2} sx={{ width: 380, p: 3 }}>
+      <Stack spacing={2} sx={{ width: 380, maxWidth: '100vw', p: 3 }}>
         <Typography variant="h6">{'New assignment rule'}</Typography>
         <Typography variant="body2" color="text.secondary">
           {'When a new contact matches every condition below, it is assigned ' +

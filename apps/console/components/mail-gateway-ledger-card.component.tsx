@@ -246,7 +246,7 @@ export default function MailGatewayLedgerCard() {
       contentGutterY
     >
       <Stack spacing={2}>
-        <Stack direction="row" spacing={2} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+        <Stack useFlexGap direction="row" spacing={2} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
           <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
             {'Refusals and deliveries each security gateway and mail host gave each sending ' +
               'domain. Two refusals in thirty days with no delivery hold that domain’s bulk ' +

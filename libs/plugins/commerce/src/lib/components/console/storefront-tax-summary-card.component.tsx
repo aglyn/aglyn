@@ -346,6 +346,7 @@ export function StorefrontTaxSummaryCard(props: StorefrontTaxSummaryCardProps) {
                     {group.how}
                   </Typography>
                   <Stack
+                    useFlexGap
                     direction="row"
                     spacing={3}
                     sx={{ flexWrap: 'wrap', rowGap: 1, mb: 1 }}

@@ -253,7 +253,7 @@ export function ActivityCard(props: ActivityCardProps) {
       }}
     >
       <Stack spacing={2}>
-        <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+        <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
           <ReportStatTile
             label={'Activities logged'}
             value={activityFigures ? activityFigures.current.toLocaleString() : null}

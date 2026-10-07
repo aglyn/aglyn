@@ -40,7 +40,6 @@ import {
   TextField,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
   Typography,
 } from '@mui/material'
@@ -76,6 +75,7 @@ import { formatStaffTimestamp } from '../../../../../utils/staff-timestamps'
 import StaffUserProductEmail, {
   type StaffUserMarketing,
 } from '../../../../../components/staff-user-product-email.component'
+import StaffTableHead from '../../../../../components/staff-table-head.component'
 
 interface UserDetail {
   user: {
@@ -514,6 +514,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   called. Read-only: recording or clearing an opt-out
                                   is the audited /admin/contact-suppressions form. */}
                               <Stack
+                                useFlexGap
                                 direction="row"
                                 spacing={1}
                                 sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
@@ -654,7 +655,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                               </Typography>
                             ) : (
                               <ScrollTable size="small">
-                                <TableHead>
+                                <StaffTableHead>
                                   <TableRow>
                                     <TableCell>{'Organization'}</TableCell>
                                     {/* AGL-1114: which seat this membership consumes.
@@ -666,7 +667,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                     <TableCell>{'Role'}</TableCell>
                                     <TableCell>{'Sites'}</TableCell>
                                   </TableRow>
-                                </TableHead>
+                                </StaffTableHead>
                                 <TableBody>
                                   {detail.memberships.map((membership) => (
                                     <TableRow key={membership.orgId}>
@@ -718,6 +719,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                           </Typography>
                                         ) : (
                                           <Stack
+                                            useFlexGap
                                             direction="row"
                                             spacing={0.5}
                                             sx={{ flexWrap: 'wrap', gap: 0.5 }}
@@ -884,6 +886,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                     ) : (
                       <Stack spacing={1.5}>
                         <Stack
+                          useFlexGap
                           direction="row"
                           spacing={1}
                           sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
@@ -947,7 +950,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                           </Typography>
                         ) : (
                           <ScrollTable size="small">
-                            <TableHead>
+                            <StaffTableHead>
                               <TableRow>
                                 <TableCell>{'Version'}</TableCell>
                                 <TableCell>{'Accepted'}</TableCell>
@@ -955,7 +958,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 <TableCell>{'Documents (sha256)'}</TableCell>
                                 <TableCell>{'IP'}</TableCell>
                               </TableRow>
-                            </TableHead>
+                            </StaffTableHead>
                             <TableBody>
                               {detail.legal.acceptances.map((record) => (
                                 <TableRow key={record.version}>

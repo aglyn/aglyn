@@ -357,6 +357,7 @@ function FieldsTable(props: FieldsTableProps) {
             minWidth: 180,
             renderCell: ({ row }: { row: FieldRow }) => (
               <Stack
+                useFlexGap
                 direction="row"
                 spacing={1}
                 sx={{ flexWrap: 'wrap', alignItems: 'center' }}
@@ -875,6 +876,9 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
             if (isCrmPicklistObject(next)) setTab(next)
           }}
           aria-label="Fields by record"
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
         >
           {CRM_PICKLIST_OBJECTS.map((entry) => (
             <Tab key={entry} value={entry} label={CRM_PICKLIST_OBJECT_LABELS[entry]} />

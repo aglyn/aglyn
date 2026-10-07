@@ -335,7 +335,7 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
           <Typography variant="subtitle2">
             {`Screenshots (${screenshots.length}/${MAX_SCREENSHOTS})`}
           </Typography>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
             {screenshots.map((url, index) => (
               <Box key={url} sx={{ position: 'relative' }}>
                 <Box
