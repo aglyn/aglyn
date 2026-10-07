@@ -25,6 +25,7 @@ import {
   SELF_HOSTED_FONT_CACHE_CONTROL,
   selfHostedThemeFonts,
   serveSelfHostedFont,
+  themeFontDeliveryCost,
 } from './self-hosted-fonts'
 
 const CSS = `/* latin */
@@ -284,6 +285,73 @@ describe('the loader picks faces, delivery and fallbacks (AGL-3656)', () => {
     )
     expect(decodeURIComponent(fetchMock.mock.calls[0][0])).toContain('family=Roboto+Flex:wght@')
     expect(fonts?.css).toContain("font-family:'Roboto Flex Fallback'")
+  })
+
+  it('prices the files the page declares, as the page chooses them (AGL-3656)', async () => {
+    catalog(INTER)
+    const sizes = { var: 120_000, s400: 24_000, s900: 23_000, s300: 22_000, s500: 24_000, s700: 24_000, si400: 26_000 }
+    fetchMock.mockImplementation(google(sizes))
+    const cost = await themeFontDeliveryCost(THEME, { baseTypography: BASE })
+    expect(cost.complete).toBe(true)
+    expect(cost.families).toHaveLength(1)
+    const [inter] = cost.families
+    expect(inter.family).toBe('Inter')
+    expect(inter.files.map((file) => `${file.style[0]}${file.weight}`).sort()).toEqual(
+      ['i400', 'n400', 'n500', 'n700', 'n900'],
+    )
+    expect(cost.bytes).toBe(24_000 + 24_000 + 24_000 + 23_000 + 26_000)
+    expect(cost.files).toBe(5)
+    // The same page, rendered: every priced file is one it declares.
+    const page = await selfHostedThemeFonts(THEME, { baseTypography: BASE })
+    expect(page?.css).toContain('/s900.woff2')
+  })
+
+  it('counts a variable file once, however many weights it holds', async () => {
+    catalog({ ...INTER, italics: [] })
+    fetchMock.mockImplementation(google({ var: 30_000, s400: 24_000, s900: 23_000, s500: 24_000, s700: 24_000 }))
+    const cost = await themeFontDeliveryCost(THEME, { baseTypography: BASE })
+    expect(cost.files).toBe(1)
+    expect(cost.bytes).toBe(30_000)
+  })
+
+  it('answers incomplete rather than throwing when Google cannot be read', async () => {
+    catalog(INTER)
+    fetchMock.mockRejectedValue(new Error('offline'))
+    const cost = await themeFontDeliveryCost(THEME, { baseTypography: BASE })
+    expect(cost).toEqual({
+      families: [{ family: 'Inter', source: 'google', files: [], bytes: 0, complete: false }],
+      bytes: 0,
+      files: 0,
+      complete: false,
+    })
+  })
+
+  it('costs nothing for system fonts, and counts an upload’s Latin files', async () => {
+    expect(await themeFontDeliveryCost({}, { baseTypography: BASE })).toEqual({
+      families: [],
+      bytes: 0,
+      files: 0,
+      complete: true,
+    })
+    const cost = await themeFontDeliveryCost(
+      {
+        fonts: [
+          {
+            family: 'Acme Sans',
+            source: 'custom',
+            faces: [
+              { weight: 400, style: 'normal', src: 'media:org:o1/m1' },
+              { weight: 400, style: 'normal', src: 'media:org:o1/m2', unicodeRange: 'U+0400-045F' },
+            ],
+          },
+        ],
+        typography: { fontFamily: '"Acme Sans", sans-serif' },
+      },
+      { baseTypography: BASE },
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(cost.files).toBe(1)
+    expect(cost.complete).toBe(false)
   })
 
   it('adds nothing for a site on system fonts', async () => {

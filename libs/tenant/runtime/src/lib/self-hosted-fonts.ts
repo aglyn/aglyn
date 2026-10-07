@@ -171,10 +171,14 @@ function fileSize(path: string): Promise<number | null> {
   )
 }
 
-/** The Latin, upright file of a weight among some faces, if there is one. */
-function latinFileOf(faces: readonly GoogleFontFace[], weight: number): string | undefined {
+/** The Latin file of a weight (upright unless asked) among some faces, if there is one. */
+function latinFileOf(
+  faces: readonly GoogleFontFace[],
+  weight: number,
+  style: 'normal' | 'italic' = 'normal',
+): string | undefined {
   return faces.find((face) => {
-    if (face.style !== 'normal' || (face.subset && face.subset !== 'latin')) return false
+    if (face.style !== style || (face.subset && face.subset !== 'latin')) return false
     const [low, high = low] = face.weight.split(' ').map(Number)
     return weight >= low && weight <= high
   })?.path
@@ -199,6 +203,21 @@ async function facesOneByOne(family: string, faces: readonly Face[]): Promise<Go
 }
 
 /**
+ * The faces of a family the page asks Google for: each wanted weight as the
+ * nearest one the family offers, and an italic only of a family the catalog
+ * says has one — a request for one it lacks is refused, and a slanted upright
+ * is what the browser would draw anyway.
+ */
+function facesToAsk(need: ThemeFontNeed, facts: ThemeFontFacts | undefined): Face[] {
+  const weights = offeredWeights(need.weights, facts?.weights)
+  const italics = facts?.italics?.length ? offeredWeights(need.italics, facts.italics) : []
+  return [
+    ...weights.map((weight) => ({ weight, style: 'normal' as const })),
+    ...italics.map((weight) => ({ weight, style: 'italic' as const })),
+  ]
+}
+
+/**
  * How one Google family is delivered: as a file per weight, or as the
  * family's variable file holding every weight, whichever is smaller for the
  * weights the page's text styles draw with (AGL-3656).
@@ -218,14 +237,7 @@ function deliveryFor(
   facts: ThemeFontFacts | undefined,
 ): Promise<GoogleFontFace[] | null> {
   const weights = offeredWeights(need.weights, facts?.weights)
-  // An italic is asked for only of a family the catalog says has one: a
-  // request for one it lacks is refused, and a slanted upright is what the
-  // browser would draw anyway.
-  const italics = facts?.italics?.length ? offeredWeights(need.italics, facts.italics) : []
-  const wanted: Face[] = [
-    ...weights.map((weight) => ({ weight, style: 'normal' as const })),
-    ...italics.map((weight) => ({ weight, style: 'italic' as const })),
-  ]
+  const wanted = facesToAsk(need, facts)
   const key = `${need.family.toLowerCase()}|${wanted.map((face) => `${face.style[0]}${face.weight}`).join(',')}`
   return deliveries
     .readThrough(
@@ -364,6 +376,157 @@ export async function selfHostedThemeFonts(
       faces,
       options.baseTypography,
     ),
+  }
+}
+
+/** One file a theme's text is drawn from, as the font picker prices it. */
+export interface ThemeFontCostFile {
+  style: 'normal' | 'italic'
+  /** A weight (`400`) or, for a variable file, its range (`100 900`). */
+  weight: string
+  /** Its size in bytes; null when it could not be read. */
+  bytes: number | null
+}
+
+/** What one family costs a visitor. */
+export interface ThemeFontFamilyCost {
+  family: string
+  source: 'google' | 'custom'
+  /** The Latin files, one per file however many faces it holds. */
+  files: ThemeFontCostFile[]
+  /** The bytes of the files whose size is known. */
+  bytes: number
+  /** Every file was found and measured. */
+  complete: boolean
+}
+
+/** What a theme's fonts cost a visitor, family by family. */
+export interface ThemeFontDeliveryCost {
+  families: ThemeFontFamilyCost[]
+  bytes: number
+  files: number
+  complete: boolean
+}
+
+/** The most families one question prices: a theme sets text in two or three. */
+const COST_MAX_FAMILIES = 6
+
+/**
+ * What a theme's web fonts cost a visitor (AGL-3656): the Latin files a
+ * published page draws its text styles and italics from, and their sizes,
+ * chosen exactly as
+ * {@link selfHostedThemeFonts} chooses them — the same faces, the same
+ * nearest weights, the same pick between a file per weight and the variable
+ * file. The font picker shows it beside each choice.
+ *
+ * Latin, because that is the file an English-language page downloads: the
+ * other subsets are declared with their `unicode-range` and fetched only for
+ * text that needs them. A file holding several faces (the variable file, a
+ * shared range) is counted once.
+ *
+ * Bounded and cached like the page's own load, and never throws: anything it
+ * could not read is left out and the answer says it is not `complete`. An
+ * uploaded font's files are counted from the theme, and sized when the theme
+ * records their size.
+ */
+export async function themeFontDeliveryCost(
+  theme: Pick<HostTheme, 'fonts' | 'typography'> | undefined,
+  options: SelfHostedThemeFontsOptions = {},
+): Promise<ThemeFontDeliveryCost> {
+  const empty: ThemeFontDeliveryCost = { families: [], bytes: 0, files: 0, complete: true }
+  try {
+    const fonts = [...(theme?.fonts ?? []), ...(options.baseFonts ?? [])]
+    const needs = themeFontNeeds(theme, options.baseTypography, options.baseFonts).slice(
+      0,
+      COST_MAX_FAMILIES,
+    )
+    if (!needs.length) return empty
+    const families = await Promise.all(
+      needs.map(async (need): Promise<ThemeFontFamilyCost | null> => {
+        const font = fonts.find(
+          (entry) => entry.family.trim().toLowerCase() === need.family.toLowerCase(),
+        )
+        if (!font) return null
+        if (font.source === 'custom') {
+          const files = (font.faces ?? [])
+            .filter((face) => face.style === 'normal' || face.style === 'italic')
+            .filter((face) => coversLatinLetters(face.unicodeRange))
+            .map((face): ThemeFontCostFile => {
+              const bytes = Number((face as { bytes?: unknown }).bytes)
+              return {
+                style: face.style,
+                weight: String(Math.round(Number(face.weight) || 400)),
+                bytes: Number.isFinite(bytes) && bytes > 0 ? bytes : null,
+              }
+            })
+          return familyCost(font.family.trim(), 'custom', files)
+        }
+        const facts = await themeFontFacts(need.family)
+        const delivered = await deliveryFor(need, facts)
+        if (!delivered) return { family: need.family, source: 'google', files: [], bytes: 0, complete: false }
+        // The weights the text styles draw with, and the italics: a named
+        // weight no style uses (MUI's light) is declared and never fetched.
+        const wanted = facesToAsk(
+          { ...need, weights: need.textWeights.length ? need.textWeights : need.weights },
+          facts,
+        )
+        const paths = new Map<string, GoogleFontFace>()
+        let missing = false
+        for (const face of wanted) {
+          const path = latinFileOf(delivered, face.weight, face.style)
+          if (!path) {
+            missing = true
+            continue
+          }
+          const declared = delivered.find((entry) => entry.path === path)
+          if (declared && !paths.has(path)) paths.set(path, declared)
+        }
+        const entries = [...paths.entries()]
+        const sizes = await Promise.all(entries.map(([path]) => fileSize(path)))
+        const cost = familyCost(
+          need.family,
+          'google',
+          entries.map(([, face], index) => ({ style: face.style, weight: face.weight, bytes: sizes[index] })),
+        )
+        return missing ? { ...cost, complete: false } : cost
+      }),
+    )
+    const priced = families.filter((entry): entry is ThemeFontFamilyCost => !!entry)
+    return {
+      families: priced,
+      bytes: priced.reduce((sum, entry) => sum + entry.bytes, 0),
+      files: priced.reduce((sum, entry) => sum + entry.files.length, 0),
+      complete: priced.every((entry) => entry.complete),
+    }
+  } catch {
+    return { ...empty, complete: false }
+  }
+}
+
+/** Whether a `unicode-range` holds the Latin letters; none at all holds everything. */
+function coversLatinLetters(range: string | undefined): boolean {
+  if (!range) return true
+  const letter = 0x41
+  return range.split(',').some((part) => {
+    const match = /^\s*U\+([0-9A-F?]{1,6})(?:-([0-9A-F]{1,6}))?\s*$/i.exec(part)
+    if (!match) return false
+    const low = parseInt(match[1].replace(/\?/g, '0'), 16)
+    const high = match[2] ? parseInt(match[2], 16) : parseInt(match[1].replace(/\?/g, 'F'), 16)
+    return letter >= low && letter <= high
+  })
+}
+
+function familyCost(
+  family: string,
+  source: 'google' | 'custom',
+  files: ThemeFontCostFile[],
+): ThemeFontFamilyCost {
+  return {
+    family,
+    source,
+    files,
+    bytes: files.reduce((sum, file) => sum + (file.bytes ?? 0), 0),
+    complete: files.length > 0 && files.every((file) => file.bytes !== null),
   }
 }
 
