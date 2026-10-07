@@ -151,6 +151,12 @@ type Step = 'choose' | 'describe'
 /** Labels the dialog for a reader, from its own heading. */
 const TITLE_ID = 'ai-site-start-title'
 
+/**
+ * The takeover's surface, for its paper, its bar and its footer alike: the
+ * console page's own background, with no elevation overlay (AGL-3596).
+ */
+export const AI_SITE_START_SURFACE_SX = { bgcolor: 'background.default', backgroundImage: 'none' } as const
+
 /** The two steps, as the indicator under the header names them. */
 const STEP_LABELS = ['Choose', 'Describe'] as const
 
@@ -407,7 +413,12 @@ export function AiSiteStartCard({
       fullScreen
       onClose={exit}
       aria-labelledby={TITLE_ID}
-      slotProps={{ paper: { sx: { bgcolor: 'background.paper' } } }}
+      // The console's own page surface, in both modes. A Dialog's paper sits
+      // at elevation 24, and in dark mode MUI lightens an elevated paper with
+      // a white overlay (`background-image`), which turned the whole takeover
+      // a washed-out gray; the overlay is for floating surfaces, and this one
+      // fills the screen.
+      slotProps={{ paper: { sx: AI_SITE_START_SURFACE_SX } }}
     >
       {/*
         The way out, before anything it is a way out of: a slim header on the
@@ -419,7 +430,7 @@ export function AiSiteStartCard({
         color="inherit"
         elevation={0}
         enableColorOnDark
-        sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}
+        sx={{ ...AI_SITE_START_SURFACE_SX, borderBottom: 1, borderColor: 'divider' }}
       >
         <Toolbar variant="dense" sx={{ gap: 1 }}>
           <IconButton
@@ -465,7 +476,7 @@ export function AiSiteStartCard({
               <Typography variant="body1" color="text.secondary">
                 {choosing
                   ? 'You can change everything later.'
-                  : `A few answers and ${PLATFORM_BRAND_NAME} AI plans your pages. Nothing is published until you say so.`}
+                  : `A few answers and ${PLATFORM_BRAND_NAME} AI plans and writes your pages, then publishes your site.`}
               </Typography>
             </Stack>
             {notice && <Alert severity="info">{notice}</Alert>}
@@ -672,7 +683,7 @@ export function AiSiteStartCard({
             columnGap: 2,
             borderTop: 1,
             borderColor: 'divider',
-            bgcolor: 'background.paper',
+            ...AI_SITE_START_SURFACE_SX,
           }}
         >
           <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', mr: 'auto', minWidth: 0 }}>
