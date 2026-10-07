@@ -137,6 +137,18 @@ export async function register(): Promise<void> {
     { pluginId: 'console' },
   )
 
+  /*
+   * The native apps' push transports (AGL-3651): APNs for iOS and macOS, FCM
+   * for Android, handed to every notification fan-out in this process. The
+   * transports load only when a notification has push recipients.
+   */
+  try {
+    const { registerNativePushSenders } = await import('./utils/server/native-push')
+    registerNativePushSenders()
+  } catch (error) {
+    console.error('[instrumentation] native push senders failed', error)
+  }
+
   // Logged, not thrown: a declaration that fails to load costs its plugin's
   // keys and events, and a boot that throws costs every route.
   try {

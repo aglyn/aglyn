@@ -1,0 +1,33 @@
+{
+  "id": "logic-variable-plan-prices",
+  "kind": "logic",
+  "brief": "A variable holding our plan prices: starter 19, pro 49, business 99.",
+  "framing": null,
+  "inventory": null,
+  "logic": { "variables": [{ "name": "currency", "type": "text", "value": "USD" }], "functions": [] },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference variable written by hand: a dictionary whose members a function reads as plan_prices.pro.",
+      "plan": null,
+      "answer": { "name": "plan_prices", "type": "dictionary", "value": "{\"starter\":19,\"pro\":49,\"business\":99}" },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 5, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A dictionary whose value is not a JSON object, which no function could read a member of.",
+      "answer": { "name": "plan_prices", "type": "dictionary", "value": "starter 19, pro 49, business 99" },
+      "fails": ["rules"]
+    },
+    {
+      "why": "Repeats a name the site already has.",
+      "answer": { "name": "currency", "type": "text", "value": "EUR" },
+      "fails": ["rules"]
+    }
+  ]
+}

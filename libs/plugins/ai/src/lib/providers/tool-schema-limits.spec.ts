@@ -47,15 +47,20 @@ import { AI_EVAL_RUBRIC_TOOL } from '../runtime/ai-eval-live'
 import { AI_OUTPUT_KINDS } from '../runtime/ai-palette'
 import { assistSectionTool } from '../server/ai-assist-prompts'
 import { aiComponentSelectionTool } from '../server/ai-generate-component'
+import { aiMediaSvgTool } from '../server/ai-media-svg'
 import { assistEditTool } from '../server/assist-edit'
+import { assistBuildTool } from '../server/assist-build'
 import { aiComponentTool } from '../tools/ai-component-tool'
 import { AI_CRM_EMAIL_TOOL, AI_CRM_MAPPING_TOOL, aiCrmRecordTool } from '../tools/ai-crm-tool'
 import { aiExperimentExplainTool, aiExperimentVariantsTool } from '../tools/ai-experiment-tool'
+import { aiLogicFunctionTool, aiLogicVariableTool } from '../tools/ai-logic-tool'
 import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_CATALOG_TOOL, AI_CATEGORIES_TOOL, AI_PRODUCT_COPY_TOOL } from '../tools/ai-products-tool'
 import { aiSeoFieldsTool, aiSeoFixesTool, aiSeoSiteTool } from '../tools/ai-seo-tool'
 import { aiThemeTool } from '../tools/ai-theme-tool'
+import { aiOverlayTool } from '../tools/ai-overlay-tool'
+import { AI_OVERLAY_COPY_CEILINGS } from '../model/ai-overlay-copy'
 import { aiAutomationTool, aiWorkflowExplanationTool } from '../tools/ai-workflow-tool'
 import { ANTHROPIC_TOOL_SCHEMA_LIMITS, anthropicProvider } from './anthropic'
 import { aiToolSchemaBreaches, aiToolSchemaCompiledBytes, aiToolSchemaCounts, type AiTool } from './contract'
@@ -160,6 +165,7 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
     mapping: () => [AI_CRM_MAPPING_TOOL],
   },
   'server/ai-generate-component.ts': { selection: () => [aiComponentSelectionTool()] },
+  'server/ai-media-svg.ts': { illustration: () => [aiMediaSvgTool()] },
   'jobs/ai-job-theme-step.ts': { theme: () => [aiThemeTool()] },
   'jobs/ai-job-seo-step.ts': {
     site: () => [aiSeoSiteTool()],
@@ -177,7 +183,19 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
     'email variants': () => [aiExperimentVariantsTool('email')],
     explain: () => [aiExperimentExplainTool()],
   },
+  // Logic by AI (AGL-3603): a function, a variable, or an explanation.
+  'jobs/ai-job-logic-step.ts': {
+    function: () => [aiLogicFunctionTool()],
+    variable: () => [aiLogicVariableTool()],
+    explain: () => [aiWorkflowExplanationTool()],
+  },
   'jobs/ai-job-text-step.ts': { text: () => [] },
+  // Overlay copy (AGL-3603), a text job answered through one tool: a bar's
+  // set and a popup's differ.
+  'jobs/ai-job-overlay-copy.ts': {
+    bar: () => [aiOverlayTool('bar', AI_OVERLAY_COPY_CEILINGS, [])],
+    popup: () => [aiOverlayTool('popup', AI_OVERLAY_COPY_CEILINGS, ['delay', 'scroll', 'exit'])],
+  },
   // The text-generation seam (AGL-3324) sends a caller's prompt and no tool:
   // its answer is prose the caller parses, held to the caller's own rules.
   'server/plugin-text-generation.ts': { generate: () => [] },
@@ -185,6 +203,11 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
   'server/assist-chat.ts': {
     chat: () => [],
     ...Object.fromEntries(ASSIST_EDIT_DOCUMENT_KINDS.map((kind) => [`${kind} edit`, () => [assistEditTool(kind)]])),
+    // The build rung (AGL-3616): alone off the Besigner, beside the edit tool on it.
+    build: () => [assistBuildTool()],
+    ...Object.fromEntries(
+      ASSIST_EDIT_DOCUMENT_KINDS.map((kind) => [`${kind} edit and build`, () => [assistEditTool(kind), assistBuildTool()]]),
+    ),
   },
 }
 
@@ -239,10 +262,14 @@ describe('what each adapter declares', () => {
     // past it is unknown, not safe, so the guard turns red and the next live
     // request settles it. AGL-3538 carried a task's priority and a logged
     // call's direction inside it by compiling the host events' enum once
-    // rather than twice, which left the draft 38 bytes under the proof.
+    // rather than twice, which left the draft 38 bytes under the proof. The
+    // funnels plugin's "Left a funnel" trigger (AGL-3605) adds 13, and the
+    // order and return triggers (AGL-3611) took it 140 past the proof. Folding
+    // exitFlow into the reference variant and wait into waitForEvent's,
+    // every trigger kept, leaves it 131 under.
     const draft = [aiAutomationTool()]
     expect(ANTHROPIC_TOOL_SCHEMA_LIMITS.compiledSchemaBytes).toBe(3_807)
-    expect(aiToolSchemaCompiledBytes(draft)).toBe(3_769)
+    expect(aiToolSchemaCompiledBytes(draft)).toBe(3_676)
     expect(aiToolSchemaBreaches(draft, ANTHROPIC_TOOL_SCHEMA_LIMITS)).toEqual([])
   })
 
@@ -379,7 +406,8 @@ describe('the second control: the automation tool with a variant per step type',
     expect(variants(VARIANT_PER_STEP_AUTOMATION_TOOL)).toHaveLength(17)
     expect(keys(VARIANT_PER_STEP_AUTOMATION_TOOL).size).toBe(21)
     // The guard lifted out of the union, and one variant per set of fields.
-    expect(variants(aiAutomationTool())).toHaveLength(10)
+    // 8 since exitFlow and wait ride the reference and waitForEvent variants.
+    expect(variants(aiAutomationTool())).toHaveLength(8)
     // 13 before AGL-3538 gave a task its priority and a logged call its direction.
     expect(keys(aiAutomationTool()).size).toBe(15)
   })

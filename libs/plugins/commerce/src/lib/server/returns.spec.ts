@@ -216,7 +216,7 @@ describe('the buyer asks', () => {
       status: 'requested',
       requestedBy: 'buyer',
       customerNote: 'Two arrived cracked',
-      lines: [{ lineItemId: 0, quantity: 2, reason: 'damaged' }],
+      lines: [{ lineItemId: 0, quantity: 2, reason: 'damaged', name: 'Mug' }],
     })
     expect(mockNotify).toHaveBeenCalledTimes(1)
     expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'owner@shop.test', context: 'return-requested' }))
@@ -277,6 +277,7 @@ describe('the merchant runs it', () => {
     await merchant({ action: 'decline', returnId: id, merchantNote: 'Past the window' })
     const out = await merchant({ action: 'receive', returnId: id, restock: [] })
     expect(out.status).toBe(409)
+    expect(outbox().map((event) => event.event)).toEqual(['return.requested', 'return.declined'])
     // And a declined return gives its units back: the buyer may ask again.
     expect((await buyer('POST', { orderId: 'o1', t: 'good-token', lines: [{ lineItemId: 0, quantity: 3, reason: 'other' }] })).status).toBe(200)
   })
@@ -318,7 +319,7 @@ describe('the merchant runs it', () => {
     expect(returns()[0]).toMatchObject({ status: 'refunded', refundCents: 2000 })
     // The order's restock question is answered by what the return did.
     expect(docs.get(`hosts/${HOST}/orders/o1`)!.restockCheck).toMatchObject({ resolution: 'restocked', resolvedBy: 'admin-1' })
-    expect(outbox().map((event) => event.event)).toEqual(['return.requested', 'return.refunded'])
+    expect(outbox().map((event) => event.event)).toEqual(['return.requested', 'return.approved', 'return.received', 'return.refunded'])
     expect(mockSendEmail).toHaveBeenLastCalledWith(expect.objectContaining({ context: 'return-refunded' }))
 
     expect((await merchant({ action: 'refund', returnId: id })).body.already).toBe(true)
@@ -353,5 +354,17 @@ describe('the merchant runs it', () => {
     expect((await merchant({ action: 'attach-label', returnId: id, label: { carrier: 'USPS', trackingNumber: '9400', labelUrl: 'http://x' } })).status).toBe(409)
     await merchant({ action: 'attach-label', returnId: id, label: { carrier: 'USPS', trackingNumber: '9400', labelUrl: 'https://labels.test/1.pdf' } })
     expect(returns()[0].returnLabel).toMatchObject({ carrier: 'USPS', labelUrl: 'https://labels.test/1.pdf', trackingUrl: expect.stringContaining('usps.com') })
+    // Still only requested: the buyer hears nothing until it is approved.
+    expect(mockSendEmail).not.toHaveBeenCalledWith(expect.objectContaining({ context: 'return-approved' }))
+  })
+
+  it('emails a label attached after the approval, in the approval email', async () => {
+    const id = await open()
+    await merchant({ action: 'approve', returnId: id, notify: false })
+    mockSendEmail.mockClear()
+    await merchant({ action: 'attach-label', returnId: id, label: { carrier: 'UPS', trackingNumber: '1Z9', labelUrl: 'https://labels.test/2.pdf' } })
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'ada@example.com', context: 'return-approved', text: expect.stringContaining('https://labels.test/2.pdf') }),
+    )
   })
 })

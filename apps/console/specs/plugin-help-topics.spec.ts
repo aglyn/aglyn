@@ -43,7 +43,10 @@ const PLUGINS_ROOT = join(REPO_ROOT, 'libs/plugins')
  * the reason — an entry here is a claim that the docs do not cover it, not
  * that the topic was hard to pick.
  */
-const NO_TOPIC_YET: Record<string, string> = {}
+const NO_TOPIC_YET: Record<string, string> = {
+  'accounting:Accounting':
+    'The QuickBooks Online and Xero guides are `unlisted: true` until `release_accounting` is on (AGL-3614), so the console registry holds no accounting topic; the page\'s cards link the guides through PLUGIN_UNLISTED_TOPICS instead. Set docsTopic when the guides are listed.',
+}
 
 /** The balanced `{...}` starting at `from`, braces included. */
 function braceBlock(source: string, from: number): string {

@@ -299,6 +299,12 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // The ladder: Free 1, Starter 5, Pro 25, Business 100, and
     // `FORMS_PER_HOST_CEILING` on Scale and above.
     formsPerHost: 1,
+    // One reusable component per Free site (AGL-3615), counted the way the
+    // one saved form is: the create is refused on this number, with the
+    // upgrade path, and no longer on `reusableComponents`, which stays off
+    // here because Free's allowance has a count. Every paid plan is
+    // `UNLIMITED`, the allowance it had when components were only a feature.
+    componentsPerHost: 1,
     variablesPerHost: 3,
     functionsPerHost: 1,
     workflowsPerHost: 0,
@@ -411,6 +417,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // Sized by the same annual-price invariant as Pro's — see that band.
     bandwidthGb: 15,
     formsPerHost: 5,
+    componentsPerHost: UNLIMITED,
     variablesPerHost: 25,
     functionsPerHost: 10,
     workflowsPerHost: 3,
@@ -536,6 +543,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // at the page-view pass-through rather than being refused or absorbed.
     bandwidthGb: 25,
     formsPerHost: 25,
+    componentsPerHost: UNLIMITED,
     variablesPerHost: 100,
     functionsPerHost: 50,
     workflowsPerHost: 25,
@@ -628,6 +636,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // Sized by the same annual-price invariant as Pro's — see that band.
     bandwidthGb: 45,
     formsPerHost: 100,
+    componentsPerHost: UNLIMITED,
     variablesPerHost: 1000,
     functionsPerHost: 250,
     workflowsPerHost: 100,
@@ -700,6 +709,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // Sized by the same annual-price invariant as Pro's — see that band.
     bandwidthGb: 70,
     formsPerHost: FORMS_PER_HOST_CEILING,
+    componentsPerHost: UNLIMITED,
     variablesPerHost: 5000,
     functionsPerHost: 500,
     workflowsPerHost: 250,
@@ -769,6 +779,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // Sized by the same annual-price invariant as Pro's — see that band.
     bandwidthGb: 80,
     formsPerHost: FORMS_PER_HOST_CEILING,
+    componentsPerHost: UNLIMITED,
     variablesPerHost: UNLIMITED,
     functionsPerHost: 1000,
     workflowsPerHost: 500,
@@ -842,6 +853,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // Sized by the same annual-price invariant as Pro's — see that band.
     bandwidthGb: 395,
     formsPerHost: FORMS_PER_HOST_CEILING,
+    componentsPerHost: UNLIMITED,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
     workflowsPerHost: UNLIMITED,
@@ -951,6 +963,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxMembersPerHost: 2_000,
     bandwidthGb: 790,
     formsPerHost: FORMS_PER_HOST_CEILING,
+    componentsPerHost: UNLIMITED,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
     workflowsPerHost: UNLIMITED,
@@ -3381,6 +3394,16 @@ function resolveCappedOrgEntitlements(
     // override of the included count is a grant; the band moves with it.
     for (const [included, max] of SEAT_BANDS) {
       merged[max] = Math.max(merged[max], merged[included])
+    }
+    // An org granted `reusableComponents` by override was granted components
+    // without a count, which is what the flag meant before
+    // `componentsPerHost` existed (AGL-3615). The grant keeps meaning that
+    // unless the same override also names a count, which then decides.
+    if (
+      featureOverrides?.reusableComponents === true &&
+      typeof quotaOverrides.componentsPerHost !== 'number'
+    ) {
+      merged.componentsPerHost = UNLIMITED
     }
     resolved = {
       ...merged,

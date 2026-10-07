@@ -56,6 +56,28 @@ export interface ConsoleProductDraft {
   mediaUrls: string[]
   seoTitle: string
   seoDescription: string
+  /**
+   * What one unit ships as (AGL-3612): packed size and customs facts, as the
+   * editor holds them. A side nobody set is `null`.
+   */
+  shipping: {
+    lengthCm: number | null
+    widthCm: number | null
+    heightCm: number | null
+    hsCode: string
+    originCountry: string
+  }
+  /**
+   * What shopping channels ask of it (AGL-3637), as the editor holds it. A
+   * field nobody entered is `''`.
+   */
+  channel: {
+    brand: string
+    gtin: string
+    mpn: string
+    condition: '' | 'new' | 'refurbished' | 'used'
+    googleProductCategory: string
+  }
 }
 
 /**
@@ -70,6 +92,28 @@ export interface ConsoleProductCopyValues {
   optionNames?: string[]
   seoTitle?: string
   seoDescription?: string
+  /**
+   * Packed size and customs facts (AGL-3612), merged over the product's; a
+   * side set to `null` is cleared.
+   */
+  shipping?: Partial<{
+    lengthCm: number | null
+    widthCm: number | null
+    heightCm: number | null
+    hsCode: string
+    originCountry: string
+  }>
+  /**
+   * Shopping-channel facts (AGL-3637), merged over the product's; a field
+   * set to `''` is cleared.
+   */
+  channel?: Partial<{
+    brand: string
+    gtin: string
+    mpn: string
+    condition: '' | 'new' | 'refurbished' | 'used'
+    googleProductCategory: string
+  }>
 }
 
 /**
@@ -196,11 +240,26 @@ export const PRODUCT_IMPORT_ZONE =
   definePluginZone<ConsoleProductImportZoneProps>('productImport')
 
 /**
- * Declares the three zones, from the console registrar. The ids are the ones
+ * What the `productsCreate` zone hands each widget (AGL-3596): the site and
+ * its org. The zone sits beside Add product on the Products page and in the
+ * empty catalog: another way to start a product. A widget here writes nothing
+ * through the page — anything it proposes is applied through `productsHub`.
+ */
+export interface ConsoleProductsCreateZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` where the host does not know it. */
+  orgId: string | undefined
+}
+
+export const PRODUCTS_CREATE_ZONE =
+  definePluginZone<ConsoleProductsCreateZoneProps>('productsCreate')
+
+/**
+ * Declares the four zones, from the console registrar. The ids are the ones
  * widgets have always registered under, so a widget written for them keeps
  * working. Each is `bare`: the section is one item of a layout this plugin
  * draws — among the editor's fields, above the catalog table, in the import
- * wizard's After import step — and a wrapper would add a gap the page
+ * wizard's After import step, in the row beside Add product — and a wrapper would add a gap the page
  * already spaces.
  */
 export function registerCommerceZones(): void {
@@ -224,6 +283,17 @@ export function registerCommerceZones(): void {
       layout: 'bare',
       description:
         'Above the catalog table on the Products page. A widget here proposes copy, draft products, categories and switched-off discounts, and asks the hub to write them; every write is the hub’s, with its allowance and slug checks.',
+    },
+    owner,
+  )
+  registerPluginZone(
+    {
+      zone: PRODUCTS_CREATE_ZONE,
+      label: 'Start a product',
+      surface: 'console',
+      layout: 'bare',
+      description:
+        'Beside Add product on the Products page, and in the empty catalog: another way to start a product. A widget here is handed the site and its org and writes nothing through the page.',
     },
     owner,
   )

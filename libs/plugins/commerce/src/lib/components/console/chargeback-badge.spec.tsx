@@ -40,6 +40,8 @@ import OrderDetailDialog from './order-detail-dialog.component'
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
+  // The order's returns list (AGL-3611); none here.
+  useFirestoreCollection: () => ({ data: [] }),
   useUser: () => ({ data: { uid: 'uid-admin', getIdToken: jest.fn() } }),
 }))
 

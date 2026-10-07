@@ -47,6 +47,7 @@ import {
   packageOfSpecifier,
   packagesImported,
   peerFamiliesImported,
+  isNpmLibrary,
   peerRangeFindings,
   readPackageMap,
   typesPackageOf,
@@ -457,7 +458,7 @@ describe('the real workspace', () => {
     for (const name of ['aglyn', 'besigner-core', 'besigner-feature-designer', 'aglyn-node-renderer', 'tenant-runtime', 'plugins-crm', 'console', 'tenant']) {
       assert.ok(names.includes(name), `${name} is in the map`)
     }
-    for (const project of packageMap.filter((project) => project.projectType === 'library')) {
+    for (const project of packageMap.filter(isNpmLibrary)) {
       assert.ok(project.alias, `${project.name} has an @aglyn alias`)
     }
     const versioned = versionedLibPackages(repoRoot)
@@ -471,7 +472,7 @@ describe('the real workspace', () => {
 
   it('carries every scope the map names in at least one constraint', () => {
     const sources = new Set(DEP_CONSTRAINTS.map((constraint) => constraint.sourceTag))
-    for (const scope of ['scope:shared', 'scope:core', 'scope:renderer', 'scope:besigner', 'scope:besigner-ui', 'scope:tenant', 'scope:console', 'scope:plugin']) {
+    for (const scope of ['scope:shared', 'scope:core', 'scope:renderer', 'scope:besigner', 'scope:besigner-ui', 'scope:tenant', 'scope:console', 'scope:plugin', 'scope:mobile']) {
       assert.ok(sources.has(scope), scope)
     }
   })
@@ -585,7 +586,7 @@ describe('a peer range is one a consumer can satisfy (AGL-3201)', () => {
   it('holds for every lib in the workspace', () => {
     const rootManifest = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
     const rootRanges = { ...rootManifest.devDependencies, ...rootManifest.dependencies }
-    const projects = readPackageMap(repoRoot).filter((project) => project.projectType === 'library')
+    const projects = readPackageMap(repoRoot).filter(isNpmLibrary)
     const workspacePackages = new Set(projects.map((project) => project.alias).filter(Boolean))
     const findings = projects.flatMap((project) => {
       const manifest = JSON.parse(readFileSync(join(repoRoot, project.root, 'package.json'), 'utf8'))

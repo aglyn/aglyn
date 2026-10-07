@@ -18,17 +18,27 @@
 // The seam from its own module, not the plugin-manager barrel: boot needs the
 // registry and nothing else, and the barrel reaches the client contexts.
 import { registerOperatorAlerts } from '@aglyn/aglyn/plugin-manager/operator-alerts'
+import { registerPluginEventHandler } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import {
   registerPluginRecordIndex,
   type PluginRecordIndex,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import {
+  registerPluginShipmentRecords,
+  type PluginShipmentRecords,
+} from '@aglyn/aglyn/plugin-manager/plugin-shipment-records'
+import {
+  registerPluginProductCatalog,
+  type PluginProductCatalog,
+} from '@aglyn/aglyn/plugin-manager/plugin-product-catalog'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_OPERATOR_ALERTS } from './constants/operator-alerts'
 import { registerCommerceEventTriggers } from './server/order-event-triggers'
 
 /**
  * The commerce plugin's server declarations: the light registrations core
- * reads at boot, before any surface loads.
+ * reads at boot, before any surface loads — among them its orders as a label
+ * buyer reads and writes them, through core's `core.shipment-records`.
  *
  * Its operator alerts (AGL-3377), so Staff → Operator alerts lists them and
  * staff can switch them before the first one is ever raised; and the indexes
@@ -45,6 +55,43 @@ export function registerCommerceServerDeclarations(): void {
   registerPluginRecordIndex('productCategory', lazyIndex('productCategoryRecordIndex'), {
     pluginId: BUNDLE_ID,
   })
+  // Orders, as a label buyer reads and writes them (AGL-3612): read the
+  // lines and the address, write a shipment, record tracking. The module and
+  // the Admin SDK load with the first call.
+  registerPluginShipmentRecords(lazyShipmentRecords, { pluginId: BUNDLE_ID })
+  // A site's domains as Stripe payment method domains (AGL-3629), so Apple
+  // Pay and the other wallets show on the merchant's own domain. The Stripe
+  // calls arrive with the first event, not with the boot.
+  registerPluginEventHandler(
+    'host.domain.attached',
+    async (payload) =>
+      (await import('./server/payment-method-domains')).onHostDomainAttached(payload),
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginEventHandler(
+    'host.domain.released',
+    async (payload) =>
+      (await import('./server/payment-method-domains')).onHostDomainReleased(payload),
+    { pluginId: BUNDLE_ID },
+  )
+  // The store's catalog, as a shopping-channel feed reads it (AGL-3637).
+  registerPluginProductCatalog(lazyCatalog, { pluginId: BUNDLE_ID })
+}
+
+const loadShipmentRecords = async () =>
+  (await import('./server/shipment-records')).commerceShipmentRecords
+
+const lazyShipmentRecords: PluginShipmentRecords = {
+  read: async (hostId, recordId) => (await loadShipmentRecords()).read(hostId, recordId),
+  recordShipment: async (write) => (await loadShipmentRecords()).recordShipment(write),
+  recordTracking: async (update) => (await loadShipmentRecords()).recordTracking(update),
+  shipFromAddresses: async (hostId) => (await loadShipmentRecords()).shipFromAddresses(hostId),
+}
+
+/** The catalog, with the Admin SDK and the model arriving on the first read. */
+const lazyCatalog: PluginProductCatalog = {
+  store: async (hostId) => (await import('./server/product-catalog')).productCatalog.store(hostId),
+  page: async (request) => (await import('./server/product-catalog')).productCatalog.page(request),
 }
 
 type IndexName = 'productRecordIndex' | 'productCategoryRecordIndex'

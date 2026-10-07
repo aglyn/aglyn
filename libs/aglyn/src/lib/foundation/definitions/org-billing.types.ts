@@ -97,6 +97,14 @@ export interface CoreOrgFeatureFlags {
   /** A/B experiments (AGL-252); Business tier. */
   abTesting?: boolean
   versioning?: boolean
+  /**
+   * Reusable components WITHOUT a count: Starter and above. Since AGL-3615 a
+   * component's create is counted against `componentsPerHost` alone — Free
+   * saves one — so this flag no longer decides whether a site may make one.
+   * It states that the allowance is unlimited, and a per-org override that
+   * turns it on lifts `componentsPerHost` with it, which is how an org
+   * granted the feature by contract before the count existed keeps it.
+   */
   reusableComponents?: boolean
   customDomain?: boolean
   /**
@@ -521,6 +529,14 @@ export interface CoreOrgEntitlements {
    * is why a plan resolving to 0 still accepts submissions.
    */
   formsPerHost?: number
+  /**
+   * Reusable component DEFINITIONS per host — documents under
+   * `hosts/{hostId}/components` (AGL-3615). Free 1; every paid plan
+   * `UNLIMITED`, the allowance it had when components were a boolean
+   * feature. Refused at the create only, so a site holding more than its
+   * plan now includes keeps every component.
+   */
+  componentsPerHost?: number
   /** Component-builder caps (AGL-99): host variables. */
   variablesPerHost?: number
   /** Component-builder caps (AGL-99): host functions. */

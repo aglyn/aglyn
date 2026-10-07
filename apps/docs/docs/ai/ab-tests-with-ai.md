@@ -48,9 +48,25 @@ on it. A variant that fills the other kind's fields has them dropped.
 **Put into the variants** places the proposal in the editor's own fields, unsaved:
 
 - For an **email**, each variant takes its name, subject and body.
-- For a **page or a section**, each variant takes its **name** only. The copy itself is
-  a page version, so you make one per variant in the editor and pin it above — read the
-  proposed copy on the card and build from it.
+- For a **page or a section**, each variant takes its **name**. The copy itself lives in
+  a version of the page, so the card also offers **Make draft versions**.
+
+### Draft versions for a page or a section {#draft-versions}
+
+Once the page under test — and, for a section test, the section — is picked in the
+editor, **Make draft versions** copies the page's **published** version once for every
+variant after the first, puts that variant's headline into the first heading and its body
+into the first plain text after it (inside the section for a section test, in the page's
+content for a page test), and saves each copy as a new **unpublished** version named
+**A/B:** and the variant's name. Each version is pinned to its variant in the editor,
+unsaved. The first variant is your copy as it stands, so it stays on the published page as
+the control.
+
+Nothing is published and the test is not started: open each version in the editor to check
+it, then **Save** the experiment. Rich text is never rewritten, and a part of the page with
+no plain heading or text says so instead of guessing. Pressing it again finds the versions
+it made rather than making more. It needs version history, which your plan includes from
+Pro — see [Billing & plans](../workspace-and-billing/billing-and-plans/overview.md).
 
 Then review them and **Save** the experiment, or **Cancel**.
 

@@ -32,9 +32,10 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { doc, setDoc } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useCallback, useEffect, useState } from 'react'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
   useFirestoreDoc,
   writeGuardedBySeed,
@@ -99,6 +100,29 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
   )
   const [draft, setDraft] = useState<CommerceModel.ShippingSettings | null>(null)
   const current: CommerceModel.ShippingSettings = draft ?? store?.shipping ?? {}
+  /*
+   * Live carrier rates (AGL-3612) are offered only where a plugin quotes
+   * carriers for this site — the server asks core's quoter seam. A rate
+   * already saved as `carrier` stays editable either way, so a merchant can
+   * still see and change what checkout falls back to.
+   */
+  const { data: user } = useUser()
+  const [carrier, setCarrier] = useState<{
+    available: boolean
+    services: Array<{ serviceKey: string; label: string }>
+  }>({ available: false, services: [] })
+  useEffect(() => {
+    let live = true
+    authorizedFetch(user, `/api/commerce/shipping/carrier-rates?hostId=${encodeURIComponent(hostId)}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((answer) => {
+        if (live && answer) setCarrier({ available: Boolean(answer.available), services: answer.services ?? [] })
+      })
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [hostId, user])
   const update = (patch: Partial<CommerceModel.ShippingSettings>) =>
     setDraft({ ...current, ...patch })
 
@@ -328,6 +352,9 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
                 <MenuItem value="free_over">{'Free over subtotal'}</MenuItem>
                 <MenuItem value="price_tiers">{'Subtotal tiers'}</MenuItem>
                 <MenuItem value="weight_tiers">{'Weight tiers'}</MenuItem>
+                {carrier.available || rate.kind === 'carrier' ? (
+                  <MenuItem value="carrier">{'Carrier rates'}</MenuItem>
+                ) : null}
               </TextField>
               <Button
                 size="small"
@@ -337,7 +364,20 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
                 {'✕'}
               </Button>
             </Stack>
-            {rate.kind === 'flat' || rate.kind === 'free_over' ? (
+            {rate.kind === 'carrier' ? (
+              <CarrierRateFields
+                rate={rate}
+                services={carrier.services}
+                available={carrier.available}
+                fallbacks={(current.rates ?? []).filter(
+                  (other) =>
+                    other.id !== rate.id &&
+                    other.zoneId === rate.zoneId &&
+                    other.kind !== 'carrier',
+                )}
+                onChange={(patch) => updateRate(index, patch)}
+              />
+            ) : rate.kind === 'flat' || rate.kind === 'free_over' ? (
               <Stack direction="row" spacing={1}>
                 <TextField
                   label="Price ($)"
@@ -546,3 +586,100 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
 ShippingSettingsCard.displayName = 'ShippingSettingsCard'
 
 export default ShippingSettingsCard
+
+interface CarrierRateFieldsProps {
+  rate: CommerceModel.ShippingRate
+  services: Array<{ serviceKey: string; label: string }>
+  available: boolean
+  /** The zone's other rates, any of which checkout may fall back to. */
+  fallbacks: CommerceModel.ShippingRate[]
+  onChange: (patch: Partial<CommerceModel.ShippingRate>) => void
+}
+
+/**
+ * A carrier rate's options (AGL-3612): which services checkout offers, what
+ * is added to each quote, and the zone's rate offered when no live quote is.
+ */
+function CarrierRateFields(props: CarrierRateFieldsProps) {
+  const { rate, services, available, fallbacks, onChange } = props
+  const options = rate.carrier ?? {}
+  const set = (patch: Partial<CommerceModel.CarrierRateSettings>) =>
+    onChange({ carrier: { ...options, ...patch } })
+  const picked = new Set(options.services ?? [])
+  return (
+    <Stack spacing={1} sx={{ pl: 2 }}>
+      {!available ? (
+        <Alert severity="info">
+          {'Live carrier rates are not available on this site right now, so checkout offers the fallback rate.'}
+        </Alert>
+      ) : null}
+      <Typography variant="caption" color="text.secondary">
+        {'Shoppers see each carrier’s price for their address. Leave every service unticked to offer all of them.'}
+      </Typography>
+      <Stack direction="row" sx={{ flexWrap: 'wrap', columnGap: 2 }}>
+        {services.map((service) => (
+          <FormControlLabel
+            key={service.serviceKey}
+            control={
+              <Switch
+                size="small"
+                checked={picked.has(service.serviceKey)}
+                onChange={(event) =>
+                  set({
+                    services: event.target.checked
+                      ? [...picked, service.serviceKey]
+                      : [...picked].filter((key) => key !== service.serviceKey),
+                  })
+                }
+              />
+            }
+            label={service.label}
+          />
+        ))}
+      </Stack>
+      <Stack direction="row" spacing={1}>
+        <TextField
+          label="Markup (%)"
+          value={options.markupPct ?? ''}
+          onChange={(event) => {
+            const pct = Number(event.target.value)
+            set({ markupPct: Number.isFinite(pct) && pct > 0 ? Math.min(pct, 500) : 0 })
+          }}
+          size="small"
+          sx={{ width: 120 }}
+          slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+        />
+        <TextField
+          label="Handling fee ($)"
+          value={options.handlingCents ? options.handlingCents / 100 : ''}
+          onChange={(event) => {
+            const dollars = Number(event.target.value)
+            set({ handlingCents: Number.isFinite(dollars) && dollars > 0 ? Math.round(dollars * 100) : 0 })
+          }}
+          size="small"
+          sx={{ width: 150 }}
+          slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+        />
+        <TextField
+          select
+          label="If no live rate"
+          value={options.fallbackRateId ?? ''}
+          onChange={(event) => set({ fallbackRateId: event.target.value })}
+          size="small"
+          sx={{ minWidth: 200 }}
+          error={!options.fallbackRateId}
+          helperText={
+            options.fallbackRateId ? undefined : 'Pick a rate of this zone, or checkout can’t price without a quote'
+          }
+        >
+          <MenuItem value="">{'None'}</MenuItem>
+          {fallbacks.map((fallback) => (
+            <MenuItem key={fallback.id} value={fallback.id}>
+              {fallback.name || 'Unnamed rate'}
+            </MenuItem>
+          ))}
+        </TextField>
+      </Stack>
+    </Stack>
+  )
+}

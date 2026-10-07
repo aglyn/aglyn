@@ -66,6 +66,10 @@ page filed under a campaign is counted the same way.
 - **Cross-visit A/B test identity**: without an analytics grant, experiment variant
   assignment is remembered only for the visit (sessionStorage) instead of across
   visits.
+- **Funnel visits.** On a site with a [funnel](./funnels.md), each visit's steps are
+  tied together by a random id kept in that browser tab's session storage, and the id is
+  sent with each step. No step is recorded until the visitor's state grants analytics;
+  a refusal deletes the id. See [What counts as a visit](./funnels.md#what-is-a-visit).
 - **Remembering the campaign that last touched a visitor.** Reading it on the page
   they are on needs no grant; keeping it across visits does. See
   [The campaign a visitor came from](#campaign-touch).

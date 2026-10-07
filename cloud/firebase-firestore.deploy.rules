@@ -873,6 +873,30 @@ orgCarriesOutreach(orgId);
 
 
 
+match /shippingAccounts/{accountId} {
+allow read, write: if false;
+}
+match /shippingHostSettings/{hostId} {
+allow read, write: if false;
+}
+match /shippingLabels/{labelId} {
+allow read, write: if false;
+}
+
+
+match /shippingAddressChecks/{checkId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
 
 match /outreachMailboxes/{mailboxId} {
 allow read: if canReadOutreach();
@@ -935,6 +959,15 @@ match /mailGatewayLedger/{key} {
 allow read: if isStaff() || isOrgMember();
 allow write: if false;
 }
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2284,8 +2317,77 @@ allow read, write: if false;
 
 
 
+match /commerceShipStationConnections/{hostId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
 
 match /outreachLinks/{linkId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+match /shippingTrackers/{trackerId} {
+allow read, write: if false;
+}
+match /shippingQuoteCache/{key} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+match /taxEngineConnections/{hostId} {
+allow read, write: if false;
+}
+match /taxEngineProductCodes/{codeId} {
+allow read, write: if false;
+}
+match /taxEngineExemptions/{exemptionId} {
+allow read, write: if false;
+}
+match /taxEngineTransactions/{transactionId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+match /marketingPlatformConnections/{connectionId} {
+allow read, write: if false;
+match /log/{entryId} {
+allow read, write: if false;
+}
+}
+match /marketingPlatformEvents/{eventId} {
 allow read, write: if false;
 }
 
@@ -2814,6 +2916,11 @@ allow update: if isStaff() ||
 
 
 'starterProvisionedAt',
+
+
+
+
+'funnelRecording',
 
 
 
@@ -3370,11 +3477,29 @@ match /{subcollection}/{document=**} {
 
 
 
+
+
+
+
+
+
+
 allow read: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
+subcollection != 'posStaffPins' &&
+subcollection != 'salesChannels' &&
 (isStaff() || (isHostMember(hostId) &&
 !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
-'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries'])));
+'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnelJourneys', 'funnelResults'])));
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3485,7 +3610,9 @@ subcollection != 'orderWebhookSecrets' &&
 
 
 allow create: if subcollection != 'siteMemberCredentials' &&
-subcollection != 'orderWebhookSecrets' && (isStaff() ||
+subcollection != 'orderWebhookSecrets' &&
+subcollection != 'posStaffPins' &&
+subcollection != 'salesChannels' && (isStaff() ||
 ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
 !(subcollection in ['screens', 'layouts', 'variables',
 'functions', 'workflows', 'services', 'redirects',
@@ -3501,9 +3628,9 @@ subcollection != 'orderWebhookSecrets' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'recordPages', 'printers',
+'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
-'orderWebhookSecrets', 'orderWebhookDeliveries']) &&
+'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults']) &&
 
 
 
@@ -3635,8 +3762,17 @@ subcollection != 'orderWebhookSecrets' && (isStaff() ||
 
 
 
+
+
+
+
+
+
+
 allow update: if subcollection != 'siteMemberCredentials' &&
-subcollection != 'orderWebhookSecrets' && (isStaff() ||
+subcollection != 'orderWebhookSecrets' &&
+subcollection != 'posStaffPins' &&
+subcollection != 'salesChannels' && (isStaff() ||
 ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
 !(subcollection in ['screens', 'layouts', 'components', 'installs',
 'templates', 'collections', 'datasets', 'orders', 'registers',
@@ -3652,9 +3788,9 @@ subcollection != 'orderWebhookSecrets' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'recordPages', 'printers',
+'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
-'orderWebhookSecrets', 'orderWebhookDeliveries'])));
+'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
 
 
 
@@ -3692,7 +3828,9 @@ subcollection != 'orderWebhookSecrets' && (isStaff() ||
 
 
 allow delete: if subcollection != 'siteMemberCredentials' &&
-subcollection != 'orderWebhookSecrets' && (isStaff() ||
+subcollection != 'orderWebhookSecrets' &&
+subcollection != 'posStaffPins' &&
+subcollection != 'salesChannels' && (isStaff() ||
 ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
 !(subcollection in ['screens', 'layouts', 'components',
 'collections', 'datasets', 'orders', 'registers', 'webhooks',
@@ -3707,8 +3845,9 @@ subcollection != 'orderWebhookSecrets' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-'recordPages', 'printers', 'printJobs', 'returns', 'orderWebhooks',
-'orderWebhookSecrets', 'orderWebhookDeliveries'])));
+'posStaffPins', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
+'orderWebhooks',
+'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
 }
 
 
@@ -4085,6 +4224,38 @@ allow read, write: if false;
 match /transferPrefs/{resourceKey} {
 allow read, write: if isSignedIn() && request.auth.uid == userId;
 }
+
+
+
+
+
+
+
+
+match /devices/{deviceId} {
+allow read, delete: if isSignedIn() && request.auth.uid == userId;
+allow create, update: if isSignedIn() && request.auth.uid == userId &&
+request.resource.data.keys().hasOnly(['token', 'transport', 'apnsEnvironment',
+'platform', 'app', 'appVersion', 'lastSeen', 'createdAt']) &&
+request.resource.data.token is string &&
+((request.resource.data.transport == 'apns' &&
+request.resource.data.token.size() >= 64 &&
+request.resource.data.token.size() <= 200 &&
+request.resource.data.token.matches('^[0-9A-Fa-f]+$') &&
+request.resource.data.get('apnsEnvironment', '') in ['sandbox', 'production'] &&
+request.resource.data.platform in ['ios', 'macos']) ||
+(request.resource.data.transport == 'fcm' &&
+request.resource.data.token.size() >= 100 &&
+request.resource.data.token.size() <= 4096 &&
+request.resource.data.token.matches('^[A-Za-z0-9_:-]+$') &&
+!('apnsEnvironment' in request.resource.data) &&
+request.resource.data.platform == 'android')) &&
+request.resource.data.app in ['aglyn', 'aglyn-pos'] &&
+(!('appVersion' in request.resource.data) ||
+(request.resource.data.appVersion is string &&
+request.resource.data.appVersion.size() <= 32)) &&
+request.resource.data.lastSeen == request.time;
+}
 }
 
 
@@ -4453,6 +4624,18 @@ allow write: if false;
 
 
 match /abuseReports/{reportId} {
+allow read: if isStaff();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
+match /paymentMethodDomains/{domainKey} {
 allow read: if isStaff();
 allow write: if false;
 }

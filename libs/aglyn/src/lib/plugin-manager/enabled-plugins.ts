@@ -412,10 +412,10 @@ export function resolveEnabledPlugins(
   org?: { enabledPlugins?: string[] } | null,
 ): string[] {
   const configured = org?.enabledPlugins
-  const base = Array.isArray(configured)
-    ? canonicalPluginIds(configured)
-    : [...DEFAULT_ENABLED_PLUGINS]
-  return Array.from(new Set([...ALWAYS_ON_FOR_WORKSPACE, ...base]))
+  // The default already holds every catalog id, the always-on ones included,
+  // in catalog order; only a stored list needs them unioned back in.
+  if (!Array.isArray(configured)) return [...DEFAULT_ENABLED_PLUGINS]
+  return Array.from(new Set([...ALWAYS_ON_FOR_WORKSPACE, ...canonicalPluginIds(configured)]))
 }
 
 /**

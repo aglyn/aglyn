@@ -113,6 +113,18 @@ export async function register(): Promise<void> {
     console.error('[instrumentation] live page dropper failed', error)
   }
 
+  /*
+   * The native apps' push transports (AGL-3651): APNs for iOS and macOS, FCM
+   * for Android, handed to every notification fan-out in this process. The
+   * transports load only when a notification has push recipients.
+   */
+  try {
+    const { registerNativePushSenders } = await import('./utils/native-push')
+    registerNativePushSenders()
+  } catch (error) {
+    console.error('[instrumentation] native push senders failed', error)
+  }
+
   try {
     const { warmFirestoreAtBoot } = await import('./utils/boot-warmup')
     warmFirestoreAtBoot()

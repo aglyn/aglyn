@@ -134,6 +134,7 @@ const QUOTA_LABELS: Readonly<Record<string, string>> = {
   // The catalog, not the traffic: the submissions a month are the forms
   // plugin's key, and its plan declaration labels them.
   formsPerHost: 'Saved forms / site',
+  componentsPerHost: 'Reusable components / site',
   variablesPerHost: 'Variables',
   functionsPerHost: 'Functions',
   workflowsPerHost: 'Workflows',

@@ -33,6 +33,9 @@ import {
   EXPERIMENT_RESULT_ZONE,
   EXPERIMENT_VARIANTS_ZONE,
 } from './components/experiment-zones'
+import { HOST_OVERLAYS_ZONE, OVERLAY_EDITOR_ZONE } from './components/overlay-zones'
+import { HOST_CAMPAIGNS_ZONE } from './components/campaign-list-zones'
+import { MARKETING_INSIGHTS_ZONE } from './components/marketing-insight-zones'
 import {
   MARKETING_CONSOLE_SECTIONS,
   MARKETING_ORG_CONSOLE_SECTIONS,
@@ -169,6 +172,32 @@ export function registerMarketingConsole(): void {
     CAMPAIGN_DESIGN_PREVIEW_ZONE,
     'A sent email as an inbox receives it',
     'On one message’s page. A widget here renders the stored design, or the plain-text body, through the renderer the send path uses.',
+  )
+  /*
+   * The overlays list's two positions (AGL-3603): another way to start an
+   * overlay beside New bar and New popup, and copy proposed among the
+   * editor's fields. What each hands a widget is carried on its token in
+   * `components/overlay-zones`; neither lets a widget write.
+   */
+  bareZone(
+    HOST_OVERLAYS_ZONE,
+    'Start an overlay',
+    'On a site’s Overlays section, beside New bar and New popup: another way to start an announcement bar or a popup. A widget hands proposed copy to `createOverlayDraft`; the list writes the overlay switched off and opens it in the editor.',
+  )
+  bareZone(
+    OVERLAY_EDITOR_ZONE,
+    'An overlay’s copy',
+    'Among the overlay editor’s fields. A widget is handed the copy as the editor holds it, the field limits and the popup triggers, and proposes copy through `proposeValues`, which fills the fields unsaved; the editor’s Save is the write.',
+  )
+  bareZone(
+    HOST_CAMPAIGNS_ZONE,
+    'Start a campaign',
+    'On the Campaigns section, a site’s or the organization’s, beside Create campaign and again in the empty list: another way to start a campaign. A widget is handed the site, the organization and, on the organization’s hub, the sites a campaign could be placed on; it writes nothing through the list.',
+  )
+  bareZone(
+    MARKETING_INSIGHTS_ZONE,
+    'A marketing report’s figures, in words',
+    'In the header of the Conversions section and of one campaign’s report, beside the page’s own actions. A widget is handed the site the figures are one site’s and what the report is about, reads the figures this plugin publishes as figure readers, and writes nothing.',
   )
   registerMarketingRecordRoutes()
   // The site's overlays, for another plugin's picker to list (AGL-3080).

@@ -87,11 +87,48 @@ export function aiJobRefundKey(input: { day: string; jobId: string; ordinal: num
   return `${AI_JOB_REFUND_SOURCE}-${input.day.replace(/-/g, '')}-${job}-${Math.max(0, Math.floor(input.ordinal))}`
 }
 
-/** How many give-backs a meter's month already records for `day`. */
+/**
+ * A build item's give-back key (AGL-3616): per job, per item and per
+ * attempt, so one item's failure gives back once however often its pass is
+ * replayed, and Try again's next attempt is a give-back of its own. The day
+ * is the JOB's (the day it was created), not the day of the give-back, so a
+ * pass replayed across midnight finds the same key. `item` marks it, so the
+ * daily bound counts a build's give-backs once per job. `slot` is the unit's
+ * slot (`c0`, `p1`, `i2`) or `plan` for the build's own planning.
+ */
+export function aiJobItemRefundKey(input: { day: string; jobId: string; slot: string; attempt: number }): string {
+  const job = input.jobId.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40)
+  const slot = input.slot.replace(/[^A-Za-z0-9]/g, '').slice(0, 8) || 'x'
+  return `${AI_JOB_REFUND_SOURCE}-${input.day.replace(/-/g, '')}-item-${job}-${slot}-${Math.max(0, Math.floor(input.attempt))}`
+}
+
+/** The tail every item key ends in: its slot and attempt. */
+const ITEM_KEY_TAIL = /-[A-Za-z0-9]{1,8}-\d+$/
+
+/**
+ * What one give-back counts as toward the daily bound: the key itself, or
+ * for a build item's key its job (AGL-3616) — a ten-item build whose items
+ * fail is one give-back, not ten, or the bound would starve it.
+ */
+function aiJobRefundIdentity(key: string, prefix: string): string {
+  const rest = key.slice(prefix.length)
+  return rest.startsWith('item-') ? rest.replace(ITEM_KEY_TAIL, '') : rest
+}
+
+/** How many give-backs a meter's month already records for `day`: build items once per job. */
 export function aiJobRefundsOn(returns: unknown, day: string): number {
-  if (!returns || typeof returns !== 'object') return 0
+  return aiJobRefundIdentitiesOn(returns, day).size
+}
+
+/** The give-backs a meter's month records for `day`, each by what it counts as. */
+export function aiJobRefundIdentitiesOn(returns: unknown, day: string): Set<string> {
+  if (!returns || typeof returns !== 'object') return new Set()
   const prefix = `${AI_JOB_REFUND_SOURCE}-${day.replace(/-/g, '')}-`
-  return Object.keys(returns).filter((key) => key.startsWith(prefix)).length
+  return new Set(
+    Object.keys(returns)
+      .filter((key) => key.startsWith(prefix))
+      .map((key) => aiJobRefundIdentity(key, prefix)),
+  )
 }
 
 /**
@@ -127,21 +164,36 @@ export async function refundJobCredits(
     month: string
     day: string
     reason: AiJobRefundReason
+    /**
+     * A build item's give-back (AGL-3616), keyed by `aiJobItemRefundKey`
+     * rather than by `ordinal`: its slot and attempt, and the day the job was
+     * created. Counted toward the daily bound once per job.
+     */
+    item?: { slot: string; attempt: number; jobDay: string }
   },
 ): Promise<AiJobRefundOutcome> {
   const workspace = workspaceCreditMeter(firestore, input.orgId, input.month)
   const account = input.free?.accountUid
     ? accountCreditMeter(firestore, input.free.accountUid, input.month)
     : null
+  const key = input.item
+    ? aiJobItemRefundKey({ day: input.item.jobDay, jobId: input.jobId, slot: input.item.slot, attempt: input.item.attempt })
+    : aiJobRefundKey({ day: input.day, jobId: input.jobId, ordinal: input.ordinal })
   const counter = await (account ?? workspace).ref.get()
-  if (aiJobRefundsOn(counter.get(ASSIST_CREDIT_RETURNS_FIELD), input.day) >= AI_JOB_REFUNDS_PER_DAY) {
+  const returns = counter.get(ASSIST_CREDIT_RETURNS_FIELD)
+  const counted = aiJobRefundIdentitiesOn(returns, input.day)
+  // A build already given back today counts once: its later items ride the same give-back.
+  const jobCounted = input.item
+    ? counted.has(aiJobRefundIdentity(key, `${AI_JOB_REFUND_SOURCE}-${input.item.jobDay.replace(/-/g, '')}-`))
+    : false
+  if (!jobCounted && counted.size >= AI_JOB_REFUNDS_PER_DAY) {
     return { status: 'bounded', lines: [] }
   }
   return returnAssistCredits(firestore, {
     month: input.month,
     meters: account ? [workspace, account] : [workspace],
     credits: input.credits,
-    key: aiJobRefundKey({ day: input.day, jobId: input.jobId, ordinal: input.ordinal }),
+    key,
     reason: `An AI job failed on our side (${input.reason})`,
     actorUid: AI_JOB_REFUND_ACTOR,
     source: AI_JOB_REFUND_SOURCE,

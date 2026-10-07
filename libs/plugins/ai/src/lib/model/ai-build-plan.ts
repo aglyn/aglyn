@@ -215,6 +215,41 @@ export interface AiBuildPlanEmbed {
   url: string | null
 }
 
+/** How the items that depend on a failed item behave (AGL-3616). */
+export type AiBuildItemDegrade = 'omit' | 'fallback'
+
+export const AI_BUILD_ITEM_DEGRADES: readonly AiBuildItemDegrade[] = ['omit', 'fallback']
+
+/** One argument value of an item: scalars and lists of text only. */
+export type AiBuildItemArg = string | number | boolean | string[]
+
+/**
+ * One thing a `build` plan makes that its creations and screens do not
+ * (AGL-3616): an operation another plugin — or this one — registered as an
+ * AI capability, with the arguments its schema declares. `reuse`, `create`
+ * and `screens` keep their meaning; an item is everything else.
+ */
+export interface AiBuildItem {
+  /** Stable within the plan: `i0`, `i1`… in plan order. */
+  slot: string
+  /** The capability's operation. */
+  op: string
+  /** Unique within the plan, creations included; referenced as `new:<name>`. */
+  name: string
+  /** Why the brief needs it, in one sentence. */
+  why: string
+  /** What it is built after: `new:<name>` of a creation or another item. */
+  dependsOn: string[]
+  /** How the items that depend on it behave when it fails. */
+  degrade: AiBuildItemDegrade
+  /** The operation's arguments, in the shape its capability declares. */
+  args: Record<string, AiBuildItemArg>
+  /** The id its draft is written under, minted when the job keeps the plan; never the model's. */
+  id?: string
+  /** The most it can cost in credits, from its capability, recorded when the plan is kept. */
+  credits?: number
+}
+
 export interface AiBuildPlan {
   reuse: AiBuildPlanReuse[]
   create: AiBuildPlanCreate[]
@@ -224,6 +259,11 @@ export interface AiBuildPlan {
    * before the list existed, and every plan whose brief asks for no player.
    */
   embeds?: AiBuildPlanEmbed[]
+  /**
+   * What a `build` plan makes beyond its creations and pages (AGL-3616).
+   * Absent is none: every other kind's plan.
+   */
+  items?: AiBuildItem[]
 }
 
 /**
@@ -242,6 +282,12 @@ export const AI_BUILD_PLAN_LIMITS = {
   text: 200,
   seoDescription: 320,
   items: 500,
+  /** A build plan's items (AGL-3616). */
+  buildItems: 16,
+  /** What one item depends on. */
+  dependsOn: 8,
+  /** The arguments one item carries, as JSON. */
+  argsChars: 2_000,
 } as const
 
 const string = (description: string) => ({ type: 'string', description })
@@ -475,11 +521,64 @@ function withRecords(tool: AiTool): AiTool {
 export const AI_BUILD_PLAN_RECORDS_TOOL: AiTool = withRecords(AI_BUILD_PLAN_TOOL)
 export const AI_BUILD_PLAN_EMBEDS_RECORDS_TOOL: AiTool = withRecords(AI_BUILD_PLAN_EMBEDS_TOOL)
 
+const ITEMS_SCHEMA = {
+  type: 'array',
+  description:
+    'What the plan makes beyond its creations and pages, each one operation from the list in the request. Empty when the brief asks for nothing else.',
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['op', 'name', 'why', 'dependsOn', 'degrade', 'args'],
+    properties: {
+      op: string('The operation, exactly as the request lists it.'),
+      name: string(`Unique within the plan, creations included, ${atMost()}; other entries refer to it as new:<name>.`),
+      why: string(`Why the brief needs it, in one sentence of ${atMost()}.`),
+      dependsOn: strings('What it is built after: new:<name> of a creation or another item. Empty when nothing.'),
+      degrade: {
+        type: 'string',
+        enum: [...AI_BUILD_ITEM_DEGRADES],
+        description:
+          'omit: what depends on it is built without it if it fails. fallback: what depends on it uses something the site already has instead.',
+      },
+      args: string('Its arguments as one JSON object, with exactly the fields the request lists for the operation.'),
+    },
+  },
+}
+
+/**
+ * Any plan tool with a build's items (AGL-3616), offered only to a `build`
+ * job. The items' arguments travel as one JSON string whose fields the
+ * request lists per operation, so the tool stays byte for byte the same
+ * whichever plugins registered operations, and the prompt cache keeps it.
+ */
+export function withBuildItems(tool: AiTool): AiTool {
+  return {
+    ...tool,
+    inputSchema: {
+      ...tool.inputSchema,
+      required: [...(tool.inputSchema['required'] as string[]), 'items'],
+      properties: {
+        ...(tool.inputSchema['properties'] as Record<string, unknown>),
+        items: ITEMS_SCHEMA,
+      },
+    },
+  }
+}
+
 /** The plan tool a brief is answered with, on a job that may or may not bind a dataset. */
-export function aiBuildPlanToolFor(brief: string, options: { records?: boolean } = {}): AiTool {
+export function aiBuildPlanToolFor(
+  brief: string,
+  options: { records?: boolean; items?: boolean } = {},
+): AiTool {
   const video = AI_PLAN_ASKS_FOR_VIDEO.test(brief)
-  if (options.records) return video ? AI_BUILD_PLAN_EMBEDS_RECORDS_TOOL : AI_BUILD_PLAN_RECORDS_TOOL
-  return video ? AI_BUILD_PLAN_EMBEDS_TOOL : AI_BUILD_PLAN_TOOL
+  const tool = options.records
+    ? video
+      ? AI_BUILD_PLAN_EMBEDS_RECORDS_TOOL
+      : AI_BUILD_PLAN_RECORDS_TOOL
+    : video
+      ? AI_BUILD_PLAN_EMBEDS_TOOL
+      : AI_BUILD_PLAN_TOOL
+  return options.items ? withBuildItems(tool) : tool
 }
 
 export type AiBuildPlanParse =
@@ -493,6 +592,39 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 class PlanShapeError extends Error {}
 
 /**
+ * An item's arguments as the plan keeps them: the model writes one JSON
+ * string, a kept plan stores the object. Values are scalars and lists of
+ * text; anything else is a shape the item cannot be built from.
+ */
+function buildItemArgs(value: unknown, path: string): Record<string, AiBuildItemArg> {
+  let parsed: unknown = value
+  if (value === undefined || value === null || value === '') return {}
+  if (typeof value === 'string') {
+    if (value.length > AI_BUILD_PLAN_LIMITS.argsChars) {
+      throw new PlanShapeError(`${path} is over ${AI_BUILD_PLAN_LIMITS.argsChars} characters`)
+    }
+    try {
+      parsed = JSON.parse(value)
+    } catch {
+      throw new PlanShapeError(`${path} is not a JSON object`)
+    }
+  }
+  if (!isRecord(parsed)) throw new PlanShapeError(`${path} is not a JSON object`)
+  const args: Record<string, AiBuildItemArg> = {}
+  for (const [key, raw] of Object.entries(parsed)) {
+    if (raw === null || raw === undefined) continue
+    if (typeof raw === 'string' || typeof raw === 'boolean' || (typeof raw === 'number' && Number.isFinite(raw))) {
+      args[key] = raw
+    } else if (Array.isArray(raw) && raw.every((one) => typeof one === 'string')) {
+      args[key] = raw as string[]
+    } else {
+      throw new PlanShapeError(`${path}.${key} is not text, a number, true or false, or a list of text`)
+    }
+  }
+  return args
+}
+
+/**
  * Read a plan out of a tool call, or name what makes it unreadable.
  *
  * Structure is refused — a missing list, an unknown kind, more screens than
@@ -500,6 +632,29 @@ class PlanShapeError extends Error {}
  * differently from what the model meant is worse than a re-ask. Length is
  * repaired: copy past a ceiling is cut and the cut is listed.
  */
+/**
+ * A layout's regions, one word each. A plan sometimes writes the whole list as
+ * one entry — "regions: header, nav, main, footer" — which names regions the
+ * platform builds but reads as one unknown word, and the plan was refused for
+ * it (job AvVxbFbzQx). A leading label is dropped and a list is split on its
+ * commas, slashes, plus signs and "and", so each region is checked on its own;
+ * a duplicate keeps its first place.
+ */
+export function aiPlanLayoutRegionWords(fields: readonly string[]): string[] {
+  const words: string[] = []
+  for (const field of fields) {
+    const listed = /^\s*(?:the\s+)?(?:layout\s+)?(?:regions?|areas?)\s*[:=-]\s*(.+)$/i.exec(field)?.[1] ?? field
+    const parts = /[,/+]|\band\b/i.test(listed)
+      ? listed.split(/\s*(?:,|\/|\+|\band\b)\s*/i)
+      : [listed]
+    for (const part of parts) {
+      const word = part.trim()
+      if (word && !words.some((seen) => seen.toLowerCase() === word.toLowerCase())) words.push(word)
+    }
+  }
+  return words
+}
+
 export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
   const repairs: string[] = []
   const text = (
@@ -577,14 +732,16 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
           throw new PlanShapeError(`create[${index}].name "${name}" is used twice`)
         }
         names.add(key)
+        const kind = oneOf(entry['kind'], AI_BUILD_PLAN_CREATE_KINDS, `create[${index}].kind`)
+        const fields = list(entry['fields'] ?? [], `create[${index}].fields`, AI_BUILD_PLAN_LIMITS.fields)
+          .map((field, fieldIndex) => text(field, `create[${index}].fields[${fieldIndex}]`))
+          .filter(Boolean)
         return {
-          kind: oneOf(entry['kind'], AI_BUILD_PLAN_CREATE_KINDS, `create[${index}].kind`),
+          kind,
           name,
           why: text(entry['why'], `create[${index}].why`),
           duplicateOf: nullable(entry['duplicateOf'], `create[${index}].duplicateOf`),
-          fields: list(entry['fields'] ?? [], `create[${index}].fields`, AI_BUILD_PLAN_LIMITS.fields)
-            .map((field, fieldIndex) => text(field, `create[${index}].fields[${fieldIndex}]`))
-            .filter(Boolean),
+          fields: kind === 'layout' ? aiPlanLayoutRegionWords(fields) : fields,
         }
       },
     )
@@ -643,10 +800,48 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
         }
       },
     )
-    // A plan whose brief asks for no player carries no list, as it did before the list existed.
+    const items = list(root['items'] ?? [], 'items', AI_BUILD_PLAN_LIMITS.buildItems).map(
+      (raw, index): AiBuildItem => {
+        const path = `items[${index}]`
+        const entry = record(raw, path)
+        const op = text(entry['op'], `${path}.op`)
+        if (!op) throw new PlanShapeError(`${path}.op is empty`)
+        const name = text(entry['name'], `${path}.name`)
+        if (!name) throw new PlanShapeError(`${path}.name is empty`)
+        const key = name.toLowerCase()
+        if (names.has(key)) throw new PlanShapeError(`${path}.name "${name}" is used twice`)
+        names.add(key)
+        return {
+          slot: `i${index}`,
+          op,
+          name,
+          why: text(entry['why'] ?? '', `${path}.why`),
+          dependsOn: list(entry['dependsOn'] ?? [], `${path}.dependsOn`, AI_BUILD_PLAN_LIMITS.dependsOn)
+            .map((ref, refIndex) => text(ref, `${path}.dependsOn[${refIndex}]`))
+            .filter(Boolean),
+          degrade:
+            entry['degrade'] === undefined || entry['degrade'] === null
+              ? 'omit'
+              : oneOf(entry['degrade'], AI_BUILD_ITEM_DEGRADES, `${path}.degrade`),
+          args: buildItemArgs(entry['args'], `${path}.args`),
+          ...(typeof entry['id'] === 'string' && entry['id'] ? { id: entry['id'] } : {}),
+          ...(typeof entry['credits'] === 'number' && Number.isFinite(entry['credits'])
+            ? { credits: Math.max(0, Math.floor(entry['credits'])) }
+            : {}),
+        }
+      },
+    )
+    // A plan whose brief asks for no player carries no list, as it did before the list existed;
+    // so does a plan with no items.
     return {
       ok: true,
-      plan: { reuse, create, screens, ...(embeds.length ? { embeds } : {}) },
+      plan: {
+        reuse,
+        create,
+        screens,
+        ...(embeds.length ? { embeds } : {}),
+        ...(items.length ? { items } : {}),
+      },
       repairs,
     }
   } catch (error) {
@@ -684,6 +879,16 @@ export function aiPlanCreateFor(
   if (!isAiPlanNewRef(ref)) return undefined
   const name = ref.slice(AI_PLAN_NEW_REF_PREFIX.length).trim().toLowerCase()
   return plan.create.find((entry) => entry.name.toLowerCase() === name)
+}
+
+/** The item a `new:<name>` reference names, case-insensitively (AGL-3616). */
+export function aiPlanItemFor(
+  plan: Pick<AiBuildPlan, 'items'>,
+  ref: string,
+): AiBuildItem | undefined {
+  if (!isAiPlanNewRef(ref)) return undefined
+  const name = ref.slice(AI_PLAN_NEW_REF_PREFIX.length).trim().toLowerCase()
+  return (plan.items ?? []).find((entry) => entry.name.toLowerCase() === name)
 }
 
 /** A slug as two spellings of one path compare: lowercase, one leading slash, no trailing one. */
@@ -771,7 +976,7 @@ export type AiPlanUndeclaredRef = {
 export function aiPlanUndeclaredRefs(plan: AiBuildPlan): AiPlanUndeclaredRef[] {
   const found: AiPlanUndeclaredRef[] = []
   const undeclared = (ref: string | null): ref is string =>
-    isAiPlanNewRef(ref) && !aiPlanCreateFor(plan, ref)
+    isAiPlanNewRef(ref) && !aiPlanCreateFor(plan, ref) && !aiPlanItemFor(plan, ref)
   const nameOf = (ref: string) => ref.slice(AI_PLAN_NEW_REF_PREFIX.length).trim()
   plan.screens.forEach((screen, screenIndex) => {
     for (const field of ['layout', 'template'] as const) {

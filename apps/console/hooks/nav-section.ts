@@ -78,7 +78,7 @@ export function hostOrgSlugFor(input: {
     : null
 }
 
-export type NavSectionKind = 'host' | 'org' | 'admin' | 'manage' | 'none'
+export type NavSectionKind = 'host' | 'org' | 'admin' | 'manage' | 'kiosk' | 'none'
 
 export interface NavSection {
   kind: NavSectionKind
@@ -105,6 +105,9 @@ export function resolveNavSection(pathname: string | null): NavSection {
   if (!first) return { kind: 'none', base: '' }
   if (first === 'admin') return { kind: 'admin', base: '/admin' }
   if (first === 'manage') return { kind: 'manage', base: '/manage' }
+  // A plugin's public device page (AGL-3608): the second segment is a plugin
+  // id, and nothing about the route is a workspace's.
+  if (first === 'kiosk') return { kind: 'kiosk', base: '/kiosk' }
   if (second === 'hosts' && third) {
     return {
       kind: 'host',
@@ -163,5 +166,8 @@ export function urlNamesOrg(
   subdomainSlug: string | null,
 ): boolean {
   if (section.kind === 'admin') return false
+  // A public device page is nobody's session (AGL-3608): a display on a
+  // workspace subdomain still loads none of that workspace's plugins.
+  if (section.kind === 'kiosk') return false
   return Boolean(section.orgSlug) || Boolean(subdomainSlug)
 }

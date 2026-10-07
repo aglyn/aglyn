@@ -1,0 +1,27 @@
+// The default build configuration: the local Firebase emulator stack on a
+// demo- project, and a console running on this Mac. Nothing here reaches a
+// live project. Production.xcconfig.example lists what a release build sets.
+//
+// Per-machine overrides (other emulator ports, a debug sign-in for
+// screenshots) go in Config/Local.xcconfig, which git ignores.
+
+AGLYN_CONSOLE_URL = http:/$()/localhost:4200
+AGLYN_FIREBASE_API_KEY = emulator-api-key
+AGLYN_FIREBASE_AUTH_DOMAIN = localhost
+AGLYN_FIREBASE_PROJECT_ID = demo-aglyn
+AGLYN_FIREBASE_APP_ID = 1:000000000000:ios:0000000000000000
+AGLYN_FIREBASE_MESSAGING_SENDER_ID = 000000000000
+AGLYN_FIREBASE_STORAGE_BUCKET =
+AGLYN_AUTH_EMULATOR_HOST = 127.0.0.1:9099
+AGLYN_FIRESTORE_EMULATOR_HOST = 127.0.0.1:8082
+AGLYN_GOOGLE_IOS_CLIENT_ID =
+AGLYN_GOOGLE_WEB_CLIENT_ID =
+AGLYN_BRAND_NAME = Aglyn
+
+// Debug builds only: with `-AglynAutoSignIn YES` on the launch arguments,
+// an emulator build signs in as this seeded test member (tools/scripts/
+// seed-native-emulator.mjs prints it). Set in Local.xcconfig; never a real account.
+AGLYN_DEBUG_EMAIL =
+AGLYN_DEBUG_PASSWORD =
+
+#include? "Local.xcconfig"

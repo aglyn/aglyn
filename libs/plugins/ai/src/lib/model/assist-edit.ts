@@ -17,6 +17,7 @@
 
 import type { ScreenSeoTextField } from '@aglyn/aglyn/app-utils/screen-seo-fields'
 import type { ReusableComponentProp } from '@aglyn/aglyn/foundation/definitions/platform.types'
+import type { NodeInteraction } from '@aglyn/aglyn/app-utils/node-interactions'
 
 /**
  * Assist level 3, the edit contract (AGL-2906): what the chat door proposes
@@ -36,7 +37,7 @@ import type { ReusableComponentProp } from '@aglyn/aglyn/foundation/definitions/
  * version the live site serves, the editor's own new-version flow runs first.
  */
 
-/** The eight operations a proposal may carry. */
+/** The nine operations a proposal may carry. */
 export const ASSIST_EDIT_OP_KINDS = [
   'insertSubtree',
   'updateProps',
@@ -46,6 +47,7 @@ export const ASSIST_EDIT_OP_KINDS = [
   'setSeo',
   'rename',
   'saveAsComponent',
+  'addInteraction',
 ] as const
 
 export type AssistEditOpKind = (typeof ASSIST_EDIT_OP_KINDS)[number]
@@ -137,7 +139,67 @@ export interface AssistEditCanvasNode {
    * the way the cards of a row are. Its own contents are left out.
    */
   like?: string
+  /**
+   * The interactions the element carries (AGL-3603), each by its name, the
+   * event it listens for and its steps' kinds — carried for the selected
+   * element only, so Assist can say what it does. Never a selector, a script
+   * or HTML.
+   */
+  interactions?: AssistEditInteractionSummary[]
 }
+
+/** One interaction on an element, as an outline describes it. */
+export interface AssistEditInteractionSummary {
+  name: string
+  event: string
+  steps: string[]
+  enabled: boolean
+}
+
+/* ------------------------------------------------------------------ *
+ * The interactions Assist may add (AGL-3603)
+ * ------------------------------------------------------------------ */
+
+/**
+ * The events an interaction Assist adds may listen for: those that watch the
+ * element it is added to, the way the Besigner's Interactions section offers
+ * them on a selected element.
+ */
+export const ASSIST_EDIT_INTERACTION_EVENTS = [
+  'elementClick',
+  'elementHoverEnter',
+  'elementHoverLeave',
+  'elementVisible',
+  'scrollToElement',
+] as const
+
+export type AssistEditInteractionEvent = (typeof ASSIST_EDIT_INTERACTION_EVENTS)[number]
+
+/**
+ * The steps it may take: the platform's basic presentational client steps,
+ * which run on every plan and touch no data. No script, no HTML, no
+ * attribute, no overlay, no analytics event — and no server step.
+ */
+export const ASSIST_EDIT_INTERACTION_STEPS = [
+  'showElement',
+  'hideElement',
+  'toggleElement',
+  'addClass',
+  'removeClass',
+  'toggleClass',
+  'scrollTo',
+  'playVideo',
+  'openDrawer',
+  'closeDrawer',
+  'toggleDrawer',
+  'openMenu',
+  'closeMenu',
+  'toggleMenu',
+  'redirect',
+  'siteAlert',
+] as const
+
+export type AssistEditInteractionStep = (typeof ASSIST_EDIT_INTERACTION_STEPS)[number]
 
 export interface AssistEditCanvasContext {
   /** The element the author has selected, or null. */
@@ -262,7 +324,20 @@ export interface AssistEditSaveAsComponentOp extends AssistEditNodeOpBase {
   bindings: AssistEditPropBinding[]
 }
 
+/**
+ * Add one interaction to an element (AGL-3603), in the shape the element
+ * stores it — its trigger with no selector, which the element's id derives.
+ * It never replaces or removes one the element already carries.
+ */
+export interface AssistEditAddInteractionOp extends AssistEditNodeOpBase {
+  op: 'addInteraction'
+  interaction: NodeInteraction
+  /** Every other element a step acts on, each with the component it was validated as. */
+  targets: Array<{ nodeId: string; componentId: string }>
+}
+
 export type AssistEditOp =
+  | AssistEditAddInteractionOp
   | AssistEditInsertOp
   | AssistEditUpdatePropsOp
   | AssistEditUpdateSxOp
@@ -293,6 +368,8 @@ export interface AssistEditDiff {
   componentProps: number
   /** Selections saved as a reusable component — at most one per proposal. */
   componentsSaved: number
+  /** Interactions added to elements. */
+  interactionsAdded: number
 }
 
 /** The most reasons a proposal carries for the changes validation left out. */
@@ -321,6 +398,7 @@ export function summarizeAssistEditOps(ops: readonly AssistEditOp[]): AssistEdit
     seoFields: 0,
     componentProps: 0,
     componentsSaved: 0,
+    interactionsAdded: 0,
   }
   for (const op of ops) {
     switch (op.op) {
@@ -349,6 +427,9 @@ export function summarizeAssistEditOps(ops: readonly AssistEditOp[]): AssistEdit
         diff.componentsSaved += 1
         diff.componentProps += op.props.length
         break
+      case 'addInteraction':
+        diff.interactionsAdded += 1
+        break
     }
   }
   return diff
@@ -373,6 +454,9 @@ export function describeAssistEditDiff(diff: AssistEditDiff): string[] {
   if (diff.seoFields) {
     lines.push(`${plural(diff.seoFields, 'search field', 'search fields')} filled in`)
   }
+  if (diff.interactionsAdded) {
+    lines.push(`${plural(diff.interactionsAdded, 'interaction', 'interactions')} added`)
+  }
   if (diff.componentsSaved) {
     lines.push(
       `saved as a reusable component with ${plural(diff.componentProps, 'property', 'properties')}`,
@@ -391,6 +475,7 @@ const OP_COUNT_WORDS: Readonly<Record<AssistEditOpKind, string>> = {
   rename: 'rename',
   setSeo: 'seo',
   saveAsComponent: 'component',
+  addInteraction: 'interaction',
 }
 
 /** The applied ops counted by kind, as the activity row names them (`{ set: 3, insert: 1 }`). */

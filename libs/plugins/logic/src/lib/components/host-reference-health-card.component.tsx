@@ -20,6 +20,8 @@ import { pluginDocsHelp, scopeTokensForHost } from '@aglyn/aglyn'
 import { pluginContainerKind } from '@aglyn/aglyn/plugin-manager/plugin-containers'
 import { auditHostReferences } from '../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import { LOGIC_REFERENCE_ISSUE_ZONE } from './logic-zones'
 import { Alert, Chip, Stack, Typography } from '@mui/material'
 import { collection, query, where } from 'firebase/firestore'
 import { useMemo } from 'react'
@@ -45,6 +47,8 @@ import {
 
 export interface HostReferenceHealthCardProps {
   hostId: string
+  /** The org the page names (AGL-3603), handed to the zone on each issue. */
+  orgId?: string
 }
 
 /**
@@ -66,8 +70,10 @@ const REFERENCE_CEILING = 100
  * of failing silently on a visitor's pageview.
  */
 export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
-  const { hostId } = props
+  const { hostId, orgId } = props
   const firestore = useFirestore()
+  /** The shell's zone renderer (AGL-3603); `null` outside the console shell. */
+  const ExtensionZone = useConsoleWidgetSlot()
   // The org lookup is async (AGL-1061). `dataScope` is null until it
   // settles — and stays null for a host with no owning org — so the two
   // org-data queries below simply are not issued rather than falling back
@@ -322,6 +328,15 @@ export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
                 >
                   {issue.missing || '(empty)'}
                 </Typography>
+                {/* What other plugins offer for one broken reference (AGL-3603). */}
+                {ExtensionZone ? (
+                  <ExtensionZone
+                    slot={LOGIC_REFERENCE_ISSUE_ZONE.id}
+                    hostId={hostId}
+                    orgId={orgId}
+                    issue={issue}
+                  />
+                ) : null}
               </Stack>
             ))}
           </Stack>

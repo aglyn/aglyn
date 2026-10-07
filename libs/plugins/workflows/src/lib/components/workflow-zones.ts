@@ -62,7 +62,8 @@ export interface AutomationTarget {
 /**
  * The editor of one SAVED automation — an action or a workflow — on the
  * Automation page (AGL-2919). A widget here reads the automation as it is
- * stored and changes nothing in the editor.
+ * stored and changes nothing in the editor; what it drafts is a new
+ * automation, which `openAction` opens.
  */
 export interface AutomationEditorZoneProps {
   hostId: string
@@ -70,6 +71,13 @@ export interface AutomationEditorZoneProps {
   orgId: string | undefined
   /** The automation the editor has open, as it is stored. */
   target: AutomationTarget
+  /**
+   * Opens a listed action in the Actions editor in place of the one open —
+   * a changed copy a widget drafted, say — and answers `false` when the id
+   * names no action the list has read yet (AGL-3603). The Actions editor
+   * hands it; a workflow's editor does not.
+   */
+  openAction?: (actionId: string) => boolean
 }
 
 /**
@@ -90,8 +98,58 @@ export interface AutomationRunZoneProps {
 export const HOST_AUTOMATIONS_ZONE =
   definePluginZone<HostAutomationsZoneProps>('hostAutomations')
 
+/**
+ * The workspace's Org automations section, in its card's header (AGL-3603):
+ * another way to start an org automation, drawn for a member who may write
+ * them. `triggers` and `steps` are what an org automation may start on and
+ * hold — this plugin's own lists, handed over so a widget never restates
+ * them. `propose` opens an automation in the section's editor as a NEW one,
+ * unsaved and switched off, and answers `false` when the editor cannot take
+ * it. A widget here writes nothing: the editor's Save, through the section's
+ * route, is the write.
+ */
+export interface OrgAutomationsZoneProps {
+  orgId: string
+  triggers: readonly string[]
+  steps: readonly string[]
+  propose: (automation: OrgAutomationProposal) => boolean
+}
+
+/** An automation a widget proposes to the Org automations editor. */
+export interface OrgAutomationProposal {
+  name: string
+  trigger: {
+    event: string
+    conditions?: ReadonlyArray<{ field: string; op: string; value?: string }>
+    combinator?: 'and' | 'or'
+  }
+  steps: ReadonlyArray<Record<string, unknown> & { type: string }>
+}
+
+export const ORG_AUTOMATIONS_ZONE =
+  definePluginZone<OrgAutomationsZoneProps>('orgAutomations')
+
 export const AUTOMATION_EDITOR_ZONE =
   definePluginZone<AutomationEditorZoneProps>('automationEditor')
 
 export const AUTOMATION_RUN_ZONE =
   definePluginZone<AutomationRunZoneProps>('automationRun')
+
+/**
+ * The query parameter that asks the Actions section to open one of its
+ * actions in the editor once its list has read it (AGL-3603) — how the
+ * Workflows section's `openAction` hands over an action a widget drafted
+ * there, since the action lives in the other section.
+ */
+export const OPEN_ACTION_PARAM = 'action'
+
+/** The Actions section's address, opening `actionId` in its editor. */
+export function openActionHref(actionsHref: string, actionId: string): string {
+  return `${actionsHref}?${OPEN_ACTION_PARAM}=${encodeURIComponent(actionId)}`
+}
+
+/** The action the address asks the Actions section to open, or `null`. */
+export function requestedActionId(search: string): string | null {
+  const id = new URLSearchParams(search).get(OPEN_ACTION_PARAM)
+  return id && /^[A-Za-z0-9_-]{1,128}$/.test(id) ? id : null
+}

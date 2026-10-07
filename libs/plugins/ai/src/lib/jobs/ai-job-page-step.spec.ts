@@ -359,11 +359,15 @@ describe('the page step’s registration', () => {
     const card = { kind: 'component' as const, name: 'Price tier', why: 'Three tiers repeat.', duplicateOf: null, fields: [] }
     const creating = { ...PLAN, create: [card] }
     expect(await ask({ plan: creating })).toBeNull()
+    // …on Free too, whose site saves one component (AGL-3615)…
+    expect(await ask({ plan: creating, org: {} })).toBeNull()
     // …refused where it may not, in a sentence naming the creation and why…
+    mockDocs.set('hosts/host-1/components/cmp-held', { displayName: 'Hero' })
     expect(await ask({ plan: creating, org: {} })).toEqual({
       status: 403,
-      error: 'This page cannot be built as planned: it creates the component “Price tier”, because this workspace\'s plan does not include reusable components. Describe the page again.',
+      error: 'This page cannot be built as planned: it creates the component “Price tier”, because this site already holds the 1 reusable component its plan includes. Describe the page again.',
     })
+    mockDocs.delete('hosts/host-1/components/cmp-held')
     // …refused where nothing here builds it…
     mockRunners.delete('component')
     expect(await ask({ plan: creating })).toEqual({ status: 400, error: AI_JOB_PAGE_CREATION_UNAVAILABLE_COPY })

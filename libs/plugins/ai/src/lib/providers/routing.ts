@@ -314,6 +314,17 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       'the largest automation the tool accepts, 6,000 characters written out as JSON, at three characters a token with as much again to think in, as ai-job-workflow-step.spec.ts measures it',
     eval: { kinds: ['workflow'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
   },
+  'job.logic': {
+    // A site function or variable proposed, or a function explained
+    // (AGL-3603): which conditions and arithmetic a description means is the
+    // judgment the step sells, so it thinks before it answers.
+    thinking: 'adaptive',
+    effort: null,
+    maxTokens: 3000,
+    maxTokensBasis:
+      'the largest function the tool accepts — twelve parameters, twenty-four operations — is far past any description; a function of eight operations is about 2,400 characters of JSON, at three characters a token with as much again to think in, as ai-job-logic-step.spec.ts measures it',
+    eval: { kinds: ['logic'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 1 },
+  },
   'job.seo': {
     thinking: null,
     effort: null,

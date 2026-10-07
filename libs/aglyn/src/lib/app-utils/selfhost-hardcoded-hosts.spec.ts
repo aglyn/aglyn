@@ -107,7 +107,7 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "AGL-3370. The email twin of the tenant.theme.ts row below: which hosts' mail wears the OPERATOR's own palette rather than the site's. The two literals are the `??` default of `NEXT_PUBLIC_PLATFORM_BRAND_HOSTS` and nothing else reads them; a self-host operator points that variable at their own domain, and on a self-hosted instance no sending host ever equals the defaults, so every site's mail correctly takes its own palette.",
   },
   {
-    file: 'libs/shared/ui/theme/src/lib/tenant.theme.ts',
+    file: 'libs/shared/ui/theme/src/lib/platform-brand.ts',
     count: 2,
     reason:
       "AGL-2703. Which hosts wear the OPERATOR's own brand rather than the neutral tenant palette. The two literals are the `??` default of `NEXT_PUBLIC_PLATFORM_BRAND_HOSTS` and nothing else reads them: a self-host operator points that variable at their own marketing domain, and their customers keep resolving the tenant default either way. Left as the default so the platform's own deployment needs no variable to keep its brand. On a self-hosted instance the literals are inert — no host there ever equals them, so every site correctly gets the tenant palette.",
@@ -189,6 +189,18 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
     count: 1,
     reason:
       "The same shape as `auth-action-url.ts` above, and modelled on it by name: `DEFAULT_CONSOLE_ORIGIN` is the `??` default of NEXT_PUBLIC_CONSOLE_URL and nothing else reads the literal, so an operator who sets that variable never evaluates it. It matters more here than for an auth email, because a mailbox's OAuth callback must be an address the operator REGISTERED with the provider — a self-hoster who left the variable unset would send Google to a console that is not theirs, and Google would refuse it as an unregistered redirect_uri rather than leak anything. That is the right failure: loud, at connect time, on a deployment that has not been configured. AGL-3228 added the fallback; this row is the decision it implies.",
+  },
+  {
+    file: 'libs/aglyn/src/lib/app-utils/mobile-push.ts',
+    count: 1,
+    reason:
+      "AGL-3651. `com.aglyn.app` is the Aglyn app's bundle identifier, which APNs takes as the push topic; it reads as `aglyn.app` but names a store listing, not a host, and no request is sent to it. A rebuilt app registers under its own bundle id.",
+  },
+  {
+    file: 'libs/plugins/accounting/src/lib/server/oauth-redirect.ts',
+    count: 1,
+    reason:
+      "AGL-3614, the outreach mailbox row above in the accounting plugin: `DEFAULT_CONSOLE_ORIGIN` is the `||` default of NEXT_PUBLIC_CONSOLE_URL, read only when the variable is unset. Intuit and Xero refuse a redirect_uri the operator never registered, so an unconfigured self-host fails loudly at Connect rather than sending a ledger grant to Aglyn's console.",
   },
   {
     file: 'libs/shared/util/email/src/lib/outbound-phishing-screen.ts',

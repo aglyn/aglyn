@@ -23,7 +23,7 @@ import {
 import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import { pluginSmsAvailable } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
-import { notifyOrderBuyer } from './order-notifications'
+import { finishPosDisplayReceipt } from './pos-display'
 import * as CommerceModel from '../model'
 import { posRegisterSettings } from '../plugin-config'
 import {
@@ -35,6 +35,7 @@ import {
 } from './pos-auth'
 import {
   applyPosPayment,
+  deliverChosenPosReceipt,
   posPaymentId,
   posSaleSummary,
   readPosSale,
@@ -42,7 +43,10 @@ import {
   type PosLiftedOrder,
   type PosPaymentOutcome,
 } from './pos-sale'
+import { posPaymentCashierId } from './pos-sale-stamp'
+import { printPosSaleReceipt } from './pos-print'
 import {
+  POS_CURRENCY,
   posStripe,
   posStripeErrorMessage,
   posStripeTestMode,
@@ -84,7 +88,7 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(body['hostId'] ?? '')
   const gate = await authorizePosStaff(req, hostId)
   if ('error' in gate) return res.status(gate.status).json({ error: gate.error })
-  const staff = gate.staff
+  let staff = gate.staff
   const action = String(body['action'] ?? '')
   const orderId = String(body['orderId'] ?? '')
   try {
@@ -141,6 +145,18 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
     const paymentId = startsPayment
       ? posPaymentId(orderId, attemptKey)
       : String(body['paymentId'] ?? '')
+    // The cashier a PIN switched in takes the payment (AGL-3609).
+    if (startsPayment && body['cashierAssertion']) {
+      staff = {
+        ...staff,
+        uid: await posPaymentCashierId({
+          hostId,
+          orderId,
+          signedInUid: staff.uid,
+          assertion: body['cashierAssertion'],
+        }),
+      }
+    }
     const amountCents = Math.round(Number(body['amountCents'] ?? 0))
     const tipCents = Math.round(Number(body['tipCents'] ?? 0)) || 0
     const settings = posRegisterSettings(
@@ -694,6 +710,9 @@ async function reversePayment(
   })
 }
 
+/** A repeat of the same receipt choice inside this window sends nothing more. */
+const RECEIPT_REPEAT_WINDOW_MS = 2 * 60 * 1000
+
 /**
  * How the customer wants their receipt, from the cashier or the customer
  * display. Kept on the order; an email chosen after the sale is paid is sent
@@ -735,6 +754,18 @@ async function recordReceiptChoice(
       $id: orderId,
     } as PosLiftedOrder
     if (fresh.channel !== 'pos') return null
+    // The same choice twice in a row (a double tap, or the display and the
+    // cashier answering together) is one receipt, not two.
+    const previous = fresh.receiptRequest
+    if (
+      fresh.status === 'paid' &&
+      previous &&
+      previous.channel === channel &&
+      String(previous.to ?? '') === to &&
+      Date.now() - Number(previous.atMs ?? 0) < RECEIPT_REPEAT_WINDOW_MS
+    ) {
+      return { ...fresh, repeated: true } as PosLiftedOrder & { repeated?: boolean }
+    }
     const receiptRequest = {
       channel,
       ...(to ? { to } : {}),
@@ -756,14 +787,28 @@ async function recordReceiptChoice(
       },
       { merge: true },
     )
-    return { ...fresh, receiptRequest } as PosLiftedOrder
+    return { ...fresh, receiptRequest } as PosLiftedOrder & { repeated?: boolean }
   })
   if (!order) return { ok: false, status: 404, error: 'Unknown sale' }
+  if (order.repeated) return { ok: true, order, payment: null, completed: false, changed: false }
+  if (order.status === 'paid' && channel === 'print') {
+    // Chosen after the sale completed: printed now on the register's receipt
+    // printer, under the sale's own key so it never prints twice (AGL-3609).
+    await printPosSaleReceipt(staff.hostId, orderId)
+  }
+  if (order.status === 'paid' && order.registerId) {
+    // The customer has answered (or the cashier for them): the display says
+    // thank you and drops the address they typed (AGL-3608).
+    await finishPosDisplayReceipt(staff.hostId, order.registerId).catch((error: unknown) =>
+      console.error('[pos-payment] display finish failed', error),
+    )
+  }
   if (order.status === 'paid' && (channel === 'email' || channel === 'sms')) {
-    // Chosen after the sale completed: sent now, through the same door.
-    const sent = await notifyOrderBuyer({ hostId: staff.hostId, orderId }, 'receipt', {
-      ...(channel === 'email' ? { email: to } : {}),
-    })
+    // Chosen after the sale completed: sent now, to where they said.
+    const sent = await deliverChosenPosReceipt(
+      { hostId: staff.hostId, orderId },
+      { channel, to, orderEmail: String(order.customerEmail ?? '') },
+    )
     if (channel === 'email') {
       await recordCapturedContact({
         orgId: '',
@@ -775,16 +820,27 @@ async function recordReceiptChoice(
         interaction: {
           source: 'order',
           refId: orderId,
-          summary: `In-store purchase ($${(Number(order.totals?.totalCents ?? 0) / 100).toFixed(2)})`,
+          summary: `In-store purchase (${CommerceModel.formatReceiptMoney(
+            Number(order.totals?.totalCents ?? 0),
+            POS_CURRENCY,
+          )})`,
         },
       }).catch((error: unknown) => console.error('[pos-payment] contact capture failed', error))
     }
-    if (sent.outcome === 'handled' && sent.channels.some((entry) => entry.outcome === 'failed')) {
-      return { ok: false, status: 502, error: 'The receipt could not be sent.' }
+    if (sent !== 'sent') {
+      // A failed send is not a repeat: the cashier's retry goes out.
+      await orderRef
+        .set({ receiptRequest: { atMs: 0 } }, { merge: true })
+        .catch((error: unknown) => console.error('[pos-payment] receipt retry reset failed', error))
     }
-    if (sent.outcome === 'disabled') {
-      return { ok: false, status: 409, error: 'Receipts are switched off in the store settings.' }
+    if (sent === 'not_configured') {
+      return {
+        ok: false,
+        status: 409,
+        error: channel === 'sms' ? 'Text receipts are not set up for this store.' : 'Email is not set up.',
+      }
     }
+    if (sent !== 'sent') return { ok: false, status: 502, error: 'The receipt could not be sent.' }
   }
   return { ok: true, order, payment: null, completed: false, changed: true }
 }

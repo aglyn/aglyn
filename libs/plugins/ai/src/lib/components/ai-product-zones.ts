@@ -130,3 +130,9 @@ export interface ConsoleProductImportZoneProps {
   options: Readonly<Record<string, boolean>>
   setOption: (key: string, on: boolean) => void
 }
+
+/** What `productsCreate` hands each widget: the site and its org (AGL-3596). */
+export interface ConsoleProductsCreateZoneProps {
+  hostId: string
+  orgId: string | undefined
+}

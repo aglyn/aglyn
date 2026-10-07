@@ -16,8 +16,11 @@
  */
 
 export * from './lib/constants/bundle-common'
-export * from './lib/model'
 export * from './lib/plugin'
+// The model (`./lib/model`) is not re-exported: nothing reaches it through
+// this entry, and naming it here put every model module — the ShipStation,
+// POS and printing ones among them — into the chunk every site loads.
+// Callers deep-import the model module they need.
 /**
  * ⛔ No console surface may be re-exported here (AGL-1151).
  *

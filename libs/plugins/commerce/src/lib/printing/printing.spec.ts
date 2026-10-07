@@ -19,7 +19,9 @@ import type { ReceiptData } from '../model/commerce-receipt'
 import {
   code128Printable,
   layoutDrawerKick,
+  layoutKitchenTicket,
   layoutReceipt,
+  layoutReport,
   layoutTestPage,
   toPrintable,
   twoColumnLines,
@@ -35,6 +37,7 @@ import {
 } from './render-epson'
 import { renderStar, STAR_DRAWER_KICK, starLogoNumber } from './render-star'
 import { renderText } from './render-text'
+import { printJobDocument } from '../server/print-queue'
 
 const RECEIPT: ReceiptData = {
   storeName: 'Corner Café',
@@ -162,6 +165,30 @@ describe('the printer-neutral layout (AGL-3619)', () => {
 
   it('a drawer kick prints nothing', () => {
     expect(layoutDrawerKick(48).ops).toEqual([{ op: 'drawer' }])
+  })
+
+  it('a shift report prints its sections as aligned two-column rows (AGL-3609)', () => {
+    const document = layoutReport(
+      {
+        title: 'Z REPORT',
+        storeName: 'Corner Café',
+        subtitle: 'Front - Closed by Cal',
+        sections: [
+          { section: 'Sales', rows: [{ label: 'Net sales', value: '$71.60', strong: true }] },
+          { section: 'Cash drawer', rows: [{ label: 'Short', value: '-$0.60', strong: true }] },
+        ],
+      },
+      { columns: 32 },
+    )
+    const text = renderText(document)
+    expect(text).toContain('Z REPORT')
+    expect(text).toContain('Corner Cafe')
+    expect(text).toContain('CASH DRAWER')
+    const short = text.split('\n').find((line) => line.startsWith('Short'))!
+    expect(short).toHaveLength(32)
+    expect(short.endsWith('-$0.60')).toBe(true)
+    expect(document.ops.some((op) => op.op === 'drawer')).toBe(false)
+    expect(document.ops.at(-1)).toEqual({ op: 'cut' })
   })
 
   it('a test page names the printer and exercises alignment, emphasis, size and a barcode', () => {
@@ -310,5 +337,30 @@ describe('Epson ePOS-Print XML (Server Direct Print)', () => {
       },
     ])
     expect(parseEpsonPrintResults('nonsense')).toEqual([])
+  })
+})
+
+describe('kitchen tickets (AGL-3619)', () => {
+  it('prints the order number, quantities and options, and no money', () => {
+    const text = renderText(layoutKitchenTicket(RECEIPT, { columns: 42 }))
+    expect(text).toContain('#1042')
+    expect(text).toContain('2 x Latte')
+    expect(text).toContain('Oat milk')
+    expect(text).toContain('Front counter')
+    expect(text).toContain('3 items')
+    expect(text).not.toMatch(/\$\d/)
+    expect(layoutKitchenTicket(RECEIPT, { columns: 42 }).ops.some((op) => op.op === 'drawer')).toBe(false)
+  })
+
+  it('a job with nothing to print never falls through to a drawer kick', () => {
+    const printer = { paperWidthMm: 80 as const, name: 'Kitchen' }
+    const base = { printerId: 'p', status: 'queued' as const, attempts: 0, createdAtMs: 1, deliverByMs: 2 }
+    expect(printJobDocument({ ...base, kind: 'kitchen' }, printer).ops).toEqual([])
+    expect(printJobDocument({ ...base, kind: 'receipt' }, printer).ops).toEqual([])
+    expect(printJobDocument({ ...base, kind: 'drawer' }, printer).ops).toEqual([{ op: 'drawer' }])
+    expect(printJobDocument({ ...base, kind: 'kitchen', receipt: RECEIPT }, printer).ops[0]).toMatchObject({
+      op: 'text',
+      text: '#1042',
+    })
   })
 })

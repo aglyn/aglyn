@@ -58,6 +58,7 @@ import {
   storefrontPaymentAppearance,
   storefrontPaymentFonts,
 } from './storefront-payment-appearance'
+import type { StorefrontCheckoutWallets } from '../model/commerce-payment-methods'
 
 /**
  * The storefront Payment Element (AGL-1944) — the shopper pays on the
@@ -157,6 +158,12 @@ export interface StorefrontPaymentElementProps {
    * session for the old one.
    */
   onRestart?: () => void
+  /**
+   * The wallets the merchant hid (AGL-3629). Stripe cannot exclude Apple Pay,
+   * Google Pay or Link on the session, so the Payment Element is told instead.
+   * Absent means every wallet the device supports shows.
+   */
+  wallets?: StorefrontCheckoutWallets
 }
 
 /**
@@ -242,9 +249,10 @@ function PaymentForm({
   defaultEmail,
   onCancel,
   onRestart,
+  wallets,
 }: Pick<
   StorefrontPaymentElementProps,
-  'payLabel' | 'defaultEmail' | 'onCancel' | 'onRestart'
+  'payLabel' | 'defaultEmail' | 'onCancel' | 'onRestart' | 'wallets'
 >) {
   // A `{ type: 'loading' | 'success' | 'error' }` union since react-stripe-js
   // v6: the session is not usable until Stripe.js has booted against it.
@@ -484,7 +492,7 @@ function PaymentForm({
           </RadioGroup>
         </Box>
       ) : null}
-      <PaymentElement />
+      <PaymentElement options={wallets ? { wallets } : undefined} />
       {total ? (
         <Box
           sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}
@@ -544,6 +552,7 @@ export function StorefrontPaymentElement({
   defaultEmail,
   onCancel,
   onRestart,
+  wallets,
 }: StorefrontPaymentElementProps) {
   const stripe = useMemo(() => getStripe(publishableKey), [publishableKey])
   const theme = useTheme()
@@ -577,6 +586,7 @@ export function StorefrontPaymentElement({
           defaultEmail={defaultEmail}
           onCancel={onCancel}
           onRestart={onRestart}
+          wallets={wallets}
         />
       </Box>
     </CheckoutElementsProvider>

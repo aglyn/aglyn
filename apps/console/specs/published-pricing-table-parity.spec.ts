@@ -272,7 +272,6 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     it.each([
       ['Custom domain & SSL', 'customDomain', 1],
       ['Remove Aglyn branding', 'removeBranding', 1],
-      ['Reusable components', 'reusableComponents', 1],
       ['URL redirects', 'redirects', 1],
       ['Page versioning', 'versioning', 2],
       ['Scheduled publishing', 'scheduledPublishing', 3],
@@ -287,6 +286,21 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
         expect(flagColumn(flag as string)).toEqual(published)
       },
     )
+
+    /**
+     * "Reusable components" — 1 · ✓ · ✓ · ✓ · ✓ · ✓ · ✓ (AGL-3615). Free's cell
+     * was "—" while components were a Starter feature; Free now saves one per
+     * site, and `tools/scripts/publish-pricing-free-component-cell.mjs` sets
+     * the cell to "1" on version `oKpP7e6UeG`. A tick is an unlimited
+     * allowance, which every paid plan keeps, and the flag that says so.
+     */
+    it('Reusable components — 1 · ✓ · ✓ · ✓ · ✓ · ✓ · ✓', () => {
+      const [free, ...paid] = quotaColumn('componentsPerHost')
+      expect(free).toBe(1)
+      expect(flagColumn('reusableComponents')[0]).toBeFalsy()
+      for (const value of paid) expect(value).toBe(UNLIMITED)
+      expect(flagColumn('reusableComponents').slice(1)).toEqual(paid.map(() => true))
+    })
   })
 
   // ---------------------------------------------------------------------

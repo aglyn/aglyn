@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  checkEntitlement,
+  pluginRequestFromWeb,
+  runPluginEventHandlers,
+} from '@aglyn/aglyn/server'
 import {
   attachProjectDomain,
   domainProvider,
@@ -315,6 +319,15 @@ async function handler(request: Request): Promise<Response> {
       'Attached a custom domain',
       { type: 'host', id: hostId, name: domain },
     )
+    // Plugins that register the domain somewhere of their own — commerce's
+    // Stripe payment method domains, so Apple Pay shows on it (AGL-3629).
+    // After the claim and the attach, so the name is this site's; isolated,
+    // so a plugin that fails cannot fail the connect.
+    await runPluginEventHandlers('host.domain.attached', {
+      orgId: String(hostSnapshot.get('orgId') ?? '') || null,
+      hostId,
+      domain,
+    })
     return Response.json({
       attached: true,
       // The wizard renders these rather than a bare tick: which of "still

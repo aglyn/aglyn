@@ -28,7 +28,7 @@
  * assert on the WHOLE rendered card, not on one string.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 
 if (typeof globalThis.TextDecoder === 'undefined') {
   globalThis.TextDecoder = require('util').TextDecoder
@@ -61,7 +61,6 @@ import {
   type AiExperimentVariantsCardProps,
   type AiExperimentZoneVariant,
 } from './ai-experiment-cards.component'
-import { forgetAiJobsVerdicts } from './use-ai-job-run'
 
 /**
  * Words that make a claim about which variant is better. The same family the
@@ -170,7 +169,7 @@ const VARIANTS_ANSWER = {
   ],
 }
 
-/** The jobs route, then the create door; no card reaches any other route. */
+/** The jobs route's doors; no card reaches any other route. */
 function routes(answers: { verdict?: () => unknown; create?: () => unknown }) {
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (init?.method === 'POST' && url === '/api/ai/jobs') {
@@ -205,31 +204,15 @@ const variantsProps = (
 
 beforeEach(() => {
   jest.clearAllMocks()
-  forgetAiJobsVerdicts()
 })
 
 describe('whether either card is here at all', () => {
-  it('stays absent while the release flag is off, and asks nothing else', async () => {
-    routes({ verdict: () => json({ error: 'Not found' }, 404) })
-    const result = render(<AiExperimentResultCard hostId="host-1" experimentId="exp-1" test="Hero copy" />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(result.container.textContent).toBe('')
-
-    forgetAiJobsVerdicts()
-    const variants = render(<AiExperimentVariantsCard {...variantsProps()} />)
-    await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThan(1))
-    expect(variants.container.textContent).toBe('')
-    // Nothing was started: the door is not merely hidden, it is unreachable.
-    expect(mockFetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
-  })
-
-  it('stays absent for a workspace whose plan does not carry generation', async () => {
-    routes({ verdict: () => json({ error: 'Forbidden' }, 403) })
-    const { container } = render(
-      <AiExperimentResultCard hostId="host-1" experimentId="exp-1" test="Hero copy" />,
-    )
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
+  it('draws both at once from the shell’s gates, and asks nothing until one is used (AGL-3601)', () => {
+    routes({})
+    render(<AiExperimentResultCard hostId="host-1" experimentId="exp-1" test="Hero copy" />)
+    render(<AiExperimentVariantsCard {...variantsProps()} />)
+    expect(screen.getByRole('button', { name: 'Explain this result' })).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })
 
@@ -446,5 +429,78 @@ describe('the pieces', () => {
     expect(aiExperimentSubjectFrom('email', EDITOR_VARIANTS)).toBe('Your quote\n\nAs it stands.')
     expect(aiExperimentSubjectFrom('screen', EDITOR_VARIANTS)).toBe('')
     expect(aiExperimentSubjectFrom('email', [])).toBe('')
+  })
+})
+
+/**
+ * A page or a section varies a VERSION of the page (AGL-3603): after the copy
+ * is written, "Make draft versions" asks the versions door for one per
+ * variant past the control and pins them to the editor's variants unsaved.
+ */
+describe('draft versions for a page or a section test', () => {
+  const PAGE_ANSWER = {
+    task: 'variants',
+    target: 'section',
+    goal: 'quotes',
+    variants: [
+      { name: 'A (control)', headline: 'Roofs done right', body: 'Free quotes.', subject: '', preheader: '', rationale: '' },
+      { name: 'B — speed', headline: 'A new roof in a week', body: 'Quotes in a day.', subject: '', preheader: '', rationale: '' },
+    ],
+  }
+
+  function pageRoutes(versions: () => unknown) {
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (init?.method === 'POST' && url === '/api/ai/jobs') return Promise.resolve(json({ job: answered(PAGE_ANSWER) }))
+      if (init?.method === 'POST' && url === '/api/ai/experiments/versions') return Promise.resolve(versions())
+      if (url.startsWith('/api/ai/jobs?')) return Promise.resolve(json({ jobs: [] }))
+      throw new Error(`unexpected ${init?.method ?? 'GET'} ${url}`)
+    })
+  }
+
+  const SECTION_VARIANTS: AiExperimentZoneVariant[] = [
+    { id: 'a', name: 'A', subject: '', body: '', versionId: '' },
+    { id: 'b', name: 'B', subject: '', body: '', versionId: '' },
+  ]
+
+  async function write(patch: Partial<AiExperimentVariantsCardProps>) {
+    render(<AiExperimentVariantsCard {...variantsProps({ target: 'section', variants: SECTION_VARIANTS, ...patch })} />)
+    fireEvent.change(await screen.findByLabelText('The section copy under test'), {
+      target: { value: 'Roofs done right. Free quotes.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Write variants' }))
+    await screen.findByText('A new roof in a week')
+  }
+
+  it('makes them for the page and section under test, and pins each to its variant', async () => {
+    pageRoutes(() => json({ versions: [{ index: 1, name: 'A/B: B — speed', versionId: 'ab-job-1-1' }], skipped: [] }))
+    await write({ screenId: 'scr-1', nodeId: 'hero' })
+    fireEvent.click(screen.getByRole('button', { name: 'Make draft versions' }))
+
+    expect(await screen.findByText(/Draft versions made and pinned above: A\/B: B — speed/)).toBeTruthy()
+    const call = mockFetch.mock.calls.find(([url]) => url === '/api/ai/experiments/versions')
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+      orgId: 'org-1',
+      hostId: 'host-1',
+      jobId: 'job-1',
+      screenId: 'scr-1',
+      nodeId: 'hero',
+    })
+    const [drafts] = proposeVariants.mock.calls.at(-1) ?? []
+    expect(drafts.map((draft: AiExperimentZoneVariant) => draft.versionId)).toEqual([undefined, 'ab-job-1-1'])
+  })
+
+  it('waits for the section under test before it can make them', async () => {
+    pageRoutes(() => json({}))
+    await write({ screenId: 'scr-1', nodeId: '' })
+    expect((screen.getByRole('button', { name: 'Make draft versions' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText('Pick the section under test above to make draft versions.')).toBeTruthy()
+  })
+
+  it('says why when the door refuses, and pins nothing', async () => {
+    pageRoutes(() => json({ error: 'Version history requires a Pro plan — see Billing to upgrade' }, 403))
+    await write({ screenId: 'scr-1', nodeId: 'hero' })
+    fireEvent.click(screen.getByRole('button', { name: 'Make draft versions' }))
+    expect(await screen.findByText(/Version history requires a Pro plan/)).toBeTruthy()
+    expect(proposeVariants).not.toHaveBeenCalled()
   })
 })

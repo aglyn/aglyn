@@ -21,7 +21,7 @@ import {
   type PluginDomainEventEnvelope,
 } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
 import { BUNDLE_ID } from '../constants/bundle-common'
-import { COMMERCE_EVENT_DECLARATIONS } from '../model/order-events'
+import { CHECKOUT_STARTED_EVENT_DECLARATION, COMMERCE_EVENT_DECLARATIONS } from '../model/order-events'
 
 /**
  * Commerce's events as workflow triggers (AGL-3611).
@@ -81,7 +81,7 @@ export function hostEventPayloadFor(
  * with the boot.
  */
 export function registerCommerceEventTriggers(): void {
-  declarePluginDomainEvents(COMMERCE_EVENT_DECLARATIONS, { pluginId: BUNDLE_ID })
+  declarePluginDomainEvents([...COMMERCE_EVENT_DECLARATIONS, CHECKOUT_STARTED_EVENT_DECLARATION], { pluginId: BUNDLE_ID })
   for (const declaration of COMMERCE_EVENT_DECLARATIONS) {
     subscribePluginDomainEvent(
       declaration.event,
@@ -92,6 +92,16 @@ export function registerCommerceEventTriggers(): void {
       // Named, so the outbox records it apart from the webhook subscriber
       // this plugin also registers.
       { pluginId: BUNDLE_ID, name: 'workflow-triggers' },
+    )
+    // The merchant's own webhooks (AGL-3611). Its own subscriber name, so a
+    // failing endpoint is retried without raising the workflow trigger again.
+    subscribePluginDomainEvent(
+      declaration.event,
+      async (envelope) => {
+        const { deliverOrderEventToWebhooks } = await import('./order-webhooks')
+        await deliverOrderEventToWebhooks(envelope)
+      },
+      { pluginId: BUNDLE_ID, name: 'webhooks' },
     )
   }
 }

@@ -29,10 +29,17 @@
  * this" from "the stand-in forgot to grant it".
  */
 
-import { PLAN_ENTITLEMENTS, planLabelGrantingFeature } from '@aglyn/aglyn'
+import {
+  AI_ADDON_CREDITS_PER_MONTH,
+  PLAN_ENTITLEMENTS,
+  planLabelGrantingFeature,
+  registerPluginEntitlements,
+  resetPluginEntitlementsForTests,
+} from '@aglyn/aglyn'
 import {
   blockedExtensionNotice,
   composeExtensionEntitlements,
+  entitlementPurchasable,
   resolveExtensionEntitlement,
 } from './extension-entitlement'
 
@@ -97,5 +104,63 @@ describe('blockedExtensionNotice', () => {
       'Deals is not included in your current plan. Manage your plan and ' +
         'add-ons from Billing. Included from Starter.',
     )
+  })
+})
+
+describe('entitlementPurchasable (AGL-3601)', () => {
+  // A plugin's add-on, declared the way the AI plugin declares its own: the
+  // flag it switches on, and a per-plan figure that is 0 where it is not sold.
+  beforeAll(() => {
+    registerPluginEntitlements({
+      pluginId: 'demo-upsell',
+      seatAddons: [
+        {
+          key: 'demoUpsellAddon',
+          label: 'Demo add-on',
+          maxUnits: 1,
+          quota: { key: 'demoUpsellQuota', perUnitByPlan: AI_ADDON_CREDITS_PER_MONTH },
+          features: ['demoUpsell'],
+        },
+      ],
+    })
+  })
+  afterAll(() => resetPluginEntitlementsForTests())
+
+  const live = (plan: string, extra: Record<string, unknown> = {}) => ({
+    plan,
+    billingStatus: 'active',
+    ...extra,
+  })
+
+  it('answers yes where a paid plan lacks a flag an add-on it sells would grant', () => {
+    expect(entitlementPurchasable(['demoUpsell'], live('pro'))).toBe(true)
+    expect(entitlementPurchasable([undefined, 'demoUpsell'], live('starter'))).toBe(true)
+  })
+
+  it('answers no on a plan the add-on is not sold on', () => {
+    expect(AI_ADDON_CREDITS_PER_MONTH.free).toBe(0)
+    expect(entitlementPurchasable(['demoUpsell'], live('free'))).toBe(false)
+  })
+
+  it('answers no without a live subscription for the add-on to ride', () => {
+    expect(entitlementPurchasable(['demoUpsell'], { plan: 'pro' })).toBe(false)
+    expect(
+      entitlementPurchasable(['demoUpsell'], { plan: 'pro', billingStatus: 'canceled' }),
+    ).toBe(false)
+  })
+
+  it('answers no for a flag no add-on grants: that is a plan upgrade, not this upsell', () => {
+    expect(entitlementPurchasable(['demoNoAddon'], live('pro'))).toBe(false)
+    expect(entitlementPurchasable(['demoUpsell', 'demoNoAddon'], live('pro'))).toBe(false)
+  })
+
+  it('answers no when nothing is missing', () => {
+    expect(entitlementPurchasable([undefined], live('pro'))).toBe(false)
+    expect(
+      entitlementPurchasable(
+        ['demoUpsell'],
+        live('pro', { entitlements: { features: { demoUpsell: true } } }),
+      ),
+    ).toBe(false)
   })
 })

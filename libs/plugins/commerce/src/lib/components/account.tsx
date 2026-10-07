@@ -33,6 +33,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { forwardRef, useCallback, useEffect, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { returnRequestHref } from '../constants/return-request'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
@@ -346,6 +347,13 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
                 variant="outlined"
               />
               <Typography variant="body2">{usd(order.totalCents)}</Typography>
+              {CommerceModel.RETURNABLE_ORDER_STATUSES.includes(order.status) ? (
+                // The member's session authorizes the return page, so the
+                // link carries no token (AGL-3611).
+                <Button size="small" href={returnRequestHref(order.id)}>
+                  {'Request a return'}
+                </Button>
+              ) : null}
             </Box>
           ))
         )}

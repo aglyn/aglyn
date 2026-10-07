@@ -25,6 +25,7 @@
 
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
 import { fakeDocs, resetFakeFirestore } from '../testing/fake-firestore'
+import { registerPluginSmsMessaging } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
 import { posCardProcessingCostCents } from './pos-stripe'
 
 const mockDecrement = jest.fn(async (options: any) => ({
@@ -36,11 +37,30 @@ const mockContacts: any[] = []
 const mockSaleCompleted: any[] = []
 
 const mockNotified: any[] = []
+const mockResent: any[] = []
+const mockReceiptDoor: { next: any; resend: any } = { next: null, resend: null }
 const mockRaised: any[] = []
 jest.mock('./order-notifications', () => ({
   notifyOrderBuyer: async (ref: any, event: string, options: any) => {
     mockNotified.push({ ref, event, options })
-    return { outcome: 'handled', channels: [] }
+    if (mockReceiptDoor.next) {
+      const next = mockReceiptDoor.next
+      mockReceiptDoor.next = null
+      return next
+    }
+    return {
+      outcome: 'handled',
+      channels: [{ channel: options?.email ? 'email' : 'sms', outcome: 'sent' }],
+    }
+  },
+  sendOrderReceipt: async (ref: any, input: any) => {
+    mockResent.push({ ref, channel: input.channel, to: input.to })
+    if (mockReceiptDoor.resend) {
+      const resend = mockReceiptDoor.resend
+      mockReceiptDoor.resend = null
+      return resend
+    }
+    return { outcome: 'sent', channel: input.channel }
   },
 }))
 jest.mock('./order-events', () => ({
@@ -277,6 +297,9 @@ beforeEach(() => {
   mockContacts.length = 0
   mockSaleCompleted.length = 0
   mockNotified.length = 0
+  mockResent.length = 0
+  mockReceiptDoor.next = null
+  mockReceiptDoor.resend = null
   mockRaised.length = 0
   seedSale()
 })
@@ -359,12 +382,28 @@ describe('card readers', () => {
     expect(sale().payments).toHaveLength(0)
   })
 
+  it('refuses a live card-present payment until Terminal is switched on for the platform', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_fake'
+    delete process.env.STRIPE_TERMINAL_LIVE_ENABLED
+    try {
+      const refused = await act({ action: 'card-present', amountCents: 5000, readerId: 'tmr_ours123' }, 'live')
+      expect(refused.status).toBe(409)
+      const sdk = await act({ action: 'card-present-sdk', amountCents: 5000 }, 'live-sdk')
+      expect(sdk.status).toBe(409)
+      expect(stripeCalls.some((call) => call.path === 'payment_intents')).toBe(false)
+    } finally {
+      process.env.STRIPE_SECRET_KEY = 'sk_test_fake'
+    }
+  })
+
   it('authorizes on the reader, then captures with a fee that excludes the tip', async () => {
     const started = await act({ action: 'card-present', amountCents: 10_000, readerId: 'tmr_ours123' }, 'r2')
     expect(started.status).toBe(200)
     const create = stripeCalls.find((call) => call.path === 'payment_intents')!
     expect(create.params.get('capture_method')).toBe('manual')
-    expect(create.params.get('on_behalf_of')).toBe('acct_merchant')
+    // Settlement stays on the platform account (ToS §10.7), like every
+    // other storefront charge: a destination charge with no `on_behalf_of`.
+    expect(create.params.has('on_behalf_of')).toBe(false)
     expect(create.params.get('transfer_data[destination]')).toBe('acct_merchant')
     expect(create.params.getAll('payment_method_types[]')).toEqual(['card_present'])
     expect(create.params.get('metadata[kind]')).toBe('pos')
@@ -485,6 +524,93 @@ describe('receipts', () => {
 
   it('refuses a text receipt when no SMS provider is on', async () => {
     expect((await act({ action: 'receipt', channel: 'sms', to: '+1 555 010 0199' })).status).toBe(409)
+  })
+
+  describe('with an SMS provider registered (AGL-3610)', () => {
+    let configured = true
+    beforeAll(() => {
+      registerPluginSmsMessaging(
+        { isConfigured: () => configured, send: async () => ({ outcome: 'sent', id: 'SM1' }) as any },
+        { pluginId: 'sms-spec' },
+      )
+    })
+    afterAll(() => {
+      configured = false
+    })
+
+    it('texts the receipt of a paid sale to the number the customer typed', async () => {
+      await act({ action: 'cash', tenderedCents: 10_000 }, 'paid')
+      mockNotified.length = 0
+      const sent = await act({ action: 'receipt', channel: 'sms', to: '+1 (555) 010-0199' })
+      expect(sent.status).toBe(200)
+      expect(sale()).toMatchObject({
+        customerPhone: '+15550100199',
+        receiptRequest: { channel: 'sms', to: '+15550100199' },
+      })
+      expect(mockNotified).toEqual([
+        { ref: { hostId: 'host-1', orderId: 'sale-1' }, event: 'receipt', options: {} },
+      ])
+      expect(mockResent).toHaveLength(0)
+    })
+
+    it('still texts the customer who asked when the store turned automatic texts off', async () => {
+      await act({ action: 'cash', tenderedCents: 10_000 }, 'paid')
+      mockNotified.length = 0
+      mockResent.length = 0
+      // The door skips the text: the store's `texts` switch is off.
+      mockReceiptDoor.next = { outcome: 'handled', channels: [] }
+      const sent = await act({ action: 'receipt', channel: 'sms', to: '+1 (555) 010-0199' })
+      expect(sent.status).toBe(200)
+      expect(mockResent).toEqual([
+        { ref: { hostId: 'host-1', orderId: 'sale-1' }, channel: 'sms', to: '+15550100199' },
+      ])
+    })
+
+    it('sends one text for a double tap, and lets a failed one be retried', async () => {
+      await act({ action: 'cash', tenderedCents: 10_000 }, 'paid')
+      mockNotified.length = 0
+      mockResent.length = 0
+      mockReceiptDoor.next = { outcome: 'handled', channels: [{ channel: 'sms', outcome: 'failed', error: 'x' }] }
+      expect((await act({ action: 'receipt', channel: 'sms', to: '+15550100199' })).status).toBe(502)
+      expect((await act({ action: 'receipt', channel: 'sms', to: '+15550100199' })).status).toBe(200)
+      expect((await act({ action: 'receipt', channel: 'sms', to: '+15550100199' })).status).toBe(200)
+      expect(mockNotified).toHaveLength(2)
+    })
+  })
+
+  it('emails the address typed at the counter, not the one the sale was opened with', async () => {
+    await act({ action: 'cash', tenderedCents: 10_000 }, 'paid')
+    const order = sale()
+    fakeDocs.set(ORDER, { ...order, customerEmail: 'opened@example.com' })
+    mockNotified.length = 0
+    mockResent.length = 0
+    expect((await act({ action: 'receipt', channel: 'email', to: 'typed@example.com' })).status).toBe(200)
+    expect(mockNotified).toHaveLength(0)
+    expect(mockResent).toEqual([
+      { ref: { hostId: 'host-1', orderId: 'sale-1' }, channel: 'email', to: 'typed@example.com' },
+    ])
+  })
+
+  it('ends the customer display turn and drops the typed address once handled (AGL-3608)', async () => {
+    const STATE = 'posDisplayStates/host-1__register-1'
+    await act({ action: 'cash', tenderedCents: 10_000 }, 'paid')
+    fakeDocs.set(STATE, {
+      mode: 'receipt',
+      promptId: 'r1',
+      updatedAtMs: Date.now(),
+      receipt: { channels: ['email', 'none'], offerMarketing: false },
+      response: { promptId: 'r1', receiptChannel: 'email', email: 'ann@example.com', atMs: 1 },
+    })
+    expect((await act({ action: 'receipt', channel: 'email', to: 'ann@example.com' })).status).toBe(200)
+    expect(fakeDocs.get(STATE)).toMatchObject({ mode: 'thanks', currency: 'usd' })
+    expect(JSON.stringify(fakeDocs.get(STATE))).not.toContain('ann@example.com')
+  })
+
+  it('leaves the display alone for a receipt chosen before the sale is paid', async () => {
+    const STATE = 'posDisplayStates/host-1__register-1'
+    fakeDocs.set(STATE, { mode: 'cart', updatedAtMs: Date.now() })
+    await act({ action: 'receipt', channel: 'none' })
+    expect(fakeDocs.get(STATE)).toMatchObject({ mode: 'cart' })
   })
 })
 

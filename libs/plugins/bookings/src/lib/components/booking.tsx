@@ -21,6 +21,7 @@ import {
   trackEvent,
   trackEventBeforeNavigation,
 } from '@aglyn/aglyn/app-utils/analytics-events'
+import { recordSiteJourneyStep } from '@aglyn/aglyn/app-utils/site-journey'
 import { utmTouchField } from '@aglyn/aglyn/app-utils/utm-touch'
 import { mdiCalendarClock } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
@@ -448,6 +449,9 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
       // `form_name` is the block, not the service and never the guest: the
       // name and email typed above are the reason this is the only param
       // shape that may leave here.
+      // A funnel step (AGL-3605): a free booking is made here; a paid one
+      // when its payment settles (`use-booking-purchase-event.ts`).
+      recordSiteJourneyStep('booking', serviceId)
       trackEvent('generate_lead', {
         form_name: 'Booking',
         form_location: window.location.pathname,

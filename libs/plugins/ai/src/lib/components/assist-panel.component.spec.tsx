@@ -511,12 +511,12 @@ describe('the launcher and the open action (AGL-3593)', () => {
     })
     openAiJobs({ jobId: 'job-plan' })
     expect(await screen.findByLabelText('Hide AI jobs')).toBeTruthy()
-    const row = await waitFor(() => {
+    // The highlight fades after a few seconds, so it is read as the row is
+    // listed rather than after the rest of the panel has settled.
+    await waitFor(() => {
       const found = document.querySelector('[data-ai-job-id="job-plan"]')
-      expect(found).toBeTruthy()
-      return found as HTMLElement
+      expect(found?.getAttribute('aria-current')).toBe('true')
     })
-    expect(row.getAttribute('aria-current')).toBe('true')
   })
 
   it('a request already answered never reopens a panel mounted later', async () => {

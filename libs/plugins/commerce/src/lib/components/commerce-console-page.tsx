@@ -30,18 +30,40 @@ import HostCouponsCard from './console/host-coupons-card.component'
 import HostOrdersCard from './console/host-orders-card.component'
 import LocationsCard from './console/locations-card.component'
 import MemberPostsCard from './console/member-posts-card.component'
+import OrderWebhooksCard from './console/order-webhooks-card.component'
 import PaymentsSettingsCard from './console/payments-settings-card.component'
+import PosShiftHistoryCard from './console/pos-ops/pos-shift-history-card.component'
+import PosStaffPinsCard from './console/pos-ops/pos-staff-pins-card.component'
+import PaymentMethodsCard from './console/payment-methods-card.component'
 import ProductsHubCard from './console/products-hub-card.component'
 import RecoveryQueueCard from './console/recovery-queue-card.component'
 import RegistersCard from './console/registers-card.component'
+import RegisterHardwareCards from './console/register-hardware-card.component'
+import PosDevicesCard from './console/pos-devices-card.component'
 import ReservationsCard from './console/reservations-card.component'
+import ReturnSettingsCard from './console/return-settings-card.component'
+import ReturnsCard from './console/returns-card.component'
 import ReviewsModerationCard from './console/reviews-moderation-card.component'
 import ShippingSettingsCard from './console/shipping-settings-card.component'
+import ShipStationCard from './console/shipstation-card.component'
 import StockMovementsCard from './console/stock-movements-card.component'
 import StoreSettingsCard from './console/store-settings-card.component'
 import StorefrontTaxSummaryCard from './console/storefront-tax-summary-card.component'
 import SuppliersCard from './console/suppliers-card.component'
 import TaxSettingsCard from './console/tax-settings-card.component'
+import { COMMERCE_SETTINGS_ZONE } from './console/store-zones'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+
+/**
+ * The `commerceSettings` zone (AGL-3612): other plugins' settings for the
+ * store — label settings and carrier accounts — under the store's own.
+ */
+function CommerceSettingsZone(props: { hostId: string }) {
+  const WidgetSlot = useConsoleWidgetSlot()
+  return WidgetSlot ? (
+    <WidgetSlot slot={COMMERCE_SETTINGS_ZONE.id} hostId={props.hostId} orgId={undefined} />
+  ) : null
+}
 
 /**
  * The body of one commerce section, built only when that section is the one
@@ -92,9 +114,16 @@ function sectionBody(
               size: { xs: 12 },
               children: <RecoveryQueueCard hostId={hostId} />,
             },
+            {
+              size: { xs: 12 },
+              children: <PosShiftHistoryCard hostId={hostId} />,
+            },
           ]}
         />
       )
+    case 'returns':
+      // Returns (AGL-3611); `?return={id}` opens one on arrival.
+      return <ReturnsCard hostId={hostId} />
     case 'promotions':
       return (
         <GridItems
@@ -123,9 +152,19 @@ function sectionBody(
               size: { xs: 12 },
               children: <PaymentsSettingsCard hostId={hostId} />,
             },
+            // What shoppers may pay with (AGL-3629), beside the account the
+            // money lands in.
+            {
+              size: { xs: 12 },
+              children: <PaymentMethodsCard hostId={hostId} />,
+            },
             {
               size: { xs: 12 },
               children: <StoreSettingsCard hostId={hostId} />,
+            },
+            {
+              size: { xs: 12 },
+              children: <ReturnSettingsCard hostId={hostId} />,
             },
             {
               size: { xs: 12 },
@@ -134,11 +173,30 @@ function sectionBody(
             { size: { xs: 12 }, children: <TaxSettingsCard hostId={hostId} /> },
             { size: { xs: 12 }, children: <LocationsCard hostId={hostId} /> },
             { size: { xs: 12 }, children: <RegistersCard hostId={hostId} /> },
+            { size: { xs: 12 }, children: <PosStaffPinsCard hostId={hostId} /> },
+            // A register's printers, cash drawer and status (AGL-3619), one
+            // card per register, after the list that names them.
+            {
+              size: { xs: 12 },
+              children: <RegisterHardwareCards hostId={hostId} />,
+            },
+            { size: { xs: 12 }, children: <PosDevicesCard hostId={hostId} /> },
             {
               size: { xs: 12 },
               children: <ShippingSettingsCard hostId={hostId} />,
             },
             { size: { xs: 12 }, children: <SuppliersCard hostId={hostId} /> },
+            { size: { xs: 12 }, children: <ShipStationCard hostId={hostId} /> },
+            // The store's own endpoints for order events (AGL-3611). Renders
+            // nothing for a person who may not manage them.
+            {
+              size: { xs: 12 },
+              children: <OrderWebhooksCard hostId={hostId} />,
+            },
+            {
+              size: { xs: 12 },
+              children: <CommerceSettingsZone hostId={hostId} />,
+            },
           ]}
         />
       )

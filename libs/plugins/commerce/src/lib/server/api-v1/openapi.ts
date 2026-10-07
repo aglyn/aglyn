@@ -98,6 +98,8 @@ export const ORDERS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
     totals: objectOf('Money totals, in the smallest unit of `currency`.'),
     refundedCents: int('Amount refunded so far.'),
     disputed: bool('Whether a chargeback is open.'),
+    taxMode: nullable(str('The tax regime: `stripe-automatic` (Stripe Tax, collected and remitted by the platform as marketplace facilitator), `manual` (your own rate) or `none`. `null` on an order from before it was recorded.')),
+    taxEngine: nullable(objectOf('The tax service you connected, when one was asked for this sale’s tax: `provider` (`avalara` or `taxjar`), `providerLabel`, `status` (`quoted` when its tax was charged, `fallback` when it did not answer and your own rate was charged), `reason` (`timeout` or `error` on a fallback) and `sandbox`. `null` when no service was asked.')),
     shippingAddress: ADDRESS(),
     couponCode: nullable(str('Coupon applied.')),
     fulfillments: { type: 'array', description: 'Shipments and deliveries.', items: { type: 'object', additionalProperties: true } },

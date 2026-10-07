@@ -40,6 +40,8 @@ import { BUNDLE_ID } from './constants/bundle-common'
 import { registerCommerceMediaPublishGuard } from './server/media-publish-guard'
 import { registerCommerceRecurringCharges } from './server/recurring-charges'
 import { registerProductCardReader } from './server/product-card'
+import { registerProductAiCapability } from './server/product-ai-capability'
+import { registerProductDraftWriter } from './server/product-drafts'
 import { registerCommerceTaxProfile } from './server/tax-profile'
 import { registerTaxReturnSource } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
 import { commerceTaxReturnSource } from './server/tax-return-source'
@@ -57,7 +59,6 @@ import { cartHandler } from './server/cart'
 import { catalogHandler } from './server/catalog'
 import { checkoutHandler } from './server/checkout'
 import { downloadHandler } from './server/download'
-import { feedHandler } from './server/feed'
 import { newsletterHandler } from './server/newsletter'
 import { notifyRestockHandler } from './server/notify-restock'
 import { productHandler } from './server/product'
@@ -81,11 +82,13 @@ import { subscriptionPortalHandler } from './server/subscription-portal'
 import { reviewsHandler } from './server/reviews'
 import { connectHandler } from './server/connect'
 import { cancelOrderHandler } from './server/cancel-order'
+import { carrierRatesAvailabilityHandler } from './server/carrier-rates-availability'
 import { collectionMembershipHandler } from './server/collection-membership'
 import { draftOrderHandler } from './server/draft-order'
 import { fulfillOrderHandler } from './server/fulfill-order'
 import { orderReceiptSendHandler } from './server/order-receipt-send'
-import { orderStatusHandler } from './server/order-status'
+import { orderStatusHandler, registerOrderStatusActions } from './server/order-status'
+import { returnRequestStatusAction } from './server/return-status-action'
 import { giftCardsHandler } from './server/gift-cards'
 import { memberPostHandler } from './server/member-post'
 import { orderAnalyticsHandler } from './server/order-analytics'
@@ -94,7 +97,9 @@ import { posOrderHandler } from './server/pos-order'
 import { printersHandler } from './server/printers'
 import { posPaymentHandler } from './server/pos-payment'
 import { posReadersHandler } from './server/pos-readers'
+import { posTerminalConnectionTokenHandler } from './server/pos-terminal-connection-token'
 import { posDisplayHandler } from './server/pos-display'
+import { registerPosOpsRoutes } from './server/pos-ops-routes'
 import {
   processAbandonedHandler,
   scanAbandonedCheckouts,
@@ -102,6 +107,7 @@ import {
 import { processRestockHandler, scanRestockAlerts } from './server/process-restock'
 import { scanStockDecrements } from './server/reconcile-stock'
 import { refundHandler } from './server/refund'
+import { orderWebhooksHandler } from './server/order-webhooks'
 import { returnRequestHandler, returnsHandler } from './server/returns'
 import { scanSupplierDeliveries } from './server/supplier-outbox'
 import { supplierUpdateHandler } from './server/supplier-update'
@@ -239,6 +245,37 @@ registerPluginJob({
 })
 
 /**
+ * Stripe payment method domains for every connected custom domain (AGL-3629).
+ *
+ * The backfill for domains connected before registration existed, and the
+ * repair for a connect whose event was lost, in one daily pass. A domain
+ * already registered costs a document read and no Stripe call, so the beat is
+ * cheap; a day's delay costs only the Apple Pay button on a domain connected
+ * while Stripe was unreachable, and the first in-page checkout there registers
+ * it anyway.
+ */
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'payment-method-domains',
+  intervalMinutes: 24 * 60,
+  description:
+    'Register connected custom domains with Stripe so Apple Pay, Google Pay ' +
+    'and Link show on them (AGL-3629).',
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
+    if (!process.env.STRIPE_SECRET_KEY) return
+    const { reconcileCustomDomains } = await import('./server/payment-method-domains')
+    const result = await reconcileCustomDomains(gate)
+    if (result.registered || result.failed) {
+      console.info(
+        `commerce: payment method domains — ${result.registered} registered, ` +
+          `${result.failed} failed across ${result.hosts} sites`,
+      )
+    }
+  },
+})
+
+/**
  * A visitor's payment door: it opens a Stripe Checkout Session for whoever
  * calls it, so the dispatcher holds it to the card-testing counters
  * (AGL-3363). Declared here, beside the registration, so the door cannot
@@ -267,7 +304,11 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('commerce/catalog', catalogHandler)
   registerPluginApiRoute('commerce/checkout', checkoutHandler, CARD_PAYMENT_DOOR)
   registerPluginApiRoute('commerce/download', downloadHandler)
-  registerPluginApiRoute('commerce/feed', feedHandler)
+  // The pre-channels Google feed address (AGL-299), now written by the
+  // catalog's feed publisher (AGL-3637); the module loads with a fetch.
+  registerPluginApiRoute('commerce/feed', {
+    web: async (request) => (await import('./server/legacy-feed')).legacyFeedRoute(request),
+  })
   registerPluginApiRoute('commerce/newsletter', newsletterHandler)
   registerPluginApiRoute('commerce/notify-restock', notifyRestockHandler)
   // GA-safe order projection for the storefront `purchase` (AGL-1641).
@@ -275,6 +316,9 @@ export function registerCommerceApi(): void {
   // The guest order-status page's data (AGL-3610), behind the signed link in
   // every buyer email — a recipient link, so it outlives the site's gates.
   registerPluginApiRoute('commerce/order-status', orderStatusHandler, { recipientLink: true })
+  // …and its "Request a return" button (AGL-3611), on an order that can
+  // still send something back.
+  registerOrderStatusActions(returnRequestStatusAction)
   // What became of a session the shopper was returned from (AGL-3606).
   registerPluginApiRoute('commerce/checkout-status', checkoutStatusHandler)
   registerPluginApiRoute('commerce/product', productHandler)
@@ -312,9 +356,20 @@ export function registerCommerceApi(): void {
  * instead of having it.
  */
 export function registerCommerceConsoleApi(): void {
+  // The register's gate (`managePos`) is resolved on THIS surface: every POS
+  // route below runs in the console, and a key no surface registered here is
+  // absent from the resolved map, which reads as refused — the site's own
+  // owner was answered 403 at the register.
+  registerPluginPermissions(COMMERCE_PERMISSIONS)
   // What a product looks like to a surface that is not this plugin's — a
   // campaign email that features one asks here rather than importing the model.
   registerProductCardReader()
+  // …and a draft product another plugin asks for by name (AGL-3616): an AI
+  // build setting a store up from a brief, unpriced unless the brief priced it.
+  // The console runs AI jobs (AGL-3026).
+  registerProductDraftWriter()
+  // …and the operation an AI build plans for it, which that writer executes.
+  registerProductAiCapability()
   // …and why a file somebody is SELLING may not be made public (AGL-3080).
   // The media library asks before it hands an asset its permanent CDN URL
   // back; what a product is, and which of its fields hold paid media, is
@@ -341,6 +396,8 @@ export function registerCommerceConsoleApi(): void {
   // the release depends on the transition rule, and a client write could not
   // re-ask it under the same lock that flips the status.
   registerPluginApiRoute('commerce/cancel-order', cancelOrderHandler)
+  // Whether live carrier rates can be offered on this site (AGL-3612).
+  registerPluginApiRoute('commerce/shipping/carrier-rates', carrierRatesAvailabilityHandler)
   registerPluginApiRoute('commerce/connect', connectHandler)
   registerPluginApiRoute('commerce/draft-order', draftOrderHandler)
   // Fulfil + mark-delivered with the transition re-asked under the write
@@ -360,6 +417,13 @@ export function registerCommerceConsoleApi(): void {
   // The merchant's own storefront sales tax, by who owes it (AGL-2440): the
   // same rows and classifier the operator's return reads, fenced to one site.
   registerPluginApiRoute('commerce/tax-summary', { web: taxSummaryHandler })
+  // The payment methods card (AGL-3629): toggles, the platform's offer, the
+  // payout account's capabilities and the site's wallet domains. Loaded with
+  // the first request, so a console that never opens Settings never imports it.
+  registerPluginApiRoute('commerce/payment-methods', {
+    web: async (request) =>
+      (await import('./server/payment-methods')).paymentMethodsHandler(request),
+  })
   // A smart collection's rules changed or it was deleted: re-stamp which
   // products it holds (AGL-3321), the membership the storefront queries.
   registerPluginApiRoute('commerce/collection-membership', collectionMembershipHandler)
@@ -404,17 +468,43 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/pos-payment', posPaymentHandler)
   registerPluginApiRoute('commerce/pos-readers', posReadersHandler)
   registerPluginApiRoute('commerce/pos-display', posDisplayHandler)
+  // Shifts, staff PINs, the customer lookup and returns (AGL-3609).
+  registerPosOpsRoutes()
+  // The native Aglyn POS app's Stripe Terminal SDK: a connection token scoped
+  // to the site's Location, and the Location itself (AGL-3618). Gated like a
+  // sale.
+  registerPluginApiRoute('commerce/pos-terminal-connection-token', posTerminalConnectionTokenHandler)
   registerPluginApiRoute('commerce/process-abandoned', processAbandonedHandler)
   registerPluginApiRoute('commerce/process-restock', processRestockHandler)
   registerPluginApiRoute('commerce/refund', refundHandler)
   // Returns (AGL-3611): approve, decline, receive with restock, refund
   // through the route above, a label from a shipping plugin.
   registerPluginApiRoute('commerce/returns', returnsHandler)
+  // The merchant's outbound order webhooks (AGL-3611): endpoints, secrets,
+  // a test ping and a resend from the delivery log.
+  registerPluginApiRoute('commerce/order-webhooks', orderWebhooksHandler)
   registerPluginApiRoute('commerce/supplier-update', supplierUpdateHandler)
   // Stamps the open orders that predate the shipping fields, before an
   // export for shipping (AGL-3613).
   registerPluginApiRoute('commerce/orders-shipping-prepare', async (req, res) =>
     (await import('./server/orders-shipping-prepare')).ordersShippingPrepareHandler(req, res),
+  )
+  // ShipStation's Custom Store endpoint (AGL-3613): ShipStation's servers
+  // pull the order feed and post shipments back with the site's own Basic
+  // credentials, so it is a MACHINE's route and asks the site's commerce,
+  // plan, release and lockdown gates itself once the credentials prove the
+  // site. Loaded on its first call, never with the console API surface.
+  registerPluginApiRoute(
+    'commerce/shipstation/:hostId',
+    {
+      web: async (request, context) =>
+        (await import('./server/shipstation')).shipStationRoute(request, context),
+    },
+    { machine: true },
+  )
+  // The ShipStation card's connect, show, new password and disconnect.
+  registerPluginApiRoute('commerce/shipping-connectors', async (req, res) =>
+    (await import('./server/shipping-connectors')).shippingConnectorsHandler(req, res),
   )
   // The store's sales as figure tables (AGL-2915), for the AI plugin's
   // insights to read by id rather than by reading orders. The console runs

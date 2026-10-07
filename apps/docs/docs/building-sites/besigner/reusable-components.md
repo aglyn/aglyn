@@ -19,9 +19,13 @@ point you copy once, with no live link back to the source, that is a
 [template](../site-templates/templates-library.md).
 
 :::info Plan availability
-**Starter and above.** On Free, promoting an element answers *"Reusable components
-require a Starter plan — see Billing to upgrade."* There is no cap on how many
-components a site can have.
+**One per site on Free; unlimited on Starter and above.** The site's Components page
+shows how many a site has used, for example *0/1 components on your plan* on Free. The
+limit applies when you create, promote, duplicate or install a component: at the limit,
+the next one is refused with *"Your plan includes 1 reusable component — upgrade in
+Billing for more."* A deleted component frees its place. A site that holds more
+components than its plan includes, for example after moving to Free, keeps every one of
+them, and they keep rendering.
 :::
 
 ![The site's Reusable Components page: the components table with Display name, Used in, ID, Description, Updated and Created columns, under the table's Columns, Filters, Export and Search controls](/img/besigner/components-page.png)
@@ -426,8 +430,8 @@ To start a new component from an existing one, choose **Duplicate…** in its
 row menu on the Components page, or **More → Duplicate** on its detail page.
 The copy carries the definition, its properties and the latest saved version,
 under the name you give it. It has no instances: every page keeps pointing
-at the original, and you place the copy where you want it. Duplicating needs
-the same plan as creating a component.
+at the original, and you place the copy where you want it. A copy counts
+toward your plan's components per site, the same as creating one.
 
 ## Reusable email blocks (header and footer) {#reusable-email-blocks}
 

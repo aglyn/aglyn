@@ -49,7 +49,14 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
-import { posDisplayHandler } from './pos-display'
+import { registerPluginSmsMessaging } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
+import { finishPosDisplayReceipt, posDisplayHandler, resetPosDisplay } from './pos-display'
+
+let mockSmsConfigured = true
+registerPluginSmsMessaging(
+  { isConfigured: () => mockSmsConfigured, send: async () => ({ outcome: 'sent', id: 'SM1' }) as any },
+  { pluginId: 'sms-spec' },
+)
 
 async function call(
   body: Record<string, unknown>,
@@ -90,6 +97,7 @@ const SITE = { hostId: 'host-1', registerId: 'register-1' }
 beforeEach(() => {
   resetFakeFirestore()
   mockRateAllowed = true
+  mockSmsConfigured = true
   fakeDocs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'editor' }, displayName: 'Bean Bar' })
   fakeDocs.set('hosts/host-1/registers/register-1', { name: 'Front' })
 })
@@ -176,5 +184,101 @@ describe('the display token', () => {
 
   it('refuses a made-up token', async () => {
     expect((await call({ action: 'poll' }, { method: 'GET', token: 'x'.repeat(43) })).status).toBe(401)
+  })
+})
+
+describe('the end of a sale (AGL-3608)', () => {
+  const STATE_KEY = 'posDisplayStates/host-1__register-1'
+
+  async function answerReceipt(token: string) {
+    await call(
+      {
+        action: 'push',
+        ...SITE,
+        state: {
+          mode: 'receipt',
+          promptId: 'r1',
+          receipt: { channels: ['email', 'sms', 'none'], offerMarketing: false },
+        },
+      },
+      { staff: true },
+    )
+    await call(
+      { action: 'respond', response: { promptId: 'r1', receiptChannel: 'sms', phone: '+1 555 010 9999' } },
+      { token },
+    )
+    expect(JSON.stringify(fakeDocs.get(STATE_KEY))).toContain('15550109999')
+  }
+
+  it('never offers text on the screen when the store cannot send one', async () => {
+    const token = await pairDisplay()
+    mockSmsConfigured = false
+    await call(
+      {
+        action: 'push',
+        ...SITE,
+        state: { mode: 'receipt', promptId: 'r1', receipt: { channels: ['email', 'sms', 'none'] } },
+      },
+      { staff: true },
+    )
+    const poll = await call({ action: 'poll' }, { method: 'GET', token })
+    expect(poll.body.state.receipt.channels).toEqual(['email', 'none'])
+  })
+
+  it("formats in the store's chosen currency", async () => {
+    const token = await pairDisplay()
+    fakeDocs.set('hosts/host-1/settings/store', { currency: 'CAD' })
+    await call({ action: 'push', ...SITE, state: { mode: 'idle' } }, { staff: true })
+    const poll = await call({ action: 'poll' }, { method: 'GET', token })
+    expect(poll.body.state).toMatchObject({ currency: 'cad' })
+  })
+
+  it('stamps the store currency on every state, whatever the register sent', async () => {
+    const token = await pairDisplay()
+    await call(
+      {
+        action: 'push',
+        ...SITE,
+        state: { mode: 'cart', currency: 'eur', cart: { lines: [], itemsCents: 0, discountCents: 0, taxCents: 0, totalCents: 500 } },
+      },
+      { staff: true },
+    )
+    const poll = await call({ action: 'poll' }, { method: 'GET', token })
+    expect(poll.body.state).toMatchObject({ mode: 'cart', currency: 'usd' })
+  })
+
+  it('says thank you and forgets the typed phone once the receipt is handled', async () => {
+    const token = await pairDisplay()
+    await answerReceipt(token)
+    await finishPosDisplayReceipt('host-1', 'register-1')
+    const stored = fakeDocs.get(STATE_KEY)
+    expect(stored).toMatchObject({ mode: 'thanks' })
+    expect(JSON.stringify(stored)).not.toContain('15550109999')
+    const poll = await call({ action: 'poll' }, { method: 'GET', token })
+    expect(poll.body.state).toMatchObject({ mode: 'thanks' })
+  })
+
+  it('leaves the next customer\'s basket alone but still drops a stale answer', async () => {
+    await pairDisplay()
+    fakeDocs.set(STATE_KEY, {
+      mode: 'cart',
+      updatedAtMs: Date.now(),
+      cart: { lines: [], itemsCents: 0, discountCents: 0, taxCents: 0, totalCents: 900 },
+      response: { promptId: 'old', receiptChannel: 'email', email: 'ann@example.com', atMs: 1 },
+      hostId: 'host-1',
+      registerId: 'register-1',
+    })
+    await finishPosDisplayReceipt('host-1', 'register-1')
+    const stored = fakeDocs.get(STATE_KEY)
+    expect(stored).toMatchObject({ mode: 'cart', cart: { totalCents: 900 } })
+    expect(JSON.stringify(stored)).not.toContain('ann@example.com')
+  })
+
+  it('a completed sale rewrites the state whole, answer and all', async () => {
+    const token = await pairDisplay()
+    await answerReceipt(token)
+    await resetPosDisplay('host-1', 'register-1')
+    expect(fakeDocs.get(STATE_KEY)).toMatchObject({ mode: 'thanks', currency: 'usd' })
+    expect(JSON.stringify(fakeDocs.get(STATE_KEY))).not.toContain('15550109999')
   })
 })

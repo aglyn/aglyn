@@ -69,6 +69,10 @@ const PLACEHOLDERS: Record<Exclude<AiInsightSurface, 'digest'>, string> = {
   analytics: 'Which pages brought in the most visitors, and did anything change?',
   datasets: 'What is the average order total by state?',
   'crm-reports': 'Which campaign or form brought in the most people this month?',
+  marketing: 'Which campaign brought in the most form submissions, and what did it earn?',
+  automations: 'Which automations failed most this month?',
+  bookings: 'Which services were booked most, and how many were canceled?',
+  workspace: 'How much is in the pipeline, and what closed this month?',
 }
 
 export interface AiInsightDialogProps {
@@ -87,12 +91,18 @@ export interface AiInsightDialogProps {
   uid: string | null
   /** An answered job to show rather than a question to ask. */
   jobId?: string | null
+  /**
+   * A question to start from, put in the box each time the dialog opens to
+   * ask (AGL-3603): the page that opened it knows what it is about. The
+   * person may change it before asking; absent, the box keeps what it held.
+   */
+  question?: string
 }
 
 type Phase = 'ask' | 'working' | 'answer'
 
 export function AiInsightDialog(props: AiInsightDialogProps) {
-  const { open, onClose, orgId, orgSlug, hostId, host, surface, jobId } = props
+  const { open, onClose, orgId, orgSlug, hostId, host, surface, jobId, question: startFrom } = props
   // Held in a ref: a request reads who is signed in, and nothing keys on the
   // identity of the object that says so.
   const userRef = useRef(props.user)
@@ -196,8 +206,9 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
     } else {
       setAnswer(null)
       setPhase('ask')
+      if (startFrom) setQuestion(startFrom.slice(0, AI_INSIGHT_QUESTION_MAX_CHARS))
     }
-  }, [open, jobId, readAnswer])
+  }, [open, jobId, readAnswer, startFrom])
 
   // The person's own weekly-insights switch, read when the dialog opens.
   useEffect(() => {

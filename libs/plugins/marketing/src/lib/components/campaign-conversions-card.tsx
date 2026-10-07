@@ -75,6 +75,7 @@ import {
   type CampaignConversionKind,
   type CampaignConversionRecord,
 } from '../model/campaign-conversions'
+import { MarketingInsightsZone } from './marketing-insight-zones'
 
 /**
  * WHAT THE CAMPAIGNS CAUSED, from the conversions' end.
@@ -561,17 +562,27 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
       }
       help={conversionsDocsHelp}
       HeaderProps={{
-        action: campaignId ? (
-          <Button
-            component={AppLink as any}
-            {...({ componentVariant: 'naked', nativeButton: false } as any)}
-            href={`${basePath}/conversions`}
-            size="small"
-            color="primary"
-          >
-            {'All conversions'}
-          </Button>
-        ) : undefined,
+        action: (
+          <Stack direction="row" spacing={1}>
+            {/*
+              The figures in words, from a plugin (AGL-3603): the
+              `marketingInsights` zone this plugin declares, handed the site
+              these conversions are one site's.
+            */}
+            <MarketingInsightsZone hostId={hostId} subject="conversions" campaign={null} />
+            {campaignId ? (
+              <Button
+                component={AppLink as any}
+                {...({ componentVariant: 'naked', nativeButton: false } as any)}
+                href={`${basePath}/conversions`}
+                size="small"
+                color="primary"
+              >
+                {'All conversions'}
+              </Button>
+            ) : null}
+          </Stack>
+        ),
       }}
       contentGutterX
       contentGutterY

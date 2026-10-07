@@ -120,6 +120,13 @@ function answer(patch: Record<string, unknown> = {}) {
 const codes = (result: { violations: Array<{ code: string }> }) => result.violations.map((one) => one.code)
 const messages = (result: { violations: Array<{ message: string }> }) => result.violations.map((one) => one.message)
 
+
+/** The fields a step type's variant carries that the step itself leaves empty. */
+const UNUSED_VARIANT_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  exitFlow: ['reference'],
+  wait: ['event'],
+}
+
 describe('the tools', () => {
   it('are strict: every object forbids extra keys and requires every key it has', () => {
     for (const tool of [aiAutomationTool(), aiWorkflowExplanationTool()]) {
@@ -205,7 +212,10 @@ describe('the tools', () => {
           .filter(([key, value]) => key !== 'type' && value !== null)
           .map(([key]) => key)
         expect([type, kept]).toHaveLength(2)
-        expect([type, kept.length]).toEqual([type, fields.length])
+        // A step that rides a larger variant leaves its extra field empty,
+        // and the reader keeps nothing of it.
+        const unused = UNUSED_VARIANT_FIELDS[type] ?? []
+        expect([type, kept.length]).toEqual([type, fields.length - unused.length])
       }
     }
   })

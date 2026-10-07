@@ -16,6 +16,7 @@
  */
 
 import { registerPluginApiRoute } from '@aglyn/aglyn/server'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { registerWorkflowsServerDeclarations } from './declarations.server'
 import { registerAutomationDraftWriter } from './server-automation-drafts'
 import {
@@ -28,6 +29,7 @@ import {
   orgAutomationsManageHandler,
   orgAutomationsManageSubject,
 } from './server/org-automations-routes'
+import { registerAutomationRunFigureReader } from './server/automation-run-figures'
 
 /**
  * The workflows plugin's console server surface (AGL-2919).
@@ -57,4 +59,7 @@ export function registerWorkflowsConsoleApi(): void {
   registerPluginApiRoute(ORG_AUTOMATION_API_ROUTES.pause, orgAutomationPauseHandler)
   // So does a test run: a site with Automation switched off has no such door.
   registerPluginApiRoute(ACTION_TEST_RUN_API_ROUTE, actionTestRunHandler)
+  // Automation runs as a figure table (AGL-3603), for the AI plugin's
+  // insights to read by id; the console runs insight jobs.
+  registerAutomationRunFigureReader(() => firebaseAdmin.app().firestore())
 }

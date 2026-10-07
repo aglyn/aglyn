@@ -131,7 +131,7 @@ describe('references and tracking numbers', () => {
     expect(parseShippingOrderRef('')).toBeNull()
   })
 
-  it('treats spacing and case as the same parcel, and a cancelled shipment as none', () => {
+  it('treats spacing and case as the same parcel, and a canceled shipment as none', () => {
     expect(normalizeTrackingNumber(' 9400 1000-ab ')).toBe('94001000AB')
     const order = {
       fulfillments: [

@@ -175,10 +175,24 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
     flipOff('Toggle Redirects')
     await waitFor(() => expect(savedSet()).not.toBeNull())
     expect(continueButton()).toBeUndefined()
-    // `forms`, `ai` and `theme-presets` ride every save the way `mui` does: all four
-    // are locked on for the workspace, so `resolveEnabledPlugins` unions them
-    // in before the toggle subtracts. A site switches AI off for itself.
-    expect(savedSet()).toEqual(['mui', 'forms', 'ai', 'theme-presets', 'commerce'])
+    // `forms`, `ai`, `theme-presets`, `funnels`, `shipping`, `tax-engines`,
+    // `sales-channels` and `marketing-platforms` ride every save the way `mui`
+    // does: all are locked on for the workspace, so `resolveEnabledPlugins`
+    // unions them in before the toggle subtracts. A site switches AI off for
+    // itself.
+    expect(savedSet()).toEqual([
+      'mui',
+      'forms',
+      'ai',
+      'theme-presets',
+      'funnels',
+      'shipping',
+      'tax-engines',
+      'sales-channels',
+      'marketing-platforms',
+      'fonts',
+      'commerce',
+    ])
   })
 
   describe('Cancel', () => {
@@ -221,8 +235,21 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
       await waitFor(() => expect(savedSet()).not.toBeNull())
       // `set-enabled-plugins` REPLACES the array, so one request carries the
       // whole cascade — there is no window in which Commerce is off while
-      // User Accounts still believes it can use it.
-      expect(savedSet()).toEqual(['mui', 'forms', 'ai', 'theme-presets'])
+      // User Accounts still believes it can use it. Shipping, tax services and
+      // sales channels are locked on and stay in the set; each runs only on a
+      // site where commerce is on.
+      expect(savedSet()).toEqual([
+        'mui',
+        'forms',
+        'ai',
+        'theme-presets',
+        'funnels',
+        'shipping',
+        'tax-engines',
+        'sales-channels',
+        'marketing-platforms',
+        'fonts',
+      ])
       const settingsCalls = (globalThis.fetch as jest.Mock).mock.calls.filter(
         ([url]) => url === '/api/orgs/settings',
       )

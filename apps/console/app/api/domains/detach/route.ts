@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb, TENANT_APEX } from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb, runPluginEventHandlers, TENANT_APEX } from '@aglyn/aglyn/server'
 import { revalidateHostAliases } from '../../../../utils/server/tenant-revalidate'
 import {
   attachProjectDomain,
@@ -220,6 +220,15 @@ async function handler(request: Request): Promise<Response> {
     // trying to drop. The domain no longer resolves to this host, and the
     // `cname--` alias entry is the only thing that still says it does.
     await revalidateHostAliases({ subdomain, hostId, cname: domain })
+
+    // The name no longer serves this site: plugins undo what they registered
+    // for it (AGL-3629), each checking no other site still serves it.
+    await runPluginEventHandlers('host.domain.released', {
+      orgId: String(hostSnapshot.get('orgId') ?? '') || null,
+      hostId,
+      domain,
+      reason: 'detached',
+    })
 
     return Response.json({ detached: true }, { status: 200 })
   } catch (error) {

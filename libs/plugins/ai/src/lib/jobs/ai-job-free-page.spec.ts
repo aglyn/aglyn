@@ -144,7 +144,7 @@ const PLAN_MODEL = modelOf('job.plan')
 const SEO_MODEL = modelOf('job.seo')
 const LAYOUT_MODEL = modelOf('job.layout')
 
-/** The Free workspace's capabilities on the fixture's site: its one layout already there. */
+/** The Free workspace's capabilities on the fixture's site: its one layout already there, no component. */
 const FREE = aiPlanCapabilitiesFrom(FREE_ORG, {
   layout: FIXTURE.inventory.layouts.map((row) => ({
     id: row.id,
@@ -153,6 +153,7 @@ const FREE = aiPlanCapabilitiesFrom(FREE_ORG, {
     deletedAt: undefined,
   })),
   template: [],
+  component: [],
 })
 
 interface SentRequest {
@@ -293,9 +294,11 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks())
 
 describe('a Free workspace builds its first page', () => {
-  it('is told it keeps no reusable components, the one saved form its site has room for, and what else it may create', () => {
+  it('is told it builds no repeats as components, the one component and one saved form its site has room for, and what else it may create', () => {
+    // A Free site saves one component (AGL-3615), but its page still draws
+    // repeats inline: a finite allowance cannot hold every repeat a plan draws.
     expect(FREE.reusableComponents).toBe(false)
-    expect(FREE.create.component).toMatchObject({ allowed: false, reason: expect.stringContaining('reusable components') })
+    expect(FREE.create.component).toEqual({ allowed: true, left: 1, reason: null })
     // A Free site saves one form (AGL-3597); it is not behind the component feature.
     expect(FREE.create.form).toMatchObject({ allowed: true })
     // The one shared layout the Free plan includes is already the site's.

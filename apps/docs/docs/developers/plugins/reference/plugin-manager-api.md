@@ -21,6 +21,7 @@ design: the surface is small and curated, and each entry needs semantics
 | `listConsoleOrgNavItems()` / `resolveConsoleOrgPluginPage(href)` | The same pair for **organization-level** surfaces — the extension's `orgNavItems`, listed on the organization's tab strip and served under `/[orgSlug]/[...pluginSlug]` with the same matching rules. Neither pair reads the other's list. |
 | `listConsoleWidgets(slot)` | Widgets registered for a named zone — see [Injection zones](injection-zones.md). |
 | `listConsoleStaffPages()` / `resolveConsoleStaffPage(id)` | How the shell draws a plugin's staff pages: a tab after the staff strip's own, and a page at `/admin/{id}` from the generic staff route. Two plugins claiming one id resolve to nothing, and say so. |
+| `listConsolePublicPages()` / `resolveConsolePublicPage(pluginId, path)` | How the console serves a plugin's full-screen page that needs no staff session, at `/kiosk/{pluginId}{path}` — a screen facing customers, for example. The route loads only that plugin's console bundle, and only for a path its manifest lists in `contributes.console.publicRoutes`; the path matches exactly. First-party plugins only. |
 | `listConsoleProviders()` | App-level providers mounted around every console page. |
 | `defineUiFeatureBundle(options, components)` | Site/canvas component bundle; auto-depends on the base `mui` bundle. Component and bundle ids are **persisted in page docs — never rename**. |
 | `CONSOLE_WIDGET_SLOTS` | The typed injection-zone catalog. A widget with a `column: { header, sortKey?, align? }` is a column of a shell-owned table on the zones documented as column zones. |
@@ -36,8 +37,11 @@ receives `hostId: null` and an `orgMount` naming the organization and its
 sites, and the shell admits only a member whose access spans the whole
 organization; an `href` that names one of the console's own organization
 routes, such as `/team` or `/settings`, never renders), `dashboardCards?`,
-`settingsSections?`, `widgets?`, `providers?`, `staffPages?`, `themePresets?`,
-`searchSources?`.
+`settingsSections?`, `widgets?`, `providers?`, `staffPages?`, `publicPages?`
+(`{ path, title, Component }`; the page receives `ConsolePublicPageProps
+{ pluginId, path }`, renders with the console theme and no workspace shell,
+and neither `featureFlag` nor `permission` applies, so it must prove itself
+to its own API routes), `themePresets?`, `searchSources?`.
 
 A nav item's `header?: { title, icon?, docsTopic?, docsAnchor? }` titles its
 page and names the docs topic its help button opens. `docsAnchor` deep-links
@@ -1401,6 +1405,54 @@ handler, a cron or the billing webhook runs — and
 `tax-profile-is-registered.spec.ts` in each app runs the real registrars and
 holds the real rule, because a plugin's own spec may not import the owner.
 
+### An outside tax engine — `registerPluginTaxEngine`
+
+The same module carries a second slot, for a merchant who calculates tax in a
+service of their own (an Avalara AvaTax or TaxJar account). One plugin answers
+for every outside engine and dispatches to whichever one a site connected; a
+plugin that charges asks it for a quote, within a deadline, and prices the sale
+its usual way when the answer does not come.
+
+```ts
+import {
+  quotePluginTaxEngine,
+  registerPluginTaxEngine,
+} from '@aglyn/aglyn/plugin-manager/plugin-tax-profile'
+
+// the engine's plugin, from its server declarations
+registerPluginTaxEngine({
+  status: (hostId) => readConnection(hostId),
+  quote: (request) => askTheVendor(request), // throws on any failure
+  validateAddress: (hostId, address) => resolveWithTheVendor(hostId, address),
+})
+
+// a plugin that charges
+const outcome = await quotePluginTaxEngine({
+  hostId, currency: 'usd', channel: 'online',
+  lines: [{ id: 'line-0', productId, quantity: 1, amountCents: 4_500 }],
+  shipTo: { line1, city, region: 'TX', postalCode, country: 'US' },
+  customer: { email },
+})
+if (!outcome.ok) {
+  // `unavailable`, `timeout` or `error`: price it the way you did before,
+  // and flag the sale so the merchant sees the engine was not asked.
+}
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginTaxEngine(engine, { pluginId? })` | A slot: one plugin answers for outside engines. |
+| `pluginTaxEngine()` | The engine's plugin, or `null`. Unlike the tax profile, an empty slot is a normal state. |
+| `quotePluginTaxEngine(request, { timeoutMs? })` | Never throws and never waits past the deadline (`PLUGIN_TAX_ENGINE_QUOTE_TIMEOUT_MS`, 5 s): `{ ok: true, quote }`, or `{ ok: false, reason, message }` with `reason` one of `unavailable`, `timeout`, `error`. |
+| `engine.quote(request)` | `{ provider, providerLabel, taxCents, lines: [{ id, taxCents }], shippingTaxCents, sandbox }`, integer cents. A line marked `exempt` answers zero. No `shipTo` taxes at the site's own address, which is right for an in-person sale. |
+| `engine.status(hostId)` | `{ connected, provider?, providerLabel?, sandbox? }`. |
+| `engine.validateAddress(hostId, address)` | `{ valid, normalized, messages }`: the engine's own reading of an address, for a plugin that wants one checked. |
+
+Recording a paid sale with the engine, and reversing it on a refund, is not on
+the contract. The seller already raises `order.paid`, `order.refunded` and
+`order.cancelled` as domain events with retries, so the engine's plugin
+subscribes to those and the seller never learns that anything was recorded.
+
 ## Sales on the operator's tax return — `plugin-tax-return-sources`
 
 The operator of a deployment files a sales tax return for the sales it
@@ -2254,6 +2306,7 @@ after, never a reference to the plugin.
 | `org.seatAddons.changed` | the add-on checkout and the billing webhook | `{ orgId, actor, before, after }` — the `org.seatAddons` maps |
 | `org.permissions.changed` | the member, role and host-member routes | `{ orgId, actor, subject: { type, id?, name? }, permission, granted }` |
 | `host.records.removed` | the public API's deletes and a person's erasure, after the delete lands | `{ orgId, hostIds, collection, records: [{ id, data }] }` — each removed document as it stood |
+| `host.email.engaged` | the email delivery webhook, for a message tagged with a site, after the delivery log records it | `{ hostId, events: [{ to, type, at, firstOfType }] }` — opens and clicks only; `firstOfType` marks the first of its type for that message |
 | `billing.invoice.paid` | the billing webhook, once the invoice resolves to a workspace | `{ orgId, invoiceId, amountPaidCents, currency, paidOutOfBand, metadata }` |
 | `billing.invoice.failed` | the billing webhook | `{ orgId, invoiceId, amountDueCents, metadata }` |
 | `billing.invoice.closed` | the billing webhook, on `voided` and on `marked_uncollectible` | `{ orgId, invoiceId, reason: 'voided' \| 'uncollectible', metadata }` |
@@ -2293,11 +2346,56 @@ can still see an event twice (it succeeded and the record of that did not
 land), so dedupe on the envelope's `id`. A locked site's events wait until
 the lock lifts.
 
-The commerce plugin raises `order.paid`, `order.fulfilled` (once per
-shipment), `order.delivered`, `order.refunded` (once per refund),
-`order.cancelled`, `return.requested` and `return.refunded`. Each payload
-carries `order` in the public API's order shape (`GET /v1/sites/{siteId}/orders/{orderId}`), plus
-`fulfillment`, `refund` or `return` where the event has one.
+### Commerce's order and return events
+
+The commerce plugin declares these events. Their names and payload keys are a
+stable contract: fields are only ever added, never renamed or removed. Each
+payload carries `order` in the public API's order shape
+(`GET /v1/sites/{siteId}/orders/{orderId}`) as it stood once the fact was
+written, with money in integer cents in `order.currency`.
+
+| Event | Raised | Payload beside `order` |
+| --- | --- | --- |
+| `order.paid` | An order was paid: storefront checkout, buy-now, payment link, POS sale (card or cash) or subscription renewal. | — |
+| `order.fulfilled` | Once per shipment recorded, partial or whole. | `fulfillment`: `{ id, lines: [{ lineItemId, quantity }], carrier, trackingNumber, trackingUrl, labelUrl, at }` |
+| `order.delivered` | The order was marked delivered. | — |
+| `order.refunded` | Once per refund, partial or full. | `refund`: `{ id, amountCents, lineItemIds, full }` — what this refund moved |
+| `order.cancelled` | The order was canceled and its stock returned. | — |
+| `return.requested` | A buyer asked for a return, or the store opened one. | `return` |
+| `return.approved` | The store approved a return, or opened one itself. | `return` |
+| `return.declined` | The store declined a return request. | `return` |
+| `return.received` | The returned items arrived. | `return`, with `restock` |
+| `return.refunded` | A return was refunded, through the order's refund. An `order.refunded` for the same money is raised too. | `return`, with `refundCents` |
+
+`return` is `{ id, status, lines: [{ lineItemId, quantity, reason }],
+refundCents, restock }`, where `lineItemId` is the line's index in
+`order.lineItems` and `restock` is `[{ lineItemId, quantity }]` once the parcel
+arrived, else `null`. A subscriber that counts money takes it from
+`order.refunded`, not `return.refunded`, so a returned refund is counted once.
+
+A subscriber restates the shape it reads and subscribes by name:
+
+```ts
+import {
+  definePluginDomainEvent,
+  subscribePluginDomainEvent,
+} from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+
+interface OrderRefunded {
+  order: { id: string; currency: string; totals: { totalCents: number | null } }
+  refund: { id: string | null; amountCents: number; full: boolean }
+}
+
+const ORDER_REFUNDED = definePluginDomainEvent<OrderRefunded>('order.refunded')
+
+subscribePluginDomainEvent(ORDER_REFUNDED, async ({ id, hostId, payload }) => {
+  // `id` is the same on every retry: dedupe on it.
+})
+```
+
+The merchant's own webhooks are one more subscriber to the same events, so a
+store's endpoints receive exactly what a plugin does, signed (see
+[Order webhooks](/commerce-and-bookings/commerce/orders-and-returns#order-webhooks)).
 
 ## Site beacons — `plugin-site-beacons` (`/server`)
 

@@ -29,6 +29,7 @@ import {
   posStripe,
   posStripeErrorMessage,
   posStripeTestMode,
+  posTerminalAvailable,
 } from './pos-stripe'
 import { applyPosPayment, readPosSale, type PosLiftedOrder, type PosPaymentOutcome } from './pos-sale'
 
@@ -408,7 +409,8 @@ function paymentIntentParams(
 /**
  * Creates (or finds) the card-present PaymentIntent for one payment WITHOUT
  * choosing how the card is collected: reserves the amount in the ledger and
- * creates a manual-capture destination charge `on_behalf_of` the merchant,
+ * creates a manual-capture destination charge to the merchant (settled on
+ * Aglyn's platform account, with no `on_behalf_of`, as ToS §10.7 states),
  * keyed by the payment so a retry returns the same intent.
  *
  * Two collectors use it. {@link startCardPresentPayment} pushes the intent
@@ -421,6 +423,12 @@ function paymentIntentParams(
 export async function createCardPresentIntent(
   start: CardStart & { readerId?: string },
 ): Promise<PosPaymentOutcome & { clientSecret?: string; paymentIntentId?: string }> {
+  // Live card-present payments wait for Terminal to be switched on for the
+  // platform (`STRIPE_TERMINAL_LIVE_ENABLED`); the hidden controls are not
+  // the only gate.
+  if (!posTerminalAvailable()) {
+    return { ok: false, status: 409, error: 'Card readers are not available for this store yet.' }
+  }
   const destination = await posMerchantAccount(start.hostId, start.org)
   if (!destination) return { ok: false, status: 409, error: 'Card payments not set up' }
   const reserved = await reserveCardPayment(
@@ -439,7 +447,6 @@ export async function createCardPresentIntent(
       payment_method_types:
         POS_CURRENCY === 'usd' ? ['card_present'] : ['card_present', 'interac_present'],
       capture_method: 'manual',
-      on_behalf_of: destination,
       ...(start.readerId ? { 'metadata[readerId]': start.readerId } : {}),
       description: 'In-store purchase',
     }),

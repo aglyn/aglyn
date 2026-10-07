@@ -40,6 +40,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, getDoc } from 'firebase/firestore'
+import { ScanAdornment } from '../../barcode/scan-button.component'
 import { productCollectionFields } from './smart-collections'
 import { memo, useCallback, useMemo, useRef, useState } from 'react'
 import {
@@ -80,6 +81,7 @@ import {
   PaidDownloadAddButton,
   PaidMediaProtection,
 } from './paid-media'
+import { ProductRegisterFields } from './product-register-fields.component'
 
 /**
  * What each picker in this dialog will offer.
@@ -225,6 +227,9 @@ type ProductPatch =
 /** Spreads a patch over the draft as last rendered. One identity per dialog. */
 type ProductUpdate = (patch: ProductPatch) => void
 
+/** A stable empty list, so a product without modifiers never redraws its section. */
+const NO_MODIFIER_GROUPS: CommerceModel.ProductModifierGroup[] = []
+
 /** Replaces the draft with what `build` makes of it as last rendered. */
 type DraftReplace = (
   build: (product: CommerceModel.HostProduct) => CommerceModel.HostProduct,
@@ -276,6 +281,7 @@ const VERSION_FIELD = { width: 100 } as const
 const OPTION_FIELD = { width: 160 } as const
 const PRICE_CELL = { width: 88 } as const
 const CODE_CELL = { width: 110 } as const
+const BARCODE_CELL = { width: 150 } as const
 const STOCK_CELL = { width: 72 } as const
 const DECIMAL_INPUT = { htmlInput: { inputMode: 'decimal' } } as const
 const NUMERIC_INPUT = { htmlInput: { inputMode: 'numeric' } } as const
@@ -601,6 +607,21 @@ const ProductVariantRow = memo(function ProductVariantRow(props: {
     }),
     [label],
   )
+  // A camera scan fills the barcode the same way typing it does (AGL-3619).
+  const barcodeInput = useMemo(
+    () => ({
+      htmlInput: { 'aria-label': `Barcode — ${label}` },
+      input: {
+        endAdornment: (
+          <ScanAdornment
+            label={`Scan the barcode for ${label}`}
+            onScan={(code) => onField(index, 'barcode', code)}
+          />
+        ),
+      },
+    }),
+    [label, index, onField],
+  )
   return (
     <TableRow>
       <TableCell sx={{ whiteSpace: 'nowrap' }}>{label}</TableCell>
@@ -639,7 +660,8 @@ const ProductVariantRow = memo(function ProductVariantRow(props: {
           value={variant.barcode ?? ''}
           onChange={set.barcode}
           size="small"
-          sx={CODE_CELL}
+          sx={BARCODE_CELL}
+          slotProps={barcodeInput}
         />
       </TableCell>
       <TableCell>
@@ -1183,6 +1205,8 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
    */
   const subs = useCommerceEntitlement(hostId, 'storefrontSubscriptions')
   const gifts = useCommerceEntitlement(hostId, 'giftCards')
+  // The register settings show only where the plan includes POS (AGL-3607).
+  const pos = useCommerceEntitlement(hostId, 'pos')
   const subsLocked = subs.ready && !subs.entitled
   const giftsLocked = gifts.ready && !gifts.entitled
   const firestore = useFirestore()
@@ -1387,6 +1411,20 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     mediaUrls: current.mediaUrls ?? [],
     seoTitle: current.seo?.title ?? '',
     seoDescription: current.seo?.description ?? '',
+    shipping: {
+      lengthCm: current.shipping?.lengthCm ?? null,
+      widthCm: current.shipping?.widthCm ?? null,
+      heightCm: current.shipping?.heightCm ?? null,
+      hsCode: current.shipping?.hsCode ?? '',
+      originCountry: current.shipping?.originCountry ?? '',
+    },
+    channel: {
+      brand: current.channel?.brand ?? '',
+      gtin: current.channel?.gtin ?? '',
+      mpn: current.channel?.mpn ?? '',
+      condition: current.channel?.condition ?? '',
+      googleProductCategory: current.channel?.googleProductCategory ?? '',
+    },
   })
   const seoSubject = useContentStable({
     kind: 'product',
@@ -1871,6 +1909,13 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           update={update}
           replaceDraft={replaceDraft}
         />
+        {pos.ready && pos.entitled ? (
+          <ProductRegisterFields
+            posQuickKey={Boolean(current.posQuickKey)}
+            modifierGroups={current.modifierGroups ?? NO_MODIFIER_GROUPS}
+            update={update}
+          />
+        ) : null}
         {current.type === 'digital' ? (
           <ProductDigitalFields
             hostId={hostId}

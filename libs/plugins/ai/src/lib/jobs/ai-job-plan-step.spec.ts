@@ -833,3 +833,65 @@ describe('the plan step — reuse', () => {
     expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('the plan step — a build from one request (AGL-3616)', () => {
+  const SERVICE = {
+    op: 'booking-service',
+    noun: 'booking service',
+    where: 'Bookings → Services',
+    intents: ['a service people can book'],
+    argsSchema: {
+      type: 'object' as const,
+      properties: { durationMinutes: { type: 'integer' as const, description: 'Minutes it lasts', minimum: 5, maximum: 480 } },
+      required: ['durationMinutes'],
+      additionalProperties: false as const,
+    },
+    maxPerPlan: 2,
+    freeAllowed: false,
+    draftResource: 'bookingService',
+    estimateCredits: () => 0,
+    degrade: 'omit' as const,
+    pageBlocks: ['Booking'],
+  }
+  const OPS = new Map([[SERVICE.op, SERVICE]])
+  const buildPlan = (durationMinutes: number) => ({
+    ...PLAN,
+    create: [],
+    screens: [{ ...PLAN.screens[0], sections: [{ name: 'book a consult', uses: ['new:Consult'], items: 0 }] }],
+    items: [
+      {
+        op: 'booking-service',
+        name: 'Consult',
+        why: 'People book a consult.',
+        dependsOn: [],
+        degrade: 'omit',
+        args: JSON.stringify({ durationMinutes }),
+      },
+    ],
+  })
+
+  it('lists the site’s operations on the job’s own turn, offers the items tool, and holds the arguments to their schema with the one re-ask', async () => {
+    mockRunAiRequest
+      .mockResolvedValueOnce(planAnswer(buildPlan(2) as never))
+      .mockResolvedValueOnce(planAnswer(buildPlan(30) as never))
+    const outcome = await planStep({ readOps: async () => OPS })({
+      job: job({ kind: 'build', brief: 'A page to book a consult.' }),
+      stepIndex: 0,
+      now: NOW,
+      firestore,
+    })
+    const [first, second] = mockRunAiRequest.mock.calls.map(([request]) => request)
+    expect(first.tools[0].inputSchema.required).toContain('items')
+    expect(first.messages[0].content).toContain('- booking-service: a booking service, at most 2')
+    expect(first.messages[0].content).toContain('places the Booking block')
+    expect(second.messages[2].content).toContain('"durationMinutes" must be at least 5')
+    expect(outcome.plan?.items).toEqual([
+      expect.objectContaining({ slot: 'i0', args: { durationMinutes: 30 }, id: expect.stringMatching(RESOURCE_ID), credits: 0 }),
+    ])
+    expect(outcome.plan?.screens[0]?.id).toMatch(RESOURCE_ID)
+  })
+
+  it('scopes a build to the creations it builds', () => {
+    expect(AI_JOB_PLAN_SCOPES.build?.creates).toEqual(['layout', 'form', 'component', 'email'])
+  })
+})

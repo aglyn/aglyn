@@ -47,6 +47,8 @@ import {
   AI_SIMILAR_PAGES_MIN,
   aiDoctrineViolationText,
   detectPublishIntent,
+  aiSettlePlanLayouts,
+  aiSettlePlanRefs,
   validateAiBuildPlan,
   validateAiDoctrineTree,
   type AiCopyFraming,
@@ -279,6 +281,9 @@ export const AI_DOCTRINE_KIND_SCOPE: Readonly<Record<string, AiDoctrineScope>> =
   'crm-email': 'fields',
   'crm-mapping': 'fields',
   'crm-record': 'fields',
+  // Logic by AI (AGL-3603): a function's or a variable's values, which the
+  // logic editor takes, composing nothing.
+  logic: 'fields',
 }
 
 /** The scope for a kind; `documents` unless the kind names another. */
@@ -660,15 +665,18 @@ export function aiDoctrinePlanCheck(
         ],
       }
     }
+    // A reference or a page's layout that has only one answer is given it,
+    // not refused for it.
+    const plan = aiSettlePlanLayouts(aiSettlePlanRefs(parsed.plan), inventory, capabilities)
     const violations = [
       ...publish,
-      ...validateAiBuildPlan(parsed.plan, inventory, framing, capabilities),
+      ...validateAiBuildPlan(plan, inventory, framing, capabilities),
     ]
     const paths = [...new Set(violations.flatMap((violation) => violation.paths ?? []))]
     return {
-      value: parsed.plan,
+      value: plan,
       violations,
-      offending: capped(paths.map((path) => [path, valueAtPath(parsed.plan, path)])),
+      offending: capped(paths.map((path) => [path, valueAtPath(plan, path)])),
     }
   }
 }

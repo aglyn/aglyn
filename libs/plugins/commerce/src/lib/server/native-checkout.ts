@@ -16,6 +16,10 @@
  */
 
 import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin'
+import {
+  type StorefrontCheckoutWallets,
+  storefrontWalletsHideAny,
+} from '../model/commerce-payment-methods'
 
 /**
  * The storefront Payment Element (AGL-1944), the half of native payments
@@ -223,6 +227,13 @@ export interface NativeCheckoutPayload {
   publishableKey: string
   /** The order document id, and the `session_id` the return URL carries. */
   sessionId: string
+  /**
+   * The wallets the merchant hid (AGL-3629), for the Payment Element's
+   * `wallets` option — Stripe will not exclude Apple Pay, Google Pay or Link
+   * on the session itself. Absent when nothing is hidden, so a store on the
+   * defaults answers exactly what it answered before.
+   */
+  wallets?: StorefrontCheckoutWallets
 }
 
 export interface HostedCheckoutPayload {
@@ -244,6 +255,7 @@ export interface HostedCheckoutPayload {
 export function readCheckoutSessionPayload(
   session: { url?: string; id?: string; client_secret?: string },
   mode: NativeCheckoutMode,
+  wallets?: StorefrontCheckoutWallets,
 ): NativeCheckoutPayload | HostedCheckoutPayload | null {
   if (!mode.native) return session?.url ? { url: session.url } : null
   if (!session?.client_secret || !session?.id) return null
@@ -251,5 +263,6 @@ export function readCheckoutSessionPayload(
     clientSecret: String(session.client_secret),
     publishableKey: mode.publishableKey,
     sessionId: String(session.id),
+    ...(wallets && storefrontWalletsHideAny(wallets) ? { wallets } : {}),
   }
 }

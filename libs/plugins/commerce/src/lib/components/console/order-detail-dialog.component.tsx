@@ -62,7 +62,10 @@ import {
   ORDER_DETAIL_ZONE,
   ORDER_FULFILLMENT_ZONE,
 } from './order-zones'
+import { OrderInvoiceButton } from './order-invoice.component'
 import { OrderReceiptResend } from './order-receipt-resend.component'
+import { OrderReturns } from './order-returns.component'
+import { PosReceiptActions } from './pos-ops/pos-receipt-actions.component'
 
 export interface OrderDetailDialogProps {
   hostId: string
@@ -1124,6 +1127,8 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
             recordFulfillment={recordFulfillment}
           />
         ) : null}
+        {/* The order's returns and "Start return" (AGL-3611). */}
+        {orderId ? <OrderReturns hostId={hostId} orderId={orderId} order={order} /> : null}
         {order.paymentLinkUrl && order.status === 'pending' ? (
           <Button
             size="small"
@@ -1151,7 +1156,13 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           </Button>
         ) : null}
         <Button onClick={handlePackingSlip}>{'Packing slip'}</Button>
+        {orderId ? <OrderInvoiceButton hostId={hostId} orderId={orderId} order={order} /> : null}
         {orderId ? <OrderReceiptResend hostId={hostId} orderId={orderId} order={order} /> : null}
+        {orderId && order.channel === 'pos' ? (
+          // The register's 80mm receipt, its gift receipt and a reprint on
+          // the register's cloud printer (AGL-3609).
+          <PosReceiptActions hostId={hostId} orderId={orderId} order={order} cloudPrint="reprint" />
+        ) : null}
         {can('cancelled') ? (
           <Button color="error" disabled={busy} onClick={handleCancel}>
             {'Cancel order'}

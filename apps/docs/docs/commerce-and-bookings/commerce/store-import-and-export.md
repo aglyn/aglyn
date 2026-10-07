@@ -1,7 +1,7 @@
 ---
-sidebar_position: 4
+sidebar_position: 5
 title: Import and export store data
-description: Bring products in from a file or from Shopify, update them by handle or SKU, move gift cards by issuing each one, record shipments from a file of tracking numbers, and export products, orders, discounts, coupons, gift cards and categories with the fields you choose.
+description: Import products from a file or Shopify, update them by handle or SKU, issue gift cards, record shipments from a tracking file, and export store data with the fields you choose.
 ---
 
 # Import and export store data

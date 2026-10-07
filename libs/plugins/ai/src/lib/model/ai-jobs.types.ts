@@ -73,8 +73,10 @@ export type AiJobKind =
   | 'crm'
   | 'onboarding'
   | 'workflow'
+  | 'logic'
   | 'text'
   | 'theme'
+  | 'build'
 
 /** The union as a value, so a route can validate a body against it. */
 export const AI_JOB_KINDS: readonly AiJobKind[] = [
@@ -94,8 +96,10 @@ export const AI_JOB_KINDS: readonly AiJobKind[] = [
   'crm',
   'onboarding',
   'workflow',
+  'logic',
   'text',
   'theme',
+  'build',
 ]
 
 /**
@@ -237,6 +241,10 @@ export type AiJobOutputResource =
   | 'seo'
   | 'insight'
   | 'crm'
+  /** A draft another plugin wrote for a build (AGL-3616), named by `draftResource`. */
+  | 'draft'
+  | 'logic'
+  | 'orgAutomation'
 
 /**
  * One thing a job wrote. Addressed by resource and id so the console can
@@ -260,6 +268,14 @@ export type AiJobOutputResource =
  * step, an email draft, or an import's column matches. The CRM's own task
  * form, stage route, composer and import drawer are the writes, and a person
  * makes each of them, or does not.
+ *
+ * A `logic` output is a proposal too (AGL-3603): a site function or variable
+ * the Functions & Variables editor opens unsaved. Saving it is the editor's
+ * write, which a person makes, or does not.
+ *
+ * An `orgAutomation` output is a proposal too (AGL-3603): one of the
+ * workspace's automations, which the Org automations editor opens unsaved and
+ * switched off. `hostId` is `null`: it belongs to no one site.
  */
 export interface AiJobOutput {
   resource: AiJobOutputResource
@@ -294,6 +310,11 @@ export interface AiJobOutput {
    * anything is applied. Absent where the output is not a page's document.
    */
   load?: AiLoadEstimate | null
+  /**
+   * For a `draft` output (AGL-3616): the resource whose owner wrote it, as
+   * its writer is registered on the resource-draft seam.
+   */
+  draftResource?: string
 }
 
 export interface AiJobLease {
@@ -404,6 +425,69 @@ export interface AiJobPlan extends AiBuildPlan {
   reusedFrom?: string
 }
 
+/**
+ * Where one item of a `build` job stands (AGL-3616). A build settles item by
+ * item: a failed item gives back its own spend and the rest of the plan still
+ * runs, so the job keeps one row per item, written only by the machine's
+ * `recordStep` — in the same transaction as the spend it accounts for — and
+ * by the resume door's retry.
+ */
+export type AiJobItemStatus = 'pending' | 'running' | 'succeeded' | 'degraded' | 'failed' | 'skipped'
+
+/** Why an item failed: a give-back reason when it was ours, else the model's refusal or a review. */
+export type AiJobItemFailureReason =
+  | 'plan-refused'
+  | 'doctrine-refused'
+  | 'provider'
+  | 'timeout'
+  | 'step-failure'
+  | 'unavailable'
+  | 'refused'
+  | 'review'
+
+export interface AiJobItemFailure {
+  /** Whether the failure was on our side: only then is the item's spend given back. */
+  ours: boolean
+  reason: AiJobItemFailureReason
+  /** Customer-safe. */
+  message: string
+}
+
+export interface AiJobItemLedger {
+  /** The unit's slot within the plan: `c0` a creation, `p0` a page, `i0` an item. */
+  slot: string
+  /** The capability operation that builds it: `page`, `form`, or an owner's op. */
+  op: string
+  /** What a person reads: the page's title, the creation's or item's name. */
+  label: string
+  status: AiJobItemStatus
+  /** Bumped by Try again; the refund key names it, so each attempt gives back once. */
+  attempt: number
+  /** What this item's passes cost, every attempt. */
+  creditsSpent: number
+  /** What this attempt's passes cost so far: what a failure of this attempt gives back. */
+  attemptCredits?: number
+  /** What was given back for this item's failures. */
+  creditsRefunded: number
+  /** The key the latest give-back for this item was made under. */
+  refundKey?: string
+  failure?: AiJobItemFailure | null
+  /** The ids of the outputs this item produced. */
+  outputs: string[]
+  /** The slots whose failure changed how this item was built. */
+  degradedBy?: string[]
+  /** Customer-safe: what the person should know about this item. */
+  note?: string | null
+}
+
+/** Whether a build's own planning was charged or given back (AGL-3616). */
+export interface AiJobOrchestration {
+  /** What the plan step spent. */
+  creditsSpent: number
+  /** `charged` once anything was delivered; `refunded` when nothing was. */
+  settled: 'pending' | 'charged' | 'refunded'
+}
+
 export interface AiJob {
   $id: string
   orgId: string
@@ -463,6 +547,10 @@ export interface AiJob {
    * other job, which leaves its pages as drafts.
    */
   sitePublish?: AiJobSitePublish | null
+  /** A `build` job's items, one row each (AGL-3616); absent on every other kind. */
+  items?: AiJobItemLedger[] | null
+  /** A `build` job's planning spend and how it settled (AGL-3616). */
+  orchestration?: AiJobOrchestration | null
 }
 
 /**
@@ -558,4 +646,13 @@ export interface AiJobSummary {
    * on every other kind.
    */
   siteInputs?: Record<string, unknown> | null
+  /** A `build` job's items (AGL-3616); absent on every other job. */
+  items?: AiJobItemLedger[]
+  /**
+   * Whether a build's request asked to publish (AGL-3616), so its plan card
+   * offers the box that confirms it. Absent on every other job.
+   */
+  publishAsked?: boolean
+  /** A `build` job's planning spend and how it settled (AGL-3616). */
+  orchestration?: AiJobOrchestration
 }

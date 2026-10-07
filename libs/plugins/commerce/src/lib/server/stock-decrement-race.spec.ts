@@ -414,6 +414,9 @@ describe('AGL-2320 — every stock writer is transactional', () => {
     // product (AGL-3611): `transaction.get`, then `transaction.update`, as
     // the cancellation's restore does.
     'returns.ts',
+    // A register return's restock (AGL-3609): read and written in one
+    // transaction per product, the same shape as the cancel.
+    'pos-return.ts',
   ])
 
   const sources = fs

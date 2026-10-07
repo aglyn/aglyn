@@ -49,7 +49,11 @@ import {
   getDoc,
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useLiveArtifactCount,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 import {
   authorizedFetch,
   type MaybeTokenSource,
@@ -177,6 +181,10 @@ function HostUsageMeters(props: {
     counted: null,
   })
   const entitlements = resolveOrgEntitlements(org)
+  // The reusable-component catalog `componentsPerHost` bounds (AGL-3615):
+  // Free 1, every paid plan unlimited. LIVE components, as the resources
+  // route counts them — a deleted one keeps its document with `deletedAt`.
+  const components = useLiveArtifactCount(host.$id, 'components')
 
   // Aggregation counts instead of full collection reads — one billed read
   // per counter regardless of collection size.
@@ -291,6 +299,11 @@ function HostUsageMeters(props: {
         label="Saved forms"
         used={counts.forms}
         limit={entitlements.formsPerHost}
+      />
+      <UsageMeter
+        label="Reusable components"
+        used={components}
+        limit={entitlements.componentsPerHost}
       />
       <UsageMeter
         label="Variables"

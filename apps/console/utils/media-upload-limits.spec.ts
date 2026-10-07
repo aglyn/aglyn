@@ -17,7 +17,18 @@
 
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { storageContentHash } from './media-upload-limits'
+import {
+  directUploadMaxBytes,
+  isAllowedUploadType,
+  isFontUploadType,
+  mediaPickerKindOf,
+  mediaUploadKind,
+  normalizeUploadContentType,
+  requiresFileUploadEntitlement,
+  storageContentHash,
+  UPLOAD_ACCEPT_ATTRIBUTE,
+  uploadAcceptForKind,
+} from './media-upload-limits'
 
 describe('storageContentHash — an ETag for signed uploads (AGL-1440 follow-up)', () => {
   it('re-encodes GCS base64 md5 as a URL-safe hex segment', () => {
@@ -75,5 +86,32 @@ describe('the signed-upload finalize writes a contentHash', () => {
 
   it('persists it on the media doc, where serveMediaCdn reads it', () => {
     expect(source).toContain('contentHash')
+  })
+})
+
+describe('web fonts in the media library (AGL-3656)', () => {
+  it('accepts a WOFF2 by type and by name, and nothing else of the font formats', () => {
+    expect(isAllowedUploadType('font/woff2')).toBe(true)
+    expect(normalizeUploadContentType('', 'Acme-700.woff2')).toBe('font/woff2')
+    // The installer converts every other format before the library sees it.
+    for (const type of ['font/ttf', 'font/otf', 'font/woff', 'application/font-woff']) {
+      expect(isAllowedUploadType(type)).toBe(false)
+    }
+    expect(UPLOAD_ACCEPT_ATTRIBUTE).toContain('font/woff2')
+    expect(UPLOAD_ACCEPT_ATTRIBUTE).toContain('.woff2')
+  })
+
+  it('is its own family, so a replace cannot swap a font for a document', () => {
+    expect(mediaUploadKind('font/woff2')).toBe('font')
+    expect(isFontUploadType('font/woff2')).toBe(true)
+    expect(uploadAcceptForKind('font')).toBe('font/woff2,.woff2')
+    // No narrowed picker offers a font.
+    expect(mediaPickerKindOf('font/woff2')).toBeUndefined()
+  })
+
+  it('needs no file-upload plan, because a theme font is on every plan', () => {
+    expect(requiresFileUploadEntitlement('font/woff2')).toBe(false)
+    expect(requiresFileUploadEntitlement('application/pdf')).toBe(true)
+    expect(directUploadMaxBytes('font/woff2')).toBe(10 * 1024 * 1024)
   })
 })

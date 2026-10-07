@@ -24,6 +24,7 @@
  * I/O here.
  */
 
+import type { OrderLineModifier } from './product-modifiers'
 import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 import type { PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import type { ProductType } from './commerce'
@@ -61,8 +62,13 @@ export interface OrderLineItem {
   sku?: string
   productType?: ProductType
   quantity: number
-  /** Per-unit price in cents at purchase time. */
+  /** Per-unit price in cents at purchase time, its modifiers included. */
   unitAmountCents: number
+  /**
+   * Choices added at the register (AGL-3607), as sold. Already folded into
+   * `variantLabel` and `unitAmountCents`; kept for reports and reorders.
+   */
+  modifiers?: OrderLineModifier[]
   /** Supplier at purchase time (dropship routing, AGL-289). */
   supplierId?: string
   /** Fulfillment id once this line ships (AGL-288). */
@@ -119,6 +125,15 @@ export interface OrderFulfillment {
   trackingUrl?: string
   /** A shipping label bought for this parcel, when a shipping plugin bought one. */
   labelUrl?: string
+  /** The shipping plugin's id for that label (AGL-3612), so a retry finds this shipment. */
+  labelRef?: string
+  /**
+   * Where the carrier says the parcel is (AGL-3612): `pre_transit`,
+   * `in_transit`, `out_for_delivery`, `delivered`, `exception` or `returned`,
+   * written by a tracking webhook through the shipment-records seam.
+   */
+  trackingStatus?: string
+  trackingStatusAtMs?: number
   /** Absent reads as `active`; a cancelled fulfillment ships nothing. */
   status?: 'active' | 'cancelled'
   cancelledAtMs?: number
@@ -309,6 +324,16 @@ export interface HostOrder {
    */
   registerId?: string
   cashierId?: string
+  /**
+   * The register shift the sale was rung in (AGL-3609), which the shift's X
+   * and Z reports count it under.
+   */
+  shiftId?: string
+  /**
+   * The person the cashier attached at the register (AGL-3609), as the
+   * person-records seam names them: which record system, and its id there.
+   */
+  customerRecord?: { kind: string; id: string }
   /**
    * Every payment toward a register sale (AGL-3607): one per tender, until
    * the balance due is zero. Read through `orderPayments`, which infers one

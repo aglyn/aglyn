@@ -185,7 +185,24 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
     // Themes (AGL-3405): its built-in themes are listed on a site's theme
     // page, and a workspace that stored its plugin set before it existed must
     // still get them — so it is unioned in, and a site can still turn it off.
-    expect(WORKSPACE_LOCKED).toEqual(['forms', 'ai', 'theme-presets'])
+    // Funnels (AGL-3605) the same way: a card on every site's Analytics page,
+    // sold by the analytics tier rather than by a switch.
+    // Shipping (AGL-3612): its label spend and carrier accounts belong to the
+    // workspace, and its every surface hides until a provider is configured.
+    // Tax services (AGL-3631) the same way, until the deployment can seal a
+    // merchant's credentials. Sales channels (AGL-3637): sold with commerce,
+    // and a site that does not sell has no feed to publish. Email platforms
+    // (AGL-3639) the same way: a site connects its own account, or nothing.
+    expect(WORKSPACE_LOCKED).toEqual([
+      'forms',
+      'ai',
+      'theme-presets',
+      'funnels',
+      'shipping',
+      'tax-engines',
+      'sales-channels',
+      'marketing-platforms',
+    ])
   })
 
   it('never also claims `alwaysOn`, which would make the site switch inert', () => {

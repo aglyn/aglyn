@@ -153,6 +153,7 @@ import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import { mediaSrc, mediaThumbnailSrc } from '@aglyn/aglyn/app-utils/media-src'
 import { mediaOriginalSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { probeVideoFile } from '../../utils/video-probe'
+import PluginWidgetSlot from '../plugin-widget-slot.component'
 import { MediaFileInfo } from './media-file-info.component'
 import {
   readAnalyticsDays,
@@ -1646,6 +1647,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const clearSelection = useCallback(
     () => setSelection(EMPTY_MEDIA_SELECTION),
     [],
+  )
+  /** Assets a plugin added through the `mediaLibrary` zone, shown selected. */
+  const handleZoneCreated = useCallback(
+    (ids: readonly string[]) => {
+      if (ids.length) {
+        setSelection({ ids: new Set(ids), anchorId: ids[0] ?? null })
+      }
+      refresh()
+    },
+    [refresh],
   )
   /** Forget assets that no longer exist, anchor included. */
   const forgetSelected = useCallback(
@@ -4009,6 +4020,28 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     }
   })()
 
+  /**
+   * The `mediaLibrary` zone (AGL-3602): another way to add a file, drawn
+   * beside Upload media and again in the empty state. Not offered in a
+   * library narrowed to video or PDFs, which a picture could not go in. A
+   * widget hands back the assets it added, and they are shown selected.
+   */
+  const mediaLibraryZone =
+    kind && kind !== 'image' ? null : (
+      <PluginWidgetSlot
+        slot="mediaLibrary"
+        hostId={orgId ? (forHostId ?? null) : (hostId ?? null)}
+        orgId={orgId ?? org?.$id}
+        library={orgId ? 'org' : 'host'}
+        folderId={
+          typeof currentFolder === 'string' && currentFolder !== 'all'
+            ? currentFolder
+            : null
+        }
+        onCreated={handleZoneCreated}
+      />
+    )
+
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <Box
@@ -4070,6 +4103,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             {'New folder'}
           </Button>
         )}
+        {/* Other ways to add a file, from plugins (AGL-3602). */}
+        {mediaLibraryZone}
         <MediaLibraryUsage
           libraryCount={totalCount}
           place={usagePlace}
@@ -4434,13 +4469,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 {'Clear filters'}
               </Button>
             ) : (
-              <Button
-                size="small"
-                variant="contained"
-                onClick={() => inputRef.current?.click()}
-              >
-                {'Upload media'}
-              </Button>
+              <Stack direction="row" spacing={1} sx={{ justifyContent: 'center' }}>
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={() => inputRef.current?.click()}
+                >
+                  {'Upload media'}
+                </Button>
+                {mediaLibraryZone}
+              </Stack>
             )
           }
         />

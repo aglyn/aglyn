@@ -50,6 +50,10 @@ actions from running, even when the month's runs are nearly used up.
    **Chosen sites**, up to 30 of them.
 4. Add the **steps**, then save.
 
+To start from a description instead, choose **Create with AI** in the card's header: Aglyn
+AI drafts one and opens it in the editor, switched off, for you to place on sites and save.
+See [Automations with AI](../../ai/automations-with-ai.md#org-automations).
+
 Only an organization **owner**, **admin** or **editor** creates and edits org
 automations. An organization holds up to 100 of them; deleting one frees its place.
 

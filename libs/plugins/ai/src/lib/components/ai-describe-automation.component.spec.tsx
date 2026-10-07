@@ -50,7 +50,6 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 
 import type { ConsoleHostAutomationsZoneProps } from './ai-automation-zones'
 import AiDescribeAutomationButton, { AI_AUTOMATION_BRIEF_COPY } from './ai-describe-automation.component'
-import { forgetAiJobsVerdicts } from './use-ai-job-run'
 
 const copy = AI_AUTOMATION_BRIEF_COPY
 
@@ -125,7 +124,6 @@ const zoneProps = (patch: Partial<ConsoleHostAutomationsZoneProps> = {}): Consol
 /** The route answers the probe, the create door, and the job's events. */
 function routes(answers: { create?: unknown; events?: unknown }) {
   mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
-    if (url.startsWith('/api/ai/jobs?')) return json({ jobs: [] })
     if (url === '/api/ai/jobs' && init?.method === 'POST') return answers.create ?? json({ job: job() })
     if (url.startsWith('/api/ai/jobs/job-1/events?orgId=org-1')) return answers.events ?? sse([])
     throw new Error(`unexpected ${url}`)
@@ -140,7 +138,6 @@ async function draftFrom(text: string) {
 
 beforeEach(() => {
   mockFetch.mockReset()
-  forgetAiJobsVerdicts()
   openAction = jest.fn(() => true)
 })
 
@@ -149,18 +146,8 @@ afterEach(() => {
   for (const [url] of mockFetch.mock.calls) expect(String(url)).toMatch(/^\/api\/ai\/jobs/)
 })
 
-describe('whether the button is here at all', () => {
-  it.each([
-    ['the route is not released to this workspace', 404],
-    ['the plan or the member may not generate', 403],
-  ])('stays absent when %s', async (_why, status) => {
-    mockFetch.mockResolvedValue(json({ error: 'No' }, status))
-    const { container } = render(<AiDescribeAutomationButton {...zoneProps()} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
-  })
-
-  it('asks the route once however many controls ask, and nothing while the page has no org', async () => {
+describe('the button is drawn at once (AGL-3601)', () => {
+  it('draws every control on the first render, and asks the route nothing to do it', () => {
     routes({})
     render(
       <>
@@ -169,8 +156,16 @@ describe('whether the button is here at all', () => {
         <AiDescribeAutomationButton {...zoneProps({ orgId: undefined })} />
       </>,
     )
-    expect(await screen.findAllByRole('button', { name: 'Create with AI' })).toHaveLength(2)
-    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(screen.getAllByRole('button', { name: 'Create with AI' })).toHaveLength(3)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('opens the description on click without a request', () => {
+    routes({})
+    render(<AiDescribeAutomationButton {...zoneProps()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+    expect(screen.getByLabelText(copy.briefLabel)).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })
 
@@ -263,6 +258,6 @@ describe('drafting', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
     fireEvent.change(screen.getByLabelText(copy.briefLabel), { target: { value: '   ' } })
     expect(screen.getByRole('button', { name: copy.submit }).hasAttribute('disabled')).toBe(true)
-    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })

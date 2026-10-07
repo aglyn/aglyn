@@ -36,28 +36,33 @@ import {
   StaffOrgsAiSpendHeader,
 } from './components/staff-orgs-ai-spend-column.component'
 import { AI_PLUGIN_ID } from './constants'
+import type { LazyWidget } from './lazy-widget'
 import { registerAiConsole } from './plugin'
 
 const registered = (slot: string) =>
   listConsoleWidgets(slot, [AI_PLUGIN_ID]).map(({ widget }) => widget)
+
+/**
+ * The component a registration stands for. Every one is registered lazily
+ * (AGL-3649), so the registry holds a stand-in that loads it when drawn.
+ */
+const loaded = (component: unknown) => (component as LazyWidget).load()
 
 beforeAll(() => {
   registerAiConsole()
 })
 
 describe('the AI staff table columns are registered (AGL-2984)', () => {
-  it('contributes the AI spend column to the Organizations list, sorted by its own header', () => {
+  it('contributes the AI spend column to the Organizations list, sorted by its own header', async () => {
     const widgets = registered(CONSOLE_WIDGET_SLOTS.staffOrgsListColumn)
     expect(widgets.map((widget) => widget.widgetId)).toEqual(['ai-orgs-spend'])
-    expect(widgets[0].column).toEqual({
-      header: 'AI spend (month)',
-      align: 'right',
-      Header: StaffOrgsAiSpendHeader,
-    })
-    expect(widgets[0].Component).toBe(StaffOrgsAiSpendCell)
+    const { Header, ...column } = widgets[0].column ?? {}
+    expect(column).toEqual({ header: 'AI spend (month)', align: 'right' })
+    expect(await loaded(Header)).toBe(StaffOrgsAiSpendHeader)
+    expect(await loaded(widgets[0].Component)).toBe(StaffOrgsAiSpendCell)
   })
 
-  it('contributes Assist, AI credits used and AI overage billed ($) to the usage table, in that order, with the pool line above it', () => {
+  it('contributes Assist, AI credits used and AI overage billed ($) to the usage table, in that order, with the pool line above it', async () => {
     const widgets = registered(CONSOLE_WIDGET_SLOTS.staffOrgUsageColumn)
     const columns = widgets.filter((widget) => widget.column)
     expect(columns.map((widget) => widget.column)).toEqual([
@@ -65,13 +70,15 @@ describe('the AI staff table columns are registered (AGL-2984)', () => {
       { header: 'AI credits used', align: 'right' },
       { header: 'AI overage billed ($)', align: 'right' },
     ])
-    expect(columns.map((widget) => widget.Component)).toEqual([
+    expect(await Promise.all(columns.map((widget) => loaded(widget.Component)))).toEqual([
       StaffOrgUsageAssistCell,
       StaffOrgUsageAiCreditsCell,
       StaffOrgUsageAiOverageCell,
     ])
     expect(
-      widgets.filter((widget) => !widget.column).map((widget) => widget.Component),
+      await Promise.all(
+        widgets.filter((widget) => !widget.column).map((widget) => loaded(widget.Component)),
+      ),
     ).toEqual([StaffOrgUsageAiPool])
   })
 })

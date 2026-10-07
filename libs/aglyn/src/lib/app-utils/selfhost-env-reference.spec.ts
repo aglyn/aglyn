@@ -119,6 +119,23 @@ const INDIRECT_READS: Record<string, string> = {
   TWILIO_ACCOUNT_SID: 'libs/plugins/sms/src/lib/twilio-provider.ts',
   TWILIO_AUTH_TOKEN: 'libs/plugins/sms/src/lib/twilio-provider.ts',
   TWILIO_MESSAGING_SERVICE_SID: 'libs/plugins/sms/src/lib/twilio-provider.ts',
+  SHIPPO_API_TOKEN: 'libs/plugins/shipping/src/lib/server/config.ts',
+  EASYPOST_API_KEY: 'libs/plugins/shipping/src/lib/server/config.ts',
+  SHIPPING_PROVIDER: 'libs/plugins/shipping/src/lib/server/config.ts',
+  SHIPPING_TOKEN_KEY: 'libs/plugins/shipping/src/lib/server/config.ts',
+  SHIPPO_WEBHOOK_TOKEN: 'libs/plugins/shipping/src/lib/server/config.ts',
+  SHIPPO_WEBHOOK_HMAC_SECRET: 'libs/plugins/shipping/src/lib/server/config.ts',
+  EASYPOST_WEBHOOK_SECRET: 'libs/plugins/shipping/src/lib/server/config.ts',
+  MOBILE_PUSH_ENABLED: 'libs/tenant/data/admin/src/lib/server/mobile-push-switch.ts',
+  APNS_KEY_P8: 'libs/tenant/data/admin/src/lib/server/push-apns.ts',
+  APNS_KEY_ID: 'libs/tenant/data/admin/src/lib/server/push-apns.ts',
+  APNS_TEAM_ID: 'libs/tenant/data/admin/src/lib/server/push-apns.ts',
+  GOOGLE_MERCHANT_CLIENT_ID: 'libs/plugins/sales-channels/src/lib/server/connect/config.ts',
+  GOOGLE_MERCHANT_CLIENT_SECRET: 'libs/plugins/sales-channels/src/lib/server/connect/config.ts',
+  META_CATALOG_APP_ID: 'libs/plugins/sales-channels/src/lib/server/connect/config.ts',
+  META_CATALOG_APP_SECRET: 'libs/plugins/sales-channels/src/lib/server/connect/config.ts',
+  META_GRAPH_API_VERSION: 'libs/plugins/sales-channels/src/lib/server/connect/config.ts',
+  SALES_CHANNELS_TOKEN_KEY: 'libs/plugins/sales-channels/src/lib/server/connect/config.ts',
 }
 
 /**

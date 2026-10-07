@@ -21,7 +21,17 @@ import * as CommerceModel from '../../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { Button, Chip, Stack, TextField, Typography } from '@mui/material'
+import {
+  Button,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
 import {
   collection,
   deleteDoc,
@@ -186,6 +196,49 @@ export function LocationsCard(props: LocationsCardProps) {
     [locations, firestore, hostId],
   )
 
+  /*
+   * A location's postal address (AGL-3612): where parcels can leave from,
+   * for anything that ships. Optional, written beside the free-text name.
+   */
+  const [addressFor, setAddressFor] = useState<any | null>(null)
+  const [addressDraft, setAddressDraft] = useState<CommerceModel.PostalAddress>({})
+  const openAddress = useCallback(
+    (location: any) => () => {
+      setAddressFor(location)
+      setAddressDraft(CommerceModel.normalizePostalAddress(location.postalAddress) ?? {})
+    },
+    [],
+  )
+  const handleSaveAddress = useCallback(async () => {
+    if (!addressFor) return
+    try {
+      await setDoc(
+        doc(firestore, 'hosts', hostId, 'locations', addressFor.$id),
+        { postalAddress: CommerceModel.normalizePostalAddress(addressDraft) ?? {} },
+        { merge: true },
+      )
+      setAddressFor(null)
+    } catch (error: any) {
+      enqueueSnackbar(error?.message ?? 'Could not save the address', {
+        variant: 'warning',
+        persist: false,
+      })
+    }
+  }, [addressDraft, addressFor, enqueueSnackbar, firestore, hostId])
+  const addressField = (field: keyof CommerceModel.PostalAddress, label: string) => (
+    <TextField
+      label={label}
+      value={addressDraft[field] ?? ''}
+      onChange={(event) =>
+        setAddressDraft((prior) => ({
+          ...prior,
+          [field]: field === 'country' ? event.target.value.toUpperCase().slice(0, 2) : event.target.value,
+        }))
+      }
+      size="small"
+    />
+  )
+
   return (
     <CardDisplay
       header={'Inventory locations'}
@@ -210,6 +263,9 @@ export function LocationsCard(props: LocationsCardProps) {
               <Typography variant="body2" sx={{ flex: 1 }} noWrap>
                 {location.name}
               </Typography>
+              <Button size="small" onClick={openAddress(location)}>
+                {location.postalAddress?.line1 ? 'Edit address' : 'Add address'}
+              </Button>
               {location.isDefault ? (
                 <Chip label="Default" size="small" variant="outlined" />
               ) : (
@@ -252,6 +308,28 @@ export function LocationsCard(props: LocationsCardProps) {
           noun="location"
         />
       </Stack>
+      <Dialog open={Boolean(addressFor)} onClose={() => setAddressFor(null)} fullWidth maxWidth="sm">
+        <DialogTitle>{`Address of ${addressFor?.name ?? 'this location'}`}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5} sx={{ pt: 1 }}>
+            {addressField('line1', 'Street address')}
+            {addressField('line2', 'Apartment, suite (optional)')}
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+              {addressField('city', 'City')}
+              {addressField('state', 'State or region')}
+              {addressField('postalCode', 'Postal code')}
+              {addressField('country', 'Country (two letters)')}
+            </Stack>
+            {addressField('phone', 'Phone')}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddressFor(null)}>{'Cancel'}</Button>
+          <Button variant="contained" onClick={handleSaveAddress}>
+            {'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </CardDisplay>
   )
 }

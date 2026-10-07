@@ -21,20 +21,25 @@ import {
   isConsoleStaffWidgetSlot,
   listConsoleWidgets,
   type ConsoleWidgetColumn,
+  type ConsoleWidgetEntitlementProps,
   type ConsoleWidgetSlot,
 } from '@aglyn/aglyn'
 import { pluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { ABSENT_WHEN_EMPTY } from '@aglyn/shared-ui-jsx/components/grid-items'
 import { Stack } from '@mui/material'
 import type { ComponentType } from 'react'
+import { buildRoute, Route } from '../constants/route-links'
 import { STAFF_PLUGIN_IDS } from '../constants/staff-plugins'
 import { useEnabledPluginIds } from './console-plugins-gate.component'
 import { useDashboardWidgetPrefs } from './dashboard-widget-prefs.context'
 import { useConsoleSlotPlugins } from '../hooks/use-console-plugins'
 import useCurrentOrg from '../hooks/use-current-org'
 import useOrgPermissions from '../hooks/use-org-permissions'
+import { useOrgSlug } from '../hooks/use-org-scope'
+import { useReleaseFlags } from '../hooks/use-release-flags'
 import {
   composeExtensionEntitlements,
+  entitlementPurchasable,
   resolveExtensionEntitlement,
 } from '../utils/extension-entitlement'
 import {
@@ -83,6 +88,8 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // commerce glance sits.
   hostDashboard: 'bare',
   commerceGlance: 'bare',
+  // Cards of the site's Analytics page, among its own traffic cards.
+  hostAnalytics: 'stack',
   // Tiles of the org dashboard row's grid on the sites page.
   orgDashboard: 'bare',
   // Page and section bodies: the widget IS the surface.
@@ -106,6 +113,9 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // own cards as any other card on it would be.
   hostFirstRun: 'stack',
   hostTheme: 'stack',
+  // The font picker and the font installer among the theme editor's
+  // Typography fields, which space them.
+  themeEditorFonts: 'bare',
   // The marketplace's cards among the overview's own, as one block.
   staffOverview: 'stack',
   adminOrgDetail: 'stack',
@@ -157,6 +167,8 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // One pane of a package import's side-by-side diff, which lays the two
   // panes out itself.
   sitePackageItemPreview: 'bare',
+  // A button in the media library's row of actions, and in its empty state.
+  mediaLibrary: 'bare',
 }
 
 /** The layout a zone renders its widgets in. */
@@ -217,6 +229,13 @@ export interface EntitledSlotWidget {
   column?: ConsoleWidgetColumn
   /** The kinds of item it draws, for a zone keyed by kind (AGL-3545). */
   itemKinds?: readonly string[]
+  /**
+   * What the shell adds to the props of a widget that declared
+   * `showWhenNotEntitled` (AGL-3601): `{ entitled: true }` when the plan
+   * includes it, and `{ entitled: false, upgrade }` when it is mounted as its
+   * own upsell. Absent for every other widget, whose props stay the zone's.
+   */
+  entitlementProps?: ConsoleWidgetEntitlementProps
   Component: ComponentType<any>
 }
 
@@ -292,6 +311,23 @@ export function useSlotWidgets(slots: readonly string[]): {
    */
   const { can, permissions, loaded: permissionsLoaded } = useOrgPermissions()
   const answers = { can, permissions, loaded: permissionsLoaded }
+  /*
+   * What a widget mounted as its own upsell (AGL-3601) needs from the shell:
+   * where Billing sells add-ons, and whether this reader may buy one. The
+   * add-ons section is behind its own release flag, so with it off there is
+   * nothing to send anyone to and no widget is mounted that way.
+   */
+  const orgSlug = useOrgSlug()
+  const { ready: flagsReady, isStaff, flags } = useReleaseFlags()
+  const addonStoreVisible =
+    isStaff || (flags?.release_addon_store?.released ?? false)
+  const upgrade =
+    orgSlug && addonStoreVisible
+      ? {
+          billingHref: `${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#addons`,
+          canManageBilling: permissionsLoaded && can('billing.manage') === true,
+        }
+      : undefined
   const resolved = slots.flatMap((slot) => {
     /*
      * A staff zone (AGL-2939) names no workspace: its widgets come from the
@@ -302,47 +338,79 @@ export function useSlotWidgets(slots: readonly string[]): {
      */
     const staff = isConsoleStaffWidgetSlot(slot)
     return listConsoleWidgets(slot, staff ? STAFF_PLUGIN_IDS : enabledPluginIds).map(
-      ({ extension, widget }) => ({
-        staff,
+      ({ extension, widget }) => {
         // The extension's flag AND the widget's own (AGL-2611), exactly as
         // the permission below composes: a card gated narrower than its
         // extension, on a plan that has the extension and not the card's
-        // entitlement, is absent, without an upsell.
-        entitlement: staff
+        // entitlement, is absent, without an upsell — unless it declared it
+        // draws its own (AGL-3601) and the workspace could buy what it lacks.
+        const entitlement = staff
           ? ('entitled' as const)
           : composeExtensionEntitlements(
               resolveExtensionEntitlement(extension.featureFlag, org, orgReady),
               resolveExtensionEntitlement(widget.featureFlag, org, orgReady),
-            ),
-        // The extension's requirement AND the widget's own, exactly as a nav
-        // item composes with its extension's: a card cannot escape its
-        // extension's gate by declaring a key its reader happens to hold.
-        // A zone its host gates (AGL-3554) asks the widget's own alone.
-        permission: staff
-          ? ('granted' as const)
-          : resolveExtensionPermission(
-              requiredExtensionPermissions(
-                isConsoleHostGatedWidgetSlot(slot) ? undefined : extension,
-                widget,
+            )
+        const optedIn = !staff && widget.showWhenNotEntitled === true
+        const upsell =
+          optedIn &&
+          entitlement === 'blocked' &&
+          upgrade !== undefined &&
+          entitlementPurchasable([extension.featureFlag, widget.featureFlag], org)
+        // A widget behind a release flag (AGL-3601) is withheld until the
+        // flags settle and absent while its flag is off: the same verdict
+        // `useReleaseFlag(...).visible` gives a page, from the flags every
+        // page already loaded.
+        const release =
+          staff || !widget.releaseFlag
+            ? ('on' as const)
+            : !flagsReady
+              ? ('pending' as const)
+              : isStaff || flags?.[widget.releaseFlag]?.released === true
+                ? ('on' as const)
+                : ('off' as const)
+        return {
+          staff,
+          release,
+          entitlement: upsell ? ('entitled' as const) : entitlement,
+          // The extension's requirement AND the widget's own, exactly as a nav
+          // item composes with its extension's: a card cannot escape its
+          // extension's gate by declaring a key its reader happens to hold.
+          // A zone its host gates (AGL-3554) asks the widget's own alone.
+          permission: staff
+            ? ('granted' as const)
+            : resolveExtensionPermission(
+                requiredExtensionPermissions(
+                  isConsoleHostGatedWidgetSlot(slot) ? undefined : extension,
+                  widget,
+                ),
+                answers,
               ),
-              answers,
-            ),
-        widget: {
-          slot,
-          widgetId: widget.widgetId,
-          title: widget.title ?? extension.displayName ?? widget.widgetId,
-          column: widget.column,
-          ...(widget.itemKinds ? { itemKinds: widget.itemKinds } : {}),
-          Component: widget.Component,
-        },
-      }),
+          widget: {
+            slot,
+            widgetId: widget.widgetId,
+            title: widget.title ?? extension.displayName ?? widget.widgetId,
+            column: widget.column,
+            ...(widget.itemKinds ? { itemKinds: widget.itemKinds } : {}),
+            ...(optedIn
+              ? {
+                  entitlementProps: upsell
+                    ? { entitled: false, upgrade }
+                    : { entitled: true },
+                }
+              : {}),
+            Component: widget.Component,
+          },
+        }
+      },
     )
   })
   return {
     widgets: resolved
       .filter(
         (entry) =>
-          entry.entitlement === 'entitled' && entry.permission === 'granted',
+          entry.entitlement === 'entitled' &&
+          entry.permission === 'granted' &&
+          entry.release === 'on',
       )
       .map((entry) => entry.widget),
     /**
@@ -361,7 +429,11 @@ export function useSlotWidgets(slots: readonly string[]): {
       pluginsLoaded &&
       (orgReady ||
         (slots.length > 0 && slots.every((slot) => isConsoleStaffWidgetSlot(slot)))) &&
-      resolved.every((entry) => entry.staff || entry.permission !== 'pending'),
+      resolved.every(
+        (entry) =>
+          entry.staff ||
+          (entry.permission !== 'pending' && entry.release !== 'pending'),
+      ),
   }
 }
 
@@ -377,6 +449,11 @@ export function useSlotWidgets(slots: readonly string[]): {
  * put an upsell: an unentitled surface is simply absent, and the upgrade
  * path stays where it has always been, on the feature's own page and in
  * Billing.
+ *
+ * The one exception is a widget that declares `showWhenNotEntitled`
+ * (AGL-3601): it IS its own upsell, so where only the plan entitlement is
+ * missing and an add-on this workspace can buy would grant it, it is mounted
+ * with `entitled={false}` and the shell's `upgrade` link instead of dropped.
  *
  * Inside a `DashboardWidgetPrefsProvider` the reader's own arrangement is
  * applied on top: hidden cards are dropped and the rest are ranked. It is
@@ -426,7 +503,11 @@ export default function PluginWidgetSlot({
   if (customizable && !prefsReady) return null
   if (arranged.length === 0) return null
   const rendered = arranged.map((widget) => (
-    <widget.Component key={widget.widgetId} {...props} />
+    <widget.Component
+      key={widget.widgetId}
+      {...props}
+      {...widget.entitlementProps}
+    />
   ))
   if (widgetZoneLayout(slot) === 'bare') return <>{rendered}</>
   return (

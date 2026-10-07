@@ -24,10 +24,10 @@ import { toPrintable, type PrintDocument } from './print-document'
  * padding; a barcode prints its data between brackets; a drawer kick and a
  * cut print nothing.
  */
-export function renderText(document: PrintDocument): string {
-  const { columns } = document
+export function renderText(layout: PrintDocument): string {
+  const { columns } = layout
   const lines: string[] = []
-  for (const op of document.ops) {
+  for (const op of layout.ops) {
     switch (op.op) {
       case 'text': {
         const text = toPrintable(op.text).slice(0, columns)

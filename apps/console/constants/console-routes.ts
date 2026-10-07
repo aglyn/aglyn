@@ -39,6 +39,7 @@ export const CONSOLE_TOP_LEVEL_SEGMENTS = new Set([
   'auth',
   'billing',
   'edit-access',
+  'kiosk',
   'manage',
   'reset-password',
   'signin',
@@ -76,6 +77,11 @@ export const APEX_PATH_SEGMENTS: ReadonlySet<string> = new Set([
   'signup',
   'verify-email',
   'account-recovery',
+  // A plugin's public device pages (AGL-3608): `/kiosk/{pluginId}/…` names a
+  // plugin, never a workspace, so a customer display opened on a workspace
+  // subdomain or a custom console domain must reach the same route rather
+  // than `/{slug}/kiosk/…`.
+  'kiosk',
 ])
 
 /**

@@ -19,9 +19,11 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { sendAnalyticsBeacon } from '@aglyn/aglyn/app-utils/analytics-beacon'
 import {
+  resolveAuthoredEventName,
   trackAuthoredEvent,
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
+import { recordSiteJourneyStep } from '@aglyn/aglyn/app-utils/site-journey'
 import {
   claimFirstCampaignTouch,
   notePageCampaigns,
@@ -58,6 +60,10 @@ function sendOverlayBeacon(
     overlay,
     ...(overlayId ? { overlayId } : {}),
   })
+  // A funnel step (AGL-3605): a click on a bar or popup, by the overlay.
+  if (overlay === 'barClick' || overlay === 'popupClick') {
+    recordSiteJourneyStep('overlay', overlayId)
+  }
   // GA mirror (wave v8): sites with Analytics configured see overlay
   // engagement in their own property; no-op without gtag.
   //
@@ -479,6 +485,10 @@ function AutomationsEngine(props: {
             // shared sanitizer and the reserved-name refusal like everything
             // else, never raw gtag.
             trackAuthoredEvent(step.eventName, step.params)
+            // A funnel step (AGL-3605), under the name GA would receive; a
+            // name GA would refuse is no step either.
+            const journeyEvent = resolveAuthoredEventName(step.eventName).name
+            if (journeyEvent) recordSiteJourneyStep('event', journeyEvent)
           } else if (step.type === 'siteAlert') {
             showToast(
               String(step.message ?? '').slice(0, 300),

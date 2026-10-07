@@ -864,6 +864,30 @@ service cloud.firestore {
           orgCarriesOutreach(orgId);
       }
 
+      // Shipping (AGL-3612): the workspace's account at the carrier platform
+      // (its ids sealed under SHIPPING_TOKEN_KEY, and the member's consent to
+      // label charges being taken from the Stripe balance), each site's label
+      // settings, and every label bought with its cost and how that cost was
+      // recovered. Server-written AND server-read: the shipping routes serve
+      // what the console shows. A client that could write a label could
+      // change what the usage meter invoices; one that could write the
+      // account could forge the consent a balance debit stands on. Unmatched
+      // org subcollections deny already; these carry the record.
+      match /shippingAccounts/{accountId} {
+        allow read, write: if false;
+      }
+      match /shippingHostSettings/{hostId} {
+        allow read, write: if false;
+      }
+      match /shippingLabels/{labelId} {
+        allow read, write: if false;
+      }
+      // Whether the carrier can deliver to a paid order's address (AGL-3612),
+      // checked by the shipping plugin's server and shown by its routes.
+      match /shippingAddressChecks/{checkId} {
+        allow read, write: if false;
+      }
+
       // Outreach (AGL-2974): the mailboxes reps connect, the sequences they
       // send and each prospect's enrollment in one. Read through
       // `canReadOutreach()` above.
@@ -935,6 +959,15 @@ service cloud.firestore {
         allow read: if isStaff() || isOrgMember();
         allow write: if false;
       }
+
+      // Accounting (AGL-3614): `accountingConnections` (the sealed grant to
+      // the business's QuickBooks or Xero books), `accountingSyncItems` (the
+      // sync log and the order snapshots each posting was made from) and
+      // `accountingOAuthStates` (a connect's single-use pending record) are
+      // DELIBERATELY not matched here. The org block has no catch-all, so
+      // every client, staff included, is refused all three; the accounting
+      // plugin's console routes read and write them with the Admin SDK.
+      // `cloud/rules-accounting.spec.mjs` holds the refusal.
 
       /**
        * Per-user AI usage (AGL-2928): one document per person per month,
@@ -2277,6 +2310,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ShipStation Custom Store connections (AGL-3613), one document per site,
+    // keyed by the host id: the username and the password SEALED with the
+    // secret box, which together let ShipStation's servers read every
+    // shippable order's name and address and record shipments. Deny ALL
+    // client access, staff included: the console card connects, shows,
+    // rotates and disconnects through `commerce/shipping-connectors` on the
+    // Admin SDK, and the ShipStation route reads it server-side.
+    match /commerceShipStationConnections/{hostId} {
+      allow read, write: if false;
+    }
+
     // Outreach short tracking links (AGL-3297): what one link in a sent
     // sequence email points at — the org, the enrollment, the step and the
     // destination — keyed by the link's random id. Written by the sending
@@ -2286,6 +2330,64 @@ service cloud.firestore {
     // point a link already in somebody's inbox anywhere. Org erasure destroys
     // them by the `orgId` field.
     match /outreachLinks/{linkId} {
+      allow read, write: if false;
+    }
+
+    // Shipping (AGL-3612): which workspace, site and order a tracking number
+    // belongs to, so a carrier platform's webhook finds the parcel it names;
+    // and checkout's carrier quotes, kept ten minutes, with the quote a label
+    // is bought from. Written and read by the shipping plugin's server half
+    // through the Admin SDK only. Deny ALL client access: a client that could
+    // write a tracker could point a carrier's delivery at another workspace's
+    // order, and one that could write a held quote could buy a label at a
+    // price nobody quoted. Org erasure destroys both by the `orgId` field.
+    match /shippingTrackers/{trackerId} {
+      allow read, write: if false;
+    }
+    match /shippingQuoteCache/{key} {
+      allow read, write: if false;
+    }
+
+    // Tax services (AGL-3631): a site's connection to the merchant's OWN
+    // Avalara AvaTax or TaxJar account, its credential sealed; each product's
+    // tax code; the customers the merchant recorded as exempt; and each
+    // order as it was recorded with the service. Written and read by the
+    // tax-engines plugin's server half through the Admin SDK only. Deny ALL
+    // client access, staff and the owner included: a client that could read a
+    // connection could carry off a sealed credential, one that could write an
+    // exemption could make its own purchases tax-free, and one that could
+    // write a record could mark an unrecorded sale recorded. Org erasure
+    // destroys all four by the `orgId` field.
+    match /taxEngineConnections/{hostId} {
+      allow read, write: if false;
+    }
+    match /taxEngineProductCodes/{codeId} {
+      allow read, write: if false;
+    }
+    match /taxEngineExemptions/{exemptionId} {
+      allow read, write: if false;
+    }
+    match /taxEngineTransactions/{transactionId} {
+      allow read, write: if false;
+    }
+
+    // Email platforms (AGL-3639): a site's connection to the merchant's OWN
+    // Mailchimp, Klaviyo, Omnisend or Attentive account — its credential
+    // sealed, its sync cursors and its log — and the commerce events owed to
+    // it. Written and read by the marketing-platforms plugin's server half
+    // through the Admin SDK only. Deny ALL client access, staff and the owner
+    // included: a client that could read a connection could carry off a
+    // sealed credential, one that could write its cursors could skip people
+    // past the sync, and one that could write an owed event could send a
+    // fabricated order to the merchant's flows. Org erasure destroys both by
+    // the `orgId` field.
+    match /marketingPlatformConnections/{connectionId} {
+      allow read, write: if false;
+      match /log/{entryId} {
+        allow read, write: if false;
+      }
+    }
+    match /marketingPlatformEvents/{eventId} {
       allow read, write: if false;
     }
 
@@ -2814,6 +2916,11 @@ service cloud.firestore {
                      // whether the guided AI start is still offered, and only
                      // the starter route writes it.
                      'starterProvisionedAt',
+                     // Whether the site records visitor journeys (AGL-3605).
+                     // The tenant's collector reads it to decide whether a
+                     // visit is stored, and only the funnels routes write it,
+                     // as a funnel is saved or removed.
+                     'funnelRecording',
                      // `sendingDomain`/`sendingLocalPart` are this site's
                      // half of the custom-sending-domain model: together they
                      // are the `From:` address every recipient of this site's
@@ -3071,7 +3178,7 @@ service cloud.firestore {
       // Reusable components (AGL-679) now carry editing history like screens
       // and layouts. The component DOC stays API-create-only (the catch-all
       // below excludes `components`, and the resources route enforces the
-      // reusableComponents entitlement) — but its `versions` subcollection
+      // plan's `componentsPerHost` allowance, AGL-3615) — but its `versions` subcollection
       // has to be client-writable, and the catch-all's create exclusion is
       // by collection NAME, so `components/{id}/versions/{v}` was caught by
       // it too. This dedicated block carves the versions back out.
@@ -3370,11 +3477,20 @@ service cloud.firestore {
         // content is the object AGL-1443 is open on, and the undo affordance
         // does not need one. No client read means no such surface can appear
         // by accident.
+        //
+        // `funnelJourneys` and `funnelResults` join it too (AGL-3605): a
+        // journey is one visitor's recorded visit — the pages, forms and
+        // products they went through, in order, and where they came from — and
+        // the only reader is the funnels results route, which turns visits into
+        // counts on the Admin SDK. A member gets the counts, never the visits.
+        // A result is that route's cache, served by the route.
         allow read: if subcollection != 'siteMemberCredentials' &&
           subcollection != 'orderWebhookSecrets' &&
+          subcollection != 'posStaffPins' &&
+          subcollection != 'salesChannels' &&
           (isStaff() || (isHostMember(hostId) &&
             !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
-              'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries'])));
+              'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnelJourneys', 'funnelResults'])));
         // THE EXCLUSION LISTS ARE THE MECHANISM. Sibling match blocks are OR'd
         // and the LOOSER one wins, so a dedicated deny (or a tighter dedicated
         // block) beside this catch-all decides nothing until the name is also
@@ -3484,8 +3600,19 @@ service cloud.firestore {
         //    the suspend flag and a delete that strands no credential.
         //    `siteMemberCredentials` holds the password hashes; the `!=` that
         //    opens all four statements keeps every client out, staff included.
+        //  - `posStaffPins`, all four (AGL-3609): each register member's PIN
+        //    hash and its lockout counter. A read hands out a 4-6 digit hash
+        //    to crack offline, and a write plants a PIN or lifts a lockout.
+        //    /api/commerce/pos-staff-pin is the only reader and writer, so it
+        //    joins the `!=` with `siteMemberCredentials`.
+        //  - `salesChannels`, all four (AGL-3637): a feed document holds the
+        //    token that is the only lock on the store's catalog feed, and a
+        //    connection holds a sealed channel OAuth token. The sales-channels
+        //    routes are the only reader and writer, so it joins the `!=`.
         allow create: if subcollection != 'siteMemberCredentials' &&
-          subcollection != 'orderWebhookSecrets' && (isStaff() ||
+          subcollection != 'orderWebhookSecrets' &&
+          subcollection != 'posStaffPins' &&
+          subcollection != 'salesChannels' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
               'functions', 'workflows', 'services', 'redirects',
@@ -3501,9 +3628,9 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials', 'recordPages', 'printers',
+              'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
-              'orderWebhookSecrets', 'orderWebhookDeliveries']) &&
+              'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults']) &&
             // The org Inbox's collection-group read (AGL-3303) lists EVERY
             // `formSubmissions` collection, at any depth, filed under the org
             // a row names, so none may be minted beneath another name here.
@@ -3533,6 +3660,13 @@ service cloud.firestore {
         //    so `/api/commerce/printers` and the printers' own poll routes are
         //    the only writers. READ stays with the catch-all for the Hardware
         //    card's status and recent jobs; neither holds a secret.
+        //
+        //  - `funnels`, `funnelJourneys` and `funnelResults` (AGL-3605). A
+        //    funnel's save checks the plan, the admin-or-editor role and every
+        //    step against the site, and switches the site's visit recording on
+        //    or off with it, so the funnels routes are its only writer; members
+        //    still READ funnels here. Journeys are written by the site
+        //    collector and results by the results route, both on the Admin SDK.
         //
         //  - `recordPages` (AGL-3475): a site's record templates. A binding
         //    decides which page serves `/{base}/…` for every record of a
@@ -3636,7 +3770,9 @@ service cloud.firestore {
         //    it a publish act (AGL-2334) rather than authoring, so the block
         //    below re-grants both on `canPublishHostContent`.
         allow update: if subcollection != 'siteMemberCredentials' &&
-          subcollection != 'orderWebhookSecrets' && (isStaff() ||
+          subcollection != 'orderWebhookSecrets' &&
+          subcollection != 'posStaffPins' &&
+          subcollection != 'salesChannels' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
@@ -3652,9 +3788,9 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials', 'recordPages', 'printers',
+              'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
-              'orderWebhookSecrets', 'orderWebhookDeliveries'])));
+              'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -3692,7 +3828,9 @@ service cloud.firestore {
         // which is the same routing decision in the other direction and is
         // exactly the AGL-2334 `components` argument.
         allow delete: if subcollection != 'siteMemberCredentials' &&
-          subcollection != 'orderWebhookSecrets' && (isStaff() ||
+          subcollection != 'orderWebhookSecrets' &&
+          subcollection != 'posStaffPins' &&
+          subcollection != 'salesChannels' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components',
               'collections', 'datasets', 'orders', 'registers', 'webhooks',
@@ -3707,8 +3845,9 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-              'recordPages', 'printers', 'printJobs', 'returns', 'orderWebhooks',
-              'orderWebhookSecrets', 'orderWebhookDeliveries'])));
+              'posStaffPins', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
+              'orderWebhooks',
+              'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only
@@ -4085,6 +4224,38 @@ service cloud.firestore {
       match /transferPrefs/{resourceKey} {
         allow read, write: if isSignedIn() && request.auth.uid == userId;
       }
+
+      // The native apps' push devices (AGL-3620, AGL-3651): one row per
+      // install, written by the app for its signed-in owner, read by the
+      // server's push fan-out. Owner only, and only the registry's fields:
+      // an APNs device token (hex, 64-200) from iOS or macOS with the APNs
+      // environment it was minted in, or an FCM registration token
+      // ([A-Za-z0-9_:-], 100-4096) from Android. RE2 caps a repeat at 1000,
+      // so lengths are checked with size(), not in the pattern.
+      match /devices/{deviceId} {
+        allow read, delete: if isSignedIn() && request.auth.uid == userId;
+        allow create, update: if isSignedIn() && request.auth.uid == userId &&
+          request.resource.data.keys().hasOnly(['token', 'transport', 'apnsEnvironment',
+            'platform', 'app', 'appVersion', 'lastSeen', 'createdAt']) &&
+          request.resource.data.token is string &&
+          ((request.resource.data.transport == 'apns' &&
+              request.resource.data.token.size() >= 64 &&
+              request.resource.data.token.size() <= 200 &&
+              request.resource.data.token.matches('^[0-9A-Fa-f]+$') &&
+              request.resource.data.get('apnsEnvironment', '') in ['sandbox', 'production'] &&
+              request.resource.data.platform in ['ios', 'macos']) ||
+            (request.resource.data.transport == 'fcm' &&
+              request.resource.data.token.size() >= 100 &&
+              request.resource.data.token.size() <= 4096 &&
+              request.resource.data.token.matches('^[A-Za-z0-9_:-]+$') &&
+              !('apnsEnvironment' in request.resource.data) &&
+              request.resource.data.platform == 'android')) &&
+          request.resource.data.app in ['aglyn', 'aglyn-pos'] &&
+          (!('appVersion' in request.resource.data) ||
+            (request.resource.data.appVersion is string &&
+              request.resource.data.appVersion.size() <= 32)) &&
+          request.resource.data.lastSeen == request.time;
+      }
     }
 
     // WebAuthn machinery (AGL-662): server-only, both of them. Challenges
@@ -4453,6 +4624,18 @@ service cloud.firestore {
     //    in the same act. A bare client write would be a decision with no
     //    record of who made it.
     match /abuseReports/{reportId} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    // Stripe payment method domains the platform registered for storefronts
+    // (AGL-3629), keyed `{live|test}~{domain}`: a cache of what Stripe said,
+    // so a checkout costs one read instead of a Stripe round trip. Written by
+    // the commerce server only. A client write could mark a domain registered
+    // that is not — the checkout would then skip the registration and Apple
+    // Pay would silently vanish from that store — so no client writes, staff
+    // included; staff may read it to answer "why is there no Apple Pay here".
+    match /paymentMethodDomains/{domainKey} {
       allow read: if isStaff();
       allow write: if false;
     }

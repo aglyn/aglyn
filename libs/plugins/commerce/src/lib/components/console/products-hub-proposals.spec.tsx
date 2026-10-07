@@ -21,7 +21,10 @@
  *
  *  1. A product with a variant that has no price says so in the Price column
  *     rather than reading `$0`, and the hub will not activate it.
- *  2. The import wizard's After import step (AGL-3531) hosts `productImport`
+ *  2. Other ways to start a product (AGL-3596): the `productsCreate` zone
+ *     the hub declares and draws beside Add product and in the empty
+ *     catalog, with the site.
+ *  3. The import wizard's After import step (AGL-3531) hosts `productImport`
  *     with the dry run's count of new products, and the options a widget
  *     sets there reach `productsHub` with the ids of the products the
  *     import created, read from the job's results when the wizard closes.
@@ -144,7 +147,13 @@ jest.mock(
   { virtual: true },
 )
 
+import { CONSOLE_WIDGET_SLOTS } from '@aglyn/aglyn'
+import { pluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import ProductsHubCard from './products-hub-card.component'
+import { PRODUCTS_CREATE_ZONE, registerCommerceZones } from './product-zones'
+
+/** Every call the shell's renderer received for `productsCreate`. */
+const createCalls: Array<Record<string, unknown>> = []
 
 /** What the shell's renderer was last handed, by zone. */
 const zones: {
@@ -155,6 +164,10 @@ const zones: {
 /** A stand-in for the shell's gated renderer: one widget on the import zone that sets an option. */
 function ShellSlot(props: { slot: string } & Record<string, unknown>) {
   if (props.slot === 'productsHub') zones.productsHub = props as unknown as ConsoleProductsHubZoneProps
+  if (props.slot === 'productsCreate') {
+    createCalls.push(props)
+    return <button type="button">{'widget in productsCreate'}</button>
+  }
   if (props.slot !== 'productImport') return null
   const zone = props as unknown as ConsoleProductImportZoneProps
   zones.productImport = zone
@@ -206,6 +219,7 @@ beforeEach(() => {
   opened.length = 0
   delete zones.productsHub
   delete zones.productImport
+  createCalls.length = 0
 })
 
 describe('a product nobody has priced yet, in the products hub (AGL-2916)', () => {
@@ -270,5 +284,38 @@ describe('what an import does next (AGL-2916, AGL-3531)', () => {
       jobId: 'job-1',
       include: 'results',
     })
+  })
+})
+
+describe('other ways to start a product (AGL-3596)', () => {
+  it('declares `productsCreate` here, laid out bare, outside the shell catalog', () => {
+    registerCommerceZones()
+    const zone = pluginZone('productsCreate')
+    expect(PRODUCTS_CREATE_ZONE.id).toBe('productsCreate')
+    expect(`${zone?.pluginId} ${zone?.layout} ${zone?.surface}`).toBe('commerce bare console')
+    expect(Object.values(CONSOLE_WIDGET_SLOTS)).not.toContain('productsCreate')
+  })
+
+  it('draws the zone beside Add product, with the site and no org of its own', async () => {
+    mount()
+    await screen.findByText('Set a price')
+    expect(screen.getAllByRole('button', { name: 'widget in productsCreate' })).toHaveLength(1)
+    expect(createCalls[0]).toEqual({ slot: 'productsCreate', hostId: 'host-1', orgId: undefined })
+  })
+
+  it('draws it again in the empty catalog, beside Add your first product', async () => {
+    const held = mockCollections['products']
+    mockCollections['products'] = []
+    try {
+      mount()
+      expect(await screen.findByText('No products yet')).toBeTruthy()
+      await waitFor(() =>
+        expect(screen.getAllByRole('button', { name: 'widget in productsCreate' })).toHaveLength(2),
+      )
+      expect(screen.getByRole('button', { name: 'Add product' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Add your first product' })).toBeTruthy()
+    } finally {
+      mockCollections['products'] = held
+    }
   })
 })

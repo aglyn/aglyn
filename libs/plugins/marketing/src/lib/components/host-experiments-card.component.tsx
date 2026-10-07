@@ -313,6 +313,9 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
                 ...(draft.name ? { name: draft.name } : {}),
                 ...(draft.subject ? { subject: draft.subject } : {}),
                 ...(draft.body ? { body: draft.body } : {}),
+                // A draft version a widget made for this variant (AGL-3603),
+                // pinned unsaved like a version picked from the list.
+                ...(draft.versionId && previous.target !== 'email' ? { versionId: draft.versionId } : {}),
               }
             }),
           }
@@ -928,6 +931,8 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
               name={editor.name ?? ''}
               target={editor.target ?? 'screen'}
               goal={editor.goal?.event ?? ''}
+              screenId={editor.target === 'email' ? '' : (editor.screenId ?? '')}
+              nodeId={editor.target === 'section' ? (editor.nodeId ?? '') : ''}
               variants={marketingExperimentVariantDrafts(editor.variants)}
               proposeVariants={proposeVariants}
             />

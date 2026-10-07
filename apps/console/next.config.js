@@ -92,9 +92,23 @@ const SHARP_NATIVE_LIBRARIES = [
 ]
 
 /**
+ * The font installer's converters (AGL-3656): `subset-font` runs HarfBuzz's
+ * subsetter as WebAssembly, and finds the `.wasm` with `require.resolve` and
+ * reads it with `fs` — which a bundled copy cannot do, because the bundler
+ * replaces the resolved path with a module id. So these four load from
+ * `node_modules` at run time, and the WASM ships beside the route below.
+ */
+const FONT_INSTALLER_PACKAGES = ['subset-font', 'fontverter', 'harfbuzzjs', 'wawoff2']
+const FONT_INSTALLER_WASM = [
+  '../../node_modules/harfbuzzjs/dist/harfbuzz-subset.wasm',
+  '../../node_modules/wawoff2/build/**',
+]
+
+/**
  * @type {import('/tools/nextjs-base.config').WithAglynOptions}
  **/
 module.exports = withAglyn({
+  serverExternalPackages: FONT_INSTALLER_PACKAGES,
   // experimental: { appDir: isProduction },
   env: {
     AGLYN_SILOED_HOST: process.env.AGLYN_SILOED_HOST,
@@ -139,6 +153,11 @@ module.exports = withAglyn({
    * where a route becomes able to encode at all.
    */
   outputFileTracingIncludes: {
+    // The font installer's WASM (AGL-3656), read from disk by `subset-font`
+    // through `require.resolve` at the first request. Stated rather than left
+    // to tracing, for the reason SHARP_NATIVE_LIBRARIES is: a file the trace
+    // misses is a route that fails only once deployed.
+    '/api/[...pluginApi]': FONT_INSTALLER_WASM,
     '/api/health': SHARP_NATIVE_LIBRARIES,
     '/api/media/upload': SHARP_NATIVE_LIBRARIES,
     '/api/media/replace': SHARP_NATIVE_LIBRARIES,
@@ -157,6 +176,22 @@ module.exports = withAglyn({
       {
         source: '/__/:path*',
         destination: `https://${project}.firebaseapp.com/__/:path*`,
+      },
+    ]
+  },
+  // The brand face's files (AGL-3655). Their names carry the font's version,
+  // so a recut ships under a new URL and these never change under one: cache
+  // them for a year instead of revalidating on every page load.
+  async headers() {
+    return [
+      {
+        source: '/_static/fonts/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
       },
     ]
   },
