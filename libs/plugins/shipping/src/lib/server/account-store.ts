@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { openSecret, sealSecret } from '@aglyn/shared-util-tools/secret-box'
 import { SHIPPING_COLLECTIONS } from '../constants/bundle-common'
 import type { ProviderAccount, ShippingProviderId } from '../providers/types'
@@ -53,7 +54,7 @@ export interface StoredShippingAccount {
 /** The wording a member agrees to, versioned so a change asks again. */
 export const LABEL_DEBIT_CONSENT_VERSION = '2026-10-06'
 export const LABEL_DEBIT_CONSENT_TEXT =
-  'I authorize Aglyn to take the cost of each shipping label I buy from my store’s ' +
+  `I authorize ${PLATFORM_BRAND_NAME} to take the cost of each shipping label I buy from my store’s ` +
   'Stripe balance when the label is bought, and to return it there when a voided ' +
   'label is refunded. Labels the balance cannot cover are added to my monthly invoice.'
 

@@ -70,6 +70,11 @@ import { trackerDocId } from './trackers'
  * merchant buying a second box means.
  */
 
+/** The id a label quote is held under: the provider's shipment id, which a purchase names. */
+export function heldQuoteDocId(shipmentId: string): string {
+  return `q_${shipmentId}`
+}
+
 export interface ShippingActor {
   orgId: string
   org: Record<string, unknown>
@@ -383,7 +388,7 @@ export async function rateRecord(
   if (quote.shipmentId) {
     await shippingDb()
       .collection(SHIPPING_COLLECTIONS.quoteCache)
-      .doc(`q_${quote.shipmentId}`)
+      .doc(heldQuoteDocId(quote.shipmentId))
       .set({
         orgId: actor.orgId,
         hostId: actor.hostId,
@@ -424,7 +429,7 @@ export async function buyLabel(
   }
   const held = await shippingDb()
     .collection(SHIPPING_COLLECTIONS.quoteCache)
-    .doc(`q_${String(input.shipmentId)}`)
+    .doc(heldQuoteDocId(String(input.shipmentId)))
     .get()
   const hold = held.data() as
     | { orgId: string; hostId: string; recordId: string; kind: LabelKind; quote: RecordQuote; insuranceCents: number; expiresAtMs: number }

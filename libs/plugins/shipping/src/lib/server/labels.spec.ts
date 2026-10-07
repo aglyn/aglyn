@@ -166,7 +166,7 @@ const actor = (orgId = ORG, hostId = HOST): ShippingActor => ({
 
 function config() {
   const configured = readShippingConfig()
-  if (!configured.configured) throw new Error(`not configured: ${configured.missing.join(', ')}`)
+  if (!configured.configured) throw new Error('not configured')
   return configured.config
 }
 

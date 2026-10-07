@@ -107,7 +107,7 @@ export async function shippingGate(
       hostId,
       uid: decoded.uid,
       email: String(decoded.email ?? ''),
-      name: String(decoded['name'] ?? decoded.email ?? 'Aglyn merchant'),
+      name: String(decoded['name'] ?? decoded.email ?? 'Merchant'),
     },
     config: configured.config,
     body,

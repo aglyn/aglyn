@@ -196,7 +196,7 @@ export async function quotePluginShippingRates(
       (async (): Promise<PluginShippingQuote[] | null> => {
         if (!(await quoter.available(request.hostId))) return null
         return quoter.quote({ ...request, signal: controller.signal })
-      })().catch(() => null),
+      })().catch((): null => null),
       deadline,
     ])
   } finally {
