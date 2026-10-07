@@ -51,6 +51,7 @@ import { POST as resumeAiJob } from './server/ai-jobs-resume'
 import { POST as aiGenerateComponent } from './server/ai-generate-component'
 import { POST as createAiMediaImages } from './server/ai-media-image'
 import { POST as applyAiSeoAudit } from './server/ai-seo-apply'
+import { POST as createAiExperimentVersions } from './server/ai-experiment-versions'
 import { POST as assistChat } from './server/assist-chat'
 import { POST as assistEditApplied } from './server/assist-edit-applied'
 import { POST as assistFeedback } from './server/assist-feedback'
@@ -213,6 +214,10 @@ export function registerAiConsoleApi(): void {
   // A site SEO audit's "Apply all" (AGL-2910): content fixes as new
   // unpublished versions, listing values staged for their SEO cards.
   registerPluginApiRoute('ai/seo/apply', { web: applyAiSeoAudit })
+  // A page's or a section's A/B variants as draft versions (AGL-3603): the
+  // published version copied once per proposed variant, the variant's copy
+  // put in, stored unpublished for the experiment editor to pin.
+  registerPluginApiRoute('ai/experiments/versions', { web: createAiExperimentVersions })
   // Save the selection as a reusable component, with AI (AGL-2908): the
   // second entry point of the component job, from the besigner's Attributes
   // panel. It proposes, and the person's Apply writes.

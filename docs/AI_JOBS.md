@@ -1603,6 +1603,16 @@ and its `passes` counted; `AI_JOB_STEP_MAX_PASSES` bounds it. Every pass is one
 reservation and one provider exchange, so a large site is a few beats of work,
 and the job's `creditsSpent` is what the whole audit cost.
 
+**A/B variants as draft versions** (AGL-3603). `POST /api/ai/experiments/versions
+{ orgId, hostId, jobId, screenId, nodeId? }` (`server/ai-experiment-versions.ts`) takes a
+finished `experiment` variants job for a page or a section and, with the same rungs as the
+apply below plus the `versioning` entitlement, copies the screen's published version once
+per proposed variant past the control, puts the variant's headline and body into the region
+under test (`runtime/experiment-variant-copy.ts`: first heading, first plain text after it,
+never rich text) and stores it as an unpublished version under `ab-{jobId}-{index}`, so a
+second press finds what the first made. The experiment card pins each version to its
+variant as an unsaved edit; nothing is published and no test is started.
+
 **Apply.** `POST /api/ai/seo/apply { orgId, hostId, jobId }`
 (`src/lib/server/ai-seo-apply.ts`) takes a finished audit. It opens a NEW
 version per page with content fixes — the published version copied, the fixes

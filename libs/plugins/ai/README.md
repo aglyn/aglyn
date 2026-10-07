@@ -25,7 +25,7 @@ Peer dependencies: `react`, `next`, `@mui/material`, `@mui/x-data-grid`, `fireba
 **Server** (`registerAiConsoleApi`, the `consoleApi` registrar, exported from `@aglyn/plugins-ai/server`). It registers the first-party providers, every job kind, and the routes under the `ai` and `assist` prefixes with `registerPluginApiRoute`:
 
 - Assistant: `assist/chat`, `assist/feedback`, `assist/edit-applied`, `ai/assist`.
-- Jobs: `ai/jobs`, `ai/jobs/batch`, `ai/jobs/:jobId/cancel`, `ai/jobs/:jobId/resume`, `ai/jobs/:jobId/events`, the scheduled jobs beat, `ai/insights/:jobId`, `ai/crm/:jobId`, `ai/seo/apply`, `ai/generate/component`.
+- Jobs: `ai/jobs`, `ai/jobs/batch`, `ai/jobs/:jobId/cancel`, `ai/jobs/:jobId/resume`, `ai/jobs/:jobId/events`, the scheduled jobs beat, `ai/insights/:jobId`, `ai/crm/:jobId`, `ai/seo/apply`, `ai/experiments/versions`, `ai/generate/component`.
 - Usage and access: `ai/usage`, `ai/allotments`, `ai/models`, `ai/host-permissions`, `ai/billing/credits`, `ai/billing/overage`.
 - Staff: `ai/admin/org`, `ai/admin/orgs-spend`, `ai/admin/user`, `ai/admin/signals`, `ai/admin/overage`, `ai/admin/credits`.
 

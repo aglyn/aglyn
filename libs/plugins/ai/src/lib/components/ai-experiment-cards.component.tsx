@@ -17,6 +17,7 @@
 'use client'
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useHostOrgId, useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -95,6 +96,8 @@ export interface AiExperimentZoneVariant {
   name: string
   subject: string
   body: string
+  /** The screen version a page or section variant pins; empty for the published one. */
+  versionId?: string
 }
 
 /** What the variants zone hands this widget. */
@@ -104,6 +107,10 @@ export interface AiExperimentVariantsCardProps {
   name: string
   target: AiExperimentTarget
   goal: string
+  /** A page or section test's page; empty until one is picked (AGL-3603). */
+  screenId?: string
+  /** A section test's element; empty until one is picked. */
+  nodeId?: string
   variants: AiExperimentZoneVariant[]
   proposeVariants: (
     variants: readonly AiExperimentZoneVariant[],
@@ -156,25 +163,38 @@ export function aiExperimentVariantDrafts(
   target: AiExperimentTarget,
   variants: readonly AiExperimentZoneVariant[],
   proposal: AiExperimentVariantsProposalView,
+  /** Draft versions made for a page or section test (AGL-3603), by the proposal's index. */
+  versions: ReadonlyMap<number, string> = new Map(),
 ): AiExperimentZoneVariant[] {
   return variants.map((variant, index) => {
     const proposed = proposal.variants[index]
     if (!proposed) return variant
+    const versionId = target === 'email' ? undefined : versions.get(index)
     return {
       id: variant.id,
       name: proposed.name,
       subject: target === 'email' ? proposed.subject : '',
       body: target === 'email' ? proposed.body : '',
+      ...(versionId ? { versionId } : {}),
     }
   })
+}
+
+/** What the draft versions door answers. */
+interface AiExperimentVersionsAnswer {
+  versions?: Array<{ index: number; name: string; versionId: string }>
+  skipped?: Array<{ index: number; reason: string }>
+  error?: string
 }
 
 /** Where a proposed variant's copy lands, said before the person presses the button. */
 export function aiExperimentApplyCopy(target: AiExperimentTarget): string {
   return target === 'email'
     ? 'Each variant above takes its name, subject and body. Nothing is saved until you save the experiment.'
-    : 'Each variant above takes its name. The copy itself is a page version — make one per variant in the editor and pin it above.'
+    : 'Each variant above takes its name. Make draft versions to put each variant’s copy into a new unpublished version of the page, pinned to its variant; the first stays on the published page as the control.'
 }
+
+const VERSIONS_FAILED_COPY = 'The draft versions could not be made. Try again.'
 
 /**
  * "Write variants with AI", in the experiment editor beneath the variants it
@@ -197,6 +217,8 @@ export function AiExperimentVariantsCard(props: AiExperimentVariantsCardProps) {
   )
   const [subject, setSubject] = useState(prefill)
   const [applied, setApplied] = useState<string | null>(null)
+  const [versioning, setVersioning] = useState(false)
+  const [versionsNote, setVersionsNote] = useState<{ ok: boolean; text: string } | null>(null)
   // The control's copy follows the editor until the person edits this field,
   // so switching a draft test from a page to an email fills it rather than
   // leaving the earlier target's copy under a question about a new one.
@@ -249,6 +271,59 @@ export function AiExperimentVariantsCard(props: AiExperimentVariantsCardProps) {
       run.job.id,
     )
     setApplied(run.job.id)
+  }
+
+  /*
+   * A page or a section varies a VERSION of the page (AGL-3603): the door
+   * copies the published version once per variant past the control, puts
+   * the variant's copy into it, and stores it unpublished; the versions are
+   * then pinned to the variants here as unsaved edits.
+   */
+  const screenId = props.screenId ?? ''
+  const nodeId = props.nodeId ?? ''
+  const versionsBlocked =
+    target === 'email'
+      ? null
+      : !screenId
+        ? 'Pick the page under test above to make draft versions.'
+        : target === 'section' && !nodeId
+          ? 'Pick the section under test above to make draft versions.'
+          : null
+  const makeVersions = async () => {
+    if (!proposal || !run.job || !orgId || versionsBlocked) return
+    const jobId = run.job.id
+    setVersioning(true)
+    setVersionsNote(null)
+    try {
+      const response = await authorizedFetch(user, '/api/ai/experiments/versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId, hostId, jobId, screenId, ...(nodeId ? { nodeId } : {}) }),
+      })
+      const answer = ((await response.json().catch(() => null)) ?? {}) as AiExperimentVersionsAnswer
+      if (!response.ok) {
+        setVersionsNote({ ok: false, text: answer.error || VERSIONS_FAILED_COPY })
+        return
+      }
+      const made = new Map((answer.versions ?? []).map((entry) => [entry.index, entry.versionId]))
+      proposeVariants(aiExperimentVariantDrafts(target, variants, proposal, made), jobId)
+      setApplied(jobId)
+      const names = (answer.versions ?? []).map((entry) => entry.name)
+      const skipped = answer.skipped ?? []
+      setVersionsNote({
+        ok: names.length > 0,
+        text: [
+          names.length
+            ? `Draft versions made and pinned above: ${names.join(', ')}. Open each in the editor to check it, then Save the experiment. Nothing is published.`
+            : 'No draft version could be made.',
+          ...skipped.map((entry) => `Variant ${entry.index + 1}: ${entry.reason}`),
+        ].join(' '),
+      })
+    } catch {
+      setVersionsNote({ ok: false, text: VERSIONS_FAILED_COPY })
+    } finally {
+      setVersioning(false)
+    }
   }
 
   return (
@@ -362,7 +437,26 @@ export function AiExperimentVariantsCard(props: AiExperimentVariantsCardProps) {
               >
                 {'Put into the variants'}
               </Button>
+              {target === 'email' ? null : (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={versioning || Boolean(versionsBlocked)}
+                  onClick={() => void makeVersions()}
+                >
+                  {'Make draft versions'}
+                </Button>
+              )}
+              {versioning ? <CircularProgress size={16} aria-label="Making draft versions" /> : null}
             </Stack>
+            {versionsBlocked && target !== 'email' ? (
+              <Typography variant="caption" color="text.secondary">
+                {versionsBlocked}
+              </Typography>
+            ) : null}
+            {versionsNote ? (
+              <Alert severity={versionsNote.ok ? 'success' : 'warning'}>{versionsNote.text}</Alert>
+            ) : null}
             {applied === run.job?.id ? (
               <Alert severity="success">
                 {'In the variants above. Review them, then Save the experiment — or Cancel to leave it as it was.'}
