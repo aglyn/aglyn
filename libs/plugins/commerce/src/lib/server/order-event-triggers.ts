@@ -21,7 +21,13 @@ import {
   type PluginDomainEventEnvelope,
 } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
 import { BUNDLE_ID } from '../constants/bundle-common'
-import { CHECKOUT_STARTED_EVENT_DECLARATION, COMMERCE_EVENT_DECLARATIONS } from '../model/order-events'
+import {
+  CHECKOUT_STARTED_EVENT_DECLARATION,
+  COMMERCE_EVENT_DECLARATIONS,
+  ORDER_CANCELLED_EVENT,
+  ORDER_PAID_EVENT,
+  ORDER_REFUNDED_EVENT,
+} from '../model/order-events'
 
 /**
  * Commerce's events as workflow triggers (AGL-3611).
@@ -104,4 +110,22 @@ export function registerCommerceEventTriggers(): void {
       { pluginId: BUNDLE_ID, name: 'webhooks' },
     )
   }
+  // ShippingEasy (AGL-3633): a paid order is sent to the merchant's
+  // ShippingEasy account, and a canceled or refunded one is canceled there.
+  // Its own subscriber name, so a ShippingEasy outage is retried without
+  // re-posting the merchant's webhooks. A site with no connection costs one
+  // document read.
+  for (const event of SHIPPINGEASY_EVENTS) {
+    subscribePluginDomainEvent(
+      event,
+      async (envelope) => {
+        const { deliverOrderEventToShippingEasy } = await import('./shippingeasy')
+        await deliverOrderEventToShippingEasy(envelope)
+      },
+      { pluginId: BUNDLE_ID, name: 'shippingeasy' },
+    )
+  }
 }
+
+/** The order events that change what ShippingEasy should hold. */
+export const SHIPPINGEASY_EVENTS = [ORDER_PAID_EVENT, ORDER_CANCELLED_EVENT, ORDER_REFUNDED_EVENT] as const

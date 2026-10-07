@@ -71,6 +71,39 @@ export function easypostTrackingStatus(status: unknown): PluginTrackingStatus | 
   }
 }
 
+/**
+ * Easyship's tracking `status` (AGL-3632), a sentence such as "In Transit to
+ * Customer" from a list of thirty-odd: read by its words, most specific
+ * first, and anything not recognised is nothing to say yet.
+ */
+export function easyshipTrackingStatus(status: unknown): PluginTrackingStatus | null {
+  const text = String(status ?? '').trim().toLowerCase()
+  if (!text) return null
+  if (text.includes('out for delivery')) return 'out_for_delivery'
+  if (text.includes('return')) return 'returned'
+  if (/\b(lost|exception|failed|failure|damaged|undeliverable|not delivered|refused)\b/.test(text)) return 'exception'
+  if (/^delivered\b/.test(text) || text === 'delivered') return 'delivered'
+  if (/\b(transit|shipped|picked up|in transit|handed over|at local|arrived)\b/.test(text)) return 'in_transit'
+  if (/\b(pending|created|info received|label|awaiting|ready)\b/.test(text)) return 'pre_transit'
+  return null
+}
+
+/**
+ * Sendcloud's parcel status id (AGL-3632), as its webhook's
+ * `parcel.status.id` carries it. Ids outside this table — announcement
+ * errors, cancellations — say nothing about where the parcel is.
+ */
+export function sendcloudTrackingStatus(statusId: unknown): PluginTrackingStatus | null {
+  const id = Number(statusId)
+  if (!Number.isInteger(id)) return null
+  if (id === 11 || id === 93) return 'delivered'
+  if (id === 92) return 'out_for_delivery'
+  if (id === 8 || id === 15 || id === 80) return 'exception'
+  if ([3, 4, 5, 6, 7, 12, 22, 62, 91].includes(id)) return 'in_transit'
+  if (id === 1 || id === 13 || id === 1000) return 'pre_transit'
+  return null
+}
+
 /** How far along each status is, so an out-of-order webhook cannot walk a parcel back. */
 export const TRACKING_PROGRESS: Readonly<Record<PluginTrackingStatus, number>> = {
   pre_transit: 0,
