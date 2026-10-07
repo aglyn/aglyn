@@ -557,3 +557,82 @@ describe('a guided start, snapshot by snapshot (AGL-3596)', () => {
     expect(aiJobPageCopy(job({ ...(SNAPSHOTS[2][1] as object), autoConfirm: undefined } as never), 'Aglyn').heading).toBe('Your site was not built')
   })
 })
+
+/*
+ * The founder, 2026-10-07: the page never showed the contact form being
+ * built (AGL-3596). The guided start always plans one, so its row is there
+ * from the start, between the header and footer and the pages, and it is the
+ * active row while the form is built.
+ */
+describe('the contact form’s stage (AGL-3596)', () => {
+  const PLAN_WITH_FORM = {
+    ...PLAN,
+    create: [
+      { kind: 'layout', name: 'Main Layout', why: 'The frame.', duplicateOf: null, fields: [] },
+      { kind: 'form', name: 'Contact Request Form', why: 'Requests.', duplicateOf: null, fields: [] },
+    ],
+  }
+  const steps = [
+    { name: 'plan', status: 'done', startedAt: '2026-10-07T17:11:06.000Z', endedAt: null, creditsSpent: 12, error: null },
+    { name: 'generate', status: 'running', startedAt: '2026-10-07T17:12:08.000Z', endedAt: null, creditsSpent: 0, error: null },
+  ]
+  const ledger = (slot: string, op: string, label: string, status: string, extra: Record<string, unknown> = {}) => ({
+    slot, op, label, status, attempt: 1, creditsSpent: status === 'succeeded' ? 48 : 0, creditsRefunded: 0, outputs: [], ...extra,
+  })
+  /** The header and footer built; the form is next. */
+  const FORM_NEXT = () =>
+    job({
+      kind: 'site',
+      status: 'running',
+      plan: PLAN_WITH_FORM,
+      steps,
+      siteInputs: { businessType: 'A dog groomer in Austin', pages: 2, submissions: 'inbox' },
+      items: [
+        ledger('l', 'layout', 'Main Layout', 'succeeded', { settledAt: '2026-10-07T17:12:30.000Z' }),
+        ledger('f', 'form', 'Contact Request Form', 'pending'),
+        ledger('p0', 'page', 'Home', 'pending'),
+        ledger('p1', 'page', 'Book', 'pending'),
+      ],
+    } as never)
+
+  it('lists the form before the plan exists, in build order', () => {
+    const rows = aiSiteBuildRows(
+      job({
+        kind: 'site',
+        plan: null,
+        steps: [
+          { name: 'plan', status: 'running', startedAt: '2026-10-07T17:11:06.000Z', endedAt: null, creditsSpent: 0, error: null },
+          { name: 'generate', status: 'pending', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+        ],
+        siteInputs: { businessType: 'A dog groomer in Austin', pages: 2, submissions: 'lead' },
+      } as never),
+    )
+    expect(rows.map((row) => row.label)).toEqual([
+      'Planning your pages',
+      'Building the header and footer',
+      'Building your contact form',
+      'Writing your 2 pages',
+      'Publishing your site',
+    ])
+  })
+
+  it('makes the form the active row once the header and footer are built, counted from then', () => {
+    const rows = aiSiteBuildRows(FORM_NEXT())
+    expect(rows.map((row) => [row.label, row.state])).toEqual([
+      ['Planning your pages', 'done'],
+      ['Building the header and footer: Main Layout', 'done'],
+      ['Building the form: Contact Request Form', 'active'],
+      ['Writing page 1 of 2: Home', 'waiting'],
+      ['Writing page 2 of 2: Book', 'waiting'],
+      ['Publishing your site', 'waiting'],
+    ])
+    expect(rows[2]).toMatchObject({ hint: AI_SITE_ITEM_HINT, startedAt: '2026-10-07T17:12:30.000Z' })
+  })
+
+  it('draws the form’s row as in progress, with its hint', async () => {
+    await open(FORM_NEXT())
+    expect(await screen.findByText(AI_SITE_ITEM_HINT)).toBeTruthy()
+    const row = screen.getByText('Building the form: Contact Request Form').closest('li') as HTMLElement
+    expect(row.querySelector('[aria-label="In progress"]')).toBeTruthy()
+  })
+})

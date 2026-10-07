@@ -163,6 +163,12 @@ export function aiSiteBuildRows(
     const pagesAsked = typeof job.siteInputs?.['pages'] === 'number' ? Math.round(job.siteInputs['pages'] as number) : 0
     if (job.siteInputs) {
       rows.push({ id: 'layout', label: 'Building the header and footer', state: 'waiting' })
+      // A guided start that says where its contact form's submissions go
+      // plans that form, built after the layout and before the pages (AGL-3596).
+      const submissions = job.siteInputs['submissions']
+      if (submissions === 'inbox' || submissions === 'lead') {
+        rows.push({ id: 'form', label: 'Building your contact form', state: 'waiting' })
+      }
       rows.push({
         id: 'pages',
         label: pagesAsked > 1 ? `Writing your ${pagesAsked} pages` : 'Writing your pages',
