@@ -284,20 +284,15 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   /**
    * The readout the page header renders (AGL-2501).
    *
-   * `reusableComponents` is a BOOLEAN entitlement, which looks like a reason
-   * to print no denominator at all. It is not: the denominator is exactly what
-   * the boolean says. A plan that grants it caps nothing (`∞`, which is what
-   * layouts and screens already print on that plan), and a plan that does not
-   * grant it allows none.
-   *
-   * So `0/0 components on your plan` on Free is not a missing number, it is
-   * the number — and it is the one an operator on Starter needs to see BEFORE
-   * clicking a create button the resources route will refuse (AGL-473).
+   * The denominator is `componentsPerHost` (AGL-3615): Free 1, every paid
+   * plan unlimited (`∞`, which is what layouts and screens already print on
+   * those plans). It was the `reusableComponents` boolean, which printed
+   * `0/0 components on your plan` on Free; a Free site now reads `0/1`, and
+   * the number is the one `/api/hosts/resources` refuses at. An operator
+   * needs to see it BEFORE clicking a create button the route will refuse.
    * `QuotaReadoutComponent` holds the `ready` rule that keeps a paying org
    * from being shown a free tier's cap while the org doc is still loading.
    */
-  const componentsEntitled =
-    orgReady && Aglyn.checkEntitlement(org as never, 'reusableComponents')
   /*
    * The COUNT is a server aggregate, not the length of a page (AGL-1716).
    *
@@ -310,13 +305,18 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   // Pending or refused, the page window stands in: a LOWER bound, and this
   // card's behaviour before the aggregate existed.
   const componentsUsed = liveComponentCount ?? components.length
+  const componentsLimit = Aglyn.checkQuota(
+    org as never,
+    'componentsPerHost',
+    componentsUsed,
+  ).limit
   useEffect(() => {
     onQuota?.({
       ready: orgReady,
       used: componentsUsed,
-      limit: componentsEntitled ? Aglyn.UNLIMITED : 0,
+      limit: componentsLimit,
     })
-  }, [onQuota, orgReady, componentsUsed, componentsEntitled])
+  }, [onQuota, orgReady, componentsUsed, componentsLimit])
 
   const [editor, setEditor] = useState<{
     id: string

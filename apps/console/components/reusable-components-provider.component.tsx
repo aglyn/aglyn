@@ -55,7 +55,7 @@ import {
   useFirestore,
   useHostResourceApi,
 } from '@aglyn/tenant-feature-instance'
-import { hasEntitlement } from '../constants/entitlements'
+import { checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import useHostComponentDefinitions from '../hooks/use-host-component-definitions'
@@ -203,7 +203,7 @@ export function ReusableComponentsProvider(
   const handlePromote = useCallback(
     (node: Aglyn.NodeSchema<any>) => {
       // AGL-1380: this provider wraps the besigner, which mounts well before
-      // the org billing doc settles. `hasEntitlement` on an undefined `org`
+      // the org billing doc settles. A plan check on an undefined `org`
       // answers NO, so promoting a node in that window told a Starter+ org
       // the feature it pays for is not on its plan.
       if (!orgReady) {
@@ -212,9 +212,19 @@ export function ReusableComponentsProvider(
           { variant: 'info', persist: false },
         )
       }
-      if (!hasEntitlement('reusableComponents', org)) {
+      // The site's allowance, counted the way `/api/hosts/resources` counts
+      // it (AGL-3615): Free 1, every paid plan unlimited, live components
+      // only. The route still decides; this only saves a dialog the route
+      // would refuse. `componentDocs` is the shared listener's window, which
+      // holds every live definition a finite allowance can reach.
+      const liveComponents = (componentDocs ?? []).filter(
+        (definition: any) => !definition.deletedAt,
+      ).length
+      const quota = checkQuota(org as never, 'componentsPerHost', liveComponents)
+      if (!quota.allowed) {
         return void enqueueSnackbar(
-          'Reusable components require a Starter plan — see Billing to upgrade',
+          `Your plan includes ${quota.limit} reusable component${quota.limit === 1 ? '' : 's'} — ` +
+            'upgrade in Billing for more',
           { variant: 'warning', persist: false },
         )
       }
@@ -222,7 +232,7 @@ export function ReusableComponentsProvider(
       setDescription('')
       setPromoteNode(node)
     },
-    [org, orgReady, enqueueSnackbar],
+    [org, orgReady, componentDocs, enqueueSnackbar],
   )
 
   const handlePromoteConfirm = useCallback(async () => {

@@ -1487,3 +1487,45 @@ describe('the saved-forms-per-site row', () => {
     }
   })
 })
+
+/**
+ * Reusable components per site (AGL-3615): Free 1, every paid plan
+ * unlimited. Each card states its own, read from the plan model, directly
+ * above the saved-forms line — the other per-site catalog the plan counts.
+ */
+describe('the reusable-components-per-site row', () => {
+  const CARDS = [
+    ['Free', 'free'],
+    ['Starter', 'starter'],
+    ['Pro', 'pro'],
+    ['Business', 'business'],
+    ['Agency', 'agency'],
+  ] as const
+
+  it('states each plan’s own allowance, from the entitlement', () => {
+    renderCards({ plan: undefined })
+    for (const [label, plan] of CARDS) {
+      const allowance = PLAN_ENTITLEMENTS[plan].componentsPerHost
+      const expected =
+        allowance === 1
+          ? '1 reusable component per site'
+          : Number.isFinite(allowance)
+            ? `${allowance} reusable components per site`
+            : 'Unlimited reusable components per site'
+      expect([label, within(cardFor(label)).queryAllByText(expected).length]).toEqual([label, 1])
+    }
+    expect(within(cardFor('Free')).getByText('1 reusable component per site')).toBeTruthy()
+    expect(within(cardFor('Starter')).getByText('Unlimited reusable components per site')).toBeTruthy()
+  })
+
+  it('sits directly above the saved-forms row', () => {
+    renderCards({ plan: undefined })
+    for (const [label] of CARDS) {
+      const row = within(cardFor(label)).getByText(/reusable components? per site$/)
+      expect([label, row.nextElementSibling?.textContent ?? '']).toEqual([
+        label,
+        expect.stringMatching(/forms? per site$/),
+      ])
+    }
+  })
+})

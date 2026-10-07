@@ -77,6 +77,7 @@ const SOURCES = [searchSourceEntity(PEOPLE), searchSourceEntity(BOTTLES)]
 /** A workspace with everything switched on. */
 const RICH = {
   reusableComponents: true,
+  componentsPerHost: Number.POSITIVE_INFINITY,
   sharedLayoutsPerHost: 5,
   templatesPerHost: 10,
   bottlesPerHost: 12,
@@ -85,6 +86,8 @@ const RICH = {
 /** A plan that grants none of the gated groups. */
 const FREE = {
   reusableComponents: false,
+  // Free saves one reusable component per site (AGL-3615).
+  componentsPerHost: 1,
   sharedLayoutsPerHost: 1,
   templatesPerHost: 10,
   bottlesPerHost: 0,
@@ -239,8 +242,9 @@ describe('entitlement gating, which is a cost control as well as a correctness o
   it('never reads a collection the plan does not grant', () => {
     const offered = ids(scopeAt({ entitlements: FREE }))
     expect(offered).not.toContain('bottles')
-    expect(offered).not.toContain('components')
-    // …but the ungated groups are unaffected.
+    // …but the ungated groups are unaffected, and neither is a group whose
+    // count Free holds one of (AGL-3615).
+    expect(offered).toContain('components')
     expect(offered).toContain('screens')
     expect(offered).toContain('collections')
     expect(offered).toContain('layouts')
@@ -273,8 +277,9 @@ describe('entitlement gating, which is a cost control as well as a correctness o
     expect(entitlementAllows(bottles, { bottlesPerHost: 0 })).toBe(false)
     expect(entitlementAllows(bottles, { bottlesPerHost: 3 })).toBe(true)
     const components = GLOBAL_SEARCH_ENTITIES.find((e) => e.id === 'components')!
-    expect(entitlementAllows(components, { reusableComponents: false })).toBe(false)
-    expect(entitlementAllows(components, { reusableComponents: true })).toBe(true)
+    expect(entitlementAllows(components, { componentsPerHost: 0 })).toBe(false)
+    // Free's one component, not the `reusableComponents` flag it lacks (AGL-3615).
+    expect(entitlementAllows(components, { componentsPerHost: 1, reusableComponents: false })).toBe(true)
   })
 
   it('lets an ungated group through with no entitlements at all', () => {
