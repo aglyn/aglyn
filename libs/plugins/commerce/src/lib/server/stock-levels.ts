@@ -20,6 +20,7 @@ import type {
   PluginStockLevelResult,
   PluginStockLevels,
 } from '@aglyn/aglyn/plugin-manager/plugin-stock-levels'
+import { createResourceUid } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import * as CommerceModel from '../model'
 import { alertLowStockCrossing } from './low-stock'
@@ -149,7 +150,7 @@ async function applyToProduct(input: {
       { variants, ...CommerceModel.productStockFields(after), updatedAtMs: nowMs },
       { merge: true },
     )
-    for (const row of rows) transaction.set(host.collection('inventoryAdjustments').doc(), row)
+    for (const row of rows) transaction.set(host.collection('inventoryAdjustments').doc(createResourceUid()), row)
     return { results, before, after }
   })
   if (outcome.before && outcome.after) alertLowStockCrossing(hostId, outcome.before, outcome.after)
