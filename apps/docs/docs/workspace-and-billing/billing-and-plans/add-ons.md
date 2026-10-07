@@ -156,7 +156,7 @@ out never touches another. See [AI allotments](overview.md#ai-allotments).
 
 **Can I keep it off for one site?** Yes, but it is a site setting rather than a billing
 one. A site admin switches AI off for that site under **Admin → Plugins → AI**, which
-removes the assistant and every **Describe it** door from it while the rest of the
+removes the assistant and every **Create with AI** door from it while the rest of the
 workspace carries on. It does not pause the add-on or its charge — see
 [Switch AI off for one site](../../ai/overview.md#switch-ai-off-for-one-site).
 

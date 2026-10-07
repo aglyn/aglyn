@@ -192,6 +192,13 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
         <HostComponentsCard
           hostId={hostId}
           onQuota={setQuota}
+          emptyActions={
+            <PluginWidgetSlot
+              slot="hostComponents"
+              hostId={hostId}
+              orgId={currentOrg?.$id}
+            />
+          }
           // Same two actions as the header, so the empty state opens the
           // page's own drawer and gallery rather than a second pair.
           onCreate={() => setCreateOpen(true)}

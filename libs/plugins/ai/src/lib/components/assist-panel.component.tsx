@@ -30,8 +30,8 @@ import {
 } from '@aglyn/aglyn/plugin-manager/editor-sessions'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import {
-  mdiChatQuestionOutline,
   mdiChevronDown,
+  mdiCreation,
   mdiChevronUp,
   mdiClose,
   mdiOpenInNew,
@@ -945,7 +945,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
               overlap="circular"
               data-ai-jobs-badge={jobsActivity?.state ?? undefined}
             >
-              <MdiIcon path={mdiChatQuestionOutline.path} fontSize="medium" />
+              <MdiIcon path={mdiCreation.path} fontSize="medium" />
             </Badge>
           </Fab>
         </Tooltip>
@@ -975,7 +975,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
             {/* Same reason as the launcher: this one sits beside an `h6`
                 title in a plain Stack, so `inherit` gave it the 16px body
                 size against a 20px heading. */}
-            <MdiIcon path={mdiChatQuestionOutline.path} fontSize="medium" />
+            <MdiIcon path={mdiCreation.path} fontSize="medium" />
             <Typography variant="h6" sx={{ flexGrow: 1 }}>
               {`${branding.productName} Assist`}
             </Typography>

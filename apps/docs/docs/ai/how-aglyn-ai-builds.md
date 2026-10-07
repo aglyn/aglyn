@@ -15,7 +15,7 @@ is checked against them before you see it.
 ## Where to describe a build
 
 Open the site you are building for, go to the page that lists what you want built, and
-choose **Describe it** beside its create button:
+choose **Create with AI** beside its create button:
 
 - a page on **Pages**, or **Describe a page** in **AI jobs** in the Assist panel; see
   [Generate a page](../building-sites/screens-and-layouts/generate-a-page.md);
@@ -27,7 +27,7 @@ choose **Describe it** beside its create button:
 - a reusable component on **Components**; see
   [Generate a reusable component](../building-sites/components/generate-a-component-with-aglyn-ai.md#from-a-brief).
 
-**Describe it** is there when your workspace has AI build jobs, you have the **Generate
+**Create with AI** is there when your workspace has AI build jobs, you have the **Generate
 with AI** permission, and AI is on for the site.
 
 ## The plan comes first

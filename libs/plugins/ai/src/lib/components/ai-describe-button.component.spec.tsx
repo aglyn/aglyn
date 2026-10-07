@@ -16,7 +16,7 @@
  */
 
 /**
- * "Describe it" on the Templates, Layouts and Forms pages (AGL-3043), and on
+ * "Create with AI" on the Templates, Layouts and Forms pages (AGL-3043), and on
  * the Components page (AGL-3051).
  *
  * Every render here goes through the component the AI plugin REGISTERED on
@@ -170,7 +170,7 @@ async function openDialog(entry: Entry) {
   const Widget = widgetFor(entry.zone)
   mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
   render(<Widget {...zoneProps()} />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Describe it' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
   const dialog = screen.getByRole('dialog')
   expect(within(dialog).getByText(entry.title)).toBeTruthy()
   return dialog

@@ -72,7 +72,7 @@ import ListTable, {
   ListRowActions,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { checkOrgQuota } from '../../constants/entitlements'
 import { TABLE_ROW_HEIGHT } from '../../constants/shared'
 import { buildRoute, Route } from '../../constants/route-links'
@@ -135,8 +135,11 @@ export function HostTemplatesCard({
   hostId,
   onQuota,
   onCreate,
+  emptyActions,
 }: {
   hostId: string
+  /** Other ways to start a template, from plugins, beside the create button. */
+  emptyActions?: ReactNode
   /**
    * The empty state's way OUT (AGL-1152). The card owns the list, the PAGE
    * owns the create drawer — so the button comes down rather than being
@@ -818,11 +821,17 @@ export function HostTemplatesCard({
               noRowsLabel: 'No templates yet',
               noRowsDescription:
                 'A template is a saved starting point for a page or layout. Create one, or save one from a page you have already built.',
-              noRowsAction: onCreate ? (
-                <Button variant="contained" onClick={onCreate}>
-                  {'Create your first template'}
-                </Button>
-              ) : null,
+              noRowsAction:
+                onCreate || emptyActions ? (
+                  <Stack direction="row" spacing={1}>
+                    {emptyActions}
+                    {onCreate ? (
+                      <Button variant="contained" onClick={onCreate}>
+                        {'Create your first template'}
+                      </Button>
+                    ) : null}
+                  </Stack>
+                ) : null,
             })}
         rows={rows}
         // The panel and the search are the grid's; the QUERY answers them

@@ -62,7 +62,7 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     "alwaysOnForWorkspace": true,
     "description": "The assistant, generative building and automation, and the AI add-on.",
     "siteOff": {
-      "stops": "Switching AI off for this site hides the assistant, Describe it, the AI cards and the editor’s AI controls on this site, refuses every AI request made for it, and stops its queued AI jobs without spending credits.",
+      "stops": "Switching AI off for this site hides the assistant, Create with AI, the AI cards and the editor’s AI controls on this site, refuses every AI request made for it, and stops its queued AI jobs without spending credits.",
       "keeps": "It does not stop the workspace’s AI add-on, credits, allotments or overage billing, and AI keeps working on the workspace’s other sites."
     }
   },

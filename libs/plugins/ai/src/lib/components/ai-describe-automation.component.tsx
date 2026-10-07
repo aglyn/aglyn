@@ -19,6 +19,8 @@
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import type { ConsoleHostAutomationsZoneProps } from './ai-automation-zones'
+import { mdiCreation } from '@aglyn/shared-data-mdi'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -38,7 +40,7 @@ import { openAiJobs } from './ai-jobs-store'
 import { aiJobProblem, useAiJobRun, useAiJobsVerdict } from './use-ai-job-run'
 
 /**
- * "Describe it" on the Automation page's Actions (AGL-2919), beside Add action
+ * "Create with AI" on the Automation page's Actions (AGL-2919), beside Add action
  * and Recipes through the `hostAutomations` zone: a description becomes a
  * `workflow` job that drafts one automation, switched off.
  *
@@ -214,8 +216,13 @@ export function AiDescribeAutomationButton({ hostId, orgId, openAction }: Consol
   if (verdict !== 'ready') return null
   return (
     <>
-      <Button size="small" variant="outlined" onClick={() => setOpen(true)}>
-        {'Describe it'}
+      <Button
+        size="small"
+        variant="outlined"
+        startIcon={<MdiIcon path={mdiCreation.path} />}
+        onClick={() => setOpen(true)}
+      >
+        {'Create with AI'}
       </Button>
       <AiAutomationBriefDialog
         open={open}

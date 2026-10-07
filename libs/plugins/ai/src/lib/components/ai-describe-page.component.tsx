@@ -21,7 +21,7 @@ import type { ConsoleHostScreensZoneProps } from '@aglyn/aglyn/plugin-manager/fe
 import { AiDescribeButton } from './ai-describe-button.component'
 
 /**
- * "Describe it" (AGL-2907): a page from a brief, beside Templates and Create
+ * "Create with AI" (AGL-2907): a page from a brief, beside Templates and Create
  * New Screen on a site's Screens page, mounted through the `hostScreens`
  * zone. The Assist panel's AI jobs opens the same dialog. The button, its
  * probe and its dialog are the ones every describe entry shares

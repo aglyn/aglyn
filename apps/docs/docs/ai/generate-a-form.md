@@ -21,7 +21,7 @@ form the job says so before it starts, not after it has spent anything.
 
 ## Describe the form
 
-Open **Forms** for the site and choose **Describe it**, beside **Create Form**. Write what the
+Open **Forms** for the site and choose **Create with AI**, beside **Create Form**. Write what the
 form is for in one box: who fills it in, what you need to know from them and what should happen
 with each submission. Then choose **Plan the form**.
 

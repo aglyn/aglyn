@@ -36,20 +36,20 @@ Each capability has its own page, next to the thing it builds:
 
 | You want | Where you start | The page |
 | --- | --- | --- |
-| A page from a brief | **Pages → Describe it** | [Generate a page](../building-sites/screens-and-layouts/generate-a-page.md) |
+| A page from a brief | **Pages → Create with AI** | [Generate a page](../building-sites/screens-and-layouts/generate-a-page.md) |
 | A whole small site | **Pages**, or **Sites** for several at once | [Generate a site](generate-a-site.md) |
 | Many client sites, run as an agency | **Sites** | [An AI website builder for agencies](agency-sites.md) |
-| A layout — header, navigation, footer | **Layouts → Describe it** | [Generate a layout](../building-sites/screens-and-layouts/layouts.md#generate-a-layout-with-aglyn-ai) |
-| A page template | **Templates → Describe it** | [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai) |
-| A reusable component | **Components → Describe it** | [Generate a component](../building-sites/components/generate-a-component-with-aglyn-ai.md) |
-| A form | **Forms → Describe it** | [Generate a form](generate-a-form.md) |
+| A layout — header, navigation, footer | **Layouts → Create with AI** | [Generate a layout](../building-sites/screens-and-layouts/layouts.md#generate-a-layout-with-aglyn-ai) |
+| A page template | **Templates → Create with AI** | [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai) |
+| A reusable component | **Components → Create with AI** | [Generate a component](../building-sites/components/generate-a-component-with-aglyn-ai.md) |
+| A form | **Forms → Create with AI** | [Generate a form](generate-a-form.md) |
 | A section on the canvas | The Besigner | [Generate a section](generate-section.md) |
 | Copy, rewritten or fresh | Any text in the Besigner | [Rewrite and write copy](copy-assist.md) |
 | A change to your theme | **Setup → Theme** | [Change your theme with AI](theme-assist.md) |
 | Search titles and descriptions | **SEO** | [SEO by AI](../building-sites/seo/seo-by-ai.md) |
 | Product copy, catalog and discount ideas | **Commerce** | [Products with AI](products-with-ai.md) |
 | Help working the CRM | A record, the composer, an import | [CRM by AI](crm-by-ai.md) |
-| A designed email | **Email → Describe it** | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md) |
+| A designed email | **Email → Create with AI** | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md) |
 | A campaign | **Campaigns** | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md) |
 | Variants for an A/B test, and its result in words | **Marketing → Experiments** | [A/B tests by AI](ab-tests-with-ai.md) |
 | What your analytics mean | **Analytics → Insights** | [Insights](../marketing-and-automation/analytics/insights.md) |
@@ -139,7 +139,7 @@ switching it off stops and what it leaves running.
 
 With AI off for a site:
 
-- the assistant, **Describe it** on the Pages, Templates, Layouts, Forms and
+- the assistant, **Create with AI** on the Pages, Templates, Layouts, Forms and
   Components pages, the SEO and theme cards, the editor's **Rewrite with AI**,
   **Generate a section with AI** and **Make a reusable component with AI** controls, and
   the AI columns on the site's collaborators card are gone from that site;
