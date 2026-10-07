@@ -134,8 +134,13 @@ class WorkspaceStore(
     picked.value = WorkspacePick(orgId, null)
   }
 
+  /**
+   * Picks a site in the workspace on screen. The pick names that workspace
+   * too: a fresh install has remembered none, and a site picked under a
+   * workspace the pick does not name would fall back to the first site.
+   */
   fun selectSite(hostId: String?) {
-    picked.value = picked.value.copy(hostId = hostId)
+    picked.value = WorkspacePick(state.value.org?.id ?: picked.value.orgId, hostId)
   }
 
   private fun restore(uid: String): WorkspacePick =
