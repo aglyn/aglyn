@@ -376,7 +376,7 @@ export async function importChannelOrder(
     title: `New ${channelLabel} order on {site} — ${totalLabel}`,
     body:
       `Order ${displayRef} came in from ${channelLabel} (their order ${clip(order.externalRef, 120) || order.externalOrderId}): ` +
-      `${units} item${units === 1 ? '' : 's'}, ${totalLabel}. Ship it from the order in Aglyn and the tracking goes back to ${channelLabel}.`,
+      `${units} item${units === 1 ? '' : 's'}, ${totalLabel}. Ship it from the order here and the tracking goes back to ${channelLabel}.`,
     link: `/${order.hostId}/products`,
   })
   if (result.shortfalls.length) {

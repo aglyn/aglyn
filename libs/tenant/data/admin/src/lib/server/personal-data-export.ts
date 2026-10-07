@@ -267,7 +267,7 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     keyedBy: 'field',
     subjects: ['org'],
     exported: true,
-    note: 'Each marketplace order the store imported (AGL-3638): the marketplace and its order id, the Aglyn order it became, which order line each marketplace line became, the marketplace’s fees, and each shipment confirmed back with carrier and tracking number. The merchant’s own record of a marketplace BUYER’s order, so disclosed to the ORG only; the buyer’s name and address are on the store’s order, not here.',
+    note: 'Each marketplace order the store imported (AGL-3638): the marketplace and its order id, the store order it became, which order line each marketplace line became, the marketplace’s fees, and each shipment confirmed back with carrier and tracking number. The merchant’s own record of a marketplace BUYER’s order, so disclosed to the ORG only; the buyer’s name and address are on the store’s order, not here.',
   },
   {
     collection: 'ssoDomains',

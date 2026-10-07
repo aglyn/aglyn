@@ -36,7 +36,7 @@ import type {
  */
 
 const LISTING_AND_ORDER_DATA =
-  "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from Aglyn: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent."
+  "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent."
 
 const TOKEN_DATA =
   "The deployment's OAuth client credentials, and the authorization code or refresh token the marketplace itself issued — credentials, never orders or listings."
