@@ -122,6 +122,6 @@ export function barcodeSvg(encoded: EncodedBarcode, options: { height?: number }
   }
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" ` +
-    `preserveAspectRatio="none" shape-rendering="crispEdges"><path d="${path}" fill="#000"/></svg>`
+    `preserveAspectRatio="none" shape-rendering="crispEdges"><path d="${path}" fill="currentColor"/></svg>`
   )
 }

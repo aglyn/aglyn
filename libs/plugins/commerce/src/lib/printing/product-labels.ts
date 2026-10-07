@@ -95,7 +95,7 @@ export function productLabelsHtml(labels: ProductLabel[], sizeId?: string): stri
   return (
     '<!doctype html><html><head><meta charset="utf-8"><title>Labels</title><style>' +
     `@page{size:${width} ${height};margin:0}` +
-    '*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff}' +
+    '*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}' +
     `.label{width:${width};height:${height};padding:0.06in 0.08in;overflow:hidden;display:flex;flex-direction:column;page-break-after:always;break-after:page}` +
     '.label:last-child{page-break-after:auto;break-after:auto}' +
     '.name{font-size:9pt;font-weight:700;line-height:1.1;max-height:2.2em;overflow:hidden}' +
