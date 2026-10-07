@@ -17,7 +17,7 @@
 
 import type { AglynNotification } from '@aglyn/aglyn/app-utils/notifications'
 import { aiJobKindNoun } from './ai-job-activity'
-import type { AiJobKind, AiJobOutput, AiJobReviewReason } from './ai-jobs.types'
+import type { AiJobKind, AiJobOutput, AiJobReviewReason, AiJobSitePublish } from './ai-jobs.types'
 
 /** The besigner segment each versioned resource lives under. */
 export const AI_JOB_BESIGNER_SEGMENT: Partial<Record<AiJobOutput['resource'], string>> = {
@@ -51,6 +51,8 @@ export interface AiJobNoticeSource {
   review?: { reason: AiJobReviewReason; message?: string | null } | null
   outputs?: readonly AiJobOutput[] | null
   error?: string | null
+  /** What a guided site start put live (AGL-3596); absent on every other job. */
+  sitePublish?: Pick<AiJobSitePublish, 'published' | 'drafts'> | null
 }
 
 export type AiJobNotice = Pick<
@@ -122,6 +124,24 @@ export function aiJobNotice(job: AiJobNoticeSource, to: AiJobNoticeTransition): 
     }
   }
   if (to === 'done') {
+    // A guided site start publishes its pages when it finishes (AGL-3596):
+    // with one live, the site is, and the build page lists any that stayed
+    // drafts with the reason for each.
+    const live = job.kind === 'site' ? (job.sitePublish?.published.length ?? 0) : 0
+    if (live > 0) {
+      const drafts = job.sitePublish?.drafts.length ?? 0
+      return {
+        type: 'content.aiJobDone',
+        level: 'success',
+        title: 'Your site is live',
+        body:
+          drafts > 0
+            ? `Your pages are published, except ${drafts === 1 ? 'one that stayed a draft' : `${drafts} that stayed drafts`}. Open it to see why.`
+            : 'Your pages are published. Open it to view your site or edit your pages.',
+        link,
+        ...scope,
+      }
+    }
     const pages = (job.outputs ?? []).filter((output) => output.resource === 'screen').length
     const title =
       job.kind === 'site' || pages > 1

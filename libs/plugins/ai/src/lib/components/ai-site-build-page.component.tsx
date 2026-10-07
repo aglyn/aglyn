@@ -18,6 +18,7 @@
 'use client'
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn'
+import { PageHeaderRecord } from '@aglyn/aglyn/app-utils/page-header-record-context'
 import type { ConsolePluginPageProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import {
   mdiAlertCircle,
@@ -27,7 +28,7 @@ import {
 } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import type { MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Accordion,
   AccordionDetails,
@@ -42,9 +43,9 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { doc, getDoc } from 'firebase/firestore'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import {
+  aiJobPageCopy,
   aiSiteBuildCreditsLine,
   aiSiteBuildPhase,
   aiSiteBuildRows,
@@ -55,54 +56,77 @@ import type { AiJobSummary } from '../model/ai-jobs.types'
 import { followAiJobEvents } from './ai-job-events'
 import { aiSiteBuildDoneLinks } from './ai-job-links'
 import { resumeAiJobRequest } from './ai-job-requests'
+import { useAiJobSite } from './ai-job-site'
 import { AiSiteStarterFallback } from './ai-site-starter-fallback.component'
 
 /**
- * "Building your site" (AGL-3594): where the guided start sends a person the
- * moment they plan a site, and where a notification about that job opens.
+ * "Building your site" (AGL-3594): one job's page, at `/ai-jobs/{jobId}`
+ * under its site — where the guided start sends a person the moment they
+ * plan a site, and where a notification about that job opens.
  *
  * A guided site start confirms its own plan (`autoConfirm`), so there is no
  * approval to make here: the page says what is happening, step by step, live
  * from the job's events route; shows what is being built; and, when the job
- * ends, leads with the next thing to do — the site to look at and the pages
- * to edit, or, where it stopped, the plain sentence for why and what to do
+ * ends, leads with the next thing to do — the live site and the pages to
+ * edit, or, where it stopped, the plain sentence for why and what to do
  * about it. It is linkable and survives a reload, because it reads the job by
  * the id in its own address under the site's own route.
  *
- * Mounted by the shell's generic plugin route as an unlisted page: no tab on
+ * Every wait ends (AGL-3596): a site that cannot be read, a job the route
+ * does not know, a route that fails, and a first state that never arrives
+ * each end on a sentence instead of a spinner.
+ *
+ * Mounted by `AiJobsPage`, the plugin's unlisted `/ai-jobs` route: no tab on
  * the site's strip, an address under it.
  */
 
-/** The site's name, subdomain and org, read off the site document the reader may already read. */
-interface SiteFacts {
-  orgId: string
-  name: string
-}
+/** How long the job's first state may take before the page says it could not be loaded. */
+export const AI_JOB_FIRST_STATE_TIMEOUT_MS = 20_000
 
-/** Follows one job by id: its latest summary, `null` while the first state is out, `'missing'` when the route had none. */
+/**
+ * One job, followed by id: its latest summary; `null` while the first state
+ * is out; `'missing'` when the route says there is no such job for this
+ * reader; `'error'` when the route failed or no state arrived in time.
+ */
+export type AiJobByIdState = AiJobSummary | 'missing' | 'error' | null
+
+/** Follows one job by id. `retry` follows it again after a `'missing'` or `'error'`. */
 export function useAiJobById(
   user: MaybeTokenSource,
   orgId: string | null,
   jobId: string | null,
-): [AiJobSummary | 'missing' | null, (job: AiJobSummary) => void] {
+): [AiJobByIdState, (job: AiJobSummary) => void, () => void] {
   const userRef = useRef(user)
   userRef.current = user
-  const [job, setJob] = useState<AiJobSummary | 'missing' | null>(null)
-  const status = job && job !== 'missing' ? job.status : null
+  const [job, setJob] = useState<AiJobByIdState>(null)
+  const [attempt, setAttempt] = useState(0)
+  const status = job && typeof job === 'object' ? job.status : null
   const moving = status === null || status === 'queued' || status === 'running'
   useEffect(() => {
     if (!orgId || !jobId || !moving) return undefined
     const controller = new AbortController()
     let heard = false
+    const timer = setTimeout(() => {
+      if (!heard) setJob((current) => current ?? 'error')
+    }, AI_JOB_FIRST_STATE_TIMEOUT_MS)
     void followAiJobEvents(() => userRef.current, orgId, jobId, controller.signal, (next) => {
       heard = true
       setJob(next)
-    }).then(() => {
-      if (!heard && !controller.signal.aborted) setJob((current) => current ?? 'missing')
+    }).then((end) => {
+      if (heard || controller.signal.aborted) return
+      const unheard: AiJobByIdState = end === 'not-found' ? 'missing' : 'error'
+      setJob((current) => (current && typeof current === 'object' ? current : unheard))
     })
-    return () => controller.abort()
-  }, [orgId, jobId, moving])
-  return [job, setJob]
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [orgId, jobId, moving, attempt])
+  const retry = useCallback(() => {
+    setJob(null)
+    setAttempt((count) => count + 1)
+  }, [])
+  return [job, setJob, retry]
 }
 
 const ROW_ICON: Readonly<Record<Exclude<AiSiteBuildRowState, 'active'>, { path: string; color: string; label: string }>> = {
@@ -123,170 +147,244 @@ function RowIcon({ state }: { state: AiSiteBuildRowState }) {
   )
 }
 
-export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPageProps) {
-  const firestore = useFirestore()
-  const { data: user } = useUser()
-  const jobId = segments?.[0] ? decodeURIComponent(String(segments[0])) : null
-  const orgSlug = (basePath ?? '').split('/')[1] ?? ''
-  const [site, setSite] = useState<SiteFacts | null>(null)
-  useEffect(() => {
-    if (!hostId) return
-    let active = true
-    void getDoc(doc(firestore, 'hosts', hostId))
-      .then((snapshot) => {
-        if (!active) return
-        const data = (snapshot.data() ?? {}) as { orgId?: string; displayName?: string }
-        setSite({ orgId: String(data.orgId ?? ''), name: String(data.displayName ?? '') })
-      })
-      .catch(() => {
-        if (active) setSite({ orgId: '', name: '' })
-      })
-    return () => {
-      active = false
-    }
-  }, [firestore, hostId])
-
-  const [job, setJob] = useAiJobById(user, site?.orgId || null, jobId)
-  const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
-  const tryAgain = useCallback(async () => {
-    if (!site?.orgId || !job || job === 'missing') return
-    setBusy(true)
-    setNotice(null)
-    const decision = await resumeAiJobRequest(user, site.orgId, job)
-    if (decision.job) setJob(decision.job)
-    if (decision.error) setNotice(decision.error)
-    setBusy(false)
-  }, [site, job, user, setJob])
-
-  const ready = job && job !== 'missing' ? job : null
-  const phase = ready ? aiSiteBuildPhase(ready) : 'working'
-  const heading =
-    phase === 'done' ? 'Your site is ready' : phase === 'working' ? 'Building your site' : 'Your site was not built'
-  const lede =
-    phase === 'done'
-      ? 'Your new pages are drafts. Publish them when you’re happy.'
-      : phase === 'working'
-        ? `${PLATFORM_BRAND_NAME} AI is planning your pages and writing each one. You can leave this page; it keeps going.`
-        : phase === 'canceled'
-          ? 'The job was canceled.'
-          : (ready?.review?.message ?? ready?.error ?? 'Something went wrong building your site.')
-  const rows = ready ? aiSiteBuildRows(ready) : []
-  const credits = ready ? aiSiteBuildCreditsLine(ready) : null
-  const links = ready && phase === 'done' ? aiSiteBuildDoneLinks(ready, orgSlug) : { view: null, pages: null }
-  const retryRefusal = ready?.review?.retryRefusal
-  const canRetry = phase === 'stopped' && ready?.review?.reason === 'doctrine'
-
+/** The page's frame: the site's name over the heading and its sentence. */
+function Frame({
+  siteName,
+  heading,
+  lede,
+  children,
+}: {
+  siteName?: string
+  heading: string
+  lede?: string
+  children?: ReactNode
+}) {
   return (
     <Container maxWidth="sm" sx={{ py: { xs: 3, sm: 5 }, px: { xs: 2, sm: 3 } }}>
       <Stack spacing={4}>
         <Stack spacing={1}>
-          {site?.name ? (
+          {siteName ? (
             <Typography variant="overline" color="text.secondary">
-              {site.name}
+              {siteName}
             </Typography>
           ) : null}
           <Typography variant="h4" component="h1">
             {heading}
           </Typography>
-          <Typography variant="body1" color="text.secondary">
-            {lede}
-          </Typography>
+          {lede ? (
+            <Typography variant="body1" color="text.secondary">
+              {lede}
+            </Typography>
+          ) : null}
         </Stack>
-        {job === 'missing' ? (
-          <Alert severity="info">{'This job could not be found. It may belong to another workspace.'}</Alert>
-        ) : !ready ? (
-          <Stack sx={{ alignItems: 'center', py: 4 }}>
-            <CircularProgress aria-label="Loading the job" />
-          </Stack>
-        ) : (
-          <>
-            {notice && <Alert severity="warning">{notice}</Alert>}
-            <Card variant="outlined" sx={{ borderRadius: 2 }}>
-              {phase === 'working' && <LinearProgress aria-label="Building" />}
-              <Box component="ol" aria-label="Progress" sx={{ listStyle: 'none', m: 0, p: { xs: 2, sm: 3 } }}>
-                <Stack spacing={2}>
-                  {rows.map((row) => (
-                    <Stack component="li" key={row.id} direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-                      <Box sx={{ width: (theme) => theme.spacing(3), display: 'flex', justifyContent: 'center' }}>
-                        <RowIcon state={row.state} />
-                      </Box>
-                      <Typography
-                        variant="body1"
-                        color={row.state === 'waiting' ? 'text.secondary' : 'text.primary'}
-                      >
-                        {row.label}
-                      </Typography>
-                    </Stack>
-                  ))}
-                </Stack>
-              </Box>
-            </Card>
-            {credits && (
-              <Typography variant="body2" color="text.secondary">
-                {credits}
-              </Typography>
-            )}
-            {phase === 'done' && (
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                {links.view && (
-                  <Button variant="contained" size="large" component={AppLink} href={links.view}>
-                    {'View your site'}
-                  </Button>
-                )}
-                {links.pages && (
-                  <Button variant="outlined" size="large" component={AppLink} href={links.pages}>
-                    {'Edit your pages'}
-                  </Button>
-                )}
-              </Stack>
-            )}
-            {(phase === 'stopped' || phase === 'failed' || phase === 'canceled') && (
-              <Stack spacing={1}>
-                {retryRefusal && (
-                  <Typography variant="body2" color="text.secondary">
-                    {retryRefusal}
-                  </Typography>
-                )}
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: { sm: 'center' } }}>
-                  {canRetry && (
-                    <Button
-                      variant="contained"
-                      disabled={busy || Boolean(retryRefusal)}
-                      onClick={() => void tryAgain()}
-                    >
-                      {'Try again'}
-                    </Button>
-                  )}
-                  {aiSiteStarterFallbackOffered(ready) && user ? <AiSiteStarterFallback job={ready} user={user} /> : null}
-                </Stack>
-              </Stack>
-            )}
-            {ready.plan && ready.plan.screens.length > 0 && (
-              <Accordion variant="outlined" disableGutters sx={{ borderRadius: 2, '&::before': { display: 'none' } }}>
-                <AccordionSummary expandIcon={<MdiIcon path={mdiChevronDown.path} />}>
-                  <Typography variant="subtitle1">{'What we’re building'}</Typography>
-                </AccordionSummary>
-                <AccordionDetails>
-                  <Stack component="ul" spacing={1.5} sx={{ m: 0, pl: 2.5 }}>
-                    {ready.plan.screens.map((screen, index) => (
-                      <Box component="li" key={`${screen.slug}-${index}`}>
-                        <Typography variant="body1">{`${screen.title} — ${screen.slug}`}</Typography>
-                        {screen.sections.length > 0 && (
-                          <Typography variant="body2" color="text.secondary">
-                            {screen.sections.map((section) => section.name).join(', ')}
-                          </Typography>
-                        )}
-                      </Box>
-                    ))}
-                  </Stack>
-                </AccordionDetails>
-              </Accordion>
-            )}
-          </>
-        )}
+        {children}
       </Stack>
     </Container>
+  )
+}
+
+export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPageProps) {
+  const { data: user } = useUser()
+  const jobId = segments?.[0] ? decodeURIComponent(String(segments[0])) : null
+  const orgSlug = (basePath ?? '').split('/')[1] ?? ''
+  const site = useAiJobSite(hostId)
+  const orgId = site.status === 'ready' ? site.orgId : null
+  const siteName = site.status === 'ready' ? site.name : undefined
+
+  const [job, setJob, retry] = useAiJobById(user, orgId, jobId)
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const tryAgain = useCallback(async () => {
+    if (!orgId || !job || typeof job !== 'object') return
+    setBusy(true)
+    setNotice(null)
+    const decision = await resumeAiJobRequest(user, orgId, job)
+    if (decision.job) setJob(decision.job)
+    if (decision.error) setNotice(decision.error)
+    setBusy(false)
+  }, [orgId, job, user, setJob])
+
+  const ready = job && typeof job === 'object' ? job : null
+  const copy = ready ? aiJobPageCopy(ready, PLATFORM_BRAND_NAME) : null
+  // The shell's header names the job's page as the page does, and its trail
+  // walks back to the site's AI jobs.
+  const record = <PageHeaderRecord title={copy?.heading} />
+
+  if (site.status === 'error') {
+    return (
+      <Frame heading="This site could not be read">
+        <Alert severity="warning">
+          {'The site this job belongs to could not be loaded. Check your connection and reload the page.'}
+        </Alert>
+      </Frame>
+    )
+  }
+  if (job === 'missing') {
+    return (
+      <Frame siteName={siteName} heading="This job could not be found">
+        <Alert severity="info">{'It may belong to another workspace, or it may have expired.'}</Alert>
+        {basePath ? (
+          <Box>
+            <Button variant="outlined" component={AppLink} href={basePath}>
+              {'See this site’s AI jobs'}
+            </Button>
+          </Box>
+        ) : null}
+      </Frame>
+    )
+  }
+  if (job === 'error') {
+    return (
+      <Frame siteName={siteName} heading="This job could not be loaded">
+        <Alert
+          severity="warning"
+          action={
+            <Button color="inherit" size="small" onClick={retry}>
+              {'Try again'}
+            </Button>
+          }
+        >
+          {'Something went wrong reading it. It may still be running: try again in a moment.'}
+        </Alert>
+      </Frame>
+    )
+  }
+  if (!ready || !copy) {
+    return (
+      <Frame siteName={siteName} heading="Building your site">
+        <Stack sx={{ alignItems: 'center', py: 4 }}>
+          <CircularProgress aria-label="Loading the job" />
+        </Stack>
+      </Frame>
+    )
+  }
+
+  const phase = aiSiteBuildPhase(ready)
+  const rows = aiSiteBuildRows(ready)
+  const credits = aiSiteBuildCreditsLine(ready)
+  const links = phase === 'done' ? aiSiteBuildDoneLinks(ready, orgSlug) : { view: null, pages: null }
+  const sitePublish = ready.kind === 'site' && phase === 'done' ? (ready.sitePublish ?? null) : null
+  const liveUrl = sitePublish && sitePublish.published.length > 0 ? sitePublish.liveUrl : null
+  const retryRefusal = ready.review?.retryRefusal
+  const canRetry = phase === 'stopped' && ready.review?.reason === 'doctrine'
+
+  return (
+    <Frame siteName={siteName} heading={copy.heading} lede={copy.lede}>
+      {record}
+      {notice && <Alert severity="warning">{notice}</Alert>}
+      <Card variant="outlined" sx={{ borderRadius: 2 }}>
+        {phase === 'working' && <LinearProgress aria-label="Building" />}
+        <Box component="ol" aria-label="Progress" sx={{ listStyle: 'none', m: 0, p: { xs: 2, sm: 3 } }}>
+          <Stack spacing={2}>
+            {rows.map((row) => (
+              <Stack component="li" key={row.id} direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+                <Box sx={{ width: (theme) => theme.spacing(3), display: 'flex', justifyContent: 'center' }}>
+                  <RowIcon state={row.state} />
+                </Box>
+                <Typography
+                  variant="body1"
+                  color={row.state === 'waiting' ? 'text.secondary' : 'text.primary'}
+                >
+                  {row.label}
+                </Typography>
+              </Stack>
+            ))}
+          </Stack>
+        </Box>
+      </Card>
+      {credits && (
+        <Typography variant="body2" color="text.secondary">
+          {credits}
+        </Typography>
+      )}
+      {sitePublish && sitePublish.drafts.length > 0 && (
+        // The pages the publish left as drafts, each with its plain reason;
+        // Edit your pages is where they are fixed and published.
+        <Alert severity="warning">
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            {sitePublish.drafts.length === 1 ? 'This page stayed a draft:' : 'These pages stayed drafts:'}
+          </Typography>
+          <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+            {sitePublish.drafts.map((draft) => (
+              <li key={draft.id}>
+                <Typography variant="body2">{`${draft.label}: ${draft.reason}`}</Typography>
+              </li>
+            ))}
+          </Box>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            {'Open Edit your pages to fix and publish them.'}
+          </Typography>
+        </Alert>
+      )}
+      {phase === 'done' && (
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+          {liveUrl ? (
+            // The live site, in a tab of its own: the console stays where it is.
+            <Button
+              variant="contained"
+              size="large"
+              component="a"
+              href={liveUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {'View your site'}
+            </Button>
+          ) : links.view ? (
+            <Button variant="contained" size="large" component={AppLink} href={links.view}>
+              {'View your site'}
+            </Button>
+          ) : null}
+          {links.pages && (
+            <Button variant="outlined" size="large" component={AppLink} href={links.pages}>
+              {'Edit your pages'}
+            </Button>
+          )}
+        </Stack>
+      )}
+      {(phase === 'stopped' || phase === 'failed' || phase === 'canceled') && (
+        <Stack spacing={1}>
+          {retryRefusal && (
+            <Typography variant="body2" color="text.secondary">
+              {retryRefusal}
+            </Typography>
+          )}
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: { sm: 'center' } }}>
+            {canRetry && (
+              <Button
+                variant="contained"
+                disabled={busy || Boolean(retryRefusal)}
+                onClick={() => void tryAgain()}
+              >
+                {'Try again'}
+              </Button>
+            )}
+            {aiSiteStarterFallbackOffered(ready) && user ? <AiSiteStarterFallback job={ready} user={user} /> : null}
+          </Stack>
+        </Stack>
+      )}
+      {ready.plan && ready.plan.screens.length > 0 && (
+        <Accordion variant="outlined" disableGutters sx={{ borderRadius: 2, '&::before': { display: 'none' } }}>
+          <AccordionSummary expandIcon={<MdiIcon path={mdiChevronDown.path} />}>
+            <Typography variant="subtitle1">{'What we’re building'}</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Stack component="ul" spacing={1.5} sx={{ m: 0, pl: 2.5 }}>
+              {ready.plan.screens.map((screen, index) => (
+                <Box component="li" key={`${screen.slug}-${index}`}>
+                  <Typography variant="body1">{`${screen.title} — ${screen.slug}`}</Typography>
+                  {screen.sections.length > 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      {screen.sections.map((section) => section.name).join(', ')}
+                    </Typography>
+                  )}
+                </Box>
+              ))}
+            </Stack>
+          </AccordionDetails>
+        </Accordion>
+      )}
+    </Frame>
   )
 }
 

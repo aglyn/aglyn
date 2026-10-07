@@ -1073,6 +1073,8 @@ function describeSubprocessorDrift(expected, actual) {
  *  - A nav item's `label` and `href` (`plugin.ts`) name a surface.
  *  - A nav item's `sections` const names its rail, and the
  *    `*-console-sections.ts` that exports it is plain data, loaded as such.
+ *  - A nav item's `recordTitle` (AGL-3596) names the page of one record
+ *    beneath a surface that owns its subtree.
  *
  * A surface or a section named two different ways is refused: the tab could
  * follow only one of them.
@@ -1080,6 +1082,7 @@ function describeSubprocessorDrift(expected, actual) {
 const TITLES_MANIFEST = 'apps/console/constants/plugins.titles.generated.ts'
 const NAV_LABEL = /label:\s*'([^']+)',[\s\S]{0,200}?href:\s*'\/([a-z0-9-]+)'/g
 const NAV_SECTIONS = /href:\s*'\/([a-z0-9-]+)',[\s\S]{0,600}?sections:\s*([A-Z_]+)/g
+const NAV_RECORD_TITLE = /href:\s*'\/([a-z0-9-]+)',[\s\S]{0,300}?recordTitle:\s*'([^']+)'/g
 
 /** Every file beneath `dir` whose name `keep` accepts. */
 function filesBeneath(dir, keep) {
@@ -1098,6 +1101,7 @@ async function pluginSurfaceTitles() {
   const jiti = jitiForWorkspace()
   const titles = new Map()
   const sections = new Map()
+  const records = new Map()
   const claim = (map, key, value, where) => {
     const held = map.get(key)
     if (held !== undefined && held !== value) {
@@ -1121,6 +1125,9 @@ async function pluginSurfaceTitles() {
       for (const [, label, slug] of source.matchAll(NAV_LABEL)) {
         claim(titles, slug, label, where)
       }
+      for (const [, slug, recordTitle] of source.matchAll(NAV_RECORD_TITLE)) {
+        claim(records, slug, recordTitle, where)
+      }
       for (const [, slug, constName] of source.matchAll(NAV_SECTIONS)) {
         const list = lists.get(constName)
         if (!list) throw new Error(`${where}: /${slug} names sections ${constName}, which no *-console-sections.ts beside it exports`)
@@ -1129,15 +1136,16 @@ async function pluginSurfaceTitles() {
       }
     }
   }
-  return { titles, sections }
+  return { titles, sections, records }
 }
 
 /** The titles manifest, byte for byte. */
-function titlesContent({ titles, sections }) {
+function titlesContent({ titles, sections, records }) {
   const key = (name) => (/^[a-z][a-z0-9]*$/i.test(name) ? name : `'${name}'`)
   const quote = (text) => `'${text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
   const sorted = (map) => [...map.entries()].sort(([a], [b]) => a.localeCompare(b))
   const titleRows = sorted(titles).map(([slug, label]) => `  ${key(slug)}: ${quote(label)},\n`).join('')
+  const recordRows = sorted(records).map(([slug, label]) => `  ${key(slug)}: ${quote(label)},\n`).join('')
   const sectionRows = sorted(sections)
     .map(
       ([slug, list]) =>
@@ -1156,7 +1164,9 @@ function titlesContent({ titles, sections }) {
     `/** A surface's display name, by its URL slug. */\n` +
     `export const PLUGIN_SURFACE_TITLES: Readonly<Record<string, string>> = {\n${titleRows}}\n\n` +
     `/** The sections a surface's rail declares, id to display name, by the surface's URL slug. */\n` +
-    `export const PLUGIN_SURFACE_SECTIONS: Readonly<\n  Record<string, Readonly<Record<string, string>>>\n> = {\n${sectionRows}}\n`
+    `export const PLUGIN_SURFACE_SECTIONS: Readonly<\n  Record<string, Readonly<Record<string, string>>>\n> = {\n${sectionRows}}\n\n` +
+    `/** The noun for one record's page beneath a surface that owns its subtree, by the surface's URL slug. */\n` +
+    `export const PLUGIN_SURFACE_RECORD_TITLES: Readonly<Record<string, string>> = {\n${recordRows}}\n`
   )
 }
 

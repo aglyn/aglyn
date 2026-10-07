@@ -543,6 +543,19 @@ export interface ConsoleNavItem {
    */
   ownsSubtree?: boolean
   /**
+   * The browser tab's noun on a RECORD beneath a surface that
+   * {@link ownsSubtree} (AGL-3596), where the surface's `label` would stand
+   * otherwise: `AI jobs` lists a site's jobs at `/ai-jobs`, and one job's
+   * page at `/ai-jobs/{jobId}` is `Building your site`.
+   *
+   * The tab title is built on the server from the URL alone, which never
+   * reads the record, so this is one fixed string per surface — the noun for
+   * what a record's page is, not the record's name. It is read from the
+   * plugin's source by `tools/scripts/generate-plugin-manifests.mjs` into the
+   * titles manifest, and so must be a string literal beside a literal `href`.
+   */
+  recordTitle?: string
+  /**
    * A page with an address and no tab (AGL-3594): served at its `href` like
    * any nav item, and left off the site's tab strip. For a surface a person
    * is SENT to — the page a flow lands on, the page a notification opens —

@@ -16,6 +16,7 @@
  */
 
 import {
+  PLUGIN_SURFACE_RECORD_TITLES,
   PLUGIN_SURFACE_SECTIONS,
   PLUGIN_SURFACE_TITLES,
 } from '../constants/plugins.titles.generated'
@@ -74,4 +75,13 @@ export function pluginSectionTitle(
 ): string {
   const sections = own(PLUGIN_SURFACE_SECTIONS, surfaceSlug)
   return (sections && own(sections, sectionSlug)) ?? ''
+}
+
+/**
+ * The noun for one record's page beneath `surfaceSlug` (AGL-3596) — what a
+ * nav item that owns its subtree declares as its `recordTitle` — or `''` when
+ * it declares none, and the surface's own name stands.
+ */
+export function pluginRecordTitle(surfaceSlug: string): string {
+  return own(PLUGIN_SURFACE_RECORD_TITLES, surfaceSlug) ?? ''
 }

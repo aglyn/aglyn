@@ -54,6 +54,13 @@ export async function readEventFrames(
 }
 
 /**
+ * How a follow ended (AGL-3596): the stream ran its course (`ok`), the route
+ * answered that the job is not this reader's to see or does not exist
+ * (`not-found`), or the route could not be reached or failed (`error`).
+ */
+export type AiJobFollowEnd = 'ok' | 'not-found' | 'error'
+
+/**
  * Follows one job through the events route until it settles, the signal
  * aborts or the route stops answering, handing each state to `onJob` and to
  * every surface counting the workspace's jobs (AGL-3593). The server closes a
@@ -65,7 +72,7 @@ export async function followAiJobEvents(
   jobId: string,
   signal: AbortSignal,
   onJob: (job: AiJobSummary) => void,
-): Promise<void> {
+): Promise<AiJobFollowEnd> {
   let again = true
   while (again && !signal.aborted) {
     again = false
@@ -75,7 +82,8 @@ export async function followAiJobEvents(
         `/api/ai/jobs/${encodeURIComponent(jobId)}/events?orgId=${encodeURIComponent(orgId)}`,
         { signal },
       )
-      if (!response.ok || !response.body) return
+      if (response.status === 404 || response.status === 403) return 'not-found'
+      if (!response.ok || !response.body) return 'error'
       await readEventFrames(response.body, (event) => {
         if (signal.aborted) return
         if (event['type'] === 'state') {
@@ -85,7 +93,8 @@ export async function followAiJobEvents(
         } else if (event['type'] === 'reconnect') again = true
       })
     } catch {
-      return
+      return 'error'
     }
   }
+  return 'ok'
 }

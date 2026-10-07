@@ -602,6 +602,12 @@ export interface ListAiJobsOptions {
    * job not yet settled in one read. Ignored when `status` is given.
    */
   statuses?: readonly AiJobStatus[]
+  /**
+   * One site's jobs (AGL-3596), for the site's AI jobs page; on the
+   * (hostId, createdAt) index. Not combined with a status filter, which no
+   * reader asks for and no index answers.
+   */
+  hostId?: string
   limit?: number
 }
 
@@ -618,6 +624,7 @@ export async function listAiJobs(
   let query: FirebaseFirestore.Query = jobsCollection(firestore, orgId)
   if (options.status) query = query.where('status', '==', options.status)
   else if (options.statuses?.length) query = query.where('status', 'in', [...options.statuses])
+  else if (options.hostId) query = query.where('hostId', '==', options.hostId)
   const snapshot = await query.orderBy('createdAt', 'desc').limit(limit).get()
   return snapshot.docs
     .map((doc) => jobFrom(doc))
