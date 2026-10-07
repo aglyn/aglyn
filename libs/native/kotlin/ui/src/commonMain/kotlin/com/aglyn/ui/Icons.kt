@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.automirrored.outlined.Launch
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -88,6 +89,7 @@ object AglynIcons {
     "shield" to Icons.Outlined.Shield,
     "warning" to Icons.Outlined.WarningAmber,
     "info" to Icons.Outlined.Info,
+    "logout" to Icons.AutoMirrored.Outlined.Logout,
     "launch" to Icons.AutoMirrored.Outlined.Launch,
   )
 

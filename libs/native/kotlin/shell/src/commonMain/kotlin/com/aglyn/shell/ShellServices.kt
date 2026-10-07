@@ -28,6 +28,8 @@ class ShellServices(
   val firestore: FirestoreReader,
   val api: ConsoleApiClient,
   val workspace: WorkspaceStore,
+  /** Small per-install settings (the POS store this device sells for). */
+  val prefs: com.aglyn.core.KeyValueStore,
   val registry: NativePluginRegistry,
   /** Shows an absolute console path: the authenticated WebView on Android, the browser on desktop. */
   val console: @Composable (path: String, onExit: () -> Unit) -> Unit,

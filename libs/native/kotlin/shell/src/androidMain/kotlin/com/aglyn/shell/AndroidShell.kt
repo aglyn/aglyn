@@ -39,6 +39,7 @@ object AndroidShell {
     val firestore = FirebaseFirestoreReader(firebase.firestore)
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val api = ConsoleApiClient(config.consoleOrigin, defaultHttpClient(), auth::idToken, config.brandName)
+    val prefs = SharedPreferencesStore(context)
     val registry = NativePluginRegistry()
     registry.load(manifest).failed.forEach { android.util.Log.e("Aglyn", "plugin ${it.pluginId}: ${it.error}") }
     return ShellServices(
@@ -47,7 +48,8 @@ object AndroidShell {
       auth = auth,
       firestore = firestore,
       api = api,
-      workspace = WorkspaceStore(scope, auth, firestore, SharedPreferencesStore(context)),
+      workspace = WorkspaceStore(scope, auth, firestore, prefs),
+      prefs = prefs,
       registry = registry,
       console = { path, onExit -> ConsoleView(config.consoleOrigin, path, auth, config.brandName, onExit) },
       debugSignIn = debugSignIn,

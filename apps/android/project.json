@@ -13,7 +13,7 @@
       "cache": false,
       "options": {
         "cwd": "apps/android",
-        "command": "./gradlew :app:assembleDebug"
+        "command": "./gradlew :app:assembleDebug :pos:assembleDebug"
       }
     }
   }
