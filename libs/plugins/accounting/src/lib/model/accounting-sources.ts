@@ -75,6 +75,14 @@ export interface AccountingOrderSnapshot {
    * order carried one. Mapped to a ledger tax code like the base keys.
    */
   taxKey: string | null
+  /**
+   * Tax the buyer paid that is NOT the merchant's: on a Stripe Tax sale Aglyn
+   * is the marketplace facilitator, the tax settles into Aglyn's balance and
+   * Aglyn remits it, so it never reaches the merchant's Stripe account. It is
+   * already taken out of `totals` (whose `taxCents` is then 0); this records
+   * how much, for the memo and for scaling a refund to the merchant's share.
+   */
+  marketplaceTaxCents?: number
 }
 
 /** A refund against a paid order. */

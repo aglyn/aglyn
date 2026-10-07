@@ -27,7 +27,14 @@ import { registerAccountingServerDeclarations } from '../declarations.server'
 import { EMPTY_ACCOUNTING_MAPPING } from '../model/accounting.types'
 import { asFirestore, memoryFirestore } from '../testing/memory-firestore'
 import { feeItemId, feeRefundItemId, refundItemId, saleItemId } from './sync-store'
-import { feeRefundedFor, onOrderCancelled, onOrderPaid, onOrderRefunded, snapshotFromOrderEvent } from './sync-intake'
+import {
+  feeRefundedFor,
+  merchantShareOfRefund,
+  onOrderCancelled,
+  onOrderPaid,
+  onOrderRefunded,
+  snapshotFromOrderEvent,
+} from './sync-intake'
 
 const NOW = Date.UTC(2026, 9, 6, 18)
 
@@ -105,6 +112,36 @@ describe('the event intake', () => {
     expect(item(refundItemId(snapshot))).toMatchObject({ kind: 'refund', amountCents: 1620 })
     expect(item(feeRefundItemId(snapshot))).toMatchObject({ kind: 'fee-refund', amountCents: 49 })
     expect(feeRefundedFor(snapshotFromOrderEvent(orderView, { orgId: 'o', hostId: 'h', occurredAtMs: 0 }), 3240)).toBe(97)
+  })
+
+  it('posts a Stripe Tax sale without its tax, which Aglyn holds and remits as marketplace facilitator', async () => {
+    const { deps, item } = setup()
+    const taxed = { ...orderView, taxMode: 'stripe-automatic' }
+    expect(snapshotFromOrderEvent(taxed, { orgId: 'org-1', hostId: 'host-1', occurredAtMs: 7 })).toMatchObject({
+      totals: { itemsCents: 2500, shippingCents: 500, taxCents: 0, totalCents: 3000, feeCents: 97 },
+      marketplaceTaxCents: 240,
+    })
+    // A manual-tax sale keeps its tax: it is the merchant's own liability.
+    expect(snapshotFromOrderEvent({ ...orderView, taxMode: 'manual' }, { orgId: 'o', hostId: 'h', occurredAtMs: 0 })).toMatchObject({
+      totals: { taxCents: 240, totalCents: 3240 },
+    })
+    await onOrderPaid(deps, envelope({ order: taxed }))
+    expect(item(saleItemId({ hostId: 'host-1', orderId: 'order-1' }))).toMatchObject({ amountCents: 3000 })
+    // The buyer gets 3240 back; 240 of it comes out of Aglyn's balance.
+    const refund = { id: 're_tax', amountCents: 3240, lineItemIds: [], full: true }
+    await onOrderRefunded(deps, envelope({ order: { ...taxed, refundedCents: 3240 }, refund }, 'evt-4'))
+    const snapshot = { order: { hostId: 'host-1', orderId: 'order-1' }, refundId: 're_tax' } as never
+    expect(item(refundItemId(snapshot))).toMatchObject({ amountCents: 3000 })
+    expect(item(feeRefundItemId(snapshot))).toMatchObject({ amountCents: 97 })
+  })
+
+  it('scales a partial refund of a Stripe Tax sale to the merchant’s share, and leaves any other refund whole', () => {
+    const taxed = snapshotFromOrderEvent({ ...orderView, taxMode: 'stripe-automatic' }, { orgId: 'o', hostId: 'h', occurredAtMs: 0 })
+    // 1620 × 3000 ÷ 3240
+    expect(merchantShareOfRefund(taxed, 1620)).toBe(1500)
+    expect(merchantShareOfRefund(taxed, 99_999)).toBe(3000)
+    const manual = snapshotFromOrderEvent(orderView, { orgId: 'o', hostId: 'h', occurredAtMs: 0 })
+    expect(merchantShareOfRefund(manual, 1620)).toBe(1620)
   })
 
   it('names a refund with no Stripe id by its envelope, so a redelivery is the same refund', async () => {

@@ -47,7 +47,7 @@ import type { AccountingOrderSnapshot, AccountingRefundSnapshot } from '../model
 import { connectionRef, type AccountingConnectionRecord } from './connection-store'
 import type { AccountingEngineDeps } from './sync-engine'
 import { enqueueOrderPaid } from './sync-engine'
-import { snapshotFromOrderEvent, type CommerceOrderEventOrder } from './sync-intake'
+import { feeRefundedFor, merchantShareOfRefund, snapshotFromOrderEvent, type CommerceOrderEventOrder } from './sync-intake'
 import { createSyncItems, itemsForRefund, syncItemId } from './sync-store'
 
 /** Where a backfill stands, on the connection document. */
@@ -103,14 +103,16 @@ export function backfillRefund(
   entry: Pick<CommerceOrderHistoryEntry, 'order' | 'lastRefundAtMs'>,
   nowMs: number,
 ): (AccountingRefundSnapshot & { coversUntilMs: number }) | null {
-  const refunded = Math.min(toCents(entry.order?.refundedCents), order.totals.totalCents)
+  // What came back to the buyer, less a Stripe Tax sale's tax, which was Aglyn's.
+  const refunded = Math.min(merchantShareOfRefund(order, toCents(entry.order?.refundedCents)), order.totals.totalCents)
   if (refunded <= 0) return null
   return {
     order,
     refundId: `backfill-${order.orderId}`,
     amountCents: refunded,
     refundedAtMs: entry.lastRefundAtMs ?? order.paidAtMs,
-    feeRefundedCents: 0,
+    // Every refund gives the platform fee back in proportion (`refund_application_fee`).
+    feeRefundedCents: feeRefundedFor(order, refunded),
     coversUntilMs: nowMs,
   }
 }

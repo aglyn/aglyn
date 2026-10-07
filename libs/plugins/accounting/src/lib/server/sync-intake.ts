@@ -77,7 +77,16 @@ export interface CommerceOrderEventOrder {
     feeCents?: number
   }
   refundedCents?: number
+  /**
+   * Which tax regime the sale carried: `stripe-automatic` when Stripe Tax
+   * computed it under Aglyn's registrations, `manual` or `none` otherwise,
+   * `null` on an order from before it was recorded.
+   */
+  taxMode?: string | null
 }
+
+/** The tax regime under which Aglyn, as marketplace facilitator, holds and remits the tax. */
+export const MARKETPLACE_TAX_MODE = 'stripe-automatic'
 
 /** `order.paid` and `order.cancelled`. */
 export interface CommerceOrderEventPayload {
@@ -139,6 +148,11 @@ export function snapshotFromOrderEvent(
 ): AccountingOrderSnapshot {
   const totals = order.totals ?? {}
   const lines = Array.isArray(order.lineItems) ? (order.lineItems as Array<Record<string, unknown>>) : []
+  // A Stripe Tax sale's tax is Aglyn's to remit and never reaches the
+  // merchant's account, so it is neither the merchant's liability nor money
+  // in their clearing account: the sale is posted without it.
+  const taxCents = toCents(totals.taxCents)
+  const marketplaceTaxCents = order.taxMode === MARKETPLACE_TAX_MODE ? taxCents : 0
   return {
     orgId: context.orgId,
     hostId: context.hostId,
@@ -159,15 +173,32 @@ export function snapshotFromOrderEvent(
     totals: {
       itemsCents: toCents(totals.itemsCents),
       shippingCents: toCents(totals.shippingCents),
-      taxCents: toCents(totals.taxCents),
+      taxCents: taxCents - marketplaceTaxCents,
       discountCents: toCents(totals.discountCents),
-      totalCents: toCents(totals.totalCents),
+      totalCents: Math.max(0, toCents(totals.totalCents) - marketplaceTaxCents),
       feeCents: toCents(totals.feeCents),
     },
     // Storefront prices are tax-exclusive: the tax is added at checkout.
     taxInclusive: false,
     taxKey: null,
+    ...(marketplaceTaxCents > 0 ? { marketplaceTaxCents } : {}),
   }
+}
+
+/**
+ * The part of a refund that comes out of the merchant's account. A refund
+ * gives the buyer back their tax too; on a Stripe Tax sale that share is
+ * Aglyn's, reversed from Aglyn's balance, so the merchant's refund is the
+ * amount in proportion to what the sale paid them (`totals.totalCents`, the
+ * tax already taken out).
+ */
+export function merchantShareOfRefund(order: AccountingOrderSnapshot, amountCents: number): number {
+  const amount = toCents(amountCents)
+  const marketplaceTax = toCents(order.marketplaceTaxCents)
+  if (marketplaceTax <= 0 || amount <= 0) return amount
+  const merchantTotal = toCents(order.totals.totalCents)
+  const paid = merchantTotal + marketplaceTax
+  return Math.min(merchantTotal, Math.round((amount * merchantTotal) / paid))
 }
 
 /**
@@ -287,13 +318,15 @@ export async function onOrderRefunded(
   const fromSale = sale.exists ? (sale.get('order') as AccountingOrderSnapshot | undefined) : undefined
   const snapshot =
     fromSale ?? snapshotFromOrderEvent(order, { orgId, hostId: envelope.hostId, occurredAtMs: envelope.occurredAtMs })
+  const merchantCents = merchantShareOfRefund(snapshot, amountCents)
+  if (merchantCents <= 0) return 0
   return enqueueOrderRefunded(deps, {
     order: snapshot,
     // Stripe's refund id; the envelope's id, stable across redeliveries, for one without.
     refundId: refund?.id ? String(refund.id) : envelope.id,
-    amountCents,
+    amountCents: merchantCents,
     refundedAtMs: envelope.occurredAtMs,
-    feeRefundedCents: feeRefundedFor(snapshot, amountCents),
+    feeRefundedCents: feeRefundedFor(snapshot, merchantCents),
   })
 }
 

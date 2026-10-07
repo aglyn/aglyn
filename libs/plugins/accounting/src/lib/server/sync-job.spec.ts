@@ -202,9 +202,29 @@ describe('backfill', () => {
     const snapshot = snapshotFromHistoryEntry('org-1', 'host-1', entry('o-1'))!
     expect(backfillRefund(snapshot, entry('o-1'), NOW)).toMatchObject({
       amountCents: 400,
+      // 30 × 400 ÷ 1000: the fee comes back in proportion, as on a live refund.
+      feeRefundedCents: 12,
       refundedAtMs: NOW - 9 * 86_400_000,
       coversUntilMs: NOW,
     })
+  })
+
+  it('takes a Stripe Tax sale’s tax out of the sale and of its earlier refund: Aglyn remitted it', () => {
+    const taxed = entry('o-4', {
+      order: {
+        id: 'o-4',
+        number: 13,
+        status: 'refunded',
+        currency: 'usd',
+        taxMode: 'stripe-automatic',
+        lineItems: [{ name: 'Mug', quantity: 1, unitAmountCents: 1000 }],
+        totals: { itemsCents: 1000, shippingCents: 0, taxCents: 80, discountCents: 0, totalCents: 1080, feeCents: 30 },
+        refundedCents: 1080,
+      },
+    })
+    const snapshot = snapshotFromHistoryEntry('org-1', 'host-1', taxed)!
+    expect(snapshot).toMatchObject({ marketplaceTaxCents: 80, totals: { taxCents: 0, totalCents: 1000 } })
+    expect(backfillRefund(snapshot, taxed, NOW)).toMatchObject({ amountCents: 1000, feeRefundedCents: 30 })
   })
 
   it('queues the sales before the connection from the start date, a page at a time, through commerce’s reader', async () => {
@@ -219,12 +239,13 @@ describe('backfill', () => {
     await startBackfill(asFirestore(store), connection, NOW - 30 * 86_400_000)
     const withBackfill = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'))!
     const queued = await runBackfillStep(deps, withBackfill as never)
-    // The sale, its fee and its refund; the unpaid order and the one after the connection are not.
-    expect(queued).toBe(3)
+    // The sale, its fee, its refund and the fee the refund gave back; the
+    // unpaid order and the one after the connection are not.
+    expect(queued).toBe(4)
     expect(listOrders).toHaveBeenCalledWith(expect.objectContaining({ hostId: 'host-1', fromMs: NOW - 30 * 86_400_000 }))
     expect(store.read(`orgs/org-1/accountingSyncItems/${saleItemId({ hostId: 'host-1', orderId: 'o-1' })}`)).toBeDefined()
     expect(store.read(`orgs/org-1/accountingSyncItems/${saleItemId({ hostId: 'host-1', orderId: 'o-3' })}`)).toBeUndefined()
-    expect(store.read('orgs/org-1/accountingConnections/quickbooks')!['backfill']).toMatchObject({ done: true, queued: 3 })
+    expect(store.read('orgs/org-1/accountingConnections/quickbooks')!['backfill']).toMatchObject({ done: true, queued: 4 })
   })
 
   it('waits where it stands while commerce’s reader is not registered', async () => {

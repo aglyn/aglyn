@@ -52,6 +52,8 @@ export interface OrderEventOrder {
     feeCents: number
   }
   refundedCents: number
+  /** The tax regime: `stripe-automatic`, `manual`, `none`, or `null` when not recorded. */
+  taxMode: string | null
   [key: string]: unknown
 }
 

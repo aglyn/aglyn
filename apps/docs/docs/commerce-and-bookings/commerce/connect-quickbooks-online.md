@@ -80,6 +80,13 @@ the income accounts you chose. Sales receipts name them on each line.
 Each sales receipt's number is the order's number with a short code for the
 site in front of it, so two sites' order #1042 are two receipts.
 
+### Sales tax collected by Aglyn
+
+On a store that uses **Stripe Tax**, Aglyn collects and remits the sales tax as
+the marketplace facilitator, and that tax never reaches your Stripe account. So
+Aglyn posts those sales without it, and refunds only your share of what went
+back to the buyer. Sales taxed at your own rate post their tax as usual.
+
 ### One summary a day instead
 
 Choose **One summary journal entry per day** to post one **journal entry** per
