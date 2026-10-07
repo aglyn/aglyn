@@ -35,8 +35,9 @@
  * qrserver". The source-level half of the guarantee is the
  * `aglyn/no-remote-image-service` lint rule; this is the rendered half.
  *
- * `fetch` is mocked at `/api/commerce/pos-order`, which is the ONLY boundary
- * this test crosses. Nothing here reaches Stripe: the payment URL is a string
+ * `fetch` is mocked at the register's own routes (`/api/commerce/pos-order`,
+ * `/api/commerce/pos-payment`, `/api/commerce/pos-display`), which are the ONLY
+ * boundary this test crosses. Nothing here reaches Stripe: the payment URL is a string
  * of the right shape and length, and its length is load-bearing — a 317-char
  * Checkout URL is what sizes the symbol at 61x61 modules.
  *
@@ -143,6 +144,12 @@ jest.mock('@aglyn/shared-ui-next/contexts/next-page-title-provider', () => ({
   NextPageTitle: () => null,
 }))
 
+// The void confirmation's provider is the console shell's; the register
+// never reaches it in these cases.
+jest.mock('@aglyn/shared-ui-jsx', () => ({
+  useConfirmationContext: () => ({ confirm: jest.fn() }),
+}))
+
 jest.mock('@aglyn/aglyn', () => ({
   // The register cap has its own coverage (AGL-482/1064/1775); here it just
   // has to admit the one register so the sale can proceed. Per SITE since
@@ -155,28 +162,111 @@ jest.mock('@aglyn/aglyn', () => ({
 
 import { PosConsolePage } from './pos-page.component'
 
+const SALE = {
+  orderId: 'sale-1',
+  status: 'pending',
+  totalCents: 450,
+  paidCents: 0,
+  dueCents: 450,
+  tenderableCents: 0,
+  tipCents: 0,
+}
+
+/** The register's routes, answered the way the server answers them. */
+function answer(url: string, body: any): any {
+  if (url.startsWith('/api/commerce/pos-payment?')) {
+    return {
+      settings: {
+        tippingEnabled: false,
+        tipPercentages: [15, 18, 20, 25],
+        receiptDefault: 'none',
+        displayMessage: '',
+        displayMarketingOptIn: true,
+      },
+      terminal: { available: false, testMode: true },
+      readers: [],
+      publishableKey: '',
+      smsReceipts: false,
+    }
+  }
+  if (url.startsWith('/api/commerce/pos-display')) return { state: null, connected: false }
+  if (url === '/api/commerce/pos-order') {
+    return { orderId: 'sale-1', totals: { totalCents: 450 }, dueCents: 450 }
+  }
+  if (url === '/api/commerce/pos-payment' && body?.action === 'card-link') {
+    return {
+      sale: {
+        ...SALE,
+        payments: [
+          { id: 'pay-1', method: 'card_link', amountCents: 450, status: 'pending', checkoutUrl: PAYMENT_URL },
+        ],
+      },
+      paymentId: 'pay-1',
+      completed: false,
+    }
+  }
+  if (url === '/api/commerce/pos-payment' && body?.action === 'cash') {
+    return {
+      sale: {
+        ...SALE,
+        status: 'paid',
+        paidCents: 450,
+        dueCents: 0,
+        payments: [{ id: 'pay-2', method: 'cash', amountCents: 450, status: 'succeeded', changeCents: 50 }],
+      },
+      paymentId: 'pay-2',
+      completed: true,
+    }
+  }
+  return { sale: { ...SALE, tenderableCents: 450, payments: [] } }
+}
+
+beforeAll(() => {
+  // A tablet in landscape: the register sits beside the grid.
+  window.matchMedia = ((query: string) => ({
+    matches: true,
+    media: query,
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia
+})
+
 beforeEach(() => {
   requests = []
   payloads = []
   global.fetch = jest.fn(async (input: any, init?: any) => {
-    requests.push(String(input))
-    payloads.push(init?.body ? JSON.parse(String(init.body)) : null)
-    return {
-      ok: true,
-      json: async () => ({ url: PAYMENT_URL }),
-    }
+    const url = String(input)
+    const body = init?.body ? JSON.parse(String(init.body)) : null
+    requests.push(url)
+    payloads.push(body)
+    return { ok: true, status: 200, json: async () => answer(url, body) }
   }) as unknown as typeof fetch
 })
 
-/** Rings up one item and settles it by card, which opens the QR dialog. */
-async function openCardDialog() {
+/** The requests that start a sale or a payment, in order. */
+function moneyRequests() {
+  return requests
+    .map((url, index) => ({ url, body: payloads[index] }))
+    .filter((entry) => entry.url === '/api/commerce/pos-order' || entry.url === '/api/commerce/pos-payment')
+}
+
+/** Rings up one item and charges it, which opens the sale's tender panel. */
+async function openSale() {
   render(<PosConsolePage hostId="host-1" entitled />)
   fireEvent.click(screen.getByText('Flat White'))
-  // ONE click. Until AGL-1682 this needed two: `settle` closed over `paying`
-  // and the handler set it in the same tick, so the first click died at the
-  // `if (… || !paying) return` guard and only the second reached the API.
+  fireEvent.click(screen.getByText('Charge $4.50'))
+  await waitFor(() => expect(screen.getByText('Balance due')).toBeTruthy())
+}
+
+/** Takes the card by QR, which opens the QR dialog. */
+async function openCardDialog() {
+  await openSale()
   fireEvent.click(screen.getByText('Card (QR)'))
-  await waitFor(() => expect(screen.getByText('Customer pays by card')).toBeTruthy())
+  await waitFor(() => expect(screen.getByText('Scan to pay $4.50')).toBeTruthy())
 }
 
 describe('POS card QR is rendered locally (AGL-1671)', () => {
@@ -187,150 +277,87 @@ describe('POS card QR is rendered locally (AGL-1671)', () => {
     const qr = dialog.querySelector('svg[role="img"]')
     expect(qr).toBeTruthy()
     // 256px carrying a 4-module quiet zone around a 61x61 symbol. Asserting
-    // the viewBox asserts the payload really was ENCODED here — a stub that
-    // drew nothing would not know the URL is 317 characters long.
+    // the viewBox asserts the payload really was ENCODED here.
     expect(qr?.getAttribute('viewBox')).toBe('0 0 69 69')
     expect(qr?.getAttribute('width')).toBe('256')
     expect(qr?.getAttribute('height')).toBe('256')
     expect(qr?.querySelector('title')?.textContent).toBe('Payment QR')
   })
 
-  // SUPPORTING, not load-bearing, and worth saying so: an `<img src>` is a
-  // browser resource load, not a `fetch`, and jsdom issues neither — so this
-  // case passes against the BROKEN component too. It is here to pin the one
-  // request the flow is allowed to make, which is what would catch the
-  // payment URL being posted somewhere new.
-  it('sends the payment URL to no one — the only call is our own order API', async () => {
+  // SUPPORTING: pins that every request the flow makes is to our own API, so
+  // the payment URL being posted somewhere new would be caught.
+  it('sends the payment URL to no one — every call is our own register API', async () => {
     await openCardDialog()
 
-    expect(requests).toEqual(['/api/commerce/pos-order'])
+    expect(requests.every((url) => url.startsWith('/api/commerce/'))).toBe(true)
     expect(requests.some((url) => url.includes('qrserver'))).toBe(false)
+    expect(moneyRequests().map((entry) => entry.body?.action ?? entry.body?.payment)).toEqual([
+      'open',
+      'card-link',
+    ])
   })
 
   it('leaves no element in the dialog that loads a remote resource', async () => {
     await openCardDialog()
 
-    // THE ASSERTION THIS ISSUE IS ABOUT, written so it holds against any
-    // remote renderer rather than against goQR by name.
     const dialog = screen.getByRole('dialog')
-    const loaders = dialog.querySelectorAll(
-      'img, image, iframe, [src], [xlink\\:href]',
-    )
+    const loaders = dialog.querySelectorAll('img, image, iframe, [src], [xlink\\:href]')
     expect(Array.from(loaders).map((el) => el.tagName)).toEqual([])
-
-    // The payment URL appears exactly once, in the escape-hatch link the
-    // cashier can open on a customer display — an `href` the merchant
-    // chooses to follow, not a request the browser makes unasked.
+    // The payment URL appears exactly once, in the escape-hatch link.
     const links = Array.from(dialog.querySelectorAll('a[href]'))
     expect(links.map((el) => el.getAttribute('href'))).toEqual([PAYMENT_URL])
   })
 })
 
 /**
- * One tap, one order (AGL-1682).
- *
- * The tender is now an argument to `settle` rather than a `paying` state value
- * the same handler had just written, and re-entrancy is held by a ref instead
- * of the `busy` state — which a second tap arriving before React re-rendered
- * would have read stale in exactly the same way.
- *
- * Both halves matter on this path because `/api/commerce/pos-order` carries no
- * idempotency key: one surplus call is one surplus `orders` doc plus one
- * surplus Stripe Checkout session, on a live merchant account.
+ * One tap, one sale (AGL-1682, carried onto the open sale of AGL-3607): a
+ * double-tapped Charge opens one sale, and a dismissed QR leaves the sale open
+ * on the register rather than a full basket that bills again.
  */
-describe('POS settlement takes one tap and makes one order (AGL-1682)', () => {
-  /** Renders the register with one item rung up, ready to settle. */
-  function ringUpOneItem() {
+describe('POS settlement takes one tap and makes one sale (AGL-1682)', () => {
+  it('opens ONE sale when two taps land inside a single React batch', async () => {
     render(<PosConsolePage hostId="host-1" entitled />)
     fireEvent.click(screen.getByText('Flat White'))
-  }
-
-  it('creates the order on the FIRST Card (QR) click', async () => {
-    ringUpOneItem()
-    fireEvent.click(screen.getByText('Card (QR)'))
-
-    await waitFor(() =>
-      expect(screen.getByText('Customer pays by card')).toBeTruthy(),
-    )
-    expect(requests).toEqual(['/api/commerce/pos-order'])
-    expect(payloads[0].payment).toBe('link')
+    const charge = screen.getByText('Charge $4.50')
+    await act(async () => {
+      charge.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      charge.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await waitFor(() => expect(screen.getByText('Balance due')).toBeTruthy())
+    expect(moneyRequests()).toHaveLength(1)
+    expect(moneyRequests()[0].body.payment).toBe('open')
   })
 
-  it('makes ONE order when the cashier double-taps Card (QR)', async () => {
-    ringUpOneItem()
-    // Three separate clicks, each with a render between it and the next.
-    // MEASURED, not assumed: this case still passes with the in-flight ref
-    // deleted, because by click two `busy` has flushed, the button carries
-    // `disabled`, and React declines to fire onClick on a disabled button.
-    // So this pins the user-visible outcome — a cashier who has learned to
-    // double-tap gets one order — and the case below is the one that pins the
-    // ref.
-    const card = screen.getByText('Card (QR)')
-    fireEvent.click(card)
-    fireEvent.click(card)
-    fireEvent.click(card)
-
-    await waitFor(() =>
-      expect(screen.getByText('Customer pays by card')).toBeTruthy(),
-    )
-    expect(requests).toEqual(['/api/commerce/pos-order'])
-  })
-
-  it('makes ONE order when two taps land inside a single React batch', async () => {
-    ringUpOneItem()
-    // Both events dispatched inside ONE `act` scope, so React does not
-    // re-render between them: `setBusy(true)` has not flushed, the button is
-    // not yet `disabled`, and the second handler is the same instance holding
-    // the same pre-click closure. That is the hazard `disabled` cannot cover
-    // and the reason the guard is a ref — it is the only thing that stops the
-    // second call here, and deleting it makes this case, alone, report two
-    // requests.
+  it('sends one card payment when the cashier double-taps Card (QR)', async () => {
+    await openSale()
     const card = screen.getByText('Card (QR)')
     await act(async () => {
       card.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       card.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
-
-    await waitFor(() =>
-      expect(screen.getByText('Customer pays by card')).toBeTruthy(),
-    )
-    expect(requests).toEqual(['/api/commerce/pos-order'])
+    await waitFor(() => expect(screen.getByText('Scan to pay $4.50')).toBeTruthy())
+    expect(moneyRequests().filter((entry) => entry.body?.action === 'card-link')).toHaveLength(1)
   })
 
   it('does not leave the same basket chargeable after the QR is dismissed', async () => {
-    ringUpOneItem()
-    fireEvent.click(screen.getByText('Card (QR)'))
-    await waitFor(() =>
-      expect(screen.getByText('Customer pays by card')).toBeTruthy(),
-    )
-
-    // Escape, not the Done button — `onClose` is the path that fires by
-    // accident, and it used to clear only `cardUrl`, handing the cashier back
-    // a still-full register whose next tap billed the basket a second time.
+    await openCardDialog()
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
-    await waitFor(() =>
-      expect(screen.getByText('Tap products to add them.')).toBeTruthy(),
-    )
-
-    fireEvent.click(screen.getByText('Card (QR)'))
-    expect(requests).toEqual(['/api/commerce/pos-order'])
+    await waitFor(() => expect(screen.queryByText('Scan to pay $4.50')).toBeNull())
+    // The sale stays open with its payment waiting; there is no Charge to
+    // press again, and the waiting payment can still show its QR.
+    expect(screen.queryByText(/^Charge /)).toBeNull()
+    expect(screen.getByText('Show QR')).toBeTruthy()
+    expect(moneyRequests().filter((entry) => entry.body?.payment === 'open')).toHaveLength(1)
   })
 
-  it('sends the cash tender as cash, not as a click event', async () => {
-    // `settle` used to be passed to `onClick` bare. Now that it takes the
-    // tender as its first argument, that spelling would post MUI's synthetic
-    // mouse event as `payment` and the server would fall back to 'cash' by
-    // luck rather than by intent — for the folio button, to the wrong tender
-    // entirely.
-    ringUpOneItem()
+  it('sends the cash tender as cash, with what the customer handed over', async () => {
+    await openSale()
     fireEvent.click(screen.getByText('Cash'))
-    fireEvent.change(screen.getByLabelText('Cash received ($)'), {
-      target: { value: '5' },
-    })
-    fireEvent.click(screen.getByText('Complete sale'))
+    fireEvent.change(screen.getByLabelText('Cash received ($)'), { target: { value: '5' } })
+    fireEvent.click(screen.getByText('Take cash'))
 
-    await waitFor(() => expect(requests.length).toBe(1))
-    expect(payloads[0].payment).toBe('cash')
-    expect(payloads[0].cashReceivedCents).toBe(500)
+    await waitFor(() => expect(screen.getByText('Change due: $0.50')).toBeTruthy())
+    const cash = moneyRequests().find((entry) => entry.body?.action === 'cash')
+    expect(cash?.body).toMatchObject({ action: 'cash', tenderedCents: 500, orderId: 'sale-1' })
   })
 })

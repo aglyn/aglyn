@@ -23,39 +23,27 @@ import {
   PRODUCT_LIST_BASE,
   PRODUCT_LIST_QUERY,
 } from '../../constants/product-list-query'
-import {
-  PosCustomerLookup,
-  PosLastReceipt,
-  PosOperationsBar,
-  usePosCashier,
-  usePosOpsSettings,
-  type PosSelectedCustomer,
-} from './pos-ops/register-ops'
-import { ScanAdornment } from '../../barcode/scan-button.component'
-import { useScannerWedge } from '../../barcode/scanner-wedge'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { ListQueryNotices } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import {
-  Alert,
+  Badge,
   Box,
   Button,
-  Card,
-  CardActionArea,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Drawer,
   MenuItem,
   Stack,
   TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
-import { QRCodeSVG } from 'qrcode.react'
 import {
   collection,
   getDocs,
@@ -68,21 +56,20 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
-import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-
-/** How a sale is being settled. Passed to `settle` explicitly (AGL-1682). */
-type Tender = 'cash' | 'link' | 'folio'
-
-interface RegisterLine {
-  productId: string
-  variantId?: string
-  name: string
-  variantLabel?: string
-  unitAmountCents: number
-  quantity: number
-}
-
-const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
+import {
+  newAttemptKey,
+  openPosSale,
+  posRegisterContext,
+  PosRequestError,
+  usd,
+  type PosRegisterContext,
+  type PosSaleSummary,
+} from './pos/pos-api'
+import { PosCartPanel, type RegisterLine } from './pos/pos-cart-panel.component'
+import { POS_TOUCH_PX, PosProductGrid } from './pos/pos-product-grid.component'
+import { PosReceiptPanel } from './pos/pos-receipt-panel.component'
+import { PosTenderPanel } from './pos/pos-tender-panel.component'
+import { usePosDisplay } from './pos/use-pos-display'
 
 /** The till sells active products only; every read of the catalog asks it. */
 const SELLABLE: ListFilterRequest = { field: 'status', op: 'equals', value: 'active' }
@@ -103,10 +90,12 @@ const POS_GRID_CEILING = 500
 export function posProductPlan(options: {
   search?: string
   code?: { field: 'barcodes' | 'skus'; value: string }
+  /** A category chip (AGL-3607): served by the storefront's own composite. */
+  categoryId?: string
 }) {
   const typed = options.search?.trim()
   return planListQuery(
-    PRODUCT_LIST_QUERY,
+    POS_GRID_QUERY,
     {
       base: PRODUCT_LIST_BASE,
       clauses: [
@@ -114,22 +103,47 @@ export function posProductPlan(options: {
         ...(options.code
           ? [{ field: options.code.field, op: 'contains', value: options.code.value }]
           : []),
+        ...(options.categoryId
+          ? [{ field: 'categoryIds', op: 'contains', value: options.categoryId }]
+          : []),
       ],
-      search: typed ? [typed] : [],
+      // A chip and a typed word are both array clauses, and Firestore takes
+      // one: with a chip on, the word narrows by name prefix instead.
+      search: typed && !options.categoryId ? [typed] : [],
     },
     nameSearchNormalizers,
   )
 }
 
 /**
- * POS register (AGL-312): touch-first full-screen sale surface —
- * product grid with search/barcode (keyboard-wedge scanners type into
- * the search box and press Enter), a register cart with a whole-sale
- * discount, and cash / QR-card / reservation-folio settlement through
- * the server-priced pos-order API. The operations strip (AGL-3609) runs the
- * shift and drawer, the PIN cashier switch and returns; the customer lookup
- * attaches a person to the sale; receipts print on an 80mm roll through the
- * browser or the register's cloud printer.
+ * The grid's query: the products hub's, plus the category a chip picks
+ * (AGL-3607). `categoryIds CONTAINS, nameLower ASC` is a composite the
+ * storefront catalog already declares.
+ */
+export const POS_GRID_QUERY = {
+  ...PRODUCT_LIST_QUERY,
+  fields: [
+    ...PRODUCT_LIST_QUERY.fields,
+    {
+      column: 'categoryIds',
+      kind: 'exact' as const,
+      path: 'categoryIds',
+      tokensPath: 'categoryIds',
+      operators: ['contains'],
+    },
+  ],
+} as typeof PRODUCT_LIST_QUERY
+
+/**
+ * POS register (AGL-312, AGL-3607): a tablet-first sale surface — the
+ * product grid with search, scan and category chips, the basket, and a
+ * tender panel that takes one or more payments against an open sale (cash,
+ * card reader, a native Tap to Pay bridge, a typed card, the QR link, gift
+ * cards and room charges) until the balance is zero. A paired customer
+ * display mirrors the basket and takes the tip and the receipt (AGL-3608).
+ *
+ * On a wide screen (900px and up) the grid and the register sit side by
+ * side; below that the register is a bottom sheet behind a sticky total bar.
  */
 /*
  * `managePos` is NOT read here. The nav item in `plugin.ts` declares it and
@@ -140,28 +154,28 @@ export function posProductPlan(options: {
  * Re-adding a check off the `permissions` prop would be a second answer to a
  * settled question, and a laxer one: a prop absent because the map has not
  * landed reads as permitted here, while the shell holds the route on that
- * same condition rather than guessing. `server/pos-order.ts` remains the
- * enforcement point for the sale itself.
+ * same condition rather than guessing. The server routes remain the
+ * enforcement point for every sale and every payment.
  */
 export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
+  const theme = useTheme()
+  const wide = useMediaQuery(theme.breakpoints.up('md'))
 
   const [search, setSearch] = useState('')
-  const gridPlan = useMemo(() => posProductPlan({ search }), [search])
+  const [categoryId, setCategoryId] = useState('')
+  const gridPlan = useMemo(
+    () => posProductPlan({ search, categoryId }),
+    [search, categoryId],
+  )
   const { data: productDocs } = useFirestoreCollection<any>(
     /*
      * The till's grid, narrowed by the QUERY rather than by the rows it
-     * happened to fetch (AGL-2501, AGL-2292, AGL-3321).
-     *
-     * `limit(500)` with no `orderBy` was document-id order over
-     * `createResourceUid()` — an arbitrary five hundred, filtered afterwards
-     * for status, deletion and the typed search. All three are the query's
-     * now (`posProductPlan`), so the window is the first five hundred
-     * SELLABLE products by name and a typed name reaches the whole catalog.
-     * The scan does not come through here at all — see `handleSearchEnter`,
-     * which is a lookup rather than a filter.
+     * happened to fetch (AGL-2501, AGL-2292, AGL-3321): the first five
+     * hundred SELLABLE products by name, and a typed name reaches the whole
+     * catalog. The scan does not come through here — see `handleSearchEnter`.
      */
     () =>
       query(
@@ -170,6 +184,11 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
         limit(POS_GRID_CEILING),
       ),
     [firestore, hostId, gridPlan],
+    { idField: '$id' },
+  )
+  const { data: categoryDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'productCategories'), limit(30)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const { data: locationDocs } = useFirestoreCollection<any>(
@@ -186,30 +205,13 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
   const registers = [...(registerDocs ?? [])].sort((a: any, b: any) =>
     String(a.name ?? '').localeCompare(String(b.name ?? '')),
   )
-  // Only registers within the plan cap can transact (pos-order.ts enforces
-  // this at sale time by creation rank, AGL-482) — offer only those.
-  //
-  // Not until the org doc has arrived (AGL-1064): an absent org resolves to
-  // the free tier's `posRegisters: 0`, which empties this list and tells a
-  // paying seller their registers exceed a plan nobody has read yet.
-  // Per SITE (AGL-1775): the plan's cap plus the register seats the org has
-  // allocated to this host out of the purchased pool. `checkQuota` on the
-  // org-level `posRegisters` no longer carries the pool and would hide
-  // registers this site is paying for.
-  const registerCap = Aglyn.checkHostRegisterQuota(
-    org,
-    hostId,
-    registers.length,
-  ).limit
+  // Only registers within the plan cap can transact (AGL-482), and not until
+  // the org doc has arrived (AGL-1064). Per SITE (AGL-1775).
+  const registerCap = Aglyn.checkHostRegisterQuota(org, hostId, registers.length).limit
   const withinCap = CommerceModel.registersWithinCap(registers, registerCap)
-  const usableRegisters = planReady
-    ? registers.filter((r: any) => withinCap.has(r.$id))
-    : []
+  const usableRegisters = planReady ? registers.filter((r: any) => withinCap.has(r.$id)) : []
   /*
-   * The stays a sale can be charged to, asked for BY STATUS (AGL-3321). This
-   * read the first hundred reservations in document-id order and kept the
-   * checked-in ones, so a guest in the house was missing from the folio
-   * picker whenever a hundred other bookings sorted before theirs.
+   * The stays a sale can be charged to, asked for BY STATUS (AGL-3321).
    */
   const { data: reservationDocs } = useFirestoreCollection<any>(
     () =>
@@ -225,115 +227,70 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
 
   const [lines, setLines] = useState<RegisterLine[]>([])
   const [discountPct, setDiscountPct] = useState(0)
-  // The customer the lookup attached (AGL-3609); their email is the sale's.
-  const [customer, setCustomer] = useState<PosSelectedCustomer | null>(null)
-  const customerEmail = customer?.email ?? ''
+  const [customerEmail, setCustomerEmail] = useState('')
   const [locationId, setLocationId] = useState('')
-  // Register (AGL-472): a sale must run through a named register so the
-  // `posRegisters` cap is meaningful and takings are attributable.
   const [registerId, setRegisterId] = useState('')
-  // Default to the first register once they load; if that register pins a
-  // location, adopt it (the cashier can still override below).
   useEffect(() => {
     if (registerId || usableRegisters.length === 0) return
     const first = usableRegisters[0]
     setRegisterId(first.$id)
     if (first.locationId) setLocationId(first.locationId)
   }, [usableRegisters, registerId])
-  const registerName = String(
-    usableRegisters.find((register: any) => register.$id === registerId)?.name ?? '',
-  )
-  // Who is ringing (AGL-3609): a PIN-switched cashier, and the idle lock.
-  const opsSettings = usePosOpsSettings(hostId)
-  const cashier = usePosCashier({
-    hostId,
-    registerId,
-    autoLockMinutes: opsSettings.autoLockMinutes,
-  })
-  // `paying` routes the settlement DIALOGS — nothing else. It is deliberately
-  // not the tender `settle` acts on (AGL-1682): it used to be both, and the
-  // Card button had to `setPaying('link')` and call `settle()` in one handler,
-  // where `settle` still closed over the pre-click `null` and returned at its
-  // own guard. Card has no dialog of its own — the QR dialog is gated on
-  // `cardUrl` — so the card path sets nothing here at all.
-  const [paying, setPaying] = useState<Tender | null>(null)
-  const [cashReceived, setCashReceived] = useState('')
-  const [folioReservation, setFolioReservation] = useState('')
-  const [cardUrl, setCardUrl] = useState('')
-  const [busy, setBusy] = useState(false)
-  // Re-entrancy guard for `settle`, deliberately a ref and not `busy`. `busy`
-  // is for RENDERING (it disables the settle buttons); a second tap arriving
-  // before React has re-rendered would read the pre-click `false` out of the
-  // handler's closure exactly the way `paying` was read above. The ref is
-  // written and read synchronously, so it holds whatever the scheduler does.
-  // It is no longer the last line of defence — the server dedupes on the
-  // attempt key below (AGL-1691) — but it is still the cheap one, and it stops
-  // the redundant round trip rather than merely making it harmless.
-  const inFlight = useRef(false)
+
+  const [context, setContext] = useState<PosRegisterContext | null>(null)
+  // Keyed on the uid, not the user object: a session refresh hands back a
+  // new object for the same person, and re-reading the context on every one
+  // would re-render the register in a loop.
+  const userRef = useRef(user)
+  userRef.current = user
+  const uid = user?.uid ?? ''
+  useEffect(() => {
+    const signedIn = userRef.current
+    if (!signedIn) return
+    let active = true
+    posRegisterContext(signedIn, hostId)
+      .then((answer) => {
+        // Only a whole answer: a register that half-knows its tenders would
+        // offer one the server then refuses.
+        if (active && answer?.settings && answer?.terminal) setContext(answer)
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [uid, hostId])
+
+  /** The open sale, once the basket has been priced and payment started. */
+  const [sale, setSale] = useState<PosSaleSummary | null>(null)
+  const [saleLines, setSaleLines] = useState<RegisterLine[]>([])
+  const [opening, setOpening] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [pairing, setPairing] = useState<{ code: string; expiresAtMs: number } | null>(null)
+  const display = usePosDisplay(user, hostId, registerId)
+
   /**
-   * Idempotency key for ONE settlement attempt (AGL-1691).
-   *
-   * The guards above are all client-side and none of them survives a reload, a
-   * lost response, or a retry. `/api/commerce/pos-order` now dedupes on this
-   * key, but only if the key is right, and the key is the whole design:
-   *
-   * - Minted lazily on the first settle of a basket, NOT per `settle()` call.
-   *   Per-call would defeat the point — two taps would mint two keys and the
-   *   server would see two distinct sales.
-   * - Retired whenever the register's contents change (the effect below),
-   *   which covers the sale completing and clearing the lines. So a cashier
-   *   ringing the same coffee twice gets a NEW key and a real second order —
-   *   de-duplicating that would be a worse bug than the one being fixed.
+   * One key per basket (AGL-1691): minted on the first Charge and retired
+   * whenever the basket changes, so a retried Charge finds the same sale and
+   * ringing the same coffee twice is two sales.
    */
   const attemptKey = useRef('')
   useEffect(() => {
-    // A different basket is a different attempt. Also fires when `settle`
-    // clears the lines, which is what retires a spent key.
     attemptKey.current = ''
   }, [lines, discountPct])
-  // The last completed sale, whose receipt is read back from the stored order.
-  const [lastReceipt, setLastReceipt] = useState<{ orderId: string } | null>(null)
 
   const products = useMemo(
     () =>
-      // Status, deletion and the search are all the query's (`posProductPlan`).
-      [...(productDocs ?? [])]
-        .map((product: any) => ({
-          ...CommerceModel.liftLegacyProduct(product),
-          $id: product.$id,
-        })),
+      [...(productDocs ?? [])].map((product: any) => ({
+        ...CommerceModel.liftLegacyProduct(product),
+        $id: product.$id,
+      })),
     [productDocs],
   )
-  /*
-   * The grid is what the query returned. Re-filtering it by the same text
-   * would narrow it AGAIN and more strictly: the server matches a word prefix
-   * ("cof" finds "Coffee"), the old compare wanted the whole typed string as a
-   * substring, so "flat white" was sent as "flat" and then hidden again by a
-   * row that never contained "flat white". Rows found, then dropped.
-   */
-  const visible = products
-
   const productsById = useMemo(
     () => new Map(products.map((product: any) => [product.$id, product])),
     [products],
   )
-  /**
-   * WHAT THE COUNT SAYS, at the line the cashier is looking at (AGL-2357).
-   *
-   * The register ignored `oversellPolicy` entirely — `pos-order.ts` had no
-   * `canPurchase` call — so a merchant who chose "deny" in the product editor
-   * silently got "backorder" at the counter. That silence is the defect.
-   *
-   * WARNS, NEVER BLOCKS (the decision on AGL-2357). Nothing here touches
-   * `disabled` on the settle buttons, and nothing gates `settle`: a till is the
-   * wrong place for a stale number to stop a real sale, because the cashier is
-   * holding the goods. Honouring the policy behind a manager override is the
-   * post-launch shape (AGL-2372).
-   *
-   * Indexed alongside `lines` rather than keyed, because the line list is
-   * rendered by index and two lines of the same product/variant cannot exist —
-   * `addProduct` merges them into one quantity.
-   */
+  /** AGL-2357: warns, never blocks. */
   const shortfalls = useMemo(
     () =>
       lines.map((line) => {
@@ -348,12 +305,17 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     [lines, productsById],
   )
 
-  const itemsCents = lines.reduce(
-    (sum, line) => sum + line.unitAmountCents * line.quantity,
-    0,
-  )
+  const itemsCents = lines.reduce((sum, line) => sum + line.unitAmountCents * line.quantity, 0)
   const discountCents = Math.round((itemsCents * discountPct) / 100)
-  const dueCents = itemsCents - discountCents
+  const estimateCents = itemsCents - discountCents
+  const units = lines.reduce((sum, line) => sum + line.quantity, 0)
+
+  const notify = useCallback(
+    (message: string, variant: 'success' | 'error' | 'warning' | 'info') => {
+      enqueueSnackbar(message, { variant, persist: false, allowDuplicate: true })
+    },
+    [enqueueSnackbar],
+  )
 
   const addProduct = useCallback((product: any, variant?: any) => {
     const pick = variant ?? product.variants[0]
@@ -364,9 +326,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
       )
       if (existing) {
         return prev.map((line) =>
-          line === existing
-            ? { ...line, quantity: line.quantity + 1 }
-            : line,
+          line === existing ? { ...line, quantity: line.quantity + 1 } : line,
         )
       }
       return [
@@ -386,27 +346,12 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
   }, [])
 
   /**
-   * The barcode wedge: a scanner types the code and presses Enter.
-   *
-   * A LOOKUP against the whole catalog, not a scan of the rows on screen
-   * (AGL-2501). It used to walk `products` — the grid's `limit(500)` window —
-   * so a shop whose catalog was larger than that had items whose barcode
-   * simply did nothing when scanned. At a till, holding the goods, with a
-   * customer waiting.
-   *
-   * `barcodes` and `skus` are top-level arrays the write path flattens out of
-   * `variants`, because Firestore cannot query a field inside an array of
-   * objects. Barcode is tried first: it is what the scanner produced, and a
-   * SKU that happens to equal another product's barcode should not win over
-   * the code actually scanned.
-   *
-   * ⚠️ A MISS NOW SAYS SO. The old loop returned silently, so an unknown code
-   * and a code outside the window were indistinguishable from a scanner that
-   * had not fired — the cashier's only signal was that nothing happened.
+   * The barcode wedge: a LOOKUP against the whole catalog (AGL-2501),
+   * barcode first, and a miss says so.
    */
-  const lookupCode = useCallback(async (scanned: string) => {
-    const needle = scanned.trim().toLowerCase()
-    if (!needle) return
+  const handleSearchEnter = useCallback(async () => {
+    const needle = search.trim().toLowerCase()
+    if (!needle || sale) return
     const lookup = async (field: 'barcodes' | 'skus') => {
       const found = await getDocs(
         query(
@@ -422,504 +367,351 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
       hit = (await lookup('barcodes')) ?? (await lookup('skus'))
     } catch (error) {
       console.error(error)
-      return void enqueueSnackbar('Could not reach the catalog — try again', {
-        variant: 'warning',
-        persist: false,
-      })
+      return void notify('Could not reach the catalog — try again', 'warning')
     }
-    if (!hit) {
-      return void enqueueSnackbar(`No product matches “${scanned.trim()}”`, {
-        variant: 'warning',
-        persist: false,
-      })
-    }
-    const product = {
-      ...CommerceModel.liftLegacyProduct(hit.data() as any),
-      $id: hit.id,
-    }
+    if (!hit) return void notify(`No product matches “${search.trim()}”`, 'warning')
+    const product = { ...CommerceModel.liftLegacyProduct(hit.data() as any), $id: hit.id }
     const variant =
       product.variants.find(
         (item: any) =>
-          item.barcode?.trim().toLowerCase() === needle ||
-          item.sku?.trim().toLowerCase() === needle,
+          item.barcode?.trim().toLowerCase() === needle || item.sku?.trim().toLowerCase() === needle,
       ) ?? product.variants[0]
     addProduct(product, variant)
     setSearch('')
-  }, [firestore, hostId, addProduct, enqueueSnackbar])
-  const handleSearchEnter = useCallback(() => lookupCode(search), [lookupCode, search])
-  // A scanner fired while focus is on a product or a button (AGL-3619), and
-  // the camera; neither while a tender dialog is taking input.
-  useScannerWedge((code) => void lookupCode(code), paying === null)
-  const scanSlotProps = useMemo(
-    () => ({
-      input: {
-        endAdornment: (
-          <ScanAdornment label="Scan a barcode with the camera" onScan={(code) => void lookupCode(code)} />
-        ),
-      },
-    }),
-    [lookupCode],
-  )
+  }, [search, sale, firestore, hostId, addProduct, notify])
 
-  /**
-   * Take payment. The tender is an ARGUMENT, never read back out of state
-   * (AGL-1682) — every caller already knows which button was pressed, and the
-   * one caller that had to announce it through `setPaying` first could not
-   * then observe its own write.
-   */
-  const settle = useCallback(async (tender: Tender) => {
-    if (inFlight.current || lines.length === 0) return
-    if (!registerId) {
-      return void enqueueSnackbar(
-        'Select a register before taking payment',
-        { variant: 'warning', persist: false },
-      )
-    }
-    inFlight.current = true
-    setBusy(true)
-    // Reuse the key across retries of this basket; mint one if this is the
-    // first attempt (AGL-1691). `randomUUID` needs a secure context, which the
-    // console always is, but fall back rather than throw on a settle.
-    if (!attemptKey.current) {
-      attemptKey.current =
-        globalThis.crypto?.randomUUID?.() ??
-        `${Date.now()}-${Math.random().toString(36).slice(2)}`
-    }
+  /** Prices the basket on the server and opens the sale for payment. */
+  // A ref, not `opening`: two taps inside one React batch both read the
+  // pre-click state, and only a ref is written before the second reads it
+  // (the AGL-1682 lesson).
+  const chargeInFlight = useRef(false)
+  const charge = useCallback(async () => {
+    if (chargeInFlight.current || lines.length === 0 || !user) return
+    if (!registerId) return void notify('Select a register before taking payment', 'warning')
+    if (!attemptKey.current) attemptKey.current = newAttemptKey()
+    chargeInFlight.current = true
+    setOpening(true)
     try {
-      const response = await authorizedFetch(user, '/api/commerce/pos-order', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': attemptKey.current,
-        },
-        body: JSON.stringify({
-          hostId,
-          lines,
-          discountPct,
-          payment: tender,
-          registerId,
-          customerEmail: customerEmail || undefined,
-          ...(customer ? { customer } : {}),
-          ...(cashier.assertion ? { cashierAssertion: cashier.assertion } : {}),
-          locationId: locationId || undefined,
-          cashReceivedCents: Math.round(Number(cashReceived) * 100) || 0,
-          reservationId: tender === 'folio' ? folioReservation : undefined,
-        }),
+      const opened = await openPosSale(user, attemptKey.current, {
+        hostId,
+        registerId,
+        lines,
+        discountPct,
+        ...(customerEmail ? { customerEmail } : {}),
+        ...(locationId ? { locationId } : {}),
       })
-      const payload = await response.json()
-      if (!response.ok) {
-        return void enqueueSnackbar(payload?.error ?? 'Sale failed', {
-          variant: 'error',
-          allowDuplicate: true,
-        })
-      }
-      if (tender === 'link' && payload.url) {
-        setCardUrl(payload.url)
-        return
-      }
-      setLastReceipt(payload.orderId ? { orderId: String(payload.orderId) } : null)
-      setLines([])
-      setDiscountPct(0)
-      setCustomer(null)
-      setCashReceived('')
-      setPaying(null)
-      enqueueSnackbar(
-        payload.changeCents > 0
-          ? `Paid — change ${usd(payload.changeCents)}`
-          : 'Paid',
-        { variant: 'success', persist: false },
-      )
+      setSaleLines(lines)
+      setSale({
+        orderId: opened.orderId,
+        status: 'pending',
+        totalCents: opened.totals.totalCents,
+        paidCents: 0,
+        dueCents: opened.totals.totalCents,
+        tenderableCents: opened.totals.totalCents,
+        tipCents: 0,
+        payments: [],
+      })
+      setSheetOpen(true)
+    } catch (error) {
+      notify(error instanceof PosRequestError ? error.message : 'Sale failed', 'error')
     } finally {
-      inFlight.current = false
-      setBusy(false)
+      chargeInFlight.current = false
+      setOpening(false)
     }
-  }, [
-    lines,
-    registerId,
-    user,
-    hostId,
-    discountPct,
-    customerEmail,
-    customer,
-    cashier.assertion,
-    locationId,
-    cashReceived,
-    folioReservation,
-    enqueueSnackbar,
-  ])
+  }, [lines, user, registerId, hostId, discountPct, customerEmail, locationId, notify])
 
-  /**
-   * Close the card QR dialog. Clears the cart, because by the time this dialog
-   * exists the order is already on the server awaiting the webhook — leaving
-   * the lines behind meant a backdrop click or Escape dropped the cashier back
-   * on a full register that would mint a SECOND pending order and a SECOND
-   * Checkout session for the same basket on the next tap (AGL-1682). `Done`
-   * always did this; `onClose` did not, and only `onClose` can fire by
-   * accident.
-   */
-  const closeCardDialog = useCallback(() => {
-    setCardUrl('')
+  const resetSale = useCallback(() => {
+    setSale(null)
+    setSaleLines([])
     setLines([])
-    setPaying(null)
+    setDiscountPct(0)
+    setCustomerEmail('')
+    setSheetOpen(false)
   }, [])
 
+  // The customer display mirrors the basket while nothing else is on it.
+  const mirrored = sale ? saleLines : lines
+  useEffect(() => {
+    if (!display.connected || display.asking) return
+    if (sale?.payments.some((payment) => payment.status === 'pending' && payment.method === 'card_present')) {
+      return
+    }
+    if (sale?.status === 'paid') return
+    const timer = setTimeout(() => {
+      void display.show(
+        mirrored.length
+          ? {
+              mode: 'cart',
+              cart: {
+                lines: mirrored.map((line) => ({
+                  name: line.name,
+                  ...(line.variantLabel ? { variantLabel: line.variantLabel } : {}),
+                  quantity: line.quantity,
+                  amountCents: line.unitAmountCents * line.quantity,
+                })),
+                itemsCents,
+                discountCents,
+                taxCents: sale ? Math.max(0, sale.totalCents - estimateCents) : 0,
+                totalCents: sale ? sale.totalCents : estimateCents,
+                ...(sale ? { paidCents: sale.paidCents, dueCents: sale.dueCents, tipCents: sale.tipCents } : {}),
+              },
+            }
+          : { mode: 'idle' },
+      )
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [display, mirrored, sale, itemsCents, discountCents, estimateCents])
+
+  const registerPicker = !planReady ? (
+    <Typography variant="body2" color="text.secondary">
+      {'Checking your plan…'}
+    </Typography>
+  ) : usableRegisters.length === 0 ? (
+    <Typography variant="body2" color="warning.main">
+      {registers.length > 0
+        ? 'Your registers exceed your plan — remove extras or upgrade in Billing to take payments.'
+        : 'No POS register yet. Add one under Commerce → Settings → POS registers before taking payments.'}
+    </Typography>
+  ) : usableRegisters.length > 1 ? (
+    <TextField
+      label="Register"
+      value={registerId}
+      onChange={(event) => setRegisterId(event.target.value)}
+      size="small"
+      select
+      disabled={Boolean(sale)}
+    >
+      {usableRegisters.map((register: any) => (
+        <MenuItem key={register.$id} value={register.$id}>
+          {register.name}
+        </MenuItem>
+      ))}
+    </TextField>
+  ) : (
+    <Typography variant="body2" color="text.secondary">
+      {usableRegisters[0]?.name}
+    </Typography>
+  )
+
+  const registerPanel = (
+    <Stack spacing={1.5} sx={{ minHeight: 0, flex: 1 }}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        <Typography variant="h6" sx={{ flex: 1 }}>
+          {'Register'}
+        </Typography>
+        {registerId ? (
+          <Button
+            size="small"
+            onClick={async () => {
+              try {
+                setPairing(await display.pairingCode())
+              } catch (error) {
+                notify(error instanceof PosRequestError ? error.message : 'Could not make a code', 'error')
+              }
+            }}
+          >
+            {display.connected ? 'Display connected' : 'Pair display'}
+          </Button>
+        ) : null}
+      </Stack>
+      {registerPicker}
+      {(locationDocs?.length ?? 0) > 1 ? (
+        <TextField
+          label="Location"
+          value={locationId}
+          onChange={(event) => setLocationId(event.target.value)}
+          size="small"
+          select
+          disabled={Boolean(sale)}
+        >
+          {(locationDocs ?? []).map((location: any) => (
+            <MenuItem key={location.$id} value={location.$id}>
+              {location.name}
+            </MenuItem>
+          ))}
+        </TextField>
+      ) : null}
+      <PosCartPanel
+        lines={sale ? saleLines : lines}
+        shortfalls={sale ? [] : shortfalls}
+        onQuantity={(index, quantity) =>
+          setLines((prev) =>
+            quantity <= 0
+              ? prev.filter((_line, at) => at !== index)
+              : prev.map((line, at) => (at === index ? { ...line, quantity: Math.min(99, quantity) } : line)),
+          )
+        }
+        onRemove={(index) => setLines((prev) => prev.filter((_line, at) => at !== index))}
+        discountPct={discountPct}
+        onDiscountPct={setDiscountPct}
+        customerEmail={customerEmail}
+        onCustomerEmail={setCustomerEmail}
+        locked={Boolean(sale)}
+      />
+      {sale && user ? (
+        sale.status === 'paid' ? (
+          <PosReceiptPanel
+            user={user}
+            hostId={hostId}
+            sale={sale}
+            lines={saleLines}
+            context={context}
+            display={display}
+            onNewSale={resetSale}
+            notify={notify}
+          />
+        ) : (
+          <PosTenderPanel
+            user={user}
+            hostId={hostId}
+            registerId={registerId}
+            sale={sale}
+            context={context}
+            stays={openStays}
+            display={display}
+            onSale={setSale}
+            onVoided={() => {
+              setSale(null)
+              setSaleLines([])
+            }}
+            notify={notify}
+          />
+        )
+      ) : (
+        <>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Typography variant="h6">{'Due'}</Typography>
+            <Typography variant="h6">{usd(estimateCents)}</Typography>
+          </Box>
+          <Typography variant="caption" color="text.secondary">
+            {'Tax is added when you charge.'}
+          </Typography>
+          <Button
+            variant="contained"
+            size="large"
+            disabled={opening || lines.length === 0 || !registerId}
+            onClick={() => void charge()}
+            sx={{ minHeight: 56 }}
+          >
+            {opening ? 'Pricing…' : `Charge ${usd(estimateCents)}`}
+          </Button>
+        </>
+      )}
+    </Stack>
+  )
 
   return (
     <>
       <NextPageTitle screen={'POS'} />
-      <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-        {/* Product grid */}
-        <Box sx={{ flex: 1, p: 2, overflowY: 'auto' }}>
-          <TextField
-            placeholder="Search or scan barcode…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void handleSearchEnter()
+      <Box
+        sx={{
+          display: 'flex',
+          height: '100dvh',
+          overflow: 'hidden',
+        }}
+      >
+        <Box sx={{ flex: 1, p: 2, overflowY: 'auto', pb: wide ? 2 : 12 }}>
+          <PosProductGrid
+            search={search}
+            onSearch={setSearch}
+            onSearchEnter={() => void handleSearchEnter()}
+            categories={(categoryDocs ?? []).map((category: any) => ({
+              $id: category.$id,
+              name: String(category.name ?? 'Category'),
+            }))}
+            categoryId={categoryId}
+            onCategory={setCategoryId}
+            notices={gridPlan.notices}
+            products={products}
+            onAdd={(product, variant) => {
+              if (sale) return void notify('Finish or void the open sale first', 'info')
+              addProduct(product, variant)
             }}
-            slotProps={scanSlotProps}
-            size="small"
-            fullWidth
-            autoFocus
-            sx={{ mb: 2 }}
           />
-          <Box sx={{ mb: gridPlan.notices.length ? 2 : 0 }}>
-            <ListQueryNotices refused={[]} notices={gridPlan.notices} />
-          </Box>
+        </Box>
+        {wide ? (
           <Box
             sx={{
-              display: 'grid',
-              gap: 1.5,
-              gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+              width: { md: 400, lg: 440 },
+              borderLeft: 1,
+              borderColor: 'divider',
+              display: 'flex',
+              flexDirection: 'column',
+              p: 2,
+              overflowY: 'auto',
             }}
           >
-            {visible.map((product: any) => (
-              <Card key={product.$id} variant="outlined">
-                <CardActionArea
-                  onClick={() => addProduct(product)}
-                  sx={{ p: 1.5, minHeight: 88 }}
-                >
-                  <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                    {product.name}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {`$${product.variants[0]?.priceUsd ?? 0}`}
-                    {product.variants.length > 1
-                      ? ` · ${product.variants.length} variants`
-                      : ''}
-                  </Typography>
-                </CardActionArea>
-                {product.variants.length > 1 ? (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, p: 0.5 }}>
-                    {product.variants.slice(0, 6).map((variant: any) => (
-                      <Chip
-                        key={variant.id}
-                        label={
-                          Object.values(variant.options ?? {}).join('/') ||
-                          'Default'
-                        }
-                        size="small"
-                        onClick={() => addProduct(product, variant)}
-                      />
-                    ))}
-                  </Box>
-                ) : null}
-              </Card>
-            ))}
+            {registerPanel}
           </Box>
-        </Box>
-
-        {/* Register */}
-        <Box
-          sx={{
-            width: 380,
-            borderLeft: 1,
-            borderColor: 'divider',
-            display: 'flex',
-            flexDirection: 'column',
-            p: 2,
-            gap: 1,
-          }}
-        >
-          <Typography variant="h6">{'Register'}</Typography>
-          {!planReady ? (
-            <Typography variant="body2" color="text.secondary">
-              {'Checking your plan…'}
-            </Typography>
-          ) : usableRegisters.length === 0 ? (
-            <Typography variant="body2" color="warning.main">
-              {registers.length > 0
-                ? 'Your registers exceed your plan — remove extras or ' +
-                  'upgrade in Billing to take payments.'
-                : 'No POS register yet. Add one under Commerce → Settings → ' +
-                  'POS registers before taking payments.'}
-            </Typography>
-          ) : usableRegisters.length > 1 ? (
-            <TextField
-              label="Register"
-              value={registerId}
-              onChange={(event) => setRegisterId(event.target.value)}
-              size="small"
-              select
-            >
-              {usableRegisters.map((register: any) => (
-                <MenuItem key={register.$id} value={register.$id}>
-                  {register.name}
-                </MenuItem>
-              ))}
-            </TextField>
-          ) : (
-            <Typography variant="body2" color="text.secondary">
-              {usableRegisters[0]?.name}
-            </Typography>
-          )}
-          {(locationDocs?.length ?? 0) > 1 ? (
-            <TextField
-              label="Location"
-              value={locationId}
-              onChange={(event) => setLocationId(event.target.value)}
-              size="small"
-              select
-            >
-              {(locationDocs ?? []).map((location: any) => (
-                <MenuItem key={location.$id} value={location.$id}>
-                  {location.name}
-                </MenuItem>
-              ))}
-            </TextField>
-          ) : null}
-          {registerId ? (
-            <PosOperationsBar
-              hostId={hostId}
-              registerId={registerId}
-              {...(registerName ? { registerName } : {})}
-              cashier={cashier}
-              onExchange={(returned) =>
-                setCustomer(
-                  returned.email || returned.name
-                    ? {
-                        kind: 'none',
-                        id: '',
-                        name: returned.name ?? '',
-                        email: returned.email,
-                        phone: null,
-                      }
-                    : null,
-                )
-              }
-            />
-          ) : null}
-          <Box sx={{ flex: 1, overflowY: 'auto' }}>
-            {lines.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                {'Tap products to add them.'}
-              </Typography>
-            ) : (
-              lines.map((line, index) => (
-                <Box key={index} sx={{ py: 0.5 }}>
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    sx={{ alignItems: 'center' }}
-                  >
-                    <Typography variant="body2" sx={{ flex: 1 }} noWrap>
-                      {`${line.quantity}× ${line.name}`}
-                      {line.variantLabel ? ` (${line.variantLabel})` : ''}
-                    </Typography>
-                    <Typography variant="body2">
-                      {usd(line.unitAmountCents * line.quantity)}
-                    </Typography>
-                    <Button
-                      size="small"
-                      color="error"
-                      onClick={() =>
-                        setLines((prev) =>
-                          prev.filter((_item, itemIndex) => itemIndex !== index),
-                        )
-                      }
-                    >
-                      {'✕'}
-                    </Button>
-                  </Stack>
-                  {shortfalls[index] ? (
-                    // AGL-2357: said, not enforced. The cashier reads it and
-                    // rings the sale through — the settle buttons below are
-                    // untouched by this.
-                    <Typography variant="caption" color="warning.main">
-                      {`Only ${shortfalls[index]?.available} in stock — selling ${line.quantity}`}
-                    </Typography>
-                  ) : null}
-                </Box>
-              ))
-            )}
-          </Box>
-          <Stack direction="row" spacing={1}>
-            <TextField
-              label="Discount %"
-              value={discountPct || ''}
-              onChange={(event) =>
-                setDiscountPct(
-                  Math.min(100, Math.max(0, Number(event.target.value) || 0)),
-                )
-              }
-              size="small"
-              sx={{ width: 110 }}
-              slotProps={{ htmlInput: { inputMode: 'numeric' } }}
-            />
-          </Stack>
-          <PosCustomerLookup hostId={hostId} value={customer} onChange={setCustomer} />
-          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Typography variant="h6">{'Due'}</Typography>
-            <Typography variant="h6">{usd(dueCents)}</Typography>
-          </Box>
-          <Stack direction="row" spacing={1}>
-            <Button
-              variant="contained"
-              color="primary"
-              disabled={lines.length === 0}
-              onClick={() => setPaying('cash')}
-              sx={{ flex: 1 }}
-            >
-              {'Cash'}
-            </Button>
-            <Button
-              variant="contained"
-              disabled={busy || lines.length === 0}
-              onClick={() => void settle('link')}
-              sx={{ flex: 1 }}
-            >
-              {'Card (QR)'}
-            </Button>
-            <Button
-              variant="outlined"
-              disabled={lines.length === 0 || openStays.length === 0}
-              onClick={() => setPaying('folio')}
-              sx={{ flex: 1 }}
-            >
-              {'Room'}
-            </Button>
-          </Stack>
-          {lastReceipt ? (
-            <PosLastReceipt
-              hostId={hostId}
-              orderId={lastReceipt.orderId}
-              {...(registerName ? { registerName } : {})}
-              {...(cashier.cashier ? { cashierName: cashier.cashier.name } : {})}
-            />
-          ) : null}
-        </Box>
+        ) : null}
       </Box>
-
-      {/* Cash dialog */}
-      <Dialog open={paying === 'cash'} onClose={() => setPaying(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>{`Cash — due ${usd(dueCents)}`}</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <TextField
-            label="Cash received ($)"
-            value={cashReceived}
-            onChange={(event) =>
-              setCashReceived(event.target.value.replace(/[^0-9.]/g, ''))
-            }
-            size="small"
-            autoFocus
-            sx={{ mt: 1 }}
-            slotProps={{ htmlInput: { inputMode: 'decimal' } }}
-          />
-          {Number(cashReceived) * 100 >= dueCents && cashReceived ? (
-            <Alert severity="success">
-              {`Change: ${usd(Math.round(Number(cashReceived) * 100) - dueCents)}`}
-            </Alert>
-          ) : null}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPaying(null)}>{'Cancel'}</Button>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={busy || Math.round(Number(cashReceived) * 100) < dueCents}
-            // `onClick={settle}` would hand MUI's click event to `tender`.
-            onClick={() => void settle('cash')}
+      {!wide ? (
+        <>
+          <Box
+            sx={{
+              position: 'fixed',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              p: 1.5,
+              bgcolor: 'background.paper',
+              borderTop: 1,
+              borderColor: 'divider',
+              display: 'flex',
+              gap: 1,
+              alignItems: 'center',
+              zIndex: theme.zIndex.appBar,
+            }}
           >
-            {'Complete sale'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Folio dialog */}
-      <Dialog open={paying === 'folio'} onClose={() => setPaying(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>{`Charge to room — ${usd(dueCents)}`}</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <TextField
-            label="Checked-in stay"
-            value={folioReservation}
-            onChange={(event) => setFolioReservation(event.target.value)}
-            size="small"
-            select
-            sx={{ mt: 1 }}
+            <Badge badgeContent={units} color="primary">
+              <Button
+                variant="outlined"
+                onClick={() => setSheetOpen(true)}
+                sx={{ minHeight: POS_TOUCH_PX }}
+              >
+                {sale ? 'Payment' : 'Cart'}
+              </Button>
+            </Badge>
+            <Typography variant="h6" sx={{ flex: 1, textAlign: 'right' }}>
+              {usd(sale ? sale.dueCents : estimateCents)}
+            </Typography>
+            {!sale ? (
+              <Button
+                variant="contained"
+                disabled={opening || lines.length === 0 || !registerId}
+                onClick={() => void charge()}
+                sx={{ minHeight: POS_TOUCH_PX }}
+              >
+                {'Charge'}
+              </Button>
+            ) : null}
+          </Box>
+          <Drawer
+            anchor="bottom"
+            open={sheetOpen}
+            onClose={() => setSheetOpen(false)}
+            slotProps={{ paper: { sx: { maxHeight: '90dvh', p: 2, borderTopLeftRadius: 16, borderTopRightRadius: 16 } } }}
           >
-            {openStays.map((stay: any) => (
-              <MenuItem key={stay.$id} value={stay.$id}>
-                {stay.guestName ?? stay.guestEmail ?? stay.$id}
-              </MenuItem>
-            ))}
-          </TextField>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPaying(null)}>{'Cancel'}</Button>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={busy || !folioReservation}
-            onClick={() => void settle('folio')}
-          >
-            {'Charge folio'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Card QR dialog */}
-      <Dialog open={Boolean(cardUrl)} onClose={closeCardDialog} maxWidth="xs" fullWidth>
-        <DialogTitle>{'Customer pays by card'}</DialogTitle>
+            {registerPanel}
+          </Drawer>
+        </>
+      ) : null}
+      <Dialog open={Boolean(pairing)} onClose={() => setPairing(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>{'Pair a customer display'}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            {'Show this QR (or open the link on the customer display); the ' +
-              'order completes automatically once paid. Stripe Terminal ' +
-              'readers can replace this step later.'}
+            {'On the tablet facing your customer, open this address and enter the code. ' +
+              'The code works once and expires in 10 minutes.'}
           </Typography>
-          {/* Encoded in this browser, never fetched (AGL-1671). The previous
-              revision pointed an `<img>` at api.qrserver.com, which put the
-              LIVE Stripe payment URL — a link that pays the order for whoever
-              opens it — in a query string to a third party with no contract,
-              no DPA and no logging guarantee, on every card sale. It also
-              meant a register with no internet could not take a card.
-
-              `level="L"` is what that endpoint was being asked for (its
-              default `ecc`). The two numbers are MEASURED, not matched: a
-              317-character Stripe Checkout URL is a 61x61 symbol, so the old
-              220px/no-quiet-zone render gave 3.61px per module. `marginSize`
-              adds the 4-module quiet zone the spec requires and goQR omitted
-              — which matters more here than it looks, since the dialog paper
-              is dark in dark mode and the symbol had no white border of its
-              own. Paying for that out of 220px would shrink modules to
-              3.19px; 256px puts them at 3.71px, so every module is LARGER
-              than what shipped and the quiet zone is free. `maxWidth="xs"`
-              leaves ~396px of content, so it still centres with room. */}
-          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-            <QRCodeSVG
-              value={cardUrl}
-              size={256}
-              level="L"
-              marginSize={4}
-              title="Payment QR"
-              role="img"
-            />
-          </Box>
-          <Button size="small" href={cardUrl} target="_blank">
-            {'Open payment page'}
-          </Button>
+          <Typography variant="body1" sx={{ wordBreak: 'break-all' }}>
+            {`${typeof window === 'undefined' ? '' : window.location.origin}/kiosk/commerce/pos-display`}
+          </Typography>
+          <Typography variant="h3" component="p" sx={{ textAlign: 'center', letterSpacing: 8 }}>
+            {pairing?.code}
+          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeCardDialog}>{'Done'}</Button>
+          <Button onClick={() => setPairing(null)}>{'Done'}</Button>
         </DialogActions>
       </Dialog>
     </>

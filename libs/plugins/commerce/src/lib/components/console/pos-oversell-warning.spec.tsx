@@ -154,6 +154,10 @@ jest.mock('@aglyn/shared-ui-next/contexts/next-page-title-provider', () => ({
   NextPageTitle: () => null,
 }))
 
+jest.mock('@aglyn/shared-ui-jsx', () => ({
+  useConfirmationContext: () => ({ confirm: jest.fn() }),
+}))
+
 jest.mock('@aglyn/aglyn', () => ({
   checkHostRegisterQuota: () => ({ limit: 5 }),
   checkQuota: () => ({ limit: 5 }),
@@ -161,16 +165,34 @@ jest.mock('@aglyn/aglyn', () => ({
 
 import { PosConsolePage } from './pos-page.component'
 
+beforeAll(() => {
+  // A tablet in landscape: the register sits beside the grid.
+  window.matchMedia = ((query: string) => ({
+    matches: true,
+    media: query,
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia
+})
+
 beforeEach(() => {
   requests = []
   payloads = []
   global.fetch = jest.fn(async (input: any, init?: any) => {
-    requests.push(String(input))
+    const url = String(input)
+    requests.push(url)
     payloads.push(init?.body ? JSON.parse(String(init.body)) : null)
-    return {
-      ok: true,
-      json: async () => ({ url: 'https://checkout.stripe.com/c/pay/cs_test_1' }),
-    }
+    const body =
+      url === '/api/commerce/pos-order'
+        ? { orderId: 'sale-1', totals: { totalCents: 900 }, dueCents: 900 }
+        : url.startsWith('/api/commerce/pos-display')
+          ? { state: null, connected: false }
+          : {}
+    return { ok: true, status: 200, json: async () => body }
   }) as unknown as typeof fetch
 })
 
@@ -207,8 +229,7 @@ describe('the register warns about a shortfall (AGL-2357)', () => {
     fireEvent.click(screen.getByText('Flat White'))
 
     expect(screen.getByText('Only 1 in stock — selling 2')).toBeTruthy()
-    expect(settleButton('Cash').disabled).toBe(false)
-    expect(settleButton('Card (QR)').disabled).toBe(false)
+    expect(settleButton('Charge $9.00').disabled).toBe(false)
   })
 
   /** And pressing one really does put the sale through. */
@@ -216,13 +237,12 @@ describe('the register warns about a shortfall (AGL-2357)', () => {
     render(<PosConsolePage hostId="host-1" entitled />)
     fireEvent.click(screen.getByText('Flat White'))
     fireEvent.click(screen.getByText('Flat White'))
-    fireEvent.click(screen.getByText('Card (QR)'))
+    fireEvent.click(screen.getByText('Charge $9.00'))
 
-    await waitFor(() =>
-      expect(screen.getByText('Customer pays by card')).toBeTruthy(),
-    )
-    expect(requests).toEqual(['/api/commerce/pos-order'])
-    expect(payloads[0].lines).toEqual([
+    await waitFor(() => expect(screen.getByText('Balance due')).toBeTruthy())
+    const opened = payloads[requests.indexOf('/api/commerce/pos-order')]
+    expect(opened.payment).toBe('open')
+    expect(opened.lines).toEqual([
       expect.objectContaining({
         productId: 'prod-1',
         variantId: 'v1',
@@ -279,7 +299,7 @@ describe('the register warns about a shortfall (AGL-2357)', () => {
     fireEvent.click(screen.getByText('Flat White'))
     expect(screen.getByText('Only 1 in stock — selling 2')).toBeTruthy()
 
-    fireEvent.click(screen.getByText('✕'))
+    fireEvent.click(screen.getByLabelText('Remove Flat White'))
     expect(screen.queryByText(/in stock/)).toBeNull()
   })
 })
