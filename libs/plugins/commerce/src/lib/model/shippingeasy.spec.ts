@@ -36,7 +36,8 @@ import {
  */
 
 const ADDRESS = { name: 'Ada Buyer', line1: '1 Main St', city: 'Austin', state: 'TX', postalCode: '78701', country: 'US' }
-const order = (overrides: Record<string, unknown> = {}) => ({
+const order = (overrides: Record<string, unknown> = {}) =>
+  ({
   number: 1042,
   status: 'paid' as const,
   livemode: true,
@@ -45,7 +46,7 @@ const order = (overrides: Record<string, unknown> = {}) => ({
   lineItems: [{ productId: 'p1', name: 'Mug', quantity: 2, unitAmountCents: 1250, productType: 'physical' }],
   totals: { itemsCents: 2500, shippingCents: 0, taxCents: 0, discountCents: 0, totalCents: 2500, feeCents: 0 },
   ...overrides,
-})
+}) as unknown as Parameters<typeof shippingEasyIntent>[0]
 
 describe('the signature plaintext', () => {
   it('is the Ruby client’s own example, method upper-cased, query sorted, body last', () => {

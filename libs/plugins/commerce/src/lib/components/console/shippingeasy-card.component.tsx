@@ -226,13 +226,13 @@ export function ShippingEasyCard(props: ShippingEasyCardProps) {
           </Typography>
         ) : (
           <>
-            <Stack direction="row" spacing={1} alignItems="center">
+            <div>
               {status?.lastError ? (
                 <StatusChip label="Needs attention" tone="warning" data-testid="shippingeasy-status" />
               ) : (
                 <StatusChip label="Connected" tone="success" data-testid="shippingeasy-status" />
               )}
-            </Stack>
+            </div>
             {status?.lastError ? (
               <Alert severity="warning">
                 {`${status.lastError.message} (${when(status.lastError.atMs)})`}
