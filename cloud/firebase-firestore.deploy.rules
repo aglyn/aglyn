@@ -686,6 +686,14 @@ allow update: if (isSuperStaff() &&
 
 
 
+'defaultResourceScope', 'defaultMediaScope',
+
+
+
+
+
+
+
 'nameLower', 'nameTokens', 'nameReversed',
 'crmInbound',
 

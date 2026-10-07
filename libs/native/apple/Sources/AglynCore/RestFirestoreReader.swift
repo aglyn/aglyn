@@ -272,6 +272,9 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
       switch value {
       case FirestoreSentinel.serverTimestamp:
         transforms.append(["fieldPath": path.map(quote).joined(separator: "."), "setToServerValue": "REQUEST_TIME"])
+      case FirestoreSentinel.delete:
+        // Named in the update mask with no value: the field is removed.
+        continue
       case let map as [String: Any] where !map.isEmpty:
         encoded[key] = ["mapValue": ["fields": encodeFields(map, prefix: path, transforms: &transforms)]]
       default:

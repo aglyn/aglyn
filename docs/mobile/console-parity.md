@@ -14,7 +14,7 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Home, site switcher | `(home)`, `[orgSlug]`, `hosts`, `hosts/[host]` | leads | [x] | [x] |
 | Orders, products, stock, sales | `commerce` | leads | [ ] | [ ] |
 | POS register, readers, kiosk | `commerce` POS, `kiosk/[pluginId]` | leads | [ ] | [ ] |
-| Redirects | `redirects` | leads | [ ] | [x] |
+| Redirects | `redirects` | leads | [x] | [x] |
 | Commerce integrations cards | `accounting`, `shipping`, `post-purchase`, `tax-engines`, `marketing-platforms`, `fulfillment-networks`, `sales-channels` | next lane | [ ] | [ ] |
 | Sites, pages and their versions | `hosts/[host]/screens/*` (opening a page = Besigner) | AGL-3668 | [ ] | [ ] |
 | Components, layouts, templates | `hosts/[host]/components/*`, `layouts/*`, `templates/*` (lists native, editing = Besigner) | AGL-3668 | [ ] | [ ] |

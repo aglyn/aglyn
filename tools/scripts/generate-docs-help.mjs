@@ -185,6 +185,10 @@ const PLUGIN_TOPICS = {
   // dialog's section (AGL-3634). Unlisted until the deployment offers a
   // network; see PLUGIN_UNLISTED_TOPICS.
   fulfillmentNetworks: '/commerce-and-bookings/commerce/fulfillment-networks',
+  // The AfterShip, Route and Narvar cards under the store's Settings and the
+  // order dialog's Tracking and protection section (AGL-3635). Unlisted until
+  // the deployment offers a service; see PLUGIN_UNLISTED_TOPICS.
+  postPurchase: '/commerce-and-bookings/commerce/tracking-and-protection',
   events: '/content-and-data/events/overview',
   forms: '/content-and-data/forms/overview',
   funnels: '/marketing-and-automation/analytics/funnels',
@@ -258,6 +262,10 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // FULFILLMENT_NETWORKS_TOKEN_KEY and a network's app, the gate the guide
   // waits on (AGL-3634).
   'fulfillmentNetworks',
+  // The Tracking and protection cards draw nothing until the console holds
+  // POST_PURCHASE_VENDORS and POST_PURCHASE_TOKEN_KEY, the gate the guide
+  // waits on (AGL-3635).
+  'postPurchase',
 ])
 
 // ── Docs parsing ──────────────────────────────────────────────────────────

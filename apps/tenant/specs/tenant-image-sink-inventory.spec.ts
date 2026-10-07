@@ -337,6 +337,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "Not a sink, and never on a tenant render: the copy assistant's mode prompts (AGL-2937), composed for /api/ai/assist on the console. The marker is `image: src, alt` in the prose listing which props the model may set on a generated node, and the same block tells it to leave the src EMPTY. It is instruction text, not a value: no author string reaches it and no URL is produced here.",
   },
+  'libs/plugins/ai/src/lib/layout-language/ai-layout-language.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: the layout language's prompt and reader (AGL-3660), used by the AI job steps that design a page or a header and footer (jobs/ai-job-page-language.ts, jobs/ai-job-layout-language.ts), which run for a job on the console's AI job doors and from the job beat (jobs/ai-jobs-beat.ts). The marker is the `image:` line of the INSTRUCTION TEXT, telling the model an image block is a description that becomes alt text and that the owner adds the picture. It is prose handed to the model, not a value: the compiler (ai-layout-compiler.ts) writes no src for an image block, so no URL is produced here.",
+  },
   'libs/plugins/ai/src/lib/runtime/seo-fields.ts': {
     markers: 1,
     guard: 'off-tenant',

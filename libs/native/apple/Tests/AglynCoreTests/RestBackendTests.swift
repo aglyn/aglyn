@@ -276,4 +276,13 @@ final class RestFirestoreReaderTests: XCTestCase {
       XCTAssertEqual((error as? ConsoleAPIError)?.message, "You do not have permission to do that.")
     }
   }
+
+  func testAMergeDeletesAFieldByNamingItWithNoValue() {
+    var transforms: [[String: Any]] = []
+    let fields: [String: Any] = ["approvedBy": FirestoreSentinel.delete, "enabled": true]
+    let encoded = RestFirestoreReader.encodeFields(fields, prefix: [], transforms: &transforms)
+    XCTAssertNil(encoded["approvedBy"])
+    XCTAssertNotNil(encoded["enabled"])
+    XCTAssertEqual(RestFirestoreReader.leafPaths(fields, prefix: []), ["approvedBy", "enabled"])
+  }
 }
