@@ -16,7 +16,10 @@
  */
 
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
-import { validateAiNodeTree, type AiNodeTreeContext } from '../runtime/ai-node-tree'
+import {
+  validateAiNodeTree,
+  type AiNodeTreeContext,
+} from '../runtime/ai-node-tree'
 import type { AiSurface } from '../runtime/ai-palette'
 import type { AiLayoutRawTree } from './ai-layout-tree'
 
@@ -34,7 +37,11 @@ export type AiLayoutStored =
   | { ok: true; nodes: NodesMap; rootId: string; repairs: string[] }
   | { ok: false; error: string }
 
-type StoredNode = Record<string, unknown> & { $id: string; parentId: string | null; nodes?: string[] }
+type StoredNode = Record<string, unknown> & {
+  $id: string
+  parentId: string | null
+  nodes?: string[]
+}
 
 export function aiLayoutStoredTree(
   compiled: AiLayoutRawTree,
@@ -46,10 +53,15 @@ export function aiLayoutStoredTree(
   const bare = {
     rootId: compiled.rootId,
     nodes: Object.fromEntries(
-      Object.entries(compiled.nodes).map(([id, { interactions: _interactions, ...node }]) => [id, node]),
+      Object.entries(compiled.nodes).map(
+        ([id, { interactions: _interactions, ...node }]) => [id, node],
+      ),
     ),
   }
-  const validated = validateAiNodeTree(bare, surface, { ...context, codeBuilt: true })
+  const validated = validateAiNodeTree(bare, surface, {
+    ...context,
+    codeBuilt: true,
+  })
   if (validated.ok === false) return { ok: false, error: validated.error }
   const keep = new Set(keepIds)
   // Minted → the id it is stored under: its own, or the one the caller keeps.
@@ -58,7 +70,9 @@ export function aiLayoutStoredTree(
     return source && keep.has(source) ? source : minted
   }
   const nodes: Record<string, StoredNode> = {}
-  for (const [minted, raw] of Object.entries(validated.nodes as unknown as Record<string, StoredNode>)) {
+  for (const [minted, raw] of Object.entries(
+    validated.nodes as unknown as Record<string, StoredNode>,
+  )) {
     const id = storedId(minted)
     const source = compiled.nodes[validated.sourceIds[minted] ?? '']
     nodes[id] = {
@@ -66,8 +80,15 @@ export function aiLayoutStoredTree(
       $id: id,
       parentId: raw.parentId === null ? null : storedId(raw.parentId),
       ...(Array.isArray(raw.nodes) ? { nodes: raw.nodes.map(storedId) } : {}),
-      ...(source?.interactions?.length ? { interactions: source.interactions } : {}),
+      ...(source?.interactions?.length
+        ? { interactions: source.interactions }
+        : {}),
     }
   }
-  return { ok: true, nodes: nodes as unknown as NodesMap, rootId: storedId(validated.rootId), repairs: validated.repairs }
+  return {
+    ok: true,
+    nodes: nodes as unknown as NodesMap,
+    rootId: storedId(validated.rootId),
+    repairs: validated.repairs,
+  }
 }

@@ -41,6 +41,22 @@ export interface AiLayoutRawTree {
   nodes: Record<string, AiLayoutRawNode>
 }
 
+/** Elements that only frame what they hold, and so mean nothing empty. */
+export const AI_LAYOUT_FRAMES: ReadonlySet<string> = new Set([
+  'muiStack',
+  'muiBox',
+  'muiGrid',
+  'muiCard',
+  'muiCardContent',
+  'muiContainer',
+  'muiList',
+  'muiListItem',
+  'muiAccordion',
+  'muiAccordionDetails',
+  'muiDrawer',
+  'section',
+])
+
 /** A node map built in document order, with ids that read in a review: `ll3-heading`. */
 export class AiLayoutTreeBuilder {
   readonly nodes: Record<string, AiLayoutRawNode> = {}
@@ -58,15 +74,50 @@ export class AiLayoutTreeBuilder {
     fixedId?: string,
   ): string {
     this.count += 1
-    const id = fixedId ?? `${this.prefix}${this.count}-${role.replace(/[^A-Za-z0-9]/g, '').slice(0, 16)}`
+    const id =
+      fixedId ??
+      `${this.prefix}${this.count}-${role.replace(/[^A-Za-z0-9]/g, '').slice(0, 16)}`
     const node: AiLayoutRawNode = { componentId }
-    const kept = props ? Object.fromEntries(Object.entries(props).filter(([, value]) => value !== undefined)) : {}
+    const kept = props
+      ? Object.fromEntries(
+          Object.entries(props).filter(([, value]) => value !== undefined),
+        )
+      : {}
     if (Object.keys(kept).length) node.props = kept
     if (sx && Object.keys(sx).length) node.sx = { ...sx }
-    const list = (children ?? []).filter((child): child is string => typeof child === 'string')
+    const list = (children ?? []).filter(
+      (child): child is string => typeof child === 'string',
+    )
     if (list.length) node.nodes = list
     this.nodes[id] = node
     return id
+  }
+
+  /**
+   * Takes out every frame left holding nothing — a card whose words were all
+   * filler, the cell that held it — from the leaves up, so no element meant
+   * to hold content is stored empty (rule 16). `keep` names the ones that
+   * stay whatever they hold.
+   */
+  prune(rootId: string, keep: ReadonlySet<string> = new Set()): void {
+    const visit = (id: string): boolean => {
+      const node = this.nodes[id]
+      if (!node) return false
+      if (node.nodes) {
+        node.nodes = node.nodes.filter(visit)
+        if (!node.nodes.length) delete node.nodes
+      }
+      if (
+        id === rootId ||
+        keep.has(id) ||
+        node.nodes?.length ||
+        !AI_LAYOUT_FRAMES.has(node.componentId)
+      )
+        return true
+      delete this.nodes[id]
+      return false
+    }
+    visit(rootId)
   }
 
   /** The tree rooted at `rootId`. */

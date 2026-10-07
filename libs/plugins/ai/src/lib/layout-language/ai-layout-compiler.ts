@@ -17,10 +17,20 @@
 
 import { REUSABLE_INSTANCE_COMPONENT_ID } from '@aglyn/aglyn/app-utils/reusable-component-keys'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import { AI_ICON_COMPONENT_ID, aiIconOfWord, AI_ICON_LIBRARY, type AiIconLibraryEntry } from '../runtime/ai-icon-library'
+import {
+  AI_ICON_COMPONENT_ID,
+  aiIconOfWord,
+  AI_ICON_LIBRARY,
+  type AiIconLibraryEntry,
+} from '../runtime/ai-icon-library'
 import { AI_INSTANCE_REF_PROP } from '../runtime/ai-node-tree'
 import { aiPageScrollInteraction } from '../runtime/ai-page-links'
-import { aiLayoutFitText, aiLayoutQuoteGap, aiLayoutWords, type AiLayoutTextPlace } from './ai-layout-copy'
+import {
+  aiLayoutFitText,
+  aiLayoutQuoteGap,
+  aiLayoutWords,
+  type AiLayoutTextPlace,
+} from './ai-layout-copy'
 import {
   AI_LAYOUT_GROUP_KINDS,
   AI_LAYOUT_MAX_ITEMS,
@@ -30,8 +40,17 @@ import {
   type AiLayoutSection,
   type AiLayoutSettlement,
 } from './ai-layout-language'
-import { aiLayoutResolveLink, type AiLayoutDestination, type AiLayoutLinkScope, type AiLayoutTargets } from './ai-layout-links'
-import { AiLayoutTreeBuilder, type AiLayoutRawTree } from './ai-layout-tree'
+import {
+  aiLayoutResolveLink,
+  type AiLayoutDestination,
+  type AiLayoutLinkScope,
+  type AiLayoutTargets,
+} from './ai-layout-links'
+import {
+  AI_LAYOUT_FRAMES,
+  AiLayoutTreeBuilder,
+  type AiLayoutRawTree,
+} from './ai-layout-tree'
 
 /**
  * The layout language compiler (AGL-3660): a page designed in the language
@@ -73,7 +92,11 @@ import { AiLayoutTreeBuilder, type AiLayoutRawTree } from './ai-layout-tree'
 export interface AiLayoutPagePlan {
   /** The page's title in its plan: the h1 where the first section names none. */
   title: string
-  sections: ReadonlyArray<{ name: string; uses: readonly string[]; items: number }>
+  sections: ReadonlyArray<{
+    name: string
+    uses: readonly string[]
+    items: number
+  }>
 }
 
 export interface AiLayoutCompileOptions {
@@ -128,6 +151,8 @@ export interface PageScope {
   formSection: number | null
   /** The icon a picture shows until the owner places one, when its block names none. */
   pageIcon: AiIconLibraryEntry
+  /** The forms this page already places, each once. */
+  formsPlaced: Set<string>
 }
 
 /** Everything one section's compile shares. */
@@ -152,20 +177,31 @@ export interface SectionScope {
   itemsLeft: number
 }
 
-const formIdsOf = (targets: AiLayoutTargets): Set<string> => new Set(targets.forms.map((form) => form.id))
+const formIdsOf = (targets: AiLayoutTargets): Set<string> =>
+  new Set(targets.forms.map((form) => form.id))
 const componentOf = (targets: AiLayoutTargets, id: string | undefined) =>
-  id ? (targets.components.find((component) => component.id === id) ?? null) : null
+  id
+    ? (targets.components.find((component) => component.id === id) ?? null)
+    : null
 
 /**
  * The section of this page that places a form: one whose plan places one, or
  * whose design places one by its id.
  */
-function formSectionOf(sections: readonly AiLayoutSection[], plan: AiLayoutPagePlan, targets: AiLayoutTargets): number | null {
+function formSectionOf(
+  sections: readonly AiLayoutSection[],
+  plan: AiLayoutPagePlan,
+  targets: AiLayoutTargets,
+): number | null {
   const forms = formIdsOf(targets)
-  const planned = plan.sections.findIndex((section) => section.uses.some((ref) => forms.has(ref)))
+  const planned = plan.sections.findIndex((section) =>
+    section.uses.some((ref) => forms.has(ref)),
+  )
   if (planned !== -1) return planned
   const designed = sections.findIndex((section) =>
-    section.blocks.some((block) => block.kind === 'form' && (!block.to || forms.has(block.to))),
+    section.blocks.some(
+      (block) => block.kind === 'form' && (!block.to || forms.has(block.to)),
+    ),
   )
   return designed === -1 ? null : designed
 }
@@ -189,13 +225,26 @@ export function aiCompileLayoutPage(
     strong: { brand: 0, dark: 0 },
     formSection: formSectionOf(sections, plan, targets),
     pageIcon: pageIconOf(sections),
+    formsPlaced: new Set(),
   }
   const roots = plan.sections.map((_, index) => {
     const section = sections[index] ?? { blocks: [] }
     return compileSection(page, section, index)
   })
-  const rootId = tree.add('div', null, null, roots, 'page', CANVAS_ROOT_ELEMENT_ID)
-  return { tree: { rootId, nodes: tree.nodes }, sectionRoots: roots, scrollTo: page.scrollTo, settled: page.settled }
+  const rootId = tree.add(
+    'div',
+    null,
+    null,
+    roots,
+    'page',
+    CANVAS_ROOT_ELEMENT_ID,
+  )
+  return {
+    tree: { rootId, nodes: tree.nodes },
+    sectionRoots: roots,
+    scrollTo: page.scrollTo,
+    settled: page.settled,
+  }
 }
 
 /** The first icon the design names anywhere, else a sparkle: what an empty picture shows. */
@@ -215,7 +264,11 @@ function pageIconOf(sections: readonly AiLayoutSection[]): AiIconLibraryEntry {
 
 // ── A section ─────────────────────────────────────────────────────────────
 
-function compileSection(page: PageScope, raw: AiLayoutSection, index: number): string {
+function compileSection(
+  page: PageScope,
+  raw: AiLayoutSection,
+  index: number,
+): string {
   const at = `sections[${index}]`
   const band = settleBand(page, raw.band ?? 'plain', at)
   const scope: SectionScope = {
@@ -250,12 +303,17 @@ function compileSection(page: PageScope, raw: AiLayoutSection, index: number): s
       head.push(block)
     }
   }
-  let filled = columns.map((column, position) => ({ column, weight: cols?.[position] ?? 1 })).filter((entry) => entry.column.length)
+  let filled = columns
+    .map((column, position) => ({ column, weight: cols?.[position] ?? 1 }))
+    .filter((entry) => entry.column.length)
   // A row whose columns all say the same kind of thing, three or more across,
   // is a group of cards: one design, the words the columns gave.
   if (filled.length >= 3 && sameShape(filled.map((entry) => entry.column))) {
     head.push(columnsAsCards(filled.map((entry) => entry.column)))
-    page.settled.push({ at, what: `${filled.length} like columns drawn as cards` })
+    page.settled.push({
+      at,
+      what: `${filled.length} like columns drawn as cards`,
+    })
     filled = []
   }
   if (filled.length === 1) {
@@ -266,26 +324,48 @@ function compileSection(page: PageScope, raw: AiLayoutSection, index: number): s
   // The section's heading leads its outline: a heading with no words is no
   // heading, the first section always carries the page's one h1, and a
   // heading written after a group whose titles sit under it moves above it.
-  const inOrder = () => head.concat(filled.flatMap((entry) => entry.column), tail)
+  const inOrder = () =>
+    head.concat(
+      filled.flatMap((entry) => entry.column),
+      tail,
+    )
   const speaks = (block: AiLayoutBlock) =>
-    block.kind === 'heading' && !!aiLayoutWords(block.text, 'heading', page.targets.facts)
+    block.kind === 'heading' &&
+    !!aiLayoutWords(block.text, 'heading', page.targets.facts)
   for (const list of [head, tail, ...filled.map((entry) => entry.column)]) {
-    for (let at = list.length - 1; at >= 0; at -= 1) if (list[at].kind === 'heading' && !speaks(list[at])) list.splice(at, 1)
+    for (let at = list.length - 1; at >= 0; at -= 1)
+      if (list[at].kind === 'heading' && !speaks(list[at])) list.splice(at, 1)
   }
   if (index === 0 && !inOrder().some(speaks)) {
     head.unshift({ kind: 'heading', text: page.plan.title })
-    page.settled.push({ at, what: "no heading; the page's title written as its h1" })
+    page.settled.push({
+      at,
+      what: "no heading; the page's title written as its h1",
+    })
   }
   const order = inOrder()
   const first = order.findIndex(speaks)
-  if (first > 0 && order.slice(0, first).some((block) => block.kind === 'cards' || block.kind === 'steps' || block.kind === 'component')) {
+  if (
+    first > 0 &&
+    order
+      .slice(0, first)
+      .some(
+        (block) =>
+          block.kind === 'cards' ||
+          block.kind === 'steps' ||
+          block.kind === 'component',
+      )
+  ) {
     const lead = order[first]
     for (const list of [head, tail, ...filled.map((entry) => entry.column)]) {
       const at = list.indexOf(lead)
       if (at !== -1) list.splice(at, 1)
     }
     head.unshift({ ...lead, col: undefined })
-    page.settled.push({ at, what: 'the heading moved above the group it heads' })
+    page.settled.push({
+      at,
+      what: 'the heading moved above the group it heads',
+    })
   }
   filled = filled.filter((entry) => entry.column.length)
   if (filled.length === 1) {
@@ -293,16 +373,46 @@ function compileSection(page: PageScope, raw: AiLayoutSection, index: number): s
     filled = []
   }
   const wide =
-    filled.length > 0 ||
-    [...head, ...tail].some((block) => isWideGroup(block))
+    filled.length > 0 || [...head, ...tail].some((block) => isWideGroup(block))
   const parts: string[] = []
   const headId = compileFlow(scope, head, 'full')
   if (headId) parts.push(centered(scope, headId, wide))
   if (filled.length) parts.push(compileRow(scope, filled))
   const tailId = compileFlow(scope, tail, 'full')
   if (tailId) parts.push(centered(scope, tailId, wide))
+  // A frame whose content came to nothing is taken out, leaves first.
+  for (let at = parts.length - 1; at >= 0; at -= 1) {
+    page.tree.prune(parts[at])
+    const part = page.tree.nodes[parts[at]]
+    if (AI_LAYOUT_FRAMES.has(part.componentId) && !part.nodes?.length) {
+      delete page.tree.nodes[parts[at]]
+      parts.splice(at, 1)
+    }
+  }
+  if (!parts.length) {
+    // Nothing the design gave this section could be shown: it keeps its
+    // place on the page under the name its plan gives it.
+    const fallback = compileFlow(
+      scope,
+      [
+        {
+          kind: 'heading',
+          text: page.plan.sections[index]?.name || page.plan.title,
+        },
+      ],
+      'full',
+    )
+    if (fallback) parts.push(fallback)
+    page.settled.push({
+      at,
+      what: 'nothing to show; the section named by its plan',
+    })
+  }
   const tree = page.tree
-  const content = parts.length === 1 ? parts[0] : tree.add('muiStack', { spacing: '6' }, null, parts, 'content')
+  const content =
+    parts.length === 1
+      ? parts[0]
+      : tree.add('muiStack', { spacing: '6' }, null, parts, 'content')
   const container = tree.add(
     'muiContainer',
     { maxWidth: wide ? 'lg' : 'md' },
@@ -315,7 +425,7 @@ function compileSection(page: PageScope, raw: AiLayoutSection, index: number): s
     'section',
     {
       element: 'section',
-      ariaLabel: name.slice(0, 200),
+      ariaLabel: aiLayoutFitText(name, 'note') || `Section ${index + 1}`,
       ...(band === 'dark' ? { colorScheme: 'dark' } : {}),
     },
     bandSx(band),
@@ -326,10 +436,17 @@ function compileSection(page: PageScope, raw: AiLayoutSection, index: number): s
 }
 
 /** A band the page has room for: past two brand or two dark bands, a soft one instead. */
-function settleBand(page: PageScope, band: AiLayoutBand, at: string): AiLayoutBand {
+function settleBand(
+  page: PageScope,
+  band: AiLayoutBand,
+  at: string,
+): AiLayoutBand {
   if (band !== 'brand' && band !== 'dark') return band
   if (page.strong[band] >= AI_LAYOUT_MAX_STRONG_BANDS) {
-    page.settled.push({ at: `${at}.band`, what: `a third ${band} band drawn soft` })
+    page.settled.push({
+      at: `${at}.band`,
+      what: `a third ${band} band drawn soft`,
+    })
     return 'soft'
   }
   page.strong[band] += 1
@@ -339,14 +456,18 @@ function settleBand(page: PageScope, band: AiLayoutBand, at: string): AiLayoutBa
 /** A band's own colors, as palette roles: the dark band pins the scheme instead. */
 export function bandSx(band: AiLayoutBand): Record<string, unknown> | null {
   if (band === 'soft') return { bgcolor: 'background.paper' }
-  if (band === 'brand') return { bgcolor: 'primary.main', color: 'primary.contrastText' }
+  if (band === 'brand')
+    return { bgcolor: 'primary.main', color: 'primary.contrastText' }
   return null
 }
 
 /** Whether a block spans more than a reading column: a row of several items. */
 function isWideGroup(block: AiLayoutBlock): boolean {
   return (
-    (block.kind === 'cards' || block.kind === 'steps' || block.kind === 'stats' || block.kind === 'quotes') &&
+    (block.kind === 'cards' ||
+      block.kind === 'steps' ||
+      block.kind === 'stats' ||
+      block.kind === 'quotes') &&
     (block.items?.length ?? 0) >= 2
   )
 }
@@ -354,9 +475,17 @@ function isWideGroup(block: AiLayoutBlock): boolean {
 /** A full-width flow centered on a wide section is held to a reading width. */
 function centered(scope: SectionScope, flowId: string, wide: boolean): string {
   const flow = scope.page.tree.nodes[flowId]
-  const holdsGroup = (flow.nodes ?? []).some((id) => scope.page.tree.nodes[id]?.componentId === 'muiGrid')
+  const holdsGroup = (flow.nodes ?? []).some(
+    (id) => scope.page.tree.nodes[id]?.componentId === 'muiGrid',
+  )
   if (!wide || !scope.centered || holdsGroup) return flowId
-  return scope.page.tree.add('muiContainer', { maxWidth: 'md', disableGutters: true }, null, [flowId], 'measure')
+  return scope.page.tree.add(
+    'muiContainer',
+    { maxWidth: 'md', disableGutters: true },
+    null,
+    [flowId],
+    'measure',
+  )
 }
 
 /**
@@ -365,20 +494,32 @@ function centered(scope: SectionScope, flowId: string, wide: boolean): string {
  * section ends, and a `form` or `component` block naming nothing takes the
  * one the plan line names.
  */
-function placePlanned(scope: SectionScope, raw: AiLayoutSection): AiLayoutBlock[] {
+function placePlanned(
+  scope: SectionScope,
+  raw: AiLayoutSection,
+): AiLayoutBlock[] {
   const { page, index, at } = scope
   const forms = formIdsOf(page.targets)
   const uses = page.plan.sections[index]?.uses ?? []
   const plannedForms = uses.filter((ref) => forms.has(ref))
   const plannedComponents = uses.filter((ref) => componentOf(page.targets, ref))
-  const blocks = raw.blocks.map((block) => ({ ...block, ...(block.items ? { items: [...block.items] } : {}) }))
-  const lastCol = raw.cols && raw.cols.length >= 2 ? raw.cols.length - 1 : undefined
+  const blocks = raw.blocks.map((block) => ({
+    ...block,
+    ...(block.items ? { items: [...block.items] } : {}),
+  }))
+  const lastCol =
+    raw.cols && raw.cols.length >= 2 ? raw.cols.length - 1 : undefined
   for (const block of blocks) {
     if (block.kind === 'form' && !(block.to && forms.has(block.to))) {
-      const only = page.targets.forms.length === 1 ? page.targets.forms[0].id : undefined
+      const only =
+        page.targets.forms.length === 1 ? page.targets.forms[0].id : undefined
       block.to = plannedForms[0] ?? only
     }
-    if ((block.kind === 'component' || block.kind === 'cards') && block.to && !componentOf(page.targets, block.to)) {
+    if (
+      (block.kind === 'component' || block.kind === 'cards') &&
+      block.to &&
+      !componentOf(page.targets, block.to)
+    ) {
       if (block.kind === 'component') block.to = plannedComponents[0]
       else delete block.to
     }
@@ -386,25 +527,58 @@ function placePlanned(scope: SectionScope, raw: AiLayoutSection): AiLayoutBlock[
   }
   for (const form of plannedForms) {
     if (!blocks.some((block) => block.kind === 'form' && block.to === form)) {
-      blocks.push({ kind: 'form', to: form, ...(lastCol !== undefined ? { col: lastCol } : {}) })
+      blocks.push({
+        kind: 'form',
+        to: form,
+        ...(lastCol !== undefined ? { col: lastCol } : {}),
+      })
       page.settled.push({ at, what: `the planned form ${form} placed` })
     }
   }
   for (const component of plannedComponents) {
-    if (blocks.some((block) => (block.kind === 'component' || block.kind === 'cards') && block.to === component)) continue
+    if (
+      blocks.some(
+        (block) =>
+          (block.kind === 'component' || block.kind === 'cards') &&
+          block.to === component,
+      )
+    )
+      continue
     // A group the design drew where the plan places a component is that component's placements.
-    const group = blocks.find((block) => AI_LAYOUT_GROUP_KINDS.has(block.kind) && block.kind !== 'faq' && block.kind !== 'list' && !block.to)
+    const group = blocks.find(
+      (block) =>
+        AI_LAYOUT_GROUP_KINDS.has(block.kind) &&
+        block.kind !== 'faq' &&
+        block.kind !== 'list' &&
+        !block.to,
+    )
     if (group) {
       group.to = component
       continue
     }
-    blocks.push({ kind: 'component', to: component, ...(lastCol !== undefined ? { col: lastCol } : {}) })
+    blocks.push({
+      kind: 'component',
+      to: component,
+      ...(lastCol !== undefined ? { col: lastCol } : {}),
+    })
     page.settled.push({ at, what: `the planned component ${component} placed` })
   }
   return blocks.filter((block) => {
     if ((block.kind === 'form' || block.kind === 'component') && !block.to) {
-      page.settled.push({ at, what: `a ${block.kind} with nothing to place; left out` })
+      page.settled.push({
+        at,
+        what: `a ${block.kind} with nothing to place; left out`,
+      })
       return false
+    }
+    // A form is placed once a page: a second copy of the same form asks a
+    // visitor the same thing twice.
+    if (block.kind === 'form' && block.to) {
+      if (page.formsPlaced.has(block.to)) {
+        page.settled.push({ at, what: `the form ${block.to} again; left out` })
+        return false
+      }
+      page.formsPlaced.add(block.to)
     }
     return true
   })
@@ -420,7 +594,11 @@ function sameShape(columns: readonly AiLayoutBlock[][]): boolean {
   return (
     columns.every((column) => shapeOf(column) === first) &&
     columns[0].some((block) => block.kind === 'heading') &&
-    columns[0].every((block) => ['heading', 'text', 'lede', 'eyebrow', 'image', 'note'].includes(block.kind))
+    columns[0].every((block) =>
+      ['heading', 'text', 'lede', 'eyebrow', 'image', 'note'].includes(
+        block.kind,
+      ),
+    )
   )
 }
 
@@ -431,7 +609,12 @@ function columnsAsCards(columns: readonly AiLayoutBlock[][]): AiLayoutBlock {
     items: columns.map((column) => {
       const title = column.find((block) => block.kind === 'heading')?.text ?? ''
       const words = column
-        .filter((block) => block.kind === 'text' || block.kind === 'lede' || block.kind === 'note')
+        .filter(
+          (block) =>
+            block.kind === 'text' ||
+            block.kind === 'lede' ||
+            block.kind === 'note',
+        )
         .map((block) => block.text ?? '')
         .join(' ')
       const icon = column.find((block) => block.icon)?.icon
@@ -445,7 +628,9 @@ function columnsAsCards(columns: readonly AiLayoutBlock[][]): AiLayoutBlock {
 /** Spans out of twelve for relative widths: each at least three, summing to twelve. */
 export function aiLayoutSpans(weights: readonly number[]): number[] {
   const total = weights.reduce((sum, weight) => sum + weight, 0)
-  const spans = weights.map((weight) => Math.max(3, Math.round((weight / total) * 12)))
+  const spans = weights.map((weight) =>
+    Math.max(3, Math.round((weight / total) * 12)),
+  )
   let over = spans.reduce((sum, span) => sum + span, 0) - 12
   while (over !== 0) {
     // Take from (or give to) the widest column that can spare it.
@@ -460,13 +645,21 @@ export function aiLayoutSpans(weights: readonly number[]): number[] {
   return spans
 }
 
-export function compileRow(scope: SectionScope, columns: Array<{ column: AiLayoutBlock[]; weight: number }>): string {
+export function compileRow(
+  scope: SectionScope,
+  columns: Array<{ column: AiLayoutBlock[]; weight: number }>,
+): string {
   const tree = scope.page.tree
   const spans = aiLayoutSpans(columns.map((entry) => entry.weight))
   const items = columns.map((entry, position) => {
     const span = spans[position]
-    const flow = compileFlow(scope, entry.column, span >= 8 ? 'full' : span >= 5 ? 'half' : 'narrow')
-    const size = columns.length >= 4 ? `xs:12 sm:6 md:${span}` : `xs:12 md:${span}`
+    const flow = compileFlow(
+      scope,
+      entry.column,
+      span >= 8 ? 'full' : span >= 5 ? 'half' : 'narrow',
+    )
+    const size =
+      columns.length >= 4 ? `xs:12 sm:6 md:${span}` : `xs:12 md:${span}`
     return tree.add('muiGrid', { size }, null, [flow], 'column')
   })
   return tree.add(
@@ -483,7 +676,11 @@ export function compileRow(scope: SectionScope, columns: Array<{ column: AiLayou
 export type Room = 'full' | 'half' | 'narrow'
 
 /** A column of blocks, top to bottom, with buttons side by side; `null` when nothing in it compiles. */
-export function compileFlow(scope: SectionScope, blocks: readonly AiLayoutBlock[], room: Room): string | null {
+export function compileFlow(
+  scope: SectionScope,
+  blocks: readonly AiLayoutBlock[],
+  room: Room,
+): string | null {
   const tree = scope.page.tree
   const children: string[] = []
   let buttons: string[] = []
@@ -499,7 +696,9 @@ export function compileFlow(scope: SectionScope, blocks: readonly AiLayoutBlock[
               spacing: '2',
               useFlexGap: true,
               flexWrap: 'wrap',
-              ...(scope.centered && room === 'full' ? { justifyContent: 'center' } : {}),
+              ...(scope.centered && room === 'full'
+                ? { justifyContent: 'center' }
+                : {}),
             },
             null,
             buttons,
@@ -520,12 +719,17 @@ export function compileFlow(scope: SectionScope, blocks: readonly AiLayoutBlock[
   }
   flushButtons()
   if (!children.length) return null
+  // One block needs no flow around it.
+  if (children.length === 1) return children[0]
   const align = scope.centered && room === 'full'
   // A flow whose words open with a label, a heading and a lede reads as one
   // block at a tighter spacing than the groups under it.
   return tree.add(
     'muiStack',
-    { spacing: hasGroup(tree, children) ? '4' : '2.5', ...(align ? { alignItems: 'center' } : {}) },
+    {
+      spacing: hasGroup(tree, children) ? '4' : '2.5',
+      ...(align ? { alignItems: 'center' } : {}),
+    },
     null,
     children,
     'flow',
@@ -533,13 +737,26 @@ export function compileFlow(scope: SectionScope, blocks: readonly AiLayoutBlock[
 }
 
 function hasGroup(tree: AiLayoutTreeBuilder, ids: readonly string[]): boolean {
-  return ids.some((id) => ['muiGrid', 'muiList'].includes(tree.nodes[id]?.componentId ?? ''))
+  return ids.some((id) =>
+    ['muiGrid', 'muiList'].includes(tree.nodes[id]?.componentId ?? ''),
+  )
 }
 
-function compileBlock(scope: SectionScope, block: AiLayoutBlock, room: Room): string | null {
+function compileBlock(
+  scope: SectionScope,
+  block: AiLayoutBlock,
+  room: Room,
+): string | null {
   switch (block.kind) {
     case 'eyebrow':
-      return words(scope, block, 'eyebrow', 'overline', { component: 'p' }, accent(scope))
+      return words(
+        scope,
+        block,
+        'eyebrow',
+        'overline',
+        { component: 'p' },
+        accent(scope),
+      )
     case 'heading':
       return heading(scope, block)
     case 'lede':
@@ -604,18 +821,41 @@ function words(
 /** A heading at its place in the outline: the section's own, or one under it. */
 function heading(scope: SectionScope, block: AiLayoutBlock): string | null {
   if (scope.frame) {
-    const label = aiLayoutWords(block.text, 'itemTitle', scope.page.targets.facts)
+    const label = aiLayoutWords(
+      block.text,
+      'itemTitle',
+      scope.page.targets.facts,
+    )
     return label
-      ? scope.page.tree.add('muiTypography', { children: label, variant: 'subtitle1', component: 'p', ...align(scope) }, null, null, 'label')
+      ? scope.page.tree.add(
+          'muiTypography',
+          {
+            children: label,
+            variant: 'subtitle1',
+            component: 'p',
+            ...align(scope),
+          },
+          null,
+          null,
+          'label',
+        )
       : null
   }
   const own = !scope.headed
   const level = own ? scope.level : scope.level + 1
-  const place: AiLayoutTextPlace = level === 1 ? 'title' : own ? 'heading' : 'itemTitle'
+  const place: AiLayoutTextPlace =
+    level === 1 ? 'title' : own ? 'heading' : 'itemTitle'
   const text = aiLayoutWords(block.text, place, scope.page.targets.facts)
   if (!text) return null
   scope.headed = scope.headed || own
-  const variant = level === 1 ? (block.style === 'large' ? 'displayXl' : 'h1') : own ? 'h2' : 'h4'
+  const variant =
+    level === 1
+      ? block.style === 'large'
+        ? 'displayXl'
+        : 'h1'
+      : own
+        ? 'h2'
+        : 'h4'
   return scope.page.tree.add(
     'muiTypography',
     { children: text, variant, component: `h${level}`, ...align(scope) },
@@ -635,12 +875,23 @@ function itemElement(scope: SectionScope): string {
   return scope.frame ? 'p' : `h${itemLevel(scope)}`
 }
 
-function compileButton(scope: SectionScope, block: AiLayoutBlock): string | null {
+function compileButton(
+  scope: SectionScope,
+  block: AiLayoutBlock,
+): string | null {
   const label = aiLayoutFitText(block.text, 'label')
   if (!label) return null
-  const destination = aiLayoutResolveLink(block.to, label, scope.link, scope.page.targets)
+  const destination = aiLayoutResolveLink(
+    block.to,
+    label,
+    scope.link,
+    scope.page.targets,
+  )
   if (!destination) {
-    scope.page.settled.push({ at: scope.at, what: `the button "${label}" has nowhere to go; left out` })
+    scope.page.settled.push({
+      at: scope.at,
+      what: `the button "${label}" has nowhere to go; left out`,
+    })
     return null
   }
   const style = block.style ?? 'primary'
@@ -672,18 +923,29 @@ function compileButton(scope: SectionScope, block: AiLayoutBlock): string | null
  * interaction to that section's root (AGL-3097), by the id the page stores it
  * under.
  */
-function linkTo(scope: SectionScope, id: string, destination: AiLayoutDestination): void {
+function linkTo(
+  scope: SectionScope,
+  id: string,
+  destination: AiLayoutDestination,
+): void {
   if (destination.kind !== 'section') return
   const { page } = scope
   page.scrollTo[id] = destination.index
-  const target = page.options.sectionIds?.[destination.index] ?? sectionIdOf(destination.index)
-  const name = page.plan.sections[destination.index]?.name ?? `section ${destination.index + 1}`
+  const target =
+    page.options.sectionIds?.[destination.index] ??
+    sectionIdOf(destination.index)
+  const name =
+    page.plan.sections[destination.index]?.name ??
+    `section ${destination.index + 1}`
   page.tree.nodes[id].interactions = [aiPageScrollInteraction(target, name)]
 }
 
-export function destinationProps(destination: AiLayoutDestination): Record<string, unknown> {
+export function destinationProps(
+  destination: AiLayoutDestination,
+): Record<string, unknown> {
   if (destination.kind === 'page') return { screenId: destination.screenId }
-  if (destination.kind === 'href') return { href: destination.href, target: '_blank' }
+  if (destination.kind === 'href')
+    return { href: destination.href, target: '_blank' }
   return {}
 }
 
@@ -692,18 +954,31 @@ export function destinationProps(destination: AiLayoutDestination): Record<strin
  * owner places the picture, which then fills it. Its description is its alt
  * text (rule 9), and no source is set: a picture comes from the media library.
  */
-function image(scope: SectionScope, block: AiLayoutBlock, room: Room): string | null {
+function image(
+  scope: SectionScope,
+  block: AiLayoutBlock,
+  room: Room,
+): string | null {
   const { page } = scope
   const alt = aiLayoutFitText(block.text, 'alt')
   if (!alt) return null
   if (page.images >= maxImages(page)) {
-    page.settled.push({ at: scope.at, what: `a picture past the page's ${AI_LAYOUT_MAX_IMAGES}; left out` })
+    page.settled.push({
+      at: scope.at,
+      what: `a picture past the page's ${AI_LAYOUT_MAX_IMAGES}; left out`,
+    })
     return null
   }
   page.images += 1
   const icon = aiIconOfWord(block.icon) ?? page.pageIcon
   const tree = page.tree
-  const mark = tree.add(AI_ICON_COMPONENT_ID, { iconId: icon.id, size: '64' }, { color: 'primary.main' }, null, 'imageIcon')
+  const mark = tree.add(
+    AI_ICON_COMPONENT_ID,
+    { iconId: icon.id, size: '64' },
+    { color: 'primary.main' },
+    null,
+    'imageIcon',
+  )
   const picture = tree.add(
     'image',
     { alt, objectFit: 'cover' },
@@ -723,7 +998,16 @@ function image(scope: SectionScope, block: AiLayoutBlock, room: Room): string | 
       borderRadius: 4,
       bgcolor: 'action.hover',
       // The frame's shape follows its room, so no two slots of a page share one style.
-      aspectRatio: room === 'full' ? (page.images === 1 ? '16 / 9' : '21 / 9') : room === 'half' ? '4 / 3' : page.images === 1 ? '1 / 1' : '3 / 4',
+      aspectRatio:
+        room === 'full'
+          ? page.images === 1
+            ? '16 / 9'
+            : '21 / 9'
+          : room === 'half'
+            ? '4 / 3'
+            : page.images === 1
+              ? '1 / 1'
+              : '3 / 4',
     },
     [mark, picture],
     'frame',
@@ -734,8 +1018,20 @@ function image(scope: SectionScope, block: AiLayoutBlock, room: Room): string | 
 function form(scope: SectionScope, block: AiLayoutBlock): string | null {
   const tree = scope.page.tree
   const placed = tree.add('form', { formId: block.to }, null, null, 'form')
-  const content = tree.add('muiCardContent', null, { p: { xs: 3, md: 4 } }, [placed], 'formContent')
-  return tree.add('muiCard', { variant: 'outlined' }, null, [content], 'formCard')
+  const content = tree.add(
+    'muiCardContent',
+    null,
+    { p: { xs: 3, md: 4 } },
+    [placed],
+    'formContent',
+  )
+  return tree.add(
+    'muiCard',
+    { variant: 'outlined' },
+    null,
+    [content],
+    'formCard',
+  )
 }
 
 /** A reusable component placed by its id, its props filled from the block's items. */
@@ -745,15 +1041,30 @@ function component(scope: SectionScope, block: AiLayoutBlock): string | null {
   const values: Record<string, unknown> = {}
   for (const item of block.items ?? []) {
     const name = item.title.trim()
-    if (name in declared.props && item.text.trim()) values[name] = aiLayoutWords(item.text, 'text', scope.page.targets.facts)
+    if (name in declared.props && item.text.trim())
+      values[name] = aiLayoutWords(item.text, 'text', scope.page.targets.facts)
   }
-  if (!Object.keys(values).length && block.text) {
+  // An instance fills at least one prop (rule 1): the block's words, else the
+  // name its section has in the plan, rather than the component's placeholder.
+  if (!Object.values(values).some(Boolean)) {
     const first = textProps(declared.props)[0]
-    if (first) values[first] = aiLayoutWords(block.text, 'text', scope.page.targets.facts)
+    const words =
+      aiLayoutWords(block.text, 'text', scope.page.targets.facts) ||
+      aiLayoutWords(
+        scope.page.plan.sections[scope.index]?.name,
+        'itemTitle',
+        scope.page.targets.facts,
+      )
+    if (first && words) values[first] = words
   }
+  for (const [name, value] of Object.entries(values))
+    if (!value) delete values[name]
   return scope.page.tree.add(
     REUSABLE_INSTANCE_COMPONENT_ID,
-    { [AI_INSTANCE_REF_PROP]: declared.id, ...(Object.keys(values).length ? { propValues: values } : {}) },
+    {
+      [AI_INSTANCE_REF_PROP]: declared.id,
+      ...(Object.keys(values).length ? { propValues: values } : {}),
+    },
     null,
     null,
     'instance',
@@ -773,22 +1084,35 @@ function instanceValues(
   facts: string,
 ): Record<string, unknown> {
   const texts = textProps(props)
-  const titleProp = texts.find((name) => /title|name|heading|label|question|figure|value/i.test(name)) ?? texts[0]
+  const titleProp =
+    texts.find((name) =>
+      /title|name|heading|label|question|figure|value/i.test(name),
+    ) ?? texts[0]
   const textProp =
-    texts.find((name) => name !== titleProp && /text|description|body|summary|copy|answer|detail|caption/i.test(name)) ??
-    texts.find((name) => name !== titleProp)
+    texts.find(
+      (name) =>
+        name !== titleProp &&
+        /text|description|body|summary|copy|answer|detail|caption/i.test(name),
+    ) ?? texts.find((name) => name !== titleProp)
   const values: Record<string, unknown> = {}
-  if (titleProp && item.title.trim()) values[titleProp] = aiLayoutWords(item.title, 'itemTitle', facts)
-  if (textProp && item.text.trim()) values[textProp] = aiLayoutWords(item.text, 'itemText', facts)
+  if (titleProp && item.title.trim())
+    values[titleProp] = aiLayoutWords(item.title, 'itemTitle', facts)
+  if (textProp && item.text.trim())
+    values[textProp] = aiLayoutWords(item.text, 'itemText', facts)
   const first = titleProp ?? textProp
-  if (!Object.values(values).some(Boolean) && first) values[first] = aiLayoutWords(item.title || item.text, 'itemTitle', facts) || item.title.trim() || item.text.trim()
+  if (!Object.values(values).some(Boolean) && first)
+    values[first] = aiLayoutWords(item.title || item.text, 'itemTitle', facts)
   return values
 }
 
 // ── Groups ────────────────────────────────────────────────────────────────
 
 /** How many items sit side by side in a room. */
-function across(count: number, room: Room, kind: AiLayoutBlock['kind']): number {
+function across(
+  count: number,
+  room: Room,
+  kind: AiLayoutBlock['kind'],
+): number {
   if (room === 'narrow') return 1
   if (room === 'half') return count >= 2 && kind === 'stats' ? 2 : 1
   if (count <= 3) return count
@@ -804,13 +1128,21 @@ function itemSize(perRow: number): string {
 }
 
 /** Items laid out side by side as a Grid of sized items, or stacked where they sit one to a row. */
-function layOut(scope: SectionScope, items: readonly string[], perRow: number, spacing: string, role: string): string {
+function layOut(
+  scope: SectionScope,
+  items: readonly string[],
+  perRow: number,
+  spacing: string,
+  role: string,
+): string {
   const tree = scope.page.tree
   if (perRow <= 1 || items.length <= 1) {
     return tree.add('muiStack', { spacing }, null, items, role)
   }
   const size = itemSize(perRow)
-  const cells = items.map((id) => tree.add('muiGrid', { size }, null, [id], 'cell'))
+  const cells = items.map((id) =>
+    tree.add('muiGrid', { size }, null, [id], 'cell'),
+  )
   return tree.add('muiGrid', { container: true, spacing }, null, cells, role)
 }
 
@@ -833,10 +1165,37 @@ function maxImages(page: PageScope): number {
  * The items a group may still show in its section (rule 8): seven like items
  * a section, across all its groups, since eight are a list typed by hand.
  */
+/** Whether an item has words left once they are cleaned and fitted: an item with none is no item. */
+function speaks(scope: SectionScope, item: AiLayoutItem): boolean {
+  const facts = scope.page.targets.facts
+  return !!(
+    aiLayoutWords(item.title, 'itemTitle', facts) ||
+    aiLayoutWords(item.text, 'itemText', facts)
+  )
+}
+
+/** A group's items with every part that has no words left once cleaned emptied, and wordless items left out. */
+function cleanItems(
+  scope: SectionScope,
+  items: readonly AiLayoutItem[],
+): AiLayoutItem[] {
+  const facts = scope.page.targets.facts
+  return items
+    .map((item) => ({
+      ...item,
+      title: aiLayoutWords(item.title, 'itemTitle', facts) ? item.title : '',
+      text: aiLayoutWords(item.text, 'itemText', facts) ? item.text : '',
+    }))
+    .filter((item) => speaks(scope, item))
+}
+
 function takeItems<T>(scope: SectionScope, items: readonly T[]): T[] {
   const kept = items.slice(0, Math.max(0, scope.itemsLeft))
   if (kept.length < items.length) {
-    scope.page.settled.push({ at: scope.at, what: `${items.length - kept.length} items past the section's ${AI_LAYOUT_MAX_ITEMS}; left out` })
+    scope.page.settled.push({
+      at: scope.at,
+      what: `${items.length - kept.length} items past the section's ${AI_LAYOUT_MAX_ITEMS}; left out`,
+    })
   }
   scope.itemsLeft -= kept.length
   return kept
@@ -848,11 +1207,12 @@ function takeItemsInPlace<T>(scope: SectionScope, items: T[]): void {
   items.length = kept.length
 }
 
-function group(scope: SectionScope, block: AiLayoutBlock, room: Room): string | null {
-  const items = takeItems(
-    scope,
-    (block.items ?? []).filter((item) => item.title.trim() || item.text.trim()),
-  )
+function group(
+  scope: SectionScope,
+  block: AiLayoutBlock,
+  room: Room,
+): string | null {
+  const items = takeItems(scope, cleanItems(scope, block.items ?? []))
   if (!items.length) return null
   const perRow = across(items.length, room, block.kind)
   const placed = componentOf(scope.page.targets, block.to)
@@ -860,13 +1220,37 @@ function group(scope: SectionScope, block: AiLayoutBlock, room: Room): string | 
   if (rule1(scope)) return compactGroup(scope, block, items, perRow)
   switch (block.kind) {
     case 'steps':
-      return layOut(scope, items.map((item, position) => step(scope, item, position)), perRow, '4', 'steps')
+      return layOut(
+        scope,
+        items.map((item, position) => step(scope, item, position)),
+        perRow,
+        '4',
+        'steps',
+      )
     case 'stats':
-      return layOut(scope, items.map((item) => stat(scope, item)), perRow, '4', 'stats')
+      return layOut(
+        scope,
+        items.map((item) => stat(scope, item)),
+        perRow,
+        '4',
+        'stats',
+      )
     case 'quotes':
-      return layOut(scope, items.map((item) => quote(scope, item)), perRow, '3', 'quotes')
+      return layOut(
+        scope,
+        items.map((item) => quote(scope, item)),
+        perRow,
+        '3',
+        'quotes',
+      )
     default:
-      return layOut(scope, items.map((item) => card(scope, block, item)), perRow, '3', 'cards')
+      return layOut(
+        scope,
+        items.map((item) => card(scope, block, item)),
+        perRow,
+        '3',
+        'cards',
+      )
   }
 }
 
@@ -881,7 +1265,10 @@ function instances(
     const values = instanceValues(placed.props, item, scope.page.targets.facts)
     return tree.add(
       REUSABLE_INSTANCE_COMPONENT_ID,
-      { [AI_INSTANCE_REF_PROP]: placed.id, ...(Object.keys(values).length ? { propValues: values } : {}) },
+      {
+        [AI_INSTANCE_REF_PROP]: placed.id,
+        ...(Object.keys(values).length ? { propValues: values } : {}),
+      },
       null,
       null,
       'instance',
@@ -894,7 +1281,12 @@ function instances(
  * A group in its compact form, a title over its text: two elements an item,
  * under the three a block must have before rule 1 asks for a component.
  */
-function compactGroup(scope: SectionScope, block: AiLayoutBlock, items: readonly AiLayoutItem[], perRow: number): string {
+function compactGroup(
+  scope: SectionScope,
+  block: AiLayoutBlock,
+  items: readonly AiLayoutItem[],
+  perRow: number,
+): string {
   const tree = scope.page.tree
   const facts = scope.page.targets.facts
   const pairs = items.map((item, position) => {
@@ -907,38 +1299,87 @@ function compactGroup(scope: SectionScope, block: AiLayoutBlock, items: readonly
     const text =
       block.kind === 'quotes'
         ? '[Customer name]'
-        : aiLayoutWords(item.text, block.kind === 'stats' ? 'statLabel' : 'itemText', facts)
-    return tree.add('muiListItemText', { primary: title, ...(text ? { secondary: text } : {}) }, null, null, 'pair')
+        : aiLayoutWords(
+            item.text,
+            block.kind === 'stats' ? 'statLabel' : 'itemText',
+            facts,
+          )
+    return tree.add(
+      'muiListItemText',
+      { primary: title, ...(text ? { secondary: text } : {}) },
+      null,
+      null,
+      'pair',
+    )
   })
   return layOut(scope, pairs, perRow, '3', 'compact')
 }
 
 /** A card: an optional icon, its title one level under the section's heading, and its words. */
-function card(scope: SectionScope, block: AiLayoutBlock, item: AiLayoutItem): string {
+function card(
+  scope: SectionScope,
+  block: AiLayoutBlock,
+  item: AiLayoutItem,
+): string {
   const tree = scope.page.tree
   const facts = scope.page.targets.facts
   const icon = aiIconOfWord(item.icon) ?? aiIconOfWord(block.icon)
   const children = [
-    icon ? tree.add(AI_ICON_COMPONENT_ID, { iconId: icon.id, size: '32' }, { color: 'primary.main' }, null, 'icon') : null,
+    icon
+      ? tree.add(
+          AI_ICON_COMPONENT_ID,
+          { iconId: icon.id, size: '32' },
+          { color: 'primary.main' },
+          null,
+          'icon',
+        )
+      : null,
     item.title.trim()
       ? tree.add(
           'muiTypography',
-          { children: aiLayoutWords(item.title, 'itemTitle', facts), variant: 'h5', component: itemElement(scope) },
+          {
+            children: aiLayoutWords(item.title, 'itemTitle', facts),
+            variant: 'h5',
+            component: itemElement(scope),
+          },
           null,
           null,
           'title',
         )
       : null,
     item.text.trim()
-      ? tree.add('muiTypography', { children: aiLayoutWords(item.text, 'itemText', facts), variant: 'body1' }, { color: 'text.secondary' }, null, 'text')
+      ? tree.add(
+          'muiTypography',
+          {
+            children: aiLayoutWords(item.text, 'itemText', facts),
+            variant: 'body1',
+          },
+          { color: 'text.secondary' },
+          null,
+          'text',
+        )
       : null,
   ]
-  const stack = tree.add('muiStack', { spacing: '1.5' }, null, children, 'cardStack')
+  const stack = tree.add(
+    'muiStack',
+    { spacing: '1.5' },
+    null,
+    children,
+    'cardStack',
+  )
   if (block.style === 'quiet') return stack
-  const content = tree.add('muiCardContent', null, { p: 3 }, [stack], 'cardContent')
+  const content = tree.add(
+    'muiCardContent',
+    null,
+    { p: 3 },
+    [stack],
+    'cardContent',
+  )
   return tree.add(
     'muiCard',
-    block.style === 'primary' || block.style === 'large' ? { variant: 'elevation', elevation: '2' } : { variant: 'outlined' },
+    block.style === 'primary' || block.style === 'large'
+      ? { variant: 'elevation', elevation: '2' }
+      : { variant: 'outlined' },
     { height: '100%' },
     [content],
     'card',
@@ -946,7 +1387,11 @@ function card(scope: SectionScope, block: AiLayoutBlock, item: AiLayoutItem): st
 }
 
 /** A numbered step: its number in the brand color, its title and its words. */
-function step(scope: SectionScope, item: AiLayoutItem, position: number): string {
+function step(
+  scope: SectionScope,
+  item: AiLayoutItem,
+  position: number,
+): string {
   const tree = scope.page.tree
   const facts = scope.page.targets.facts
   return tree.add(
@@ -956,7 +1401,11 @@ function step(scope: SectionScope, item: AiLayoutItem, position: number): string
     [
       tree.add(
         'muiTypography',
-        { children: String(position + 1).padStart(2, '0'), variant: 'h3', component: 'p' },
+        {
+          children: String(position + 1).padStart(2, '0'),
+          variant: 'h3',
+          component: 'p',
+        },
         accent(scope),
         null,
         'number',
@@ -964,14 +1413,27 @@ function step(scope: SectionScope, item: AiLayoutItem, position: number): string
       item.title.trim()
         ? tree.add(
             'muiTypography',
-            { children: aiLayoutWords(item.title, 'itemTitle', facts), variant: 'h5', component: itemElement(scope) },
+            {
+              children: aiLayoutWords(item.title, 'itemTitle', facts),
+              variant: 'h5',
+              component: itemElement(scope),
+            },
             null,
             null,
             'title',
           )
         : null,
       item.text.trim()
-        ? tree.add('muiTypography', { children: aiLayoutWords(item.text, 'itemText', facts), variant: 'body1' }, muted(scope), null, 'text')
+        ? tree.add(
+            'muiTypography',
+            {
+              children: aiLayoutWords(item.text, 'itemText', facts),
+              variant: 'body1',
+            },
+            muted(scope),
+            null,
+            'text',
+          )
         : null,
     ],
     'step',
@@ -989,7 +1451,12 @@ function stat(scope: SectionScope, item: AiLayoutItem): string {
     [
       tree.add(
         'muiTypography',
-        { children: aiLayoutWords(item.title, 'stat', facts) || '[figure]', variant: 'h2', component: 'p', ...align(scope) },
+        {
+          children: aiLayoutWords(item.title, 'stat', facts) || '[figure]',
+          variant: 'h2',
+          component: 'p',
+          ...align(scope),
+        },
         accent(scope),
         null,
         'figure',
@@ -997,7 +1464,11 @@ function stat(scope: SectionScope, item: AiLayoutItem): string {
       item.text.trim()
         ? tree.add(
             'muiTypography',
-            { children: aiLayoutWords(item.text, 'statLabel', facts), variant: 'body2', ...align(scope) },
+            {
+              children: aiLayoutWords(item.text, 'statLabel', facts),
+              variant: 'body2',
+              ...align(scope),
+            },
             muted(scope),
             null,
             'label',
@@ -1012,17 +1483,38 @@ function stat(scope: SectionScope, item: AiLayoutItem): string {
 function quote(scope: SectionScope, item: AiLayoutItem): string {
   const tree = scope.page.tree
   const words = aiLayoutQuoteGap(item.text || item.title)
-  const who = item.text && item.title ? aiLayoutFitText(item.title, 'statLabel') : ''
+  const who =
+    item.text && item.title ? aiLayoutFitText(item.title, 'statLabel') : ''
   const stack = tree.add(
     'muiStack',
     { spacing: '2' },
     null,
     [
-      tree.add(AI_ICON_COMPONENT_ID, { iconId: AI_ICON_LIBRARY.quote.id, size: '32' }, { color: 'primary.main' }, null, 'quoteMark'),
-      tree.add('muiTypography', { children: words, variant: 'body1' }, null, null, 'quote'),
+      tree.add(
+        AI_ICON_COMPONENT_ID,
+        { iconId: AI_ICON_LIBRARY.quote.id, size: '32' },
+        { color: 'primary.main' },
+        null,
+        'quoteMark',
+      ),
       tree.add(
         'muiTypography',
-        { children: who ? `[Customer name], ${who.replace(/^\[|\]$/g, '')}` : '[Customer name]', variant: 'subtitle2', component: 'p' },
+        { children: words, variant: 'body1' },
+        null,
+        null,
+        'quote',
+      ),
+      tree.add(
+        'muiTypography',
+        {
+          children:
+            aiLayoutFitText(
+              who ? `[Customer name], ${who.replace(/^\[|\]$/g, '')}` : '',
+              'note',
+            ) || '[Customer name]',
+          variant: 'subtitle2',
+          component: 'p',
+        },
         null,
         null,
         'attribution',
@@ -1030,8 +1522,20 @@ function quote(scope: SectionScope, item: AiLayoutItem): string {
     ],
     'quoteStack',
   )
-  const content = tree.add('muiCardContent', null, { p: 3 }, [stack], 'quoteContent')
-  return tree.add('muiCard', { variant: 'outlined' }, { height: '100%' }, [content], 'quoteCard')
+  const content = tree.add(
+    'muiCardContent',
+    null,
+    { p: 3 },
+    [stack],
+    'quoteContent',
+  )
+  return tree.add(
+    'muiCard',
+    { variant: 'outlined' },
+    { height: '100%' },
+    [content],
+    'quoteCard',
+  )
 }
 
 /** A list: check-marked lines, or plain lines where rule 1 holds and the list is long. */
@@ -1043,11 +1547,18 @@ function list(scope: SectionScope, block: AiLayoutBlock): string | null {
   if ((block.items ?? []).some((item) => item.to)) {
     const links = (block.items ?? []).flatMap((item) => {
       const label = aiLayoutFitText(item.title || item.text, 'label')
-      const destination = label ? aiLayoutResolveLink(item.to, label, scope.link, scope.page.targets) : null
+      const destination = label
+        ? aiLayoutResolveLink(item.to, label, scope.link, scope.page.targets)
+        : null
       if (!destination) return []
       const id = tree.add(
         'muiScreenLink',
-        { children: label, renderAs: 'link', color: 'inherit', ...destinationProps(destination) },
+        {
+          children: label,
+          renderAs: 'link',
+          color: 'inherit',
+          ...destinationProps(destination),
+        },
         null,
         null,
         'link',
@@ -1055,16 +1566,30 @@ function list(scope: SectionScope, block: AiLayoutBlock): string | null {
       linkTo(scope, id, destination)
       return [id]
     })
-    return links.length ? tree.add('muiStack', { spacing: '1' }, null, links, 'links') : null
+    return links.length
+      ? tree.add('muiStack', { spacing: '1' }, null, links, 'links')
+      : null
   }
-  const lines = (block.items ?? [])
-    .map((item) => aiLayoutWords([item.title, item.text].filter((part) => part.trim()).join(' — '), 'listItem', facts))
+  const lines = cleanItems(scope, block.items ?? [])
+    .map((item) =>
+      aiLayoutWords(
+        [item.title, item.text].filter((part) => part.trim()).join(' — '),
+        'listItem',
+        facts,
+      ),
+    )
     .filter(Boolean)
   takeItemsInPlace(scope, lines)
   if (!lines.length) return null
   if (rule1(scope)) {
     const rows = lines.map((line) =>
-      tree.add('muiListItem', { disableGutters: true }, null, [tree.add('muiListItemText', { primary: line }, null, null, 'line')], 'row'),
+      tree.add(
+        'muiListItem',
+        { disableGutters: true },
+        null,
+        [tree.add('muiListItemText', { primary: line }, null, null, 'line')],
+        'row',
+      ),
     )
     return tree.add('muiList', { disablePadding: true }, null, rows, 'list')
   }
@@ -1075,8 +1600,20 @@ function list(scope: SectionScope, block: AiLayoutBlock): string | null {
       { direction: 'row', spacing: '1.5', alignItems: 'flex-start' },
       null,
       [
-        tree.add(AI_ICON_COMPONENT_ID, { iconId: check.id, size: '22' }, accent(scope), null, 'check'),
-        tree.add('muiTypography', { children: line, variant: 'body1' }, null, null, 'line'),
+        tree.add(
+          AI_ICON_COMPONENT_ID,
+          { iconId: check.id, size: '22' },
+          accent(scope),
+          null,
+          'check',
+        ),
+        tree.add(
+          'muiTypography',
+          { children: line, variant: 'body1' },
+          null,
+          null,
+          'line',
+        ),
       ],
       'row',
     ),
@@ -1088,7 +1625,12 @@ function list(scope: SectionScope, block: AiLayoutBlock): string | null {
 function faq(scope: SectionScope, block: AiLayoutBlock): string | null {
   const tree = scope.page.tree
   const facts = scope.page.targets.facts
-  const items = takeItems(scope, (block.items ?? []).filter((item) => item.title.trim()))
+  const items = takeItems(
+    scope,
+    cleanItems(scope, block.items ?? []).filter(
+      (item) => !!aiLayoutWords(item.title, 'question', facts),
+    ),
+  )
   if (!items.length) return null
   if (rule1(scope)) {
     const rows = items.map((item) =>
@@ -1101,7 +1643,9 @@ function faq(scope: SectionScope, block: AiLayoutBlock): string | null {
             'muiListItemText',
             {
               primary: aiLayoutWords(item.title, 'question', facts),
-              ...(item.text.trim() ? { secondary: aiLayoutWords(item.text, 'answer', facts) } : {}),
+              ...(item.text.trim()
+                ? { secondary: aiLayoutWords(item.text, 'answer', facts) }
+                : {}),
             },
             null,
             null,
@@ -1116,16 +1660,36 @@ function faq(scope: SectionScope, block: AiLayoutBlock): string | null {
   const panels = items.map((item, position) =>
     tree.add(
       'muiAccordion',
-      { disableGutters: true, ...(position === 0 ? { defaultExpanded: true } : {}) },
+      {
+        disableGutters: true,
+        ...(position === 0 ? { defaultExpanded: true } : {}),
+      },
       null,
       [
-        tree.add('muiAccordionSummary', { children: aiLayoutWords(item.title, 'question', facts) }, null, null, 'question'),
+        tree.add(
+          'muiAccordionSummary',
+          { children: aiLayoutWords(item.title, 'question', facts) },
+          null,
+          null,
+          'question',
+        ),
         item.text.trim()
           ? tree.add(
               'muiAccordionDetails',
               null,
               null,
-              [tree.add('muiTypography', { children: aiLayoutWords(item.text, 'answer', facts), variant: 'body1' }, { color: 'text.secondary' }, null, 'answer')],
+              [
+                tree.add(
+                  'muiTypography',
+                  {
+                    children: aiLayoutWords(item.text, 'answer', facts),
+                    variant: 'body1',
+                  },
+                  { color: 'text.secondary' },
+                  null,
+                  'answer',
+                ),
+              ],
               'details',
             )
           : null,

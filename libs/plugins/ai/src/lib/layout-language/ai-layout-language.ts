@@ -113,7 +113,12 @@ export type AiLayoutBand = (typeof AI_LAYOUT_BANDS)[number]
 export const AI_LAYOUT_ALIGNS = ['start', 'center'] as const
 export type AiLayoutAlign = (typeof AI_LAYOUT_ALIGNS)[number]
 
-export const AI_LAYOUT_STYLES = ['primary', 'secondary', 'quiet', 'large'] as const
+export const AI_LAYOUT_STYLES = [
+  'primary',
+  'secondary',
+  'quiet',
+  'large',
+] as const
 export type AiLayoutStyle = (typeof AI_LAYOUT_STYLES)[number]
 
 /** The most columns a row holds; a fifth is folded into the fourth. */
@@ -205,7 +210,8 @@ const SECTION_SCHEMA = {
 /** The page tool: every section of one page, in plan order, in one answer. */
 export const AI_LAYOUT_PAGE_TOOL: AiTool = {
   name: 'submit_page',
-  description: 'Submit the page: one entry in sections for each planned section, in order, in the layout language.',
+  description:
+    'Submit the page: one entry in sections for each planned section, in order, in the layout language.',
   strict: true,
   inputSchema: {
     type: 'object',
@@ -218,7 +224,8 @@ export const AI_LAYOUT_PAGE_TOOL: AiTool = {
 /** The frame tool: the site's header and footer, in the same language. */
 export const AI_LAYOUT_FRAME_TOOL: AiTool = {
   name: 'submit_frame',
-  description: "Submit the site's header and footer, each as a section in the layout language.",
+  description:
+    "Submit the site's header and footer, each as a section in the layout language.",
   strict: true,
   inputSchema: {
     type: 'object',
@@ -234,7 +241,7 @@ export const AI_LAYOUT_FRAME_TOOL: AiTool = {
  * written down and what each word becomes.
  */
 export const AI_LAYOUT_LANGUAGE_TEXT = [
-  'You design web pages in a compact layout language. You decide the structure and write every word; the platform turns your design into the page, with the site\'s theme, spacing and type, so never describe styling beyond the words below.',
+  "You design web pages in a compact layout language. You decide the structure and write every word; the platform turns your design into the page, with the site's theme, spacing and type, so never describe styling beyond the words below.",
   '',
   'A page is a list of sections, one for each section the plan names, in that order. A section has:',
   '- band: plain (the page background), soft (a light band), brand (the brand color) or dark (always dark). Vary the bands down a page so neighboring sections read apart; keep brand and dark to one or two sections a page.',
@@ -243,19 +250,19 @@ export const AI_LAYOUT_LANGUAGE_TEXT = [
   '- blocks: what the section shows, top to bottom. A block with "col" goes in that column of the row (0 is the first); a block without one spans the whole section, above the row when it comes first and below it when it comes last.',
   '',
   'Block kinds:',
-  '- eyebrow: a short label above a heading. heading: a heading; the first heading of the page\'s first section is the page\'s title, and the first heading of every other section is that section\'s heading. lede: the larger sentence under a heading. text: a paragraph. note: small print.',
+  "- eyebrow: a short label above a heading. heading: a heading; the first heading of the page's first section is the page's title, and the first heading of every other section is that section's heading. lede: the larger sentence under a heading. text: a paragraph. note: small print.",
   '- button: text is the label and to says where it goes; style primary, secondary or quiet. Two buttons in a row read as a pair.',
   '- image: text describes the picture to place, which becomes its alt text; the owner adds the picture. icon names a drawing to show until then.',
   '- list: items are the lines (title only; text may be empty).',
-  '- cards, steps, stats, quotes, faq: items, each with a title and a text. cards are features or services; steps are numbered; stats are a figure (title) with its label (text); faq items are a question (title) and its answer (text); quotes are what a customer should be quoted saying, written as the gap the owner fills, never as a real person\'s words.',
-  '- form: places a saved form by its id in to. component: places a reusable component by its id in to; its items fill the component\'s props, title the prop name and text the value.',
+  "- cards, steps, stats, quotes, faq: items, each with a title and a text. cards are features or services; steps are numbered; stats are a figure (title) with its label (text); faq items are a question (title) and its answer (text); quotes are what a customer should be quoted saying, written as the gap the owner fills, never as a real person's words.",
+  "- form: places a saved form by its id in to. component: places a reusable component by its id in to; its items fill the component's props, title the prop name and text the value.",
   '- style large on a heading makes the page title display-sized. icon (on a block or an item) is one of: ' +
     AI_ICON_WORDS.join(', ') +
     '.',
   '',
-  'Where a link goes (to): page:<page id> for a page of this site; #<n> for section n of this page (counted from 1); form for the site\'s form; or an https: address the brief gives. A button the page has nowhere to send is left out.',
+  "Where a link goes (to): page:<page id> for a page of this site; #<n> for section n of this page (counted from 1); form for the site's form; or an https: address the brief gives. A button the page has nowhere to send is left out.",
   '',
-  'Writing: plain, specific copy in the site\'s voice, from the brief, the business and its audience, never filler. Keep a page title under 70 characters and a section heading under 80. Where the brief leaves out a fact such as a price, a figure, a name, a phone number, an email or an address, write the gap in square brackets, like [phone number], instead of inventing it. Never invent a customer, a review, an award or a statistic.',
+  "Writing: plain, specific copy in the site's voice, from the brief, the business and its audience, never filler. Keep a page title under 70 characters and a section heading under 80. Where the brief leaves out a fact such as a price, a figure, a name, a phone number, an email or an address, write the gap in square brackets, like [phone number], instead of inventing it. Never invent a customer, a review, an award or a statistic.",
   '',
   'Design each page for this business and this request: choose the bands, the rows and the blocks that tell its story best, so no two sites read alike.',
 ].join('\n')
@@ -270,8 +277,14 @@ function text(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined
 }
 
-function oneOf<T extends string>(value: unknown, values: readonly T[]): T | undefined {
-  return typeof value === 'string' && (values as readonly string[]).includes(value) ? (value as T) : undefined
+function oneOf<T extends string>(
+  value: unknown,
+  values: readonly T[],
+): T | undefined {
+  return typeof value === 'string' &&
+    (values as readonly string[]).includes(value)
+    ? (value as T)
+    : undefined
 }
 
 /** What the reader settled on its own, for the job's record and the specs. */
@@ -293,18 +306,30 @@ function readItem(raw: unknown): AiLayoutItem | null {
   return { ...item, ...(to ? { to } : {}), ...(icon ? { icon } : {}) }
 }
 
-function readBlock(raw: unknown, at: string, settled: AiLayoutSettlement[]): AiLayoutBlock | null {
+function readBlock(
+  raw: unknown,
+  at: string,
+  settled: AiLayoutSettlement[],
+): AiLayoutBlock | null {
   if (!isRecord(raw)) {
     settled.push({ at, what: 'not a block; left out' })
     return null
   }
   const kind = oneOf(raw['kind'], AI_LAYOUT_BLOCK_KINDS)
   if (!kind) {
-    settled.push({ at, what: `unknown kind ${JSON.stringify(raw['kind'] ?? null)}; left out` })
+    settled.push({
+      at,
+      what: `unknown kind ${JSON.stringify(raw['kind'] ?? null)}; left out`,
+    })
     return null
   }
   const block: AiLayoutBlock = { kind }
-  if (typeof raw['col'] === 'number' && Number.isInteger(raw['col']) && raw['col'] >= 0) block.col = raw['col']
+  if (
+    typeof raw['col'] === 'number' &&
+    Number.isInteger(raw['col']) &&
+    raw['col'] >= 0
+  )
+    block.col = raw['col']
   const words = text(raw['text'])
   if (words) block.text = words
   const to = text(raw['to'])
@@ -314,19 +339,29 @@ function readBlock(raw: unknown, at: string, settled: AiLayoutSettlement[]): AiL
   const icon = text(raw['icon'])
   if (icon) block.icon = icon.trim().toLowerCase()
   if (AI_LAYOUT_GROUP_KINDS.has(kind) || kind === 'component') {
-    const items = (Array.isArray(raw['items']) ? raw['items'] : []).map(readItem).filter((item): item is AiLayoutItem => !!item)
-    const most = kind === 'quotes' ? AI_LAYOUT_MAX_QUOTES : kind === 'component' ? Infinity : AI_LAYOUT_MAX_ITEMS
-    if (items.length > most) settled.push({ at, what: `${items.length} items; the first ${most} kept` })
+    const items = (Array.isArray(raw['items']) ? raw['items'] : [])
+      .map(readItem)
+      .filter((item): item is AiLayoutItem => !!item)
+    const most =
+      kind === 'quotes'
+        ? AI_LAYOUT_MAX_QUOTES
+        : kind === 'component'
+          ? Infinity
+          : AI_LAYOUT_MAX_ITEMS
+    if (items.length > most)
+      settled.push({
+        at,
+        what: `${items.length} items; the first ${most} kept`,
+      })
     if (items.length) block.items = items.slice(0, most)
   }
   // A block with nothing to show is no block: a group with no items, words
   // with no words. A form or a component may name its record alone.
-  const empty =
-    AI_LAYOUT_GROUP_KINDS.has(kind)
-      ? !block.items?.length
-      : kind === 'form' || kind === 'component'
-        ? false
-        : !block.text
+  const empty = AI_LAYOUT_GROUP_KINDS.has(kind)
+    ? !block.items?.length
+    : kind === 'form' || kind === 'component'
+      ? false
+      : !block.text
   if (empty) {
     settled.push({ at, what: `an empty ${kind}; left out` })
     return null
@@ -348,19 +383,33 @@ export function aiReadLayoutSection(
   if (align) section.align = align
   if (Array.isArray(raw['cols'])) {
     const cols = raw['cols'].filter(
-      (value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0,
+      (value): value is number =>
+        typeof value === 'number' && Number.isFinite(value) && value > 0,
     )
     if (cols.length > AI_LAYOUT_MAX_COLS) {
-      settled.push({ at: `${at}.cols`, what: `${cols.length} columns; the first ${AI_LAYOUT_MAX_COLS} kept` })
+      settled.push({
+        at: `${at}.cols`,
+        what: `${cols.length} columns; the first ${AI_LAYOUT_MAX_COLS} kept`,
+      })
     }
-    if (cols.length >= 2) section.cols = cols.slice(0, AI_LAYOUT_MAX_COLS).map((value) => Math.min(12, Math.max(1, Math.round(value))))
+    if (cols.length >= 2)
+      section.cols = cols
+        .slice(0, AI_LAYOUT_MAX_COLS)
+        .map((value) => Math.min(12, Math.max(1, Math.round(value))))
   }
   const blocks = Array.isArray(raw['blocks']) ? raw['blocks'] : []
   blocks.forEach((entry, index) => {
     const block = readBlock(entry, `${at}.blocks[${index}]`, settled)
     if (!block) return
-    if (block.col !== undefined && section.cols && block.col >= section.cols.length) {
-      settled.push({ at: `${at}.blocks[${index}]`, what: `column ${block.col} of ${section.cols.length}; placed in the last` })
+    if (
+      block.col !== undefined &&
+      section.cols &&
+      block.col >= section.cols.length
+    ) {
+      settled.push({
+        at: `${at}.blocks[${index}]`,
+        what: `column ${block.col} of ${section.cols.length}; placed in the last`,
+      })
       block.col = section.cols.length - 1
     }
     if (block.col !== undefined && !section.cols) delete block.col
@@ -382,11 +431,18 @@ export interface AiLayoutPageReading {
  * an answer's extra sections are left out, and a planned section the answer
  * left empty or out is `null` — the one thing a re-ask asks for again.
  */
-export function aiReadLayoutPage(raw: unknown, planned: number): AiLayoutPageReading {
+export function aiReadLayoutPage(
+  raw: unknown,
+  planned: number,
+): AiLayoutPageReading {
   const settled: AiLayoutSettlement[] = []
-  const given = isRecord(raw) && Array.isArray(raw['sections']) ? raw['sections'] : []
+  const given =
+    isRecord(raw) && Array.isArray(raw['sections']) ? raw['sections'] : []
   if (given.length > planned) {
-    settled.push({ at: 'sections', what: `${given.length} sections for a plan of ${planned}; the extra left out` })
+    settled.push({
+      at: 'sections',
+      what: `${given.length} sections for a plan of ${planned}; the extra left out`,
+    })
   }
   const sections = Array.from({ length: planned }, (_, index) =>
     aiReadLayoutSection(given[index], `sections[${index}]`, settled),
@@ -405,7 +461,8 @@ export function aiReadLayoutFrame(raw: unknown): {
   // A header needs no block of its own: its brand and navigation are the
   // site's, so an empty one is a plain bar.
   const header = isRecord(record['header'])
-    ? (aiReadLayoutSection(record['header'], 'header', settled) ?? readBare(record['header']))
+    ? (aiReadLayoutSection(record['header'], 'header', settled) ??
+      readBare(record['header']))
     : null
   const footer = aiReadLayoutSection(record['footer'], 'footer', settled)
   return { header, footer, settled }

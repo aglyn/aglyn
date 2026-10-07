@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { aiDanglingWord, detectOffVoiceCopy } from '../runtime/ai-doctrine-validators'
+import {
+  aiDanglingWord,
+  detectOffVoiceCopy,
+} from '../runtime/ai-doctrine-validators'
 
 /**
  * The words of a layout language document, made to fit where they are shown
@@ -111,11 +114,13 @@ function fitText(value: unknown, place: AiLayoutTextPlace): string {
   const clause = lastMatch(CLAUSE_END)
   if (clause > 0) return withoutDanglingTail(room.slice(0, clause))
   const space = room.lastIndexOf(' ', limit)
-  return withoutDanglingTail(space > half ? room.slice(0, space) : room.slice(0, limit))
+  return withoutDanglingTail(
+    space > half ? room.slice(0, space) : room.slice(0, limit),
+  )
 }
 
 /** A phone number as people write one: seven or more digits with the usual separators. */
-const PHONE = /(?:\+?\d[\d\s().-]{6,}\d)/g
+const PHONE = /\(?\+?\d[\d\s().-]{6,}\d/g
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
 
 /** The digits of a phone number, which is what two spellings of one number share. */
@@ -133,7 +138,9 @@ export function aiLayoutGuardContacts(line: string, facts: string): string {
   const known = facts.toLowerCase()
   const knownDigits = new Set((facts.match(PHONE) ?? []).map(digitsOf))
   return line
-    .replace(EMAIL, (email) => (known.includes(email.toLowerCase()) ? email : '[email address]'))
+    .replace(EMAIL, (email) =>
+      known.includes(email.toLowerCase()) ? email : '[email address]',
+    )
     .replace(PHONE, (phone) => {
       const digits = digitsOf(phone)
       // A year, a price or a count is not a phone number.
@@ -143,15 +150,25 @@ export function aiLayoutGuardContacts(line: string, facts: string): string {
 }
 
 /** A line fitted to its place with invented contact details written as gaps. */
-export function aiLayoutWords(value: unknown, place: AiLayoutTextPlace, facts: string): string {
-  return aiLayoutFitText(aiLayoutGuardContacts(aiLayoutCleanText(value), facts), place)
+export function aiLayoutWords(
+  value: unknown,
+  place: AiLayoutTextPlace,
+  facts: string,
+): string {
+  return aiLayoutFitText(
+    aiLayoutGuardContacts(aiLayoutCleanText(value), facts),
+    place,
+  )
 }
 
 /**
  * A line held to the characters its place holds (see `fitText`), and none at
  * all where what is left is filler.
  */
-export function aiLayoutFitText(value: unknown, place: AiLayoutTextPlace): string {
+export function aiLayoutFitText(
+  value: unknown,
+  place: AiLayoutTextPlace,
+): string {
   const text = fitText(value, place)
   return aiLayoutIsFiller(text) ? '' : text
 }
@@ -166,7 +183,9 @@ export function aiLayoutIsFiller(text: string): boolean {
 
 /** A quote that cannot be a real customer's, written as the gap the owner fills with one (rule 14). */
 export function aiLayoutQuoteGap(value: unknown): string {
-  const text = aiLayoutFitText(value, 'quote').replace(/^["“'‘]+|["”'’]+$/g, '').trim()
+  const text = aiLayoutFitText(value, 'quote')
+    .replace(/^["“'‘]+|["”'’]+$/g, '')
+    .trim()
   if (!text) return ''
   if (/^\[.*\]$/.test(text)) return text
   return `[${text.replace(/^\[|\]$/g, '')}]`

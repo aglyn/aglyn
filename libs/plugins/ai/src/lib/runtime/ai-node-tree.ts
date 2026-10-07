@@ -1038,7 +1038,9 @@ function validate(
       continue
     }
     if (codeBuilt && node.componentId === AI_ICON_COMPONENT_ID) {
-      const { iconId, iconPath: _iconPath, ...rest } = node.props
+      const { iconId, ...props } = node.props
+      const rest = { ...props }
+      delete rest['iconPath']
       const icon = aiIconOfId(iconId)
       if (icon) iconByNodeId.set(id, { iconId: icon.id, iconPath: icon.path })
       forSanitizer[id] = { ...node, props: rest }

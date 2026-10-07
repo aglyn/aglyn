@@ -16,9 +16,17 @@
  */
 
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import { validateAiDoctrineTree, walkTree, type AiDoctrineTree } from '../runtime/ai-doctrine-validators'
+import {
+  validateAiDoctrineTree,
+  walkTree,
+  type AiDoctrineTree,
+} from '../runtime/ai-doctrine-validators'
 import { AI_ICON_WORDS } from '../runtime/ai-icon-library'
-import { aiCompileLayoutPage, aiLayoutSpans, type AiLayoutPagePlan } from './ai-layout-compiler'
+import {
+  aiCompileLayoutPage,
+  aiLayoutSpans,
+  type AiLayoutPagePlan,
+} from './ai-layout-compiler'
 import { aiCompileLayoutFrame } from './ai-layout-frame'
 import {
   AI_LAYOUT_ALIGNS,
@@ -58,12 +66,23 @@ const TARGETS: AiLayoutTargets = {
   homeIds: [HOME],
   forms: [{ id: FORM, name: 'Contact form' }],
   formPageId: CONTACT,
-  components: [{ id: CARD, name: 'Service card', props: { title: 'text', description: 'text' } }],
-  facts: 'A dog groomer in Austin. Call 512-555-0199. https://example.com/booking',
+  components: [
+    {
+      id: CARD,
+      name: 'Service card',
+      props: { title: 'text', description: 'text' },
+    },
+  ],
+  facts:
+    'A dog groomer in Austin. Call 512-555-0199. https://example.com/booking',
 }
 
 /** What the page's checks are given, as the page step gives them. */
-function checkContext(plan: AiLayoutPagePlan, reusableComponents: boolean, sectionIds: string[]) {
+function checkContext(
+  plan: AiLayoutPagePlan,
+  reusableComponents: boolean,
+  sectionIds: string[],
+) {
   return {
     screenIds: TARGETS.pages.map((page) => page.id),
     formIds: [FORM],
@@ -78,10 +97,23 @@ function checkContext(plan: AiLayoutPagePlan, reusableComponents: boolean, secti
 }
 
 /** A page compiled, stored as the page step stores it, and checked as its last pass checks it. */
-function build(sections: readonly AiLayoutSection[], plan: AiLayoutPagePlan, reusableComponents: boolean, targets = TARGETS) {
+function build(
+  sections: readonly AiLayoutSection[],
+  plan: AiLayoutPagePlan,
+  reusableComponents: boolean,
+  targets = TARGETS,
+) {
   const sectionIds = plan.sections.map((_, index) => `sec-${index + 1}`)
-  const compiled = aiCompileLayoutPage(sections, plan, targets, { reusableComponents, sectionIds })
-  const stored = aiLayoutStoredTree(compiled.tree, 'screen', checkContext(plan, reusableComponents, sectionIds), sectionIds)
+  const compiled = aiCompileLayoutPage(sections, plan, targets, {
+    reusableComponents,
+    sectionIds,
+  })
+  const stored = aiLayoutStoredTree(
+    compiled.tree,
+    'screen',
+    checkContext(plan, reusableComponents, sectionIds),
+    sectionIds,
+  )
   if (stored.ok === false) throw new Error(stored.error)
   const report = validateAiDoctrineTree(
     { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: stored.nodes },
@@ -105,37 +137,105 @@ function random(seed: number) {
   }
   return {
     next,
-    int: (min: number, max: number) => min + Math.floor(next() * (max - min + 1)),
-    pick: <T>(values: readonly T[]): T => values[Math.floor(next() * values.length)],
+    int: (min: number, max: number) =>
+      min + Math.floor(next() * (max - min + 1)),
+    pick: <T>(values: readonly T[]): T =>
+      values[Math.floor(next() * values.length)],
     chance: (p: number) => next() < p,
   }
 }
 type Random = ReturnType<typeof random>
 
 const WORDS = [
-  'gentle', 'grooming', 'for', 'every', 'dog', 'and', 'the', 'calm', 'bath', 'trim', 'Austin', 'owners', 'book',
-  'today', 'a', 'with', 'care', 'nails', 'coat', 'fresh', 'appointments', 'weekly', 'of', 'to', 'or',
+  'gentle',
+  'grooming',
+  'for',
+  'every',
+  'dog',
+  'and',
+  'the',
+  'calm',
+  'bath',
+  'trim',
+  'Austin',
+  'owners',
+  'book',
+  'today',
+  'a',
+  'with',
+  'care',
+  'nails',
+  'coat',
+  'fresh',
+  'appointments',
+  'weekly',
+  'of',
+  'to',
+  'or',
 ]
 const SPICE = [
-  '**bold**', '# Heading', '- bullet', 'call (512) 555-0100', 'mail hello@groomer.test', 'Call 512-555-0199',
-  '[price]', '“quoted”', 'and', 'the', '—', 'lorem', '15+ years', '100%',
+  '**bold**',
+  '# Heading',
+  '- bullet',
+  'call (512) 555-0100',
+  'mail hello@groomer.test',
+  'Call 512-555-0199',
+  '[price]',
+  '“quoted”',
+  'and',
+  'the',
+  '—',
+  'lorem',
+  '15+ years',
+  '100%',
 ]
+
+/** Words with nothing a page would refuse: what a plan, already held to its rules, carries. */
+function plainPhrase(r: Random, min: number, max: number): string {
+  const words = Array.from({ length: r.int(min, max) }, () =>
+    r.pick(WORDS.filter((word) => word.length > 3)),
+  )
+  return words.join(' ').replace(/^./, (first) => first.toUpperCase())
+}
 
 function phrase(r: Random, min: number, max: number): string {
   const count = r.int(min, max)
-  const words = Array.from({ length: count }, () => (r.chance(0.08) ? r.pick(SPICE) : r.pick(WORDS)))
+  const words = Array.from({ length: count }, () =>
+    r.chance(0.08) ? r.pick(SPICE) : r.pick(WORDS),
+  )
   const text = words.join(' ')
-  return r.chance(0.5) ? `${text[0]?.toUpperCase() ?? ''}${text.slice(1)}${r.pick(['.', '', '!', ','])}` : text
+  return r.chance(0.5)
+    ? `${text[0]?.toUpperCase() ?? ''}${text.slice(1)}${r.pick(['.', '', '!', ','])}`
+    : text
 }
 
-const LINKS = ['page:pg-contact', 'page:pg-services', 'page:Services', 'page:pg-home', '#1', '#2', '#3', '#9', 'form', 'https://example.com/booking', 'https://elsewhere.test/x', '/contact', 'nowhere', '', FORM, CARD]
+const LINKS = [
+  'page:pg-contact',
+  'page:pg-services',
+  'page:Services',
+  'page:pg-home',
+  '#1',
+  '#2',
+  '#3',
+  '#9',
+  'form',
+  'https://example.com/booking',
+  'https://elsewhere.test/x',
+  '/contact',
+  'nowhere',
+  '',
+  FORM,
+  CARD,
+]
 
 function item(r: Random) {
   return {
     title: r.chance(0.9) ? phrase(r, 1, r.chance(0.1) ? 30 : 6) : '',
     text: r.chance(0.8) ? phrase(r, 0, r.chance(0.1) ? 80 : 20) : '',
     ...(r.chance(0.15) ? { to: r.pick(LINKS) } : {}),
-    ...(r.chance(0.4) ? { icon: r.chance(0.9) ? r.pick(AI_ICON_WORDS) : 'unicorn' } : {}),
+    ...(r.chance(0.4)
+      ? { icon: r.chance(0.9) ? r.pick(AI_ICON_WORDS) : 'unicorn' }
+      : {}),
   }
 }
 
@@ -143,12 +243,16 @@ function block(r: Random, cols: number): Record<string, unknown> {
   const kind = r.chance(0.03) ? 'banner' : r.pick(AI_LAYOUT_BLOCK_KINDS)
   return {
     kind,
-    ...(cols && r.chance(0.7) ? { col: r.int(0, cols + (r.chance(0.1) ? 2 : 0)) } : {}),
+    ...(cols && r.chance(0.7)
+      ? { col: r.int(0, cols + (r.chance(0.1) ? 2 : 0)) }
+      : {}),
     ...(r.chance(0.92) ? { text: phrase(r, 1, r.chance(0.1) ? 120 : 14) } : {}),
     ...(r.chance(0.5) ? { to: r.pick(LINKS) } : {}),
     ...(r.chance(0.3) ? { style: r.pick(AI_LAYOUT_STYLES) } : {}),
     ...(r.chance(0.3) ? { icon: r.pick(AI_ICON_WORDS) } : {}),
-    ...(r.chance(0.6) ? { items: Array.from({ length: r.int(0, 11) }, () => item(r)) } : {}),
+    ...(r.chance(0.6)
+      ? { items: Array.from({ length: r.int(0, 11) }, () => item(r)) }
+      : {}),
   }
 }
 
@@ -156,7 +260,13 @@ function section(r: Random): Record<string, unknown> {
   const cols = r.chance(0.45) ? r.int(2, 5) : 0
   return {
     ...(r.chance(0.8) ? { band: r.pick(AI_LAYOUT_BANDS) } : {}),
-    ...(cols ? { cols: Array.from({ length: cols }, () => r.int(r.chance(0.05) ? 0 : 1, 12)) } : {}),
+    ...(cols
+      ? {
+          cols: Array.from({ length: cols }, () =>
+            r.int(r.chance(0.05) ? 0 : 1, 12),
+          ),
+        }
+      : {}),
     ...(r.chance(0.6) ? { align: r.pick(AI_LAYOUT_ALIGNS) } : {}),
     blocks: Array.from({ length: r.int(0, 9) }, () => block(r, cols)),
   }
@@ -164,9 +274,10 @@ function section(r: Random): Record<string, unknown> {
 
 function plan(r: Random, sections: number, paid: boolean): AiLayoutPagePlan {
   return {
-    title: phrase(r, 2, 9),
+    // A plan's own words passed the plan rules, filler included, so they are plain.
+    title: plainPhrase(r, 2, 9),
     sections: Array.from({ length: sections }, (_, index) => ({
-      name: phrase(r, 1, 4).replace(/[^\w ]/g, '') || `Part ${index + 1}`,
+      name: plainPhrase(r, 1, 4) || `Part ${index + 1}`,
       uses: [
         ...(r.chance(0.15) ? [FORM] : []),
         ...(paid && r.chance(0.2) ? [CARD] : []),
@@ -180,10 +291,19 @@ function plan(r: Random, sections: number, paid: boolean): AiLayoutPagePlan {
 function draw(seed: number, paid: boolean) {
   const r = random(seed)
   const count = r.int(1, 8)
-  const raw = { sections: Array.from({ length: count + (r.chance(0.1) ? 2 : 0) }, () => section(r)) }
+  const raw = {
+    sections: Array.from({ length: count + (r.chance(0.1) ? 2 : 0) }, () =>
+      section(r),
+    ),
+  }
   const reading = aiReadLayoutPage(raw, count)
   // A section the reader could not use is asked for again; here it comes back as one heading.
-  const sections = reading.sections.map((entry) => entry ?? { blocks: [{ kind: 'heading' as const, text: phrase(r, 2, 6) }] })
+  const sections = reading.sections.map(
+    (entry) =>
+      entry ?? {
+        blocks: [{ kind: 'heading' as const, text: phrase(r, 2, 6) }],
+      },
+  )
   return { sections, plan: plan(r, count, paid) }
 }
 
@@ -192,23 +312,70 @@ describe('every page the language can describe compiles into a page the doctrine
   it.each([
     ['Free', false],
     ['paid', true],
-  ])('%s: %i random documents, sloppy ones included, with no violation and no repair', (_label, paid) => {
-    const failures: string[] = []
-    for (let seed = 1; seed <= RUNS; seed += 1) {
-      const { sections, plan: pagePlan } = draw(seed * (paid ? 7919 : 104_729), paid)
-      try {
-        const { report, stored } = build(sections, pagePlan, paid)
-        if (stored.ok && stored.repairs.length) failures.push(`seed ${seed}: repairs ${stored.repairs.slice(0, 3).join(' | ')}`)
-        if (report.violations.length) {
-          failures.push(`seed ${seed}: ${report.violations.map((violation) => `${violation.code}: ${violation.message}`).join(' | ')}`)
+  ])(
+    `%s: ${RUNS} random documents, sloppy ones included, with no violation and no repair`,
+    (_label, paid) => {
+      const failures: string[] = []
+      for (let seed = 1; seed <= RUNS; seed += 1) {
+        const { sections, plan: pagePlan } = draw(
+          seed * (paid ? 7919 : 104_729),
+          paid,
+        )
+        try {
+          const { report, stored } = build(sections, pagePlan, paid)
+          if (stored.ok && stored.repairs.length)
+            failures.push(
+              `seed ${seed}: repairs ${stored.repairs.slice(0, 3).join(' | ')}`,
+            )
+          if (report.violations.length) {
+            failures.push(
+              `seed ${seed}: ${report.violations
+                .map(
+                  (violation) =>
+                    `${violation.code}: ${violation.message}${
+                      process.env['LL_DEBUG']
+                        ? ` ${JSON.stringify(
+                            (violation.nodeIds ?? []).slice(0, 3).map((id) => {
+                              const minted = report.tree?.nodes[
+                                id
+                              ] as unknown as
+                                | {
+                                    componentId: string
+                                    props?: unknown
+                                    nodes?: string[]
+                                  }
+                                | undefined
+                              return (
+                                minted && {
+                                  c: minted.componentId,
+                                  p: minted.props,
+                                  kids: (minted.nodes ?? []).map((kid) => {
+                                    const k = report.tree?.nodes[
+                                      kid
+                                    ] as unknown as {
+                                      componentId: string
+                                      props?: unknown
+                                    }
+                                    return k && [k.componentId, k.props]
+                                  }),
+                                }
+                              )
+                            }),
+                          )}`
+                        : ''
+                    }`,
+                )
+                .join(' | ')}`,
+            )
+          }
+        } catch (error) {
+          failures.push(`seed ${seed}: threw ${(error as Error).message}`)
         }
-      } catch (error) {
-        failures.push(`seed ${seed}: threw ${(error as Error).message}`)
+        if (failures.length >= 5) break
       }
-      if (failures.length >= 5) break
-    }
-    expect(failures).toEqual([])
-  })
+      expect(failures).toEqual([])
+    },
+  )
 })
 
 describe('the outline', () => {
@@ -222,15 +389,28 @@ describe('the outline', () => {
 
   it('gives the first section the page one h1 from the plan when the design wrote none', () => {
     const { report, stored } = build(
-      [{ blocks: [{ kind: 'text', text: 'Calm baths and tidy trims.' }] }, { blocks: [{ kind: 'heading', text: 'What we do' }] }],
+      [
+        { blocks: [{ kind: 'text', text: 'Calm baths and tidy trims.' }] },
+        { blocks: [{ kind: 'heading', text: 'What we do' }] },
+      ],
       pagePlan,
       false,
     )
     expect(report.violations).toEqual([])
-    const headings = Object.values(stored.ok ? stored.nodes : {}).filter(
-      (node) => (node as { props?: { component?: string } }).props?.component?.startsWith('h'),
-    ) as Array<{ props: { children: string; component: string } }>
-    expect(headings.map((node) => [node.props.component, node.props.children])).toEqual([
+    const ordered = stored.ok
+      ? walkTree({
+          rootId: stored.rootId,
+          nodes: stored.nodes as unknown as AiDoctrineTree['nodes'],
+        }).map((visit) => visit.node)
+      : []
+    const headings = ordered.filter((node) =>
+      String(node.props?.['component'] ?? '').startsWith('h'),
+    ) as unknown as Array<{
+      props: { children: string; component: string }
+    }>
+    expect(
+      headings.map((node) => [node.props.component, node.props.children]),
+    ).toEqual([
       ['h1', 'Gentle dog grooming in Austin'],
       ['h2', 'What we do'],
     ])
@@ -243,15 +423,26 @@ describe('the outline', () => {
         {
           blocks: [
             { kind: 'heading', text: 'Services' },
-            { kind: 'cards', items: [{ title: 'Bath', text: 'Warm water.' }, { title: 'Trim', text: 'Neat lines.' }] },
+            {
+              kind: 'cards',
+              items: [
+                { title: 'Bath', text: 'Warm water.' },
+                { title: 'Trim', text: 'Neat lines.' },
+              ],
+            },
           ],
         },
       ],
       pagePlan,
       false,
     )
-    const titles = Object.values(compiled.tree.nodes).filter((node) => node.props?.['variant'] === 'h5')
-    expect(titles.map((node) => node.props?.['component'])).toEqual(['h3', 'h3'])
+    const titles = Object.values(compiled.tree.nodes).filter(
+      (node) => node.props?.['variant'] === 'h5',
+    )
+    expect(titles.map((node) => node.props?.['component'])).toEqual([
+      'h3',
+      'h3',
+    ])
   })
 })
 
@@ -272,7 +463,11 @@ describe('links', () => {
             { kind: 'heading', text: 'Calm grooming' },
             { kind: 'button', text: 'See our services', to: 'page:Services' },
             { kind: 'button', text: 'Book a groom', to: 'form' },
-            { kind: 'button', text: 'Book online', to: 'https://example.com/booking' },
+            {
+              kind: 'button',
+              text: 'Book online',
+              to: 'https://example.com/booking',
+            },
           ],
         },
         { blocks: [{ kind: 'heading', text: 'Book a groom' }] },
@@ -281,8 +476,15 @@ describe('links', () => {
       false,
     )
     expect(report.violations).toEqual([])
-    const buttons = Object.values(compiled.tree.nodes).filter((node) => node.componentId === 'muiButton')
-    expect(buttons.map((node) => [node.props?.['children'], node.props?.['screenId'] ?? node.props?.['href'] ?? 'scroll'])).toEqual([
+    const buttons = Object.values(compiled.tree.nodes).filter(
+      (node) => node.componentId === 'muiButton',
+    )
+    expect(
+      buttons.map((node) => [
+        node.props?.['children'],
+        node.props?.['screenId'] ?? node.props?.['href'] ?? 'scroll',
+      ]),
+    ).toEqual([
       ['See our services', SERVICES],
       ['Book a groom', 'scroll'],
       ['Book online', 'https://example.com/booking'],
@@ -297,7 +499,11 @@ describe('links', () => {
           blocks: [
             { kind: 'heading', text: 'Calm grooming' },
             { kind: 'button', text: 'Read our story', to: 'nowhere' },
-            { kind: 'button', text: 'Our partner', to: 'https://elsewhere.test/x' },
+            {
+              kind: 'button',
+              text: 'Our partner',
+              to: 'https://elsewhere.test/x',
+            },
             { kind: 'button', text: 'Learn more', to: `page:${CONTACT}` },
           ],
         },
@@ -321,17 +527,27 @@ describe('links', () => {
 
   it('places the form the plan names in its section even when the design forgot it', () => {
     const { compiled, report } = build(
-      [{ blocks: [{ kind: 'heading', text: 'Calm grooming' }] }, { blocks: [{ kind: 'heading', text: 'Book' }] }],
+      [
+        { blocks: [{ kind: 'heading', text: 'Calm grooming' }] },
+        { blocks: [{ kind: 'heading', text: 'Book' }] },
+      ],
       pagePlan,
       false,
     )
     expect(report.violations).toEqual([])
-    expect(Object.values(compiled.tree.nodes).filter((node) => node.componentId === 'form').map((node) => node.props?.['formId'])).toEqual([FORM])
+    expect(
+      Object.values(compiled.tree.nodes)
+        .filter((node) => node.componentId === 'form')
+        .map((node) => node.props?.['formId']),
+    ).toEqual([FORM])
   })
 })
 
 describe('copy', () => {
-  const pagePlan: AiLayoutPagePlan = { title: 'Home', sections: [{ name: 'Hero', uses: [], items: 0 }] }
+  const pagePlan: AiLayoutPagePlan = {
+    title: 'Home',
+    sections: [{ name: 'Hero', uses: [], items: 0 }],
+  }
 
   it('ends an over-long heading at a clean boundary, takes out markup, and writes an invented phone as a gap', () => {
     const { compiled } = build(
@@ -342,7 +558,10 @@ describe('copy', () => {
               kind: 'heading',
               text: '**Gentle grooming** for nervous dogs, senior dogs and the puppies who are meeting the clippers for the very first time',
             },
-            { kind: 'text', text: 'Call (512) 555-0100 or 512-555-0199 to book.' },
+            {
+              kind: 'text',
+              text: 'Call (512) 555-0100 or 512-555-0199 to book.',
+            },
           ],
         },
       ],
@@ -375,9 +594,18 @@ describe('repeats (rule 1)', () => {
   }
 
   it('places the planned component once per item on a workspace that keeps components', () => {
-    const { compiled, report } = build([{ blocks: [{ kind: 'heading', text: 'Our services' }] }, { blocks: [cards] }], pagePlan, true)
+    const { compiled, report } = build(
+      [
+        { blocks: [{ kind: 'heading', text: 'Our services' }] },
+        { blocks: [cards] },
+      ],
+      pagePlan,
+      true,
+    )
     expect(report.violations).toEqual([])
-    const instances = Object.values(compiled.tree.nodes).filter((node) => node.componentId === 'reusableInstance')
+    const instances = Object.values(compiled.tree.nodes).filter(
+      (node) => node.componentId === 'reusableInstance',
+    )
     expect(instances.map((node) => node.props?.['propValues'])).toEqual([
       { title: 'Bath', description: 'Warm water and a gentle dry.' },
       { title: 'Trim', description: 'Neat lines for every coat.' },
@@ -387,12 +615,22 @@ describe('repeats (rule 1)', () => {
 
   it('draws the same cards in full on a workspace that keeps none', () => {
     const { compiled, report } = build(
-      [{ blocks: [{ kind: 'heading', text: 'Our services' }] }, { blocks: [cards] }],
-      { ...pagePlan, sections: pagePlan.sections.map((entry) => ({ ...entry, uses: [] })) },
+      [
+        { blocks: [{ kind: 'heading', text: 'Our services' }] },
+        { blocks: [cards] },
+      ],
+      {
+        ...pagePlan,
+        sections: pagePlan.sections.map((entry) => ({ ...entry, uses: [] })),
+      },
       false,
     )
     expect(report.violations).toEqual([])
-    expect(Object.values(compiled.tree.nodes).filter((node) => node.componentId === 'muiCard')).toHaveLength(3)
+    expect(
+      Object.values(compiled.tree.nodes).filter(
+        (node) => node.componentId === 'muiCard',
+      ),
+    ).toHaveLength(3)
   })
 })
 
@@ -421,43 +659,78 @@ describe('the frame', () => {
 
   function frame(raw: unknown) {
     const read = aiReadLayoutFrame(raw)
-    const compiled = aiCompileLayoutFrame(read, { siteName: 'Hillside Dog Grooming', homeId: HOME, navPages: nav }, TARGETS)
+    const compiled = aiCompileLayoutFrame(
+      read,
+      { siteName: 'Hillside Dog Grooming', homeId: HOME, navPages: nav },
+      TARGETS,
+    )
     const stored = aiLayoutStoredTree(compiled.tree, 'layout', layoutContext)
     if (stored.ok === false) throw new Error(stored.error)
-    const report = validateAiDoctrineTree({ rootId: stored.rootId, nodes: stored.nodes }, 'layout', layoutContext)
+    const report = validateAiDoctrineTree(
+      { rootId: stored.rootId, nodes: stored.nodes },
+      'layout',
+      layoutContext,
+    )
     return { compiled, stored, report }
   }
 
   it('builds the brand, the navigation, the phone menu, the slot and the footer the doctrine admits', () => {
     const { compiled, report, stored } = frame({
-      header: { band: 'plain', blocks: [{ kind: 'button', text: 'Book a groom', to: 'form' }] },
+      header: {
+        band: 'plain',
+        blocks: [{ kind: 'button', text: 'Book a groom', to: 'form' }],
+      },
       footer: {
         band: 'dark',
         cols: [2, 1],
         blocks: [
           { kind: 'heading', col: 0, text: 'Hillside Dog Grooming' },
-          { kind: 'text', col: 0, text: 'Gentle grooming for Austin dogs. Call 512-555-0199.' },
-          { kind: 'list', col: 1, items: [{ title: 'Services', text: '', to: `page:${SERVICES}` }] },
+          {
+            kind: 'text',
+            col: 0,
+            text: 'Gentle grooming for Austin dogs. Call 512-555-0199.',
+          },
+          {
+            kind: 'list',
+            col: 1,
+            items: [{ title: 'Services', text: '', to: `page:${SERVICES}` }],
+          },
         ],
       },
     })
     expect(report.violations).toEqual([])
     expect(stored.ok && stored.repairs).toEqual([])
-    const ids = Object.values(compiled.tree.nodes).map((node) => node.componentId)
-    expect(ids).toEqual(expect.arrayContaining(['muiAppBar', 'muiDrawer', 'muiDrawerToggle', 'layoutSlot']))
-    const brand = Object.values(compiled.tree.nodes).find((node) => node.componentId === 'muiScreenLink')
-    expect(brand?.props).toMatchObject({ children: 'Hillside Dog Grooming', screenId: HOME })
+    const ids = Object.values(compiled.tree.nodes).map(
+      (node) => node.componentId,
+    )
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'muiAppBar',
+        'muiDrawer',
+        'muiDrawerToggle',
+        'layoutSlot',
+      ]),
+    )
+    const brand = Object.values(compiled.tree.nodes).find(
+      (node) => node.componentId === 'muiScreenLink',
+    )
+    expect(brand?.props).toMatchObject({
+      children: 'Hillside Dog Grooming',
+      screenId: HOME,
+    })
   })
 
-  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])(
-    'compiles random frame %i with no violation',
-    (seed) => {
-      const r = random(seed * 31)
-      const { report, stored } = frame({ header: section(r), footer: r.chance(0.9) ? section(r) : null })
-      expect(report.violations).toEqual([])
-      expect(stored.ok && stored.repairs).toEqual([])
-    },
-  )
+  it.each([
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+  ])('compiles random frame %i with no violation', (seed) => {
+    const r = random(seed * 31)
+    const { report, stored } = frame({
+      header: section(r),
+      footer: r.chance(0.9) ? section(r) : null,
+    })
+    expect(report.violations).toEqual([])
+    expect(stored.ok && stored.repairs).toEqual([])
+  })
 })
 
 describe('reading an answer', () => {
@@ -465,14 +738,21 @@ describe('reading an answer', () => {
     const reading = aiReadLayoutPage(
       {
         sections: [
-          { blocks: [{ kind: 'heading', text: 'Hi' }, { kind: 'banner', text: 'x' }] },
+          {
+            blocks: [
+              { kind: 'heading', text: 'Hi' },
+              { kind: 'banner', text: 'x' },
+            ],
+          },
           { blocks: [] },
           { blocks: [{ kind: 'text', text: 'extra' }] },
         ],
       },
       2,
     )
-    expect(reading.sections[0]?.blocks).toEqual([{ kind: 'heading', text: 'Hi' }])
+    expect(reading.sections[0]?.blocks).toEqual([
+      { kind: 'heading', text: 'Hi' },
+    ])
     expect(reading.sections[1]).toBeNull()
     expect(reading.settled.map((entry) => entry.what)).toEqual([
       '3 sections for a plan of 2; the extra left out',
@@ -483,7 +763,13 @@ describe('reading an answer', () => {
 
 /** The doctrine reads a tree's nodes by walking them; a compiled one walks whole. */
 it('a compiled page has no node outside its tree', () => {
-  const { compiled } = build([{ blocks: [{ kind: 'heading', text: 'Hi' }] }], { title: 'Hi', sections: [{ name: 'Hero', uses: [], items: 0 }] }, false)
-  const walked = walkTree(compiled.tree as unknown as AiDoctrineTree).map((visit) => visit.id)
+  const { compiled } = build(
+    [{ blocks: [{ kind: 'heading', text: 'Hi' }] }],
+    { title: 'Hi', sections: [{ name: 'Hero', uses: [], items: 0 }] },
+    false,
+  )
+  const walked = walkTree(compiled.tree as unknown as AiDoctrineTree).map(
+    (visit) => visit.id,
+  )
   expect(new Set(walked)).toEqual(new Set(Object.keys(compiled.tree.nodes)))
 })

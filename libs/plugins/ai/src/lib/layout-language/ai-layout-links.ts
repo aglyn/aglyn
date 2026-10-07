@@ -46,7 +46,11 @@ export interface AiLayoutTargets {
   /** The page that places the site's form, where that is another page. */
   formPageId?: string | null
   /** The reusable components a page may place, with the props each fills. */
-  components: readonly { id: string; name: string; props: Record<string, string> }[]
+  components: readonly {
+    id: string
+    name: string
+    props: Record<string, string>
+  }[]
   /** Every word the job was given: the brief, the site's answers, its profile. */
   facts: string
 }
@@ -85,21 +89,39 @@ export interface AiLayoutLinkScope {
 }
 
 /** The page a word names: an id, a label or an address. */
-function pageNamed(word: string, targets: AiLayoutTargets): AiLayoutPage | null {
+function pageNamed(
+  word: string,
+  targets: AiLayoutTargets,
+): AiLayoutPage | null {
   const value = word.trim()
   if (!value) return null
   const byId = targets.pages.find((page) => page.id === value)
   if (byId) return byId
   const lower = value.toLowerCase()
-  if (lower.startsWith('/')) return targets.pages.find((page) => slugOf(page.slug) === slugOf(lower)) ?? null
+  if (lower.startsWith('/'))
+    return (
+      targets.pages.find((page) => slugOf(page.slug) === slugOf(lower)) ?? null
+    )
   const words = wordsOf(value).join(' ')
-  return targets.pages.find((page) => wordsOf(page.label).join(' ') === words) ?? null
+  return (
+    targets.pages.find((page) => wordsOf(page.label).join(' ') === words) ??
+    null
+  )
 }
 
 /** A destination rule 10 admits, from the page it names, for the words a link shows. */
-function pageDestination(page: AiLayoutPage | null, label: string, targets: AiLayoutTargets): AiLayoutDestination | null {
+function pageDestination(
+  page: AiLayoutPage | null,
+  label: string,
+  targets: AiLayoutTargets,
+): AiLayoutDestination | null {
   if (!page || page.id === targets.pageId) return null
-  if (targets.homeIds.includes(page.id) && !HOME_WORDS.test(label) && !isHomeSlug(page.slug)) return null
+  if (
+    targets.homeIds.includes(page.id) &&
+    !HOME_WORDS.test(label) &&
+    !isHomeSlug(page.slug)
+  )
+    return null
   if (isHomeSlug(page.slug) && !HOME_WORDS.test(label)) return null
   return { kind: 'page', screenId: page.id }
 }
@@ -109,8 +131,12 @@ function isHomeSlug(slug: string): boolean {
 }
 
 /** Where the site's form is: a section of this page, else the page that places it. */
-function formDestination(scope: AiLayoutLinkScope, targets: AiLayoutTargets): AiLayoutDestination | null {
-  if (scope.formSection !== null && scope.formSection !== scope.from) return { kind: 'section', index: scope.formSection }
+function formDestination(
+  scope: AiLayoutLinkScope,
+  targets: AiLayoutTargets,
+): AiLayoutDestination | null {
+  if (scope.formSection !== null && scope.formSection !== scope.from)
+    return { kind: 'section', index: scope.formSection }
   if (targets.formPageId && targets.formPageId !== targets.pageId) {
     return { kind: 'page', screenId: targets.formPageId }
   }
@@ -135,7 +161,10 @@ export function aiLayoutResolveLink(
     const form = formDestination(scope, targets)
     if (form) return form
     const contact = targets.pages.find(
-      (page) => page.id !== targets.pageId && !isHomeSlug(page.slug) && CONTACT_WORDS.test(page.label),
+      (page) =>
+        page.id !== targets.pageId &&
+        !isHomeSlug(page.slug) &&
+        CONTACT_WORDS.test(page.label),
     )
     if (contact) return { kind: 'page', screenId: contact.id }
   }
@@ -157,20 +186,30 @@ function resolveNamed(
   targets: AiLayoutTargets,
 ): AiLayoutDestination | null {
   const lower = to.toLowerCase()
-  if (lower === 'form' || lower.startsWith('form:') || targets.forms.some((form) => form.id === to)) {
+  if (
+    lower === 'form' ||
+    lower.startsWith('form:') ||
+    targets.forms.some((form) => form.id === to)
+  ) {
     return formDestination(scope, targets)
   }
   if (lower.startsWith('https://')) {
     return targets.facts.includes(to) ? { kind: 'href', href: to } : null
   }
-  const section = lower.startsWith('#') ? to.slice(1) : lower.startsWith('section:') ? to.slice(8) : null
+  const section = lower.startsWith('#')
+    ? to.slice(1)
+    : lower.startsWith('section:')
+      ? to.slice(8)
+      : null
   if (section !== null) {
     const number = Number(section.trim())
     const index =
       Number.isInteger(number) && number >= 1 && number <= scope.sections.length
         ? number - 1
         : aiPageLinkSection(section, scope.sections)
-    return index !== null && index !== scope.from ? { kind: 'section', index } : null
+    return index !== null && index !== scope.from
+      ? { kind: 'section', index }
+      : null
   }
   const page = pageNamed(lower.startsWith('page:') ? to.slice(5) : to, targets)
   return pageDestination(page, label, targets)
