@@ -21,7 +21,14 @@
  */
 
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
-import { AI_LAYOUT_GAP_CODE, aiLayoutGapViolations, aiLayoutWithoutGaps } from './ai-layout-gaps'
+import {
+  AI_LAYOUT_GAP_CODE,
+  AI_LAYOUT_REF_CODE,
+  aiLayoutCopyCheck,
+  aiLayoutGapViolations,
+  aiLayoutRefViolations,
+  aiLayoutWithoutGaps,
+} from './ai-layout-gaps'
 
 type Spec = { componentId: string; props?: Record<string, unknown>; nodes?: string[]; interactions?: unknown[] }
 const map = (nodes: Record<string, Spec>) => nodes as unknown as NodesMap
@@ -97,5 +104,43 @@ describe('a page built in the layout language shows no gap (AGL-3660)', () => {
     const kept = out as unknown as Record<string, Spec>
     expect(kept['visit'].nodes).toEqual(['visitHead', 'lede'])
     expect(kept['hero'].nodes).toEqual(['h1'])
+  })
+})
+
+describe('a page built in the layout language shows no internal reference (AGL-3660)', () => {
+  const names = { pages: [{ id: 'HYpUWOhU45', label: 'Services' }], ids: ['HYpUWOhU45', 'form-contact', 'sec-visit-1'] }
+  const contact = () =>
+    map({
+      root: { componentId: 'div', nodes: ['hero', 'more'] },
+      hero: { componentId: 'section', nodes: ['h1'] },
+      h1: text('Contact Hillside', 'h1'),
+      more: { componentId: 'section', props: { ariaLabel: 'More' }, nodes: ['moreHead', 'see', 'odd', 'card'] },
+      moreHead: text('Before you book', 'h2'),
+      see: text('Prefer to see what we offer first? Visit our page:HYpUWOhU45 page.'),
+      odd: text('Or fill in the form-contact below, or {{form.contact}}.'),
+      card: { componentId: 'reusableInstance', props: { refId: 'cmp-card', propValues: { summary: 'See new:pricing' } } },
+    })
+
+  it('names each reference as one violation that asks again, and leaves the site-name token alone', () => {
+    const [violation] = aiLayoutRefViolations(contact(), names)
+    expect(violation).toMatchObject({ code: AI_LAYOUT_REF_CODE, nodeIds: ['see', 'odd', 'card'] })
+    expect(violation.message).toContain('"page:HYpUWOhU45"')
+    expect(violation.message).toContain('"{{form.contact}}"')
+    expect(violation.message).toContain('"form-contact"')
+    expect(aiLayoutRefViolations(map({ root: { componentId: 'div', nodes: ['b'] }, b: text('{{host.businessName}}') }), names)).toEqual([])
+  })
+
+  it('writes a page reference as the page title in the last answer, and takes out a line still holding one', () => {
+    const input = contact()
+    const { nodes, dropped, violations } = aiLayoutCopyCheck(input, 'root', names, true)
+    const kept = nodes as unknown as Record<string, Spec>
+    expect(violations).toEqual([])
+    expect(kept['see'].props?.['children']).toBe('Prefer to see what we offer first? Visit our Services page.')
+    expect(kept['odd']).toBeUndefined()
+    expect(kept['card']).toBeUndefined()
+    expect(dropped[0]).toContain('written as "Prefer to see what we offer first? Visit our Services page."')
+    // The input is never rewritten in place.
+    expect((input as unknown as Record<string, Spec>)['see'].props?.['children']).toContain('page:HYpUWOhU45')
+    expect(aiLayoutRefViolations(nodes, names)).toEqual([])
   })
 })

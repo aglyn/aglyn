@@ -261,7 +261,7 @@ export const AI_LAYOUT_LANGUAGE_TEXT = [
     AI_ICON_WORDS.join(', ') +
     '.',
   '',
-  "Where a link goes (to): page:<page id> for a page of this site; #<n> for section n of this page (counted from 1); form for the site's form; or an https: address the brief gives. A button the page has nowhere to send is left out.",
+  "Where a link goes (to): page:<page id> for a page of this site; #<n> for section n of this page (counted from 1); form for the site's form; or an https: address the brief gives. A button the page has nowhere to send is left out. A to value is never written into words: in text, name a page by its title.",
   '',
   "Writing: plain, specific copy in the site's voice, from the brief, the business and its audience, never filler. Keep a page title under 70 characters and a section heading under 80. The site is published exactly as you write it, so where the brief leaves out a fact such as a price, a figure, a name, a phone number, an email, an address or opening hours, leave it out: write the sentence without it, and make no list line, card or contact row for it. Never write a placeholder or a gap in square brackets, and never invent the fact. Never invent a customer, a review, an award or a statistic.",
   '',

@@ -26,7 +26,7 @@ import type {
   AiLayoutPage,
   AiLayoutTargets,
 } from '../layout-language/ai-layout-links'
-import { aiLayoutGapViolations, aiLayoutWithoutGaps } from '../layout-language/ai-layout-gaps'
+import { aiLayoutCopyCheck } from '../layout-language/ai-layout-gaps'
 import { aiLayoutStoredTree } from '../layout-language/ai-layout-store'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import type { AiJob } from '../model/ai-jobs.types'
@@ -198,9 +198,18 @@ export function aiLayoutFrameCheck(input: {
         ],
       }
     }
-    const gaps = aiLayoutGapViolations(stored.nodes)
-    const { nodes, dropped } =
-      gaps.length && last ? aiLayoutWithoutGaps(stored.nodes, stored.rootId) : { nodes: stored.nodes, dropped: [] }
+    // No gap and no internal reference in the words of a frame every published page shows.
+    const navPages = [...input.targets.pages, ...input.pages]
+    const copy = aiLayoutCopyCheck(
+      stored.nodes,
+      stored.rootId,
+      {
+        pages: navPages,
+        ids: [...navPages.map((page) => page.id), ...input.targets.forms.map((form) => form.id)],
+      },
+      last,
+    )
+    const { nodes, dropped } = copy
     const report = validateAiDoctrineTree(
       { rootId: stored.rootId, nodes },
       'layout',
@@ -208,7 +217,7 @@ export function aiLayoutFrameCheck(input: {
     )
     const violations = [
       ...report.violations,
-      ...(last ? [] : gaps),
+      ...copy.violations,
       ...input.extend({
         rootId: stored.rootId,
         nodes,

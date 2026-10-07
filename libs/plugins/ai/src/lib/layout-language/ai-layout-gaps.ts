@@ -127,18 +127,33 @@ function speaks(nodes: GapNodes, id: string, beyondHeadings = false): boolean {
   })
 }
 
-/**
- * The page or frame with every gap taken out, and what was taken: each line
- * carrying a gap, then each element above it left with nothing to say, up to
- * its section; a section other than the page's first left with only its
- * heading goes too, with any link that scrolled to it.
- */
-export function aiLayoutWithoutGaps(input: NodesMap, rootId: string): { nodes: NodesMap; dropped: string[] } {
-  const found = gapsOf(input as unknown as GapNodes)
-  if (!found.length) return { nodes: input, dropped: [] }
-  const nodes: GapNodes = Object.fromEntries(
-    Object.entries(input as unknown as GapNodes).map(([id, node]) => [id, { ...node, ...(node.nodes ? { nodes: [...node.nodes] } : {}) }]),
+/** A node's props, its component's prop values copied too, so a rewrite never reaches the input. */
+function copyProps(props: Record<string, unknown>): Record<string, unknown> {
+  const values = props['propValues']
+  return values && typeof values === 'object' && !Array.isArray(values)
+    ? { ...props, propValues: { ...(values as Record<string, unknown>) } }
+    : { ...props }
+}
+
+function cloneNodes(input: NodesMap): GapNodes {
+  return Object.fromEntries(
+    Object.entries(input as unknown as GapNodes).map(([id, node]) => [
+      id,
+      {
+        ...node,
+        ...(node.props ? { props: copyProps(node.props) } : {}),
+        ...(node.nodes ? { nodes: [...node.nodes] } : {}),
+      },
+    ]),
   )
+}
+
+/**
+ * Takes each found node out, and each element above it left with nothing to
+ * say, up to its section; a section other than the page's first left with
+ * only its heading goes too, with any link that scrolled to it.
+ */
+function pruneFound(nodes: GapNodes, rootId: string, found: ReadonlyArray<{ id: string; text: string }>): string[] {
   const dropped: string[] = []
   const sections = new Set(nodes[rootId]?.nodes ?? [])
   const touched = new Set<string>()
@@ -180,5 +195,135 @@ export function aiLayoutWithoutGaps(input: NodesMap, rootId: string): { nodes: N
       }
     }
   }
+  return dropped
+}
+
+/** The page or frame with every gap taken out, and what was taken. */
+export function aiLayoutWithoutGaps(input: NodesMap, rootId: string): { nodes: NodesMap; dropped: string[] } {
+  const found = gapsOf(input as unknown as GapNodes)
+  if (!found.length) return { nodes: input, dropped: [] }
+  const nodes = cloneNodes(input)
+  const dropped = pruneFound(nodes, rootId, found)
   return { nodes: nodes as unknown as NodesMap, dropped }
+}
+
+// ── Internal references ─────────────────────────────────────────────────
+
+/**
+ * What a link may name, which never belongs in words a visitor reads: the
+ * site's pages, with the title a reference to one is written as, and every
+ * other id the page or frame was built against (its forms, components and
+ * sections).
+ */
+export interface AiLayoutRefNames {
+  pages: ReadonlyArray<{ id: string; label: string }>
+  ids: readonly string[]
+}
+
+/** The violation code an internal reference in copy is named by. */
+export const AI_LAYOUT_REF_CODE = 'layout-internal-ref'
+
+/** A link's own notation, or a template token other than the site's own (`{{host.…}}`). */
+const REF = /\b(?:page|new|form|component|screen):[A-Za-z0-9_-]+|\{\{(?!\s*host\.)[^{}]*\}\}/g
+const PAGE_REF = /\bpage:([A-Za-z0-9_-]+)/g
+
+/** The props whose words a visitor reads, and a component's prop values. */
+const SHOWN_PROPS = [...WORD_PROPS, 'alt', 'title']
+
+function shownTexts(node: GapNode): Array<{ get: () => string; set: (value: string) => void }> {
+  const props = node.props ?? {}
+  const slots: Array<{ get: () => string; set: (value: string) => void }> = []
+  for (const prop of SHOWN_PROPS) {
+    if (typeof props[prop] === 'string') slots.push({ get: () => props[prop] as string, set: (value) => (props[prop] = value) })
+  }
+  const values = props['propValues']
+  if (values && typeof values === 'object' && !Array.isArray(values)) {
+    const record = values as Record<string, unknown>
+    for (const name of Object.keys(record)) {
+      if (typeof record[name] === 'string') slots.push({ get: () => record[name] as string, set: (value) => (record[name] = value) })
+    }
+  }
+  return slots
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function refsIn(text: string, names: AiLayoutRefNames): string[] {
+  const found = (text.match(REF) ?? []).map((ref) => ref.trim())
+  for (const id of names.ids) {
+    if (id.length >= 6 && new RegExp(`(^|[^A-Za-z0-9_-])${escapeRegExp(id)}($|[^A-Za-z0-9_-])`).test(text)) found.push(id)
+  }
+  return [...new Set(found)]
+}
+
+function refsOf(nodes: GapNodes, names: AiLayoutRefNames): Array<{ id: string; refs: string[]; text: string }> {
+  return Object.entries(nodes).flatMap(([id, node]) => {
+    const texts = shownTexts(node).map((slot) => slot.get())
+    const refs = [...new Set(texts.flatMap((text) => refsIn(text, names)))]
+    return refs.length ? [{ id, refs, text: texts.filter((text) => refsIn(text, names).length).join(' ') }] : []
+  })
+}
+
+/** Internal references in a language-built page's or frame's words, as the violation that asks again. */
+export function aiLayoutRefViolations(nodes: NodesMap, names: AiLayoutRefNames): AiDoctrineViolation[] {
+  const found = refsOf(nodes as unknown as GapNodes, names)
+  if (!found.length) return []
+  const refs = [...new Set(found.flatMap((entry) => entry.refs))].map((ref) => `"${ref}"`)
+  return [
+    {
+      rule: 14,
+      code: AI_LAYOUT_REF_CODE,
+      message: `${refs.join(', ')} ${refs.length === 1 ? 'is a link reference' : 'are link references'} written into words a visitor reads. A reference goes only in a button's or a list item's to; in text, name the page by its title, or leave the reference out.`,
+      nodeIds: found.map((entry) => entry.id),
+    },
+  ]
+}
+
+/**
+ * The page or frame with no internal reference in its words: a page's
+ * reference is written as that page's title, and a line that still names a
+ * reference is taken out, as a gap is. Returns what was rewritten and taken.
+ */
+export function aiLayoutWithoutRefs(
+  input: NodesMap,
+  rootId: string,
+  names: AiLayoutRefNames,
+): { nodes: NodesMap; dropped: string[] } {
+  if (!refsOf(input as unknown as GapNodes, names).length) return { nodes: input, dropped: [] }
+  const nodes = cloneNodes(input)
+  const labels = new Map(names.pages.map((page) => [page.id, page.label]))
+  const dropped: string[] = []
+  for (const node of Object.values(nodes)) {
+    for (const slot of shownTexts(node)) {
+      const before = slot.get()
+      const after = before.replace(PAGE_REF, (ref, id: string) => labels.get(id) ?? ref)
+      if (after !== before) {
+        slot.set(after)
+        dropped.push(`"${before}" written as "${after}"`)
+      }
+    }
+  }
+  dropped.push(...pruneFound(nodes, rootId, refsOf(nodes, names)))
+  return { nodes: nodes as unknown as NodesMap, dropped }
+}
+
+/**
+ * A language-built page's or frame's words held to both (AGL-3660): before
+ * the last answer, each gap and each internal reference is a violation that
+ * asks again; in the last, they are taken out and the rest is kept.
+ */
+export function aiLayoutCopyCheck(
+  input: NodesMap,
+  rootId: string,
+  names: AiLayoutRefNames,
+  last: boolean,
+): { nodes: NodesMap; dropped: string[]; violations: AiDoctrineViolation[] } {
+  if (!last) {
+    return { nodes: input, dropped: [], violations: [...aiLayoutRefViolations(input, names), ...aiLayoutGapViolations(input)] }
+  }
+  const refs = aiLayoutWithoutRefs(input, rootId, names)
+  const gaps = aiLayoutWithoutGaps(refs.nodes, rootId)
+  return { nodes: gaps.nodes, dropped: [...refs.dropped, ...gaps.dropped], violations: [] }
 }

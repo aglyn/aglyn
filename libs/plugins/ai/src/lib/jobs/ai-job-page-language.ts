@@ -35,7 +35,7 @@ import type {
   AiLayoutPage,
   AiLayoutTargets,
 } from '../layout-language/ai-layout-links'
-import { aiLayoutGapViolations, aiLayoutWithoutGaps } from '../layout-language/ai-layout-gaps'
+import { aiLayoutCopyCheck } from '../layout-language/ai-layout-gaps'
 import { aiLayoutStoredTree } from '../layout-language/ai-layout-store'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { AI_STEP_TIERS } from '../providers/catalog'
@@ -360,9 +360,23 @@ export function aiLayoutPageCheck(
         ],
       }
     }
-    const gaps = aiLayoutGapViolations(stored.nodes)
-    const { nodes, dropped } =
-      gaps.length && last ? aiLayoutWithoutGaps(stored.nodes, CANVAS_ROOT_ELEMENT_ID) : { nodes: stored.nodes, dropped: [] }
+    // No gap and no internal reference in the words of a page that is published as built.
+    const copy = aiLayoutCopyCheck(
+      stored.nodes,
+      CANVAS_ROOT_ELEMENT_ID,
+      {
+        pages: input.targets.pages,
+        ids: [
+          ...input.targets.pages.map((page) => page.id),
+          ...input.targets.forms.map((form) => form.id),
+          ...input.targets.components.map((component) => component.id),
+          ...input.sectionIds,
+          ...(input.targets.pageId ? [input.targets.pageId] : []),
+        ],
+      },
+      last,
+    )
+    const { nodes, dropped } = copy
     const report = validateAiDoctrineTree(
       { rootId: CANVAS_ROOT_ELEMENT_ID, nodes },
       'page',
@@ -376,7 +390,7 @@ export function aiLayoutPageCheck(
     // or an email the compiler already writes as its gap.
     const violations: AiDoctrineViolation[] = [
       ...report.violations,
-      ...(last ? [] : gaps),
+      ...copy.violations,
       ...aiLayoutInventedContactViolations(
         { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: nodes as unknown as Record<string, AiDoctrineNode> },
         input.targets.facts,
