@@ -162,6 +162,8 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // One pane of a package import's side-by-side diff, which lays the two
   // panes out itself.
   sitePackageItemPreview: 'bare',
+  // A button in the media library's row of actions, and in its empty state.
+  mediaLibrary: 'bare',
 }
 
 /** The layout a zone renders its widgets in. */

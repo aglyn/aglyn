@@ -53,6 +53,7 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `hostTemplates` | A site's Templates page, beside Create Template: another way to start a template | `hostId`, `orgId` |
 | `hostLayouts` | A site's Layouts page, beside Templates and Create New Layout: another way to start a layout | `hostId`, `orgId` |
 | `hostComponents` | A site's Components page, beside Templates and Create Component: another way to start a reusable component | `hostId`, `orgId` |
+| `mediaLibrary` | The media library, beside **Upload media** and **New folder**, and again in an empty library's call to action: another way to add a file. Not drawn in a picker narrowed to video or PDFs | `hostId` (the site whose library is open; for the organization library, the site on screen, else `null`), `orgId`, `library` (`'host'` or `'org'`), `folderId` (the open folder, where new files land, or `null`), `onCreated(mediaIds)` (the library refreshes and selects the assets the widget added) |
 | `recordInsights` | A CRM contact's, company's, deal's or lead's page, under its header. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId` (`null` at the organization level), `orgId`, `record` (`{ kind, id, name }`), `proposeTask(task, key)` (opens the CRM's task form filled in; absent on a lead), and on a deal `stages`, `stageId` and `proposeStage(stageId, key)` (asks, then moves the deal through its stage route) |
 | `recordEmail` | Inside the CRM's one-to-one composer, under the message. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `record`, `subject`, `body`, `proposeDraft({ subject, body }, key)` (fills the composer, asking before it replaces a written message; Send is the member's) |
 | `importMapping` | Under the column matching of a CRM import drawer, and of the import wizard's Columns step on any surface that names the zone (see [Import and export](../guides/import-and-export.md)). Hosted by the CRM plugin and the wizard (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `collection`, `columns` (each `{ header, shape }`, where `shape` is `email`, `phone`, `number`, `date`, `yes-no`, `url`, `text` or `empty`; never a cell), `mapping`, `proposeMapping(mapping, key)` (replaces the drawer's matching; Import is the write) |
@@ -117,8 +118,8 @@ page spaces it there:
 - `hostDashboard`, `commerceGlance` and `orgDashboard`: a tile of a dashboard
   grid.
 - `hostScreens`, `hostTemplates`, `hostLayouts`, `hostForms`,
-  `hostEmailTemplates`, `hostCampaigns`, `productsCreate`, `hostComponents` and
-  `besignerToolbar`: a control in a row.
+  `hostEmailTemplates`, `hostCampaigns`, `productsCreate`, `hostComponents`,
+  `mediaLibrary` and `besignerToolbar`: a control in a row.
 - `hostAutomations`, `automationEditor` and `automationRun`: a control the
   workflows plugin places beside its Actions buttons, in an automation's
   editor, and on a failed run.

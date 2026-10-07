@@ -1080,6 +1080,15 @@ export const CONSOLE_WIDGET_SLOTS = {
    * person decides.
    */
   sitePackageItemPreview: 'sitePackageItemPreview',
+  /**
+   * The media library, beside its Upload media and New folder actions and
+   * again in its empty state (AGL-3602): another way to add a file. Props:
+   * {@link ConsoleMediaLibraryZoneProps}. The `hostScreens` contract — a
+   * widget runs its own flow and writes nothing through the library — with
+   * one door back: `onCreated`, which the widget calls with the assets it
+   * added so the library shows them, selected.
+   */
+  mediaLibrary: 'mediaLibrary',
 } as const
 
 export type ConsoleWidgetSlot =
@@ -1126,6 +1135,24 @@ export type ConsoleHostTemplatesZoneProps = ConsoleHostScreensZoneProps
 export type ConsoleHostLayoutsZoneProps = ConsoleHostScreensZoneProps
 /** See {@link ConsoleHostTemplatesZoneProps}. */
 export type ConsoleHostComponentsZoneProps = ConsoleHostScreensZoneProps
+
+/** What the `mediaLibrary` zone hands each widget (AGL-3602). */
+export interface ConsoleMediaLibraryZoneProps {
+  /**
+   * The site whose library is open; for the organization's library, the site
+   * on screen when there is one (a site's Media tab, a picker opened for a
+   * site), else `null`.
+   */
+  hostId: string | null
+  /** The org the library belongs to; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** Which library is open: a site's own, or the organization's. */
+  library: 'host' | 'org'
+  /** The folder open in the library, where new files land; `null` for none. */
+  folderId: string | null
+  /** Hands the library the assets a widget added, to show and select them. */
+  onCreated: (mediaIds: readonly string[]) => void
+}
 
 /** What the `orgSites` zone hands each widget (AGL-2911). */
 export interface ConsoleOrgSitesZoneProps {
