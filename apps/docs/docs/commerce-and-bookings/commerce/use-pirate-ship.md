@@ -1,7 +1,7 @@
 ---
 sidebar_position: 6
 title: Use Pirate Ship with Aglyn
-description: Export the orders you still have to ship as a spreadsheet Pirate Ship reads, buy the labels there, then import Pirate Ship's shipment report to mark each order shipped and email your customers their tracking links. The same works for Shippo, EasyPost and other label tools.
+description: Export unshipped orders for Pirate Ship, buy the labels there, then import its shipment report to mark each order shipped and email tracking links. Works for Shippo and EasyPost too.
 ---
 
 # Use Pirate Ship with Aglyn
