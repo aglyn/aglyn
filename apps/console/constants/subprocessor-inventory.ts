@@ -295,6 +295,29 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       "Nothing personal: a request for an already-published public page of a customer site, made by the platform itself — the site's host name, the page path, the probe header and the bypass secret. No visitor, member or customer record.",
   },
 
+  // MARK – Apple Push Notification service
+
+  'api.push.apple.com': {
+    disposition: 'subprocessor',
+    entity: 'Apple Inc.',
+    region: 'United States',
+    purpose: 'Delivery of push notifications to the mobile apps on an iPhone or iPad',
+    publishedOn: '2026-10-07',
+    reason:
+      "APNs' production endpoint, reached over HTTP/2 from `libs/tenant/data/admin/src/lib/server/push-apns.ts` for a device registered with the production environment, when a notification's recipient has a push transport (AGL-3651). The same Apple row the push token declaration below names (AGL-3648).",
+    dataReceived: "The notification's title and body, its deep link, and the device push token.",
+  },
+  'api.sandbox.push.apple.com': {
+    disposition: 'subprocessor',
+    entity: 'Apple Inc.',
+    region: 'United States',
+    purpose: 'Delivery of push notifications to development builds of the mobile apps on an iPhone or iPad',
+    publishedOn: '2026-10-07',
+    reason:
+      "APNs' sandbox endpoint, the same sender's route for a device a development build registered with `apnsEnvironment: 'sandbox'` (AGL-3651).",
+    dataReceived: "The notification's title and body, its deep link, and the device push token.",
+  },
+
   // MARK – Resend
 
   'api.resend.com': {
@@ -1023,8 +1046,8 @@ export const SDK_EGRESS: Record<string, SdkEgress> = {
   /**
    * The native apps receive push straight from the platform's own push
    * service: Apple's for an iPhone or iPad, Google's for an Android device.
-   * Neither host is a literal in our source, so the token is the collection
-   * every registered device push token is stored in, which any sender reads.
+   * The token is the collection every registered device push token is stored
+   * in, which any sender reads; Apple's hosts are also declared above.
    */
   'Apple Push Notification service': {
     token: 'MOBILE_DEVICES_COLLECTION',
