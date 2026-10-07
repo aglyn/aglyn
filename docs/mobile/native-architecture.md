@@ -488,7 +488,9 @@ light appearance, and `-light` the dark one:
   (`res/mipmap-anydpi-v26/ic_launcher.xml` with the vector drawables
   `ic_launcher_background` (the gradient), `ic_launcher_foreground` (the art
   inside the 72dp viewport) and `ic_launcher_monochrome` (themed icons, where
-  white shapes become outlines)) plus the 512 `ic_launcher-playstore.png`; and
+  white shapes become outlines), and the `ic_launcher_background` color (the
+  ground's first stop) for the splash screen, plus the 512
+  `ic_launcher-playstore.png`; and
   `apps/android/desktop/icons/{aglyn,aglyn-pos}.{ico,icns}` for the packaged
   desktop app. minSdk is 26, so no legacy mipmap PNGs are needed. The PNGs are
   rendered with sharp (librsvg). `--check` holds them by size, transparency and

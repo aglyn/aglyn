@@ -30,6 +30,7 @@ import {
   groundGradient,
   iconContainerCount,
   iconRasters,
+  launcherBackground,
   imageSetContents,
   layerPaths,
   packIcns,
@@ -225,6 +226,10 @@ test('the adaptive icon: gradient background, foreground on the 72dp viewport, o
   assert.match(
     fg,
     /<group android:translateY="12\.288">\n {6}<path\n {10}android:fillColor="#1F001A33"/,
+  )
+  assert.match(
+    launcherBackground(pos, readIcon),
+    /<color name="ic_launcher_background">#00B0FF<\/color>/,
   )
   const mono = adaptiveForeground(pos, readIcon, { monochrome: true })
   assert.doesNotMatch(mono, /#1F001A33/)

@@ -79,11 +79,7 @@ async function renderIcon(icon, variant, size) {
     kernel: 'lanczos3',
   })
   const opaque = variant === 'full'
-  return (
-    opaque
-      ? image.flatten({ background: '#FFFFFF' }).removeAlpha()
-      : image.ensureAlpha()
-  )
+  return (opaque ? image.removeAlpha() : image.ensureAlpha())
     .png({ compressionLevel: 9 })
     .toBuffer()
 }

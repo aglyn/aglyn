@@ -163,10 +163,9 @@ export function iconContainers() {
 }
 
 /** Files an earlier icon layout wrote: removed by a write, refused by `--check`. */
-export const RETIRED_OUTPUTS = APP_ICONS.flatMap((icon) => [
-  `${appleIconSet(icon.apple)}/AppIcon-512.png`,
-  `${androidRes(icon.android)}/values/ic_launcher_background.xml`,
-])
+export const RETIRED_OUTPUTS = APP_ICONS.map(
+  (icon) => `${appleIconSet(icon.apple)}/AppIcon-512.png`,
+)
 
 const json = (value) => `${JSON.stringify(value, null, 2)}\n`
 const XCODE_INFO = { author: 'xcode', version: 1 }
@@ -506,6 +505,21 @@ export function adaptiveForeground(icon, read, { monochrome = false } = {}) {
   )
 }
 
+/**
+ * The `ic_launcher_background` color: the Android splash screen takes one
+ * color behind the icon's foreground, not a drawable, so it gets the ground's
+ * first stop (primary blue), on which both apps' foregrounds are designed to
+ * sit.
+ */
+export function launcherBackground(icon, read) {
+  const ground = icon.layers[0]
+  const { stops } = groundGradient(read(ground).toString('utf8'), ground)
+  return (
+    `<?xml version="1.0" encoding="utf-8"?>\n${GENERATED_XML(ground)}\n` +
+    `<resources>\n  <color name="ic_launcher_background">#${stops[0].color.slice(3)}</color>\n</resources>\n`
+  )
+}
+
 export const adaptiveIcon = (icon) =>
   `<?xml version="1.0" encoding="utf-8"?>\n${ICON_XML(icon)}\n` +
   `<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n` +
@@ -612,6 +626,10 @@ export function brandTextOutputs(read) {
     outputs.push({
       file: `${res}/drawable/ic_launcher_background.xml`,
       content: adaptiveBackground(icon, read),
+    })
+    outputs.push({
+      file: `${res}/values/ic_launcher_background.xml`,
+      content: launcherBackground(icon, read),
     })
     outputs.push({
       file: `${res}/drawable/ic_launcher_foreground.xml`,
