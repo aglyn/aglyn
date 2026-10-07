@@ -1020,7 +1020,8 @@ function image(
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
-      borderRadius: 4,
+      // In multiples of the theme's corner radius, so a sharp site's frames are sharp.
+      borderRadius: 2,
       bgcolor: 'action.hover',
       // The frame's shape follows its room, so no two slots of a page share one style.
       aspectRatio:
@@ -1050,13 +1051,8 @@ function form(scope: SectionScope, block: AiLayoutBlock): string | null {
     [placed],
     'formContent',
   )
-  return tree.add(
-    'muiCard',
-    { variant: 'outlined' },
-    null,
-    [content],
-    'formCard',
-  )
+  // The card style is the site theme's (AGL-3660), as a card dropped from the drawer takes it.
+  return tree.add('muiCard', null, null, [content], 'formCard')
 }
 
 /** A reusable component placed by its id, its props filled from the block's items. */
@@ -1401,15 +1397,9 @@ function card(
     [stack],
     'cardContent',
   )
-  return tree.add(
-    'muiCard',
-    block.style === 'primary' || block.style === 'large'
-      ? { variant: 'elevation', elevation: '2' }
-      : { variant: 'outlined' },
-    { height: '100%' },
-    [content],
-    'card',
-  )
+  // Flat, outlined, raised, tinted or ruled is the site theme's card style
+  // (AGL-3660), never a choice stamped on this card.
+  return tree.add('muiCard', null, { height: '100%' }, [content], 'card')
 }
 
 /** A numbered step: its number in the brand color, its title and its words. */
@@ -1555,13 +1545,7 @@ function quote(scope: SectionScope, item: AiLayoutItem): string {
     [stack],
     'quoteContent',
   )
-  return tree.add(
-    'muiCard',
-    { variant: 'outlined' },
-    { height: '100%' },
-    [content],
-    'quoteCard',
-  )
+  return tree.add('muiCard', null, { height: '100%' }, [content], 'quoteCard')
 }
 
 /** A list: check-marked lines, or plain lines where rule 1 holds and the list is long. */

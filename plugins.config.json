@@ -2681,7 +2681,8 @@
       "id": "theme-presets",
       "package": "@aglyn/plugins-themes",
       "register": {
-        "console": "registerThemesConsole"
+        "console": "registerThemesConsole",
+        "consoleServerDeclarations": "registerThemesConsoleServerDeclarations"
       },
       "catalog": {
         "order": 3,

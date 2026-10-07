@@ -86,14 +86,11 @@ function headerLook(band: AiLayoutBand): {
       },
     }
   }
+  // A rule, a shadow or nothing under a plain header is the site theme's
+  // MuiAppBar style (AGL-3660); the band's color stays here.
   return {
     props: { color: 'inherit' },
-    sx: {
-      bgcolor: 'background.paper',
-      boxShadow: 'none',
-      borderBottom: 1,
-      borderColor: 'divider',
-    },
+    sx: { bgcolor: 'background.paper' },
   }
 }
 
