@@ -1505,6 +1505,14 @@ export const PLUGIN_ORG_COLLECTIONS_DECLARED: readonly ResolvedPluginOrgCollecti
     "mediaScan": "none",
     "mediaScanReason": "An org automation (AGL-3302) — a trigger, its conditions, the sites it is placed on, and a step list drawn from the server steps only: email subject and body as plain text, list, dataset and campaign ids, CRM fields and waits. No step it may hold carries a media reference, the in-page steps that could (custom HTML, popups) are refused by its save route, and it is written only by that route."
   },
+  {
+    "pluginId": "ai",
+    "name": "aiJobs",
+    "label": "AI job",
+    "siteField": "hostId",
+    "mediaScan": "none",
+    "mediaScanReason": "An AI job is the machine's record of one request: the brief, scalar inputs, the step ledger and the ids of the documents it produced. What it produced is a screen, layout, product or other document of the site, and the scan reads that document; scanning the job would report a request as using an asset the page it built uses. Jobs expire on their own (`expiresAt`, 180 days)."
+  },
 ]
 
 /**
