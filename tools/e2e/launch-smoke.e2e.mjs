@@ -623,7 +623,7 @@ const publishStarted = Date.now()
 const orgSlug = orgDoc?.slug
 // The console's `[host]` segment is the SUBDOMAIN, not the host doc id — the
 // host shell resolves it (`HostGuard`). A doc id in that position renders the
-// app's own "This page isn't here".
+// shell's "This site doesn't exist anymore".
 const published = await publishRootThroughConsole(
   page,
   `${CONSOLE_URL}/${orgSlug}/hosts/${SUBDOMAIN}/screens/${screenId}/versions/${versionId}/view`,

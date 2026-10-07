@@ -62,7 +62,7 @@ const mockAuthUser = { uid: 'user-1' }
 
 /**
  * Paths are real here (rather than `() => ({})`) so a test can tell the two
- * `getDocs` callers apart: resolution's own reads, and the provider's
+ * server-read callers apart: resolution's own reads, and the provider's
  * cross-org `hostIndex` lookup, which fires on exactly the same
  * `ready && !hostId` state the error branch produces. Counting them together
  * would make "did anything re-read?" unanswerable.
@@ -218,13 +218,15 @@ describe('a stale tab recovers when the session does', () => {
     mockHealListeners.length = 0
     resolutionReads = 0
     respond = () => Promise.reject(denied())
-    mockGetDocs.mockImplementation((target: { path: string }) => {
+    // Every read the shell makes goes to the server (AGL-3596); the cache
+    // (`getDocs`) is never consulted, so it answers nothing useful here.
+    mockGetDocs.mockImplementation(() => Promise.resolve(snap([])))
+    mockGetDocsFromServer.mockImplementation((target: { path: string }) => {
       // The provider's cross-org redirect probe. Inert, and never counted.
       if (target.path === 'hostIndex') return Promise.resolve(snap([]))
       resolutionReads += 1
       return respond()
     })
-    mockGetDocsFromServer.mockImplementation(() => respond())
   })
 
   afterEach(() => {

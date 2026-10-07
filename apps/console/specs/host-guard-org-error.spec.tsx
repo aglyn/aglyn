@@ -72,6 +72,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
 jest.mock('firebase/firestore', () => ({
   collection: jest.fn(),
   getDocs: jest.fn(() => Promise.resolve({ docs: [] })),
+  getDocsFromServer: jest.fn(() => Promise.resolve({ docs: [] })),
   limit: jest.fn(),
   query: jest.fn(),
   where: jest.fn(),

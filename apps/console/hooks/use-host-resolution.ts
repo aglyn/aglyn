@@ -20,7 +20,6 @@ import type { HostAccessRole } from '@aglyn/aglyn'
 import {
   collection,
   type Firestore,
-  getDocs,
   getDocsFromServer,
   limit,
   query,
@@ -124,7 +123,8 @@ interface ResolutionState extends Omit<HostResolution, 'retry'> {
 /**
  * Resolve a URL subdomain to a host doc id within the current org (AGL-844),
  * replacing the whole-`hosts`-list scan the provider used to do. Two bounded
- * reads instead of the org's entire site list:
+ * reads instead of the org's entire site list, BOTH answered by the server
+ * (AGL-3596) — see "Why never the cache" below:
  *
  * 1. The user's own projection: `users/{uid}/hostMemberships where subdomain==…
  *    and orgId==…` — one doc for the sites they can reach in this org.
@@ -136,6 +136,18 @@ interface ResolutionState extends Omit<HostResolution, 'retry'> {
  * cross-org redirect + the HostGuard's 404 handle it exactly as before. Errors
  * retry with backoff and only then set `error`, preserving the AGL-813/827
  * "never 404 an unconfirmed empty" contract.
+ *
+ * ## Why never the cache
+ *
+ * The answer decides which site every page under `[host]` reads and writes,
+ * so an answer the server has not given is not an answer. The persistent
+ * IndexedDB cache outlives the site it describes: after a site is deleted,
+ * and even after its subdomain is taken by a NEW site, a cached projection
+ * row still maps the subdomain to the deleted id. Resolving from it mounted
+ * the deleted site's pages over its cached screens and layouts while every
+ * live listener underneath was refused. Both reads therefore go to the
+ * server, and a read that cannot reach it takes the retry/error path — a
+ * spinner and then "check your connection", never cached data.
  *
  * `ready` is derived DURING RENDER from the subdomain the state was computed
  * for, never left standing across a subdomain change (AGL-894). Effects run
@@ -198,7 +210,7 @@ export function useHostResolution(
       // Only the authoritative read (which the rules always allow, no special
       // index) drives retry/error, so routing never breaks on the projection.
       try {
-        const projection = await getDocs(
+        const projection = await getDocsFromServer(
           query(
             collection(firestore, 'users', uid, 'hostMemberships'),
             where('subdomain', '==', subdomain),
@@ -232,17 +244,12 @@ export function useHostResolution(
           where('subdomain', '==', subdomain),
           limit(1),
         )
-        let authoritative = await getDocs(authoritativeQuery)
+        // Server-only in BOTH directions: a cached hit can name a deleted
+        // site (AGL-3596), and a cached empty can be a stale `noDocument`
+        // tombstone for a live one (AGL-813/827). A server error falls
+        // through to the retry/error path below.
+        const authoritative = await getDocsFromServer(authoritativeQuery)
         if (cancelled) return
-        // A cached-empty is NOT a confirmed miss (AGL-813/827): multi-tab
-        // IndexedDB persistence can serve a stale `noDocument` tombstone a
-        // resumed listen never re-sends, so a valid host would false-404 on a
-        // cold load. Re-read from the server before treating "not found" as
-        // real; a server error falls through to the retry/error path below.
-        if (authoritative.empty) {
-          authoritative = await getDocsFromServer(authoritativeQuery)
-          if (cancelled) return
-        }
         const host = authoritative.docs[0]
         // Only resolve if it belongs to the CURRENT org; a match in another
         // org is left for the provider's cross-org redirect (hostId stays null).

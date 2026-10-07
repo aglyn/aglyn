@@ -34,8 +34,9 @@ export async function generateMetadata({
 
 /**
  * Host shell (AGL-622): resolves the `[host]` subdomain to a doc id (spinner
- * while pending) and 404s an unknown subdomain, inside the route tree so the
- * designed not-found boundary catches it.
+ * while pending, server-confirmed only — AGL-3596) and renders the site
+ * not-found state for a subdomain that is not an openable site. Nothing below
+ * mounts until then, plugin pages included.
  */
 export default function HostLayout({ children }: { children: ReactNode }) {
   return <HostGuard>{children}</HostGuard>
