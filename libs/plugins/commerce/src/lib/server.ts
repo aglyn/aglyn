@@ -101,6 +101,7 @@ import {
 import { processRestockHandler, scanRestockAlerts } from './server/process-restock'
 import { scanStockDecrements } from './server/reconcile-stock'
 import { refundHandler } from './server/refund'
+import { returnRequestHandler, returnsHandler } from './server/returns'
 import { scanSupplierDeliveries } from './server/supplier-outbox'
 import { supplierUpdateHandler } from './server/supplier-update'
 
@@ -281,6 +282,9 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('commerce/stream', streamHandler)
   registerPluginApiRoute('commerce/subscription-portal', subscriptionPortalHandler)
   registerPluginApiRoute('commerce/reviews', reviewsHandler)
+  // A buyer's return request (AGL-3611), from their account or the signed
+  // order-status link.
+  registerPluginApiRoute('commerce/return-request', returnRequestHandler)
   registerPluginApiRoute('membership/account', membershipAccountHandler)
   registerPluginApiRoute('membership/content', membershipContentHandler)
   registerPluginApiRoute('membership/login', membershipLoginHandler)
@@ -399,6 +403,9 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/process-abandoned', processAbandonedHandler)
   registerPluginApiRoute('commerce/process-restock', processRestockHandler)
   registerPluginApiRoute('commerce/refund', refundHandler)
+  // Returns (AGL-3611): approve, decline, receive with restock, refund
+  // through the route above, a label from a shipping plugin.
+  registerPluginApiRoute('commerce/returns', returnsHandler)
   registerPluginApiRoute('commerce/supplier-update', supplierUpdateHandler)
   // The store's sales as figure tables (AGL-2915), for the AI plugin's
   // insights to read by id rather than by reading orders. The console runs

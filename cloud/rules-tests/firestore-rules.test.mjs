@@ -13209,3 +13209,64 @@ describe('CRM sharing: a share is read where it lands and written only as grante
 
 
 assert.ok(true)
+
+/**
+ * RETURNS, MERCHANT WEBHOOKS AND THE PLUGIN EVENT OUTBOX (AGL-3611).
+ *
+ * A return decides what a refund pays and what goes back on the shelf, a
+ * webhook endpoint decides where the order book is posted, and the outbox
+ * carries every order event: their routes are the only writers. Returns,
+ * endpoints and the delivery log read like the order book; the signing
+ * secrets and the outbox have no client reader at all.
+ */
+describe('returns, order webhooks and the event outbox are the server’s (AGL-3611)', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'hosts', HOST, 'returns', 'r1'), { orderId: 'o1', status: 'requested' })
+      await setDoc(doc(db, 'hosts', HOST, 'orderWebhooks', 'w1'), { url: 'https://hooks.test/a', events: ['order.paid'] })
+      await setDoc(doc(db, 'hosts', HOST, 'orderWebhookSecrets', 'w1'), { secret: 'sealed' })
+      await setDoc(doc(db, 'hosts', HOST, 'orderWebhookDeliveries', 'd1'), { endpointId: 'w1', status: 'delivered', createdAtMs: 1 })
+      await setDoc(doc(db, 'pluginEventOutbox', 'e1'), { status: 'pending', event: 'order.paid', hostId: HOST })
+    })
+  })
+
+  for (const name of ['returns', 'orderWebhooks', 'orderWebhookDeliveries']) {
+    const id = name === 'returns' ? 'r1' : name === 'orderWebhooks' ? 'w1' : 'd1'
+    it(`lets the order book's readers read ${name}, and nobody else`, async () => {
+      await assertSucceeds(getDoc(doc(authed(OWNER), 'hosts', HOST, name, id)))
+      await assertSucceeds(getDoc(doc(authed(EDITOR), 'hosts', HOST, name, id)))
+      await assertFails(getDoc(doc(authed(AUTHOR), 'hosts', HOST, name, id)))
+      await assertFails(getDoc(doc(authed(VIEWER), 'hosts', HOST, name, id)))
+      await assertFails(getDoc(doc(authed(OUTSIDER), 'hosts', HOST, name, id)))
+    })
+
+    it(`refuses every client write to ${name}, even the owner's`, async () => {
+      await assertFails(setDoc(doc(authed(OWNER), 'hosts', HOST, name, 'minted'), { status: 'approved' }))
+      await assertFails(updateDoc(doc(authed(OWNER), 'hosts', HOST, name, id), { status: 'approved' }))
+      await assertFails(updateDoc(doc(authed(EDITOR), 'hosts', HOST, name, id), { status: 'approved' }))
+      await assertFails(deleteDoc(doc(authed(OWNER), 'hosts', HOST, name, id)))
+    })
+  }
+
+  it('lists returns by status, newest first, for the order book’s readers', async () => {
+    await assertSucceeds(
+      getDocs(query(collection(authed(EDITOR), 'hosts', HOST, 'returns'), where('status', '==', 'requested'), orderBy('createdAtMs', 'desc'))),
+    )
+  })
+
+  it('gives the webhook signing secrets no reader and no writer', async () => {
+    for (const db of [authed(OWNER), authed(STAFF, { staff: true })]) {
+      await assertFails(getDoc(doc(db, 'hosts', HOST, 'orderWebhookSecrets', 'w1')))
+      await assertFails(setDoc(doc(db, 'hosts', HOST, 'orderWebhookSecrets', 'w1'), { secret: 'mine' }))
+    }
+  })
+
+  it('closes the plugin event outbox to every client', async () => {
+    for (const db of [authed(OWNER), authed(STAFF, { staff: true }), anon()]) {
+      await assertFails(getDoc(doc(db, 'pluginEventOutbox', 'e1')))
+      await assertFails(setDoc(doc(db, 'pluginEventOutbox', 'e2'), { status: 'pending' }))
+      await assertFails(deleteDoc(doc(db, 'pluginEventOutbox', 'e1')))
+    }
+  })
+})
