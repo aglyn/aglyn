@@ -170,6 +170,16 @@ function SaveControl(props: {
       }
     />
   )
+  // On a phone the state reads from its icon — the check of a saved draft,
+  // the disk of an unsaved one — and the words stay its accessible name and
+  // tooltip, which gives the leading tools back the ~75px they scrolled for.
+  // Publish keeps its word: it is the one state that asks for a tap.
+  const labelSx = publishPending
+    ? undefined
+    : { display: { xs: 'none', sm: 'inline' } }
+  const iconOnlySx = publishPending
+    ? {}
+    : { '& .MuiButton-endIcon': { ml: { xs: 0, sm: 1 } } }
   // The primary click follows the label. A button that says Publish and saves
   // a draft is the same misdirection one layer down.
   const primaryClick: ButtonProps['onClick'] = publishPending
@@ -181,13 +191,18 @@ function SaveControl(props: {
         onClick={primaryClick}
         size="small"
         endIcon={icon}
+        aria-label={label}
+        title={label}
         sx={(theme) => ({
           mr: `${theme.spacing(-1)} !important`,
           flexShrink: 0,
           whiteSpace: 'nowrap',
+          ...iconOnlySx,
         })}
       >
-        {label}
+        <Box component="span" sx={labelSx}>
+          {label}
+        </Box>
       </Button>
     )
   }
@@ -212,8 +227,16 @@ function SaveControl(props: {
           // targets rather than a button with a stray glyph after it.
         })}
       >
-        <Button onClick={primaryClick} endIcon={icon} sx={{ pr: 0.75 }}>
-          {label}
+        <Button
+          onClick={primaryClick}
+          endIcon={icon}
+          aria-label={label}
+          title={label}
+          sx={{ pr: 0.75, ...iconOnlySx }}
+        >
+          <Box component="span" sx={labelSx}>
+            {label}
+          </Box>
         </Button>
         <Button
           aria-label="Save options"
