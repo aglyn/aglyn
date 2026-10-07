@@ -31,6 +31,7 @@ Below it, the parts that line is built from:
 | **Channel** | One of organic search, paid search, social, referral, email or direct, from the [rule table](#channels) below — not from an analytics vendor's grouping. |
 | **Source / medium** | `utm_source` / `utm_medium` when the landing URL carried them; otherwise the referring site and what the channel implies (`g2.com / referral`). `(direct) / (none)` means nothing external was known. |
 | **Campaign** | `utm_campaign`, when present. `utm_content` and `utm_term` are shown too, when present. |
+| **Google Ads campaign** | The campaign id Google Ads auto-tagging appends as `gad_campaignid`, linked to that campaign in Google Ads. It is there even when the ad carries no `utm_campaign`, so a paid-search signup always names its campaign. |
 | **Landing page** | The first page the visitor landed on, without its query string. A landing on another of our hosts (the docs, say) shows its host. |
 | **Referrer** | The external site that sent them — its host only, never the page. |
 | **Arrived from** | One of our own hosts the visitor came from before anything recorded them. It means a surface that does not include the capture yet; see [Adding a first-party surface](first-party-surfaces.md). |

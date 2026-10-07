@@ -93,6 +93,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 import '../declarations'
 import AssistPanelComponent from './assist-panel.component'
+import { resetAiJobsStoreForTests } from './ai-jobs-store'
 
 /** A small page: a hero section with a heading, then a footer. */
 const PAGE = {
@@ -246,7 +247,13 @@ beforeEach(() => {
   canvas.reset()
   canvas.setNodes(PAGE as never)
   chatResponse = null
+  resetAiJobsStoreForTests()
   global.fetch = jest.fn(async (url: string, init: RequestInit) => {
+    // The shared list of unsettled AI jobs the launcher badges (AGL-3593) is
+    // a read, not a request this spec is about: nothing is in flight.
+    if (String(url).startsWith('/api/ai/jobs?')) {
+      return { ok: true, status: 200, json: async () => ({ jobs: [] }) }
+    }
     posts.push([String(url), JSON.parse(String(init?.body ?? '{}'))])
     if (String(url).includes('/api/assist/edit-applied')) {
       return { ok: true, status: 200, json: async () => ({ ok: true }) }

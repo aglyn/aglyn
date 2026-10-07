@@ -815,6 +815,13 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       'Printed in the legal-drift checker\'s error text, telling an operator where to enable the Drive API when the call is refused.',
     dataReceived: 'Nothing. It is a sentence in a diagnostic.',
   },
+  'ads.google.com': {
+    disposition: 'no-request',
+    reason:
+      'A staff deep link to the Google Ads campaign a paid signup came from (AGL-3590). Rendered as an anchor.',
+    dataReceived:
+      'Nothing from us. A staff member who clicks it authenticates to Google themselves.',
+  },
   'dashboard.stripe.com': {
     disposition: 'no-request',
     reason:

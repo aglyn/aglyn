@@ -205,8 +205,9 @@ link is enforced by code that ships, except where noted:
    address (the row above), and the free-workspace ceiling (AGL-2265) bounds
    the count at three per account, counted by `ownerUid` ∪ `createdByUid`.
 5. **The door.** The two windows above, then — on a Free workspace only —
-   `AI_FREE_MIN_ACCOUNT_AGE_HOURS` (default 24) read off the Auth record's
-   creation time, never the token.
+   `AI_FREE_MIN_ACCOUNT_AGE_HOURS` read off the Auth record's creation time,
+   never the token. Default 0, so off (AGL-3591): a new site opens with the
+   guided AI start over it, and a day's wait refused new accounts there.
 6. **The reservation.** The workspace's daily message cap and its 300-credit
    band, then the OWNER's account: `AI_FREE_DAILY_REQUESTS` (default 30) a
    day across every free workspace they own, a pause for the day after three

@@ -86,6 +86,13 @@ export interface AiPlanCapabilities {
    * case pays for (AGL-3070). Absent is `false`.
    */
   freeTaste?: boolean
+  /**
+   * A Free workspace's site scaffold (AGL-3594): the most pages its plan may
+   * build, which the plan step sets for a `site` job on the Free taste. The
+   * Free wall then holds the plan to that many pages and to the sections a
+   * SITE plan's worst case leaves room for. Absent for every other job.
+   */
+  freeSitePages?: number
 }
 
 /** What a job of one kind builds from its own plan, where it builds only some creations. */

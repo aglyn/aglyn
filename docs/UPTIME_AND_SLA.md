@@ -1331,8 +1331,9 @@ Notes that keep these honest:
   one recovered by design.
     - `kind: "auth-desync"` — Firebase's `auth/tenant-id-mismatch`, raised in a
       tab when a sibling tab signs in to a different account pool. The console
-      reloads that tab once it is hidden (AGL-3280) and deliberately leaves the
-      rejection unhandled so it is still seen. One storage event raises several
+      re-checks that tab's session at once and adopts the shared cookie's
+      account (AGL-3592), reloads it once it is hidden (AGL-3280), and
+      deliberately leaves the rejection unhandled so it is still seen. One storage event raises several
       of them.
     - `kind: "chunk-load"` — a `ChunkLoadError` or failed dynamic import: a tab
       open across a deploy asking for a chunk the origin no longer serves.

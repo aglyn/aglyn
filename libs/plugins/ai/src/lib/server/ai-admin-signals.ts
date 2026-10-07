@@ -37,6 +37,10 @@ import {
 import { readPlatformFreeSpend } from '../usage/assist-free-taste'
 import { assistRefusalCounts } from '../usage/assist-refusals'
 import { assistUsageDay, assistUsageMonth } from '../usage/assist-usage'
+import {
+  ASSIST_RETURNED_USD_FIELD,
+  assistSpendAfterReturnsUsd,
+} from '../usage/assist-credit-returns'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {
   assistSignalRow,
@@ -169,7 +173,10 @@ async function rankAssistSpendForMonth(
       orgId,
       plan: 'free',
       aiAddon: false,
-      credits: assistCreditsFromUsd(billedUsd),
+      // Net of credits given back (AGL-3595); the provider dollars are not.
+      credits: assistCreditsFromUsd(
+        assistSpendAfterReturnsUsd(billedUsd, doc.get(ASSIST_RETURNED_USD_FIELD)),
+      ),
       providerCostUsd: assistProviderCostUsd(
         billedUsd,
         doc.get(ASSIST_PROVIDER_COST_FIELD),

@@ -42,6 +42,8 @@ import {
   type DiscountMarginRating,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AssistRefusalCounts } from './assist-refusals'
+import { assistMonthSpendUsd, assistReturnedCredits } from './assist-credit-returns'
+import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   AI_USAGE_MONTH_KINDS_FIELD,
   aiCacheHitRate,
@@ -95,8 +97,16 @@ export interface StaffOrgAiPool {
    * than the flag.
    */
   uncapped?: boolean
-  /** Credits drawn this month, rounded up from the measured spend. */
+  /**
+   * Credits drawn this month, rounded up from the measured spend, net of
+   * any staff gave back.
+   */
   usedCredits: number
+  /**
+   * Credits given back to this month's band (AGL-3595). Optional: a route
+   * older than give-backs does not send it.
+   */
+  returnedCredits?: number
   /**
    * What the month DREW, at the catalog's billed rates — the dollars
    * `usedCredits` is rounded up from, and the figure the overage line is
@@ -239,6 +249,42 @@ export interface StaffOrgAiResponse {
   margin: StaffOrgAiMargin
   /** Tokens by kind (AGL-2937); absent from a route older than the card. */
   tokens?: StaffOrgAiTokens
+  /**
+   * The OWNER's Free account allowance (AGL-3595), shared across every free
+   * workspace they own: `null` for a paid workspace and for a free one that
+   * names no owner; absent from a route older than give-backs.
+   */
+  account?: StaffAiAccountAllowance | null
+}
+
+/**
+ * One account's Free allowance this month (AGL-2925's per-person meter), as
+ * the staff org card and the staff user card show it.
+ */
+export interface StaffAiAccountAllowance {
+  uid: string
+  month: string
+  /** Credits drawn, net of any given back — the figure the gate refuses on. */
+  usedCredits: number
+  /** The allowance: `FREE_AI_TASTE_CREDITS_PER_MONTH`. */
+  limitCredits: number
+  /** Credits given back to this month's allowance. */
+  returnedCredits: number
+}
+
+/** The allowance off `users/{uid}/aiUsage/{month}`'s data (absent reads as none spent). */
+export function composeStaffAiAccountAllowance(
+  uid: string,
+  month: string,
+  monthDoc: Record<string, unknown> | null | undefined,
+): StaffAiAccountAllowance {
+  return {
+    uid,
+    month,
+    usedCredits: assistCreditsFromUsd(assistMonthSpendUsd(monthDoc)),
+    limitCredits: FREE_AI_TASTE_CREDITS_PER_MONTH,
+    returnedCredits: assistReturnedCredits(monthDoc),
+  }
 }
 
 const finite = (value: unknown): number => {
@@ -293,9 +339,14 @@ export function composeStaffOrgAiPool(
   // billed figure, because that is what its credits came out of and what its
   // band is measured in. What the month COST US is the provider figure, and
   // it is the only one a margin below may be taken against.
-  const billedUsd = finite(monthDoc?.['estCostUsd'])
+  //
+  // What it drew is NET of credits staff gave back (AGL-3595), which is the
+  // figure the gate admits on and the invoice prices; what it cost is not,
+  // because a give-back refunds the customer, not the model provider.
+  const grossBilledUsd = finite(monthDoc?.['estCostUsd'])
+  const billedUsd = assistMonthSpendUsd(monthDoc)
   const providerUsd = assistProviderCostUsd(
-    billedUsd,
+    grossBilledUsd,
     monthDoc?.[ASSIST_PROVIDER_COST_FIELD],
   )
   const usedCredits = assistCreditsFromUsd(billedUsd)
@@ -308,6 +359,7 @@ export function composeStaffOrgAiPool(
     totalCredits,
     uncapped: isUncappedPlanComp(org),
     usedCredits,
+    returnedCredits: assistReturnedCredits(monthDoc),
     billedUsd,
     providerUsd,
     remainingCredits:

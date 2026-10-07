@@ -18,10 +18,15 @@ those jobs run in order, not a different way of building.
 
 ## Starting a new site from a few questions
 
-A site you have just created opens on its **Setup** page, and **Start this site
-with AI** opens over it. It asks what kind of site you are creating, who it is
-for, which of the starter examples you like, and where your contact form's
-submissions should go — then writes the brief for you and plans the site from it.
+A site you have just created opens on its **Setup** page, and **Start your site**
+opens over it with one question first: **how do you want to start?**
+
+- **Start from the starter site** gives the site a ready-made home page with a
+  header, footer and contact form, live at its address, for you to edit.
+- **Start with AI** asks a few questions instead: what kind of site you are
+  creating, who it is for, which of the starter shapes you like, and where your
+  contact form's submissions should go. It writes the brief for you and plans the
+  site from it. **Back** returns to the first question.
 
 Each answer changes what gets built. Who the site is for is who every page's
 search listing is written for, and who the contact form asks its questions of.
@@ -29,18 +34,43 @@ Where submissions go is the form's routing: **the Inbox**, or the Inbox and a
 lead in CRM for every message that carries an email address. You can change that
 on the form itself afterwards.
 
-**Skip and start blank** is in the bar at the top, from the moment the questions
-appear, and it is the same offer whether you have answered them or not. So are
-the close control beside it and the Escape key: all three do the same thing, and
-none of them stops working while the site is being planned. Taking any of them
-creates nothing at all: no job, no pages, no half-built site behind you. You keep
-the empty site you already have, on the page you were already on, and that site
-does not ask again.
+**Skip** is in the bar at the top on both steps, and so are the close control and
+the Escape key. Before a site is being planned, all three do what the starter
+card does: the site gets the starter home page, and nothing else is created — no
+job, no half-built site behind you — and the site does not ask again. Once the
+site is being planned they only close the window; the job carries on.
+
+Until one of those happens, a site that started this way has no page yet, and its
+address shows a short **coming soon** page with the site's name, which search
+engines are asked not to index.
+
+### On the Free plan
+
+A Free workspace's AI start builds **one or two pages**: the home page and the one
+page your business most needs, such as services, booking or contact. Paid plans
+can generate more pages. The questions show what the start can cost at most out of
+the 300 AI credits a Free workspace has each month, and a Free start keeps the
+site's theme and drafts no welcome email.
+
+### If the plan does not work out
+
+If a plan cannot be made, you see one sentence saying so and what to do.
+**Try again** is turned off, with the reason, when the credits left this month
+cannot cover another plan. **Use the starter site instead** gives the site the
+starter home page, as long as the job has not built anything yet.
+
+When a job fails because of something on our side — a plan that could not be
+made, an AI provider error, a step that timed out — the credits it used are
+given back: all of them if it built nothing, or the failed step's if it had
+already built some pages, which you keep. This happens up to three times a day.
+Canceling a job yourself is not given back; you pay for what ran until then.
 
 ## What a scaffold builds
 
-- **Four to eight pages**, each with its sections, its address and its search title and
-  description. A brief that asks for a bigger site is several jobs.
+- **Four to eight pages** (one or two on the Free plan), each with its sections, its
+  address and its search title and description. A brief that asks for a bigger site
+  is several jobs. On a site that still has the starter home page untouched, the
+  plan's home page takes its place at `/` when you publish it.
 - **A shared layout** for the header, navigation and footer every page sits in.
 - **A contact form**, created on the Forms page and placed on the page that needs it.
 - **A palette suggestion** built from your theme's own colors, which you apply in the Theme
@@ -74,9 +104,26 @@ again. You can also cancel it at any point and keep what it made.
 
 ## Watching it build
 
-A site takes a while — each page is built a section at a time — so the job works in the
-background. Open **AI jobs** in the Assist panel to see which step it is on, what it has made
-so far, and to open any draft it has finished.
+A new site started from **Start with AI** has no plan to approve: the plan is made
+and the building starts straight away. **Plan my site** takes you to the site's
+**Building your site** page, which shows each step as it happens — planning your
+pages, then writing each page — and the credits used so far. **What we're
+building** opens the plan: every page and its sections.
+
+When it is done the page says **Your site is ready** and how many credits the site
+used, with **View your site**, which opens the first page in the preview, and
+**Edit your pages**, which opens the site's **Pages** list. Your new pages are
+drafts: publish them when you are happy. If it stops instead, the page says why
+and what you can do, and whether the credits were given back.
+
+You do not have to wait on the page. It keeps its own address, so you can come
+back to it, and the notification you get when the site is built or stops opens
+it. While it works, the **AI** chip in the top bar says what it is doing. See
+[Finding your AI jobs](./how-aglyn-ai-builds.md#finding-your-ai-jobs).
+
+Every other planned job — a page, a form, a site generated for an existing site —
+still stops after its plan: it shows the plan with its estimate and **Confirm
+plan**, and builds nothing until you confirm it.
 
 ## Generate for several sites at once
 

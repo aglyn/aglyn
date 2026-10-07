@@ -68,18 +68,21 @@ export function checkAiClientIpRateLimit(
 
 /**
  * How old an account must be before a Free workspace it belongs to may
- * generate (`AI_FREE_MIN_ACCOUNT_AGE_HOURS`, default 24).
+ * generate (`AI_FREE_MIN_ACCOUNT_AGE_HOURS`, default 0 — off).
  *
- * The signup surface already costs a working inbox per account; a day of
- * age costs a day, which is the one thing a script minting accounts cannot
- * buy in bulk. Paid workspaces never consult it. Zero switches the rung
- * off, which a self-hoster running an invite-only deployment may
- * reasonably want; junk and an empty value take the default.
+ * Off by default (AGL-3591). A new site opens on Setup with the guided AI
+ * start over it, so a day-long wait refused a brand-new account at the
+ * exact moment it was invited to try the product. What bounds the Free
+ * taste's spend is the reservation — a 300-credit wall metered per account,
+ * per address and per day, under a platform-wide daily ceiling — not this
+ * rung. A deployment that wants a cooling-off period sets a positive
+ * number of hours; paid workspaces never consult it, and junk and an empty
+ * value take the default.
  */
 export function aiFreeMinAccountAgeHours(): number {
   const raw = process.env.AI_FREE_MIN_ACCOUNT_AGE_HOURS
   const parsed = raw ? Number(raw) : Number.NaN
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 24
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
 }
 
 /** How long one account's creation time is remembered per instance. */

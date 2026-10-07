@@ -27,6 +27,10 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
 import { aiOverageBillsByInvoice } from './ai-overage-cutover'
 import { aiOverageFirestore } from './ai-overage-trigger'
+import {
+  ASSIST_RETURNED_USD_FIELD,
+  assistSpendAfterReturnsUsd,
+} from '../usage/assist-credit-returns'
 
 /**
  * One workspace's month of Aglyn Assist, as the usage sweep records and bills
@@ -67,10 +71,15 @@ export async function measureAiMonth(
     snapshot.get('estCostUsd'),
     snapshot.get(ASSIST_PROVIDER_COST_FIELD),
   )
-  const billedRaw = Number(snapshot.get('estCostUsd') ?? 0)
+  // The credits drawn are net of any given back (AGL-3595): a give-back is
+  // compensation, and billing the credits it returned would take it back.
+  // The provider figure above is not — that money was spent.
   const overage = assistMonthOverage(
     context.org as never,
-    Number.isFinite(billedRaw) && billedRaw > 0 ? billedRaw : 0,
+    assistSpendAfterReturnsUsd(
+      snapshot.get('estCostUsd'),
+      snapshot.get(ASSIST_RETURNED_USD_FIELD),
+    ),
   )
   const billedByInvoice = aiOverageBillsByInvoice(context.month)
   const meteredUsd = billedByInvoice ? 0 : overage.overageMonthlyUsd

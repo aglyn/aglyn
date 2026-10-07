@@ -64,6 +64,9 @@ const SITE_ZONES: readonly string[] = [
   // The dock is mounted on every page; on a site's pages it is listed from
   // the site's set, so a switched-off site draws none.
   CONSOLE_WIDGET_SLOTS.consoleDock,
+  // The AI jobs indicator in the top bar (AGL-3593), mounted on every page
+  // as the dock is and listed the same way.
+  CONSOLE_WIDGET_SLOTS.consoleTopBar,
   // The guided start on a newly created site (AGL-2918). A site is the one
   // thing it acts on, so a site that switched AI off is offered no start and
   // keeps the blank page — which is what that site asked for.

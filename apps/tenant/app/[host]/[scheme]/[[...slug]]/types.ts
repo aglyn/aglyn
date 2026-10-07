@@ -158,6 +158,14 @@ export interface Props {
   /** Maintenance mode (AGL-131): 503 screen or the built-in notice. */
   maintenanceFallback?: boolean
   /**
+   * The holding page (AGL-3594): the site's `/` while it routes no page at
+   * all — a site born for the guided AI start, before its home page is
+   * published or the starter is added. Its name and a line saying it is on
+   * its way, `noindex`, in place of the not-found page a visitor would
+   * otherwise meet at the address the create dialog called live.
+   */
+  holdingPage?: boolean
+  /**
    * Lockdown notice (AGL-1501), set alongside `maintenanceFallback` when
    * the outage is a staff lockdown rather than the customer's own
    * maintenance switch. Sanitized at the loader — reason code, per-reason

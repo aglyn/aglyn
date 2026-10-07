@@ -32,13 +32,15 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { AiJobKind } from '../model/ai-jobs.types'
+import type { AiJobKind, AiJobSummary } from '../model/ai-jobs.types'
 import { AI_PAGE_TYPES, type AiPageType } from '../model/ai-page-job'
 import {
   AI_TEMPLATE_SUBJECTS,
   parseAiTemplateJobInputs,
   type AiTemplateSubject,
 } from '../model/ai-template-subjects'
+import { AiJobFollow } from './ai-job-follow.component'
+import { publishAiJob } from './ai-jobs-store'
 import { AiTemplateCollectionField } from './ai-template-collection-field.component'
 
 /**
@@ -50,9 +52,11 @@ import { AiTemplateCollectionField } from './ai-template-collection-field.compon
  * One text box, and whatever the kind's door reads beside it, start one job of
  * that kind: a page's optional page type; a template's subject and, for a
  * collection entry's page, its collection. A layout, a form and a component
- * read nothing but the brief and the site. The job plans first and waits in
- * AI jobs, where the member confirms the plan and opens the draft once it is
- * built; nothing here builds or writes anything.
+ * read nothing but the brief and the site. The job plans first; once it
+ * exists the dialog follows it live (AGL-3593) — planning, the plan with its
+ * Confirm, building, then the draft to open — and "Open AI jobs" follows it
+ * anywhere else in the console. Nothing here builds or writes anything until
+ * the member confirms the plan.
  */
 
 /** The longest brief a job admits. */
@@ -74,7 +78,7 @@ export interface AiBriefCopy {
   next: string
   /** The action that starts the job. */
   submit: string
-  /** What the dialog says once the job exists. */
+  /** What the dialog says once the job exists, above its live status. */
   started: string
   /** What it says when the door gave no reason, or could not be reached. */
   failed: string
@@ -91,8 +95,8 @@ export const AI_BRIEF_COPY: Readonly<Record<AiBriefKind, AiBriefCopy>> = {
       'theme and what the site already has, and the plan lists anything the job builds first.',
     submit: 'Plan the page',
     started:
-      'The page is being planned. Open AI jobs in the Assist panel to review the plan and ' +
-      'confirm it. The page is built as an unpublished draft.',
+      'The page is being planned. Review the plan here or in AI jobs, and confirm it to ' +
+      'build. The page is built as an unpublished draft.',
     failed: 'The page could not be started. Try again.',
   },
   template: {
@@ -107,9 +111,9 @@ export const AI_BRIEF_COPY: Readonly<Record<AiBriefKind, AiBriefCopy>> = {
       'than typed.',
     submit: 'Plan the template',
     started:
-      'The template is being planned. Open AI jobs in the Assist panel to review the plan ' +
-      'and confirm it. The template is built as a draft in your library, and nothing on ' +
-      'your site uses it until you do.',
+      'The template is being planned. Review the plan here or in AI jobs, and confirm it ' +
+      'to build. The template is built as a draft in your library, and nothing on your ' +
+      'site uses it until you do.',
     failed: 'The template could not be started. Try again.',
   },
   layout: {
@@ -123,8 +127,8 @@ export const AI_BRIEF_COPY: Readonly<Record<AiBriefKind, AiBriefCopy>> = {
       'pages, and places your navigation or menu component when the site has one.',
     submit: 'Plan the layout',
     started:
-      'The layout is being planned. Open AI jobs in the Assist panel to review the plan and ' +
-      'confirm it. The layout is built as a draft, and no page uses it until you assign it.',
+      'The layout is being planned. Review the plan here or in AI jobs, and confirm it to ' +
+      'build. The layout is built as a draft, and no page uses it until you assign it.',
     failed: 'The layout could not be started. Try again.',
   },
   form: {
@@ -138,9 +142,9 @@ export const AI_BRIEF_COPY: Readonly<Record<AiBriefKind, AiBriefCopy>> = {
       'marketing consent and where each submission goes are planned together.',
     submit: 'Plan the form',
     started:
-      'The form is being planned. Open AI jobs in the Assist panel to review the plan and ' +
-      'confirm it. The form is built as a draft, and it collects nothing until you place it ' +
-      'on a page.',
+      'The form is being planned. Review the plan here or in AI jobs, and confirm it to ' +
+      'build. The form is built as a draft, and it collects nothing until you place it on ' +
+      'a page.',
     failed: 'The form could not be started. Try again.',
   },
   component: {
@@ -153,9 +157,9 @@ export const AI_BRIEF_COPY: Readonly<Record<AiBriefKind, AiBriefCopy>> = {
       'change, such as a name or a photo, becomes a property of the component.',
     submit: 'Plan the component',
     started:
-      'The component is being planned. Open AI jobs in the Assist panel to review the plan ' +
-      'and confirm it. The component is built as a draft, and no page shows it until you ' +
-      'insert it.',
+      'The component is being planned. Review the plan here or in AI jobs, and confirm it ' +
+      'to build. The component is built as a draft, and no page shows it until you insert ' +
+      'it.',
     failed: 'The component could not be started. Try again.',
   },
 }
@@ -219,9 +223,22 @@ export interface AiBriefDialogProps {
   hostId: string
   /** Who is signed in, whose token the request carries. */
   user: Parameters<typeof authorizedFetch>[0]
+  /** Path slug for the link to the draft; read from the address when omitted. */
+  orgSlug?: string | null
+  /** The viewer is staff (AGL-3078), for a refused plan's details. */
+  isStaff?: boolean
 }
 
-export function AiBriefDialog({ kind, open, onClose, orgId, hostId, user }: AiBriefDialogProps) {
+export function AiBriefDialog({
+  kind,
+  open,
+  onClose,
+  orgId,
+  hostId,
+  user,
+  orgSlug,
+  isStaff,
+}: AiBriefDialogProps) {
   const copy = AI_BRIEF_COPY[kind]
   // Held in a ref so the request reads WHO is signed in, and nothing keys on
   // the identity of the object that says so.
@@ -231,12 +248,13 @@ export function AiBriefDialog({ kind, open, onClose, orgId, hostId, user }: AiBr
   const [choice, setChoice] = useState<AiBriefChoice>(AI_BRIEF_NO_CHOICE)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
-  const [started, setStarted] = useState(false)
+  /** The job the brief started, as the create door answered with it. */
+  const [started, setStarted] = useState<AiJobSummary | null>(null)
 
   useEffect(() => {
     if (!open) return
     setNotice(null)
-    setStarted(false)
+    setStarted(null)
   }, [open])
 
   const pick = useCallback(
@@ -262,7 +280,14 @@ export function AiBriefDialog({ kind, open, onClose, orgId, hostId, user }: AiBr
         setNotice(locked ? lockdownRefusalText(locked) : String(payload?.error ?? copy.failed))
         return
       }
-      setStarted(true)
+      const created = (payload?.job as AiJobSummary | undefined) ?? null
+      if (!created) {
+        setNotice(copy.failed)
+        return
+      }
+      // The indicator and the launcher count it from the moment it exists.
+      publishAiJob(created)
+      setStarted(created)
       setBrief('')
       setChoice(AI_BRIEF_NO_CHOICE)
     } catch {
@@ -276,8 +301,17 @@ export function AiBriefDialog({ kind, open, onClose, orgId, hostId, user }: AiBr
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
       <DialogTitle>{copy.title}</DialogTitle>
       <DialogContent>
-        {started ? (
-          <Alert severity="success">{copy.started}</Alert>
+        {started && orgId ? (
+          <AiJobFollow
+            job={started}
+            orgId={orgId}
+            orgSlug={orgSlug}
+            user={user}
+            intro={copy.started}
+            staff={isStaff}
+            // The dialog covers the panel AI jobs opens in.
+            onOpenJobs={onClose}
+          />
         ) : (
           <Stack spacing={2} sx={{ pt: 1 }}>
             <TextField

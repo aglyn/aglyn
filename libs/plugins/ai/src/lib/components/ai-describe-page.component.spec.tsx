@@ -40,6 +40,31 @@ import AiDescribePageButton from './ai-describe-page.component'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
+/** A page job as the create door answers with it: planning (AGL-3593). */
+const pageJob = (id: string) => ({
+  id,
+  orgId: 'org-1',
+  hostId: 'host-1',
+  kind: 'page',
+  status: 'running',
+  brief: 'A page',
+  batch: null,
+  steps: [
+    { name: 'plan', status: 'running', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+    { name: 'generate', status: 'pending', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+  ],
+  outputs: [],
+  creditsReserved: 0,
+  creditsSpent: 0,
+  createdBy: 'u1',
+  createdAt: '2026-10-06T10:00:00.000Z',
+  updatedAt: '2026-10-06T10:00:00.000Z',
+  error: null,
+  running: true,
+  plan: null,
+  review: null,
+})
+
 const zoneProps = (
   patch: Partial<ConsoleHostScreensZoneProps> = {},
 ): ConsoleHostScreensZoneProps => ({ hostId: 'host-1', orgId: 'org-1', ...patch })
@@ -93,7 +118,7 @@ describe('the brief it sends', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Pricing' }))
 
-    mockFetch.mockResolvedValueOnce(json({ job: { id: 'job-1', kind: 'page', status: 'running' } }))
+    mockFetch.mockResolvedValueOnce(json({ job: pageJob('job-1') }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan the page' }))
 
     await screen.findByText(/The page is being planned/)
@@ -122,7 +147,7 @@ describe('the brief it sends', () => {
     fireEvent.click(screen.getByRole('button', { name: 'About' }))
     fireEvent.click(screen.getByRole('button', { name: 'About' }))
 
-    mockFetch.mockResolvedValueOnce(json({ job: { id: 'job-2', kind: 'page', status: 'running' } }))
+    mockFetch.mockResolvedValueOnce(json({ job: pageJob('job-2') }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan the page' }))
 
     await screen.findByText(/The page is being planned/)

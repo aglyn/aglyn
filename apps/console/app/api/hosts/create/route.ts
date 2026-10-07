@@ -39,7 +39,9 @@ import {
 import {
   claimHostForOrg,
   findSubdomainConflict,
+  NEW_SITE_ENABLED_PLUGINS,
 } from '../../../../utils/server/provision-host'
+import { guidedStartOffered } from '../../../../utils/server/guided-start-offered'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
@@ -210,12 +212,25 @@ async function handler(request: Request): Promise<Response> {
     // reasoning for the count being the larger of the directory map and the
     // pre-read aggregation now lives with the code, in
     // utils/server/provision-host.ts.
+    // Born without the starter when its creator will be offered the guided
+    // AI start (AGL-3594): the start plans the site's home, and leaving it
+    // for "a blank site" is what writes the starter
+    // (`POST /api/hosts/starter`). Anyone who will not be offered the start
+    // gets the starter now, as before.
+    const guidedStart = await guidedStartOffered({
+      orgId: orgMembership.orgId,
+      org,
+      host: { enabledPlugins: [...NEW_SITE_ENABLED_PLUGINS] },
+      member: orgMembership.member,
+      staff: decoded['staff'] === true,
+    })
     const claim = await claimHostForOrg({
       firestore,
       orgId: orgMembership.orgId,
       displayName,
       subdomain,
       org,
+      starter: !guidedStart,
     })
     // Lost the subdomain to a concurrent create between the pre-check above
     // and the transaction's commit (AGL-2465). The console has no idempotency

@@ -124,6 +124,9 @@ export const AI_JOB_TERMINAL_STATUSES: readonly AiJobStatus[] = [
 
 export type AiJobStepStatus = 'pending' | 'running' | 'done' | 'failed'
 
+/** The step a planned kind runs first (AGL-2935): its plan, before anything is built. */
+export const AI_JOB_PLAN_STEP = 'plan'
+
 export interface AiJobStep {
   /** Stable within the job (`plan`, `draft`, `generate`), unique per job. */
   name: string
@@ -363,6 +366,18 @@ export interface AiJobReview {
    * for diagnosis, and shown to staff.
    */
   outline?: AiJobReviewOutlineNode[]
+  /**
+   * The checks' own sentence, where `message` was written for the member
+   * instead (AGL-3594): rule numbers and all, for staff. Its presence is what
+   * tells the drawer the findings are staff reading too.
+   */
+  detail?: string
+  /**
+   * Why trying again cannot work yet (AGL-3594) — the Free allowance left is
+   * less than the step can cost — or absent when it can. The button is drawn
+   * disabled with this beside it.
+   */
+  retryRefusal?: string
 }
 
 export type AiJobPlanStatus = 'proposed' | 'confirmed'
@@ -415,6 +430,16 @@ export interface AiJob {
    */
   creditsReserved: number
   creditsSpent: number
+  /**
+   * Credits the job gave back because it failed on our side (AGL-3594),
+   * summed over its give-backs; absent when it gave none. `creditsSpent`
+   * stays what ran, so what the job cost is the one less the other.
+   */
+  refundedCredits?: number
+  /** Why the latest give-back was made (`AiJobRefundReason`). */
+  refundReason?: string
+  /** How many give-backs the job has had: the next one's key. */
+  refunds?: number
   createdBy: string
   createdAt: ITimestamp
   updatedAt: ITimestamp
@@ -490,6 +515,8 @@ export interface AiJobSummary {
   outputs: AiJobOutput[]
   creditsReserved: number
   creditsSpent: number
+  /** Credits given back for a failure on our side (AGL-3594); 0 when none. */
+  refundedCredits?: number
   createdBy: string
   createdAt: string
   updatedAt: string

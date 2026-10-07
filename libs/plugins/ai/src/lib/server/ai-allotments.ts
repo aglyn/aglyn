@@ -55,6 +55,10 @@ import {
   type AiAllotmentWrite,
 } from '../usage/ai-allotments'
 import { userAiUsageMonthRef } from '../usage/ai-usage-by-user'
+import {
+  ASSIST_RETURNED_USD_FIELD,
+  assistSpendAfterReturnsUsd,
+} from '../usage/assist-credit-returns'
 import type {
   AiAllotmentRowWire,
   AiAllotmentsHostWire,
@@ -289,7 +293,12 @@ async function handleGet(request: Request): Promise<Response> {
     orgId,
     month,
     pool: {
-      used: assistCreditsFromUsd(Number(orgMonth.get('estCostUsd') ?? 0)),
+      used: assistCreditsFromUsd(
+        assistSpendAfterReturnsUsd(
+          orgMonth.get('estCostUsd'),
+          orgMonth.get(ASSIST_RETURNED_USD_FIELD),
+        ),
+      ),
       limit: resolveAssistCreditBudget(org as never),
     },
     allotments: rows,

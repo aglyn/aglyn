@@ -543,6 +543,13 @@ export interface ConsoleNavItem {
    */
   ownsSubtree?: boolean
   /**
+   * A page with an address and no tab (AGL-3594): served at its `href` like
+   * any nav item, and left off the site's tab strip. For a surface a person
+   * is SENT to — the page a flow lands on, the page a notification opens —
+   * rather than one they browse to; the gates and the matching are the same.
+   */
+  unlisted?: boolean
+  /**
    * Hrefs this nav item answered to before it moved (AGL-2595).
    *
    * A console path is something people keep — a bookmark, a docs link, an
@@ -918,6 +925,17 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   consoleDock: 'consoleDock',
   /**
+   * The console's top bar, among its own status controls just ahead of the
+   * notifications bell (AGL-3593), in both shells: a compact indicator a
+   * plugin keeps in view on every page — work in progress, something waiting
+   * on the reader — that opens the plugin's own surface when pressed. Props:
+   * {@link ConsoleTopBarZoneProps}, the dock's answers, because both sit
+   * above every route and answer the same questions. A widget here is one
+   * control in a row the bar spaces; it draws nothing at all when it has
+   * nothing to say, and never more than one small control.
+   */
+  consoleTopBar: 'consoleTopBar',
+  /**
    * A section at the bottom of the besigner's Attributes panel (AGL-2940),
    * under the selected element's own fields. Props: `hostId` (`null` on an
    * editor that names no site), and `node`, the selected element (AGL-2984)
@@ -1116,16 +1134,26 @@ export interface ConsoleHostFirstRunZoneProps {
   /** The site's subdomain, which is what a console URL names a site by. */
   host: string | null
   /**
-   * Leaves the guided start for the blank site the person already has: this
-   * same page, with nothing created and nothing begun. The shell records the
-   * choice for this site and draws the zone no more.
+   * Leaves the guided start for a blank site: this same page, with nothing
+   * begun. The shell records the choice for this site, draws the zone no more,
+   * and gives a site born for the guided start its starter — the published
+   * Home page and layout every other new site is born with (AGL-3594).
    *
    * Required of every widget on this zone, drawn where its questions start
    * rather than after them, and — for a widget that takes the screen — what
-   * every way of dismissing it does. See `hostFirstRun` in
-   * {@link CONSOLE_WIDGET_SLOTS}.
+   * every way of dismissing it does BEFORE it has started anything. See
+   * `hostFirstRun` in {@link CONSOLE_WIDGET_SLOTS}.
    */
   startBlank: () => void
+  /**
+   * Closes the zone after its widget STARTED the site some other way — a
+   * guided start whose job is running (AGL-3594). The shell records that the
+   * site was asked and draws the zone no more, and writes no starter: the
+   * site's pages are the job's to build. A widget that started nothing calls
+   * `startBlank` instead. Optional, so a shell that predates it still closes
+   * the zone through `startBlank`.
+   */
+  leave?: () => void
 }
 
 /**
@@ -1229,6 +1257,12 @@ export interface ConsoleDockZoneProps {
   /** The reader's verdict for every declared permission key on the site in view. */
   permissionsOnHost?: { loaded: boolean; granted: Readonly<Record<string, boolean>> }
 }
+
+/**
+ * What the `consoleTopBar` zone hands each widget (AGL-3593): the same
+ * answers the console dock gets, from the same shell resolution.
+ */
+export type ConsoleTopBarZoneProps = ConsoleDockZoneProps
 
 /** How one plugin's shelf of the template gallery stands (AGL-3080). */
 export type ConsoleTemplateGalleryShelfState = 'loading' | 'empty' | 'shown'
@@ -1922,7 +1956,7 @@ export function listConsoleNavItems(
 ): ConsoleNavEntry[] {
   return inTabOrder(
     listConsoleExtensions(enabledPluginIds).flatMap((extension) =>
-      (extension.navItems ?? []).map((navItem) => ({
+      (extension.navItems ?? []).filter((navItem) => !navItem.unlisted).map((navItem) => ({
         ...navItem,
         pluginId: extension.pluginId,
         featureFlag: extension.featureFlag,

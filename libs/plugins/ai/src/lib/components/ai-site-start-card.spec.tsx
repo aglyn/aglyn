@@ -48,6 +48,19 @@ import type { ComponentType } from 'react'
 // the object that carries it.
 const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
 
+const mockPush = jest.fn()
+jest.mock('next/navigation', () => ({
+  __esModule: true,
+  useRouter: () => ({ push: mockPush }),
+}))
+
+const mockTrack = jest.fn()
+jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
+  __esModule: true,
+  ...jest.requireActual('@aglyn/aglyn/app-utils/analytics-events'),
+  trackEvent: (...args: unknown[]) => mockTrack(...args),
+}))
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useUser: () => ({ data: mockUser }),
@@ -56,10 +69,47 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 import { AI_PLUGIN_ID } from '../constants'
 import { registerAiConsole } from '../plugin'
-import { AI_SITE_SUBMISSION_CHOICES } from '../model/ai-site-job'
+import {
+  AI_SITE_FREE_PAGES_NOTE,
+  AI_SITE_SUBMISSION_CHOICES,
+  aiFreeSiteCreditEstimate,
+} from '../model/ai-site-job'
 import { AI_SITE_START_EXAMPLES } from '../model/ai-site-start'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
+
+/** A site job as the create door answers with it: queued, its plan step next. */
+const siteJob = (patch: Record<string, unknown> = {}) => ({
+  id: 'job-1',
+  orgId: 'org-1',
+  hostId: 'demo-legal',
+  kind: 'site',
+  status: 'queued',
+  brief: 'a neighborhood dog groomer',
+  batch: null,
+  steps: [
+    { name: 'plan', status: 'pending', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+    { name: 'generate', status: 'pending', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+  ],
+  outputs: [],
+  creditsReserved: 0,
+  creditsSpent: 0,
+  createdBy: 'u1',
+  createdAt: '2026-10-06T10:00:00.000Z',
+  updatedAt: '2026-10-06T10:00:00.000Z',
+  error: null,
+  running: false,
+  plan: null,
+  review: null,
+  ...patch,
+})
+
+/** The create door's request: the one POST to the jobs route itself. */
+const postCall = () => {
+  const call = mockFetch.mock.calls.find(([url, init]) => url === '/api/ai/jobs' && init?.method === 'POST')
+  if (!call) throw new Error('no job was started')
+  return call
+}
 
 let mockFetch: jest.Mock
 let mockStartBlank: jest.Mock
@@ -101,12 +151,23 @@ afterEach(() => {
   for (const [url] of mockFetch.mock.calls) expect(String(url)).toMatch(/^\/api\/ai\/jobs/)
 })
 
-/** Renders the dialog once the jobs route has admitted this workspace. */
-async function openCard(patch: Partial<ConsoleHostFirstRunZoneProps> = {}) {
+/** Renders the dialog on its first step, once the jobs route has admitted this workspace. */
+async function openChoice(
+  patch: Partial<ConsoleHostFirstRunZoneProps> = {},
+  verdict: Record<string, unknown> = { jobs: [] },
+) {
   const Widget = widget()
-  mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
+  mockFetch.mockResolvedValueOnce(json(verdict))
   const view = render(<Widget {...zoneProps(patch)} />)
-  await screen.findByText('Start this site with AI')
+  await screen.findByText('How do you want to start?')
+  return view
+}
+
+/** Renders the dialog and takes the AI card to the questions (AGL-3594). */
+async function openCard(patch: Partial<ConsoleHostFirstRunZoneProps> = {}) {
+  const view = await openChoice(patch)
+  fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+  await screen.findByText('Tell us about your site')
   return view
 }
 
@@ -256,13 +317,33 @@ describe('the skip', () => {
   })
 
   it('is still the way out once a site has been started', async () => {
-    await openCard()
+    await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
-    mockFetch.mockResolvedValueOnce(json({ job: { id: 'job-1', kind: 'site', status: 'queued' } }))
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await screen.findByText(/Your site is being planned/)
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(mockStartBlank).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes through `leave` once a site has been started, so no starter is written over the job (AGL-3594)', async () => {
+    const leave = jest.fn()
+    await openCard({ leave, host: null })
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await screen.findByText(/Your site is being planned/)
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(leave).toHaveBeenCalledTimes(1)
+    expect(mockStartBlank).not.toHaveBeenCalled()
+  })
+
+  it('leaves for the blank site — the starter — before anything is started, even where the shell offers `leave`', async () => {
+    const leave = jest.fn()
+    await openCard({ leave })
+    fireEvent.click(screen.getByRole('button', { name: 'Skip and start blank' }))
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+    expect(leave).not.toHaveBeenCalled()
   })
 })
 
@@ -350,19 +431,19 @@ describe('the questions become a site scaffold', () => {
     await openCard()
     expect(screen.getByLabelText(/What kind of site are you creating\?/)).toBeTruthy()
     expect(screen.getByLabelText(/Who is it for\?/)).toBeTruthy()
-    expect(screen.getByText('Which of these do you like?')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Look & layout' })).toBeTruthy()
     AI_SITE_START_EXAMPLES.forEach((_example, index) => expect(exampleChip(index)).toBeTruthy())
   })
 
   it('starts one site job for this site, carrying every answer', async () => {
-    await openCard()
+    await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     typeAnswer(/Who is it for\?/, 'local dog owners')
     fireEvent.click(exampleChip(0))
-    mockFetch.mockResolvedValueOnce(json({ job: { id: 'job-1', kind: 'site', status: 'queued' } }))
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await screen.findByText(/Your site is being planned/)
-    const [url, init] = mockFetch.mock.calls[mockFetch.mock.calls.length - 1]
+    const [url, init] = postCall()
     expect(url).toBe('/api/ai/jobs')
     expect(init.method).toBe('POST')
     const body = JSON.parse(init.body)
@@ -395,32 +476,32 @@ describe('the questions become a site scaffold', () => {
   })
 
   it('carries the answer about submissions on the job', async () => {
-    await openCard()
+    await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     fireEvent.mouseDown(screen.getByLabelText(/Where do form submissions go\?/))
     fireEvent.click(screen.getByRole('option', { name: /CRM as a lead/ }))
-    mockFetch.mockResolvedValueOnce(json({ job: { id: 'job-1', kind: 'site', status: 'queued' } }))
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await screen.findByText(/Your site is being planned/)
-    const [, init] = mockFetch.mock.calls[mockFetch.mock.calls.length - 1]
+    const [, init] = postCall()
     expect(JSON.parse(init.body).inputs.submissions).toBe('lead')
   })
 
   it('starts on the Inbox, which is what an unanswered question has to mean', async () => {
-    await openCard()
+    await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
-    mockFetch.mockResolvedValueOnce(json({ job: { id: 'job-1', kind: 'site', status: 'queued' } }))
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await screen.findByText(/Your site is being planned/)
-    const [, init] = mockFetch.mock.calls[mockFetch.mock.calls.length - 1]
+    const [, init] = postCall()
     // Filing leads is the ADDITION, and an addition is what a person chooses.
     expect(JSON.parse(init.body).inputs.submissions).toBe('inbox')
   })
 
   it('promises a plan to confirm, never a built or a published site', async () => {
-    await openCard()
+    await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
-    mockFetch.mockResolvedValueOnce(json({ job: { id: 'job-1', kind: 'site', status: 'queued' } }))
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     const said = await screen.findByText(/Your site is being planned/)
     expect(said.textContent).toMatch(/confirm/)
@@ -428,7 +509,7 @@ describe('the questions become a site scaffold', () => {
   })
 
   it('says the door’s own words when it refuses, and keeps the answers', async () => {
-    await openCard()
+    await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     mockFetch.mockResolvedValueOnce(json({ error: 'Your workspace is out of AI credits' }, 429))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
@@ -437,5 +518,188 @@ describe('the questions become a site scaffold', () => {
       (screen.getByLabelText(/What kind of site are you creating\?/) as HTMLInputElement).value,
     ).toBe('a neighborhood dog groomer')
     expect(screen.getByRole('button', { name: 'Skip and start blank' })).toBeTruthy()
+  })
+})
+
+describe('a Free workspace’s guided start (AGL-3594)', () => {
+  async function openFreeCard() {
+    await openChoice({}, { jobs: [], freeTaste: true })
+    await screen.findByText('Up to 2 pages on the Free plan')
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
+  }
+
+  it('offers one or two pages, starting on two, says paid plans generate more, and drafts no welcome email', async () => {
+    await openFreeCard()
+    fireEvent.mouseDown(screen.getByLabelText('Pages'))
+    const options = (await screen.findAllByRole('option')).map((option) => option.textContent)
+    expect(options).toEqual(['1', '2'])
+    expect(screen.queryByLabelText('Welcome email')).toBeNull()
+    expect(
+      screen.getByText(new RegExp(`Up to about ${aiFreeSiteCreditEstimate(2)} of the 300 AI credits`)),
+    ).toBeTruthy()
+  })
+
+  it('starts a two-page site job with no welcome email', async () => {
+    await openFreeCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await waitFor(() => expect(mockPush).toHaveBeenCalled())
+    const [, init] = mockFetch.mock.calls.find(([url, request]) => url === '/api/ai/jobs' && request?.method === 'POST')!
+    expect(JSON.parse(init.body).inputs).toEqual(expect.objectContaining({ pages: 2, welcomeEmail: false }))
+  })
+
+  it('keeps a paid workspace’s four to eight pages', async () => {
+    await openCard()
+    fireEvent.mouseDown(screen.getByLabelText('Pages'))
+    const options = (await screen.findAllByRole('option')).map((option) => option.textContent)
+    expect(options).toEqual(['4', '5', '6', '7', '8'])
+    expect(screen.queryByText(AI_SITE_FREE_PAGES_NOTE)).toBeNull()
+  })
+})
+
+/**
+ * The dialog stays with the job it started (AGL-3593): the plan and its
+ * Confirm arrive here, through the drawer's own request, and "Open AI jobs"
+ * follows the job in the panel and leaves the full-screen dialog.
+ */
+describe('watching and confirming in place (AGL-3593)', () => {
+  const PLAN = {
+    reuse: [],
+    create: [],
+    screens: [
+      {
+        title: 'Home',
+        slug: '/',
+        layout: null,
+        template: null,
+        duplicateOf: null,
+        nav: true,
+        seoTitle: 'Home',
+        seoDescription: 'Dog grooming.',
+        sections: [{ name: 'hero', uses: [], items: 0 }],
+      },
+    ],
+    status: 'proposed',
+    labels: {},
+    proposedAt: '2026-10-06T10:00:00.000Z',
+    confirmedAt: null,
+    confirmedBy: null,
+  }
+  const planReady = siteJob({
+    status: 'needs_review',
+    steps: [
+      { name: 'plan', status: 'done', startedAt: null, endedAt: null, creditsSpent: 6, error: null },
+      { name: 'generate', status: 'pending', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+    ],
+    plan: PLAN,
+    review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+  })
+
+  async function startWith(job: unknown) {
+    await openCard({ host: null })
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    mockFetch.mockResolvedValueOnce(json({ job }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await screen.findByText(/Your site is being planned/)
+  }
+
+  it('shows the job planning, live', async () => {
+    await startWith(siteJob())
+    expect(await screen.findByText(/^Planning\. The plan appears here/)).toBeTruthy()
+  })
+
+  it('shows the ready plan and confirms it through the drawer’s resume request', async () => {
+    await startWith(planReady)
+    expect(await screen.findByText(/Your plan is ready/)).toBeTruthy()
+    expect(screen.getByText('Builds the page Home at /: hero')).toBeTruthy()
+    mockFetch.mockResolvedValueOnce(
+      json({ job: siteJob({ ...planReady, status: 'queued', review: null, plan: { ...PLAN, status: 'confirmed' } }) }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm plan' }))
+    await screen.findByText('Confirmed plan')
+    const resume = mockFetch.mock.calls.find(([url]) => url === '/api/ai/jobs/job-1/resume')
+    expect(resume).toBeTruthy()
+    expect(JSON.parse(resume![1].body)).toEqual({ orgId: 'org-1', hostId: 'demo-legal' })
+  })
+
+  it('opens AI jobs on the job, and leaves the dialog that covers it', async () => {
+    const { useAiJobsOpenRequest } = require('./ai-jobs-store') as typeof import('./ai-jobs-store')
+    let request = { seq: 0, jobId: null as string | null }
+    const Panel = () => {
+      // What the Assist panel subscribes to.
+      request = useAiJobsOpenRequest()
+      return null
+    }
+    render(<Panel />)
+    await startWith(planReady)
+    fireEvent.click(screen.getByRole('button', { name: 'Open AI jobs' }))
+    await waitFor(() => expect(request.jobId).toBe('job-1'))
+    expect(request.seq).toBeGreaterThan(0)
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('step 1: how the site starts (AGL-3594)', () => {
+  beforeEach(() => mockTrack.mockReset())
+
+  it('offers the starter site and AI as two cards, each with its icon and its title as its name', async () => {
+    await openChoice()
+    const starter = screen.getByRole('button', { name: 'Start from the starter site' })
+    const ai = screen.getByRole('button', { name: 'Start with AI' })
+    expect(starter.querySelector('[data-icon="page-layout-header-footer"]')).toBeTruthy()
+    expect(ai.querySelector('[data-icon="creation"]')).toBeTruthy()
+    expect(screen.getByLabelText('Step 1 of 2')).toBeTruthy()
+    // The questions wait for step 2.
+    expect(screen.queryByLabelText(/What kind of site are you creating\?/)).toBeNull()
+  })
+
+  it('takes the starter site through the zone’s startBlank, once', async () => {
+    await openChoice()
+    fireEvent.click(screen.getByRole('button', { name: 'Start from the starter site' }))
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+    expect(mockTrack).toHaveBeenCalledWith('site_start_choice', { choice: 'starter' })
+  })
+
+  it('takes AI to the questions, and Back returns to the choice', async () => {
+    await openChoice()
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    expect(await screen.findByLabelText(/What kind of site are you creating\?/)).toBeTruthy()
+    expect(screen.getByLabelText('Step 2 of 2')).toBeTruthy()
+    expect(mockTrack).toHaveBeenCalledWith('site_start_choice', { choice: 'ai' })
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByText('How do you want to start?')).toBeTruthy()
+    expect(mockStartBlank).not.toHaveBeenCalled()
+  })
+
+  it('says what Free gets on the AI card, and nothing of it on a paid workspace', async () => {
+    await openChoice()
+    expect(screen.queryByText('Up to 2 pages on the Free plan')).toBeNull()
+  })
+
+  it('keeps Skip, close and Escape on the first step, each the starter', async () => {
+    await openChoice()
+    fireEvent.click(screen.getByRole('button', { name: 'Skip and start blank' }))
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('after "Plan my site": where the next step is (AGL-3594)', () => {
+  beforeEach(() => mockPush.mockReset())
+
+  it('asks for the plan to be confirmed for it, closes the zone without the starter, and opens the site’s build page for the job', async () => {
+    const leave = jest.fn()
+    await openCard({ leave })
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/acme/hosts/demo-legal/ai-jobs/job-1'))
+    expect(leave).toHaveBeenCalledTimes(1)
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    const [, init] = mockFetch.mock.calls.find(([url, request]) => url === '/api/ai/jobs' && request?.method === 'POST')!
+    expect(JSON.parse(init.body).inputs).toEqual(expect.objectContaining({ autoConfirm: true }))
+    // No thank-you notice left behind.
+    expect(screen.queryByText(/Your site is being planned/)).toBeNull()
   })
 })

@@ -75,6 +75,10 @@
  * a path, because a referring path can carry a search query or an account
  * page. `utm_*` values are trimmed, refused when shaped like an email
  * address, and capped, the same scrub the signup campaign parser applies.
+ * The one id that IS kept is Google Ads' `gad_campaignid`: it names the
+ * advertiser's own campaign, which every visitor from that campaign shares,
+ * and it is the only thing an auto-tagged ad click says about which
+ * campaign it was — `gclid` alone names the click, not the campaign.
  *
  * ## Why the whole runtime is one function
  *
@@ -130,6 +134,11 @@ export interface FirstTouch {
   utm?: FirstTouchUtm
   /** Which click identifiers the landing URL carried. */
   click?: FirstTouchClickId[]
+  /**
+   * The Google Ads campaign id auto-tagging appended as `gad_campaignid` —
+   * digits only. Present even when the ad carries no `utm_campaign`.
+   */
+  adCampaign?: string
 }
 
 /** What {@link FirstTouchKit.buildFirstTouch} reads a landing from. */
@@ -221,6 +230,8 @@ export interface FirstTouchKit {
  */
 export function createFirstTouchKit(): FirstTouchKit {
   const CLICK_IDS = ['gclid', 'fbclid', 'msclkid']
+  const AD_CAMPAIGN_PARAM = 'gad_campaignid'
+  const AD_CAMPAIGN_SHAPE = /^\d{1,20}$/
   const UTM_KEYS = ['source', 'medium', 'campaign', 'content', 'term']
   const COOKIE = 'aglyn_ft'
   const PROBE = 'aglyn_ft_probe'
@@ -354,6 +365,12 @@ export function createFirstTouchKit(): FirstTouchKit {
     return present
   }
 
+  function readAdCampaign(value: unknown): string {
+    if (typeof value !== 'string') return ''
+    const clean = value.trim()
+    return AD_CAMPAIGN_SHAPE.test(clean) ? clean : ''
+  }
+
   function buildFirstTouch(landing: FirstTouchLanding): FirstTouch | null {
     if (!landing) return null
     const url = parseUrl(landing.href)
@@ -372,6 +389,8 @@ export function createFirstTouchKit(): FirstTouchKit {
     if (utm) touch.utm = utm
     const click = readClickIds(url.searchParams)
     if (click.length) touch.click = click
+    const adCampaign = readAdCampaign(url.searchParams.get(AD_CAMPAIGN_PARAM))
+    if (adCampaign) touch.adCampaign = adCampaign
     return touch
   }
 
@@ -416,6 +435,8 @@ export function createFirstTouchKit(): FirstTouchKit {
       }
       if (click.length) touch.click = click
     }
+    const adCampaign = readAdCampaign(raw['adCampaign'])
+    if (adCampaign) touch.adCampaign = adCampaign
     return touch
   }
 

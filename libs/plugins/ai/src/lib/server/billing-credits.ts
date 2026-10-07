@@ -29,6 +29,10 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import {
+  ASSIST_RETURNED_USD_FIELD,
+  assistSpendAfterReturnsUsd,
+} from '../usage/assist-credit-returns'
 
 // lockdown-423: exempt — a READ-ONLY billing surface that writes nothing,
 // same posture as billing/usage-budget beside it. AGL-1501 keeps
@@ -117,12 +121,13 @@ async function handler(request: Request): Promise<Response> {
     if (budgetUsd === null && !unlimited) return Response.json({ credits: null })
     const month = new Date().toISOString().slice(0, 7)
     const usage = await orgRef.collection('assistUsage').doc(month).get()
-    const costUsd = Number(usage.get('estCostUsd') ?? 0)
+    // Net of credits staff gave back (AGL-3595) — the figure the gate admits on.
+    const costUsd = assistSpendAfterReturnsUsd(
+      usage.get('estCostUsd'),
+      usage.get(ASSIST_RETURNED_USD_FIELD),
+    )
     return Response.json({
-      credits: publicAssistCredits(
-        Number.isFinite(costUsd) && costUsd > 0 ? costUsd : 0,
-        budgetUsd,
-      ),
+      credits: publicAssistCredits(costUsd, budgetUsd),
       stopsAtBand: assistBandRefuses(org),
       ...(unlimited ? { unlimited: true } : {}),
     })

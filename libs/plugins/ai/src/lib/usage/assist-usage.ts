@@ -83,6 +83,10 @@ import {
 // The ceiling composition lives beside the one other reader it has, the staff
 // refusal alert, in a module that writes nothing; the reservation's importers
 // keep reaching it here.
+import {
+  ASSIST_RETURNED_USD_FIELD,
+  assistSpendAfterReturnsUsd,
+} from './assist-credit-returns'
 export { assistMonthlyCeilingUsd } from './assist-ceiling'
 
 /**
@@ -667,8 +671,13 @@ async function reserveInTransaction(
       ? await tx.get(platformFreeSpendRef(firestore, day))
       : null
     const used = Number(snapshot.get(gateField) ?? 0)
+    // Net of any credits given back this month (AGL-3595), so a give-back
+    // re-opens the band it was meant to re-open.
     const costUsd = monthlySnapshot
-      ? Number(monthlySnapshot.get('estCostUsd') ?? 0)
+      ? assistSpendAfterReturnsUsd(
+          monthlySnapshot.get('estCostUsd'),
+          monthlySnapshot.get(ASSIST_RETURNED_USD_FIELD),
+        )
       : null
     if (!(used < limit)) {
       recordAssistRefusal(firestore, orgId, month, 'messages')

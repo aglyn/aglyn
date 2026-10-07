@@ -48,7 +48,8 @@ import {
   type AiInsightSurface,
 } from '../model/ai-insight'
 import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
-import { readEventFrames } from './assist-jobs-drawer.component'
+import { readEventFrames } from './ai-job-events'
+import { openAiJobs, publishAiJob } from './ai-jobs-store'
 
 /**
  * "Ask about your numbers" (AGL-2915): the Assist panel's question box on a
@@ -105,6 +106,11 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
   const [answer, setAnswer] = useState<AiInsightAnswerWire | null>(null)
   const [openCitations, setOpenCitations] = useState<number | null>(null)
   const [subscribed, setSubscribed] = useState<boolean | null>(null)
+  /**
+   * The job whose answer was still being written when the dialog stopped
+   * waiting (AGL-3593): its notice offers to open AI jobs on it.
+   */
+  const [stillWriting, setStillWriting] = useState<string | null>(null)
   const watchRef = useRef<AbortController | null>(null)
 
   const readAnswer = useCallback(
@@ -155,6 +161,7 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
             if (event['type'] === 'reconnect') again = true
             if (event['type'] !== 'state') return
             const next = event['job'] as AiJobSummary
+            publishAiJob(next)
             if (next.status === 'needs_input') {
               setNotice(next.error ?? 'This workspace cannot run AI jobs right now.')
             }
@@ -167,7 +174,8 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
         if (settled) return settle(settled)
       }
       if (!controller.signal.aborted) {
-        setNotice('The answer is still being written. Find it under AI jobs in a minute.')
+        setNotice('The answer is still being written. Find it in AI jobs in a minute.')
+        setStillWriting(job.id)
         setPhase('ask')
       }
     },
@@ -180,6 +188,7 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
       return
     }
     setNotice(null)
+    setStillWriting(null)
     setOpenCitations(null)
     if (jobId) {
       setPhase('working')
@@ -224,6 +233,7 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
     const text = question.trim()
     if (!text) return
     setNotice(null)
+    setStillWriting(null)
     setPhase('working')
     try {
       const response = await authorizedFetch(userRef.current, '/api/ai/jobs', {
@@ -244,6 +254,7 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
         setPhase('ask')
         return
       }
+      publishAiJob(payload.job as AiJobSummary)
       await follow(payload.job as AiJobSummary)
     } catch {
       setNotice('The question could not be asked. Try again.')
@@ -362,7 +373,28 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
               ) : null}
             </Stack>
           ) : null}
-          {notice ? <Alert severity="warning">{notice}</Alert> : null}
+          {notice ? (
+            <Alert
+              severity="warning"
+              action={
+                stillWriting ? (
+                  <Button
+                    color="inherit"
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      openAiJobs({ jobId: stillWriting })
+                      onClose()
+                    }}
+                  >
+                    {'Open AI jobs'}
+                  </Button>
+                ) : undefined
+              }
+            >
+              {notice}
+            </Alert>
+          ) : null}
           {surface !== 'datasets' && subscribed !== null ? (
             <FormControlLabel
               control={<Switch checked={subscribed} onChange={() => void toggleDigest()} />}

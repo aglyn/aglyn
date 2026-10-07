@@ -1156,8 +1156,9 @@ async function handler(request: Request): Promise<Response> {
       })
     }
 
-    // A Free workspace's caller must have held an account for a day before
-    // a model answers it (AGL-2925). Below the docs and cache paths, which
+    // A Free workspace's caller must have held an account for
+    // `AI_FREE_MIN_ACCOUNT_AGE_HOURS` before a model answers it (AGL-2925);
+    // off unless a deployment sets it (AGL-3591). Below the docs and cache paths, which
     // spend nothing and stay open to everyone; above the reservation, so a
     // refused day-zero account never moves a counter. Paid workspaces and
     // staff are not consulted.

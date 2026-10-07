@@ -142,6 +142,15 @@ export interface AiInventoryScreen {
   layoutId: string | null
   /** A collection's entry template rather than a page of its own. */
   template: boolean
+  /**
+   * The platform's starter home page, untouched since the site was created
+   * (AGL-3594): the screen `host.defaultHomeScreenId` names, still answering
+   * `/`, with no version but the one it was provisioned with. A plan may put
+   * its own home page at its address, and publishing that page retires this
+   * one (AGL-3408). Absent on every other screen, and on a starter home the
+   * owner has edited, which a plan keeps and plans around.
+   */
+  replaceable?: true
 }
 
 /**
@@ -229,7 +238,9 @@ export function aiInventoryLine(kind: AiInventoryKind, row: AiInventoryRow): str
       return `${head} \u00b7 ${(row as AiInventoryCollection).slug}`
     case 'screens': {
       const screen = row as AiInventoryScreen
-      return `${head} \u00b7 ${screen.slug}${screen.template ? ' \u00b7 entry template' : ''}`
+      return `${head} \u00b7 ${screen.slug}${screen.template ? ' \u00b7 entry template' : ''}${
+        screen.replaceable ? ' \u00b7 starter home, a planned home page at / replaces it' : ''
+      }`
     }
   }
 }
@@ -248,14 +259,17 @@ const HOME_SLUGS = new Set(['', 'home', 'index'])
  * with nowhere to go is sent there, which is why the doctrine names them.
  */
 export function aiHomeScreenIds(inventory: AiSiteInventory | null): string[] {
-  return (inventory?.screens ?? [])
-    .filter(
-      (screen) =>
-        !screen.template &&
-        (HOME_SLUGS.has(screen.slug.trim().replace(/^\/+|\/+$/g, '').toLowerCase()) ||
-          /^home(?:\s?page)?$/i.test(screen.name.trim())),
-    )
-    .map((screen) => screen.id)
+  const homes = (inventory?.screens ?? []).filter(
+    (screen) =>
+      !screen.template &&
+      (HOME_SLUGS.has(screen.slug.trim().replace(/^\/+|\/+$/g, '').toLowerCase()) ||
+        /^home(?:\s?page)?$/i.test(screen.name.trim())),
+  )
+  // A starter home a planned home page replaces (AGL-3594) is retired when
+  // that page is published, so a link is sent to the page that replaces it
+  // wherever the site already has one.
+  const kept = homes.filter((screen) => !screen.replaceable)
+  return (kept.length ? kept : homes).map((screen) => screen.id)
 }
 
 /** A site the org does not own; the inventory is never read for it. */

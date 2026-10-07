@@ -179,6 +179,7 @@ const WORKSPACE_DOORS = [
   'ai/admin/user',
   'ai/admin/signals',
   'ai/admin/overage',
+  'ai/admin/credits',
 ]
 
 const HANDLERS = { GET, POST, PATCH, DELETE }
@@ -264,7 +265,10 @@ describe('the dispatcher refuses a door naming a site that switched AI off', () 
 
 describe('the workspace half keeps running whatever a site decided', () => {
   it.each(WORKSPACE_DOORS)('%s runs with no site named', async (path) => {
-    const method = path.startsWith('ai/admin/') && path !== 'ai/admin/overage' ? 'GET' : 'POST'
+    const method =
+      path.startsWith('ai/admin/') && path !== 'ai/admin/overage' && path !== 'ai/admin/credits'
+        ? 'GET'
+        : 'POST'
     const response = await call(path, method, null)
     expect(response.status).toBe(200)
     expect(mockCalls).toEqual([path])

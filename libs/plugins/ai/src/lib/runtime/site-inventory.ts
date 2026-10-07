@@ -26,7 +26,7 @@ import {
   REUSABLE_COMPONENT_KIND_EMAIL,
   reusableComponentKindOf,
 } from '@aglyn/aglyn/app-utils/reusable-component-kind'
-import { SCREEN_KIND_TEMPLATE } from '@aglyn/aglyn/app-utils/screen-route'
+import { SCREEN_KIND_TEMPLATE, SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
@@ -149,6 +149,39 @@ async function readWindow<T>(
 }
 
 /**
+ * The screen a site's starter home may be (AGL-3594, AGL-3408): the one
+ * `host.defaultHomeScreenId` names, while it still answers `/` in the routing
+ * map and is listed as a page. `null` on every site whose owner published a
+ * home page of their own, which clears the marker (AGL-3478), and on every
+ * site created before the marker existed, whose home page is the owner's.
+ */
+export function aiStarterHomeCandidate(
+  host: Readonly<Record<string, unknown>> | null,
+  screens: ReadonlyArray<Pick<AiInventoryScreen, 'id' | 'template'>>,
+): string | null {
+  const id = text(host?.['defaultHomeScreenId'])
+  if (!id) return null
+  const routing = host?.['screens']
+  const path =
+    routing && typeof routing === 'object' ? (routing as Record<string, unknown>)[id] : undefined
+  if (path !== SCREEN_ROOT_PATH) return null
+  return screens.some((screen) => screen.id === id && !screen.template) ? id : null
+}
+
+/**
+ * Whether the starter home is as the platform wrote it: its one version is
+ * the one it was provisioned and published with. A version saved in the
+ * editor is an edit, published or not, and an edited starter is the owner's
+ * page — a plan keeps it.
+ */
+export function aiStarterHomeUntouched(
+  publishedVersionId: string,
+  versionIds: readonly string[],
+): boolean {
+  return Boolean(publishedVersionId) && versionIds.length === 1 && versionIds[0] === publishedVersionId
+}
+
+/**
  * The org's datasets shared with the site, through the `dataset` index the
  * data plugin publishes (AGL-3080) rather than its collection: their names
  * and their fields' names, in the dataset page's order. None where no plugin
@@ -204,6 +237,9 @@ export async function readSiteInventory(
     Math.max(1, Math.floor(options.maxPerKind ?? AI_SITE_INVENTORY_MAX_PER_KIND)),
   )
   const host = firestore.collection('hosts').doc(hostId)
+  // Each listed screen's published version, read in the same window, for the
+  // starter home's untouched test below.
+  const screenVersions = new Map<string, string>()
 
   const [components, layouts, templates, forms, datasets, collections, screens, hostDoc] =
     await Promise.all([
@@ -288,12 +324,13 @@ export async function readSiteInventory(
       ),
       readWindow<AiInventoryScreen>(
         host.collection('screens'),
-        ['displayName', 'slug', 'layoutId', 'kind', 'deletedAt'],
+        ['displayName', 'slug', 'layoutId', 'kind', 'deletedAt', 'versionId'],
         cap,
         (id, data) => {
           const kind = text(data['kind'])
           // An email design and an error body are not pages a plan links or duplicates.
           if (data['deletedAt'] || (kind && kind !== SCREEN_KIND_TEMPLATE)) return null
+          screenVersions.set(id, text(data['versionId']))
           return {
             id,
             name: nameOf(data, id, 'displayName', 'slug'),
@@ -305,6 +342,25 @@ export async function readSiteInventory(
       ),
       host.get(),
     ])
+
+  const hostData = hostDoc.exists ? ((hostDoc.data() ?? {}) as Data) : null
+  const starter = aiStarterHomeCandidate(hostData, screens.rows)
+  if (starter) {
+    // One more read, and only on a site that still carries the marker: the
+    // starter's versions, of which an untouched one has exactly the one it
+    // was provisioned with.
+    const versions = await host
+      .collection('screens')
+      .doc(starter)
+      .collection('versions')
+      .select()
+      .limit(2)
+      .get()
+    if (aiStarterHomeUntouched(screenVersions.get(starter) ?? '', versions.docs.map((doc) => doc.id))) {
+      const row = screens.rows.find((screen) => screen.id === starter)
+      if (row) row.replaceable = true
+    }
+  }
 
   const windows: Record<AiInventoryKind, Window<unknown>> = {
     components,
@@ -324,7 +380,7 @@ export async function readSiteInventory(
     datasets: datasets.rows,
     collections: collections.rows,
     screens: screens.rows,
-    theme: aiInventoryTheme(hostDoc.exists ? ((hostDoc.data() ?? {}) as Data) : null),
+    theme: aiInventoryTheme(hostData),
     truncated: AI_INVENTORY_KINDS.filter((kind) => windows[kind].truncated),
   }
 }

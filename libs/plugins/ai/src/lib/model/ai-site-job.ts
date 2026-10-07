@@ -53,6 +53,115 @@ import { AI_PAGE_CREATE_KINDS } from './ai-page-job'
 export const AI_SITE_PAGES = { min: 4, max: 8 } as const
 
 /**
+ * How many pages a Free workspace's scaffold builds (AGL-3594): its home page
+ * and the one page the brief most needs. A product decision, not a figure the
+ * wall derives — the wall's proof (`jobs/ai-job-free-site.spec.ts`) shows a
+ * plan and a build of this many pages fit the Free taste with room for one
+ * retried section.
+ */
+export const AI_SITE_FREE_PAGES = { min: 1, max: 2 } as const
+
+/** The pages a scaffold builds for a workspace on the Free taste or on a paid plan. */
+export function aiSitePagesBand(
+  freeTaste: boolean | null | undefined,
+): { readonly min: number; readonly max: number } {
+  return freeTaste ? AI_SITE_FREE_PAGES : AI_SITE_PAGES
+}
+
+/**
+ * The job input a guided site start sets so its plan is confirmed for it
+ * (AGL-3594); `jobs/ai-job-auto-confirm.ts` says where it is honored.
+ */
+export const AI_JOB_AUTO_CONFIRM_INPUT = 'autoConfirm'
+
+/** What a Free site start's page selector says under it (AGL-3594). */
+export const AI_SITE_FREE_PAGES_NOTE = 'Paid plans can generate more pages.'
+
+/**
+ * The plan's answer ceiling for a scaffold (AGL-3594), Free and paid. A plan
+ * is an outline — each page's title, address, search listing and sections by
+ * name — and the build steps write everything else, so a scaffold plans with
+ * no thinking and at a ceiling sized to the outline of its largest band with
+ * room to spare: about 300 tokens a page. The 13,491-token plan a Free site
+ * spent 227 of its 300 credits on was its thinking, at the routing table's
+ * 8,000 a call.
+ */
+export const AI_SITE_PLAN_MAX_TOKENS = { free: 2_000, paid: 4_000 } as const
+
+/** What each exchange of a Free site job comes to at its worst, in credits. */
+export interface AiFreeSiteWorstCase {
+  /** The site plan: its answer and its one re-ask, each at its ceiling. */
+  plan: number
+  /** The one layout a Free plan includes, built first on a site with none. */
+  layout: number
+  /** A page's first section pass, which writes the cached prefix. */
+  firstSection: number
+  /** Each later section pass. */
+  laterSection: number
+  /** A page's listing. */
+  listing: number
+}
+
+/**
+ * The Free site start's wall at its worst (AGL-3594): the site plan as
+ * `jobs/ai-job-free-site.spec.ts` derives it from the plan request as it
+ * stands, on the model a Free site plans with, every answer at its ceiling;
+ * the build's exchanges are the Free page's (`AI_FREE_PAGE_WORST_CASE_CREDITS`),
+ * which the same spec holds these to. The spec fails when a figure it derives
+ * moves and this does not.
+ */
+export const AI_FREE_SITE_WORST_CASE_CREDITS: Readonly<AiFreeSiteWorstCase> = {
+  plan: 35,
+  layout: 64,
+  firstSection: 44,
+  laterSection: 20,
+  listing: 3,
+}
+
+/**
+ * The most sections a Free site's plan fits in the Free taste at its worst,
+ * across all its pages: the plan, the layouts it builds first, each page's
+ * listing and first pass, and ROOM FOR ONE RETRIED SECTION, then as many later
+ * passes as the rest pays for; none when that is already past the wall. Every
+ * page's first pass is counted as a cache write, which errs dear.
+ */
+export function aiFreeSiteSectionsWithin(
+  creations: { layouts: number; pages: number },
+  taste: number,
+  credits: Readonly<AiFreeSiteWorstCase> = AI_FREE_SITE_WORST_CASE_CREDITS,
+): number {
+  const pages = Math.max(1, Math.floor(creations.pages))
+  const before =
+    credits.plan +
+    creations.layouts * credits.layout +
+    pages * (credits.listing + credits.firstSection) +
+    credits.firstSection
+  if (before > taste) return 0
+  return pages + Math.floor((taste - before) / credits.laterSection)
+}
+
+/** Sections a Free site's page is assumed to hold before its plan names them. */
+export const AI_FREE_SITE_NOMINAL_SECTIONS = 3
+
+/**
+ * About what a Free site start of this many pages costs at its worst, in
+ * credits, for the dialog that asks for one: the site plan, each page's
+ * listing and its sections at the nominal count, from the figures the wall is
+ * proven with rather than the nominal credits a paid estimate counts.
+ */
+export function aiFreeSiteCreditEstimate(
+  pages: number,
+  credits: Readonly<AiFreeSiteWorstCase> = AI_FREE_SITE_WORST_CASE_CREDITS,
+): number {
+  const count = Math.max(1, Math.floor(pages))
+  return (
+    credits.plan +
+    count * (credits.listing + credits.firstSection) +
+    count * (AI_FREE_SITE_NOMINAL_SECTIONS - 1) * credits.laterSection
+  )
+}
+
+/**
  * The most sections one scaffolded page may hold. The plan model allows more
  * for a page job, which builds one page; a scaffold builds eight, and each
  * section is a pass of its own.
@@ -234,12 +343,14 @@ export function parseAiSiteJobInputs(
   const rawPages = inputs?.['pages']
   const pages =
     typeof rawPages === 'number' ? rawPages : Number(rawPages ?? NaN)
+  // Read here across both bands; the door holds a workspace to its own
+  // (`aiSitePagesRefusal`), since only it knows the workspace's plan.
   if (
     !Number.isInteger(pages) ||
-    pages < AI_SITE_PAGES.min ||
+    pages < AI_SITE_FREE_PAGES.min ||
     pages > AI_SITE_PAGES.max
   ) {
-    return `pages must be a whole number from ${AI_SITE_PAGES.min} to ${AI_SITE_PAGES.max}`
+    return `pages must be a whole number from ${AI_SITE_FREE_PAGES.min} to ${AI_SITE_PAGES.max}`
   }
   // Where submissions go is admitted only as one of the two the form step
   // can actually bind; anything else is nobody having said, and the model
@@ -265,6 +376,22 @@ export function parseAiSiteJobInputs(
     submissions,
     batchId,
   }
+}
+
+/**
+ * Why a workspace cannot ask for this many pages (AGL-3594), in a sentence a
+ * member reads; `null` when it can. A Free workspace builds one or two, and a
+ * paid one four to eight, as it always has. Refused rather than clamped: the
+ * guided start offers only the band, so a request outside it was not made
+ * there, and a job quietly building fewer pages than it was asked for is a
+ * worse answer than a sentence saying why.
+ */
+export function aiSitePagesRefusal(pages: number, freeTaste: boolean | null | undefined): string | null {
+  const band = aiSitePagesBand(freeTaste)
+  if (pages >= band.min && pages <= band.max) return null
+  return freeTaste
+    ? `A Free workspace's AI site start builds ${AI_SITE_FREE_PAGES.min} or ${AI_SITE_FREE_PAGES.max} pages. ${AI_SITE_FREE_PAGES_NOTE}`
+    : `A site is planned with ${band.min} to ${band.max} pages.`
 }
 
 /**
@@ -348,13 +475,16 @@ export function aiSitePlanPrerequisites(
  * with a re-ask (AGL-3030), and the doors hold a confirmed plan to it again
  * through `aiSitePlanRefusal`.
  */
-export function aiSitePlanShapeRefusal(plan: AiBuildPlan): string | null {
+export function aiSitePlanShapeRefusal(
+  plan: AiBuildPlan,
+  options: { freeTaste?: boolean } = {},
+): string | null {
   const { screens } = plan
-  if (
-    screens.length < AI_SITE_PAGES.min ||
-    screens.length > AI_SITE_PAGES.max
-  ) {
-    return `This plan builds ${screens.length} ${screens.length === 1 ? 'page' : 'pages'}, and a site scaffold builds ${AI_SITE_PAGES.min} to ${AI_SITE_PAGES.max}. Describe the site again.`
+  const band = aiSitePagesBand(options.freeTaste)
+  if (screens.length < band.min || screens.length > band.max) {
+    return `This plan builds ${screens.length} ${screens.length === 1 ? 'page' : 'pages'}, and ${
+      options.freeTaste ? "a Free workspace's site scaffold" : 'a site scaffold'
+    } builds ${band.min} to ${band.max}. Describe the site again.`
   }
   const slugs = new Set<string>()
   for (const screen of screens) {
@@ -380,8 +510,11 @@ export function aiSitePlanShapeRefusal(plan: AiBuildPlan): string | null {
  * Why a scaffold cannot build this plan, in a sentence a member reads when
  * confirming it; `null` when it can.
  */
-export function aiSitePlanRefusal(plan: AiBuildPlan): string | null {
-  const shape = aiSitePlanShapeRefusal(plan)
+export function aiSitePlanRefusal(
+  plan: AiBuildPlan,
+  options: { freeTaste?: boolean } = {},
+): string | null {
+  const shape = aiSitePlanShapeRefusal(plan, options)
   if (shape) return shape
   const prerequisites = aiSitePlanPrerequisites(plan)
   if (!prerequisites.length) return null

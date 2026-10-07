@@ -40,6 +40,14 @@ describe('normalizeNotificationLink', () => {
     expect(normalizeNotificationLink('/org/billing?status=success', ctx)).toBe(
       '/acme/billing?status=success',
     )
+    // A query straight after the prefix (AGL-3593): an AI job's link.
+    expect(normalizeNotificationLink('/org?aiJob=job-1', ctx)).toBe('/acme?aiJob=job-1')
+    expect(normalizeNotificationLink('/host-abc123?aiJob=job-1', ctx)).toBe(
+      '/acme/hosts/shop?aiJob=job-1',
+    )
+    expect(normalizeNotificationLink('/host-abc123456?aiJob=job-1', ctx)).toBe(
+      '/host-abc123456?aiJob=job-1',
+    )
   })
 
   it('rewrites the bare hosts list', () => {

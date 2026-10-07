@@ -88,8 +88,9 @@ import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin/server/rel
  *        the trusted-hop client address, so a farm rotating accounts
  *        behind one address meets one budget; skipped when no address is
  *        readable
- *   403  account age (AGL-2925): a Free workspace's caller must hold an
- *        account older than `AI_FREE_MIN_ACCOUNT_AGE_HOURS`; paid
+ *   403  account age (AGL-2925), off by default (AGL-3591): when
+ *        `AI_FREE_MIN_ACCOUNT_AGE_HOURS` is set, a Free workspace's caller
+ *        must hold an account at least that old; paid
  *        workspaces and staff never consult it, and a record that cannot
  *        be read is a 503 rather than an admission
  *   ---  the reservation, which fails CLOSED: it is the only global, atomic
@@ -302,8 +303,9 @@ export async function aiGateLadder(
     )
   }
 
-  // A Free workspace's caller must have held an account for a day
-  // (AGL-2925). Read from the pool the token was minted in — a tenant
+  // A Free workspace's caller must have held an account for
+  // `AI_FREE_MIN_ACCOUNT_AGE_HOURS` (AGL-2925) — zero, so off, unless a
+  // deployment sets it (AGL-3591). Read from the pool the token was minted in — a tenant
   // user's record is not in the project pool — and after the rate limits,
   // so a burst cannot turn one cached read into many.
   const tooYoung = await freeAccountAgeRefusal({

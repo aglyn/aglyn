@@ -2366,8 +2366,12 @@
       "contributes": {
         "console": {
           "shell": true,
+          "routes": [
+            "/ai-jobs"
+          ],
           "slots": [
             "consoleDock",
+            "consoleTopBar",
             "automationEditor",
             "automationRun",
             "besignerInspector",

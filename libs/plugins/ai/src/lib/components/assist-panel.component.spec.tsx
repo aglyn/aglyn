@@ -109,6 +109,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 // folds `aiAddon` only once the declaration is registered.
 import '../declarations'
 import AssistPanelComponent from './assist-panel.component'
+import { openAiJobs, resetAiJobsStoreForTests } from './ai-jobs-store'
 
 /**
  * The canned `/api/assist/chat` response, or null for "this test must not
@@ -117,6 +118,8 @@ import AssistPanelComponent from './assist-panel.component'
  * and silently empty `posts` — the very array these suites assert on.
  */
 let chatResponse: unknown = null
+/** What the jobs route's `status=active` list answers (AGL-3593); `null` refuses it. */
+let activeJobs: unknown[] | null = null
 
 /** One SSE `done` event, enough for the send path to complete cleanly. */
 function armChatResponse(): void {
@@ -185,8 +188,13 @@ beforeEach(() => {
   routeScope.currentOrg = { $id: 'org-1', slug: 'acme' }
   sessionStorage.clear()
   chatResponse = null
+  activeJobs = null
+  resetAiJobsStoreForTests()
   global.fetch = jest.fn(async (url: string, init: RequestInit) => {
     posts.push([String(url), JSON.parse(String(init?.body ?? '{}'))])
+    if (String(url).includes('status=active') && activeJobs) {
+      return { ok: true, status: 200, json: async () => ({ jobs: activeJobs }) }
+    }
     if (!chatResponse) throw new Error(`unarmed request to ${url}`)
     return chatResponse
   }) as unknown as typeof fetch
@@ -352,8 +360,9 @@ describe('the AI jobs drawer is mounted in the panel (AGL-2904)', () => {
     render(<AssistPanelComponent {...dockProps()} />)
     fireEvent.click(screen.getByLabelText('Open Aglyn Assist'))
     expect(await screen.findByLabelText('Show AI jobs')).toBeTruthy()
-    // Collapsed, so opening the panel made no request the thread did not.
-    expect(global.fetch).not.toHaveBeenCalled()
+    // Collapsed with nothing in flight, so the panel read only the shared
+    // list of unsettled jobs the top-bar indicator reads too (AGL-3593).
+    expect(posts.map(([url]) => url)).toEqual(['/api/ai/jobs?orgId=org-1&status=active&limit=20'])
   })
 
   it('is absent on a plan without aiGenerative', async () => {
@@ -434,5 +443,79 @@ describe('a refusal is written for the person reading it', () => {
     // what the old line never did.
     expect(text).toMatch(/different words/i)
     expect(text).toMatch(/set up this workspace|enabling the assistant/i)
+  })
+})
+
+/**
+ * AI jobs, findable from anywhere (AGL-3593): the launcher says what waits
+ * inside it, and every "Open AI jobs" opens the panel on its drawer.
+ */
+describe('the launcher and the open action (AGL-3593)', () => {
+  const planReady = {
+    id: 'job-plan',
+    orgId: 'org-1',
+    hostId: 'host-1',
+    kind: 'site',
+    status: 'needs_review',
+    brief: 'A roofer',
+    batch: null,
+    steps: [
+      { name: 'plan', status: 'done', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+      { name: 'generate', status: 'pending', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+    ],
+    outputs: [],
+    creditsReserved: 0,
+    creditsSpent: 0,
+    createdBy: 'viewer',
+    createdAt: '2026-10-06T10:00:00.000Z',
+    updatedAt: '2026-10-06T10:00:00.000Z',
+    error: null,
+    running: false,
+    plan: null,
+    review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+  }
+
+  beforeEach(() => {
+    currentOrg.org = { plan: 'pro', billingStatus: 'active', seatAddons: { aiAddon: true } }
+  })
+
+  it('badges the launcher and names the job that needs the person', async () => {
+    activeJobs = [planReady]
+    render(<AssistPanelComponent {...dockProps()} />)
+    const launcher = await screen.findByLabelText('Open Aglyn Assist, 1 AI job needs you')
+    expect(launcher.querySelector('[data-ai-jobs-badge="needs-you"]')).toBeTruthy()
+  })
+
+  it('shows no badge with nothing in flight', async () => {
+    activeJobs = []
+    const { container } = render(<AssistPanelComponent {...dockProps()} />)
+    await waitFor(() => expect(posts.length).toBe(1))
+    expect(screen.getByLabelText('Open Aglyn Assist')).toBeTruthy()
+    expect(container.querySelector('[data-ai-jobs-badge]')).toBeNull()
+  })
+
+  it('opens the panel on its expanded drawer when anything asks to open AI jobs', async () => {
+    activeJobs = []
+    render(<AssistPanelComponent {...dockProps()} />)
+    await waitFor(() => expect(posts.length).toBe(1))
+    // The drawer reads its list once expanded; answer it with the job.
+    ;(global.fetch as jest.Mock).mockImplementation(async (url: string) => {
+      posts.push([String(url), {}])
+      if (String(url).includes('status=active')) {
+        return { ok: true, status: 200, json: async () => ({ jobs: [planReady] }) }
+      }
+      if (String(url).startsWith('/api/ai/jobs?')) {
+        return { ok: true, status: 200, json: async () => ({ jobs: [planReady] }) }
+      }
+      throw new Error(`unarmed request to ${url}`)
+    })
+    openAiJobs({ jobId: 'job-plan' })
+    expect(await screen.findByLabelText('Hide AI jobs')).toBeTruthy()
+    const row = await waitFor(() => {
+      const found = document.querySelector('[data-ai-job-id="job-plan"]')
+      expect(found).toBeTruthy()
+      return found as HTMLElement
+    })
+    expect(row.getAttribute('aria-current')).toBe('true')
   })
 })

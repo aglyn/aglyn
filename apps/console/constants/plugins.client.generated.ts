@@ -135,7 +135,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'ai',
     apiPrefixes: ["ai","assist"],
     register: {"console":"registerAiConsole","staff":"registerAiConsole"},
-    contributes: {"console":{"shell":true,"slots":["consoleDock","automationEditor","automationRun","besignerInspector","besignerToolbar","experimentResult","experimentVariants","hostAutomations","hostComponents","hostFirstRun","hostForms","hostLayouts","hostMembers","hostScreens","hostSeo","hostTemplates","hostTheme","importMapping","orgBillingUsage","orgMember","orgMembersListColumn","orgSites","productEditor","productImport","productsHub","recordEmail","recordInsights","seoFields","staffOrg","staffOrgUsageColumn","staffOrgsListColumn","staffUser"]}},
+    contributes: {"console":{"shell":true,"routes":["/ai-jobs"],"slots":["consoleDock","consoleTopBar","automationEditor","automationRun","besignerInspector","besignerToolbar","experimentResult","experimentVariants","hostAutomations","hostComponents","hostFirstRun","hostForms","hostLayouts","hostMembers","hostScreens","hostSeo","hostTemplates","hostTheme","importMapping","orgBillingUsage","orgMember","orgMembersListColumn","orgSites","productEditor","productImport","productsHub","recordEmail","recordInsights","seoFields","staffOrg","staffOrgUsageColumn","staffOrgsListColumn","staffUser"]}},
     load: () => import('@aglyn/plugins-ai'),
   },
   {

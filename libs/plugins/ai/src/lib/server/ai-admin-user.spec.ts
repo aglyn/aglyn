@@ -70,6 +70,7 @@ function mockMakeCollection(path: string): any {
     doc: (id: string) => ({
       id,
       path: `${path}/${id}`,
+      get: async () => mockSnapshotOf(`${path}/${id}`),
       collection: (name: string) => mockMakeCollection(`${path}/${id}/${name}`),
     }),
   }
@@ -199,6 +200,26 @@ describe('/api/ai/admin/user (AGL-2928)', () => {
       requests: 9,
       refusals: 1,
     })
+  })
+
+  it('carries the account’s Free allowance this month, net of credits given back (AGL-3595)', async () => {
+    // 227 credits spent, 200 given back: the gate reads 27, and so does staff.
+    mockDocs[`users/user-a/aiUsage/${THIS_MONTH}`] = { estCostUsd: 0.227, returnedUsd: 0.2 }
+    staff()
+    const body = await (await get()).json()
+    expect(body.allowance).toEqual({
+      uid: 'user-a',
+      month: THIS_MONTH,
+      usedCredits: 27,
+      limitCredits: 300,
+      returnedCredits: 200,
+    })
+  })
+
+  it('reads an account with no allowance document as none spent', async () => {
+    staff()
+    const body = await (await get()).json()
+    expect(body.allowance).toMatchObject({ usedCredits: 0, limitCredits: 300, returnedCredits: 0 })
   })
 
   it('writes no audit row for opening the card', async () => {

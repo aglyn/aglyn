@@ -96,6 +96,60 @@ alert email escalates on.
 and the AI features are overridden per organization, and to Lockdown, where
 the `ai-assist` and `ai-generate` feature keys pause AI for one organization.
 
+## Compensating a customer's AI credits {#compensating-credits}
+
+When a fault of ours spent a customer's AI credits — a generation that failed
+after it had already drawn, a refusal our own code caused — give the credits
+back rather than raising their band. A give-back undoes the one month's spend;
+a band override changes every month after it.
+
+**Who can.** The `billing` and `super` staff roles. Anyone else sees the
+buttons disabled with the reason.
+
+**Where.** The AI card on **Staff → Organizations → an organization** carries
+two header actions, and each recent generation job a row action:
+
+- **Give back credits** — a number of credits, back to the meter you choose.
+  It opens at the amount that puts the meter back to zero; from a job's row it
+  opens at what that job spent, with the job id filled in.
+- **Reset this month** — everything the meter used this month, each meter its
+  own figure.
+- **Give back this job's credits** (the job's row menu) — the first, prefilled
+  for that job.
+
+**Which meter.** A paid workspace has one: its **workspace band**. A Free
+workspace has two, and both refuse at 300 credits — its own band, and its
+**owner's Free allowance**, which every free workspace that person owns draws
+on. A Free customer stopped by either is stopped, so the dialog defaults to
+**both**; the amount then applies to each, and can be no more than the lower
+of the two. On **Staff → Users → an account**, the same two actions give back
+to that account's Free allowance alone.
+
+**What it asks.** A **reason** — required, and written to the audit log — and,
+optionally, the AI job id it compensates.
+
+**What happens.**
+
+- The amount cannot exceed what the meter used this month, after earlier
+  give-backs. Asking for more is refused and names each meter's figure.
+- The spend is never erased. The month's record keeps what was spent, adds
+  what was given back beside it, and keeps each give-back with who gave it,
+  why, and the job. The card then shows *N credits given back this month*.
+- Every figure the customer sees reads the reduced use straight away — the
+  usage strip in the AI panels and the credit banner — and their next request
+  is admitted against it. There is no notice; tell them in the conversation
+  that prompted it.
+- On a paid workspace past its band, the credits given back also come off the
+  overage the month bills. An overage that was **already charged** is not
+  refunded by this — use [Refunds](refunds.md) for the money.
+- One `ai.credits.giveBack` (or `ai.credits.reset`) row lands in the staff
+  audit log with the meters, amounts, reason, job and month. A double-click or
+  a retried request returns the credits once.
+
+It does not touch the daily request or message caps, which reset at midnight
+UTC on their own, and it does not change what the month cost us: the margin
+and spend figures keep the real provider spend.
+
 ## Where else the figures appear {#where-else}
 
 **Metered usage.** The rollup table on the same page, and the Usage dialog on

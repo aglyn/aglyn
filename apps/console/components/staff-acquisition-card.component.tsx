@@ -19,6 +19,7 @@
 
 import {
   describeAccountAcquisition,
+  googleAdsCampaignUrl,
   providerLabel,
   type AccountAcquisition,
   type AcquisitionDoor,
@@ -132,6 +133,13 @@ function Record({ view }: { view: StaffAcquisitionView }) {
         {record.medium ? `${record.source} / ${record.medium}` : record.source}
       </Row>
       {record.campaign ? <Row label="Campaign">{record.campaign}</Row> : null}
+      {record.adCampaignId ? (
+        <Row label="Google Ads campaign">
+          <AppLink href={googleAdsCampaignUrl(record.adCampaignId)} target="_blank" rel="noopener">
+            {record.adCampaignId}
+          </AppLink>
+        </Row>
+      ) : null}
       {utmExtras.length ? <Row label="Other tags">{utmExtras.join(' · ')}</Row> : null}
       <Row label="Landing page">
         {record.landing ? `${record.landing.host}${record.landing.path}` : '—'}

@@ -86,6 +86,7 @@ export function unknownRecord({ nowMs, provider = null, geo = null, accountCreat
     viaHost: null,
     utm: null,
     clickIds: [],
+    adCampaignId: null,
     door: 'unknown',
     provider,
     invitedToOrgId: null,

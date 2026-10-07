@@ -62,6 +62,7 @@ import {
   type LeavingNoticeFacts,
 } from '../../../../utils/leaving-notice'
 import { resolveNotFoundScreenId } from '../../../../utils/not-found-screen-id'
+import { isHoldingPageRequest } from '../../../../utils/holding-page'
 import { startRenderTimer } from '../../../../utils/render-timings'
 import type { LoadResult, Props } from './types'
 
@@ -800,6 +801,18 @@ const composePageResult = async (
         : routedScreenEntry
 
     if (!Array.isArray(screenEntry)) {
+      // A site that routes no page at all answers its root with the holding
+      // page (AGL-3594), never the 404: it is a site on its way, born for the
+      // guided AI start and waiting on its home page or the starter. Every
+      // other unmatched path is still the 404 below.
+      if (isHoldingPageRequest(path, pathsByScreenId)) {
+        return {
+          props: JSON.parse(
+            JSON.stringify({ data: { host: hostRes.host }, nodes: null, holdingPage: true }),
+          ),
+          revalidate: 60,
+        }
+      }
       // Plugin page resolvers (AGL-418): commerce composes PDP/PLP
       // template pages for /products/* and /collections/* — first
       // non-undefined answer is the page.

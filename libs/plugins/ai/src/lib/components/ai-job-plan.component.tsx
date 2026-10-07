@@ -23,15 +23,18 @@ import {
 } from '../model/ai-build-plan'
 import type { AiJobReview, AiJobSummary } from '../model/ai-jobs.types'
 import { aiJobPlanCreditEstimate } from '../model/ai-site-job'
+import { aiSiteStarterFallbackOffered } from '../model/ai-job-failure-copy'
+import { AiSiteStarterFallback } from './ai-site-starter-fallback.component'
 import { Box, Button, Collapse, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 
 /**
- * A job's plan and what it waits for (AGL-2935), inside the AI jobs drawer:
- * what the job reuses from the site, what it creates and why, the screens it
- * builds — and, while the job waits for a person, the one button that
- * confirms the plan or tries a refused step again. The drawer owns the
- * request; this renders.
+ * A job's plan and what it waits for (AGL-2935), inside the AI jobs drawer
+ * and the dialog that started the job (AGL-3593): what the job reuses from
+ * the site, what it creates and why, the screens it builds — and, while the
+ * job waits for a person, the one button that confirms the plan or tries a
+ * refused step again. Both send the same request (`resumeAiJobRequest`);
+ * this renders.
  */
 export interface AiJobPlanProps {
   job: AiJobSummary
@@ -45,6 +48,11 @@ export interface AiJobPlanProps {
    * allow from an answer that ignored its re-ask. A member reads the findings.
    */
   staff?: boolean
+  /**
+   * The signed-in user, for "Use the starter site instead" on a guided start
+   * that did not work out (AGL-3594); the action is drawn only when given.
+   */
+  user?: Parameters<typeof AiSiteStarterFallback>[0]['user']
 }
 
 /**
@@ -98,6 +106,7 @@ export function AiJobPlan({
   onResume,
   busy = false,
   staff = false,
+  user,
 }: AiJobPlanProps): JSX.Element | null {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const { plan, review } = job
@@ -160,7 +169,17 @@ export function AiJobPlan({
           ))}
         </Stack>
       )}
-      {review?.reason === 'doctrine' && review.findings.length > 0 && (
+      {/*
+        A review written for the member (AGL-3594) carries the checks' own
+        sentence as `detail`: its findings are then staff reading too, and the
+        member reads the job's one sentence alone.
+      */}
+      {staff && review?.detail && (
+        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+          {review.detail}
+        </Typography>
+      )}
+      {review?.reason === 'doctrine' && review.findings.length > 0 && (staff || !review.detail) && (
         <Box
           component="ul"
           sx={{ my: 0.5, pl: 2.5 }}
@@ -207,17 +226,26 @@ export function AiJobPlan({
           {`Estimated cost: about ${estimate.toLocaleString('en-US')} credits. What it costs is what its steps spend.`}
         </Typography>
       )}
+      {waiting && review.retryRefusal && review.reason !== 'plan' && (
+        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1 }}>
+          {review.retryRefusal}
+        </Typography>
+      )}
       {waiting && (
         <Button
           size="small"
           variant="contained"
-          disabled={busy}
+          // Disabled with its reason above when the Free allowance left
+          // cannot pay for another try (AGL-3594).
+          disabled={busy || (review.reason !== 'plan' && Boolean(review.retryRefusal))}
           onClick={() => onResume(job)}
           sx={{ mt: 1 }}
         >
           {review.reason === 'plan' ? 'Confirm plan' : 'Try again'}
         </Button>
       )}
+      {/* A guided start that did not work out can take the starter instead (AGL-3594). */}
+      {waiting && user && aiSiteStarterFallbackOffered(job) && <AiSiteStarterFallback job={job} user={user} />}
     </Box>
   )
 }

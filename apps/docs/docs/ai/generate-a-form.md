@@ -26,8 +26,8 @@ form is for in one box: who fills it in, what you need to know from them and wha
 with each submission. Then choose **Plan the form**.
 
 The job proposes its [plan](./how-aglyn-ai-builds.md#the-plan-comes-first) before it builds
-anything. Open **AI jobs** in the Assist panel to read it, then choose **Confirm plan** to build
-the form, or cancel.
+anything. The window shows the plan when it is ready: choose **Confirm plan** to build the form,
+or **Cancel job**. **Open AI jobs** follows the job in the Assist panel instead.
 
 ## What the form gets
 

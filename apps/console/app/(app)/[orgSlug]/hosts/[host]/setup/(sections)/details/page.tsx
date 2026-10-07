@@ -16,7 +16,8 @@
  */
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useUser } from '@aglyn/tenant-feature-instance'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import BusinessDetailsCard from '../../../../../../../../components/business-details-card.component'
 import BuiltInPageLayoutCard from '../../../../../../../../components/built-in-page-layout-card.component'
 import { useHostSubdomain } from '../../../../../../../../components/host-id-provider'
@@ -29,6 +30,7 @@ import {
   hostIsBlankSite,
   hostStartedBlank,
   rememberHostStartedBlank,
+  requestStarterSite,
 } from '../../../../../../../../utils/host-first-run'
 import { useHostSettingsScope } from '../../../host-settings-scope'
 
@@ -87,7 +89,24 @@ export default function HostSetupDetailsSection() {
   useEffect(() => {
     setUnasked(Boolean(hostId) && !hostStartedBlank(hostId))
   }, [hostId])
+  const { data: user } = useUser()
+  // Held in a ref so the request reads who is signed in, never the identity
+  // of the object that says so.
+  const userRef = useRef(user)
+  userRef.current = user
+  /*
+   * Leaving the guided start for a blank site (AGL-3594). A site born for the
+   * guided start has no page yet, so "blank" means the starter every other new
+   * site is born with: the route writes it — and is a no-op on a site that has
+   * a page already — and the layout's host snapshot draws it here.
+   */
   const startBlank = useCallback(() => {
+    rememberHostStartedBlank(hostId)
+    setUnasked(false)
+    void requestStarterSite(userRef.current, hostId)
+  }, [hostId])
+  // The guided start began a job: the zone closes, and no starter is written.
+  const leave = useCallback(() => {
     rememberHostStartedBlank(hostId)
     setUnasked(false)
   }, [hostId])
@@ -114,6 +133,7 @@ export default function HostSetupDetailsSection() {
           orgSlug={orgSlug}
           host={host ?? null}
           startBlank={startBlank}
+          leave={leave}
         />
       )}
       {/* Site brand mark (AGL-594): shown by the tenant's navigation loader. */}

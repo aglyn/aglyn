@@ -21,7 +21,20 @@
  * already confirmed is being spent, not decided.
  */
 
-import { fireEvent, render, screen } from '@testing-library/react'
+const mockFetch = jest.fn()
+const mockTrack = jest.fn()
+const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
+jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
+  __esModule: true,
+  authorizedFetch: (...args: unknown[]) => mockFetch(...args),
+}))
+jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
+  __esModule: true,
+  trackEvent: (...args: unknown[]) => mockTrack(...args),
+}))
+
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { aiSiteStarterFallbackOffered } from '../model/ai-job-failure-copy'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import { AI_SITE_PASS_CREDITS, aiPlanCreditEstimate } from '../model/ai-site-job'
 import { AiJobPlan, aiJobReviewDetails, aiPlanEmbedLine } from './ai-job-plan.component'
@@ -217,6 +230,39 @@ describe('where a refused answer broke its rules (AGL-3078)', () => {
   })
 })
 
+describe('a plan refused in words written for the member (AGL-3594)', () => {
+  const PLAIN = job({
+    kind: 'site',
+    plan: null,
+    review: {
+      reason: 'doctrine',
+      message: 'Something went wrong planning your site, and it did not use any of your AI credits. Try again.',
+      detail: 'This could not be built within the building rules. Rule 10 (Navigation and SEO travel with a page): A page reuses an address…',
+      findings: [{ rule: 10, code: 'plan-slug-taken', message: 'A page reuses an address the site or the plan already uses (/).', paths: ['screens[0].slug'] }],
+    },
+  })
+
+  it('shows a member no rule and no finding, and Try again', () => {
+    render(<AiJobPlan job={PLAIN} onResume={jest.fn()} />)
+    expect(screen.queryByText(/Rule 10/)).toBeNull()
+    expect(screen.queryByText(/reuses an address/)).toBeNull()
+    expect((screen.getByRole('button', { name: 'Try again' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('shows staff the checks’ own sentence and the findings', () => {
+    render(<AiJobPlan job={PLAIN} onResume={jest.fn()} staff />)
+    expect(screen.getByText(/Rule 10/)).toBeTruthy()
+    expect(screen.getByText('A page reuses an address the site or the plan already uses (/).')).toBeTruthy()
+  })
+
+  it('disables Try again with its reason when the Free allowance cannot cover a plan', () => {
+    const reason = 'You have 10 AI credits left this month, and a plan needs up to 35. Your credits refresh next month, or upgrade for more.'
+    render(<AiJobPlan job={job({ ...PLAIN, review: { ...PLAIN.review!, retryRefusal: reason } })} onResume={jest.fn()} />)
+    expect(screen.getByText(reason)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Try again' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
 describe('a planned third-party player, read with its cost before it is confirmed (AGL-3433)', () => {
   const named = (ref: string) => (ref.startsWith('new:') ? ref.slice(4) : ref)
 
@@ -244,5 +290,46 @@ describe('a planned third-party player, read with its cost before it is confirme
     }
     render(<AiJobPlan job={job({ plan })} onResume={() => undefined} />)
     expect(screen.getByText(/Embeds a YouTube player on \/about/).textContent).toContain('whether or not they press play')
+  })
+})
+
+describe('a guided start that did not work out offers the starter instead (AGL-3594)', () => {
+  const REFUSED = job({
+    plan: null,
+    review: { reason: 'doctrine', message: 'Something went wrong planning your site. Try again.', findings: [] },
+  })
+
+  it('is offered for a site job that failed, was canceled or stopped on a refused step, while it built nothing', () => {
+    expect(aiSiteStarterFallbackOffered(REFUSED)).toBe(true)
+    expect(aiSiteStarterFallbackOffered({ ...REFUSED, status: 'failed', review: null })).toBe(true)
+    expect(aiSiteStarterFallbackOffered({ ...REFUSED, status: 'canceled', review: null })).toBe(true)
+    // A plan to confirm, a job that built something, a running job or another kind: no.
+    expect(aiSiteStarterFallbackOffered(job())).toBe(false)
+    expect(aiSiteStarterFallbackOffered({ ...REFUSED, outputs: [{ resource: 'screen', id: 's', hostId: 'host-1', label: 'Home' }] as never })).toBe(false)
+    expect(aiSiteStarterFallbackOffered({ ...REFUSED, status: 'running' })).toBe(false)
+    expect(aiSiteStarterFallbackOffered({ ...REFUSED, kind: 'page' })).toBe(false)
+  })
+
+  it('asks the console for the starter and says so, reporting the first publish once', async () => {
+    mockFetch.mockReset()
+    mockTrack.mockReset()
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ provisioned: true, screenId: 'scrHome' }) })
+    render(<AiJobPlan job={REFUSED} onResume={jest.fn()} user={mockUser as never} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Use the starter site instead' }))
+    await screen.findByText(/now has the starter home page/)
+    expect(mockFetch.mock.calls[0][1]).toBe('/api/hosts/starter')
+    expect(JSON.parse(mockFetch.mock.calls[0][2].body)).toEqual({ hostId: 'host-1' })
+    await waitFor(() => expect(mockTrack).toHaveBeenCalledWith('site_published', { first_publish: true }))
+    expect(mockTrack).toHaveBeenCalledTimes(1)
+  })
+
+  it('is not offered beside a plan waiting to be confirmed', () => {
+    render(<AiJobPlan job={job()} onResume={jest.fn()} user={mockUser as never} />)
+    expect(screen.queryByRole('button', { name: 'Use the starter site instead' })).toBeNull()
+  })
+
+  it('is drawn only where the surface hands it the signed-in user', () => {
+    render(<AiJobPlan job={REFUSED} onResume={jest.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Use the starter site instead' })).toBeNull()
   })
 })

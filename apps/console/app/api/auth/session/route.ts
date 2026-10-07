@@ -839,7 +839,13 @@ async function handler(request: Request): Promise<Response> {
           decoded.uid,
           developerClaims,
         )
-        return Response.json({ token, tenantId: sessionTenantId ?? null }, { status: 200 })
+        // `uid` names the account the cookie belongs to, so a tab holding a
+        // different one adopts the cookie instead of keeping a stale user
+        // (`sessionNamesAnotherAccount`).
+        return Response.json(
+          { token, uid: decoded.uid, tenantId: sessionTenantId ?? null },
+          { status: 200 },
+        )
       } catch (error) {
         const code = (error as { code?: string })?.code ?? ''
         // AGL-467: surface WHY the exchange failed. A `createCustomToken`

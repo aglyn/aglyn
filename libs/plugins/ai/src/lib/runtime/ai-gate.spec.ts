@@ -422,7 +422,16 @@ describe('the ladder, one rung red at a time', () => {
     expect(mockCheckRateLimit).toHaveBeenCalledWith('ai-generate:user-1', expect.anything())
   })
 
-  it('403 account-age for a FREE workspace whose caller is younger than a day; a day passes; paid and staff never read the record (AGL-2925)', async () => {
+  it('admits a minutes-old caller on a FREE workspace by default — the hold is off (AGL-3591)', async () => {
+    mockGetOrgForUser.mockResolvedValue({ orgId: 'org-1', org: { plan: 'free', ownerUid: 'user-1' }, member: {} })
+    mockGetUser.mockResolvedValue(createdHoursAgo(0))
+    expect((await climb()) as Response).not.toBeInstanceOf(Response)
+    expect(mockGetUser).not.toHaveBeenCalled()
+    expect(mockReserve).toHaveBeenCalled()
+  })
+
+  it('when set, 403 account-age for a FREE workspace whose caller is younger than a day; a day passes; paid and staff never read the record (AGL-2925)', async () => {
+    process.env.AI_FREE_MIN_ACCOUNT_AGE_HOURS = '24'
     const free = { orgId: 'org-1', org: { plan: 'free', ownerUid: 'user-1' }, member: {} }
     mockGetOrgForUser.mockResolvedValue(free)
     mockGetUser.mockResolvedValue(createdHoursAgo(3))
@@ -453,7 +462,7 @@ describe('the ladder, one rung red at a time', () => {
     mockGetUser.mockClear()
     expect((await climb()) as Response).not.toBeInstanceOf(Response)
     expect(mockGetUser).not.toHaveBeenCalled()
-    delete process.env.AI_FREE_MIN_ACCOUNT_AGE_HOURS
+    process.env.AI_FREE_MIN_ACCOUNT_AGE_HOURS = '24'
 
     // A PAID workspace: the record is never read, however young the account.
     resetAccountAgeCache()
@@ -470,7 +479,8 @@ describe('the ladder, one rung red at a time', () => {
     expect(mockGetUser).not.toHaveBeenCalled()
   })
 
-  it('the account-age read is cached per instance, and a read that fails refuses CLOSED with 503', async () => {
+  it('when set, the account-age read is cached per instance, and a read that fails refuses CLOSED with 503', async () => {
+    process.env.AI_FREE_MIN_ACCOUNT_AGE_HOURS = '24'
     const free = { orgId: 'org-1', org: { plan: 'free', ownerUid: 'user-1' }, member: {} }
     mockGetOrgForUser.mockResolvedValue(free)
     mockGetUser.mockResolvedValue(createdHoursAgo(48))

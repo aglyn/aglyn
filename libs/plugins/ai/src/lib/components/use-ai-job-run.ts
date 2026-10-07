@@ -29,7 +29,8 @@ import {
   type AiJobKind,
   type AiJobSummary,
 } from '../model/ai-jobs.types'
-import { readEventFrames } from './assist-jobs-drawer.component'
+import { followAiJobEvents } from './ai-job-events'
+import { publishAiJob } from './ai-jobs-store'
 
 /**
  * Starting one AI job from a console control, and following it until it
@@ -168,25 +169,7 @@ export function useAiJobRun(user: MaybeTokenSource, failed: string): AiJobRun {
     watchRef.current?.abort()
     const controller = new AbortController()
     watchRef.current = controller
-    let again = true
-    while (again && !controller.signal.aborted) {
-      again = false
-      try {
-        const response = await authorizedFetch(
-          userRef.current,
-          `/api/ai/jobs/${encodeURIComponent(jobId)}/events?orgId=${encodeURIComponent(orgId)}`,
-          { signal: controller.signal },
-        )
-        if (!response.ok || !response.body) return
-        await readEventFrames(response.body, (event) => {
-          if (controller.signal.aborted) return
-          if (event['type'] === 'state') setJob(event['job'] as AiJobSummary)
-          else if (event['type'] === 'reconnect') again = true
-        })
-      } catch {
-        return
-      }
-    }
+    await followAiJobEvents(() => userRef.current, orgId, jobId, controller.signal, setJob)
   }, [])
 
   const start = useCallback(
@@ -214,6 +197,8 @@ export function useAiJobRun(user: MaybeTokenSource, failed: string): AiJobRun {
           return false
         }
         setJob(next)
+        // The indicator counts it from the moment it exists (AGL-3593).
+        publishAiJob(next)
       } catch {
         setNotice(failed)
         return false

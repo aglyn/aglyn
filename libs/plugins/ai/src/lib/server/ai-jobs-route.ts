@@ -20,6 +20,7 @@
 // GET climbs `ai-jobs-gate.ts`, which carries the same rung.
 
 import { randomUUID } from 'crypto'
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   AI_JOB_KINDS,
   type AiJobKind,
@@ -31,6 +32,7 @@ import {
 import { aiGateLadder } from '../runtime/ai-gate'
 import { aiJobAdmissionRefusal, aiJobSiteRefusal } from '../jobs/ai-job-admission'
 import { AI_JOB_BRIEF_MAX_CHARS } from '../jobs/ai-job-text-step'
+import { aiJobAdmittedInputs } from '../jobs/ai-job-auto-confirm'
 import {
   AI_JOB_INLINE_BUDGET_MS,
   aiJobNextStepMinimumMs,
@@ -42,6 +44,7 @@ import {
 import { releaseAssistMessage } from '../usage/assist-usage'
 import { aiUsageMeter } from '../usage/ai-usage-meter'
 import { aiJobsGate } from './ai-jobs-gate'
+import { AI_JOB_ACTIVE_STATUSES } from '../model/ai-job-activity'
 
 /**
  * AI generation jobs: create and list (AGL-2904).
@@ -219,6 +222,13 @@ export async function POST(request: Request): Promise<Response> {
   const now = new Date()
   let created: Awaited<ReturnType<typeof createAiJob>>
   try {
+    // The guided start's own plan confirmation (AGL-3594), kept only for a
+    // site job on a site that has published nothing of the owner's yet.
+    const inputs = await aiJobAdmittedInputs(gate.firestore, {
+      kind: parsed.kind,
+      hostId: parsed.hostId,
+      inputs: parsed.inputs,
+    })
     created = await createAiJob(
       gate.firestore,
       {
@@ -226,7 +236,7 @@ export async function POST(request: Request): Promise<Response> {
         hostId: parsed.hostId,
         kind: parsed.kind,
         brief: parsed.brief,
-        inputs: parsed.inputs,
+        inputs,
         model: parsed.model,
         createdBy: gate.uid,
         createdByEmail: gate.decoded.email ?? null,
@@ -304,14 +314,23 @@ export async function GET(request: Request): Promise<Response> {
   const status = (AI_JOB_STATUSES as readonly string[]).includes(rawStatus)
     ? (rawStatus as AiJobStatus)
     : undefined
+  // `active` (AGL-3593): every job not yet settled, which is what the
+  // console's top-bar indicator and the Assist launcher count.
+  const active = rawStatus === 'active'
   const limit = Number(url.searchParams.get('limit') ?? '')
   const now = new Date()
   const jobs = await listAiJobs(gate.firestore, gate.orgId, {
     ...(status ? { status } : {}),
+    ...(active ? { statuses: AI_JOB_ACTIVE_STATUSES } : {}),
     ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}),
   })
   return Response.json(
-    { jobs: jobs.map((job) => aiJobSummary(job, now)) },
+    {
+      jobs: jobs.map((job) => aiJobSummary(job, now)),
+      // Whether the workspace spends the Free taste (AGL-3594), so the guided
+      // start offers the Free page band from the request it already makes.
+      freeTaste: resolveEffectivePlan(gate.org as never) === 'free',
+    },
     { status: 200, headers: { 'Cache-Control': 'no-store' } },
   )
 }

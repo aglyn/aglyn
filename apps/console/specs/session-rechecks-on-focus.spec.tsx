@@ -342,3 +342,86 @@ describe('the listeners are cleaned up', () => {
     expect(fetchCalls).toEqual([])
   })
 })
+
+describe('a tab holding a different account than the shared cookie adopts the cookie', () => {
+  const desync = () => {
+    const event = new Event('unhandledrejection') as PromiseRejectionEvent
+    Object.defineProperty(event, 'reason', {
+      value: { code: 'auth/tenant-id-mismatch' },
+    })
+    window.dispatchEvent(event)
+  }
+
+  it('signs this tab in as the account the cookie names, in its pool, on focus', async () => {
+    // The staff tab left open while the person signed in as someone else in
+    // another tab: its user is the OLD account, the cookie the new one.
+    await mountedAndSettled(signedInUser())
+    answers = [{ ok: true, status: 200, body: { token: 'ct-new', uid: 'u2', tenantId: null } }]
+    becomeVisible()
+    await settle()
+    expect(mockPooledSignIn).toHaveBeenCalledWith(mockAuth, 'ct-new', null)
+    expect(mockSignOut).not.toHaveBeenCalled()
+  })
+
+  it('also adopts the same uid in ANOTHER pool — a uid is unique only within one', async () => {
+    await mountedAndSettled(signedInUser())
+    answers = [{ ok: true, status: 200, body: { token: 'ct-sso', uid: 'u1', tenantId: 'org-pool' } }]
+    becomeVisible()
+    await settle()
+    expect(mockPooledSignIn).toHaveBeenCalledWith(mockAuth, 'ct-sso', 'org-pool')
+  })
+
+  it('CONTROL — leaves a tab alone when the cookie is its own account', async () => {
+    await mountedAndSettled(signedInUser())
+    answers = [{ ok: true, status: 200, body: { token: 'ct', uid: 'u1', tenantId: null } }]
+    becomeVisible()
+    await settle()
+    expect(mockPooledSignIn).not.toHaveBeenCalled()
+  })
+
+  it('CONTROL — an answer with no uid never moves the tab', async () => {
+    await mountedAndSettled(signedInUser())
+    answers = [{ ok: true, status: 200, body: { token: 'ct', tenantId: null } }]
+    becomeVisible()
+    await settle()
+    expect(mockPooledSignIn).not.toHaveBeenCalled()
+  })
+
+  it('a cross-pool desync re-checks AT ONCE, even hidden and inside the throttle, then once more', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] })
+    try {
+      await mountedAndSettled(signedInUser())
+      // The tab is hidden (beforeEach) and nothing has re-checked it yet; a
+      // focus would be refused here, the desync is not.
+      answers = [
+        { ok: false, status: 401, body: { reason: 'absent' } },
+        { ok: true, status: 200, body: { token: 'ct-new', uid: 'u2', tenantId: null } },
+      ]
+      desync()
+      await settle()
+      expect(fetchCalls[0]).toEqual({ url: '/api/auth/session', method: 'GET' })
+      expect(mockPooledSignIn).not.toHaveBeenCalled()
+      // The absent cookie is NOT healed from this tab's stale user: that
+      // would mint the old account over the one being signed in.
+      expect(mockAuthorizedFetch).not.toHaveBeenCalled()
+      // The sibling's mint lands a beat later; the retry adopts it.
+      fetchCalls.length = 0
+      jest.advanceTimersByTime(3_000)
+      await settle()
+      expect(fetchCalls[0]).toEqual({ url: '/api/auth/session', method: 'GET' })
+      await settle()
+      expect(mockPooledSignIn).toHaveBeenCalledWith(mockAuth, 'ct-new', null)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('CONTROL — any other rejection is ignored', async () => {
+    await mountedAndSettled(signedInUser())
+    const event = new Event('unhandledrejection') as PromiseRejectionEvent
+    Object.defineProperty(event, 'reason', { value: new Error('something else') })
+    window.dispatchEvent(event)
+    await settle()
+    expect(fetchCalls).toEqual([])
+  })
+})

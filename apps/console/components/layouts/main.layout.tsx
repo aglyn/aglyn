@@ -52,6 +52,7 @@ import { TOP_BAR_HEIGHT } from '../../constants/shared'
 import NotificationPrompt from '../notification-prompt.component'
 import NotificationsMenu from '../notifications-menu.component'
 import OfflineIndicator from '../offline-indicator.component'
+import ConsoleTopBarSlot from '../console-top-bar-slot.component'
 import OrgSwitcherNav from '../org-switcher-nav.component'
 import UserMenu from '../user-menu.component'
 
@@ -551,6 +552,10 @@ export function MainLayout(props: MainLayoutProps) {
                 survives navigation rather than blinking on each one. Silent
                 on a healthy connection. */}
             <OfflineIndicator />
+            {/* A plugin's indicator (AGL-3593) — work in progress or waiting
+                on the reader — beside the bell, on the same persistent
+                chrome. Draws nothing when no plugin has anything to say. */}
+            <ConsoleTopBarSlot />
             <NotificationsMenu />
             {/* Pre-permission ask (AGL-663): the browser allows exactly one
                 native prompt per origin, so we offer in-app first where a

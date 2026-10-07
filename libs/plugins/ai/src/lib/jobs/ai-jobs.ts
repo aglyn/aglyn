@@ -31,6 +31,7 @@ import {
   assistRefusedByHardCap,
 } from '../usage/assist-credits'
 import {
+  AI_JOB_PLAN_STEP,
   AI_JOB_TERMINAL_STATUSES,
   type AiJob,
   type AiJobApplied,
@@ -77,11 +78,20 @@ import { AI_JOB_SEO_STEP_MINIMUM_MS } from './ai-job-seo-budget'
 import { AI_JOB_THEME_STEP_MINIMUM_MS } from './ai-job-theme-budget'
 import {
   assistExchangeExpiry,
+  assistUsageDay,
+  assistUsageMonth,
   recordAssistCost,
   releaseAssistMessage,
   reserveAssistMessage,
   type AssistReservation,
 } from '../usage/assist-usage'
+import {
+  aiJobRefundCredits,
+  refundJobCredits,
+  type AiJobRefundReason,
+} from '../usage/assist-job-refund'
+import { freeAssistAccount, type FreeAssistAccount } from '../usage/assist-free-taste'
+import { aiJobAutoConfirms } from './ai-job-auto-confirm'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
@@ -209,8 +219,9 @@ export function isAiJobTerminal(status: AiJobStatus): boolean {
 
 // ── The step runner registry ──────────────────────────────────────────────
 
-/** The step a planned kind runs first (AGL-2935). */
-export const AI_JOB_PLAN_STEP = 'plan'
+// The step a planned kind runs first (AGL-2935), named in the model so the
+// console reads a job's phase off its steps without loading this machine.
+export { AI_JOB_PLAN_STEP }
 
 /**
  * The kinds that build site structure, and so plan before they generate
@@ -365,6 +376,48 @@ let pauseReader: AiJobPauseReader | null = null
  */
 export function registerAiJobPauseReader(reader: AiJobPauseReader | null): void {
   pauseReader = reader
+}
+
+// ── Telling the person (AGL-3593) ──────────────────────────────────────────
+
+/**
+ * A change a person is told about: the job's plan waits for them (or a step
+ * stopped for their decision), the job finished, or it stopped.
+ */
+export type AiJobTransition = 'needs-review' | 'done' | 'failed'
+
+export type AiJobTransitionListener = (input: {
+  job: AiJob
+  to: AiJobTransition
+}) => Promise<void> | void
+
+let transitionListener: AiJobTransitionListener | null = null
+
+/**
+ * The listener told each time a job ENTERS `needs_review`, `done` or `failed`
+ * — once per entry, from the write that made it, so a stream that re-reads
+ * the job or a beat that sees it again tells nobody twice. Registered by its
+ * own module (`ai-jobs-notify.ts`) from the console's server surface, as the
+ * pause reader is, so this machine never loads the notification fan-out.
+ * `null` unregisters it.
+ */
+export function registerAiJobTransitionListener(listener: AiJobTransitionListener | null): void {
+  transitionListener = listener
+}
+
+/** Whether a transition listener is registered: what a surface that runs jobs must have. */
+export function aiJobTransitionListenerRegistered(): boolean {
+  return transitionListener !== null
+}
+
+/** Tells the listener; a listener that throws never fails the write it follows. */
+async function announceAiJobTransition(job: AiJob, to: AiJobTransition): Promise<void> {
+  if (!transitionListener) return
+  try {
+    await transitionListener({ job, to })
+  } catch (error) {
+    console.error('ai job transition listener failed', { orgId: job.orgId, jobId: job.$id, to, error })
+  }
 }
 
 /** Whether a pause reader is registered: what a surface that runs jobs must have. */
@@ -543,10 +596,18 @@ export async function getAiJob(
 
 export interface ListAiJobsOptions {
   status?: AiJobStatus
+  /**
+   * Any of these statuses (AGL-3593): the console's indicator asks for every
+   * job not yet settled in one read. Ignored when `status` is given.
+   */
+  statuses?: readonly AiJobStatus[]
   limit?: number
 }
 
-/** Newest first. Needs the (status, createdAt) index when filtered. */
+/**
+ * Newest first. Needs the (status, createdAt) index when filtered, which
+ * answers an `in` over statuses as it answers one status.
+ */
 export async function listAiJobs(
   firestore: Firestore,
   orgId: string,
@@ -555,6 +616,7 @@ export async function listAiJobs(
   const limit = Math.min(Math.max(1, Math.floor(options.limit ?? 20)), 100)
   let query: FirebaseFirestore.Query = jobsCollection(firestore, orgId)
   if (options.status) query = query.where('status', '==', options.status)
+  else if (options.statuses?.length) query = query.where('status', 'in', [...options.statuses])
   const snapshot = await query.orderBy('createdAt', 'desc').limit(limit).get()
   return snapshot.docs
     .map((doc) => jobFrom(doc))
@@ -583,6 +645,7 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
     outputs: job.outputs ?? [],
     creditsReserved: job.creditsReserved ?? 0,
     creditsSpent: job.creditsSpent ?? 0,
+    refundedCredits: job.refundedCredits ?? 0,
     createdBy: job.createdBy,
     createdAt: toIso(job.createdAt as Instant) ?? new Date(0).toISOString(),
     updatedAt: toIso(job.updatedAt as Instant) ?? new Date(0).toISOString(),
@@ -860,7 +923,7 @@ export async function recordStep(
   now = new Date(),
 ): Promise<RecordedStep> {
   const ref = jobsCollection(firestore, orgId).doc(jobId)
-  return firestore.runTransaction(async (tx: Transaction) => {
+  const recorded = await firestore.runTransaction(async (tx: Transaction) => {
     const job = jobFrom(await tx.get(ref))
     if (!job) throw new Error(`ai job ${orgId}/${jobId} vanished`)
     const steps = job.steps.map((step, index) =>
@@ -926,8 +989,12 @@ export async function recordStep(
     return {
       job: { ...job, ...(patch as unknown as Partial<AiJob>) } as AiJob,
       remaining,
+      // Entered `needs_review` in this write, rather than parked again.
+      parked: parksForReview && job.status !== 'needs_review',
     }
   })
+  if (recorded.parked) await announceAiJobTransition(recorded.job, 'needs-review')
+  return { job: recorded.job, remaining: recorded.remaining }
 }
 
 async function transition(
@@ -957,7 +1024,7 @@ export async function completeAiJob(
   jobId: string,
   now = new Date(),
 ): Promise<AiJob> {
-  const { job } = await transition(firestore, orgId, jobId, (current) =>
+  const { job, changed } = await transition(firestore, orgId, jobId, (current) =>
     isAiJobTerminal(current.status)
       ? null
       : {
@@ -968,6 +1035,7 @@ export async function completeAiJob(
           updatedAt: now,
         },
   )
+  if (changed) await announceAiJobTransition(job, 'done')
   return job
 }
 
@@ -990,7 +1058,7 @@ export async function failAiJob(
     stepIndex: detail?.stepIndex ?? null,
     error: detail?.error instanceof Error ? detail.error.message : detail?.error ?? null,
   })
-  const { job } = await transition(firestore, orgId, jobId, (current) =>
+  const { job, changed } = await transition(firestore, orgId, jobId, (current) =>
     isAiJobTerminal(current.status)
       ? null
       : {
@@ -1006,6 +1074,7 @@ export async function failAiJob(
           updatedAt: now,
         },
   )
+  if (changed) await announceAiJobTransition(job, 'failed')
   return job
 }
 
@@ -1078,6 +1147,68 @@ export async function cancelAiJob(
     })
   }
   return result
+}
+
+/**
+ * Gives back what a job spent when it failed on our side (AGL-3594), and
+ * records the give-back on the job — `refundedCredits`, `refundReason` and
+ * the count its next key is numbered by. Everything the job spent and has not
+ * given back where it delivered nothing; the failing step's own spend where
+ * it delivered drafts, which it keeps. `assist-job-refund.ts` has the rule
+ * and the bound. Never throws: a give-back that cannot be made leaves the job
+ * as the failure left it, metered as every other step.
+ */
+async function refundOurFailure(
+  firestore: Firestore,
+  orgId: string,
+  job: AiJob,
+  input: {
+    reason: AiJobRefundReason
+    /** The failing step's own credits, as the step was recorded. */
+    stepCredits: number
+    /** The Free taste's attribution, where the caller holds the reservation that decided it. */
+    free?: FreeAssistAccount | null
+    now: Date
+  },
+): Promise<AiJob> {
+  try {
+    const delivered = (job.outputs ?? []).some((output) => output.resource !== 'seo')
+    const credits = aiJobRefundCredits({
+      delivered,
+      jobCredits: job.creditsSpent ?? 0,
+      stepCredits: input.stepCredits,
+      alreadyRefunded: job.refundedCredits ?? 0,
+    })
+    if (credits <= 0) return job
+    const free =
+      input.free !== undefined
+        ? input.free
+        : freeAssistAccount(
+            ((await firestore.collection('orgs').doc(orgId).get()).data() ?? {}) as Partial<AglynOrgBilling>,
+          )
+    const ordinal = job.refunds ?? 0
+    const refund = await refundJobCredits(firestore, {
+      orgId,
+      free,
+      jobId: job.$id,
+      ordinal,
+      credits,
+      month: assistUsageMonth(input.now),
+      day: assistUsageDay(input.now),
+      reason: input.reason,
+    })
+    if (refund.status !== 'returned') return job
+    const { job: refunded } = await transition(firestore, orgId, job.$id, (current) => ({
+      refundedCredits: (current.refundedCredits ?? 0) + credits,
+      refundReason: input.reason,
+      refunds: (current.refunds ?? 0) + 1,
+      updatedAt: input.now,
+    }))
+    return refunded
+  } catch (error) {
+    console.error('ai job refund failed', { orgId, jobId: job.$id, error })
+    return job
+  }
 }
 
 /**
@@ -1373,22 +1504,24 @@ export async function runAiJobStep(
   const runner = aiJobRunnerForStep(job.kind, step.name)
   if (!runner) {
     await releaseHeld()
+    const failed = await failAiJob(firestore, orgId, jobId, AI_JOB_NOT_AVAILABLE_COPY, {
+      stepIndex,
+      error: `no runner registered for kind ${job.kind}`,
+    }, now)
     return {
       outcome: 'failed',
-      job: await failAiJob(firestore, orgId, jobId, AI_JOB_NOT_AVAILABLE_COPY, {
-        stepIndex,
-        error: `no runner registered for kind ${job.kind}`,
-      }, now),
+      job: await refundOurFailure(firestore, orgId, failed, { reason: 'unavailable', stepCredits: 0, now }),
     }
   }
   if ((step.attempts ?? 0) > AI_JOB_STEP_MAX_ATTEMPTS) {
     await releaseHeld()
+    const failed = await failAiJob(firestore, orgId, jobId, AI_UPSTREAM_FAILURE_COPY, {
+      stepIndex,
+      error: `step ${step.name} exhausted ${AI_JOB_STEP_MAX_ATTEMPTS} attempts`,
+    }, now)
     return {
       outcome: 'failed',
-      job: await failAiJob(firestore, orgId, jobId, AI_UPSTREAM_FAILURE_COPY, {
-        stepIndex,
-        error: `step ${step.name} exhausted ${AI_JOB_STEP_MAX_ATTEMPTS} attempts`,
-      }, now),
+      job: await refundOurFailure(firestore, orgId, failed, { reason: 'timeout', stepCredits: 0, now }),
     }
   }
 
@@ -1499,12 +1632,15 @@ export async function runAiJobStep(
       )
       return { outcome: 'requeued', job: requeued }
     }
+    const failed = await failAiJob(firestore, orgId, jobId, AI_UPSTREAM_FAILURE_COPY, {
+      stepIndex,
+      error,
+    }, now)
     return {
       outcome: 'failed',
-      job: await failAiJob(firestore, orgId, jobId, AI_UPSTREAM_FAILURE_COPY, {
-        stepIndex,
-        error,
-      }, now),
+      job: await refundOurFailure(firestore, orgId, failed, {
+        reason: 'provider', stepCredits: 0, free: reservation.free ?? null, now,
+      }),
     }
   }
 
@@ -1523,12 +1659,15 @@ export async function runAiJobStep(
       { status: 'failed', creditsSpent: 0, error: outcome.failure },
       now,
     )
+    const failed = await failAiJob(firestore, orgId, jobId, outcome.failure, {
+      stepIndex,
+      error: `step failure before the provider: ${outcome.failure}`,
+    }, now)
     return {
       outcome: 'failed',
-      job: await failAiJob(firestore, orgId, jobId, outcome.failure, {
-        stepIndex,
-        error: `step failure before the provider: ${outcome.failure}`,
-      }, now),
+      job: await refundOurFailure(firestore, orgId, failed, {
+        reason: 'step-failure', stepCredits: 0, free: reservation.free ?? null, now,
+      }),
     }
   }
 
@@ -1591,12 +1730,18 @@ export async function runAiJobStep(
       { status: 'failed', creditsSpent: credits, error: message, tokens },
       now,
     )
+    const failed = await failAiJob(firestore, orgId, jobId, message, {
+      stepIndex,
+      error: outcome.refused ? 'stop_reason refusal' : `step failure: ${message}`,
+    }, now)
+    // A model declining the brief is not our failure; a step's own is (AGL-3594).
     return {
       outcome: 'failed',
-      job: await failAiJob(firestore, orgId, jobId, message, {
-        stepIndex,
-        error: outcome.refused ? 'stop_reason refusal' : `step failure: ${message}`,
-      }, now),
+      job: outcome.refused
+        ? failed
+        : await refundOurFailure(firestore, orgId, failed, {
+            reason: 'step-failure', stepCredits: credits, free: reservation.free ?? null, now,
+          }),
     }
   }
 
@@ -1662,6 +1807,19 @@ export async function runAiJobStep(
       },
     })
   }
+  if (review?.reason === 'plan' && recorded.job.status === 'needs_review' && aiJobAutoConfirms(job)) {
+    // A guided site start confirms its own plan (AGL-3594): the resume
+    // door's confirmation, by the job's creator, and the build queued.
+    const resumed = await resumeAiJob(firestore, orgId, jobId, { uid: job.createdBy }, now)
+    await writeAiJobAudit(firestore, {
+      action: 'ai.job.resume',
+      actorUid: job.createdBy,
+      orgId,
+      jobId,
+      after: { status: resumed.job.status, confirmedPlan: true, autoConfirm: true },
+    })
+    return { outcome: 'done', job: resumed.job }
+  }
   if (review && recorded.job.status === 'needs_review') {
     // Nobody parked the job but its own step, so the row names no actor, as
     // the meter's park does.
@@ -1670,7 +1828,15 @@ export async function runAiJobStep(
       kind: job.kind,
       reason: review.reason,
     })
-    return { outcome: 'needs_review', job: recorded.job }
+    // A plan the plan rules still refused is our failure (AGL-3594).
+    return {
+      outcome: 'needs_review',
+      job: outcome.uncredited
+        ? await refundOurFailure(firestore, orgId, recorded.job, {
+            reason: 'plan-refused', stepCredits: credits, free: reservation.free ?? null, now,
+          })
+        : recorded.job,
+    }
   }
   if (recorded.remaining > 0 || isAiJobTerminal(recorded.job.status)) {
     return { outcome: 'done', job: recorded.job }

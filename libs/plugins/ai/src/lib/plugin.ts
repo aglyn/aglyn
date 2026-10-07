@@ -27,6 +27,7 @@ import {
   AssistPanelOnHost,
 } from './components/ai-permissions-on-host.component'
 import AiCreditsCard from './components/ai-credits-card.component'
+import AiJobsTopBarIndicator from './components/ai-jobs-indicator.component'
 import {
   AiCollaboratorCreditsCell,
   AiCollaboratorCreditsHeader,
@@ -84,6 +85,8 @@ import {
 import AiProductCopyCard from './components/ai-product-copy-card.component'
 import AiProductImportOption from './components/ai-product-import-option.component'
 import AiProductsHubCard from './components/ai-products-hub-card.component'
+import AiSiteBuildPage from './components/ai-site-build-page.component'
+import { AI_SITE_BUILD_HREF } from './components/ai-job-links'
 import { AI_PLUGIN_ID } from './constants'
 import { registerAiDeclarations } from './declarations'
 
@@ -123,12 +126,37 @@ export function registerAiConsole(): void {
         Component: AssistSignalsPage,
       },
     ],
+    // "Building your site" (AGL-3594): where the guided start lands a person,
+    // and where a site job's notification opens. An address under the site
+    // and no tab — `/ai-jobs/{jobId}`.
+    navItems: [
+      {
+        label: 'Building your site',
+        href: AI_SITE_BUILD_HREF,
+        unlisted: true,
+        ownsSubtree: true,
+        permission: 'ai.generate',
+        Component: AiSiteBuildPage,
+      },
+    ],
     widgets: [
       {
         slot: 'consoleDock',
         widgetId: 'ai-assist-dock',
         title: 'Assistant',
         Component: AssistPanelOnHost,
+      },
+      // The AI jobs indicator (AGL-3593), beside the notifications bell on
+      // every page: what the workspace's jobs are doing, and the way to them.
+      // Gated as the other generative widgets are; it asks the shell for the
+      // release flags of the jobs and of the panel it opens.
+      {
+        slot: 'consoleTopBar',
+        widgetId: 'ai-jobs-indicator',
+        title: 'AI jobs',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiJobsTopBarIndicator,
       },
       {
         slot: 'orgBillingUsage',

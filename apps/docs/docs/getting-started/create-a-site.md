@@ -19,8 +19,16 @@ settings. Everything you build lives under a site, and you can own several.
    real address from the first moment — you can attach a
    [custom domain](../building-sites/custom-domains/overview.md) later.
 
-   Every new site starts as a complete website, published and open to search
-   engines from the first visit:
+   When you can use Aglyn AI, the new site opens on **Start your site**, which
+   asks how you want to start: **Start from the starter site**, or **Start with
+   AI**, which plans your pages from a few questions — see
+   [Generate a website from a prompt](../ai/generate-a-site.md). Choosing the
+   starter site, skipping or closing the window all give the site the starter
+   described below. Until you choose, the site's address shows a short *coming
+   soon* page with its name, kept out of search results.
+
+   Every other new site starts with the starter straight away. The starter is a
+   complete website, published and open to search engines from the first visit:
 
    - a **Home** page at the site root with the sections an ordinary business site
      has — a hero with your site's name, what you offer, an about section, a photo

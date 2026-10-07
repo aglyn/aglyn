@@ -73,8 +73,8 @@ works in every spec and in neither app (AGL-3025). Make the call from a
 register function your manifest entry names, or list the file in
 `sideEffects`.
 
-**Which app area does each reach?** Console = nav/pages/widgets/providers
-and the `consoleDock` dock; org = `orgData`/`orgSettings`/`orgAddons`/
+**Which app area does each reach?** Console = nav/pages/widgets/providers,
+the `consoleDock` dock and the `consoleTopBar` indicator; org = `orgData`/`orgSettings`/`orgAddons`/
 `orgBillingUsage`/`orgBillingOverview`/`orgMember`/`orgMembersListColumn`
 zones + org-scoped config, permissions and entitlement keys; hosts =
 host-area pages/widgets + the `hostMembers` zone + the `hostTheme` zone,

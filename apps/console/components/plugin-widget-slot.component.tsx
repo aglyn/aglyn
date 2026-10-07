@@ -126,6 +126,8 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   siteMember: 'bare',
   // A floating dock, positioned by the widget itself.
   consoleDock: 'bare',
+  // A control in the top bar's status cluster, which spaces its controls.
+  consoleTopBar: 'bare',
   // Controls in the besigner's Attributes panel and its toolbar.
   besignerInspector: 'bare',
   besignerToolbar: 'bare',

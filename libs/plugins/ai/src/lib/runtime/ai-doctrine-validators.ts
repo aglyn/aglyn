@@ -57,6 +57,7 @@ import {
   type AiPlanCapabilities,
 } from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
+import { aiFreeSiteSectionsWithin } from '../model/ai-site-job'
 import {
   AI_INSTANCE_REF_PROP,
   validateAiNodeTree,
@@ -3361,9 +3362,14 @@ export function detectMissingNavAndSeo(
   inventory: AiSiteInventory | null,
 ): AiDoctrineViolation[] {
   const violations: AiDoctrineViolation[] = []
+  // The starter home a planned home page replaces (AGL-3594) keeps no
+  // address from the plan: publishing the page planned at `/` retires it.
   const taken = new Map(
-    (inventory?.screens ?? []).map((screen) => [slugKey(screen.slug), screen.name]),
+    (inventory?.screens ?? [])
+      .filter((screen) => !screen.replaceable)
+      .map((screen) => [slugKey(screen.slug), screen.name]),
   )
+  const clashes = new Set<string>()
   const seen = new Set<string>()
   const badSlugs: string[] = []
   const collisions: string[] = []
@@ -3374,6 +3380,7 @@ export function detectMissingNavAndSeo(
       badSlugs.push(`screens[${index}].slug`)
     } else if (seen.has(key) || taken.has(key)) {
       collisions.push(`screens[${index}].slug`)
+      clashes.add(`/${key}`)
     }
     seen.add(key)
     if (!screen.seoTitle || screen.seoTitle.length > AI_SEO_TITLE_MAX) {
@@ -3396,8 +3403,8 @@ export function detectMissingNavAndSeo(
     violations.push({
       rule: 10,
       code: 'plan-slug-taken',
-      message:
-        'A page reuses an address the site or the plan already uses. Give each page its own slug.',
+      // Names the addresses, so the one re-ask can move the page off them.
+      message: `A page reuses an address the site or the plan already uses (${[...clashes].join(', ')}). Give each page its own slug.`,
       paths: collisions,
     })
   }
@@ -3441,8 +3448,10 @@ export function detectMissedDuplicate(
       }
       return
     }
+    // A starter home is replaced, not duplicated (AGL-3594).
     const nearest = (inventory?.screens ?? []).find(
-      (existing) => !existing.template && aiNamesMatch(existing.name, screen.title),
+      (existing) =>
+        !existing.template && !existing.replaceable && aiNamesMatch(existing.name, screen.title),
     )
     if (nearest) {
       violations.push({
@@ -3565,7 +3574,23 @@ export function detectPlanOverFreeWall(
   const asked = plan.screens.reduce((sum, screen) => sum + screen.sections.length, 0)
   const layouts = freePlanLayouts(plan, inventory, capabilities)
   const pages = Math.max(plan.screens.length, 1)
-  const fits = aiFreePageSectionsWithin({ layouts, pages })
+  // A Free site scaffold (AGL-3594) is held to its page cap first, and then to
+  // what a SITE plan's worst case leaves for sections, with room for a retry.
+  const sitePages = capabilities.freeSitePages
+  if (sitePages !== undefined && plan.screens.length > sitePages) {
+    return [
+      {
+        rule: null,
+        code: 'plan-over-free-wall',
+        message: `This plan builds ${plan.screens.length} pages, and a Free workspace's site start builds at most ${sitePages}. Plan the home page and the one page the brief most needs.`,
+        paths: ['screens'],
+      },
+    ]
+  }
+  const fits =
+    sitePages !== undefined
+      ? aiFreeSiteSectionsWithin({ layouts, pages }, FREE_AI_TASTE_CREDITS_PER_MONTH)
+      : aiFreePageSectionsWithin({ layouts, pages })
   if (asked <= fits) return []
   const job = pages > 1 ? `a Free plan of ${pages} pages` : 'a Free page'
   const beside = layouts ? ` that creates ${layouts > 1 ? `${layouts} layouts` : 'its layout'}` : ''

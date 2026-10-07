@@ -2794,6 +2794,10 @@ service cloud.firestore {
                      'suspendedAt', 'suspendedReasonCode', 'suspendedMessage',
                      'suspendedUntilMs', 'suspendedMode', 'suspendedEnforcement',
                      'suspended', 'bandwidthCeiling',
+                     // When the starter site was written (AGL-3594). Decides
+                     // whether the guided AI start is still offered, and only
+                     // the starter route writes it.
+                     'starterProvisionedAt',
                      // `sendingDomain`/`sendingLocalPart` are this site's
                      // half of the custom-sending-domain model: together they
                      // are the `From:` address every recipient of this site's

@@ -34,6 +34,11 @@ import type { GridColDef } from '@mui/x-data-grid'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { aiUsageMonthLabel } from '../usage/ai-usage-wire'
+import type { StaffAiAccountAllowance } from '../usage/staff-org-ai'
+import {
+  StaffCreditReturnActions,
+  StaffCreditReturnDialog,
+} from './staff-ai-credit-return.component'
 
 /** One row, as `/api/ai/admin/user` answers it. */
 export interface StaffUserAiUsageRow {
@@ -114,6 +119,10 @@ const COLUMNS: GridColDef<StaffUserAiUsageRow>[] = [
  * while the claim is still loading. The route records an access row about
  * this person on every open, so an open the page did not mean to make would
  * be an access nobody made.
+ *
+ * Above the table, the account's own Free allowance this month — what every
+ * free workspace it owns draws on — and in the header the two acts that give
+ * credits back to it (AGL-3595).
  */
 const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
   const { data: user } = useUser()
@@ -124,6 +133,11 @@ const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
   const [rows, setRows] = useState<StaffUserAiUsageRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
+  const [allowance, setAllowance] = useState<StaffAiAccountAllowance | null>(null)
+  // Bumped after a give-back, so the card re-reads the allowance it changed.
+  const [version, setVersion] = useState(0)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [returning, setReturning] = useState<'give' | 'reset' | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -145,6 +159,8 @@ const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
           setRows(null)
         } else {
           setRows((payload?.rows ?? []) as StaffUserAiUsageRow[])
+          // Absent from a route older than give-backs.
+          setAllowance((payload?.allowance ?? null) as StaffAiAccountAllowance | null)
         }
       } catch {
         if (active) {
@@ -158,7 +174,7 @@ const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
     return () => {
       active = false
     }
-  }, [uid, signedInUid])
+  }, [uid, signedInUid, version])
 
   return (
     <CardDisplay
@@ -168,9 +184,47 @@ const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
         excerpt:
           'This account’s AI credits in every workspace it belongs to, month by month. Opening it is recorded as a staff access about this person.',
       })}
+      HeaderProps={{
+        action: (
+          <StaffCreditReturnActions
+            disabled={!allowance}
+            onGive={() => setReturning('give')}
+            onReset={() => setReturning('reset')}
+          />
+        ),
+      }}
       contentGutterX
       contentGutterY
     >
+      {allowance ? (
+        <StaffCreditReturnDialog
+          open={returning !== null}
+          mode={returning ?? 'give'}
+          target={{ uid }}
+          workspace={null}
+          account={{ used: allowance.usedCredits, limit: allowance.limitCredits }}
+          onClose={() => setReturning(null)}
+          onReturned={(message) => {
+            setReturning(null)
+            setNotice(message)
+            setVersion((current) => current + 1)
+          }}
+        />
+      ) : null}
+      {notice ? (
+        <Alert severity="success" onClose={() => setNotice(null)} sx={{ mb: 2 }}>
+          {notice}
+        </Alert>
+      ) : null}
+      {allowance ? (
+        <Typography variant="body2" sx={{ mb: 1 }}>
+          {`Free AI allowance this month: ${allowance.usedCredits.toLocaleString()} of ${allowance.limitCredits.toLocaleString()} credits used across the free workspaces this account owns` +
+            (allowance.returnedCredits
+              ? ` (${allowance.returnedCredits.toLocaleString()} given back)`
+              : '') +
+            '.'}
+        </Typography>
+      ) : null}
       {!ready ? (
         <Typography variant="body2" color="text.secondary">
           {'Loading…'}

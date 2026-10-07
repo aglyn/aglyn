@@ -493,6 +493,14 @@ export interface AglynHost extends AglynDocument {
    * (AGL-3478).
    */
   defaultHomeScreenId?: ScreenUid
+  /**
+   * When the starter was written to a site born without it (AGL-3594): the
+   * person left the guided AI start for a blank site, or traded a guided
+   * start that did not work out for the starter. The site has made its
+   * choice, so the guided start is not offered again. Absent on every site
+   * born with the starter, which may still be offered it.
+   */
+  starterProvisionedAt?: unknown
   /** Screen rendered (noindex) for unmatched paths (AGL-87). */
   notFoundScreenId?: ScreenUid
   /**

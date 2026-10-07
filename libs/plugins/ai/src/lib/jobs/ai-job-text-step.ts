@@ -114,6 +114,13 @@ export interface AiJobStepOutcome {
    * step back, so trying again runs the same one.
    */
   review?: AiJobReview
+  /**
+   * The answer was refused by the platform's own checks, not the model's
+   * (AGL-3594): the machine meters the step as any other and then gives the
+   * job's credits back to the meters it was charged to (`refundJobCredits`),
+   * a bounded number of times a day.
+   */
+  uncredited?: boolean
 }
 
 export interface AiJobStepContext {

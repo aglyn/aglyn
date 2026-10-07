@@ -106,6 +106,11 @@ export interface AccountAcquisition {
   utm: FirstTouchUtm | null
   /** Which ad click ids the landing URL carried — presence only. */
   clickIds: FirstTouchClickId[]
+  /**
+   * The Google Ads campaign the click came from (`gad_campaignid`), which
+   * auto-tagging appends whether or not the ad carries a `utm_campaign`.
+   */
+  adCampaignId: string | null
   /** How the account was created. */
   door: AcquisitionDoor
   /** The sign-in provider it was created with: `password`, `google.com`, `saml.…`. */
@@ -216,6 +221,7 @@ export function buildAccountAcquisition(input: AccountAcquisitionInput): Account
     viaHost: touch.via ?? null,
     utm: touch.utm ?? null,
     clickIds: touch.click ?? [],
+    adCampaignId: touch.adCampaign ?? null,
     ...base,
   }
 }
@@ -242,6 +248,7 @@ export function unknownAccountAcquisition(input: {
     viaHost: null,
     utm: null,
     clickIds: [],
+    adCampaignId: null,
     door: input.door ?? 'unknown',
     provider: input.provider ?? null,
     invitedToOrgId: input.invitedToOrgId ?? null,
@@ -327,6 +334,10 @@ export function readAccountAcquisition(value: unknown): AccountAcquisition | nul
     viaHost: label(raw['viaHost'], 253),
     utm: Object.keys(utm).length ? utm : null,
     clickIds,
+    adCampaignId:
+      typeof raw['adCampaignId'] === 'string' && /^\d{1,20}$/.test(raw['adCampaignId'])
+        ? raw['adCampaignId']
+        : null,
     door: doorOf(raw['door']),
     provider: providerOf(raw['provider']),
     invitedToOrgId: uidOf(raw['invitedToOrgId']),
@@ -339,6 +350,11 @@ export function readAccountAcquisition(value: unknown): AccountAcquisition | nul
   const copiedFrom = uidOf(raw['copiedFromUid'])
   if (copiedFrom) record.copiedFromUid = copiedFrom
   return record
+}
+
+/** The Google Ads page for a campaign id, opened in whichever account is signed in. */
+export function googleAdsCampaignUrl(campaignId: string): string {
+  return `https://ads.google.com/aw/campaigns?campaignId=${encodeURIComponent(campaignId)}`
 }
 
 /** A sign-in provider id as a person reads it. */
@@ -355,7 +371,8 @@ export function providerLabel(provider: string | null | undefined): string | nul
 
 function channelPhrase(record: AccountAcquisition): string {
   const from = displayHost(record.referrerHost) || record.source
-  const campaign = record.campaign ? `, ${record.campaign}` : ''
+  const named = record.campaign ?? (record.adCampaignId ? `campaign ${record.adCampaignId}` : null)
+  const campaign = named ? `, ${named}` : ''
   switch (record.channel) {
     case 'referral':
       return `Referral from ${from}${campaign}`

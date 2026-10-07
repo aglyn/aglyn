@@ -20,6 +20,7 @@ no configuration beyond the list of hosts the install serves itself.
 | `via` | One of your own hosts they arrived from before any surface captured them |
 | `utm` | `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` — trimmed, capped at 100 characters, refused when shaped like an email address |
 | `click` | Which of `gclid`, `fbclid`, `msclkid` the landing URL carried — presence only, never the value |
+| `adCampaign` | The Google Ads campaign id auto-tagging appends as `gad_campaignid` — digits only; a campaign every visitor from that ad shares, not an identifier |
 
 **An internal referrer is never a first touch.** A hop between two hosts the
 install names as its own carries the record forward and never replaces it, so
