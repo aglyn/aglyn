@@ -517,8 +517,8 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     disposition: 'subprocessor',
     entity: 'Google LLC (Google Fonts)',
     region: 'United States',
-    purpose: 'Serving web fonts to site visitors and to the editor',
-    publishedOn: '2026-08-18',
+    purpose: "Serving web fonts to the site editor and to the payment form in a site's checkout",
+    publishedOn: '2026-10-07',
     reason:
       "The stylesheet host for the font families a site owner picks in the theme: the besigner editor links it, and a published site's server reads it to rebuild the rules on the site's own origin, so a visitor's browser no longer asks it for a theme font (AGL-3656). A visitor's browser still reaches it from the in-page checkout, whose payment fields fetch their face through Stripe.js. Also the blog-cover generator.",
     dataReceived:
@@ -528,8 +528,8 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     disposition: 'subprocessor',
     entity: 'Google LLC (Google Fonts)',
     region: 'United States',
-    purpose: 'Serving web fonts to site visitors and to the editor',
-    publishedOn: '2026-08-18',
+    purpose: "Serving web fonts to the site editor and to the payment form in a site's checkout",
+    publishedOn: '2026-10-07',
     reason:
       "The font-file host preconnected from the besigner editor pages. A published site no longer sends visitors to it (AGL-3656): its server fetches each theme font file once and serves it from the site's own `/api/fonts` route.",
     dataReceived:
@@ -1039,7 +1039,7 @@ export const SDK_EGRESS: Record<string, SdkEgress> = {
   },
   /**
    * The native apps receive push straight from the platform's own push
-   * service: Apple's for an iPhone or iPad, Google's for an Android device.
+   * service: Apple's for an iPhone, iPad or Mac, Google's for an Android device.
    * The token is the collection every registered device push token is stored
    * in, which any sender reads; Apple's hosts are also declared above.
    */
@@ -1047,7 +1047,7 @@ export const SDK_EGRESS: Record<string, SdkEgress> = {
     token: 'MOBILE_DEVICES_COLLECTION',
     entity: 'Apple Inc.',
     reason:
-      'Delivery of a mobile push notification to the mobile app on an iPhone or iPad, to the device push token the app registered.',
+      'Delivery of a push notification to the app on an iPhone, iPad or Mac, to the device push token the app registered.',
     dataReceived: "The notification's title and body, and the device push token.",
     publishedOn: '2026-10-07',
   },
