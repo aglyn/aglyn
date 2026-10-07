@@ -46,12 +46,15 @@ public struct NativePluginContext {
   public let hostSlug: String?
   public let firestore: FirestoreReader
   public let api: ConsoleAPIClient
+  /// Writes the console makes straight to Firestore (no route), made the
+  /// same way under the same security rules, as the signed-in person.
+  public let writer: FirestoreWriter
   private let navigateAction: @MainActor (String, NativeParams) -> Void
   private let openBesignerAction: @MainActor (String) -> Void
 
   public init(
     uid: String, orgID: String?, hostID: String?, orgSlug: String?, hostSlug: String?,
-    firestore: FirestoreReader, api: ConsoleAPIClient,
+    firestore: FirestoreReader, api: ConsoleAPIClient, writer: FirestoreWriter = NoFirestoreWrites(),
     navigate: @escaping @MainActor (String, NativeParams) -> Void,
     openBesigner: @escaping @MainActor (String) -> Void
   ) {
@@ -62,6 +65,7 @@ public struct NativePluginContext {
     self.hostSlug = hostSlug
     self.firestore = firestore
     self.api = api
+    self.writer = writer
     self.navigateAction = navigate
     self.openBesignerAction = openBesigner
   }
