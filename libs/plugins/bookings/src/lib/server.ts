@@ -55,6 +55,7 @@ import { registerBookingFigureReader } from './server/booking-figures'
 import { registerBookingServiceAiCapability } from './server/booking-service-ai-capability'
 import { registerBookingServiceDraftWriter } from './server/booking-service-drafts'
 import { bookingRefundHandler } from './server/refund'
+import { bookingInPersonPaymentHandler } from './server/in-person-payment'
 // The booking's way back to the record it was booked from (AGL-2660): the
 // reference a booking link carried, and the meeting a free booking files on
 // landing.
@@ -1177,6 +1178,9 @@ export function registerBookingsConsoleApi(): void {
   // Refunding a paid booking (AGL-2315). Console-side, because it is
   // site-admin-gated and moves money — never a site-facing route.
   registerPluginApiRoute('bookings/refund', bookingRefundHandler)
+  // Paying for a booking at the counter, on the Aglyn POS app's card reader
+  // (AGL-3618). Staff-gated like a refund, and it moves money the same way.
+  registerPluginApiRoute('bookings/in-person-payment', bookingInPersonPaymentHandler)
   // The merchant-side `purchase` lookup (AGL-2481). A public, unauthenticated
   // read like `bookings/slots`, authorised by the unguessable Stripe session
   // id and answering with a projection that carries no guest identity.
