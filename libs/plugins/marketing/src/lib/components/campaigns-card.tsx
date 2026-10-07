@@ -17,7 +17,6 @@
 'use client'
 
 import { buildRoute, createResourceUid, pluginDocsHelp, Route } from '@aglyn/aglyn'
-import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 /*
  * The MODULE, not the barrel, for the two PURE helpers — a spec that mocks
  * `@aglyn/tenant-feature-instance` wholesale to stage its Firestore hooks
@@ -103,8 +102,8 @@ import {
   useMarketingOrgMount,
   type MarketingOrgMount,
 } from './marketing-org-mount'
-import { HOST_CAMPAIGNS_ZONE } from './campaigns-zones'
 import { useCampaignManageApi } from './use-campaign-send-api'
+import { HostCampaignsZone } from './campaign-list-zones'
 import { useCampaignTopicOptions } from './use-campaign-topic-options'
 
 /**
@@ -221,17 +220,6 @@ export function HostCampaignsCard(props: {
   const { orgId } = useMarketingOrgId(hostId)
   // A container is the org's, so deleting one from the org hub names the org.
   const manageApi = useCampaignManageApi(hostId, orgId)
-  /**
-   * Other ways to start a campaign (AGL-3596): the `hostCampaigns` zone this
-   * plugin declares, drawn through the shell's gated slot — under a site
-   * only, since a widget there starts a campaign on one site. `null` outside
-   * the console shell.
-   */
-  const CreateZone = useConsoleWidgetSlot()
-  const createZone =
-    CreateZone && hostId ? (
-      <CreateZone slot={HOST_CAMPAIGNS_ZONE.id} hostId={hostId} orgId={orgId ?? undefined} />
-    ) : null
 
   /*==========================================
    * TWO KINDS OF ROW, EACH ITS OWN QUERY (AGL-3321).
@@ -896,6 +884,24 @@ export function HostCampaignsCard(props: {
   const none =
     page.status !== 'loading' && !rows.length && !filtering && page.page === 0
 
+  /*
+   * Other ways to start a campaign, from plugins (AGL-3603): the
+   * `hostCampaigns` zone this plugin declares, drawn through the shell's own
+   * gated slot. On the organization's hub it is handed the sites a campaign
+   * could be placed on, since there is no one site to take.
+   */
+  const campaignsZone = (
+    <HostCampaignsZone
+      hostId={hostId}
+      orgId={orgId}
+      sites={
+        hostId
+          ? []
+          : (orgMount?.hosts ?? []).map((host) => ({ id: host.id, name: host.name }))
+      }
+    />
+  )
+
   return (
     <CardDisplay
       header={'Campaigns'}
@@ -908,7 +914,7 @@ export function HostCampaignsCard(props: {
       HeaderProps={{
         action: (
           <Stack direction="row" spacing={1}>
-            {createZone}
+            {campaignsZone}
             <Button
               size="small"
               variant="contained"
@@ -1008,7 +1014,7 @@ export function HostCampaignsCard(props: {
             none && kind === 'campaign' ? (
               <Stack direction="row" spacing={1}>
                 {/* Other ways to start a campaign, the header's zone again. */}
-                {createZone}
+                {campaignsZone}
                 <Button variant="contained" onClick={() => setCreateOpen(true)}>
                   {'Create campaign'}
                 </Button>

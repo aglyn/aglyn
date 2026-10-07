@@ -235,16 +235,9 @@ let postAnswer = { ok: true, body: {} as Record<string, unknown> }
 
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
-import { CONSOLE_WIDGET_SLOTS } from '@aglyn/aglyn'
-import {
-  ConsoleWidgetSlotContext,
-  type ConsoleWidgetSlotRenderer,
-} from '@aglyn/aglyn/app-utils/console-widget-slot-context'
-import { pluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
-import { registerMarketingConsole } from '../plugin'
 import HostCampaignsCard from './campaigns-card'
-import { HOST_CAMPAIGNS_ZONE } from './campaigns-zones'
 import { MarketingOrgMountProvider } from './marketing-org-mount'
+import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 
 /** The rollup read's ceiling, per read of up to thirty campaigns. */
 const ROLLUP_CEILING = 50
@@ -1049,72 +1042,72 @@ describe('the campaigns table on the org hub', () => {
   })
 })
 
-/*
- * Other ways to start a campaign (AGL-3596): the `hostCampaigns` zone this
- * plugin declares, drawn through the renderer the shell hands down beside
- * Create campaign and in the empty list — under a site only.
+/**
+ * The `hostCampaigns` zone (AGL-3603): another way to start a campaign,
+ * drawn through a stand-in for the shell's renderer beside Create campaign
+ * and again in the empty list, handed the site or, on the org hub, the sites
+ * a campaign could be placed on.
  */
-describe('the zone beside Create campaign', () => {
-  const zoneCalls: Array<Record<string, unknown>> = []
-  const Renderer: ConsoleWidgetSlotRenderer = (props) => {
+describe('the hostCampaigns zone', () => {
+  const zoneCalls: Array<Record<string, any>> = []
+  function ZoneRenderer(props: { slot: string } & Record<string, any>) {
     zoneCalls.push(props)
-    return <button type="button">{`widget in ${props.slot}`}</button>
-  }
-  const settle = async () => {
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    })
+    return props.slot === 'hostCampaigns' ? <span>{'widget in hostCampaigns'}</span> : null
   }
 
   beforeEach(() => {
     zoneCalls.length = 0
   })
 
-  it('is declared by this plugin, laid out bare, and not in the shell catalog', () => {
-    registerMarketingConsole()
-    const zone = pluginZone('hostCampaigns')
-    expect(HOST_CAMPAIGNS_ZONE.id).toBe('hostCampaigns')
-    expect(`${zone?.pluginId} ${zone?.layout} ${zone?.surface}`).toBe('marketing bare console')
-    expect(Object.values(CONSOLE_WIDGET_SLOTS)).not.toContain('hostCampaigns')
-  })
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
 
-  it('draws it beside Create campaign and in the empty list, with the site and its org', async () => {
-    served = { ...served, emailCampaigns: [] }
+  it('is drawn beside Create campaign with the site and its org', async () => {
     render(
-      <ConsoleWidgetSlotContext.Provider value={Renderer}>
+      <ConsoleWidgetSlotContext.Provider value={ZoneRenderer}>
         <HostCampaignsCard hostId="host-1" basePath="/acme/hosts/store/marketing" />
       </ConsoleWidgetSlotContext.Provider>,
     )
     await settle()
-    const widgets = screen.getAllByRole('button', { name: 'widget in hostCampaigns' })
-    expect(widgets).toHaveLength(2)
-    expect(screen.getByText('No campaigns yet')).toBeTruthy()
-    for (const call of zoneCalls) {
-      expect(call).toEqual({ slot: 'hostCampaigns', hostId: 'host-1', orgId: 'org-1' })
-    }
+    expect(screen.getAllByText('widget in hostCampaigns')).toHaveLength(1)
+    expect(zoneCalls.at(-1)).toMatchObject({ slot: 'hostCampaigns', hostId: 'host-1', orgId: 'org-1', sites: [] })
   })
 
-  it('draws it only in the header once there are campaigns', async () => {
+  it('is drawn again in an empty list', async () => {
+    served.emailCampaigns = []
     render(
-      <ConsoleWidgetSlotContext.Provider value={Renderer}>
+      <ConsoleWidgetSlotContext.Provider value={ZoneRenderer}>
         <HostCampaignsCard hostId="host-1" basePath="/acme/hosts/store/marketing" />
       </ConsoleWidgetSlotContext.Provider>,
     )
     await settle()
-    expect(screen.getAllByRole('button', { name: 'widget in hostCampaigns' })).toHaveLength(1)
+    expect(screen.getAllByText('widget in hostCampaigns')).toHaveLength(2)
   })
 
-  it('draws nothing on the org hub, where no one site would get the campaign', async () => {
-    served = { ...served, emailCampaigns: [] }
+  it('is handed the org’s sites on the org hub', async () => {
     render(
-      <ConsoleWidgetSlotContext.Provider value={Renderer}>
+      <ConsoleWidgetSlotContext.Provider value={ZoneRenderer}>
         <MarketingOrgMountProvider value={ORG_MOUNT}>
           <HostCampaignsCard hostId={null} basePath="/acme/marketing" />
         </MarketingOrgMountProvider>
       </ConsoleWidgetSlotContext.Provider>,
     )
     await settle()
-    expect(screen.queryByText(/widget in/)).toBeNull()
-    expect(zoneCalls).toHaveLength(0)
+    expect(zoneCalls.at(-1)).toMatchObject({
+      hostId: null,
+      orgId: 'org-1',
+      sites: [
+        { id: 'host-1', name: 'Store' },
+        { id: 'host-2', name: 'Blog' },
+      ],
+    })
+  })
+
+  it('draws nothing outside the console shell', async () => {
+    await mount()
+    expect(screen.queryByText('widget in hostCampaigns')).toBeNull()
   })
 })

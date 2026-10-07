@@ -22,13 +22,10 @@ import { AiDescribeButton } from './ai-describe-button.component'
 
 /**
  * "Create with AI" for email (AGL-3596): the same button and dialog as a
- * page's, a form's or a template's, beside the create actions of the lists
- * an email job and a campaign job fill.
- *
- * Both zones are hosted by the plugins that own the lists, on the
- * `hostScreens` contract (the site and its org), and this plugin restates
- * nothing else about them: `hostEmailTemplates` is the email plugin's list of
- * email designs, `hostCampaigns` the marketing plugin's list of campaigns.
+ * page's, a form's or a template's, beside New template on the email
+ * plugin's `hostEmailTemplates` zone (the `hostScreens` contract: the site
+ * and its org). The Campaigns section's door is a widget of its own
+ * (`ai-campaign-create.component`), on the marketing plugin's `hostCampaigns`.
  */
 
 /**
@@ -38,11 +35,6 @@ import { AiDescribeButton } from './ai-describe-button.component'
  */
 export function AiDescribeEmailButton(props: ConsoleHostScreensZoneProps) {
   return <AiDescribeButton {...props} kind="email" />
-}
-
-/** An email and the draft campaign that sends it, on a site's Campaigns (`hostCampaigns`). */
-export function AiDescribeCampaignButton(props: ConsoleHostScreensZoneProps) {
-  return <AiDescribeButton {...props} kind="campaign" />
 }
 
 export default AiDescribeEmailButton

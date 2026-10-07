@@ -81,10 +81,9 @@ const SITE_ZONES: readonly string[] = [
   'hostForms',
   // And on its Components page (AGL-3051).
   CONSOLE_WIDGET_SLOTS.hostComponents,
-  // And on its email templates and Campaigns (AGL-3596), zones the email
-  // and marketing plugins declare on a site's pages: plain ids.
+  // And on its email templates (AGL-3596), a zone the email plugin declares
+  // on a site's pages: a plain id.
   'hostEmailTemplates',
-  'hostCampaigns',
   // Create with AI in the media library (AGL-3602). On a site's Media page,
   // and in a picker opened for a site, it is listed from the site's set; on
   // the organization's Media page, which names no site, from the
@@ -126,6 +125,10 @@ const SITE_ZONES: readonly string[] = [
   // on a site's Overlays section and declared by it, so plain ids again.
   'hostOverlays',
   'overlayEditor',
+  // The Campaigns section's zone (AGL-3603). On the organization's hub it is
+  // listed from the workspace's set, and the job it starts still names the
+  // site it is placed on, which the jobs route refuses when AI is off there.
+  'hostCampaigns',
 ]
 
 /** Zones drawn on the WORKSPACE's pages, where no site's switch reaches. */

@@ -34,13 +34,13 @@ import {
   EXPERIMENT_VARIANTS_ZONE,
 } from './components/experiment-zones'
 import { HOST_OVERLAYS_ZONE, OVERLAY_EDITOR_ZONE } from './components/overlay-zones'
+import { HOST_CAMPAIGNS_ZONE } from './components/campaign-list-zones'
 import {
   MARKETING_CONSOLE_SECTIONS,
   MARKETING_ORG_CONSOLE_SECTIONS,
 } from './components/marketing-console-sections'
 import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { BUNDLE_ID } from './constants/bundle-common'
-import { HOST_CAMPAIGNS_ZONE } from './components/campaigns-zones'
 import { StaffOrgEmailCard } from './components/staff-org-email-card.component'
 import { registerMarketingRecordLists } from './model/overlay-record-list'
 import { registerMarketingRecordRoutes } from './model/marketing-record-routes'
@@ -122,18 +122,6 @@ export function registerMarketingConsole(): void {
   )
   registerPluginZone(
     {
-      zone: HOST_CAMPAIGNS_ZONE,
-      label: 'A site’s Campaigns',
-      surface: 'console',
-      // One item in the list's row of actions, beside Create campaign.
-      layout: 'bare',
-      description:
-        'On a site’s Campaigns, beside Create campaign and in the empty list: another way to start a campaign. A widget here is handed the site and its org and writes nothing through the page.',
-    },
-    { pluginId: BUNDLE_ID },
-  )
-  registerPluginZone(
-    {
       zone: EXPERIMENT_RESULT_ZONE,
       label: 'A/B test result',
       surface: 'console',
@@ -199,6 +187,11 @@ export function registerMarketingConsole(): void {
     OVERLAY_EDITOR_ZONE,
     'An overlay’s copy',
     'Among the overlay editor’s fields. A widget is handed the copy as the editor holds it, the field limits and the popup triggers, and proposes copy through `proposeValues`, which fills the fields unsaved; the editor’s Save is the write.',
+  )
+  bareZone(
+    HOST_CAMPAIGNS_ZONE,
+    'Start a campaign',
+    'On the Campaigns section, a site’s or the organization’s, beside Create campaign and again in the empty list: another way to start a campaign. A widget is handed the site, the organization and, on the organization’s hub, the sites a campaign could be placed on; it writes nothing through the list.',
   )
   registerMarketingRecordRoutes()
   // The site's overlays, for another plugin's picker to list (AGL-3080).

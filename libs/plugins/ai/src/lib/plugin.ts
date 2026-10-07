@@ -75,10 +75,7 @@ import {
   AiDescribeLayoutButton,
   AiDescribeTemplateButton,
 } from './components/ai-describe-button.component'
-import {
-  AiDescribeCampaignButton,
-  AiDescribeEmailButton,
-} from './components/ai-describe-email.component'
+import { AiDescribeEmailButton } from './components/ai-describe-email.component'
 import {
   AiExperimentResultCard,
   AiExperimentVariantsCard,
@@ -87,6 +84,7 @@ import {
   AiExplainAutomation,
   AiExplainRunFailure,
 } from './components/ai-explain-automation.component'
+import AiCreateCampaignButton from './components/ai-campaign-create.component'
 import {
   AiCreateOverlayButton,
   AiOverlayEditorCard,
@@ -453,10 +451,9 @@ export function registerAiConsole(): void {
         Component: AiDescribeComponentButton,
       },
       // An email design from a brief (AGL-3596), beside New template on a
-      // site's email templates — the zone the email plugin hosts — and an
-      // email with the draft campaign that sends it, beside Create campaign
-      // on the marketing plugin's Campaigns. The email job's and the
-      // campaign job's first entry points in the console.
+      // site's email templates — the zone the email plugin hosts. Its dialog
+      // also offers the draft campaign that would send it; the Campaigns
+      // section's own door is `ai-create-campaign`, below.
       {
         slot: 'hostEmailTemplates',
         widgetId: 'ai-describe-email',
@@ -464,14 +461,6 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiDescribeEmailButton,
-      },
-      {
-        slot: 'hostCampaigns',
-        widgetId: 'ai-describe-campaign',
-        title: 'Describe a campaign',
-        featureFlag: 'aiGenerative',
-        permission: 'ai.generate',
-        Component: AiDescribeCampaignButton,
       },
       // Automations by AI (AGL-2919), in the zones the workflows plugin hosts
       // on its Automation page: "Create with AI" beside Add action and Recipes,
@@ -661,6 +650,19 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiOverlayEditorCard,
+      },
+      // A campaign from a brief (AGL-3603), beside Create campaign on the
+      // Campaigns section the marketing plugin hosts: the `campaign` job's
+      // first console door, or the `email` job's where the plan sends no
+      // campaign email. Both write drafts that are aimed at nobody and sent
+      // by nobody until a member does.
+      {
+        slot: 'hostCampaigns',
+        widgetId: 'ai-create-campaign',
+        title: 'Create a campaign with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiCreateCampaignButton,
       },
     ],
   })

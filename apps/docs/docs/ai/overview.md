@@ -51,7 +51,7 @@ Each capability has its own page, next to the thing it builds:
 | Product copy, catalog and discount ideas | **Products → Create with AI**, and **Build your catalog with AI** on the products page | [Products with AI](products-with-ai.md) |
 | Help working the CRM | A record, the composer, an import | [CRM by AI](crm-by-ai.md) |
 | A designed email | **Emails → Templates → Create with AI** | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md) |
-| A campaign | **Marketing → Campaigns → Create with AI**, or **Also draft a campaign** on an email | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md) |
+| A campaign | **Marketing → Campaigns → Create with AI**, or **Also draft a campaign** on an email | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md#where-to-start-it) |
 | Variants for an A/B test, and its result in words | **Marketing → Experiments** | [A/B tests by AI](ab-tests-with-ai.md) |
 | Announcement bar and popup copy, or a new overlay | **Marketing → Overlays** | [Marketing with AI](marketing-with-ai.md#write-overlay-copy) |
 | What your analytics mean | **Analytics → Insights** | [Insights](../marketing-and-automation/analytics/insights.md) |

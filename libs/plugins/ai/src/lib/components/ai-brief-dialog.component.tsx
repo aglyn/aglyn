@@ -50,14 +50,16 @@ import { AiTemplateCollectionField } from './ai-template-collection-field.compon
  * The brief dialog every "Create with AI" opens (AGL-2907, AGL-3043, AGL-3051):
  * a page from the Screens page and from the Assist panel's AI jobs, a page
  * template from Templates, a layout from Layouts, a form from Forms, a
- * reusable component from Components, an email design from the Emails page's
- * templates and a campaign from Campaigns (AGL-3596).
+ * reusable component from Components, and an email design from the Emails
+ * page's templates (AGL-3596). The `campaign` kind is the job an email's door
+ * starts when the campaign is asked for too; the Campaigns section's own door
+ * is a dialog of its own (`ai-campaign-create.component`, AGL-3603).
  *
  * One text box, and whatever the kind's door reads beside it, start one job of
  * that kind: a page's optional page type; a template's subject and, for a
  * collection entry's page, its collection. A layout, a form and a component
- * read nothing but the brief and the site. An email's and a campaign's read
- * the optional kind of email; an email's door also offers to draft the
+ * read nothing but the brief and the site. An email's reads the optional
+ * kind of email, and its door also offers to draft the
  * campaign that would send it, which starts a `campaign` job instead — the
  * same design, plus a draft campaign aimed at nobody. The job plans first; once it
  * exists the dialog follows it live (AGL-3593) — planning, the plan with its

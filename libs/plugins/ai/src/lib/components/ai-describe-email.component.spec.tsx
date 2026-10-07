@@ -16,24 +16,24 @@
  */
 /**
  * "Create with AI" for email (AGL-3596): on a site's email templates
- * (`hostEmailTemplates`, the email plugin's zone) and on its Campaigns
- * (`hostCampaigns`, the marketing plugin's).
+ * (`hostEmailTemplates`, the email plugin's zone). The Campaigns section's
+ * door (`hostCampaigns`) is `ai-create-campaign`, covered in its own spec.
  *
  * Every render goes through the component the AI plugin REGISTERED on the
  * zone, so what is asserted is what that list draws:
  *
- * - each entry is gated as its siblings are, and absent while the jobs route
- *   says the feature is not this workspace's (403 or 404);
+ * - each entry is gated as its siblings are, and drawn at once, asking the
+ *   server nothing until it is used (AGL-3601);
  * - the email brief starts an `email` job for this site, with the kind of
  *   email when one is picked; asking for the campaign too starts a
  *   `campaign` job instead, which writes the same design and drafts the
- *   campaign; the Campaigns entry starts a `campaign` job outright;
+ *   campaign;
  * - `reply` — the kind only a platform-composed job sets — is not offered.
  */
 
 import { listConsoleWidgets } from '@aglyn/aglyn'
 import type { ConsoleHostScreensZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ComponentType } from 'react'
 
 const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
@@ -113,9 +113,8 @@ afterEach(() => {
 
 async function openDialog(zone: string, title: string) {
   const Widget = widgetFor(zone)
-  mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
   render(<Widget {...zoneProps} />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
   const dialog = screen.getByRole('dialog')
   expect(within(dialog).getByText(title)).toBeTruthy()
   return dialog
@@ -132,16 +131,26 @@ async function planIt(submit: string, kind: string, said: RegExp) {
   return JSON.parse(init.body)
 }
 
-describe('the entries are registered on the lists an email job and a campaign job fill', () => {
-  it.each([
-    ['hostEmailTemplates', 'ai-describe-email', 'Describe an email'],
-    ['hostCampaigns', 'ai-describe-campaign', 'Describe a campaign'],
-  ])('registers on %s, alone, behind aiGenerative and ai.generate', (zone, widgetId, title) => {
-    expect(registeredOn(zone)).toEqual([
+describe('the entries are registered on the lists an email job fills', () => {
+  it('registers on hostEmailTemplates, alone, behind aiGenerative and ai.generate', () => {
+    expect(registeredOn('hostEmailTemplates')).toEqual([
       expect.objectContaining({
-        slot: zone,
-        widgetId,
-        title,
+        slot: 'hostEmailTemplates',
+        widgetId: 'ai-describe-email',
+        title: 'Describe an email',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+      }),
+    ])
+  })
+
+  it('leaves the Campaigns section one AI door, the campaign widget of its own', () => {
+    // An email's dialog can still draft a campaign; the Campaigns list's own
+    // door is `ai-create-campaign` (AGL-3603), covered in its own spec.
+    expect(registeredOn('hostCampaigns')).toEqual([
+      expect.objectContaining({
+        slot: 'hostCampaigns',
+        widgetId: 'ai-create-campaign',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
       }),
@@ -161,16 +170,11 @@ describe('the entries are registered on the lists an email job and a campaign jo
     ])
   })
 
-  it.each([403, 404])('stays absent when the jobs route answers %s', async (status) => {
+  it('draws at once and asks nothing of a server until it is used (AGL-3601)', () => {
     const Widget = widgetFor('hostEmailTemplates')
-    mockFetch.mockResolvedValueOnce(json({ error: 'no' }, status))
-    const { container } = render(<Widget {...zoneProps} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
-    expect(String(mockFetch.mock.calls[0][0])).toBe('/api/ai/jobs?orgId=org-1&limit=1')
-    // A tick for the verdict to land, and still nothing.
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(container.textContent).toBe('')
-    expect(screen.queryByRole('button', { name: 'Create with AI' })).toBeNull()
+    render(<Widget {...zoneProps} />)
+    expect(screen.getByRole('button', { name: 'Create with AI' })).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })
 
@@ -215,18 +219,6 @@ describe('the email brief', () => {
       'Cart reminder',
       'Event reminder',
     ])
-  })
-})
-
-describe('the campaign brief', () => {
-  it('starts a campaign job outright, and offers no campaign checkbox', async () => {
-    await openDialog('hostCampaigns', 'Describe a campaign')
-    expect(screen.queryByLabelText('Also draft a campaign that sends it')).toBeNull()
-    fireEvent.change(screen.getByLabelText('What is the campaign’s email for?'), {
-      target: { value: BRIEF },
-    })
-    const body = await planIt('Plan the campaign', 'campaign', /The campaign is being planned/)
-    expect(body).toMatchObject({ kind: 'campaign', hostId: 'demo-bakery', inputs: {} })
   })
 })
 

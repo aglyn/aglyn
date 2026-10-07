@@ -14,21 +14,24 @@ same design plus the **draft campaign** that would send it.
 Both are drafts. Nothing is sent, scheduled or queued, and the campaign is
 aimed at nobody until you pick an audience yourself.
 
-## Start it
+## Where to start it {#where-to-start-it}
 
 - **An email design:** on a site's **Emails** page, open **Templates** and press
   **Create with AI**, beside **New template** (or beside **Create your first template**
-  while the list is empty).
-- **A campaign:** on the site's **Marketing** page, open **Campaigns** and press
-  **Create with AI**, beside **Create campaign**. Or tick **Also draft a campaign that
-  sends it** in the email's dialog.
+  while the list is empty). Write the brief, optionally pick the kind of email, and press
+  **Plan the email**. A plan comes first: review it in the dialog or in **AI jobs**, and
+  confirm it to build. Tick **Also draft a campaign that sends it** to get the campaign
+  too (the button then reads **Plan the campaign**).
+- **A campaign:** on **Marketing → Campaigns**, press **Create with AI** beside **Create
+  campaign** (or on the list while it is empty) — on a site's Marketing page, or on your
+  organization's, where it asks which site the campaign is placed on. Describe it and
+  press **Write the campaign**. When your plan sends no campaign email, the same button
+  writes the email design on its own. See
+  [Marketing with AI](../../ai/marketing-with-ai.md#create-a-campaign).
 
-Write the brief, optionally pick the kind of email, and press **Plan the email** (or
-**Plan the campaign**). A plan comes first: review it in the dialog or in **AI jobs**,
-and confirm it to build. Nothing is written until you do.
-
-Both doors are on a site's own pages. The organization-wide Emails and Marketing pages
-have no **Create with AI**, because a generated email belongs to one site.
+Nothing is sent, and nothing is aimed at anybody, until you choose. The
+organization-wide **Emails** page has no **Create with AI**, because an email design
+belongs to one site.
 
 ## What you get
 
