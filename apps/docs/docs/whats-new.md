@@ -10,7 +10,16 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## September 2026 — screens are now pages (newest)
+## October 2026 — checkout on your own site (newest)
+
+- **[In-page checkout](guides/commerce-end-to-end.md#paying-without-leaving-your-site)** —
+  shoppers pay on your store instead of being sent to Stripe's page. The Buy and
+  Checkout buttons open the form in place with everything the order needs: email,
+  shipping address and method when the order ships, the payment method, and a live
+  total with shipping and tax. It wears your site's theme, and an order is still created
+  by Stripe's confirmation, never by the browser.
+
+## September 2026 — screens are now pages
 
 - **[Screens are now called pages](building-sites/screens-and-layouts/screens.md)** —
   everywhere Aglyn names them: the **Pages** tab in the console, the Besigner, emails and

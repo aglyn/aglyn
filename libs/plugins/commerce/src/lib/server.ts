@@ -87,6 +87,7 @@ import { fulfillOrderHandler } from './server/fulfill-order'
 import { giftCardsHandler } from './server/gift-cards'
 import { memberPostHandler } from './server/member-post'
 import { orderAnalyticsHandler } from './server/order-analytics'
+import { checkoutStatusHandler } from './server/checkout-status'
 import { posOrderHandler } from './server/pos-order'
 import {
   processAbandonedHandler,
@@ -264,6 +265,8 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('commerce/notify-restock', notifyRestockHandler)
   // GA-safe order projection for the storefront `purchase` (AGL-1641).
   registerPluginApiRoute('commerce/order-analytics', orderAnalyticsHandler)
+  // What became of a session the shopper was returned from (AGL-3606).
+  registerPluginApiRoute('commerce/checkout-status', checkoutStatusHandler)
   registerPluginApiRoute('commerce/product', productHandler)
   registerPluginApiRoute('commerce/related', relatedHandler)
   registerPluginApiRoute('commerce/reservation-availability', reservationAvailabilityHandler)
