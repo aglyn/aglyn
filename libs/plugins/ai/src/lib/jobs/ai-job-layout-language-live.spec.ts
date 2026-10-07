@@ -20,7 +20,7 @@
 /**
  * Six guided starts' pages and frames designed by the REAL model in the layout
  * language and compiled (AGL-3660): for each brief its Home page, one more
- * page, and its header and footer — through the same prompt, tool, ceiling,
+ * page, its Contact page, and its header and footer — through the same prompt, tool, ceiling,
  * re-ask and check the page step and the layout step run. Every page must be
  * built with no refusal, and a run prints a table: each page's calls, output
  * tokens, credits and anything it settled.
@@ -274,10 +274,22 @@ function record(name: string, prompt: string, before: number, result: { status: 
   }
 }
 
+/**
+ * Every brief's Contact page, which holds the site's form: where a model is
+ * most tempted to write a phone number, an address or the hours the brief
+ * never gave, or a link's reference into its copy.
+ */
+const CONTACT_PAGE: Brief['pages'][number] = {
+  title: 'Contact',
+  slug: '/contact',
+  sections: [s('Get in touch'), s('Send a message'), s('Other ways to reach us')],
+}
+
+/** A brief's page by its index; -1 is its Contact page. */
 async function buildPage(brief: Brief, index: number): Promise<Result> {
-  const page = brief.pages[index]
+  const page = index === -1 ? CONTACT_PAGE : brief.pages[index]
   const screen = {
-    id: `${brief.key}-p${index}`,
+    id: index === -1 ? `${brief.key}-contact` : `${brief.key}-p${index}`,
     title: page.title,
     slug: page.slug,
     layout: LAYOUT_ID,
@@ -289,7 +301,7 @@ async function buildPage(brief: Brief, index: number): Promise<Result> {
     sections: page.sections.map((section) => (ORG_PLAN === 'business' && section.items ? { ...section, uses: [CARD_ID] } : section)),
     record: null,
   } as unknown as AiBuildPlanScreen
-  const unit = job(brief, 'page', `job-live-${brief.key}-p${index}`, screen)
+  const unit = job(brief, 'page', `job-live-${screen.id}`, screen)
   const site = inventory()
   const reusableComponents = aiBuildsWithComponents({ plan: ORG_PLAN } as Partial<AglynOrgBilling>)
   const sectionIds = screen.sections.map((_, position) => aiPageSectionNodeId(unit.$id, position))
@@ -375,7 +387,7 @@ describeLive('six guided starts designed by the real model in the layout languag
   it('builds every page and every header and footer with no refusal', async () => {
     if (OUT) mkdirSync(OUT, { recursive: true })
     const results = await Promise.all(
-      BRIEFS.flatMap((brief) => [buildPage(brief, 0), buildPage(brief, 1), buildFrame(brief)]),
+      BRIEFS.flatMap((brief) => [buildPage(brief, 0), buildPage(brief, 1), buildPage(brief, -1), buildFrame(brief)]),
     )
     const pages = results.filter((result) => !result.name.endsWith('header+footer'))
     const frames = results.filter((result) => result.name.endsWith('header+footer'))
