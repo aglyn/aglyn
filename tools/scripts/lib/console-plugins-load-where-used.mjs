@@ -28,7 +28,9 @@
  * A workspace shell draws what a plugin declares under `console.shell`: a nav
  * tab, an organization tab, a staff tab, a provider. It draws no zone of a
  * plugin's and serves no route of one, so a plugin whose declaration names
- * only `slots`, `routes` or `orgRoutes` has NOTHING on the shell, and its code
+ * only `slots`, `routes`, `orgRoutes` or `publicRoutes` (the device pages at
+ * `/kiosk/{plugin}`, outside the workspace shell entirely) has NOTHING on the
+ * shell, and its code
  * in the shell's before-settle load is a screen paying for a surface it cannot
  * render.
  *
@@ -141,6 +143,9 @@ function describePoints(plugin) {
   if (declared.routes?.length) parts.push(`${declared.routes.length} site route(s)`)
   if (declared.orgRoutes?.length) {
     parts.push(`${declared.orgRoutes.length} org route(s)`)
+  }
+  if (declared.publicRoutes?.length) {
+    parts.push(`${declared.publicRoutes.length} public device route(s)`)
   }
   return parts.length ? `only ${parts.join(' and ')}` : 'nothing in the console'
 }

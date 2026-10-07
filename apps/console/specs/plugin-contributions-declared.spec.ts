@@ -37,6 +37,7 @@ import {
   CONSOLE_SEARCH_LOAD_POINT,
   listConsoleExtensions,
   listCustomFieldTypes,
+  normalizeConsolePublicPath,
   THEME_PRESETS_LOAD_POINT,
   type ConsoleExtension,
   type PluginContributions,
@@ -95,6 +96,7 @@ function consoleContributions(extensions: readonly ConsoleExtension[]) {
   const slots = new Set<string>()
   const routes = new Set<string>()
   const orgRoutes = new Set<string>()
+  const publicRoutes = new Set<string>()
   let shell = false
   for (const extension of extensions) {
     for (const widget of extension.widgets ?? []) slots.add(widget.slot)
@@ -104,6 +106,11 @@ function consoleContributions(extensions: readonly ConsoleExtension[]) {
     if (extension.searchSources?.length) slots.add(CONSOLE_SEARCH_LOAD_POINT)
     for (const item of extension.navItems ?? []) routes.add(item.href)
     for (const item of extension.orgNavItems ?? []) orgRoutes.add(item.href)
+    // Public pages are served by the kiosk route only for a declared path
+    // (AGL-3608), so an undeclared one would be a page nobody can open.
+    for (const page of extension.publicPages ?? []) {
+      publicRoutes.add(normalizeConsolePublicPath(page.path))
+    }
     if (SHELL_FIELDS.some((field) => (extension[field] as unknown[] | undefined)?.length)) {
       shell = true
     }
@@ -112,6 +119,7 @@ function consoleContributions(extensions: readonly ConsoleExtension[]) {
     slots: [...slots].sort(),
     routes: [...routes].sort(),
     orgRoutes: [...orgRoutes].sort(),
+    publicRoutes: [...publicRoutes].sort(),
     shell,
   }
 }
@@ -190,6 +198,7 @@ describe('first-party plugins declare what they register (AGL-3116)', () => {
       slots: sorted(own.slots),
       routes: sorted(own.routes),
       orgRoutes: sorted(own.orgRoutes),
+      publicRoutes: sorted(own.publicRoutes),
       shell: Boolean(own.shell),
     })
   })

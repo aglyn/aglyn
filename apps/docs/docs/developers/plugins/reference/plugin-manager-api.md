@@ -21,6 +21,7 @@ design: the surface is small and curated, and each entry needs semantics
 | `listConsoleOrgNavItems()` / `resolveConsoleOrgPluginPage(href)` | The same pair for **organization-level** surfaces — the extension's `orgNavItems`, listed on the organization's tab strip and served under `/[orgSlug]/[...pluginSlug]` with the same matching rules. Neither pair reads the other's list. |
 | `listConsoleWidgets(slot)` | Widgets registered for a named zone — see [Injection zones](injection-zones.md). |
 | `listConsoleStaffPages()` / `resolveConsoleStaffPage(id)` | How the shell draws a plugin's staff pages: a tab after the staff strip's own, and a page at `/admin/{id}` from the generic staff route. Two plugins claiming one id resolve to nothing, and say so. |
+| `listConsolePublicPages()` / `resolveConsolePublicPage(pluginId, path)` | How the console serves a plugin's full-screen page that needs no staff session, at `/kiosk/{pluginId}{path}` — a screen facing customers, for example. The route loads only that plugin's console bundle, and only for a path its manifest lists in `contributes.console.publicRoutes`; the path matches exactly. First-party plugins only. |
 | `listConsoleProviders()` | App-level providers mounted around every console page. |
 | `defineUiFeatureBundle(options, components)` | Site/canvas component bundle; auto-depends on the base `mui` bundle. Component and bundle ids are **persisted in page docs — never rename**. |
 | `CONSOLE_WIDGET_SLOTS` | The typed injection-zone catalog. A widget with a `column: { header, sortKey?, align? }` is a column of a shell-owned table on the zones documented as column zones. |
@@ -36,8 +37,11 @@ receives `hostId: null` and an `orgMount` naming the organization and its
 sites, and the shell admits only a member whose access spans the whole
 organization; an `href` that names one of the console's own organization
 routes, such as `/team` or `/settings`, never renders), `dashboardCards?`,
-`settingsSections?`, `widgets?`, `providers?`, `staffPages?`, `themePresets?`,
-`searchSources?`.
+`settingsSections?`, `widgets?`, `providers?`, `staffPages?`, `publicPages?`
+(`{ path, title, Component }`; the page receives `ConsolePublicPageProps
+{ pluginId, path }`, renders with the console theme and no workspace shell,
+and neither `featureFlag` nor `permission` applies, so it must prove itself
+to its own API routes), `themePresets?`, `searchSources?`.
 
 A nav item's `header?: { title, icon?, docsTopic?, docsAnchor? }` titles its
 page and names the docs topic its help button opens. `docsAnchor` deep-links

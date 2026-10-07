@@ -96,6 +96,13 @@ export interface PluginConsoleContributions {
   /** Organization-level console routes it serves (`/outreach`). */
   orgRoutes?: string[]
   /**
+   * Public console pages it serves (`/display`), at `/kiosk/{plugin id}`
+   * with no staff session (AGL-3608) — see `ConsolePublicPage`. The public
+   * route reads only the console's first-party manifest, so a marketplace
+   * plugin's declaration of these is accepted and serves nothing.
+   */
+  publicRoutes?: string[]
+  /**
    * The shell draws something of it on every screen of a workspace: a nav
    * tab, an organization tab, a staff tab or a provider. Such a plugin loads
    * with the shell, because every screen renders it.
@@ -195,7 +202,12 @@ export function sanitizePluginContributions(input: unknown): Sanitized {
         if (consoleInput['shell']) next.shell = true
         continue
       }
-      if (key !== 'slots' && key !== 'routes' && key !== 'orgRoutes') {
+      if (
+        key !== 'slots' &&
+        key !== 'routes' &&
+        key !== 'orgRoutes' &&
+        key !== 'publicRoutes'
+      ) {
         return {
           ok: false,
           error: `contributes.console.${key} is not a known contribution`,
