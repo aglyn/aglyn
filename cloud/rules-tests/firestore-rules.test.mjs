@@ -671,6 +671,11 @@ beforeEach(async () => {
       screenId: 'screen-1', nodes: { root: {} },
     })
     await setDoc(doc(db, 'hosts', HOST, 'variables', 'var-1'), { name: 'v', value: '1' })
+    // A booking service a draft writer made (AGL-3616), so activating it on
+    // the Bookings page can be told apart from creating one.
+    await setDoc(doc(db, 'hosts', HOST, 'services', 'svc-draft'), {
+      name: 'Estimate visit', durationMinutes: 60, status: 'draft',
+    })
     // An existing webhook, so the AGL-1360 create/update split can be told
     // apart: create is API-only, update (the soft delete) stays client-side.
     await setDoc(doc(db, 'hosts', HOST, 'webhooks', 'wh1'), {
@@ -1100,6 +1105,24 @@ describe('hosts', () => {
         setDoc(doc(authed(EDITOR), 'hosts', HOST, coll, 'new-doc'), { name: 'x' }),
       )
     }
+    // A draft service is activated, and sent back to draft, by an editor on
+    // the Bookings page (AGL-3616): one field on a service that exists. A
+    // viewer may do neither, and a draft still cannot be created directly —
+    // the writer that makes one runs on the Admin SDK, inside its allowance.
+    await assertSucceeds(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'services', 'svc-draft'), { status: 'active' }),
+    )
+    await assertSucceeds(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'services', 'svc-draft'), { status: 'draft' }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(VIEWER), 'hosts', HOST, 'services', 'svc-draft'), { status: 'active' }),
+    )
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'services', 'svc-new'), {
+        name: 'x', durationMinutes: 30, status: 'draft',
+      }),
+    )
     // Webhooks joined the API-only creates (AGL-1360). WEBHOOK_MAX_PER_HOST
     // was enforced ONLY by the console counting the rows its Firestore
     // listener held; with `persistentLocalCache` that count could be
@@ -5884,6 +5907,47 @@ describe('pre-release hardening guards', () => {
       await assertFails(updateDoc(doc(authed(uid), 'hosts', HOST, 'packageImports', 'i1'), { status: 'applied' }))
       await assertFails(deleteDoc(doc(authed(uid), 'hosts', HOST, 'packageImports', 'i1')))
     }
+  })
+
+  /**
+   * AGL-3605. Funnels: every member of the site READS the definitions (the
+   * Funnels card lists them), and nobody writes them client-side — the save
+   * route checks the plan, the admin-or-editor role and every step, and
+   * switches the site's recording with it. A recorded visit and a cached
+   * result are server-only both ways: a member gets counts from the results
+   * route, never somebody's visit.
+   */
+  it('funnels are member-readable and route-written; visits and results are server-only (AGL-3605)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'hosts', HOST, 'funnels', 'f1'), {
+        name: 'Pricing to contact',
+        steps: [{ type: 'page', key: '/home', match: 'exact' }, { type: 'order', key: '' }],
+      })
+      await setDoc(doc(db, 'hosts', HOST, 'funnelJourneys', 'abcdefghijklmnopqrstuv'), {
+        steps: [{ t: 'page', k: '/home', at: 1 }],
+      })
+      await setDoc(doc(db, 'hosts', HOST, 'funnelResults', 'f1_1_2026-10-01_2026-10-06'), {
+        funnelId: 'f1',
+        result: { entered: 1 },
+      })
+    })
+    for (const uid of [OWNER, EDITOR, AUTHOR, VIEWER]) {
+      await assertSucceeds(getDoc(doc(authed(uid), 'hosts', HOST, 'funnels', 'f1')))
+      await assertFails(setDoc(doc(authed(uid), 'hosts', HOST, 'funnels', 'forged'), { name: 'x', steps: [] }))
+      await assertFails(updateDoc(doc(authed(uid), 'hosts', HOST, 'funnels', 'f1'), { name: 'Renamed' }))
+      await assertFails(deleteDoc(doc(authed(uid), 'hosts', HOST, 'funnels', 'f1')))
+      await assertFails(getDoc(doc(authed(uid), 'hosts', HOST, 'funnelJourneys', 'abcdefghijklmnopqrstuv')))
+      await assertFails(
+        setDoc(doc(authed(uid), 'hosts', HOST, 'funnelJourneys', 'abcdefghijklmnopqrstuv'), { steps: [] }),
+      )
+      await assertFails(getDoc(doc(authed(uid), 'hosts', HOST, 'funnelResults', 'f1_1_2026-10-01_2026-10-06')))
+      await assertFails(
+        setDoc(doc(authed(uid), 'hosts', HOST, 'funnelResults', 'forged'), { result: { entered: 999 } }),
+      )
+    }
+    await assertFails(getDoc(doc(authed(OUTSIDER), 'hosts', HOST, 'funnels', 'f1')))
+    await assertFails(getDoc(doc(anon(), 'hosts', HOST, 'funnels', 'f1')))
   })
 
   /**

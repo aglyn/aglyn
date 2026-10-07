@@ -14,8 +14,9 @@ changes from one page to the next, already bound to the element that shows it.
 
 :::info Availability
 Aglyn AI build jobs are released gradually, and need the **Generate with AI** permission.
-Reusable components come with the Starter plan and above: on a plan without them, the job says
-so before it starts, and spends nothing.
+Free includes one reusable component per site, and Starter and above include as many as you
+need: on a site already holding the components its plan includes, the job says so before it
+starts, and spends nothing.
 :::
 
 ## From a brief
@@ -101,8 +102,8 @@ a moment before — the section now follows the component instead of being a cop
 
 The swap is an unsaved change on the version you have open, and one undo takes it back. Nothing
 is published, and on the version your live site shows, the Besigner asks you to make a new
-version first. If the component cannot be saved — a plan without reusable components, for
-instance — nothing on your page changes at all.
+version first. If the component cannot be saved — a site already holding the components its
+plan includes, for instance — nothing on your page changes at all.
 
 :::tip Pick the section, not the page
 Save the part you want to repeat. Aglyn AI declines a selection that is the whole page, one

@@ -18,9 +18,9 @@
 /**
  * "Explain it" in a saved automation's editor, and "Why did this fail?" on a
  * failed run (AGL-2919), mounted through the `automationEditor` and
- * `automationRun` zones' props: each is absent while the jobs route says the
- * feature is not this workspace's, asks that route once however many runs
- * the history shows, sends a `workflow` job naming the automation (and the
+ * `automationRun` zones' props: each is drawn from the shell's gates alone
+ * and asks the jobs route nothing until it is used (AGL-3601), however many
+ * runs the history shows, sends a `workflow` job naming the automation (and the
  * run), and shows the explanation the job wrote — changing nothing.
  */
 
@@ -52,7 +52,6 @@ import {
   AiExplainAutomation,
   AiExplainRunFailure,
 } from './ai-explain-automation.component'
-import { forgetAiJobsVerdicts } from './use-ai-job-run'
 
 const EXPLAIN = AI_AUTOMATION_EXPLAIN_COPY.explain
 const DIAGNOSE = AI_AUTOMATION_EXPLAIN_COPY.diagnose
@@ -123,7 +122,6 @@ const created = () =>
 
 beforeEach(() => {
   mockFetch.mockReset()
-  forgetAiJobsVerdicts()
 })
 
 afterEach(() => {
@@ -132,11 +130,10 @@ afterEach(() => {
 })
 
 describe('Explain it', () => {
-  it('stays absent when the feature is not this workspace’s', async () => {
-    mockFetch.mockResolvedValue(json({ error: 'Not found' }, 404))
-    const { container } = render(<AiExplainAutomation hostId="host-1" orgId="org-1" target={TARGET} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
+  it('draws at once and asks nothing of a server until it is used (AGL-3601)', () => {
+    render(<AiExplainAutomation hostId="host-1" orgId="org-1" target={TARGET} />)
+    expect(screen.getByRole('button', { name: EXPLAIN.action })).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('explains the saved automation it is open on, and says it reads what is saved', async () => {
@@ -176,7 +173,7 @@ describe('Explain it', () => {
 })
 
 describe('Why did this fail?', () => {
-  it('asks the route once for every failed run in the history', async () => {
+  it('asks the route nothing for the failed runs in the history until one is explained', async () => {
     routes({})
     render(
       <>
@@ -186,7 +183,7 @@ describe('Why did this fail?', () => {
       </>,
     )
     expect(await screen.findAllByRole('button', { name: DIAGNOSE.action })).toHaveLength(3)
-    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('explains the run it is drawn on, and shows the same answer again without asking again', async () => {

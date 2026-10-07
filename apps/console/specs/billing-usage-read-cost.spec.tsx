@@ -69,6 +69,9 @@ const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => ({}),
+  // The per-site reusable-component meter's live count (AGL-3615), its own
+  // two aggregations; not what this spec reads.
+  useLiveArtifactCount: () => null,
   useUser: () => ({ data: mockUser }),
 }))
 

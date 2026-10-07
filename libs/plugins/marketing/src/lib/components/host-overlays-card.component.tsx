@@ -24,8 +24,14 @@ import {
 } from '@aglyn/aglyn'
 import {
   compareOverlayPrecedence,
+  OVERLAY_COPY_LIMITS,
+  OVERLAY_LIST_CEILING,
+  OVERLAY_POPUP_TRIGGERS,
+  overlayCopyFromProposal,
+  overlayDraftFromProposal,
   overlayStatus,
   type HostOverlay,
+  type OverlayCopyProposal,
 } from '../model'
 import { mdiChevronDown, mdiChevronUp } from '@aglyn/shared-data-mdi'
 import {
@@ -76,6 +82,11 @@ import {
   shownAsTypedHelperText,
   useOverlayCopyEditor,
 } from './use-overlay-copy-editor'
+import {
+  HostOverlaysZone,
+  OverlayEditorZone,
+  type MarketingOverlayDraftResult,
+} from './overlay-zones'
 
 export interface HostOverlaysCardProps {
   hostId: string
@@ -93,7 +104,7 @@ type OverlayDraft = HostOverlay & { $id?: string }
  * handful of banners and popups, and the number exists to bound a pathological
  * collection rather than to bound a normal one.
  */
-const CEILING = 50
+const CEILING = OVERLAY_LIST_CEILING
 
 const EMPTY_BAR: OverlayDraft = {
   kind: 'bar',
@@ -336,6 +347,78 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
     }
   }
 
+  /*
+   * What a widget in the list's zone asks for (AGL-3603): a new overlay from
+   * proposed copy, cut to the overlay's limits and written SWITCHED OFF —
+   * through the same site-wide write a typed overlay takes — then opened in
+   * the editor, where a person reads it, changes it and turns it on.
+   */
+  const createOverlayDraft = async (
+    kind: HostOverlay['kind'],
+    proposal: OverlayCopyProposal,
+  ): Promise<MarketingOverlayDraftResult> => {
+    const draft = overlayDraftFromProposal(kind, proposal)
+    if (!draft) {
+      return {
+        ok: false,
+        error:
+          kind === 'bar'
+            ? 'There was no bar text to save.'
+            : 'There was no popup body to save.',
+      }
+    }
+    const id = createResourceUid()
+    // The list orders on `name`, which every overlay carries, null or not.
+    const stored = { ...draft, name: draft.name ?? null }
+    try {
+      await writeSiteWideChange({
+        firestore,
+        user,
+        hostId,
+        write: (batch) =>
+          batch.set(doc(firestore, 'hosts', hostId, 'overlays', id), {
+            ...stored,
+            createdAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
+          }),
+      })
+    } catch (error) {
+      console.error(error)
+      return { ok: false, error: 'The overlay could not be saved. Try again.' }
+    }
+    logActivity('Created overlay', {
+      type: 'content',
+      id,
+      ...(draft.name ? { name: draft.name } : {}),
+    })
+    setEditor({ ...draft, $id: id })
+    return { ok: true, id }
+  }
+
+  /*
+   * What a widget in the editor's zone proposes (AGL-3603), put into the
+   * editor's own fields unsaved. Copy is stored as the editor stores typed
+   * copy, so a proposed variable name is kept the way a typed one is.
+   */
+  const proposeOverlayCopy = (proposal: OverlayCopyProposal) => {
+    if (!editor) return
+    const values = overlayCopyFromProposal(editor.kind, proposal)
+    if (values.name) patch({ name: values.name })
+    if (editor.kind === 'bar') {
+      if (values.text) patchBar({ text: copy.stored(values.text) })
+      return
+    }
+    patchPopup({
+      ...(values.headline ? { headline: copy.stored(values.headline) } : {}),
+      ...(values.body ? { body: copy.stored(values.body) } : {}),
+      ...(values.ctaLabel ? { ctaLabel: values.ctaLabel } : {}),
+      ...(values.trigger ? { trigger: values.trigger } : {}),
+      ...(values.triggerValue !== undefined ? { triggerValue: values.triggerValue } : {}),
+    })
+  }
+
+  const overlayRules = { limits: OVERLAY_COPY_LIMITS, triggers: OVERLAY_POPUP_TRIGGERS }
+
   const handleDelete = async (overlay: OverlayDraft) => {
     if (!overlay.$id) return
     const confirmed = await confirm({
@@ -459,6 +542,16 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
             >
               {'New popup'}
             </Button>
+            {/*
+              Other ways to start an overlay, from plugins (AGL-3603): the
+              `hostOverlays` zone this plugin declares, drawn through the
+              shell's own gated slot.
+            */}
+            <HostOverlaysZone
+              hostId={hostId}
+              createOverlayDraft={createOverlayDraft}
+              {...overlayRules}
+            />
           </Stack>
           {truncated ? (
             <Alert severity="info">
@@ -468,10 +561,18 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
             </Alert>
           ) : null}
           {overlays.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {'No overlays yet — the single announcement bar and popup ' +
-                'below keep working as your default surfaces.'}
-            </Typography>
+            <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
+              <Typography variant="body2" color="text.secondary">
+                {'No overlays yet — the single announcement bar and popup ' +
+                  'below keep working as your default surfaces.'}
+              </Typography>
+              {/* Other ways to start an overlay, the row's zone again. */}
+              <HostOverlaysZone
+                hostId={hostId}
+                createOverlayDraft={createOverlayDraft}
+                {...overlayRules}
+              />
+            </Stack>
           ) : (
             <ScrollTable size="small">
               <TableHead>
@@ -578,6 +679,28 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
                 value={editor.name ?? ''}
                 onChange={(event) => patch({ name: event.target.value })}
                 helperText="Internal label shown in this list"
+              />
+              {/*
+                Copy proposed by a plugin (AGL-3603): the `overlayEditor`
+                zone this plugin declares. A widget fills these fields
+                unsaved; Save below is the only write.
+              */}
+              <OverlayEditorZone
+                hostId={hostId}
+                overlayId={editor.$id ?? ''}
+                kind={editor.kind}
+                copy={{
+                  name: editor.name ?? '',
+                  text: copy.editable(editor.bar?.text),
+                  headline: copy.editable(editor.popup?.headline),
+                  body: copy.editable(editor.popup?.body),
+                  ctaLabel: editor.popup?.ctaLabel ?? '',
+                  ctaHref: editor.popup?.ctaHref ?? '',
+                  trigger: editor.popup?.trigger ?? 'delay',
+                  triggerValue: editor.popup?.triggerValue ?? null,
+                }}
+                proposeValues={proposeOverlayCopy}
+                {...overlayRules}
               />
               {editor.kind === 'bar' ? (
                 <>

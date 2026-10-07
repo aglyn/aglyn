@@ -55,7 +55,13 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import { aiJobPageCopy, aiSiteBuildCreditsLine, aiSiteBuildRows } from '../model/ai-site-build-progress'
+import {
+  AI_SITE_PLAN_HINT,
+  aiJobPageCopy,
+  aiSiteBuildCreditsLine,
+  aiSiteBuildFraction,
+  aiSiteBuildRows,
+} from '../model/ai-site-build-progress'
 import { AI_JOB_FIRST_STATE_TIMEOUT_MS, AiSiteBuildPage } from './ai-site-build-page.component'
 
 beforeEach(() => {
@@ -121,9 +127,10 @@ describe('the progress a site job shows (AGL-3594)', () => {
       ['Planning your pages', 'done'],
       ['Writing page 1 of 2: Home', 'done'],
       ['Writing page 2 of 2: Book', 'active'],
+      ['Publishing your site', 'waiting'],
     ])
     expect(aiSiteBuildRows(job({ plan: null, steps: [{ name: 'plan', status: 'running' }] as never })).map((row) => row.state)).toEqual(['active'])
-    expect(aiSiteBuildRows(job({ status: 'failed', outputs: [screenOutput('home')] as never })).map((row) => row.state)).toEqual(['done', 'done', 'failed'])
+    expect(aiSiteBuildRows(job({ status: 'failed', outputs: [screenOutput('home')] as never })).map((row) => row.state)).toEqual(['done', 'done', 'failed', 'skipped'])
   })
 
   it('names the job’s one price, never a plan’s', () => {
@@ -360,6 +367,7 @@ describe('a guided start that failed on our side (AGL-3596)', () => {
       ['Building the form: Grooming Inquiry Form', 'waiting'],
       ['Writing page 1 of 2: Home', 'waiting'],
       ['Writing page 2 of 2: Book', 'waiting'],
+      ['Publishing your site', 'skipped'],
     ])
   })
 
@@ -387,5 +395,55 @@ describe('a guided start that failed on our side (AGL-3596)', () => {
     })
     render(<AiSiteBuildPage hostId="host-1" segments={['job-1']} basePath="/acme/hosts/groomer/ai-jobs" entitled />)
     expect(await screen.findByText(REFUNDED)).toBeTruthy()
+  })
+})
+
+/*
+ * The detail a site job shows while it works (founder, 2026-10-07: "just a
+ * loading bar is not enough"): every stage from the start, how far along it
+ * is, what the active stage is doing and for how long, each page's sections,
+ * and what each finished stage used.
+ */
+describe('the detail a site job shows while it works', () => {
+  const planning = () =>
+    job({
+      plan: null,
+      creditsSpent: 0,
+      siteInputs: { businessType: 'a dog groomer', pages: 2 },
+      steps: [
+        { name: 'plan', status: 'running', startedAt: '2026-10-07T12:00:00.000Z', endedAt: null, creditsSpent: 0, error: null },
+        { name: 'generate', status: 'pending', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+      ],
+    } as never)
+
+  it('names every stage before the plan exists, and what planning is doing', () => {
+    const rows = aiSiteBuildRows(planning())
+    expect(rows.map((row) => [row.label, row.state])).toEqual([
+      ['Planning your pages', 'active'],
+      ['Building the header and footer', 'waiting'],
+      ['Writing your 2 pages', 'waiting'],
+      ['Publishing your site', 'waiting'],
+    ])
+    expect(rows[0].hint).toBe(AI_SITE_PLAN_HINT)
+    expect(rows[0].startedAt).toBe('2026-10-07T12:00:00.000Z')
+  })
+
+  it('fills the bar by finished stages, the active one counting half', () => {
+    expect(aiSiteBuildFraction(aiSiteBuildRows(planning()))).toBeCloseTo(0.5 / 4)
+    expect(aiSiteBuildFraction([{ id: 'plan', label: 'Planning your pages', state: 'active' }])).toBeNull()
+  })
+
+  it("lists each page's planned sections, and what planning used once it is done", () => {
+    const rows = aiSiteBuildRows(job())
+    expect(rows[0].credits).toBe(9)
+    const pages = rows.filter((row) => row.id.startsWith('page-'))
+    expect(pages.every((row) => (row.sections?.length ?? 0) > 0)).toBe(true)
+  })
+
+  it('draws a filling bar, the hint and the sections on the page', async () => {
+    await open(planning())
+    const bar = await screen.findByRole('progressbar', { name: /Building: 0 of 4 steps done/ })
+    expect(bar.getAttribute('aria-valuenow')).toBe(String(Math.round((0.5 / 4) * 100)))
+    expect(screen.getByText(AI_SITE_PLAN_HINT)).toBeTruthy()
   })
 })

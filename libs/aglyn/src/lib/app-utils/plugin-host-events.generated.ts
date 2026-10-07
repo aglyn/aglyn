@@ -23,6 +23,7 @@ export type PluginHostEventType =
   | 'dealStageChanged'
   | 'dealWon'
   | 'dealLost'
+  | 'funnelLeft'
 
 export const PLUGIN_HOST_EVENTS: readonly HostEventDeclaration[] = [
   {
@@ -190,6 +191,21 @@ export const PLUGIN_HOST_EVENTS: readonly HostEventDeclaration[] = [
       "contactId",
       "companyId",
       "lostReason"
+    ]
+  },
+  {
+    "pluginId": "funnels",
+    "type": "funnelLeft",
+    "order": 150,
+    "label": "Left a funnel",
+    "payloadKeys": [
+      "funnelId",
+      "funnelName",
+      "step",
+      "stepLabel",
+      "nextStepLabel",
+      "afterHours",
+      "email"
     ]
   }
 ]

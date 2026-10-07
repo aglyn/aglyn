@@ -58,6 +58,7 @@ import {
 import { recordEmailCampaignTouch } from './email-campaign-touch'
 // The contact's own stamp is the record system's, asked through the core's
 // seam: what the record page, the list and the re-engagement audience read.
+import { runPluginEventHandlers } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { stampRecordEmailEngagement } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { getOrgForHost } from '@aglyn/tenant-data-admin/server/organizations'
@@ -525,6 +526,13 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
       await stampRecordEmailEngagement({ hostId: hostRef.id, events: outcomes }).catch(
         () => null,
       )
+      // The same first opens and clicks, for any plugin that counts a site's
+      // engagement of its own — a funnel's email step (AGL-3605). Isolated:
+      // a subscriber's failure never reaches the webhook's answer.
+      await runPluginEventHandlers('host.email.engaged', {
+        hostId: hostRef.id,
+        events: outcomes.filter((one) => one.type === 'opened' || one.type === 'clicked'),
+      }).catch(() => null)
     }
 
     /*==========================================

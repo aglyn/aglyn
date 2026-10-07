@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { pluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerLogicConsole } from './plugin'
 
@@ -31,5 +32,18 @@ describe('logic plugin', () => {
     expect(extension?.navItems?.[0]?.Component).toBeDefined()
     // Console-only: it contributes no besigner/canvas bundle.
     expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBeUndefined()
+  })
+})
+
+describe('the zones its Functions & Variables page hosts (AGL-3603)', () => {
+  it('declares each under the id widgets register for, owned here and laid out bare', () => {
+    registerLogicConsole()
+    for (const id of ['hostLogic', 'logicFunctionEditor', 'logicReferenceIssue']) {
+      const zone = pluginZone(id)
+      expect(`${id}: ${zone?.pluginId} ${zone?.layout} ${zone?.surface}`).toBe(`${id}: ${BUNDLE_ID} bare console`)
+    }
+    // The shell's catalog does not name them: the plugin that draws them says what they are.
+    const catalog = Object.values(Aglyn.CONSOLE_WIDGET_SLOTS) as string[]
+    expect(catalog.filter((id) => id === 'hostLogic' || id.startsWith('logic'))).toEqual([])
   })
 })

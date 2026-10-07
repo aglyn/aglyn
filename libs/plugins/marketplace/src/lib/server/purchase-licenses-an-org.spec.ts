@@ -135,6 +135,12 @@ function makeCollectionRef(name: string): any {
     doc: (id: string) => makeDocRef(`${name}/${id}`),
     where: (field: string, op: string, value: unknown) =>
       makeQuery(name, []).where(field, op, value),
+    // The install's component-allowance count (AGL-3615).
+    select: () => ({
+      get: async () => ({
+        docs: childPaths(name).map((path) => ({ get: (field: string) => docs.get(path)?.[field] })),
+      }),
+    }),
   }
 }
 

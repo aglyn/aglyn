@@ -179,6 +179,11 @@ const DIMENSIONS: Record<string, Dimension> = {
    * RECEIVE: the two are separate dimensions.
    */
   formsPerHost: quotaRow('formsPerHost', 1, RESOURCES_ROUTE, 0),
+  /**
+   * The reusable-component catalog: one component per Free site (AGL-3615),
+   * refused on the count and no longer behind `reusableComponents`.
+   */
+  componentsPerHost: quotaRow('componentsPerHost', 1, RESOURCES_ROUTE, 0),
   variablesPerHost: quotaRow('variablesPerHost', 3, RESOURCES_ROUTE, 2),
   functionsPerHost: quotaRow('functionsPerHost', 1, RESOURCES_ROUTE, 0),
   workflowsPerHost: quotaRow('workflowsPerHost', 0, RESOURCES_ROUTE),

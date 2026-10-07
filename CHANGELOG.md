@@ -9,6 +9,84 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.230 — 2026-10-07
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.229...v1.0.0-beta.230)
+
+### Added
+
+- **ai:** the build page shows every stage from the start, how far along it is, and what the active one is doing ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **funnels:** act on a drop-off — a Left a funnel trigger and a drafted follow-up ([AGL-3605](https://linear.app/aglyn/issue/AGL-3605))
+- **funnels:** a site's funnels on its Analytics page, with AI to draft and explain them ([AGL-3605](https://linear.app/aglyn/issue/AGL-3605))
+- **ai:** Create with AI drafts a workspace's org automation, opened unsaved in its editor ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **workflows:** Org automations hosts a zone that proposes an automation to its editor ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **ai:** Assist knows the CRM, Logic, Forms, Emails and Automation pages ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **marketing:** announcement bars and popups as figures for AI insights ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **ai:** automation runs and the deal pipeline as figures, and Ask AI about these numbers on the dashboards ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **ai:** Assist adds and explains an element's interactions in the Besigner ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **ai:** functions and variables by AI — create, change, fix and explain, opened unsaved in the logic editor ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **ai:** change or fix a saved action with AI as a copy switched off; Workflows offers Create with AI ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **marketing:** overlay and A/B test draft writers, and their AI build capabilities ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** page and section A/B variants become real draft versions ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **ai:** Assist knows the Marketing pages and can take you to each section ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **marketing:** conversion and revenue figures, and Ask AI about these numbers on reports ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **marketing:** Create with AI on Campaigns starts the campaign job ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603), [AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **marketing:** overlays get Write with AI and Create with AI through two hosted zones ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **ai:** the Media button draws from the shell's gates alone, with Photo and Illustration modes ([AGL-3602](https://linear.app/aglyn/issue/AGL-3602))
+- **ai:** illustrations in Media — SVG drawn by the text provider, checked before it is stored ([AGL-3602](https://linear.app/aglyn/issue/AGL-3602))
+- **ai:** photos on Gemini 3.1 Flash Image through Vertex generateContent — Imagen is retired ([AGL-3602](https://linear.app/aglyn/issue/AGL-3602))
+- **ai:** Create with AI in Media — pictures from a description, stored as uploads ([AGL-3602](https://linear.app/aglyn/issue/AGL-3602))
+- **media:** a mediaLibrary zone beside Upload media and in the empty state ([AGL-3602](https://linear.app/aglyn/issue/AGL-3602))
+- **ai:** an image provider path — Google's image models on Vertex AI, priced per picture on the same meter ([AGL-3602](https://linear.app/aglyn/issue/AGL-3602))
+- **marketing:** a script sets Free's reusable-components cell on /pricing to 1 ([AGL-3615](https://linear.app/aglyn/issue/AGL-3615))
+- **console:** plan cards, usage and the Components page state the per-site component allowance ([AGL-3615](https://linear.app/aglyn/issue/AGL-3615))
+- **billing:** a Free site saves one reusable component, counted at every create ([AGL-3615](https://linear.app/aglyn/issue/AGL-3615))
+- **ai:** Create with AI on email templates, campaigns and products, empty states included ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** the Create with AI entries offer the AI add-on on paid plans without it ([AGL-3601](https://linear.app/aglyn/issue/AGL-3601))
+- **console:** a widget may be its own upsell when only the plan lacks it ([AGL-3601](https://linear.app/aglyn/issue/AGL-3601))
+- **ai:** Assist builds from one request — one plan card, one build job ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** AI jobs show a build item by item, and try again only what failed ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** a guided site start settles page by page, as a build does ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** a build job settles item by item — one request, many drafts ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **bookings,commerce:** register booking-service and product AI capabilities ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **bookings:** draft services, and a booking-service draft writer ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **commerce:** a product draft writer another plugin asks for by name ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **core:** an AI capability contract — what a plugin lets an AI build make ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+
+### Fixed
+
+- **ai:** Assist's page notes name no storage path or brand, and the plugin-domain guard reads a console route as a page ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **ai:** a plan's layout and creation references with one answer are given it, and a live eval holds the real model to the plan rules ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** a layout's regions written as one list are read one by one, so the plan is not refused for them ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** a funnel's Create with AI and Ask AI follow the release flag and offer the AI add-on where only the plan lacks it ([AGL-3605](https://linear.app/aglyn/issue/AGL-3605))
+- **ai:** a funnel's Create with AI and Ask AI draw at once and ask the server nothing until used ([AGL-3605](https://linear.app/aglyn/issue/AGL-3605))
+- **ai:** every Create with AI and Ask AI door draws from the shell's gates and asks nothing until used ([AGL-3601](https://linear.app/aglyn/issue/AGL-3601), [AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** the AI plugin declares the logic and dashboard zones it fills ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **ai:** Create with AI draws at once and asks the server nothing until it is used ([AGL-3601](https://linear.app/aglyn/issue/AGL-3601))
+- **deps:** override vulnerable dompurify, grpc-js, tinypool, katex and kin ([AGL-3604](https://linear.app/aglyn/issue/AGL-3604))
+- **bookings:** the draft-status import stands apart from the pinned model import ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+
+### Documentation
+
+- **funnels:** identified visitors, the email step, and acting on a drop-off ([AGL-3605](https://linear.app/aglyn/issue/AGL-3605))
+- **ai:** Create images with AI covers both modes and their costs; legal draft for the photo mode ([AGL-3602](https://linear.app/aglyn/issue/AGL-3602))
+- **ai:** Create images with AI — where it is, what it costs, what is sent ([AGL-3602](https://linear.app/aglyn/issue/AGL-3602))
+- **billing:** Free's one reusable component is on record and in the docs ([AGL-3615](https://linear.app/aglyn/issue/AGL-3615))
+
+<details>
+<summary>Also in this release: 5 test, 3 chore</summary>
+
+- **ai:** the automation draft's sizes carry the Left a funnel trigger, and the drawer's highlight is read as its row is listed ([AGL-3605](https://linear.app/aglyn/issue/AGL-3605))
+- **docs:** regenerate the docs index for the funnels picks ([AGL-3605](https://linear.app/aglyn/issue/AGL-3605))
+- **ai:** the overlay doors' no-request specs pass the routes their answers ([AGL-3601](https://linear.app/aglyn/issue/AGL-3601))
+- **linear:** the issue ceiling floor is AGL-3645, read from Linear ([AGL-3645](https://linear.app/aglyn/issue/AGL-3645), [AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **docs:** regenerate the docs-help, docs index and plugin manifests for the AI arc picks ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **ai:** the tool-schema limits table names the overlay copy door ([AGL-3603](https://linear.app/aglyn/issue/AGL-3603))
+- **ai:** classify the mediaLibrary zone as a site's, listed from the site's set ([AGL-3602](https://linear.app/aglyn/issue/AGL-3602))
+- **billing:** usage specs answer the component meter's live count ([AGL-3615](https://linear.app/aglyn/issue/AGL-3615))
+
+</details>
+
 ## v1.0.0-beta.229 — 2026-10-07
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.228...v1.0.0-beta.229)

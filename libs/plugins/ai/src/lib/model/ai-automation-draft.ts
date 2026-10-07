@@ -280,3 +280,81 @@ export function aiAutomationDraftNote(draft: AiAutomationDraft, notes: readonly 
   parts.push(...notes)
   return parts.join(' ')
 }
+
+/** A step as compared across a revision: its stored fields, in a fixed key order. */
+function stepSignature(step: AiAutomationStep): string {
+  const record = step as unknown as Record<string, unknown>
+  return JSON.stringify(Object.keys(record).sort().map((key) => [key, record[key]]))
+}
+
+/** The longest run of `after` that `before` holds in order, as a pair of kept flags. */
+function keptSteps(before: readonly string[], after: readonly string[]): [boolean[], boolean[]] {
+  const table = Array.from({ length: before.length + 1 }, () => new Array<number>(after.length + 1).fill(0))
+  for (let i = before.length - 1; i >= 0; i -= 1) {
+    for (let j = after.length - 1; j >= 0; j -= 1) {
+      table[i][j] = before[i] === after[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1])
+    }
+  }
+  const keptBefore = before.map(() => false)
+  const keptAfter = after.map(() => false)
+  let i = 0
+  let j = 0
+  while (i < before.length && j < after.length) {
+    if (before[i] === after[j]) {
+      keptBefore[i] = true
+      keptAfter[j] = true
+      i += 1
+      j += 1
+    } else if (table[i + 1][j] >= table[i][j + 1]) i += 1
+    else j += 1
+  }
+  return [keptBefore, keptAfter]
+}
+
+/**
+ * What a revised draft changed from the saved action it was drawn from
+ * (AGL-3603), worked out in code from the two stored shapes — never the
+ * model's own account of what it did. A step whose kind is both removed and
+ * added — edited, or moved — is reported as changed.
+ */
+export function aiAutomationRevisionChanges(
+  before: Pick<AiAutomation, 'trigger' | 'steps'>,
+  after: Pick<AiAutomation, 'trigger' | 'steps'>,
+  label: (type: string) => string,
+): string[] {
+  const changes: string[] = []
+  if (before.trigger?.event !== after.trigger?.event) changes.push('It starts on a different event.')
+  else {
+    const conditions = (trigger: AiAutomation['trigger'] | undefined) =>
+      JSON.stringify({ conditions: trigger?.conditions ?? [], combinator: trigger?.conditions?.length ? trigger.combinator ?? 'and' : null })
+    if (conditions(before.trigger) !== conditions(after.trigger)) changes.push('Its conditions changed.')
+  }
+  const beforeSteps = before.steps ?? []
+  const afterSteps = after.steps ?? []
+  const [keptBefore, keptAfter] = keptSteps(beforeSteps.map(stepSignature), afterSteps.map(stepSignature))
+  const removed = beforeSteps.filter((_, index) => !keptBefore[index]).map((step) => label(step.type))
+  const added = afterSteps.filter((_, index) => !keptAfter[index]).map((step) => label(step.type))
+  const changed = [...new Set(removed.filter((name) => added.includes(name)))]
+  const only = (names: string[]) => [...new Set(names.filter((name) => !changed.includes(name)))]
+  if (changed.length) changes.push(`Changed: ${changed.join(', ')}.`)
+  if (only(added).length) changes.push(`Added: ${only(added).join(', ')}.`)
+  if (only(removed).length) changes.push(`Removed: ${only(removed).join(', ')}.`)
+  return changes
+}
+
+/**
+ * What a revised draft's output tells a person: which saved action it was
+ * drawn from, what changed, that the saved one is untouched, and the draft's
+ * own note.
+ */
+export function aiAutomationRevisionNote(
+  input: { fromName: string; changes: readonly string[]; draft: AiAutomationDraft; notes: readonly string[] },
+): string {
+  const changes = input.changes.length ? input.changes : ['Nothing changed from the saved action.']
+  return [
+    `A changed copy of “${input.fromName}”, which is left as it is.`,
+    ...changes,
+    aiAutomationDraftNote(input.draft, input.notes),
+    'Switch the old one off when you switch this one on.',
+  ].join(' ')
+}

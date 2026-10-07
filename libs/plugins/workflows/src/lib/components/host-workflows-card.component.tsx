@@ -100,6 +100,8 @@ import {
 } from '@aglyn/aglyn/app-utils/where-used'
 import {
   AUTOMATION_EDITOR_ZONE,
+  HOST_AUTOMATIONS_ZONE,
+  openActionHref,
   WORKFLOW_USAGE_ZONE,
   type AutomationTarget,
 } from './workflow-zones'
@@ -145,6 +147,13 @@ export interface HostWorkflowsCardProps {
   hostId: string
   /** Resolved entitlement source for quota checks (AGL-395). */
   org?: Partial<AglynOrgBilling>
+  /**
+   * The Actions section's address (AGL-3603). A widget in the
+   * `hostAutomations` zone drafts an ACTION, which lives there; opening it
+   * goes to that section with the action named. Absent, the zone's
+   * `openAction` answers `false` and the widget says where the draft went.
+   */
+  actionsHref?: string
 }
 
 interface WorkflowDraft extends AutomationWorkflow {
@@ -183,6 +192,28 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
    * editor (AGL-2919); `null` outside the console shell.
    */
   const ExtensionZone = useConsoleWidgetSlot()
+  const { actionsHref } = props
+  /*
+   * For the `hostAutomations` zone (AGL-3603): what a widget drafts is an
+   * action, listed on the Actions section rather than this card, so opening
+   * it goes there and asks that section's editor to open it.
+   */
+  const openAction = useCallback(
+    (actionId: string) => {
+      if (!actionsHref) return false
+      window.location.assign(openActionHref(actionsHref, actionId))
+      return true
+    },
+    [actionsHref],
+  )
+  const automationsZone = ExtensionZone ? (
+    <ExtensionZone
+      slot={HOST_AUTOMATIONS_ZONE.id}
+      hostId={hostId}
+      orgId={org?.$id}
+      openAction={openAction}
+    />
+  ) : null
 
   const {
     data: workflowDocs,
@@ -646,16 +677,22 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
       help={pluginDocsHelp('buildAWorkflow', {
         anchor: '#1-open-the-workflows-page',
       })}
+      // Other ways to start an automation (AGL-3603), in the header while
+      // the list has rows and in the empty state while it has none.
+      actions={workflows.length === 0 ? undefined : automationsZone}
       contentGutterX
       contentGutterY
     >
       {duplicate.dialog}
       <Stack spacing={1}>
         {workflows.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {'Chain your functions into multi-step pipelines — each step ' +
-              'feeds the next. Site-event triggers are coming next.'}
-          </Typography>
+          <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
+            <Typography variant="body2" color="text.secondary">
+              {'Chain your functions into multi-step pipelines — each step ' +
+                'feeds the next. Site-event triggers are coming next.'}
+            </Typography>
+            {automationsZone}
+          </Stack>
         ) : (
           visibleWorkflows.map((workflow: any) => (
             <Stack

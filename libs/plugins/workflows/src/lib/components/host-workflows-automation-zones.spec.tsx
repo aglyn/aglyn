@@ -27,6 +27,7 @@ import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import HostWorkflowsCard from './host-workflows-card.component'
+import { openActionHref, requestedActionId } from './workflow-zones'
 
 const collections: Record<string, Array<Record<string, unknown>>> = {
   workflows: [
@@ -80,7 +81,12 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CardDisplay: ({ children, actions }: { children: ReactNode; actions?: ReactNode }) => (
+    <div>
+      <div data-testid="card-header-actions">{actions}</div>
+      {children}
+    </div>
+  ),
   MdiIcon: () => null,
   useConfirmationContext: () => ({ confirm: jest.fn().mockResolvedValue(undefined) }),
 }))
@@ -106,10 +112,10 @@ function ShellSlot({ slot, ...props }: { slot: string } & Record<string, unknown
   return <div data-testid={`zone-${slot}`} />
 }
 
-function renderInShell() {
+function renderInShell(actionsHref?: string) {
   return render(
     <ConsoleWidgetSlotContext.Provider value={ShellSlot}>
-      <HostWorkflowsCard hostId="host-1" org={ORG} />
+      <HostWorkflowsCard hostId="host-1" org={ORG} actionsHref={actionsHref} />
     </ConsoleWidgetSlotContext.Provider>,
   )
 }
@@ -151,5 +157,46 @@ describe('the Workflows card’s automation zones (AGL-2919)', () => {
         targetName: 'Notify on signup',
       }),
     )
+  })
+})
+
+describe('the Workflows card hosts hostAutomations (AGL-3603)', () => {
+  const saved = collections.workflows
+
+  afterEach(() => {
+    collections.workflows = saved
+  })
+
+  it('draws it once, in the card’s header, while the list has rows', () => {
+    renderInShell('/acme/sites/host-1/automation/actions')
+    const header = screen.getByTestId('card-header-actions')
+    expect(within(header).getAllByTestId('zone-hostAutomations')).toHaveLength(1)
+    expect(screen.getAllByTestId('zone-hostAutomations')).toHaveLength(1)
+    const props = drawn.find((entry) => entry.slot === 'hostAutomations')?.props
+    expect(props).toEqual({ hostId: 'host-1', orgId: 'org-1', openAction: expect.any(Function) })
+  })
+
+  it('draws it once, in the empty state, while the list has none', () => {
+    collections.workflows = []
+    renderInShell('/acme/sites/host-1/automation/actions')
+    expect(within(screen.getByTestId('card-header-actions')).queryByTestId('zone-hostAutomations')).toBeNull()
+    expect(screen.getAllByTestId('zone-hostAutomations')).toHaveLength(1)
+  })
+
+  it('answers false when it has no Actions section to send a drafted action to', () => {
+    renderInShell()
+    const props = drawn.find((entry) => entry.slot === 'hostAutomations')?.props as {
+      openAction: (id: string) => boolean
+    }
+    expect(props.openAction('act-1')).toBe(false)
+  })
+
+  it('names the drafted action in the Actions section’s address, which that section reads back', () => {
+    const href = openActionHref('/acme/sites/host-1/automation/actions', 'act 1')
+    expect(href).toBe('/acme/sites/host-1/automation/actions?action=act%201')
+    expect(requestedActionId('?action=act-1')).toBe('act-1')
+    // Only a document id: anything else names nothing.
+    expect(requestedActionId('?action=act%201')).toBeNull()
+    expect(requestedActionId('')).toBeNull()
   })
 })

@@ -16,7 +16,6 @@
  */
 
 import { buildPageMarkdown } from '@aglyn/aglyn/app-utils/page-markdown'
-import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { SCREEN_SEO_TEXT_GUIDANCE } from '@aglyn/aglyn/app-utils/screen-seo-fields'
 import { SCREEN_ROOT_PATH, screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
@@ -43,6 +42,7 @@ import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiGenerationWorstCaseMs } from './ai-job-budget'
 import { aiJobDraftId, aiOriginJobId } from './ai-job-draft-ids'
 import {
+  aiBuildsWithComponents,
   aiDraftAdmissionRefusal,
   aiDraftAllowanceRefusal,
   aiSiteSubdomain,
@@ -575,10 +575,11 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     if (written && !stored) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_DELETED_COPY }
     const page = stored?.nodes ?? aiEmptyPage()
     const index = sectionIds.findIndex((id) => !(id in page))
-    // A workspace that keeps no reusable components draws its repeats inline,
-    // and every pass is held to the rules that way (AGL-3030). A form is a
-    // saved one placed by id on every plan, or none (AGL-3596).
-    const reusableComponents = checkEntitlement(org, 'reusableComponents')
+    // A workspace whose component allowance is finite — Free's one — draws
+    // its repeats inline, and every pass is held to the rules that way
+    // (AGL-3030, AGL-3615). A form is a saved one placed by id on every plan,
+    // or none (AGL-3596).
+    const reusableComponents = aiBuildsWithComponents(org)
     // A link may take a visitor to a section of this page, by its name in the plan (AGL-3097).
     const sections = screen.sections.map((section) => section.name)
     // A third-party player the confirmed plan lists for this page is the only one it may embed (AGL-3433).

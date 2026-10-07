@@ -22,6 +22,10 @@ compare-at price, weight, image, and inventory count.
 - **Types**: `physical` (shippable), `digital` (delivered as downloads), or
   `service`.
 - **Status**: `draft` (invisible to visitors), `active`, or `archived`.
+  A product created for you rather than added in the editor — a proposed
+  product, for one — starts as a draft with no photo, and its price stays
+  empty unless one was given. It counts toward your plan's product
+  allowance like any other product.
 - **Pricing**: a variant with a **compare-at price** above its price shows a
   sale badge on storefront blocks.
 - **Inventory**: leave blank for untracked, `0` means sold out — the same

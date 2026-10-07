@@ -86,6 +86,14 @@ import {
   parseAssistEditContext,
   resolveAssistEdit,
 } from './assist-edit'
+import { ASSIST_BUILD_TOOL_NAME, type AssistBuildProposal } from '../model/assist-build'
+import {
+  assistBuildBlock,
+  assistBuildIntents,
+  assistBuildIntentsBlock,
+  assistBuildTool,
+  resolveAssistBuild,
+} from './assist-build'
 import {
   type AssistActionRung,
   describeView,
@@ -645,6 +653,59 @@ async function assistEditRung(input: {
   return { target: { ...document, hostId }, context }
 }
 
+/** A request on the build rung (AGL-3616): the site it builds on and what a build can make there. */
+interface AssistBuildRung {
+  hostId: string
+  intents: string[]
+}
+
+/**
+ * Whether this turn may PROPOSE a build (AGL-3616) — one request turned into
+ * one `build` job whose plan card the person confirms — and on which site,
+ * or null and the turn is answered as it would be without one.
+ *
+ * The gates are the generation doors' own, as the edit rung's: the org's
+ * `aiGenerative`, `release_ai_generative` (staff preview), the caller's
+ * `ai.generate` on the site the page named, and the `ai-generate` switch.
+ * No canvas is needed: a build is asked from anywhere on a site. Last, a
+ * deployment that loaded the build kind and a site where some operation
+ * passes its owner's gates, which is also what the model is told it may
+ * offer. The job door checks every one of these again when the panel starts
+ * the job; this rung only decides whether the model may propose it.
+ */
+async function assistBuildRung(input: {
+  body: AssistRequestBody
+  org: Record<string, unknown>
+  staff: boolean
+  member: Parameters<typeof memberHasPermissionOnHost>[2]
+  firestore: FirebaseFirestore.Firestore
+}): Promise<AssistBuildRung | null> {
+  const { body, org, staff } = input
+  const hostId = sanitiseId(body.context?.hostId ?? '')
+  if (!hostId) return null
+  if (!checkEntitlement(org as never, 'aiGenerative')) return null
+  if (!staff && !(await isServerReleaseFlagOnForOrg('release_ai_generative', body.orgId))) {
+    return null
+  }
+  if (
+    !staff &&
+    !(await memberHasPermissionOnHost(body.orgId, hostId, input.member, 'ai.generate'))
+  ) {
+    return null
+  }
+  if (await featureLockdownRefusal({ feature: 'ai-generate', staff, orgId: body.orgId })) {
+    return null
+  }
+  const intents = await assistBuildIntents(input.firestore, { orgId: body.orgId, hostId, org }).catch(
+    (error: unknown) => {
+      // A rung that cannot be decided stays closed: the chat still answers.
+      console.error('assist build rung failed', { orgId: body.orgId, error })
+      return null
+    },
+  )
+  return intents ? { hostId, intents } : null
+}
+
 /**
  * The level-2 view block (entitled orgs only) and the scope the proposal
  * channel resolves against.
@@ -997,6 +1058,15 @@ async function handler(request: Request): Promise<Response> {
       staff,
       member: resolved.member,
     })
+    // The build rung (AGL-3616), decided beside the edit rung for the same
+    // reason: a request to make things is not a question the docs answer.
+    const buildRung = await assistBuildRung({
+      body,
+      org: org as Record<string, unknown>,
+      staff,
+      member: resolved.member,
+      firestore,
+    })
 
     // ── Retrieval FIRST (AGL-2486) ────────────────────────────────────────
     // Level-1 grounding for everyone. Hoisted above the reservation and the
@@ -1019,7 +1089,7 @@ async function handler(request: Request): Promise<Response> {
     // for a question that needs nothing around it, and the open canvas is
     // exactly what an edit request leans on.
     const deflection =
-      editRung && !questionStandsAlone(body.question)
+      (editRung || buildRung) && !questionStandsAlone(body.question)
         ? null
         : deflectToDocs(body.question, scored, body.history.length > 0)
     if (deflection?.answered) {
@@ -1125,7 +1195,7 @@ async function handler(request: Request): Promise<Response> {
     // was written by whichever model Auto chose. Nor does a turn on the edit
     // rung (AGL-2906): that answer is composed against the canvas the request
     // described, which the key cannot describe either.
-    const cacheKey = body.history.length || body.model || editRung
+    const cacheKey = body.history.length || body.model || editRung || buildRung
       ? ''
       : assistAnswerCacheKey({
           question: body.question,
@@ -1320,6 +1390,8 @@ async function handler(request: Request): Promise<Response> {
       ...(editRung
         ? [{ text: editCanvasBlock(editRung.target.kind), cacheBreakpoint: true as const }]
         : []),
+      // The build protocol (AGL-3616): the same for every site, so cached.
+      ...(buildRung ? [{ text: assistBuildBlock(), cacheBreakpoint: true as const }] : []),
       // Per-org, and therefore AFTER every breakpoint — see
       // `assistBrandBlock`. Unconditional: a free workspace assembles no
       // view block, and it must still be told what the product is called.
@@ -1329,6 +1401,8 @@ async function handler(request: Request): Promise<Response> {
       ...(editRung
         ? [{ text: editSelectionBlock(editRung.context), volatile: true as const }]
         : []),
+      // What a build can make on this site: per site, so volatile.
+      ...(buildRung ? [{ text: assistBuildIntentsBlock(buildRung.intents), volatile: true as const }] : []),
       ...(docsBlock ? [{ text: docsBlock, volatile: true as const }] : []),
     ]
 
@@ -1338,11 +1412,20 @@ async function handler(request: Request): Promise<Response> {
         model,
         // An edit proposal writes its operations as a tool call, which needs
         // room an answer does not.
-        maxTokens: editRung ? ASSIST_EDIT_MAX_OUTPUT_TOKENS : MAX_OUTPUT_TOKENS,
+        // A build's brief is a tool call too, restating the whole request.
+        maxTokens: editRung || buildRung ? ASSIST_EDIT_MAX_OUTPUT_TOKENS : MAX_OUTPUT_TOKENS,
         stream: true,
         // One strict tool, and only on the edit rung: below it the model has
         // no way to act, only to answer.
-        ...(editRung ? { tools: [assistEditTool(editRung.target.kind)] } : {}),
+        // The build rung (AGL-3616) adds its own strict tool beside it.
+        ...(editRung || buildRung
+          ? {
+              tools: [
+                ...(editRung ? [assistEditTool(editRung.target.kind)] : []),
+                ...(buildRung ? [assistBuildTool()] : []),
+              ],
+            }
+          : {}),
         // See the header comment: omitting these is NOT the same as
         // sending them — the model-side defaults are adaptive thinking at
         // `high` effort, which this workload neither needs nor can afford.
@@ -1387,6 +1470,8 @@ async function handler(request: Request): Promise<Response> {
         let stopReason: string | null = null
         /** The first call of the edit tool, as the stream delivered it. */
         let editInput: Record<string, unknown> | null = null
+        /** The first call of the build tool (AGL-3616). */
+        let buildInput: Record<string, unknown> | null = null
         /**
          * What the model wrote into its tool calls, when the stream stopped
          * at its ceiling (AGL-3143). Held here only long enough to be
@@ -1418,6 +1503,9 @@ async function handler(request: Request): Promise<Response> {
               // and a second call is the model repeating itself.
               if (editRung && !editInput && event.name === ASSIST_EDIT_TOOL_NAME) {
                 editInput = event.input
+              }
+              if (buildRung && !buildInput && event.name === ASSIST_BUILD_TOOL_NAME) {
+                buildInput = event.input
               }
             } else if (event.type === 'done') {
               usage = event.usage
@@ -1464,6 +1552,17 @@ async function handler(request: Request): Promise<Response> {
               })
             }
           }
+
+          // The build proposal (AGL-3616): the request, held to the site the
+          // turn was asked on. Still nothing is made: the panel starts a
+          // build job whose plan the person confirms.
+          const build: AssistBuildProposal | null =
+            buildRung && stopReason !== 'max_tokens'
+              ? resolveAssistBuild(buildInput, {
+                  hostId: buildRung.hostId,
+                  screen: guide?.view?.screen ?? describeView(sanitiseRoute(body.context?.route ?? ''))?.screen ?? null,
+                })
+              : null
 
           // A refusal is an HTTP 200 with an empty or partial answer, not an
           // error — so without this the user watches the spinner stop and
@@ -1546,6 +1645,7 @@ async function handler(request: Request): Promise<Response> {
             cacheKey &&
             answer &&
             !proposal &&
+            !build &&
             stopReason !== 'refusal' &&
             stopReason !== 'max_tokens' &&
             model === assistModel()
@@ -1567,6 +1667,9 @@ async function handler(request: Request): Promise<Response> {
             // The edit proposal (AGL-2906): ops the panel applies in the
             // author's editor when they press Apply, and never before.
             edit,
+            // The build proposal (AGL-3616): the panel starts its job and
+            // shows the plan card; nothing is built before it is confirmed.
+            build,
             // The reservation VERBATIM (AGL-2238). It already describes the
             // standing after the message, because it is what moved the
             // counter — `reserveAssistMessage` returns `used + 1` and

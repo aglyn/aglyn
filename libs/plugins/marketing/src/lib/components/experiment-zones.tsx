@@ -62,6 +62,13 @@ export interface MarketingExperimentVariantDraft {
   /** A screen or section variant's copy is its screen version, so it carries none here. */
   subject: string
   body: string
+  /**
+   * A draft screen version a widget MADE for a page or section variant
+   * (AGL-3603), handed back through `proposeVariants` to be pinned unsaved.
+   * Never handed TO a widget: the version a variant already pins is the
+   * test's shape, not copy.
+   */
+  versionId?: string
 }
 
 /** What {@link EXPERIMENT_VARIANTS_ZONE} hands each widget. */
@@ -74,6 +81,10 @@ export interface MarketingExperimentVariantsZoneProps {
   target: ExperimentTarget
   /** The conversion event the test counts, as the goal names it. */
   goal: string
+  /** A page or section test's page; empty until one is picked, and for an email (AGL-3603). */
+  screenId: string
+  /** A section test's element; empty until one is picked, and for a page or an email. */
+  nodeId: string
   variants: MarketingExperimentVariantDraft[]
   /**
    * Fills the editor's variant fields with what a widget proposes, unsaved.

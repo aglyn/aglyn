@@ -155,6 +155,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         where: (field: string, _op: string, value: unknown) =>
           build([...filters, [field, value]], limit),
         limit: (count: number) => build(filters, count),
+        // The install's component-allowance count (AGL-3615).
+        select: () => ({ get: async () => run() }),
         get: async () => run(),
         __run: run,
       }

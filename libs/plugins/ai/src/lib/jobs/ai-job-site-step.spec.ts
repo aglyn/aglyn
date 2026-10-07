@@ -570,7 +570,7 @@ describe('one unit a pass', () => {
     expect(outcome.stopReason).toBe('end_turn')
   })
 
-  it('waits on a unit that stopped for a person, and does not continue', async () => {
+  it('settles a unit that stopped for a person as its own failed item, not the workspace’s fault, and goes on (AGL-3616)', async () => {
     const review = {
       reason: 'limit' as const,
       message: 'no room',
@@ -578,28 +578,46 @@ describe('one unit a pass', () => {
     }
     const step = stepWith({ page: fakeRunner([], () => ({ review })) })
     const outcome = await step(context(siteJob()))
-    expect(outcome.review).toEqual(review)
-    expect(outcome.continue).toBeUndefined()
+    expect(outcome.review).toBeUndefined()
+    expect(outcome.item).toMatchObject({ slot: 'p0', status: 'failed', failure: { ours: false, reason: 'review', message: 'no room' } })
+    expect(outcome.continue).toBe(true)
   })
 
-  it('hands a unit’s refusal and its failure straight back', async () => {
+  it('settles a unit’s refusal and its failure as that item’s, and goes on (AGL-3616)', async () => {
     const refused = await stepWith({
       page: fakeRunner([], () => ({ refused: true })),
     })(context(siteJob()))
-    expect(refused.refused).toBe(true)
-    expect(refused.continue).toBeUndefined()
+    expect(refused.refused).toBeUndefined()
+    expect(refused.item).toMatchObject({ status: 'failed', failure: { ours: false, reason: 'refused' } })
+    expect(refused.continue).toBe(true)
     const failed = await stepWith({
       page: fakeRunner([], () => ({ failure: 'the draft is gone' })),
     })(context(siteJob()))
-    expect(failed.failure).toBe('the draft is gone')
+    expect(failed.item).toMatchObject({ status: 'failed', failure: { ours: true, reason: 'step-failure', message: 'the draft is gone' } })
   })
 
-  it('stops rather than ask a unit that reported nothing to build again', async () => {
+  it('fails, on our side, a unit that reported nothing, rather than ask it again', async () => {
     const outcome = await stepWith({ page: fakeRunner([], () => ({})) })(
       context(siteJob()),
     )
-    expect(outcome.failure).toBe(AI_SITE_UNIT_EMPTY_COPY)
-    expect(outcome.continue).toBeUndefined()
+    expect(outcome.item).toMatchObject({ slot: 'p0', status: 'failed', failure: { ours: true, message: AI_SITE_UNIT_EMPTY_COPY } })
+    expect(outcome.continue).toBe(true)
+  })
+
+  it('builds a page whose form failed without it, and says so (AGL-3616)', async () => {
+    const pages: AiJob[] = []
+    const job = siteJob({ plan: confirmedPlan({ create: [FORM], screens: confirmedPlan().screens.map((screen) => ({ ...screen, sections: [{ name: 'contact form', uses: ['new:Contact'], items: 0 }] })) }) })
+    const step = stepWith({
+      form: fakeRunner([], () => ({ failure: 'no form' })),
+      page: fakeRunner(pages, () => ({ outputs: [output('screen', 'screen-0')] })),
+    })
+    const first = await step(context(job))
+    expect(first.item).toMatchObject({ slot: 'f', status: 'failed' })
+    const items = (first.items ?? []).map((row) => (row.slot === 'f' ? { ...row, status: 'failed' as const } : row))
+    const second = await step(context({ ...job, items }))
+    expect(pages[0].plan?.screens[0]?.sections[0]?.uses).toEqual([])
+    expect(pages[0].brief).toContain('without the form “Contact”')
+    expect(second.item).toMatchObject({ slot: 'p0', status: 'degraded', degradedBy: ['f'] })
   })
 
   it('keeps the plan a member confirmed, whatever a delegate proposes', async () => {
@@ -1048,8 +1066,10 @@ describe('a site job generates every page from its plan (AGL-3596)', () => {
       { readNodes: async () => ({ versionId: 'v-1', nodes: starterNodes as never }) },
     )
     const outcome = await step(context(siteJob()))
-    expect(outcome.failure).toBe(AI_SITE_PAGE_NOT_WRITTEN_COPY)
-    expect(outcome.continue).toBeUndefined()
+    // The page is its own failed item, on our side; the rest of the site goes on (AGL-3616).
+    expect(outcome.failure).toBeUndefined()
+    expect(outcome.item).toMatchObject({ slot: 'p0', status: 'failed', failure: { ours: true, message: AI_SITE_PAGE_NOT_WRITTEN_COPY } })
+    expect(outcome.continue).toBe(true)
     expect(outcome.outputs.some((entry) => entry.resource === 'screen')).toBe(false)
   })
 

@@ -49,6 +49,12 @@ for what a paused site shows a visitor.
 
 Video, audio, file downloads and other media served from our servers count 1.6× toward bandwidth, because serving them costs more than serving pages. See [how usage is counted](bandwidth.md#how-usage-is-counted).
 
+Each site also holds a number of [saved forms](../../content-and-data/forms/overview.md#saved-forms-per-site)
+and [reusable components](../../building-sites/besigner/reusable-components.md): one of
+each on Free, more on every paid plan (components are unlimited from Starter up). The
+limit applies when you create one, never to what a site already holds, so a site that
+moves to a smaller plan keeps everything it built.
+
 ### Links on a new Free site {#leaving-notice}
 
 For a Free workspace's first 14 days, its sites send links and redirects to other

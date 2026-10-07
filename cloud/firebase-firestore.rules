@@ -2798,6 +2798,11 @@ service cloud.firestore {
                      // whether the guided AI start is still offered, and only
                      // the starter route writes it.
                      'starterProvisionedAt',
+                     // Whether the site records visitor journeys (AGL-3605).
+                     // The tenant's collector reads it to decide whether a
+                     // visit is stored, and only the funnels routes write it,
+                     // as a funnel is saved or removed.
+                     'funnelRecording',
                      // `sendingDomain`/`sendingLocalPart` are this site's
                      // half of the custom-sending-domain model: together they
                      // are the `From:` address every recipient of this site's
@@ -3055,7 +3060,7 @@ service cloud.firestore {
       // Reusable components (AGL-679) now carry editing history like screens
       // and layouts. The component DOC stays API-create-only (the catch-all
       // below excludes `components`, and the resources route enforces the
-      // reusableComponents entitlement) — but its `versions` subcollection
+      // plan's `componentsPerHost` allowance, AGL-3615) — but its `versions` subcollection
       // has to be client-writable, and the catch-all's create exclusion is
       // by collection NAME, so `components/{id}/versions/{v}` was caught by
       // it too. This dedicated block carves the versions back out.
@@ -3341,9 +3346,17 @@ service cloud.firestore {
         // content is the object AGL-1443 is open on, and the undo affordance
         // does not need one. No client read means no such surface can appear
         // by accident.
+        //
+        // `funnelJourneys` and `funnelResults` join it too (AGL-3605): a
+        // journey is one visitor's recorded visit — the pages, forms and
+        // products they went through, in order, and where they came from — and
+        // the only reader is the funnels results route, which turns visits into
+        // counts on the Admin SDK. A member gets the counts, never the visits.
+        // A result is that route's cache, served by the route.
         allow read: if subcollection != 'siteMemberCredentials' &&
           (isStaff() || (isHostMember(hostId) &&
-            !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports'])));
+            !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
+              'funnelJourneys', 'funnelResults'])));
         // THE EXCLUSION LISTS ARE THE MECHANISM. Sibling match blocks are OR'd
         // and the LOOSER one wins, so a dedicated deny (or a tighter dedicated
         // block) beside this catch-all decides nothing until the name is also
@@ -3468,13 +3481,21 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials', 'recordPages']) &&
+              'siteMemberCredentials', 'recordPages',
+              'funnels', 'funnelJourneys', 'funnelResults']) &&
             // The org Inbox's collection-group read (AGL-3303) lists EVERY
             // `formSubmissions` collection, at any depth, filed under the org
             // a row names, so none may be minted beneath another name here.
             !string(document).matches('.*/formSubmissions/[^/]+')));
         // More names on all THREE lists, each server-written with no client
         // writer to break:
+        //
+        //  - `funnels`, `funnelJourneys` and `funnelResults` (AGL-3605). A
+        //    funnel's save checks the plan, the admin-or-editor role and every
+        //    step against the site, and switches the site's visit recording on
+        //    or off with it, so the funnels routes are its only writer; members
+        //    still READ funnels here. Journeys are written by the site
+        //    collector and results by the results route, both on the Admin SDK.
         //
         //  - `recordPages` (AGL-3475): a site's record templates. A binding
         //    decides which page serves `/{base}/…` for every record of a
@@ -3586,7 +3607,8 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials', 'recordPages'])));
+              'siteMemberCredentials', 'recordPages',
+              'funnels', 'funnelJourneys', 'funnelResults'])));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -3637,7 +3659,7 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-              'recordPages'])));
+              'recordPages', 'funnels', 'funnelJourneys', 'funnelResults'])));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only

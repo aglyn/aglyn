@@ -26,6 +26,7 @@ import {
   hostIdsFromScope,
   isOrgWideScope,
 } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
@@ -54,6 +55,8 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import {
+  ORG_AUTOMATION_STEP_TYPES,
+  ORG_AUTOMATION_TRIGGER_EVENTS,
   ORG_AUTOMATIONS_COLLECTION,
   ORG_AUTOMATIONS_MAX,
   orgAutomationPausedHostIds,
@@ -66,7 +69,9 @@ import {
   orgAutomationBody,
   type OrgAutomationDraft,
   orgAutomationDraft,
+  orgAutomationDraftFromProposal,
 } from './org-automation-editor.component'
+import { ORG_AUTOMATIONS_ZONE, type OrgAutomationProposal } from './workflow-zones'
 import { useOrgAutomationsApi } from './use-org-automations-api'
 import { orgSiteName, type WorkflowsOrgMount } from './workflows-org-mount'
 import { HOST_ACTION_STEP_LABELS, type HostActionStepType } from '../model/host-actions'
@@ -176,16 +181,48 @@ export function OrgAutomationsCard(props: OrgAutomationsCardProps) {
     [enqueueSnackbar],
   )
 
+  const refuseUnentitled = useCallback(() => {
+    enqueueSnackbar(
+      'Org automations are built from the actions builder, which requires a Pro plan — see Billing to upgrade',
+      { variant: 'warning', persist: false },
+    )
+  }, [enqueueSnackbar])
+
   const handleAdd = useCallback(() => {
-    if (!entitled) {
-      enqueueSnackbar(
-        'Org automations are built from the actions builder, which requires a Pro plan — see Billing to upgrade',
-        { variant: 'warning', persist: false },
-      )
-      return
-    }
+    if (!entitled) return refuseUnentitled()
     setDraft(newOrgAutomationDraft())
-  }, [entitled, enqueueSnackbar])
+  }, [entitled, refuseUnentitled])
+
+  /*
+   * For the `orgAutomations` zone (AGL-3603): an automation another plugin
+   * proposed opens in the editor as a new one, unsaved and switched off —
+   * the same door Add org automation opens, so the plan is asked first and
+   * Save is still the only write.
+   */
+  const propose = useCallback(
+    (proposal: OrgAutomationProposal) => {
+      if (!entitled) {
+        refuseUnentitled()
+        return false
+      }
+      const opened = orgAutomationDraftFromProposal(proposal)
+      if (!opened) return false
+      setDraft(opened)
+      return true
+    },
+    [entitled, refuseUnentitled],
+  )
+  const ExtensionZone = useConsoleWidgetSlot()
+  const automationsZone =
+    ExtensionZone && canEdit ? (
+      <ExtensionZone
+        slot={ORG_AUTOMATIONS_ZONE.id}
+        orgId={mount.orgId}
+        triggers={ORG_AUTOMATION_TRIGGER_EVENTS}
+        steps={ORG_AUTOMATION_STEP_TYPES}
+        propose={propose}
+      />
+    ) : null
 
   const handleSave = useCallback(async () => {
     if (!draft) return
@@ -271,6 +308,8 @@ export function OrgAutomationsCard(props: OrgAutomationsCardProps) {
     <CardDisplay
       header={'Org automations'}
       help={pluginDocsHelp('orgAutomations', { anchor: '#what-an-org-automation-is' })}
+      // Other ways to start an org automation (AGL-3603), in the header.
+      actions={automationsZone ?? undefined}
       contentGutterX
       contentGutterY
     >

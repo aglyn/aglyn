@@ -88,3 +88,27 @@ describe('the site Overview’s email figures have their indexes', () => {
     expect(sendShapes).toContain('visibleTo:ARRAY > emailCampaignId:ASCENDING')
   })
 })
+
+/**
+ * The campaign conversions figures (AGL-3603) count a site's attribution
+ * records by kind, and by kind and channel, over a window on
+ * `convertedAtMs` — an aggregation over a filtered range, which needs its
+ * composite index or fails in production only.
+ */
+describe('the campaign conversions figures have their indexes', () => {
+  const attributionShapes = new Set(
+    CONFIG.indexes
+      .filter(
+        (index) =>
+          index.collectionGroup === 'campaignAttributions' && index.queryScope === 'COLLECTION',
+      )
+      .map((index) => signature(index.fields)),
+  )
+
+  it.each([
+    'kind:ASCENDING > convertedAtMs:ASCENDING',
+    'kind:ASCENDING > channel:ASCENDING > convertedAtMs:ASCENDING',
+  ])('declares %s', (shape) => {
+    expect(attributionShapes).toContain(shape)
+  })
+})

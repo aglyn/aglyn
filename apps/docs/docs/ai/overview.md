@@ -43,16 +43,22 @@ Each capability has its own page, next to the thing it builds:
 | A page template | **Templates → Create with AI** | [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai) |
 | A reusable component | **Components → Create with AI** | [Generate a component](../building-sites/components/generate-a-component-with-aglyn-ai.md) |
 | A form | **Forms → Create with AI** | [Generate a form](generate-a-form.md) |
+| Illustrations, icons, patterns, logo marks and photos | **Media → Create with AI** | [Create images with AI](create-images.md) |
 | A section on the canvas | The Besigner | [Generate a section](generate-section.md) |
 | Copy, rewritten or fresh | Any text in the Besigner | [Rewrite and write copy](copy-assist.md) |
 | A change to your theme | **Setup → Theme** | [Change your theme with AI](theme-assist.md) |
 | Search titles and descriptions | **SEO** | [SEO by AI](../building-sites/seo/seo-by-ai.md) |
-| Product copy, catalog and discount ideas | **Commerce** | [Products with AI](products-with-ai.md) |
+| Product copy, catalog and discount ideas | **Products → Create with AI**, and **Build your catalog with AI** on the products page | [Products with AI](products-with-ai.md) |
 | Help working the CRM | A record, the composer, an import | [CRM by AI](crm-by-ai.md) |
-| A designed email | **Email → Create with AI** | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md) |
-| A campaign | **Campaigns** | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md) |
+| A designed email | **Emails → Templates → Create with AI** | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md) |
+| A campaign | **Marketing → Campaigns → Create with AI**, or **Also draft a campaign** on an email | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md#where-to-start-it) |
 | Variants for an A/B test, and its result in words | **Marketing → Experiments** | [A/B tests by AI](ab-tests-with-ai.md) |
+| Announcement bar and popup copy, or a new overlay | **Marketing → Overlays** | [Marketing with AI](marketing-with-ai.md#write-overlay-copy) |
 | What your analytics mean | **Analytics → Insights** | [Insights](../marketing-and-automation/analytics/insights.md) |
+| What your campaigns caused and earned | **Marketing → Conversions**, or a campaign's report | [Marketing with AI](marketing-with-ai.md#ask-about-these-numbers) |
+| An automation, or a change to one you have | **Automation → Create with AI**, or a saved action's editor | [Automations with AI](automations-with-ai.md) |
+| A site function or variable, or a change to a function | **Logic → Create with AI**, or a saved function's editor | [Functions and variables with AI](logic-with-ai.md) |
+| A funnel from a description, and what its drop-off means | **Analytics → Funnels** | [Funnels](../marketing-and-automation/analytics/funnels.md#create-with-ai) |
 | A change to the page you have open | The Assist panel, in the Besigner | [Edits in the Besigner](../getting-started/aglyn-assist.md#edits-in-the-besigner) |
 
 Everything in that table follows the same building rules — reuse before creating, your
@@ -60,15 +66,6 @@ theme's colors and spacing, one reusable component for a repeat, images from you
 library with alt text, and a measured size. They are written out on
 [How Aglyn AI builds](how-aglyn-ai-builds.md), and every plan and every generated
 document is checked against them before you see it.
-
-### Not available yet {#not-yet}
-
-- **Drafting an automation from a description.** The door exists on
-  **Automation → Actions**, and what it is meant to do is on
-  [Explain automations with AI](automations-with-ai.md) — but a draft is
-  currently cut short at its size ceiling and can arrive with one step where the
-  description asked for several, so it is not open. **Explain an automation** and
-  **Why did this fail?** on the same pages are unaffected.
 
 ## The Aglyn AI add-on {#the-add-on}
 
@@ -139,8 +136,8 @@ switching it off stops and what it leaves running.
 
 With AI off for a site:
 
-- the assistant, **Create with AI** on the Pages, Templates, Layouts, Forms and
-  Components pages, the SEO and theme cards, the editor's **Rewrite with AI**,
+- the assistant, **Create with AI** on the Pages, Templates, Layouts, Forms,
+  Components and Media pages, the SEO and theme cards, the editor's **Rewrite with AI**,
   **Generate a section with AI** and **Make a reusable component with AI** controls, and
   the AI columns on the site's collaborators card are gone from that site;
 - every AI request made for the site is refused with **AI is switched off for this
@@ -160,6 +157,10 @@ components, layouts, forms and datasets your site already has, your theme's valu
 the copy of anything it is starting from. Each capability's page says exactly what its
 own job is sent: the CRM page lists what a record sends, and the automation page what is
 removed first.
+
+A photo made with [Create images with AI](create-images.md#what-is-sent) is the one thing
+served by Google rather than by the assistant's own model: it sends the description you
+type and the shape you choose, and nothing else of your site.
 
 Your brief is customer text and is kept with the job for 180 days, then deleted. No
 contact, lead, deal, form submission or list member is read to build a page.

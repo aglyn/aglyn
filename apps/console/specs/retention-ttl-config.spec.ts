@@ -132,6 +132,17 @@ const POLICIES: Array<{
     writers: ['apps/tenant/app/api/analytics/collect/route.ts'],
     stamp: 'expiresAt: analyticsDayExpiresAt(day)',
   },
+  // AGL-3605: a recorded site visit for funnels, and a funnel's cached result.
+  {
+    collectionGroup: 'funnelJourneys',
+    writers: ['libs/plugins/funnels/src/lib/server/journey-beacon.ts'],
+    stamp: 'expiresAt: journeyExpiresAt(now)',
+  },
+  {
+    collectionGroup: 'funnelResults',
+    writers: ['libs/plugins/funnels/src/lib/server/funnel-results.server.ts'],
+    stamp: 'expiresAt: new Date(now + 2 * CLOSED_RESULT_TTL_MS)',
+  },
   // AGL-1972: the verbatim half of an Assist exchange.
   {
     collectionGroup: 'assistExchanges',

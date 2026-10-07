@@ -2129,6 +2129,38 @@
       ]
     },
     {
+      "collectionGroup": "campaignAttributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "convertedAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "campaignAttributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "channel",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "convertedAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "entries",
       "queryScope": "COLLECTION",
       "fields": [
@@ -7841,6 +7873,56 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "funnelJourneys",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "funnelJourneys",
+      "fieldPath": "steps",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "funnelJourneys",
+      "fieldPath": "source",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "funnelJourneys",
+      "fieldPath": "left",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "funnelJourneys",
+      "fieldPath": "dropOffCheckAt",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "funnelResults",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "funnelResults",
+      "fieldPath": "result",
+      "indexes": []
     },
     {
       "collectionGroup": "screenAnalytics",

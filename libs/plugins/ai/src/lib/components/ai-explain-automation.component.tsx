@@ -34,7 +34,7 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import { aiJobProblem, useAiJobRun, useAiJobsVerdict, type AiJobRun } from './use-ai-job-run'
+import { aiJobProblem, useAiJobRun, type AiJobRun } from './use-ai-job-run'
 import type {
   ConsoleAutomationEditorZoneProps,
   ConsoleAutomationRunZoneProps,
@@ -105,10 +105,8 @@ export function AiExplainAutomation({ hostId, orgId, target }: ConsoleAutomation
   const copy = AI_AUTOMATION_EXPLAIN_COPY.explain
   const help = pluginDocsHelp('aiAutomations', { anchor: '#explain' })
   const { data: user } = useUser()
-  const verdict = useAiJobsVerdict(user, orgId)
   const run = useAiJobRun(user, copy.failed)
 
-  if (verdict !== 'ready') return null
   const asked = Boolean(run.job || run.notice)
   const busy = run.starting || run.running
 
@@ -147,11 +145,9 @@ export function AiExplainAutomation({ hostId, orgId, target }: ConsoleAutomation
 export function AiExplainRunFailure({ hostId, orgId, target, runId }: ConsoleAutomationRunZoneProps) {
   const copy = AI_AUTOMATION_EXPLAIN_COPY.diagnose
   const { data: user } = useUser()
-  const verdict = useAiJobsVerdict(user, orgId)
   const run = useAiJobRun(user, copy.failed)
   const [open, setOpen] = useState(false)
 
-  if (verdict !== 'ready') return null
   const busy = run.starting || run.running
 
   const ask = () => {

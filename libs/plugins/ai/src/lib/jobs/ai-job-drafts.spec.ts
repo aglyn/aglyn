@@ -67,6 +67,7 @@ import {
   AI_DRAFT_VERSION_FIELDS,
   AI_DRAFT_VERSION_NAME,
   aiDraftAdmissionRefusal,
+  aiBuildsWithComponents,
   aiDraftAllowanceRefusal,
   aiPlanCapabilitiesFrom,
   readAiDraft,
@@ -678,26 +679,38 @@ describe('writeAiDraft — a reusable component', () => {
     })
   })
 
-  it('admits one only on a plan with reusable components, whatever the site already holds, counting nothing', async () => {
+  it('meets the component band as the route does: live components, against the plan’s allowance alone', async () => {
     mockOwners.set('host-1', 'org-1')
     mockDocs.set('hosts/host-1', {})
+    // A Free site saves its one component, not behind the component feature (AGL-3615)…
+    expect((await writeAiDraft(firestore, componentInput({ org: FREE_ORG, id: 'job-free' }))).ok).toBe(true)
+    // …and is refused the second on the allowance, with the upgrade path.
+    expect(await writeAiDraft(firestore, componentInput({ org: FREE_ORG, id: 'job-free-2' }))).toEqual({
+      ok: false,
+      status: 403,
+      error: 'Your plan includes 1 reusable components — upgrade in Billing for more',
+    })
+    expect(
+      await aiDraftAllowanceRefusal(firestore, { kind: 'component', hostId: 'host-1', org: FREE_ORG }),
+    ).toBe('Your plan includes 1 reusable components — upgrade in Billing for more')
+    // A deleted component keeps its document and frees its slot, as the route counts.
+    mockDocs.set('hosts/host-1/components/job-free', {
+      ...(mockDocs.get('hosts/host-1/components/job-free') as Record<string, unknown>),
+      deletedAt: 5,
+    })
+    expect(
+      await aiDraftAllowanceRefusal(firestore, { kind: 'component', hostId: 'host-1', org: FREE_ORG }),
+    ).toBeNull()
+    // A paid plan's allowance is unlimited, whatever the site already holds.
     for (let index = 0; index < 60; index += 1) {
       mockDocs.set(`hosts/host-1/components/cmp-${index}`, { displayName: `Component ${index}` })
     }
-    expect(await writeAiDraft(firestore, componentInput({ org: FREE_ORG }))).toEqual({
-      ok: false,
-      status: 403,
-      error: AI_DRAFT_ENTITLEMENT_REFUSAL,
-    })
-    expect(commits).toEqual([])
-    expect(
-      await aiDraftAllowanceRefusal(firestore, { kind: 'component', hostId: 'host-1', org: FREE_ORG }),
-    ).toBe(AI_DRAFT_ENTITLEMENT_REFUSAL)
     expect(
       await aiDraftAllowanceRefusal(firestore, { kind: 'component', hostId: 'host-1', org: STARTER_ORG }),
     ).toBeNull()
     expect((await writeAiDraft(firestore, componentInput({ org: STARTER_ORG }))).ok).toBe(true)
   })
+
 
   it('refuses one whose root its node map does not hold, before anything is written', async () => {
     mockOwners.set('host-1', 'org-1')
@@ -774,10 +787,15 @@ describe('aiDraftAdmissionRefusal', () => {
     expect(ownCheck).toHaveBeenCalledWith('host-1')
     expect(await ask({ kind: 'template' })).toBeNull()
     expect(await ask()).toBeNull()
+    // The live site holds a component: a Free site has room for its one
+    // (AGL-3615) and no more, so it is refused the next on the allowance…
     expect(await ask({ kind: 'component', org: FREE_ORG })).toEqual({
       status: 403,
-      error: AI_DRAFT_ENTITLEMENT_REFUSAL,
+      error: 'Your plan includes 1 reusable components — upgrade in Billing for more',
     })
+    // …and admitted again once that one is deleted.
+    mockDocs.set('hosts/host-1/components/cmp-card', { displayName: 'Card', deletedAt: 5 })
+    expect(await ask({ kind: 'component', org: FREE_ORG })).toBeNull()
     expect(await ask({ kind: 'component', hostId: null })).toEqual({
       status: 400,
       error: 'Open the site the component is for before starting the job',
@@ -814,17 +832,19 @@ describe('readAiPlanCapabilities — what a plan may create on the site (AGL-303
     return { handle: handle as unknown as FirebaseFirestore.Firestore, read }
   }
 
-  it('tells a Free workspace it keeps no reusable components or datasets, one saved form, and what room its site has', async () => {
+  it('tells a Free workspace it keeps no datasets, one saved form and one component, and what room its site has', async () => {
     seedLiveSite()
     const { handle, read } = recording()
     const capabilities = await readAiPlanCapabilities(handle, { hostId: 'host-1', org: FREE_ORG })
     expect(capabilities.reusableComponents).toBe(false)
     // Its AI credits are the Free taste's wall, which its plan is held to (AGL-3070).
     expect(capabilities.freeTaste).toBe(true)
+    // One reusable component per Free site (AGL-3615), and the live site
+    // already holds one: it keeps it, and has no room for another.
     expect(capabilities.create.component).toEqual({
       allowed: false,
       left: 0,
-      reason: "this workspace's plan does not include reusable components",
+      reason: 'this site already holds the 1 reusable component its plan includes',
     })
     // One saved form per Free site (AGL-3597), and the live site holds none.
     expect(capabilities.create.form).toEqual({ allowed: true, left: 1, reason: null })
@@ -842,9 +862,22 @@ describe('readAiPlanCapabilities — what a plan may create on the site (AGL-303
       reason: "this workspace's plan does not include datasets",
     })
     expect(capabilities.create['theme-change']).toEqual({ allowed: true, left: null, reason: null })
-    // Only the kinds a Free plan counts are read; a component is refused on the feature.
-    expect(read.sort()).toEqual(['forms', 'layouts', 'templates'])
+    // Only the kinds a Free plan counts are read — every one, now a component is counted too.
+    expect(read.sort()).toEqual(['components', 'forms', 'layouts', 'templates'])
     expect(commits).toEqual([])
+  })
+
+  it('gives a Free site with no component its one, and still draws its repeats inline', () => {
+    // AGL-3615: the count admits one component, and the AI's build switch
+    // stays off — a finite allowance cannot hold every repeat a plan draws,
+    // so the one component is the member's to spend.
+    const capabilities = aiPlanCapabilitiesFrom(FREE_ORG, { component: [] })
+    expect(capabilities.create.component).toEqual({ allowed: true, left: 1, reason: null })
+    expect(capabilities.reusableComponents).toBe(false)
+    expect(aiBuildsWithComponents(FREE_ORG)).toBe(false)
+    expect(aiBuildsWithComponents(STARTER_ORG)).toBe(true)
+    // A paid plan's allowance is unlimited, and so uncounted.
+    expect(aiPlanCapabilitiesFrom(STARTER_ORG).create.component).toEqual({ allowed: true, left: null, reason: null })
   })
 
   it('counts a Starter site against its own allowances, in the draft writer’s arithmetic', async () => {

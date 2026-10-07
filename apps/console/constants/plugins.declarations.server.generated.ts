@@ -37,6 +37,8 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-ai/declarations')).registerAiDeclarations()
     ;(await import('@aglyn/plugins-ai/declarations.server')).registerAiServerDeclarations()
     ;(await import('@aglyn/plugins-video-delivery/declarations.server')).registerVideoDeliveryServerDeclarations()
+    ;(await import('@aglyn/plugins-funnels/declarations.server')).registerFunnelsServerDeclarations()
+    ;(await import('@aglyn/plugins-funnels/declarations.console-server')).registerFunnelsConsoleServerDeclarations()
   })()
   return done
 }

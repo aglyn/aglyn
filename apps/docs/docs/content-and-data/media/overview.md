@@ -302,6 +302,11 @@ back afterwards, so Aglyn asks first.
   replaced. Videos already in your library keep playing, and the **Video** element can
   still use them. While the pause lasts, the library shows a **Video uploads paused**
   chip beside **Upload media**.
+- **Create images with AI.** **Create with AI**, beside **Upload media**, draws an
+  illustration, icon, pattern or logo mark as an SVG from a description, or makes a photo
+  where photos are on, and adds it to the folder you have open with alt text. Each picture
+  is stored like an upload and costs AI credits — see
+  [Create images with AI](../../ai/create-images.md).
 - Documents and archives are stored and served exactly as you uploaded them — nothing
   is opened, extracted or converted. Macro-enabled Office files (`.docm`, `.xlsm`,
   `.pptm`) are not accepted.

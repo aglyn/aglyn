@@ -17,6 +17,7 @@
 
 import { aiJobKindNoun } from './ai-job-activity'
 import { aiJobRefundCopy } from './ai-job-failure-copy'
+import { aiBuildItemRows, aiBuildOutcomeLine, aiSitePartialCopy } from './ai-build-progress'
 import type { AiJobSummary } from './ai-jobs.types'
 
 /**
@@ -32,12 +33,22 @@ import type { AiJobSummary } from './ai-jobs.types'
  * Pure: no React, no request. The page and its spec read the same rows.
  */
 
-export type AiSiteBuildRowState = 'done' | 'active' | 'waiting' | 'failed'
+export type AiSiteBuildRowState = 'done' | 'active' | 'waiting' | 'failed' | 'skipped'
 
 export interface AiSiteBuildRow {
   id: string
   label: string
   state: AiSiteBuildRowState
+  /** What the person should know about this row (AGL-3616): a build item's failure, note or refund. */
+  detail?: string | null
+  /** What the row is doing while it is the active one, in a sentence. */
+  hint?: string | null
+  /** A page's planned sections, in order, so the person sees what is being written. */
+  sections?: string[]
+  /** The credits this row's work used, once it has finished; absent while it runs. */
+  credits?: number
+  /** When this row's work started, for the elapsed time beside the active row. */
+  startedAt?: string | null
 }
 
 /** Where the whole job stands, as the page's header and actions read it. */
@@ -75,19 +86,79 @@ const CREATION_ROWS: ReadonlyArray<{ kind: string; resource: string; label: (nam
  * the first page's.
  */
 export function aiSiteBuildRows(
-  job: Pick<AiJobSummary, 'status' | 'steps' | 'plan' | 'outputs' | 'review'>,
+  job: Pick<AiJobSummary, 'status' | 'steps' | 'plan' | 'outputs' | 'review'> &
+    Partial<Pick<AiJobSummary, 'items' | 'kind' | 'siteInputs' | 'sitePublish'>>,
 ): AiSiteBuildRow[] {
   const phase = aiSiteBuildPhase(job)
+  // A build is read off its item ledger (AGL-3616): one row an item, each with
+  // its own state and what became of its credits.
+  if (job.items?.length) {
+    const site = job.kind !== 'build'
+    const pages = (job.items ?? []).filter((row) => row.op === 'page')
+    return [
+      { id: 'plan', label: site ? 'Planning your pages' : 'Planning what to build', state: 'done' },
+      ...aiBuildItemRows(job).map((row, index) => {
+        const ledger = (job.items ?? [])[index]
+        // A site keeps the scaffold's own words for each stage (AGL-3596).
+        const label =
+          !site || !ledger
+            ? row.label
+            : ledger.op === 'theme'
+              ? 'Choosing your colors'
+              : ledger.op === 'layout'
+                ? `Building the header and footer: ${ledger.label}`
+                : ledger.op === 'form'
+                  ? `Building the form: ${ledger.label}`
+                  : ledger.op === 'page'
+                    ? `Writing page ${pages.indexOf(ledger) + 1} of ${pages.length}: ${ledger.label}`
+                    : ledger.op === 'email'
+                      ? 'Writing your welcome email'
+                      : row.label
+        const screen = ledger?.op === 'page' ? aiPlanScreenFor(job.plan, ledger.label, pages.indexOf(ledger)) : null
+        const finished = row.state === 'done' || row.state === 'failed'
+        const net = ledger ? Math.max(0, Math.floor((ledger.creditsSpent ?? 0) - (ledger.creditsRefunded ?? 0))) : 0
+        return {
+          id: row.slot,
+          label,
+          state: row.state,
+          detail: row.detail,
+          ...(screen?.sections.length ? { sections: screen.sections.map((section) => section.name) } : {}),
+          ...(finished && ledger ? { credits: net } : {}),
+        }
+      }),
+      ...aiSitePublishRow(job, phase),
+    ]
+  }
   const planStep = job.steps.find((step) => step.name === 'plan')
   const planDone = planStep?.status === 'done' || Boolean(job.plan)
   const stopped = phase === 'failed' || phase === 'stopped'
+  const planState: AiSiteBuildRowState = planDone ? 'done' : stopped ? 'failed' : phase === 'working' ? 'active' : 'waiting'
   const rows: AiSiteBuildRow[] = [
     {
       id: 'plan',
       label: 'Planning your pages',
-      state: planDone ? 'done' : stopped ? 'failed' : phase === 'working' ? 'active' : 'waiting',
+      state: planState,
+      startedAt: planStep?.startedAt ?? null,
+      hint: planState === 'active' ? AI_SITE_PLAN_HINT : null,
+      ...(planDone && planStep ? { credits: Math.max(0, Math.floor(planStep.creditsSpent ?? 0)) } : {}),
     },
   ]
+  // Before there is a plan, the stages a guided start always goes through
+  // are named from its answers, so the page shows the whole way from the
+  // start rather than one row.
+  if (!job.plan && job.kind !== 'build') {
+    const pagesAsked = typeof job.siteInputs?.['pages'] === 'number' ? Math.round(job.siteInputs['pages'] as number) : 0
+    if (job.siteInputs) {
+      rows.push({ id: 'layout', label: 'Building the header and footer', state: 'waiting' })
+      rows.push({
+        id: 'pages',
+        label: pagesAsked > 1 ? `Writing your ${pagesAsked} pages` : 'Writing your pages',
+        state: 'waiting',
+      })
+      rows.push(...aiSitePublishRow(job, phase))
+    }
+    return rows
+  }
   const built = new Map<string, number>()
   for (const output of job.outputs) built.set(output.resource, (built.get(output.resource) ?? 0) + 1)
   const take = (resource: string): boolean => {
@@ -96,14 +167,19 @@ export function aiSiteBuildRows(
     built.set(resource, left - 1)
     return true
   }
-  const stages: Array<{ id: string; label: string; resource: string }> = []
+  const stages: Array<{ id: string; label: string; resource: string; sections?: string[] }> = []
   for (const row of CREATION_ROWS) {
     const creation = job.plan?.create.find((entry) => entry.kind === row.kind)
     if (creation) stages.push({ id: row.resource, label: row.label(creation.name), resource: row.resource })
   }
   const pages = job.plan?.screens ?? []
   pages.forEach((page, index) => {
-    stages.push({ id: `page-${index}`, label: `Writing page ${index + 1} of ${pages.length}: ${page.title}`, resource: 'screen' })
+    stages.push({
+      id: `page-${index}`,
+      label: `Writing page ${index + 1} of ${pages.length}: ${page.title}`,
+      resource: 'screen',
+      sections: page.sections.map((section) => section.name),
+    })
   })
   let reached = false
   for (const stage of stages) {
@@ -114,9 +190,59 @@ export function aiSiteBuildRows(
       id: stage.id,
       label: stage.label,
       state: done ? 'done' : current && stopped ? 'failed' : current && phase === 'working' ? 'active' : 'waiting',
+      ...(stage.sections?.length ? { sections: stage.sections } : {}),
     })
   }
+  rows.push(...aiSitePublishRow(job, phase))
   return rows
+}
+
+/** What the planning row says while it runs. */
+export const AI_SITE_PLAN_HINT =
+  'Reading your answers and choosing your pages, what each one says, and the forms and layout they need. This usually takes under a minute.'
+
+/** The plan's page an item builds: by its title, else by its place among the pages. */
+function aiPlanScreenFor(
+  plan: AiJobSummary['plan'],
+  title: string,
+  index: number,
+): NonNullable<AiJobSummary['plan']>['screens'][number] | null {
+  const screens = plan?.screens ?? []
+  return screens.find((screen) => screen.title === title) ?? (index >= 0 ? (screens[index] ?? null) : null)
+}
+
+/**
+ * A guided start ends by putting its pages live (AGL-3596): the last row, so
+ * the person sees that step coming and when it is done. Only a site job
+ * publishes on its own; a build publishes when asked, and says so in its plan.
+ */
+function aiSitePublishRow(
+  job: Pick<AiJobSummary, 'status'> & Partial<Pick<AiJobSummary, 'kind' | 'sitePublish'>>,
+  phase: AiSiteBuildPhase,
+): AiSiteBuildRow[] {
+  if (job.kind !== 'site') return []
+  const published = (job.sitePublish?.published.length ?? 0) > 0
+  return [
+    {
+      id: 'publish',
+      label: 'Publishing your site',
+      // A job that stopped or failed publishes nothing, so the row is passed over.
+      state: phase === 'done' ? (published ? 'done' : 'skipped') : phase === 'working' ? 'waiting' : 'skipped',
+    },
+  ]
+}
+
+/**
+ * How far the job is, from 0 to 1, by its rows: a finished row counts whole
+ * and the active one half. `null` before there is more than one row to count.
+ */
+export function aiSiteBuildFraction(rows: readonly AiSiteBuildRow[]): number | null {
+  if (rows.length < 2) return null
+  const counted = rows.reduce(
+    (sum, row) => sum + (row.state === 'active' ? 0.5 : row.state === 'waiting' ? 0 : 1),
+    0,
+  )
+  return Math.min(1, counted / rows.length)
 }
 
 /**
@@ -160,10 +286,12 @@ export interface AiJobPageCopy {
  * guided start — built drafts, and says that instead.
  */
 export function aiJobPageCopy(
-  job: Pick<AiJobSummary, 'kind' | 'status' | 'review' | 'error'> & Partial<Pick<AiJobSummary, 'sitePublish'>>,
+  job: Pick<AiJobSummary, 'kind' | 'status' | 'review' | 'error'> & Partial<Pick<AiJobSummary, 'sitePublish' | 'items'>>,
   brand: string,
 ): AiJobPageCopy {
   const phase = aiSiteBuildPhase(job)
+  // A build is what the person asked for, item by item (AGL-3616).
+  if (job.kind === 'build') return aiBuildPageCopy(job, brand)
   const noun = job.kind === 'site' ? 'site' : aiJobKindNoun(job.kind)
   const generic = noun === 'AI job'
   // `products` is the one plural noun.
@@ -180,14 +308,22 @@ export function aiJobPageCopy(
   }
   if (phase === 'done') {
     const published = job.sitePublish?.published.length ?? 0
+    // Part of the site was built (AGL-3616): what was, what was not, and its credits.
+    const partial = job.kind === 'site' ? aiSitePartialCopy({ items: job.items, status: job.status }) : null
     if (job.kind === 'site' && published > 0) {
       return {
         heading: 'Your site is live',
-        lede: job.sitePublish?.drafts.length
-          ? 'Your pages are published, except the ones listed below, which stayed drafts.'
-          : 'Your pages are published, and anyone can visit your site now.',
+        lede: [
+          partial,
+          job.sitePublish?.drafts.length
+            ? 'Your pages are published, except the ones listed below, which stayed drafts.'
+            : 'Your pages are published, and anyone can visit your site now.',
+        ]
+          .filter(Boolean)
+          .join(' '),
       }
     }
+    if (partial) return { heading: 'Your site is ready', lede: `${partial} Your new pages are drafts. Publish them when you’re happy.` }
     if (job.kind === 'site' && job.sitePublish) {
       return {
         heading: 'Your site is ready',
@@ -208,5 +344,45 @@ export function aiJobPageCopy(
   return {
     heading: generic ? 'Your AI job stopped' : `Your ${noun} ${noun.endsWith('s') ? 'were' : 'was'} not built`,
     lede: why ?? (generic ? 'Something went wrong running this job.' : `Something went wrong building your ${noun}.`),
+  }
+}
+
+/** A build's page heading and sentence (AGL-3616). */
+function aiBuildPageCopy(
+  job: Pick<AiJobSummary, 'status' | 'review' | 'error'> & Partial<Pick<AiJobSummary, 'items' | 'sitePublish'>>,
+  brand: string,
+): AiJobPageCopy {
+  const phase = aiSiteBuildPhase(job)
+  const outcome = aiBuildOutcomeLine({ items: job.items ?? [], status: job.status })
+  if (phase === 'working') {
+    return {
+      heading: 'Building what you asked for',
+      lede: `${brand} AI is building each part in turn. You can leave this page; it keeps going.`,
+    }
+  }
+  if (phase === 'stopped') {
+    return {
+      heading: job.review?.reason === 'plan' ? 'Your plan is ready' : 'Your build needs you',
+      lede: job.review?.message ?? job.error ?? 'It waits for your decision.',
+    }
+  }
+  if (phase === 'done') {
+    const failed = (job.items ?? []).some((row) => row.status === 'failed' || row.status === 'skipped')
+    const live = job.sitePublish?.published.length ?? 0
+    return {
+      heading: failed ? 'Most of it is ready' : 'Everything you asked for is ready',
+      lede: [
+        outcome,
+        live ? 'Your new pages are published.' : 'Everything it built is an unpublished draft until you publish it.',
+        failed ? 'Try again builds only what failed.' : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+    }
+  }
+  if (phase === 'canceled') return { heading: 'Your build was canceled', lede: 'The job was canceled.' }
+  return {
+    heading: 'Nothing could be built',
+    lede: [job.error ?? 'Something went wrong building what you asked for.', outcome].filter(Boolean).join(' '),
   }
 }

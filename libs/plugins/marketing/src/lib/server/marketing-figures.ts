@@ -34,6 +34,16 @@ import {
 import { CAMPAIGN_SEND_HOST_FIELD } from '../model/campaign-container'
 import { orgCampaignSends } from './campaign-org-refs'
 import { compareVariants, summarizeVariantStats, type HostExperiment } from '../model/experiments'
+import {
+  CAMPAIGN_CONVERSION_KINDS,
+  type CampaignConversionKind,
+  type CampaignTouchChannel,
+} from '../model/campaign-conversions'
+import {
+  EMAIL_ATTRIBUTION_WINDOW_DAYS,
+  type CampaignRevenueRollup,
+} from '../model/campaign-revenue'
+import { CAMPAIGN_ATTRIBUTIONS_COLLECTION } from './campaign-attribution-store'
 
 /**
  * A site's campaign and A/B testing results as figure tables another plugin
@@ -56,6 +66,22 @@ export const CAMPAIGN_FIGURES_READ_LIMIT = 100
 
 /** Experiments an experiments table reads. */
 export const EXPERIMENT_FIGURES_READ_LIMIT = 20
+
+/**
+ * The channels a conversion is counted by, in reading order. Each is an
+ * aggregation count over the attribution records — `kind`, `channel` and the
+ * window on `convertedAtMs` — so the table costs a read per thousand index
+ * entries rather than a read per record, and never loads one.
+ */
+export const CONVERSION_FIGURE_CHANNELS: readonly CampaignTouchChannel[] = ['email', 'page', 'web', 'sequence']
+
+/** How a conversions table names each kind: the record it credits, in the console's words. */
+const CONVERSION_KIND_LABELS: Readonly<Record<CampaignConversionKind, string>> = {
+  form: 'Form submissions',
+  lead: 'Leads',
+  contact: 'Contacts',
+  booking: 'Bookings',
+}
 
 const WINDOWS: readonly number[] = [7, 14, 30, 90]
 
@@ -210,9 +236,190 @@ export function marketingFigureReaders(firestore: () => Firestore): PluginFigure
   ]
 }
 
+/** A stored count as a non-negative integer. */
+const whole = (raw: unknown): number => {
+  const value = Number(raw)
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
+}
+
+/**
+ * What the site's campaigns CAUSED and EARNED, as two more tables (AGL-3603):
+ * the conversions credited to a campaign touch in the window, and the revenue
+ * credited to the campaign emails sent in it. Same rules the Conversions
+ * section and a campaign's report print — the kinds are never added together,
+ * currencies are never added together, net is gross less refunded — and the
+ * same honesty about what is NOT here: a conversion credited to nothing has no
+ * record, so it is not counted, and the notes say so.
+ */
+export function marketingOutcomeFigureReaders(firestore: () => Firestore): PluginFigureReader[] {
+  return [
+    {
+      id: 'marketing.conversions',
+      label: 'Campaign conversions',
+      description:
+        'Conversions credited to a campaign touch on the site in the window — form submissions, leads, contacts and bookings, one row each — counted by the touch that earned the credit: a campaign email, a page filed under a campaign, a link labeled for a campaign, or a sales sequence email.',
+      scope: 'site',
+      windows: WINDOWS,
+      read: async (request) => {
+        if (!request.hostId) return { ok: false, status: 400, error: 'Open a site to read its conversions' }
+        if (!WINDOWS.includes(request.days)) {
+          return { ok: false, status: 400, error: 'That window is not one conversions are read over' }
+        }
+        const { current } = pluginFigureWindows(request.now, request.days)
+        /*
+         * Aggregation counts, never the records: per kind, one over every
+         * channel and one per channel, each an equality on `kind` (and
+         * `channel`) with the window on `convertedAtMs`. Served by the two
+         * composite indexes the index file declares for them.
+         */
+        const inWindow = (kind: CampaignConversionKind, channel: CampaignTouchChannel | null) => {
+          let query = firestore()
+            .collection('hosts')
+            .doc(request.hostId as string)
+            .collection(CAMPAIGN_ATTRIBUTIONS_COLLECTION)
+            .where('kind', '==', kind)
+          if (channel) query = query.where('channel', '==', channel)
+          return query
+            .where('convertedAtMs', '>=', current.startMs)
+            .where('convertedAtMs', '<', current.endMs)
+            .count()
+            .get()
+            .then((snapshot) => whole(snapshot.data().count))
+        }
+        const rows: PluginFigureRow[] = await Promise.all(
+          CAMPAIGN_CONVERSION_KINDS.map(async (kind) => {
+            const [credited, ...byChannel] = await Promise.all([
+              inWindow(kind, null),
+              ...CONVERSION_FIGURE_CHANNELS.map((channel) => inWindow(kind, channel)),
+            ])
+            const row: PluginFigureRow = { kind: CONVERSION_KIND_LABELS[kind], credited }
+            CONVERSION_FIGURE_CHANNELS.forEach((channel, index) => {
+              row[channel] = byChannel[index]
+            })
+            return row
+          }),
+        )
+        return {
+          ok: true,
+          table: {
+            title: 'Campaign conversions',
+            source: { label: 'Conversions', path: 'marketing/conversions' },
+            period: { from: current.from, to: current.to, days: request.days },
+            columns: [
+              { key: 'kind', label: 'Conversion', kind: 'text' },
+              { key: 'credited', label: 'Credited to a campaign', kind: 'count' },
+              { key: 'email', label: 'From a campaign email', kind: 'count' },
+              { key: 'page', label: 'From a campaign page', kind: 'count' },
+              { key: 'web', label: 'From a labeled link', kind: 'count' },
+              { key: 'sequence', label: 'From a sequence email', kind: 'count' },
+            ],
+            rows,
+            omitted: 0,
+            notes: [
+              'Each row counts a different record of the same visits — one form submission can also make a lead and a contact — so the rows are never added together.',
+              'Only conversions credited to a campaign touch are counted; a conversion credited to nothing has no record and is not in this table.',
+            ],
+          },
+        }
+      },
+    },
+    {
+      id: 'marketing.revenue',
+      label: 'Campaign revenue',
+      description:
+        'Revenue credited to each campaign email sent from the site in the window: orders credited, gross, refunded and net, one row per email and currency, with amounts in each row’s currency.',
+      scope: 'site',
+      windows: WINDOWS,
+      read: async (request) => {
+        if (!request.hostId) return { ok: false, status: 400, error: 'Open a site to read its campaign revenue' }
+        if (!WINDOWS.includes(request.days)) {
+          return { ok: false, status: 400, error: 'That window is not one campaign revenue is read over' }
+        }
+        if (!request.orgId) return { ok: false, status: 400, error: 'This site is not part of an organization' }
+        const { current } = pluginFigureWindows(request.now, request.days)
+        // The campaigns table's own read: the site's sends, newest first.
+        const sendsRef = orgCampaignSends(firestore(), request.orgId)
+        const snapshot = await sendsRef
+          .where(CAMPAIGN_SEND_HOST_FIELD, '==', request.hostId)
+          .orderBy(EMAIL_CREATED_AT_FIELD, 'desc')
+          .limit(CAMPAIGN_FIGURES_READ_LIMIT)
+          .get()
+        const sends = snapshot.docs
+          .filter((doc) => {
+            const record = doc.data() ?? {}
+            const sentAt = emailSendTimeMs(record)
+            return Boolean(record['sentAt']) && sentAt >= current.startMs && sentAt < current.endMs
+          })
+          .slice(0, PLUGIN_FIGURE_MAX_ROWS)
+        /*
+         * One keyed read per send for its revenue rollup, bounded by the rows
+         * a table may carry — the rollup is its own document so the history
+         * list never pays for it, and this is the one place that does.
+         */
+        const rollups = sends.length
+          ? await firestore().getAll(
+              ...sends.map((doc) => sendsRef.doc(doc.id).collection('reports').doc('revenue')),
+            )
+          : []
+        const rows: PluginFigureRow[] = []
+        const currencies = new Set<string>()
+        sends.forEach((doc, index) => {
+          const rollup = (rollups[index]?.data() ?? {}) as CampaignRevenueRollup
+          for (const [currency, totals] of Object.entries(rollup.byCurrency ?? {})) {
+            const grossCents = whole(totals?.grossCents)
+            const refundedCents = whole(totals?.refundedCents)
+            const orders = whole(totals?.orders)
+            if (!orders && !grossCents) continue
+            currencies.add(currency.toUpperCase())
+            rows.push({
+              campaign: String(doc.get('subject') ?? '').trim() || 'A campaign with no subject',
+              currency: currency.toUpperCase(),
+              orders,
+              gross: grossCents / 100,
+              refunded: refundedCents / 100,
+              // Clamped where it is shown, as the campaign report clamps it.
+              net: Math.max(0, grossCents - refundedCents) / 100,
+            })
+          }
+        })
+        const [only] = currencies
+        const money = currencies.size === 1 && /^[A-Z]{3}$/.test(only ?? '')
+        const amount = (key: string, label: string) =>
+          money
+            ? { key, label, kind: 'money' as const, currency: only }
+            : { key, label: `${label} (in the row’s currency)`, kind: 'number' as const }
+        return {
+          ok: true,
+          table: {
+            title: 'Campaign revenue',
+            source: { label: 'Campaigns', path: 'marketing/campaigns' },
+            period: { from: current.from, to: current.to, days: request.days },
+            columns: [
+              { key: 'campaign', label: 'Campaign email', kind: 'text' },
+              { key: 'currency', label: 'Currency', kind: 'text' },
+              { key: 'orders', label: 'Orders credited', kind: 'count' },
+              amount('gross', 'Gross'),
+              amount('refunded', 'Refunded'),
+              amount('net', 'Net'),
+            ],
+            rows: rows.slice(0, PLUGIN_FIGURE_MAX_ROWS),
+            omitted: Math.max(0, rows.length - PLUGIN_FIGURE_MAX_ROWS),
+            notes: [
+              `Revenue is credited to the last campaign email whose link the buyer clicked within ${EMAIL_ATTRIBUTION_WINDOW_DAYS} days, for the emails sent in the window; amounts in different currencies are never added together.`,
+              ...(snapshot.docs.length === CAMPAIGN_FIGURES_READ_LIMIT
+                ? [`Only the ${CAMPAIGN_FIGURES_READ_LIMIT} most recent emails were looked at.`]
+                : []),
+            ],
+          },
+        }
+      },
+    },
+  ]
+}
+
 /** Registers the campaign and A/B testing readers from the console surface, where insight jobs run. */
 export function registerMarketingFigureReaders(firestore: () => Firestore): void {
-  for (const reader of marketingFigureReaders(firestore)) {
+  for (const reader of [...marketingFigureReaders(firestore), ...marketingOutcomeFigureReaders(firestore)]) {
     registerPluginFigureReader(reader, { pluginId: MARKETING_PLUGIN_ID })
   }
 }

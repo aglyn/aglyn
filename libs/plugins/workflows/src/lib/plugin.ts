@@ -33,6 +33,7 @@ import {
   AUTOMATION_EDITOR_ZONE,
   AUTOMATION_RUN_ZONE,
   HOST_AUTOMATIONS_ZONE,
+  ORG_AUTOMATIONS_ZONE,
   WORKFLOW_USAGE_ZONE,
 } from './components/workflow-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -88,7 +89,18 @@ export function registerWorkflowsConsole(): void {
       surface: 'console',
       layout: 'bare',
       description:
-        'On the Automation page, beside Add action and Recipes: another way to start an automation. `openAction` opens a listed action in the Actions editor; a widget here writes nothing through the page.',
+        'On the Automation page, beside Add action and Recipes, and in the Workflows card’s header or empty state: another way to start an automation. `openAction` opens a listed action in the Actions editor; a widget here writes nothing through the page.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: ORG_AUTOMATIONS_ZONE,
+      label: 'Org automations actions',
+      surface: 'console',
+      layout: 'bare',
+      description:
+        'In the header of the workspace’s Org automations card, for a member who may write them: another way to start an org automation. `triggers` and `steps` are what one may start on and hold; `propose` opens an automation in the section’s editor, unsaved and switched off. A widget here writes nothing.',
     },
     { pluginId: BUNDLE_ID },
   )
@@ -99,7 +111,7 @@ export function registerWorkflowsConsole(): void {
       surface: 'console',
       layout: 'bare',
       description:
-        'Inside the editor of one saved automation, an action or a workflow. A widget here reads the automation as it is stored and changes nothing in the editor.',
+        'Inside the editor of one saved automation, an action or a workflow. A widget here reads the automation as it is stored and changes nothing in the editor; in an action’s editor, `openAction` opens another listed action, such as a copy the widget drafted, in its place.',
     },
     { pluginId: BUNDLE_ID },
   )

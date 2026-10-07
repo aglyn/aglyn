@@ -40,6 +40,7 @@
 
 import { runInAction } from 'mobx'
 import type { OrgPermissions } from '../app-utils/org-permissions'
+import type { ReleaseFlagKey } from '../app-utils/release-flags'
 import type { SeoAuditReport } from '../app-utils/seo-audit'
 import type { SeoListingFieldKey } from '../app-utils/seo-listing-fields'
 import type { AglynOrgBilling, OrgFeatureFlags } from '../foundation'
@@ -668,6 +669,16 @@ export const CONSOLE_WIDGET_SLOTS = {
   orgDashboard: 'orgDashboard',
   /** Host dashboard commerce summary. Props: hostId, org. */
   commerceGlance: 'commerceGlance',
+  /**
+   * A site's Analytics page, below its own traffic cards (AGL-3605): a
+   * section of analytics a plugin computes from what the site records — a
+   * funnel, say. Props: hostId, orgId (the workspace, or undefined while it
+   * loads).
+   *
+   * A section rather than a glance, so a widget here owns a whole card: its
+   * own range picker, its own plan answer and its own empty state.
+   */
+  hostAnalytics: 'hostAnalytics',
   /** Org Data page body. Props: orgId, org. */
   orgData: 'orgData',
   /** Besigner functions (ƒx) panel. Props: hostId. */
@@ -1079,6 +1090,15 @@ export const CONSOLE_WIDGET_SLOTS = {
    * person decides.
    */
   sitePackageItemPreview: 'sitePackageItemPreview',
+  /**
+   * The media library, beside its Upload media and New folder actions and
+   * again in its empty state (AGL-3602): another way to add a file. Props:
+   * {@link ConsoleMediaLibraryZoneProps}. The `hostScreens` contract — a
+   * widget runs its own flow and writes nothing through the library — with
+   * one door back: `onCreated`, which the widget calls with the assets it
+   * added so the library shows them, selected.
+   */
+  mediaLibrary: 'mediaLibrary',
 } as const
 
 export type ConsoleWidgetSlot =
@@ -1125,6 +1145,24 @@ export type ConsoleHostTemplatesZoneProps = ConsoleHostScreensZoneProps
 export type ConsoleHostLayoutsZoneProps = ConsoleHostScreensZoneProps
 /** See {@link ConsoleHostTemplatesZoneProps}. */
 export type ConsoleHostComponentsZoneProps = ConsoleHostScreensZoneProps
+
+/** What the `mediaLibrary` zone hands each widget (AGL-3602). */
+export interface ConsoleMediaLibraryZoneProps {
+  /**
+   * The site whose library is open; for the organization's library, the site
+   * on screen when there is one (a site's Media tab, a picker opened for a
+   * site), else `null`.
+   */
+  hostId: string | null
+  /** The org the library belongs to; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** Which library is open: a site's own, or the organization's. */
+  library: 'host' | 'org'
+  /** The folder open in the library, where new files land; `null` for none. */
+  folderId: string | null
+  /** Hands the library the assets a widget added, to show and select them. */
+  onCreated: (mediaIds: readonly string[]) => void
+}
 
 /** What the `orgSites` zone hands each widget (AGL-2911). */
 export interface ConsoleOrgSitesZoneProps {
@@ -1665,8 +1703,58 @@ export interface ConsoleWidget {
    * part of it. Absent without an upsell, for the reason `permission` gives.
    */
   featureFlag?: keyof OrgFeatureFlags
+  /**
+   * Mount this widget as its own upsell when the ONLY thing missing is the
+   * plan entitlement (AGL-3601).
+   *
+   * Without it a widget whose `featureFlag` the plan lacks is absent, as
+   * above. With it, the shell still mounts it — with `entitled={false}` and
+   * an `upgrade` prop ({@link ConsoleWidgetUpgrade}) — but only when every
+   * other gate passes (the reader's permission, the plugin being on for this
+   * workspace and this site) and the missing flag is one an add-on this
+   * workspace can buy switches on. Where nothing can be bought the widget
+   * stays absent, so the widget never has to decide that itself.
+   *
+   * The widget owns what it draws in that state, and must not open the
+   * feature: the shell has decided the plan does not include it.
+   */
+  showWhenNotEntitled?: boolean
+  /**
+   * The release flag this widget is behind, which the shell resolves from the
+   * flags it already loads for every page (AGL-3601) — staff bypass applied,
+   * as the server's own doors apply it. The widget is absent while the flag
+   * is off for this workspace, and while the flags have not settled, so a
+   * control is never drawn and then taken away.
+   *
+   * For a widget that would otherwise have to ask a server door whether its
+   * feature exists before it draws anything.
+   */
+  releaseFlag?: ReleaseFlagKey
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Component: ComponentType<any>
+}
+
+/**
+ * Where a widget mounted by {@link ConsoleWidget.showWhenNotEntitled} sends a
+ * reader to buy what it lacks. The shell builds it, so no extension supplies a
+ * URL the console's own chrome then renders.
+ */
+export interface ConsoleWidgetUpgrade {
+  /** The workspace's Billing page, at the section that sells add-ons. */
+  billingHref: string
+  /** Whether the reader may buy it (`billing.manage`). */
+  canManageBilling: boolean
+}
+
+/**
+ * The props the shell adds to a widget that declared
+ * {@link ConsoleWidget.showWhenNotEntitled}, beside its zone's own.
+ * `entitled` is `true` when the plan includes the feature, and `upgrade`
+ * is present only when it is `false`.
+ */
+export interface ConsoleWidgetEntitlementProps {
+  entitled?: boolean
+  upgrade?: ConsoleWidgetUpgrade
 }
 
 /**

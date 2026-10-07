@@ -52,6 +52,7 @@ describe('host events', () => {
       'dealStageChanged',
       'dealWon',
       'dealLost',
+      'funnelLeft',
     ])
     expect(HOST_EVENTS.find((event) => event.type === 'pageView')?.pluginId).toBeUndefined()
   })

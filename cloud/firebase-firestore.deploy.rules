@@ -2802,6 +2802,11 @@ allow update: if isStaff() ||
 
 
 
+'funnelRecording',
+
+
+
+
 
 
 
@@ -3341,9 +3346,17 @@ match /{subcollection}/{document=**} {
 
 
 
+
+
+
+
+
+
+
 allow read: if subcollection != 'siteMemberCredentials' &&
 (isStaff() || (isHostMember(hostId) &&
-!(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports'])));
+!(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
+'funnelJourneys', 'funnelResults'])));
 
 
 
@@ -3468,11 +3481,19 @@ allow create: if subcollection != 'siteMemberCredentials' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'recordPages']) &&
+'siteMemberCredentials', 'recordPages',
+'funnels', 'funnelJourneys', 'funnelResults']) &&
 
 
 
 !string(document).matches('.*/formSubmissions/[^/]+')));
+
+
+
+
+
+
+
 
 
 
@@ -3586,7 +3607,8 @@ allow update: if subcollection != 'siteMemberCredentials' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'recordPages'])));
+'siteMemberCredentials', 'recordPages',
+'funnels', 'funnelJourneys', 'funnelResults'])));
 
 
 
@@ -3637,7 +3659,7 @@ allow delete: if subcollection != 'siteMemberCredentials' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-'recordPages'])));
+'recordPages', 'funnels', 'funnelJourneys', 'funnelResults'])));
 }
 
 

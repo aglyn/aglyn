@@ -349,7 +349,10 @@ const featureGroups = (
   {
     title: 'Build & publish',
     rows: [
-      { key: 'reusableComponents', label: 'Reusable components' },
+      // The flag means components WITHOUT a count since AGL-3615: Free saves
+      // one, stated on its card's "per site" line, so the tick is the
+      // unlimited allowance and not the feature itself.
+      { key: 'reusableComponents', label: 'Unlimited reusable components' },
       { key: 'versioning', label: 'Page versioning' },
       { key: 'scheduledPublishing', label: 'Scheduled publishing' },
       { key: 'customDomain', label: 'Custom domain' },
@@ -1569,6 +1572,14 @@ function PlanCardBody({
         {pricing.extraEmailSendsUsdPer1k != null
           ? ` (+$${pricing.extraEmailSendsUsdPer1k.toFixed(2)}/1k over)`
           : ''}
+      </Typography>
+      {/* Reusable components per site (AGL-3615): Free 1, every paid plan
+          unlimited. Beside the saved-form line, the other per-site catalog
+          the plan counts. */}
+      <Typography variant="body2">
+        {`${quotaLabel(entitlements.componentsPerHost)} reusable component${
+          entitlements.componentsPerHost === 1 ? '' : 's'
+        } per site`}
       </Typography>
       {/* The saved-form allowance, then the submissions band: two
           axes, both tiered since AGL-3597. A site's saved forms are

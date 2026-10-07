@@ -72,6 +72,13 @@ export interface HostEventActor {
 export interface HostEventContext {
   /** Absent when the door that raised the event did not know. */
   actor?: HostEventActor
+  /**
+   * The site's recorded visit the event ends (AGL-3605): a form submission
+   * names the visit its page was on, so a listener can tie that visit to the
+   * person the door verified. Shape-checked by the door; absent when the site
+   * records no visits or the visitor's consent did not allow one.
+   */
+  journeyId?: string
 }
 
 export interface HostEventListener {

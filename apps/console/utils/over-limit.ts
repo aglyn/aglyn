@@ -54,6 +54,11 @@ import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capa
  * more forms than its new plan includes. That is grandfathering, not an
  * excess: the forms stay, and only the next create is refused.
  *
+ * The same holds for reusable components (`componentsPerHost`, AGL-3615):
+ * Free 1 and every paid plan unlimited, so only a move to Free can leave a
+ * site past its allowance, and it keeps every component — they render on its
+ * live pages — while the next create is refused. Not a kind here either.
+ *
  * A string rather than a closed union since AGL-3080, because the platform no
  * longer knows the whole set: `sites` and `seats` are its own — every
  * workspace has them with no plugin loaded — and every other capacity is

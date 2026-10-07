@@ -77,6 +77,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     }
   },
   {
+    "id": "funnels",
+    "label": "Funnels",
+    "alwaysOnForWorkspace": true,
+    "description": "Step-by-step conversion on a site's Analytics page: visits at each step, drop-off and time between steps.",
+    "siteOff": {
+      "stops": "Switching Funnels off for this site removes the Funnels card from its Analytics page.",
+      "keeps": "Saved funnels are kept, and visits keep being recorded while the site has one; delete the funnels to stop recording."
+    }
+  },
+  {
     "id": "accounts",
     "label": "User Accounts",
     "description": "Visitor accounts on the site: the /signin, /signup and /recover pages, and the Members blocks. On for a new site; a site created before that stays off until you turn it on.",
@@ -171,6 +181,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "forms": "elements",
   "ai": "console-only",
   "theme-presets": "console-only",
+  "funnels": "console-only",
   "accounts": "routes",
   "bookings": "elements",
   "commerce": "elements",
@@ -864,6 +875,24 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "nameField": "name"
       }
     }
+  },
+  {
+    "pluginId": "funnels",
+    "name": "funnels",
+    "mediaScan": "none",
+    "mediaScanReason": "A funnel is a name and its steps — paths and record ids, never an asset. Written only by the funnels save route."
+  },
+  {
+    "pluginId": "funnels",
+    "name": "funnelJourneys",
+    "mediaScan": "none",
+    "mediaScanReason": "One document per recorded visit: step types, paths or record ids, server times and UTM labels. Written only by the site collector on the Admin SDK, read only by the results route; expires 90 days after the visit."
+  },
+  {
+    "pluginId": "funnels",
+    "name": "funnelResults",
+    "mediaScan": "none",
+    "mediaScanReason": "A computed funnel result — counts, shares and durations — kept up to a day by the results route and expiring on its own."
   },
 ]
 

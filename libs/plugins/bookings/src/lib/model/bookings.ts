@@ -76,6 +76,34 @@ export interface HostBookingService {
   askPhone?: 'off' | 'optional' | 'required'
   /** Ask the booker for the address the service is at (AGL-3493); as above. */
   askAddress?: 'off' | 'optional' | 'required'
+  /**
+   * Whether the service takes bookings (AGL-3616). A `draft` is set up and
+   * offered nowhere: the public listing leaves it out, its slots are not
+   * served and the booking route refuses it, until someone activates it in
+   * the console. Absent is `active`, so every service made before the field
+   * existed keeps taking bookings. Read through `bookingServiceStatus`.
+   */
+  status?: BookingServiceStatus
+}
+
+/** Whether a service takes bookings (AGL-3616). */
+export type BookingServiceStatus = 'draft' | 'active'
+
+/** The status as stored, read so only an explicit `draft` holds a service back. */
+export function bookingServiceStatus(value: unknown): BookingServiceStatus {
+  return value === 'draft' ? 'draft' : 'active'
+}
+
+/**
+ * Whether a stored service is offered to visitors (AGL-3616): not deleted,
+ * and not a draft. The one predicate every public read asks — the service
+ * directory, a service's slots, the booking route — and the console's
+ * booking-link picker, which hands visitors a link to the same door.
+ */
+export function bookingServiceIsOffered(
+  service: { deletedAt?: unknown; status?: unknown } | null | undefined,
+): boolean {
+  return Boolean(service) && !service?.deletedAt && bookingServiceStatus(service?.status) === 'active'
 }
 
 /** Booked interval as epoch-ms instants. */

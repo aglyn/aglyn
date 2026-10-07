@@ -115,6 +115,12 @@ import {
 import { AI_TEXT_LIMITS, type AiOutputKind } from './ai-palette'
 import { expandAiRepeatedItems } from './ai-repeated-items'
 import type { AiAutomation } from '../model/ai-automation-format'
+import type { HostFunction } from '@aglyn/aglyn/app-utils/functions'
+import {
+  checkAiLogicFunction,
+  checkAiLogicVariable,
+  type AiLogicSiteVariable,
+} from '../model/ai-logic-job'
 
 /**
  * THE EVAL HARNESS (AGL-2937): the measure that gates every token lever.
@@ -178,6 +184,7 @@ export type AiEvalKind =
   | 'insight'
   | 'crm'
   | 'experiment'
+  | 'logic'
 
 export const AI_EVAL_KINDS: readonly AiEvalKind[] = [
   'page',
@@ -200,6 +207,7 @@ export const AI_EVAL_KINDS: readonly AiEvalKind[] = [
   'insight',
   'crm',
   'experiment',
+  'logic',
 ]
 
 /** The document kind a tree kind is held to; a section rewrite is one reusable block. */
@@ -445,6 +453,12 @@ export interface AiEvalCase {
    */
   experiment?: AiEvalExperiment
   /**
+   * For a logic brief (AGL-3603): the site's variables and function names a
+   * function's names are checked against, and the saved function a change or
+   * an explanation starts from.
+   */
+  logic?: AiEvalLogic
+  /**
    * What the workspace may create on the case's site (AGL-3030): a brief
    * for a workspace that keeps no reusable components is held to the inline
    * doctrine, and its plan to what the workspace may create. Absent, the
@@ -474,6 +488,13 @@ export interface AiEvalAutomation {
   action: AiAutomation
   /** A failed run of it; given, the brief asks why that run failed. */
   run?: AiRunRecord
+}
+
+/** A logic brief, as the logic step is given one. */
+export interface AiEvalLogic {
+  variables: AiLogicSiteVariable[]
+  functions: string[]
+  saved?: HostFunction | null
 }
 
 /** An A/B test brief, as the experiment step is given one. */
@@ -536,6 +557,7 @@ export const AI_EVAL_FLOORS: Readonly<Record<AiEvalKind, AiEvalFloor>> = {
   insight: { passRate: 1, meanScore: 0.9 },
   crm: { passRate: 1, meanScore: 0.9 },
   experiment: { passRate: 1, meanScore: 0.9 },
+  logic: { passRate: 1, meanScore: 0.9 },
 }
 
 /** A rubric passes at this mean, with no criterion below three. */
@@ -961,6 +983,30 @@ function checkCrm(evalCase: AiEvalCase, answer: unknown): Checked {
   }
 }
 
+/**
+ * A logic answer (AGL-3603): an explanation as an automation's is checked; a
+ * function or a variable through the step's own check, against the case's
+ * site — the grammar, the names and a first run.
+ */
+function checkLogic(evalCase: AiEvalCase, answer: unknown): Checked {
+  if (!isRecord(answer)) return { readable: false, rules: false, budget: false, findings: ['logic-not-a-call'] }
+  const site = evalCase.logic ?? { variables: [], functions: [] }
+  if ('summary' in answer) {
+    const read = readAiWorkflowExplanation(answer)
+    const found = codes(read.violations)
+    return { readable: !found.includes('explanation-shape'), rules: read.value !== null, budget: true, findings: found }
+  }
+  const context = { variables: site.variables, functions: site.functions, editing: site.saved?.name ?? null }
+  const read = 'operations' in answer ? checkAiLogicFunction(answer, context) : checkAiLogicVariable(answer, context)
+  const found = codes(read.violations)
+  return {
+    readable: !found.includes('logic-not-a-call'),
+    rules: read.value !== null,
+    budget: !found.includes('logic-size'),
+    findings: found,
+  }
+}
+
 /** What an experiment answer is refused for, by the check it fails. */
 const EXPERIMENT_RULE_FINDINGS = new Set([
   'variant-carries-markup',
@@ -1083,6 +1129,8 @@ function checkAnswer(evalCase: AiEvalCase, answer: unknown, plan?: unknown): Che
       return checkCrm(evalCase, answer)
     case 'experiment':
       return checkExperiment(evalCase, answer)
+    case 'logic':
+      return checkLogic(evalCase, answer)
     default:
       return { readable: false, rules: false, budget: false, findings: ['kind-unknown'] }
   }

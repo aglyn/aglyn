@@ -102,6 +102,8 @@ const UNIT_PLAN_KINDS: Readonly<Partial<Record<AiJobKind, { screens: boolean }>>
   template: { screens: false },
   layout: { screens: false },
   component: { screens: false },
+  // A build names every draft its plan decides, its items' too (AGL-3616).
+  build: { screens: true },
 }
 
 /**
@@ -120,6 +122,7 @@ export function aiPlanWithDraftIds<T extends AiBuildPlan>(kind: AiJobKind, plan:
       DRAFT_CREATION_KINDS.has(entry.kind) ? { ...entry, id: createResourceUid() } : entry,
     ),
     screens: units.screens ? plan.screens.map((screen) => ({ ...screen, id: createResourceUid() })) : plan.screens,
+    ...(plan.items ? { items: plan.items.map((item) => ({ ...item, id: createResourceUid() })) } : {}),
   }
 }
 
