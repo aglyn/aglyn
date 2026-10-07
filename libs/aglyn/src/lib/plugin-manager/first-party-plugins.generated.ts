@@ -594,6 +594,18 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "mediaScanReason": "The site's card readers (AGL-3607): a Stripe reader id, a label and a status, written only by `/api/commerce/pos-readers`. No content field."
   },
   {
+    "pluginId": "commerce",
+    "name": "printers",
+    "mediaScan": "none",
+    "mediaScanReason": "Cloud receipt printers (AGL-3619): a device id, a secret version, a paper width and a status. A receipt logo is the one stored IN the printer and named by a key code, never a file URL, so nothing here can use an asset."
+  },
+  {
+    "pluginId": "commerce",
+    "name": "printJobs",
+    "mediaScan": "none",
+    "mediaScanReason": "The printers' queue (AGL-3619): rendered receipt, ticket and label bytes waiting for a printer's poll, written by the print routes and gone once printed. Printer commands, not content, and a busy register queues hundreds a day."
+  },
+  {
     "pluginId": "marketplace",
     "name": "installs"
   },
