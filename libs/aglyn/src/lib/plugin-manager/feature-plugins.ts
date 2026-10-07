@@ -543,6 +543,13 @@ export interface ConsoleNavItem {
    */
   ownsSubtree?: boolean
   /**
+   * A page with an address and no tab (AGL-3594): served at its `href` like
+   * any nav item, and left off the site's tab strip. For a surface a person
+   * is SENT to — the page a flow lands on, the page a notification opens —
+   * rather than one they browse to; the gates and the matching are the same.
+   */
+  unlisted?: boolean
+  /**
    * Hrefs this nav item answered to before it moved (AGL-2595).
    *
    * A console path is something people keep — a bookmark, a docs link, an
@@ -1949,7 +1956,7 @@ export function listConsoleNavItems(
 ): ConsoleNavEntry[] {
   return inTabOrder(
     listConsoleExtensions(enabledPluginIds).flatMap((extension) =>
-      (extension.navItems ?? []).map((navItem) => ({
+      (extension.navItems ?? []).filter((navItem) => !navItem.unlisted).map((navItem) => ({
         ...navItem,
         pluginId: extension.pluginId,
         featureFlag: extension.featureFlag,

@@ -36,6 +36,9 @@ export const AI_JOB_BESIGNER_SEGMENT: Partial<Record<AiJobOutput['resource'], st
  */
 export const AI_JOB_LINK_PARAM = 'aiJob'
 
+/** Where a site's "Building your site" page lives, under the site (AGL-3594). */
+export const AI_SITE_BUILD_HREF = '/ai-jobs'
+
 /** A change the person who started a job is told about. */
 export type AiJobNoticeTransition = 'needs-review' | 'done' | 'failed'
 
@@ -68,6 +71,9 @@ export type AiJobNotice = Pick<
  */
 export function aiJobNoticeLink(job: AiJobNoticeSource, to: AiJobNoticeTransition): string {
   const base = job.hostId ? `/${job.hostId}` : '/org'
+  // A site job's every notice opens its "Building your site" page (AGL-3594),
+  // which leads with the next step whatever the job's state.
+  if (job.kind === 'site' && job.hostId) return `${base}${AI_SITE_BUILD_HREF}/${encodeURIComponent(job.$id)}`
   if (to === 'done' && job.hostId) {
     const own = (job.outputs ?? []).filter((output) => output.hostId === job.hostId)
     const screens = own.filter((output) => output.resource === 'screen')

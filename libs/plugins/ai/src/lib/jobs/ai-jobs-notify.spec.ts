@@ -52,6 +52,22 @@ const job = (patch: Partial<AiJob> = {}) =>
     ...patch,
   }) as unknown as AiJob
 
+describe('a guided site start (AGL-3594)', () => {
+  it('is not asked to confirm a plan that is confirmed for it', async () => {
+    const notify = jest.fn().mockResolvedValue(undefined)
+    await aiJobTransitionNotifier(notify)({ job: job({ inputs: { autoConfirm: true } }), to: 'needs-review' })
+    expect(notify).not.toHaveBeenCalled()
+  })
+
+  it('opens the build page from a site job’s notice, and a page job still opens AI jobs', async () => {
+    const notify = jest.fn().mockResolvedValue(undefined)
+    await aiJobTransitionNotifier(notify)({ job: job({ status: 'done', review: null }), to: 'done' })
+    expect(notify.mock.calls[0][1]).toMatchObject({ link: '/host-1/ai-jobs/job-1' })
+    await aiJobTransitionNotifier(notify)({ job: job({ kind: 'page' }), to: 'needs-review' })
+    expect(notify.mock.calls[1][1]).toMatchObject({ link: '/host-1?aiJob=job-1' })
+  })
+})
+
 describe('aiJobTransitionNotifier', () => {
   it('tells the job’s creator, once, that the plan waits for them', async () => {
     const notify = jest.fn().mockResolvedValue(undefined)
@@ -65,7 +81,7 @@ describe('aiJobTransitionNotifier', () => {
         title: 'Your site plan is ready: confirm it to build',
         orgId: 'org-1',
         hostId: 'host-1',
-        link: '/host-1?aiJob=job-1',
+        link: '/host-1/ai-jobs/job-1',
       }),
     )
   })

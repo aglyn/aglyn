@@ -54,11 +54,16 @@ site's theme and drafts no welcome email.
 
 ### If the plan does not work out
 
-If a plan cannot be made, you see one sentence saying so and what to do, and on
-the Free plan the credits it used are given back (up to three times a day).
+If a plan cannot be made, you see one sentence saying so and what to do.
 **Try again** is turned off, with the reason, when the credits left this month
 cannot cover another plan. **Use the starter site instead** gives the site the
 starter home page, as long as the job has not built anything yet.
+
+When a job fails because of something on our side — a plan that could not be
+made, an AI provider error, a step that timed out — the credits it used are
+given back: all of them if it built nothing, or the failed step's if it had
+already built some pages, which you keep. This happens up to three times a day.
+Canceling a job yourself is not given back; you pay for what ran until then.
 
 ## What a scaffold builds
 
@@ -97,19 +102,28 @@ If your workspace runs out of credits partway through, the job stops and waits r
 failing. What it had already built stays, and it carries on from there once there are credits
 again. You can also cancel it at any point and keep what it made.
 
-## Confirming and watching it build
+## Watching it build
 
-After **Plan my site**, the window stays with the job. It shows the site being planned, then
-the plan with its estimate and **Confirm plan**, so you can confirm it without going anywhere
-else. Once you confirm, it shows the site building, and when it is done, **Open your draft
-pages** opens the site's **Pages** list, where every page waits as a draft.
+A new site started from **Start with AI** has no plan to approve: the plan is made
+and the building starts straight away. **Plan my site** takes you to the site's
+**Building your site** page, which shows each step as it happens — planning your
+pages, then writing each page — and the credits used so far. **What we're
+building** opens the plan: every page and its sections.
 
-A site takes a while — each page is built a section at a time — so you do not have to wait in
-the window. **Open AI jobs** opens the Assist panel on the job instead, where you can see which
-step it is on, what it has made so far, and open any draft it has finished. While it works, the
-**AI** chip in the top bar says what it is doing, and a notification tells you when the plan is
-ready, when the site is built and if the job stops. See
+When it is done the page says **Your site is ready** and how many credits the site
+used, with **View your site**, which opens the first page in the preview, and
+**Edit your pages**, which opens the site's **Pages** list. Your new pages are
+drafts: publish them when you are happy. If it stops instead, the page says why
+and what you can do, and whether the credits were given back.
+
+You do not have to wait on the page. It keeps its own address, so you can come
+back to it, and the notification you get when the site is built or stops opens
+it. While it works, the **AI** chip in the top bar says what it is doing. See
 [Finding your AI jobs](./how-aglyn-ai-builds.md#finding-your-ai-jobs).
+
+Every other planned job — a page, a form, a site generated for an existing site —
+still stops after its plan: it shows the plan with its estimate and **Confirm
+plan**, and builds nothing until you confirm it.
 
 ## Generate for several sites at once
 

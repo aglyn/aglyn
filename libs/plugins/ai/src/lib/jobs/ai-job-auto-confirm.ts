@@ -17,6 +17,7 @@
 
 import { isFirstPublishedRoute } from '@aglyn/aglyn/app-utils/analytics-events'
 import type { AiJob } from '../model/ai-jobs.types'
+import { AI_JOB_AUTO_CONFIRM_INPUT } from '../model/ai-site-job'
 
 /**
  * A guided site start confirms its own plan (AGL-3594).
@@ -40,7 +41,7 @@ import type { AiJob } from '../model/ai-jobs.types'
  */
 
 /** The job input the guided start sets. */
-export const AI_JOB_AUTO_CONFIRM_INPUT = 'autoConfirm'
+export { AI_JOB_AUTO_CONFIRM_INPUT }
 
 /** Whether a job's plan is confirmed for it when the plan step keeps one. */
 export function aiJobAutoConfirms(job: Pick<AiJob, 'kind' | 'inputs'>): boolean {

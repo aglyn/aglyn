@@ -17,6 +17,7 @@
 
 import { notifyUsers } from '@aglyn/tenant-data-admin/server/notifications'
 import { aiJobNotice } from '../model/ai-job-notice'
+import { aiJobAutoConfirms } from './ai-job-auto-confirm'
 import { registerAiJobTransitionListener, type AiJobTransitionListener } from './ai-jobs'
 
 /**
@@ -40,6 +41,9 @@ export function aiJobTransitionNotifier(
 ): AiJobTransitionListener {
   return async ({ job, to }) => {
     if (!job.createdBy) return
+    // A guided site start's plan is confirmed for it the moment it is kept
+    // (AGL-3594): there is nothing for the person to confirm.
+    if (to === 'needs-review' && job.review?.reason === 'plan' && aiJobAutoConfirms(job)) return
     await notify([job.createdBy], aiJobNotice(job, to))
   }
 }

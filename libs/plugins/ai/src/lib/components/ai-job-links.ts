@@ -19,7 +19,7 @@ import {
   pluginRecordHref,
   pluginRecordListHref,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
-import { AI_JOB_BESIGNER_SEGMENT as BESIGNER_SEGMENT } from '../model/ai-job-notice'
+import { AI_JOB_BESIGNER_SEGMENT as BESIGNER_SEGMENT, AI_SITE_BUILD_HREF } from '../model/ai-job-notice'
 import type { AiJobOutput, AiJobSummary } from '../model/ai-jobs.types'
 
 // Where a job's work opens in the console (AGL-2904), shared by the AI jobs
@@ -103,4 +103,41 @@ export function aiJobPrimaryLink(
     }
   }
   return null
+}
+
+export { AI_SITE_BUILD_HREF }
+
+/**
+ * The "Building your site" page for one site job (AGL-3594): linkable, so the
+ * guided start lands on it, a reload keeps it and a notification opens it.
+ * `null` without the org slug or the site's subdomain a console URL needs.
+ */
+export function aiSiteBuildHref(
+  orgSlug: string | null | undefined,
+  hostSubdomain: string | null | undefined,
+  jobId: string,
+): string | null {
+  if (!orgSlug || !hostSubdomain || !jobId) return null
+  return `/${orgSlug}/hosts/${hostSubdomain}${AI_SITE_BUILD_HREF}/${encodeURIComponent(jobId)}`
+}
+
+/**
+ * A finished site's two ways in (AGL-3594): its first page's draft, opened in
+ * the console's preview of that version, and the Pages list every draft waits
+ * in. Either is `null` where the job reported nothing to open.
+ */
+export function aiSiteBuildDoneLinks(
+  job: Pick<AiJobSummary, 'outputs'>,
+  orgSlug: string,
+): { view: string | null; pages: string | null } {
+  const screens = job.outputs.filter((output) => output.resource === 'screen' && output.hostSubdomain)
+  const first = screens[0]
+  if (!first || !orgSlug) return { view: null, pages: null }
+  const host = String(first.hostSubdomain)
+  return {
+    view: first.versionId
+      ? `/${orgSlug}/hosts/${host}/screens/${first.id}/versions/${first.versionId}/view`
+      : null,
+    pages: buildRoute(Route.HOST_SCREENS, { orgSlug, host }),
+  }
 }

@@ -48,6 +48,12 @@ import type { ComponentType } from 'react'
 // the object that carries it.
 const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
 
+const mockPush = jest.fn()
+jest.mock('next/navigation', () => ({
+  __esModule: true,
+  useRouter: () => ({ push: mockPush }),
+}))
+
 const mockTrack = jest.fn()
 jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   __esModule: true,
@@ -311,7 +317,7 @@ describe('the skip', () => {
   })
 
   it('is still the way out once a site has been started', async () => {
-    await openCard()
+    await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
@@ -322,7 +328,7 @@ describe('the skip', () => {
 
   it('closes through `leave` once a site has been started, so no starter is written over the job (AGL-3594)', async () => {
     const leave = jest.fn()
-    await openCard({ leave })
+    await openCard({ leave, host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
@@ -430,7 +436,7 @@ describe('the questions become a site scaffold', () => {
   })
 
   it('starts one site job for this site, carrying every answer', async () => {
-    await openCard()
+    await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     typeAnswer(/Who is it for\?/, 'local dog owners')
     fireEvent.click(exampleChip(0))
@@ -470,7 +476,7 @@ describe('the questions become a site scaffold', () => {
   })
 
   it('carries the answer about submissions on the job', async () => {
-    await openCard()
+    await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     fireEvent.mouseDown(screen.getByLabelText(/Where do form submissions go\?/))
     fireEvent.click(screen.getByRole('option', { name: /CRM as a lead/ }))
@@ -482,7 +488,7 @@ describe('the questions become a site scaffold', () => {
   })
 
   it('starts on the Inbox, which is what an unanswered question has to mean', async () => {
-    await openCard()
+    await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
@@ -493,7 +499,7 @@ describe('the questions become a site scaffold', () => {
   })
 
   it('promises a plan to confirm, never a built or a published site', async () => {
-    await openCard()
+    await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
@@ -503,7 +509,7 @@ describe('the questions become a site scaffold', () => {
   })
 
   it('says the door’s own words when it refuses, and keeps the answers', async () => {
-    await openCard()
+    await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     mockFetch.mockResolvedValueOnce(json({ error: 'Your workspace is out of AI credits' }, 429))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
@@ -539,7 +545,7 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
-    await screen.findByText(/Your site is being planned/)
+    await waitFor(() => expect(mockPush).toHaveBeenCalled())
     const [, init] = mockFetch.mock.calls.find(([url, request]) => url === '/api/ai/jobs' && request?.method === 'POST')!
     expect(JSON.parse(init.body).inputs).toEqual(expect.objectContaining({ pages: 2, welcomeEmail: false }))
   })
@@ -592,7 +598,7 @@ describe('watching and confirming in place (AGL-3593)', () => {
   })
 
   async function startWith(job: unknown) {
-    await openCard()
+    await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     mockFetch.mockResolvedValueOnce(json({ job }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
@@ -676,5 +682,24 @@ describe('step 1: how the site starts (AGL-3594)', () => {
     await openChoice()
     fireEvent.click(screen.getByRole('button', { name: 'Skip and start blank' }))
     expect(mockStartBlank).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('after "Plan my site": where the next step is (AGL-3594)', () => {
+  beforeEach(() => mockPush.mockReset())
+
+  it('asks for the plan to be confirmed for it, closes the zone without the starter, and opens the site’s build page for the job', async () => {
+    const leave = jest.fn()
+    await openCard({ leave })
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/acme/hosts/demo-legal/ai-jobs/job-1'))
+    expect(leave).toHaveBeenCalledTimes(1)
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    const [, init] = mockFetch.mock.calls.find(([url, request]) => url === '/api/ai/jobs' && request?.method === 'POST')!
+    expect(JSON.parse(init.body).inputs).toEqual(expect.objectContaining({ autoConfirm: true }))
+    // No thank-you notice left behind.
+    expect(screen.queryByText(/Your site is being planned/)).toBeNull()
   })
 })

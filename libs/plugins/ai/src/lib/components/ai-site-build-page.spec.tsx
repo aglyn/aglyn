@@ -1,0 +1,177 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * "Building your site" (AGL-3594): the page the guided start lands on. Each
+ * state the job can be in reads as itself — planning, building, done, failed —
+ * and a finished site leads with what to do next.
+ */
+
+const mockFollow = jest.fn()
+const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
+
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  __esModule: true,
+  useUser: () => ({ data: mockUser }),
+  useFirestore: () => ({ name: 'firestore' }),
+}))
+jest.mock('firebase/firestore', () => ({
+  __esModule: true,
+  doc: (_firestore: unknown, ...path: string[]) => ({ path: path.join('/') }),
+  getDoc: async () => ({ data: () => ({ orgId: 'org-1', displayName: 'Dog Groomer' }) }),
+}))
+jest.mock('./ai-job-events', () => ({
+  __esModule: true,
+  followAiJobEvents: (...args: unknown[]) => mockFollow(...args),
+}))
+jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({ __esModule: true, trackEvent: jest.fn() }))
+
+import { render, screen } from '@testing-library/react'
+import type { AiJobSummary } from '../model/ai-jobs.types'
+import { aiSiteBuildCreditsLine, aiSiteBuildRows } from '../model/ai-site-build-progress'
+import { AiSiteBuildPage } from './ai-site-build-page.component'
+
+const PLAN = {
+  reuse: [],
+  create: [],
+  screens: [
+    { title: 'Home', slug: '/', layout: null, template: null, duplicateOf: null, nav: true, seoTitle: 'Home', seoDescription: 'Home', sections: [{ name: 'hero', uses: [], items: 0 }, { name: 'services', uses: [], items: 0 }] },
+    { title: 'Book', slug: '/book', layout: null, template: null, duplicateOf: null, nav: true, seoTitle: 'Book', seoDescription: 'Book', sections: [{ name: 'booking times', uses: [], items: 0 }] },
+  ],
+  status: 'confirmed',
+  labels: {},
+  proposedAt: null,
+  confirmedAt: null,
+  confirmedBy: 'u1',
+}
+
+const screenOutput = (id: string) => ({ resource: 'screen', id, hostId: 'host-1', hostSubdomain: 'groomer', versionId: `${id}-v1`, label: id })
+
+function job(patch: Partial<AiJobSummary> = {}): AiJobSummary {
+  return {
+    id: 'job-1',
+    orgId: 'org-1',
+    hostId: 'host-1',
+    kind: 'site',
+    status: 'running',
+    brief: 'A dog groomer',
+    batch: null,
+    steps: [
+      { name: 'plan', status: 'done', startedAt: null, endedAt: null, creditsSpent: 9, error: null },
+      { name: 'generate', status: 'running', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+    ],
+    outputs: [],
+    creditsReserved: 100,
+    creditsSpent: 9,
+    refundedCredits: 0,
+    createdBy: 'u1',
+    createdAt: '2026-10-06T00:00:00.000Z',
+    updatedAt: '2026-10-06T00:00:00.000Z',
+    error: null,
+    running: true,
+    plan: PLAN,
+    review: null,
+    ...patch,
+  } as unknown as AiJobSummary
+}
+
+async function open(state: AiJobSummary) {
+  mockFollow.mockReset()
+  mockFollow.mockImplementation(async (_user: unknown, _org: string, _id: string, _signal: AbortSignal, onJob: (job: AiJobSummary) => void) => {
+    onJob(state)
+  })
+  render(<AiSiteBuildPage hostId="host-1" segments={['job-1']} basePath="/acme/hosts/groomer/ai-jobs" entitled />)
+}
+
+describe('the progress a site job shows (AGL-3594)', () => {
+  it('lists planning and then each page, with where the build is', () => {
+    expect(aiSiteBuildRows(job({ outputs: [screenOutput('home')] as never })).map((row) => [row.label, row.state])).toEqual([
+      ['Planning your pages', 'done'],
+      ['Writing page 1 of 2: Home', 'done'],
+      ['Writing page 2 of 2: Book', 'active'],
+    ])
+    expect(aiSiteBuildRows(job({ plan: null, steps: [{ name: 'plan', status: 'running' }] as never })).map((row) => row.state)).toEqual(['active'])
+    expect(aiSiteBuildRows(job({ status: 'failed', outputs: [screenOutput('home')] as never })).map((row) => row.state)).toEqual(['done', 'done', 'failed'])
+  })
+
+  it('names the job’s one price, never a plan’s', () => {
+    expect(aiSiteBuildCreditsLine(job())).toBe('Credits used so far: 9')
+    expect(aiSiteBuildCreditsLine(job({ status: 'done', creditsSpent: 180 }))).toBe('This site used 180 credits.')
+    expect(aiSiteBuildCreditsLine(job({ status: 'failed', creditsSpent: 35, refundedCredits: 35 }))).toBe(
+      'Nothing was charged — we refunded 35 credits.',
+    )
+  })
+})
+
+describe('Building your site (AGL-3594)', () => {
+  it('says it is building, with the site’s name, live progress and the plan to open', async () => {
+    await open(job({ outputs: [screenOutput('home')] as never }))
+    expect(await screen.findByRole('heading', { name: 'Building your site' })).toBeTruthy()
+    expect(await screen.findByText('Writing page 2 of 2: Book')).toBeTruthy()
+    expect(await screen.findByText('Dog Groomer')).toBeTruthy()
+    expect(screen.getByText('Credits used so far: 9')).toBeTruthy()
+    expect(screen.getByText('What we’re building')).toBeTruthy()
+    expect(mockFollow.mock.calls[0][1]).toBe('org-1')
+    expect(mockFollow.mock.calls[0][2]).toBe('job-1')
+  })
+
+  it('reads as planning before the plan exists', async () => {
+    await open(job({ plan: null, steps: [{ name: 'plan', status: 'running' }] as never, creditsSpent: 0 }))
+    expect(await screen.findByText('Planning your pages')).toBeTruthy()
+    expect(screen.queryByText('What we’re building')).toBeNull()
+  })
+
+  it('leads a finished site with View your site and Edit your pages, and says the pages are drafts', async () => {
+    await open(job({ status: 'done', running: false, outputs: [screenOutput('home'), screenOutput('book')] as never, creditsSpent: 180 }))
+    expect(await screen.findByRole('heading', { name: 'Your site is ready' })).toBeTruthy()
+    expect(screen.getByText('Your new pages are drafts. Publish them when you’re happy.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'View your site' }).getAttribute('href')).toBe(
+      '/acme/hosts/groomer/screens/home/versions/home-v1/view',
+    )
+    expect(screen.getByRole('link', { name: 'Edit your pages' })).toBeTruthy()
+    expect(screen.getByText('This site used 180 credits.')).toBeTruthy()
+  })
+
+  it('says why a failed site was not built, what was given back, and offers the starter site', async () => {
+    await open(job({
+      status: 'failed',
+      running: false,
+      plan: null,
+      steps: [{ name: 'plan', status: 'failed' }] as never,
+      error: 'Something went wrong planning your site. Try again.',
+      creditsSpent: 35,
+      refundedCredits: 35,
+    }))
+    expect(await screen.findByRole('heading', { name: 'Your site was not built' })).toBeTruthy()
+    expect(screen.getByText('Something went wrong planning your site. Try again.')).toBeTruthy()
+    expect(screen.getByText('Nothing was charged — we refunded 35 credits.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Use the starter site instead' })).toBeTruthy()
+  })
+
+  it('offers Try again on a refused plan, and disables it with the reason when the allowance cannot cover one', async () => {
+    const reason = 'You have 10 AI credits left this month, and a plan needs up to 35. Your credits refresh next month, or upgrade for more.'
+    await open(job({
+      status: 'needs_review',
+      running: false,
+      plan: null,
+      steps: [{ name: 'plan', status: 'pending' }] as never,
+      review: { reason: 'doctrine', message: 'Something went wrong planning your site. Try again.', findings: [], retryRefusal: reason },
+    }))
+    expect(await screen.findByText(reason)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Try again' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+})

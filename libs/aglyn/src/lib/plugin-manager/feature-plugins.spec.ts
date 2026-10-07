@@ -151,6 +151,17 @@ describe('console extension registry', () => {
     })
   })
 
+  it('serves an unlisted nav item’s page and leaves it off the tab strip (AGL-3594)', () => {
+    const Page = (): null => null
+    registerConsoleExtension({
+      pluginId: 'ai',
+      displayName: 'AI',
+      navItems: [{ label: 'Building your site', href: '/ai-jobs', unlisted: true, ownsSubtree: true, Component: Page }],
+    })
+    expect(listConsoleNavItems()).toEqual([])
+    expect(resolveConsolePluginPage('/ai-jobs/job-1')?.navItem.Component).toBe(Page)
+  })
+
   it('resolves a page only for a nav item that has a Component', () => {
     const Page = (): null => null
     registerConsoleExtension({

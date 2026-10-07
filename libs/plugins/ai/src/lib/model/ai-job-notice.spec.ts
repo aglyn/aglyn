@@ -56,7 +56,7 @@ describe('a plan waiting to be confirmed', () => {
     expect(notificationLevel(notice)).toBe('warning')
     expect(notice.orgId).toBe('org-1')
     expect(notice.hostId).toBe('host-doc')
-    expect(normalizeNotificationLink(notice.link, context)).toBe('/acme/hosts/roofers?aiJob=job-1')
+    expect(normalizeNotificationLink(notice.link, context)).toBe('/acme/hosts/roofers/ai-jobs/job-1')
   })
 
   it('says a refused step needs the person, in the review’s own sentence', () => {
@@ -76,7 +76,8 @@ describe('a finished job', () => {
     expect(notice.type).toBe('content.aiJobDone')
     expect(notice.title).toBe('Your site’s draft pages are ready')
     expect(notificationLevel(notice)).toBe('success')
-    expect(normalizeNotificationLink(notice.link, context)).toBe('/acme/hosts/roofers/screens')
+    // A site job opens its build page, which leads with its pages (AGL-3594).
+    expect(normalizeNotificationLink(notice.link, context)).toBe('/acme/hosts/roofers/ai-jobs/job-1')
   })
 
   it('opens the one draft it built in the editor, on the version it wrote', () => {
@@ -100,6 +101,6 @@ describe('a job that stopped', () => {
     expect(notice.type).toBe('content.aiJobFailed')
     expect(notice.title).toBe('Your site job stopped')
     expect(notice.body).toBe('The site could not be planned.')
-    expect(normalizeNotificationLink(notice.link, context)).toBe('/acme/hosts/roofers?aiJob=job-1')
+    expect(normalizeNotificationLink(notice.link, context)).toBe('/acme/hosts/roofers/ai-jobs/job-1')
   })
 })

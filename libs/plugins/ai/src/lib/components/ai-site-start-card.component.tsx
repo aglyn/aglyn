@@ -55,8 +55,10 @@ import {
   Typography,
 } from '@mui/material'
 import { alpha, type Theme } from '@mui/material/styles'
+import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import {
+  AI_JOB_AUTO_CONFIRM_INPUT,
   AI_SITE_FREE_PAGES,
   AI_SITE_FREE_PAGES_NOTE,
   AI_SITE_SUBMISSION_CHOICES,
@@ -77,6 +79,7 @@ import {
 } from '../model/ai-site-start'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import { AiJobFollow } from './ai-job-follow.component'
+import { aiSiteBuildHref } from './ai-job-links'
 import { publishAiJob } from './ai-jobs-store'
 
 /**
@@ -260,10 +263,12 @@ export function AiSiteStartCard({
   hostId,
   orgId,
   orgSlug,
+  host,
   startBlank,
   leave,
 }: ConsoleHostFirstRunZoneProps) {
   const { data: user } = useUser()
+  const router = useRouter()
   // Held in a ref so a request reads WHO is signed in, never the identity of
   // the object that says so.
   const userRef = useRef(user)
@@ -329,7 +334,9 @@ export function AiSiteStartCard({
           hostId,
           kind: 'site',
           brief: aiSiteStartBrief(answers),
-          inputs: aiSiteStartInputs(answers),
+          // The guided start confirms its own plan (AGL-3594): the build
+          // follows the plan with no approval to make.
+          inputs: { ...aiSiteStartInputs(answers), [AI_JOB_AUTO_CONFIRM_INPUT]: true },
         }),
       })
       const payload = await response.json().catch(() => null)
@@ -349,13 +356,22 @@ export function AiSiteStartCard({
       }
       // The indicator and the launcher count it from the moment it exists.
       publishAiJob(created)
+      // Where the next step is (AGL-3594): the site's "Building your site"
+      // page for this job. The zone closes without the starter first, so the
+      // setup page does not ask again behind it.
+      const href = aiSiteBuildHref(orgSlug, host, created.id)
+      if (href) {
+        ;(leave ?? (() => undefined))()
+        router.push(href)
+        return
+      }
       setStarted(created)
     } catch {
       setNotice('The site could not be started. Try again.')
     } finally {
       setBusy(false)
     }
-  }, [orgId, hostId, answers, freeTaste])
+  }, [orgId, hostId, answers, freeTaste, orgSlug, host, leave, router])
 
   const chooseStarter = useCallback(() => {
     setStartingStarter(true)

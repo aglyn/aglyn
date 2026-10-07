@@ -68,6 +68,12 @@ export function aiSitePagesBand(
   return freeTaste ? AI_SITE_FREE_PAGES : AI_SITE_PAGES
 }
 
+/**
+ * The job input a guided site start sets so its plan is confirmed for it
+ * (AGL-3594); `jobs/ai-job-auto-confirm.ts` says where it is honored.
+ */
+export const AI_JOB_AUTO_CONFIRM_INPUT = 'autoConfirm'
+
 /** What a Free site start's page selector says under it (AGL-3594). */
 export const AI_SITE_FREE_PAGES_NOTE = 'Paid plans can generate more pages.'
 
