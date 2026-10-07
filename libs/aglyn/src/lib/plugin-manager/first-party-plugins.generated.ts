@@ -521,6 +521,12 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "mediaScanReason": "Cached Stripe tax rate ids, written by the tax sync. Vendor ids."
   },
   {
+    "pluginId": "commerce",
+    "name": "returns",
+    "mediaScan": "none",
+    "mediaScanReason": "Returns (AGL-3611): line indexes, quantities, reasons and a return label link, written only by the returns routes. A return names no image of its own; the order's lines carry the copies, and the order is not scanned for the same reason."
+  },
+  {
     "pluginId": "marketplace",
     "name": "installs"
   },

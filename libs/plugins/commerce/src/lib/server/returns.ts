@@ -59,8 +59,6 @@ import { refundHandler } from './refund'
  * return already did, so nobody is asked to restock the same units twice.
  */
 
-export const RETURNS_COLLECTION = 'returns'
-
 type Firestore = FirebaseFirestore.Firestore
 
 const hostRefFor = (firestore: Firestore, hostId: string) => firestore.collection('hosts').doc(hostId)
@@ -139,7 +137,7 @@ export async function openReturn(request: {
     const orderSnapshot = await transaction.get(orderRef)
     if (!orderSnapshot.exists) return { outcome: 'no_such_order' }
     const existing = await transaction.get(
-      hostRef.collection(RETURNS_COLLECTION).where('orderId', '==', request.orderId),
+      hostRef.collection('returns').where('orderId', '==', request.orderId),
     )
     const order = CommerceModel.liftLegacyOrder((orderSnapshot.data() ?? {}) as never)
     const verdict = CommerceModel.validateReturnRequest({
@@ -173,7 +171,7 @@ export async function openReturn(request: {
       createdAtMs: now,
       updatedAtMs: now,
     }
-    const returnRef = hostRef.collection(RETURNS_COLLECTION).doc()
+    const returnRef = hostRef.collection('returns').doc()
     transaction.create(returnRef, entry)
     const orderPatch = {
       timeline: CommerceModel.appendOrderEvent(
@@ -223,7 +221,7 @@ export async function changeReturn(request: {
 }): Promise<ChangeReturnOutcome> {
   const firestore = firebaseAdmin.app().firestore()
   const hostRef = hostRefFor(firestore, request.hostId)
-  const returnRef = hostRef.collection(RETURNS_COLLECTION).doc(request.returnId)
+  const returnRef = hostRef.collection('returns').doc(request.returnId)
   const now = request.now ?? Date.now()
   const note = request.merchantNote === undefined ? undefined : String(request.merchantNote).trim().slice(0, CommerceModel.RETURN_NOTE_MAX)
   return firestore.runTransaction(async (transaction): Promise<ChangeReturnOutcome> => {
@@ -296,7 +294,7 @@ export async function receiveReturn(request: {
 }): Promise<ChangeReturnOutcome & { units?: number }> {
   const firestore = firebaseAdmin.app().firestore()
   const hostRef = hostRefFor(firestore, request.hostId)
-  const returnRef = hostRef.collection(RETURNS_COLLECTION).doc(request.returnId)
+  const returnRef = hostRef.collection('returns').doc(request.returnId)
   const now = request.now ?? Date.now()
   const locationId = String(request.locationId ?? '').trim().slice(0, 100)
   return firestore.runTransaction(async (transaction) => {
@@ -412,7 +410,7 @@ export async function markReturnRefunded(request: {
 }): Promise<ChangeReturnOutcome> {
   const firestore = firebaseAdmin.app().firestore()
   const hostRef = hostRefFor(firestore, request.hostId)
-  const returnRef = hostRef.collection(RETURNS_COLLECTION).doc(request.returnId)
+  const returnRef = hostRef.collection('returns').doc(request.returnId)
   const now = request.now ?? Date.now()
   return firestore.runTransaction(async (transaction): Promise<ChangeReturnOutcome> => {
     const snapshot = await transaction.get(returnRef)
@@ -660,7 +658,7 @@ export const returnRequestHandler: PluginApiHandler = async (req, res) => {
     if (req.method === 'GET') {
       const [{ returnSettings }, existing] = await Promise.all([
         readStore(firestore, hostId),
-        hostRef.collection(RETURNS_COLLECTION).where('orderId', '==', orderId).get(),
+        hostRef.collection('returns').where('orderId', '==', orderId).get(),
       ])
       const returns = existing.docs.map((entry) => ({ id: entry.id, ...(entry.data() as CommerceModel.HostReturn) }))
       const endsAt = CommerceModel.returnWindowEndsAtMs(order, returnSettings)
@@ -762,7 +760,7 @@ export const returnsHandler: PluginApiHandler = async (req, res) => {
     }
 
     if (action === 'refund') {
-      const returnSnapshot = await hostRefFor(firestore, hostId).collection(RETURNS_COLLECTION).doc(returnId).get()
+      const returnSnapshot = await hostRefFor(firestore, hostId).collection('returns').doc(returnId).get()
       if (!returnSnapshot.exists) return res.status(404).json({ error: 'Unknown return' })
       const entry = returnSnapshot.data() as CommerceModel.HostReturn
       if (entry.status === 'refunded' || entry.refundedAtMs) {
