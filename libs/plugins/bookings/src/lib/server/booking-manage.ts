@@ -35,6 +35,7 @@ import {
 } from '../model/booking-manage'
 import { type BookedInterval, type HostBookingService, isSlotOpen } from '../model/bookings'
 import { bookingTimeZone, formatBookingWhen, storedBookingTimeZone } from '../model/booking-time'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /*
  * Checking a guest in and moving a booking (AGL-3621), for the site's team.
@@ -140,7 +141,8 @@ async function authorize(
   let uid: string
   try {
     uid = (await deps.verifyIdToken(token)).uid
-  } catch {
+  } catch (error) {
+    if (!isRefusedIdToken(error)) throw error
     throw new Refusal(401, 'Unauthenticated')
   }
   const host = await deps.firestore().doc(`hosts/${hostId}`).get()

@@ -107,7 +107,7 @@ function deps(firestore: ManageFirestore, overrides: Partial<BookingManageDeps> 
   const value: BookingManageDeps = {
     firestore: () => firestore,
     verifyIdToken: async (token) => {
-      if (token !== 'good') throw new Error('bad token')
+      if (token !== 'good') throw Object.assign(new Error('Firebase ID token has expired.'), { code: 'auth/id-token-expired' })
       return { uid: 'editor-1' }
     },
     siteLocked: async () => false,

@@ -29,6 +29,7 @@ import {
   bookingInPersonState,
   type BookingInPersonPayment,
 } from '../model/booking-in-person'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /*==========================================
  * `POST /api/bookings/in-person-payment` (AGL-3618).
@@ -130,7 +131,8 @@ async function authorize(
   let uid: string
   try {
     uid = (await firebaseAdmin.app().auth().verifyIdToken(idToken)).uid
-  } catch {
+  } catch (error) {
+    if (!isRefusedIdToken(error)) throw error
     return { ok: false, status: 401, error: 'Unauthenticated' }
   }
   const host = await firebaseAdmin.app().firestore().collection('hosts').doc(hostId).get()

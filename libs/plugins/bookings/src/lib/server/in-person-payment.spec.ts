@@ -73,7 +73,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       app: () => ({
         auth: () => ({
           verifyIdToken: async (token: string) => {
-            if (token === 'bad') throw new Error('expired')
+            if (token === 'bad') throw Object.assign(new Error('Firebase ID token has expired.'), { code: 'auth/id-token-expired' })
             return { uid: token === 'viewer' ? 'viewer-1' : 'staff-1' }
           },
         }),
