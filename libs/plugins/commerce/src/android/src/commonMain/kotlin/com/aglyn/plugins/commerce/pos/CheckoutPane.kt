@@ -31,7 +31,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,7 +53,6 @@ import com.aglyn.ui.SectionCard
 import com.aglyn.ui.Skeleton
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.space
-import kotlinx.coroutines.launch
 
 /*
  * CHECKOUT, on screen: the sale the server priced, a tip, a tender, and the
@@ -64,7 +62,6 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun CheckoutPane(model: RegisterModel, checkout: Checkout, onOpenReaders: () -> Unit) {
   val state by checkout.state.collectAsState()
-  val scope = rememberCoroutineScope()
   val fmt = { cents: Long -> money(cents, model.currency) }
   val receiptStep = state.step as? CheckoutStep.Receipt
   LaunchedEffect(receiptStep != null) { if (receiptStep != null) model.loadReceipt(state.opened.orderId) }
@@ -86,7 +83,7 @@ internal fun CheckoutPane(model: RegisterModel, checkout: Checkout, onOpenReader
         AmountRow("Total", fmt(state.sale.totalCents))
         if (state.sale.paidCents > 0) AmountRow("Paid", fmt(state.sale.paidCents), muted = true)
         HorizontalDivider()
-        AmountRow("Due", fmt(state.dueCents), emphasized = true, modifier = Modifier.testTag("pos-due"))
+        AmountRow("Due", fmt(state.sale.dueCents), emphasized = true, modifier = Modifier.testTag("pos-due"))
       }
     }
     state.notice?.let { notice ->
@@ -95,7 +92,7 @@ internal fun CheckoutPane(model: RegisterModel, checkout: Checkout, onOpenReader
         notice.tone.status(),
         Modifier.testTag("checkout-notice"),
         action = if (state.lost) {
-          { TextButton(onClick = { scope.launch { checkout.recheck() } }, enabled = !state.busy) { Text("Check the sale") } }
+          { TextButton(onClick = { model.act { checkout.recheck() } }, enabled = !state.busy) { Text("Check the sale") } }
         } else {
           null
         },
@@ -103,8 +100,8 @@ internal fun CheckoutPane(model: RegisterModel, checkout: Checkout, onOpenReader
     }
     when (val step = state.step) {
       CheckoutStep.Tender -> TenderStep(model, checkout, state, fmt, onOpenReaders)
-      CheckoutStep.Cash -> CashStep(checkout, state, fmt)
-      CheckoutStep.GiftCard -> GiftCardStep(checkout, state)
+      CheckoutStep.Cash -> CashStep(model, checkout, state, fmt)
+      CheckoutStep.GiftCard -> GiftCardStep(model, checkout, state)
       is CheckoutStep.Card -> CardStep(model, checkout, state, step, fmt)
       is CheckoutStep.Receipt -> ReceiptStep(model, checkout, state, step, fmt)
     }
@@ -113,7 +110,20 @@ internal fun CheckoutPane(model: RegisterModel, checkout: Checkout, onOpenReader
 
 @Composable
 private fun TenderStep(model: RegisterModel, checkout: Checkout, state: CheckoutState, fmt: (Long) -> String, onOpenReaders: () -> Unit) {
-  val scope = rememberCoroutineScope()
+  for (pending in state.inFlight) {
+    NoticeBanner(
+      "A card payment of ${fmt(pending.amountCents + pending.tipCents)} is still at the reader.",
+      StatusTone.WARNING,
+      Modifier.testTag("pos-in-flight"),
+      action = {
+        Row {
+          TextButton(onClick = { model.act { checkout.recheck() } }, enabled = !state.busy) { Text("Check") }
+          TextButton(onClick = { model.act { checkout.cancelPending(pending.id) } }, enabled = !state.busy) { Text("Stop it") }
+        }
+      },
+    )
+  }
+  if (state.dueCents <= 0) return
   val tips = checkout.tips()
   if (tips.isNotEmpty()) {
     Section("Tip") {
@@ -143,7 +153,7 @@ private fun TenderStep(model: RegisterModel, checkout: Checkout, state: Checkout
     Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
       for (reader in model.readers) {
         Button(
-          onClick = { scope.launch { checkout.payCard(reader) } },
+          onClick = { model.act { checkout.payCard(reader) } },
           enabled = state.canTender,
           modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("tender-card-${reader.id}"),
         ) {
@@ -183,7 +193,7 @@ private fun TenderStep(model: RegisterModel, checkout: Checkout, state: Checkout
   }
   if (state.busy) CircularProgressIndicator(Modifier.size(28.dp))
   TextButton(
-    onClick = { scope.launch { if (checkout.void()) model.voided() } },
+    onClick = { model.act { if (checkout.void()) model.voided() } },
     enabled = !state.busy && state.sale.paidCents == 0L,
     modifier = Modifier.testTag("pos-void"),
   ) {
@@ -194,8 +204,7 @@ private fun TenderStep(model: RegisterModel, checkout: Checkout, state: Checkout
 }
 
 @Composable
-private fun CashStep(checkout: Checkout, state: CheckoutState, fmt: (Long) -> String) {
-  val scope = rememberCoroutineScope()
+private fun CashStep(model: RegisterModel, checkout: Checkout, state: CheckoutState, fmt: (Long) -> String) {
   val owed = state.amountCents + state.tipCents
   var text by remember { mutableStateOf("") }
   val typed = centsFromText(text)
@@ -222,7 +231,7 @@ private fun CashStep(checkout: Checkout, state: CheckoutState, fmt: (Long) -> St
   Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
     OutlinedButton(onClick = { checkout.goTo(CheckoutStep.Tender) }, modifier = Modifier.heightIn(min = 52.dp)) { Text("Back") }
     Button(
-      onClick = { typed?.let { scope.launch { checkout.payCash(it) } } },
+      onClick = { typed?.let { model.act { checkout.payCash(it) } } },
       enabled = state.canTender && (typed ?: 0) >= owed,
       modifier = Modifier.weight(1f).heightIn(min = 52.dp).testTag("pos-take-cash"),
     ) { Text("Take ${fmt(owed)} in cash") }
@@ -230,8 +239,7 @@ private fun CashStep(checkout: Checkout, state: CheckoutState, fmt: (Long) -> St
 }
 
 @Composable
-private fun GiftCardStep(checkout: Checkout, state: CheckoutState) {
-  val scope = rememberCoroutineScope()
+private fun GiftCardStep(model: RegisterModel, checkout: Checkout, state: CheckoutState) {
   var code by remember { mutableStateOf("") }
   Section("Gift card") {
     OutlinedTextField(
@@ -246,10 +254,10 @@ private fun GiftCardStep(checkout: Checkout, state: CheckoutState) {
   }
   Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
     OutlinedButton(onClick = { checkout.goTo(CheckoutStep.Tender) }, modifier = Modifier.heightIn(min = 52.dp)) { Text("Back") }
-    OutlinedButton(onClick = { scope.launch { checkout.checkGiftCard(code) } }, enabled = code.isNotBlank() && !state.busy, modifier = Modifier.heightIn(min = 52.dp)) {
+    OutlinedButton(onClick = { model.act { checkout.checkGiftCard(code) } }, enabled = code.isNotBlank() && !state.busy, modifier = Modifier.heightIn(min = 52.dp)) {
       Text("Check balance")
     }
-    Button(onClick = { scope.launch { checkout.payGiftCard(code) } }, enabled = code.isNotBlank() && state.canTender, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
+    Button(onClick = { model.act { checkout.payGiftCard(code) } }, enabled = code.isNotBlank() && state.canTender, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
       Text("Apply")
     }
   }
@@ -257,7 +265,6 @@ private fun GiftCardStep(checkout: Checkout, state: CheckoutState) {
 
 @Composable
 private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutState, step: CheckoutStep.Card, fmt: (Long) -> String) {
-  val scope = rememberCoroutineScope()
   val reader = model.readers.firstOrNull { it.label == step.readerLabel }
   Column(
     Modifier.fillMaxWidth().padding(vertical = space(3f)).testTag("pos-card-waiting"),
@@ -274,13 +281,12 @@ private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutSt
       style = MaterialTheme.typography.bodyLarge,
       textAlign = TextAlign.Center,
     )
-    OutlinedButton(onClick = { reader?.let { scope.launch { checkout.cancelCard(it) } } }, enabled = step.paymentId != null) { Text("Cancel payment") }
+    OutlinedButton(onClick = { reader?.let { model.act { checkout.cancelCard(it) } } }, enabled = step.paymentId != null) { Text("Cancel payment") }
   }
 }
 
 @Composable
 private fun ReceiptStep(model: RegisterModel, checkout: Checkout, state: CheckoutState, step: CheckoutStep.Receipt, fmt: (Long) -> String) {
-  val scope = rememberCoroutineScope()
   val context = model.context
   val cash = state.sale.payments.any { it.method == "cash" && it.status == "succeeded" }
   Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(space(1f))) {
@@ -316,7 +322,7 @@ private fun ReceiptStep(model: RegisterModel, checkout: Checkout, state: Checkou
         modifier = Modifier.weight(1f).testTag("pos-receipt-email"),
       )
       Button(
-        onClick = { scope.launch { if (checkout.sendReceipt("email", email)) model.finished() } },
+        onClick = { model.act { if (checkout.sendReceipt("email", email)) model.finished() } },
         enabled = isReceiptEmail(email) && !state.busy && model.online,
       ) { Text("Send") }
     }
@@ -333,7 +339,7 @@ private fun ReceiptStep(model: RegisterModel, checkout: Checkout, state: Checkou
           keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
           modifier = Modifier.weight(1f),
         )
-        Button(onClick = { scope.launch { if (checkout.sendReceipt("sms", phone)) model.finished() } }, enabled = isReceiptPhone(phone) && !state.busy) { Text("Send") }
+        Button(onClick = { model.act { if (checkout.sendReceipt("sms", phone)) model.finished() } }, enabled = isReceiptPhone(phone) && !state.busy) { Text("Send") }
       }
     }
   }
@@ -344,7 +350,7 @@ private fun ReceiptStep(model: RegisterModel, checkout: Checkout, state: Checkou
       OutlinedButton(
         onClick = {
           val receipt = model.receipt ?: return@OutlinedButton
-          scope.launch {
+          model.act {
             printProblem = model.print(receipt, openDrawer = cash)
             if (printProblem == null && checkout.sendReceipt("print")) model.finished()
           }
@@ -358,7 +364,7 @@ private fun ReceiptStep(model: RegisterModel, checkout: Checkout, state: Checkou
       }
     }
     Button(
-      onClick = { scope.launch { if (checkout.sendReceipt("none")) model.finished() } },
+      onClick = { model.act { if (checkout.sendReceipt("none")) model.finished() } },
       modifier = Modifier.weight(1f).heightIn(min = 52.dp).testTag("pos-new-sale"),
     ) { Text("No receipt · New sale") }
   }

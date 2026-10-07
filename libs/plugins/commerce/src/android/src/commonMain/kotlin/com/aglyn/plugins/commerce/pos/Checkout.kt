@@ -57,6 +57,9 @@ data class CheckoutState(
 
   val isSplit: Boolean get() = amountCents < dueCents
 
+  /** Card payments still at a reader (a sale reopened after a restart can hold one). */
+  val inFlight: List<PosSalePayment> get() = sale.payments.filter { it.status == "pending" }
+
   /** Tenders are open: nothing in flight, nothing unknown, something to pay. */
   val canTender: Boolean get() = !busy && !lost && dueCents > 0 && step !is CheckoutStep.Receipt
 }
@@ -231,7 +234,11 @@ class Checkout(
     if (!quiet && mutable.value.busy) return
     mutable.update { it.copy(busy = true) }
     try {
-      val answer = api.payment(mutable.value.opened.orderId, SaleStep.Sale)
+      var answer = api.payment(mutable.value.opened.orderId, SaleStep.Sale)
+      // A card payment still at a reader is read from the processor, not just the ledger.
+      for (pending in answer.sale.payments.filter { it.status == "pending" }) {
+        answer = api.payment(mutable.value.opened.orderId, SaleStep.Status(pending.id))
+      }
       val paid = answer.completed || answer.sale.status == "paid"
       if (paid) keys.answered()
       mutable.update {
@@ -252,6 +259,20 @@ class Checkout(
           notice = Notice(NoticeTone.WARNING, "Still offline. The sale is safe; check it again when you reconnect."),
         )
       }
+    }
+  }
+
+  /** Stops a card payment left at a reader, so its amount can be tendered again. */
+  suspend fun cancelPending(paymentId: String) {
+    if (mutable.value.busy) return
+    mutable.update { it.copy(busy = true, notice = null) }
+    val answer = cancelCardPayment(TenderDeps(api, mutable.value.opened.orderId, sleep), paymentId)
+    mutable.update {
+      it.copy(
+        busy = false,
+        sale = answer?.sale ?: it.sale,
+        notice = if (answer == null) Notice(NoticeTone.ERROR, "The payment could not be stopped. Check the sale again.") else null,
+      )
     }
   }
 

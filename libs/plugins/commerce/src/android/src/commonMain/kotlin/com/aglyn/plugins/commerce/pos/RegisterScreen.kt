@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -90,7 +91,6 @@ import com.aglyn.ui.EmptyState
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.QuantityStepper
 import com.aglyn.ui.SkeletonGrid
-import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.WidthClass
 import com.aglyn.ui.currentWidthClass
@@ -143,6 +143,9 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit) {
   var holdsOpen by remember { mutableStateOf(false) }
   var codeOpen by remember { mutableStateOf(false) }
   val scanner = remember(model) { model.peripherals.hidScanner ?: HidBurstDetector() }
+
+  // Charging from the phone's basket sheet moves to checkout; the sheet stays shut after it.
+  LaunchedEffect(model.checkout) { if (model.checkout != null) basketOpen = false }
 
   // The toast fades on its own.
   LaunchedEffect(model.toast) {
@@ -207,7 +210,24 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit) {
   Box(Modifier.fillMaxSize().then(keys).testTag("pos-register")) {
     if (wide) {
       Row(Modifier.fillMaxSize()) {
-        CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, Modifier.weight(1f))
+        Box(Modifier.weight(1f)) {
+          CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true })
+          // The basket is the sale now: the grid rests until it is paid or canceled.
+          if (checkout != null) {
+            Box(
+              Modifier.matchParentSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)).clickable(enabled = true, onClick = {}),
+              contentAlignment = Alignment.Center,
+            ) {
+              Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 4.dp) {
+                Text(
+                  "Finish or cancel this sale to ring up the next one.",
+                  Modifier.padding(horizontal = space(3f), vertical = space(2f)),
+                  style = MaterialTheme.typography.titleMedium,
+                )
+              }
+            }
+          }
+        }
         VerticalDivider()
         Surface(Modifier.width(if (currentWidthClass() == WidthClass.MEDIUM) 340.dp else 420.dp).fillMaxHeight(), color = MaterialTheme.colorScheme.surfaceContainerLow) {
           Crossfade(checkout) { open ->
@@ -234,8 +254,8 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit) {
   }
 
   if (basketOpen && !wide && checkout == null) {
-    ModalBottomSheet(onDismissRequest = { basketOpen = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-      BasketPane(model, onHolds = { holdsOpen = true }, inSheet = true)
+    ModalBottomSheet(onDismissRequest = { basketOpen = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), dragHandle = { SheetHandle() }) {
+      BasketPane(model, onHolds = { holdsOpen = true }, inSheet = true, onHeld = { basketOpen = false })
     }
   }
   model.sheet?.let { ItemSheetDialog(model, it, wide) }
@@ -267,7 +287,7 @@ private fun CatalogPane(
         value = query,
         onValueChange = onQuery,
         modifier = Modifier.weight(1f).focusRequester(searchFocus).testTag("pos-search"),
-        placeholder = { Text("Search products or scan a barcode") },
+        placeholder = { Text(if (currentWidthClass() == WidthClass.COMPACT) "Search or scan" else "Search products or scan a barcode", maxLines = 1, overflow = TextOverflow.Ellipsis) },
         leadingIcon = { Icon(AglynIcons.named("search"), contentDescription = null) },
         trailingIcon = {
           if (query.isNotEmpty()) {
@@ -413,14 +433,26 @@ private fun ProductTile(item: PosItem, inBasket: Int, currency: String, onClick:
         Spacer(Modifier.weight(1f))
         if (inBasket > 0) Badge(containerColor = MaterialTheme.colorScheme.primary) { Text(inBasket.toString()) }
       }
-      Text(item.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-      Text(price, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-      if (soldOut || item.needsSheet()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
-          if (soldOut) StatusChip("Sold out", StatusTone.WARNING)
-          else if (item.modifierGroups.isNotEmpty() || item.variants.size > 1) StatusChip("Options")
-        }
-      }
+      Text(
+        item.name,
+        style = MaterialTheme.typography.titleSmall,
+        maxLines = 2,
+        minLines = 2,
+        overflow = TextOverflow.Ellipsis,
+      )
+      Text(price, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold, maxLines = 1)
+      // Every tile keeps this line, so the grid's rows line up.
+      Text(
+        when {
+          soldOut -> "Sold out"
+          item.needsSheet() -> "Choose options"
+          else -> "Tap to add"
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = if (soldOut) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
     }
   }
 }
@@ -436,7 +468,7 @@ private fun ItemSheetDialog(model: RegisterModel, sheet: ItemSheet, wide: Boolea
       Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surface, modifier = Modifier.widthIn(max = 520.dp)) { content() }
     }
   } else {
-    ModalBottomSheet(onDismissRequest = { model.sheet = null }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) { content() }
+    ModalBottomSheet(onDismissRequest = { model.sheet = null }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), dragHandle = { SheetHandle() }) { content() }
   }
 }
 
@@ -503,6 +535,15 @@ private fun ItemSheetContent(model: RegisterModel, sheet: ItemSheet) {
   }
 }
 
+/** The sheet's grabber, without the tooltip the stock handle shows on a long press. */
+@Composable
+private fun SheetHandle() {
+  Box(
+    Modifier.padding(vertical = space(1.5f)).width(32.dp).height(4.dp).clip(CircleShape)
+      .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)),
+  )
+}
+
 @Composable
 internal fun Section(title: String, content: @Composable () -> Unit) {
   Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
@@ -516,22 +557,46 @@ internal fun Section(title: String, content: @Composable () -> Unit) {
 @Composable
 private fun BasketBar(model: RegisterModel, onOpen: () -> Unit) {
   val cart = model.cart
+  // Large text gets the summary on its own line, so nothing wraps a word at a time.
+  val stacked = LocalDensity.current.fontScale > 1.3f
+  val summary: @Composable (Modifier) -> Unit = { modifier ->
+    Column(modifier.clickable(onClick = onOpen).testTag("pos-basket-bar")) {
+      Text(
+        if (cart.isEmpty) "Basket is empty" else "${cart.count} ${if (cart.count == 1) "item" else "items"}",
+        style = MaterialTheme.typography.titleSmall,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+      Text(
+        if (cart.isEmpty) "Tap a product to start" else "${money(cart.subtotalCents - cart.discountCents, model.currency)} before tax",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
+  }
+  val actions: @Composable (Modifier) -> Unit = { modifier ->
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+      OutlinedButton(onClick = onOpen, enabled = !cart.isEmpty || model.holds.isNotEmpty(), modifier = Modifier.heightIn(min = 52.dp)) { Text("Basket") }
+      ChargeButton(model, if (stacked) Modifier.weight(1f) else Modifier)
+    }
+  }
   Surface(color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 3.dp, shadowElevation = 6.dp) {
-    Row(
-      Modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(1.5f)),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(space(1.5f)),
-    ) {
-      Column(Modifier.weight(1f).clickable(onClick = onOpen).testTag("pos-basket-bar")) {
-        Text(if (cart.isEmpty) "Basket is empty" else "${cart.count} ${if (cart.count == 1) "item" else "items"}", style = MaterialTheme.typography.titleSmall)
-        Text(
-          if (cart.isEmpty) "Tap a product to start" else "${money(cart.subtotalCents - cart.discountCents, model.currency)} before tax",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    if (stacked) {
+      Column(Modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(1.5f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        summary(Modifier.fillMaxWidth())
+        actions(Modifier.fillMaxWidth())
       }
-      OutlinedButton(onClick = onOpen, enabled = !cart.isEmpty || model.holds.isNotEmpty()) { Text("Basket") }
-      ChargeButton(model)
+    } else {
+      Row(
+        Modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(1.5f)),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(space(1.5f)),
+      ) {
+        summary(Modifier.weight(1f))
+        actions(Modifier)
+      }
     }
   }
 }
@@ -547,13 +612,14 @@ private fun ChargeButton(model: RegisterModel, modifier: Modifier = Modifier) {
     if (model.charging) {
       androidx.compose.material3.CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
     } else {
-      Text("Charge ${money(cart.subtotalCents - cart.discountCents, model.currency)}", style = MaterialTheme.typography.titleMedium)
+      // The server adds the store's tax when the sale opens; the button names no figure it would change.
+      Text("Charge", style = MaterialTheme.typography.titleMedium)
     }
   }
 }
 
 @Composable
-private fun BasketPane(model: RegisterModel, onHolds: () -> Unit, inSheet: Boolean = false) {
+private fun BasketPane(model: RegisterModel, onHolds: () -> Unit, inSheet: Boolean = false, onHeld: () -> Unit = {}) {
   val cart = model.cart
   Column(Modifier.fillMaxWidth().then(if (inSheet) Modifier else Modifier.fillMaxHeight()).testTag("pos-basket")) {
     Row(Modifier.fillMaxWidth().padding(start = space(2f), end = space(1f), top = space(1.5f)), verticalAlignment = Alignment.CenterVertically) {
@@ -576,7 +642,7 @@ private fun BasketPane(model: RegisterModel, onHolds: () -> Unit, inSheet: Boole
       NoticeBanner("This store has no register yet. Add one in the console's register settings.", StatusTone.WARNING, Modifier.padding(space(2f)))
     }
     if (cart.isEmpty) {
-      Box(Modifier.fillMaxWidth().then(if (inSheet) Modifier.heightIn(min = 200.dp) else Modifier.weight(1f))) {
+      Box(Modifier.fillMaxWidth().then(if (inSheet) Modifier.height(240.dp) else Modifier.weight(1f))) {
         EmptyState("Tap a product to start a sale", body = "Scan a barcode or search by name.", icon = AglynIcons.named("shopping_basket"))
       }
     } else {
@@ -622,7 +688,7 @@ private fun BasketPane(model: RegisterModel, onHolds: () -> Unit, inSheet: Boole
         }
       }
       Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-        OutlinedButton(onClick = { model.hold() }, enabled = !cart.isEmpty, modifier = Modifier.heightIn(min = 52.dp).testTag("pos-hold")) {
+        OutlinedButton(onClick = { model.hold(); onHeld() }, enabled = !cart.isEmpty, modifier = Modifier.heightIn(min = 52.dp).testTag("pos-hold")) {
           Icon(AglynIcons.named("pause"), null, Modifier.size(18.dp))
           Spacer(Modifier.width(space(0.5f)))
           Text("Hold")

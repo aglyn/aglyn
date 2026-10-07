@@ -97,6 +97,15 @@ class RegisterModel(
   val cardCollector: CardCollector? get() = peripherals.cardCollector
   val readers = mutableStateListOf<CardReaderService>()
 
+  /**
+   * Runs a press on the register's own scope, not the pressed screen's: a
+   * tender moves the checkout to its next step, and a press must outlive the
+   * step that started it.
+   */
+  fun act(block: suspend () -> Unit) {
+    scope.launch { block() }
+  }
+
   fun start() {
     scope.launch { loadRegisters() }
     scope.launch { loadStore() }
@@ -107,7 +116,7 @@ class RegisterModel(
 
   private suspend fun loadStore() {
     runCatching { firestore.get("hosts/$hostId") }.getOrNull()?.let { host ->
-      storeName = (host.data["name"] as? String)?.ifEmpty { null } ?: (host.data["title"] as? String) ?: storeName
+      storeName = listOf("displayName", "name", "title").firstNotNullOfOrNull { (host.data[it] as? String)?.trim()?.ifEmpty { null } } ?: storeName
       (host.data["currency"] as? String)?.ifEmpty { null }?.let { currency = it }
       (host.data["timeZone"] as? String)?.ifEmpty { null }?.let { timeZone = it }
     }
@@ -215,6 +224,7 @@ class RegisterModel(
 
   /** A scan or a typed code, looked up across the catalog: barcode first, then SKU. */
   fun lookUp(raw: String) {
+    if (checkout != null) return
     val code = scannedProductCode(raw)
     if (code == null) {
       toast = Notice(NoticeTone.WARNING, "That code could not be read. Try again.")
@@ -246,6 +256,7 @@ class RegisterModel(
 
   /** A tile tap: straight in, or the item sheet when there is something to choose. */
   fun tap(item: PosItem) {
+    if (checkout != null) return
     if (item.needsSheet()) open(item, item.variants.firstOrNull { !it.soldOut() && it.unitCents != null } ?: item.variants.first()) else add(item, item.variants.first())
   }
 

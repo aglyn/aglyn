@@ -181,4 +181,22 @@ class CheckoutTest {
     checkout.checkGiftCard("abcd")
     assertEquals("This card is on hold.", checkout.state.value.giftBalance)
   }
+
+  @Test
+  fun aRereadAsksTheProcessorAboutAPaymentStillAtAReaderAndCanStopIt() = runTest {
+    val atReader = payment("pay1", "pending", amountCents = 1000)
+    val api = ScriptedSaleApi(
+      mapOf(
+        "sale" to listOf(sale(listOf(atReader), paymentId = null)),
+        "status" to listOf(sale(listOf(atReader))),
+        "cancel" to listOf(sale(listOf(atReader.copy(status = "canceled")))),
+      ),
+    )
+    val checkout = checkout(api)
+    checkout.recheck()
+    assertEquals(listOf("sale", "status"), api.actions)
+    assertEquals(listOf("pay1"), checkout.state.value.inFlight.map { it.id })
+    checkout.cancelPending("pay1")
+    assertTrue(checkout.state.value.inFlight.isEmpty())
+  }
 }
