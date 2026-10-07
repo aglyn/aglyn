@@ -61,10 +61,10 @@ whichever theme you pick.
 ## Set colors and fonts
 
 - Choose your **palette** and **typography**.
-- Pick any Google font. Your published site serves it from its **own address**: the
-  font rules are part of the page and the files come from your site with a long cache,
-  so text never waits on a stylesheet from Google, and visitors' browsers never contact
-  Google for your fonts.
+- Pick any Google font with the [font browser](#fonts). Your published site serves it
+  from its **own address**: the font rules are part of the page and the files come from
+  your site with a long cache, so text never waits on a stylesheet from Google, and
+  visitors' browsers never contact Google for your fonts.
 - Your site loads each font **at the weights your text styles use**, including the bold
   headings, so a heading never shows a stand-in weight. Each font comes either as one
   file per weight or as one file holding every weight, whichever is smaller.
@@ -78,6 +78,49 @@ whichever theme you pick.
   dark design of its own.
 - **Dark scheme** — set it to **Off** when your content only reads well in light: every
   visitor stays on light and the theme mode switcher is hidden on published pages.
+
+## Fonts
+
+The **Fonts** control in the **Typography** card sets two things: the font for your
+**body text** and, if you want one of their own, the font for your **headings**. Each is
+shown in your own site's name and words, so you judge a font by how it will actually read.
+
+![The Fonts control in the Typography card](/img/theme-builder/font-picker.png)
+
+Press **Change** beside either one to open the font browser:
+
+- **Every Google font**, most popular first. **Search** by name, or narrow the list with the
+  **Sans serif**, **Serif**, **Display**, **Handwriting** and **Monospace** chips. Each font in
+  the list previews your site's name in that font as it scrolls into view.
+- **Theme default** (for body text) keeps the font each visitor's device already has, which
+  costs nothing to download. **Same as body text** (for headings) sets headings in the body
+  font, in each heading's own weight.
+- Pick a font to see your heading and a paragraph in it, then choose the **styles to load** —
+  the weights, and italics for headings. Body text always loads its italic, so emphasis is a
+  true italic.
+- **Use for body text** or **Use for headings** puts the font in the editor. Nothing changes
+  on your site until you press **Save**, and **Discard changes** takes it back.
+
+![The font browser, with a font's styles, download size and pairings](/img/theme-builder/font-browser.png)
+
+### Download size
+
+The badge beside your fonts (for example **≈ 38 KB · 2 files**) is what a visitor downloads
+for them: the Latin files your text styles and italics use, measured the way your published
+pages load them — one file per weight, or one variable file holding every weight, whichever
+is smaller. Your headings and other text styles load the weights they use as well, matched
+to the nearest one the font has, so they count too. **0 KB** means your site uses the
+visitor's own system font. In the browser, **This font** is the font you are looking at and
+**All your fonts** is the total with it in place.
+
+Fewer fonts and fewer weights load faster. One family with a regular and a bold weight is
+often all a site needs.
+
+### Pairings
+
+When you look at a body font, **Headings that pair well** suggests fonts for your headings
+(and the other way round): well-known pairings first, then popular fonts from a contrasting
+style, such as serif headings over sans-serif text. **Use pair** sets both fonts at once.
 
 ## Style components
 

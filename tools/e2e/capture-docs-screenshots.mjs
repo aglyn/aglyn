@@ -446,6 +446,27 @@ const shots = [
     waitFor: 'Theme',
     settleMs: 6000,
   },
+  // The font picker (AGL-3656): the Typography card's body and heading
+  // fonts with their cost, then the catalog browser on the site's current
+  // body font — its styles, download size and pairings beside the list.
+  {
+    out: 'theme-builder/font-picker.png',
+    path: `/${HOST_BASE}/theme`,
+    waitFor: 'Body text',
+    settleMs: 6000,
+    actions: [{ scroll: '[data-widget-zone="themeEditorFonts"]', settleMs: 2500 }],
+    clipTo: { locator: '.MuiCard-root:has([data-widget-zone="themeEditorFonts"])' },
+  },
+  {
+    out: 'theme-builder/font-browser.png',
+    path: `/${HOST_BASE}/theme`,
+    waitFor: 'Body text',
+    settleMs: 6000,
+    actions: [
+      { click: '[aria-label="Change the body text font"]', waitFor: 'Download size', settleMs: 5000 },
+    ],
+    clipTo: { locator: '.MuiDialog-paper' },
+  },
   {
     out: 'besigner/components-page.png',
     path: `/${HOST_BASE}/components`,
