@@ -47,10 +47,10 @@ Each capability has its own page, next to the thing it builds:
 | Copy, rewritten or fresh | Any text in the Besigner | [Rewrite and write copy](copy-assist.md) |
 | A change to your theme | **Setup → Theme** | [Change your theme with AI](theme-assist.md) |
 | Search titles and descriptions | **SEO** | [SEO by AI](../building-sites/seo/seo-by-ai.md) |
-| Product copy, catalog and discount ideas | **Commerce** | [Products with AI](products-with-ai.md) |
+| Product copy, catalog and discount ideas | **Products → Create with AI**, and **Build your catalog with AI** on the products page | [Products with AI](products-with-ai.md) |
 | Help working the CRM | A record, the composer, an import | [CRM by AI](crm-by-ai.md) |
-| A designed email | **Email → Create with AI** | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md) |
-| A campaign | **Campaigns** | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md) |
+| A designed email | **Emails → Templates → Create with AI** | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md) |
+| A campaign | **Marketing → Campaigns → Create with AI**, or **Also draft a campaign** on an email | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md) |
 | Variants for an A/B test, and its result in words | **Marketing → Experiments** | [A/B tests by AI](ab-tests-with-ai.md) |
 | What your analytics mean | **Analytics → Insights** | [Insights](../marketing-and-automation/analytics/insights.md) |
 | A change to the page you have open | The Assist panel, in the Besigner | [Edits in the Besigner](../getting-started/aglyn-assist.md#edits-in-the-besigner) |

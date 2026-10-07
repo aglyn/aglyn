@@ -17,6 +17,7 @@
 'use client'
 
 import { buildRoute, createResourceUid, pluginDocsHelp, Route } from '@aglyn/aglyn'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 /*
  * The MODULE, not the barrel, for the two PURE helpers — a spec that mocks
  * `@aglyn/tenant-feature-instance` wholesale to stage its Firestore hooks
@@ -102,6 +103,7 @@ import {
   useMarketingOrgMount,
   type MarketingOrgMount,
 } from './marketing-org-mount'
+import { HOST_CAMPAIGNS_ZONE } from './campaigns-zones'
 import { useCampaignManageApi } from './use-campaign-send-api'
 import { useCampaignTopicOptions } from './use-campaign-topic-options'
 
@@ -219,6 +221,17 @@ export function HostCampaignsCard(props: {
   const { orgId } = useMarketingOrgId(hostId)
   // A container is the org's, so deleting one from the org hub names the org.
   const manageApi = useCampaignManageApi(hostId, orgId)
+  /**
+   * Other ways to start a campaign (AGL-3596): the `hostCampaigns` zone this
+   * plugin declares, drawn through the shell's gated slot — under a site
+   * only, since a widget there starts a campaign on one site. `null` outside
+   * the console shell.
+   */
+  const CreateZone = useConsoleWidgetSlot()
+  const createZone =
+    CreateZone && hostId ? (
+      <CreateZone slot={HOST_CAMPAIGNS_ZONE.id} hostId={hostId} orgId={orgId ?? undefined} />
+    ) : null
 
   /*==========================================
    * TWO KINDS OF ROW, EACH ITS OWN QUERY (AGL-3321).
@@ -894,17 +907,20 @@ export function HostCampaignsCard(props: {
       })}
       HeaderProps={{
         action: (
-          <Button
-            size="small"
-            variant="contained"
-            disabled={creating}
-            onClick={() => {
-              setCreateError(null)
-              setCreateOpen(true)
-            }}
-          >
-            {creating ? 'Creating…' : 'Create campaign'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {createZone}
+            <Button
+              size="small"
+              variant="contained"
+              disabled={creating}
+              onClick={() => {
+                setCreateError(null)
+                setCreateOpen(true)
+              }}
+            >
+              {creating ? 'Creating…' : 'Create campaign'}
+            </Button>
+          </Stack>
         ),
       }}
       contentGutterX
@@ -990,9 +1006,13 @@ export function HostCampaignsCard(props: {
           }
           noRowsAction={
             none && kind === 'campaign' ? (
-              <Button variant="contained" onClick={() => setCreateOpen(true)}>
-                {'Create campaign'}
-              </Button>
+              <Stack direction="row" spacing={1}>
+                {/* Other ways to start a campaign, the header's zone again. */}
+                {createZone}
+                <Button variant="contained" onClick={() => setCreateOpen(true)}>
+                  {'Create campaign'}
+                </Button>
+              </Stack>
             ) : undefined
           }
         />

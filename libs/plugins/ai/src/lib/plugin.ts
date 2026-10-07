@@ -75,6 +75,10 @@ import {
   AiDescribeTemplateButton,
 } from './components/ai-describe-button.component'
 import {
+  AiDescribeCampaignButton,
+  AiDescribeEmailButton,
+} from './components/ai-describe-email.component'
+import {
   AiExperimentResultCard,
   AiExperimentVariantsCard,
 } from './components/ai-experiment-cards.component'
@@ -85,6 +89,7 @@ import {
 import AiProductCopyCard from './components/ai-product-copy-card.component'
 import AiProductImportOption from './components/ai-product-import-option.component'
 import AiProductsHubCard from './components/ai-products-hub-card.component'
+import AiCreateProductsButton from './components/ai-products-create-button.component'
 import AiJobsPage from './components/ai-jobs-page.component'
 import { AI_PLUGIN_ID } from './constants'
 import { registerAiDeclarations } from './declarations'
@@ -417,6 +422,27 @@ export function registerAiConsole(): void {
         permission: 'ai.generate',
         Component: AiDescribeComponentButton,
       },
+      // An email design from a brief (AGL-3596), beside New template on a
+      // site's email templates — the zone the email plugin hosts — and an
+      // email with the draft campaign that sends it, beside Create campaign
+      // on the marketing plugin's Campaigns. The email job's and the
+      // campaign job's first entry points in the console.
+      {
+        slot: 'hostEmailTemplates',
+        widgetId: 'ai-describe-email',
+        title: 'Describe an email',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeEmailButton,
+      },
+      {
+        slot: 'hostCampaigns',
+        widgetId: 'ai-describe-campaign',
+        title: 'Describe a campaign',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeCampaignButton,
+      },
       // Automations by AI (AGL-2919), in the zones the workflows plugin hosts
       // on its Automation page: "Create with AI" beside Add action and Recipes,
       // "Explain it" in the editor of a saved automation, and "Why did this
@@ -538,6 +564,17 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiProductsHubCard,
+      },
+      // "Create with AI" beside Add product and in the empty catalog
+      // (AGL-3596): a door to the card's Propose products brief, shown only
+      // while that card is on the page to take it.
+      {
+        slot: 'productsCreate',
+        widgetId: 'ai-products-create',
+        title: 'Propose products',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiCreateProductsButton,
       },
       {
         slot: 'productImport',

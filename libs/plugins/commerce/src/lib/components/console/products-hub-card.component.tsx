@@ -17,6 +17,7 @@
 'use client'
 
 import { TransferResumeImport } from '@aglyn/aglyn/app-utils/transfer-resume-import'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
 import {
@@ -86,7 +87,7 @@ import { productSlugLedger } from './product-slugs'
 import { productCollectionFields } from './smart-collections'
 import ProductsHubZone from './products-hub-zone.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
-import { type ConsoleProductsHubZoneProps } from './product-zones'
+import { PRODUCTS_CREATE_ZONE, type ConsoleProductsHubZoneProps } from './product-zones'
 import { commerceListFilter } from '../../transfer/list-filter'
 import { COMMERCE_PRODUCTS_TRANSFER } from '../../transfer/transfer-keys'
 
@@ -123,6 +124,8 @@ const PRODUCT_VISIBLE_COLUMNS = ['name', 'status', 'type', 'priceUsd', 'stock', 
  */
 export function ProductsHubCard(props: ProductsHubCardProps) {
   const { hostId } = props
+  /** The shell's zone renderer, for the `productsCreate` zone (AGL-3596). */
+  const CreateZone = useConsoleWidgetSlot()
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -791,6 +794,28 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     PRODUCT_LIST_HEADERS,
   )
 
+  /** Add product: the quota first, then the create drawer. */
+  const startAddProduct = () => {
+    if (!productQuota) return
+    if (!productQuota.allowed) {
+      return void enqueueSnackbar(
+        `Your plan includes ${productQuota.limit} products — ` + 'upgrade for more',
+        { variant: 'info', persist: false },
+      )
+    }
+    setCreating(true)
+  }
+
+  /*
+   * Other ways to start a product (AGL-3596): the `productsCreate` zone this
+   * plugin declares, drawn through the shell's gated slot beside Add product
+   * and again in the empty catalog. `null` outside the console shell. The
+   * org is not this page's to know, so a widget reads it from the site.
+   */
+  const createZone = CreateZone ? (
+    <CreateZone slot={PRODUCTS_CREATE_ZONE.id} hostId={hostId} orgId={undefined} />
+  ) : null
+
   return (
     <CardDisplay
       /*
@@ -816,22 +841,13 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       <Stack spacing={2}>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
           <Box sx={{ flex: 1 }} />
+          {createZone}
           <Button
             variant="contained"
             color="primary"
             size="small"
             disabled={!productQuota}
-            onClick={() => {
-              if (!productQuota) return
-              if (!productQuota.allowed) {
-                return void enqueueSnackbar(
-                  `Your plan includes ${productQuota.limit} products — ` +
-                    'upgrade for more',
-                  { variant: 'info', persist: false },
-                )
-              }
-              setCreating(true)
-            }}
+            onClick={startAddProduct}
           >
             {'Add product'}
           </Button>
@@ -923,6 +939,16 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
               ? undefined
               : 'Build your catalog: add a product, then drop commerce ' +
                 'blocks on any page in Besigner.'
+          }
+          noRowsAction={
+            filtering ? undefined : (
+              <Stack direction="row" spacing={1}>
+                {createZone}
+                <Button variant="contained" disabled={!productQuota} onClick={startAddProduct}>
+                  {'Add your first product'}
+                </Button>
+              </Stack>
+            )
           }
         />
         {products.length === 0 && page === 0 && productsStatus !== 'loading' ? null : (
