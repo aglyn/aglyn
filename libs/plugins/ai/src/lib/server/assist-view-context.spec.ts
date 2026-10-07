@@ -60,6 +60,16 @@ describe('describeView', () => {
     ['/acme/hosts/host123/marketing', 'host-marketing'],
     ['/acme/hosts/host123/marketing/overview', 'host-marketing'],
     ['/acme/marketing/conversions', 'org-marketing'],
+    // CRM, Logic, Forms, Emails and Automation (AGL-3603), each before the
+    // site dashboard and the workspace home.
+    ['/acme/hosts/host123/automation/actions', 'host-workflows'],
+    ['/acme/hosts/host123/crm/deals/d1', 'host-crm'],
+    ['/acme/hosts/host123/logic', 'host-logic'],
+    ['/acme/hosts/host123/forms/f1', 'host-forms'],
+    ['/acme/hosts/host123/emails/messages', 'host-emails'],
+    ['/acme/automation/automations', 'org-automation'],
+    ['/acme/crm/reports', 'org-crm'],
+    ['/acme/emails/audiences', 'org-emails'],
     ['/acme/hosts/host123', 'host-dashboard'],
     ['/acme/hosts', 'org-hosts'],
     ['/acme/billing', 'org-billing'],
