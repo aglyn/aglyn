@@ -23,3 +23,7 @@ fun AglynLogo(modifier: Modifier = Modifier, contentDescription: String? = "Agly
 @Composable
 fun AglynWordmark(modifier: Modifier = Modifier, contentDescription: String? = "Aglyn") =
   Image(painterResource(Res.drawable.aglyn_wordmark), contentDescription, modifier)
+
+/** The mark as a painter, for a window or tray icon. */
+@Composable
+fun aglynMarkPainter(): androidx.compose.ui.graphics.painter.Painter = painterResource(Res.drawable.aglyn_mark)

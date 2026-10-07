@@ -45,7 +45,7 @@ android {
       buildConfigField("String", "FIREBASE_MESSAGING_SENDER_ID", quoted(setting("firebaseMessagingSenderId", "000000000000")))
       buildConfigField("String", "AUTH_EMULATOR_HOST", quoted(setting("authEmulatorHost", "10.0.2.2:9099")))
       buildConfigField("String", "FIRESTORE_EMULATOR_HOST", quoted(setting("firestoreEmulatorHost", "10.0.2.2:8082")))
-      // The seeded emulator member (apps/mobile/scripts/seed-emulator.mjs), for the debug sign-in form only.
+      // The seeded emulator member (tools/scripts/seed-native-emulator.mjs), for the debug sign-in form only.
       buildConfigField("String", "DEBUG_EMAIL", quoted("mobile-owner@example.test"))
       buildConfigField("String", "DEBUG_PASSWORD", quoted("seed-$emulatorProject-mobile"))
     }

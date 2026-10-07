@@ -65,8 +65,8 @@ internal fun posStoreKey(uid: String) = "aglyn.pos.store.$uid"
  * plugins contribute (`apps` names POS); the shell names none of them.
  */
 @Composable
-fun PosShell(services: ShellServices, autoSignIn: Boolean = false) {
-  AglynTheme {
+fun PosShell(services: ShellServices, autoSignIn: Boolean = false, dark: Boolean? = null) {
+  AglynTheme(dark = dark ?: androidx.compose.foundation.isSystemInDarkTheme()) {
     val auth by services.auth.state.collectAsState()
     when (val state = auth) {
       AuthState.Restoring -> Loading()

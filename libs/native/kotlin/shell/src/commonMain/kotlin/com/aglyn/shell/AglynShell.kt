@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -48,8 +49,10 @@ fun AglynShell(
   /** A link to open once signed in: a tapped notification's, or an App Link / aglyn:// URL. */
   pendingLink: String? = null,
   onLinkOpened: () -> Unit = {},
+  /** Light or dark regardless of the system's; null follows the system. */
+  dark: Boolean? = null,
 ) {
-  AglynTheme {
+  AglynTheme(dark = dark ?: isSystemInDarkTheme()) {
     val auth by services.auth.state.collectAsState()
     when (val state = auth) {
       AuthState.Restoring -> Loading()

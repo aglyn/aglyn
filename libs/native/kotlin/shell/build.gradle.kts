@@ -30,6 +30,11 @@ kotlin {
       implementation(libs.androidx.activity.compose)
       implementation(libs.androidx.core.ktx)
     }
+    named("desktopMain") {
+      dependencies {
+        implementation(libs.kotlinx.coroutines.swing)
+      }
+    }
     named("desktopTest") {
       dependencies {
         implementation(kotlin("test"))

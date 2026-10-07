@@ -5,6 +5,8 @@ The native Kotlin apps (AGL-3652, AGL-3653). One Gradle root builds:
 | module | what it is |
 | -- | -- |
 | `:app` | **Aglyn** (`com.aglyn.app`; debug builds are `com.aglyn.app.dev`) |
+| `:pos` | **Aglyn POS** (`com.aglyn.pos`; debug builds are `com.aglyn.pos.dev`) |
+| `:desktop` | both apps on the JVM desktop: `AglynDesktop` and `AglynPosDesktop` (Windows ships from here) |
 | `:plugin-manifest` | every plugin's native registrar, from the generated `PluginManifest.generated.kt` |
 | `:native-*` | the shared foundation in `libs/native/kotlin` (`core`, `ui`, `plugin-host`, `webview`, `shell`, `contracts`, `hardware`) |
 | `:plugin-<id>` | a plugin's `src/android` module, from `native-plugins.generated.properties` |
@@ -34,10 +36,10 @@ Needs a JDK 21 (`JAVA_HOME`) and the Android SDK (`local.properties` with
 ```bash
 # A local stack: the emulators on a demo- project, seeded with one member, one site and three redirects
 (cd cloud && firebase emulators:start --only auth,firestore --project demo-aglyn)
-node apps/mobile/scripts/seed-emulator.mjs
+node tools/scripts/seed-native-emulator.mjs
 
 cd apps/android
-./gradlew :app:assembleDebug
+./gradlew :app:assembleDebug :pos:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n com.aglyn.app.dev/com.aglyn.app.MainActivity
 ```
@@ -56,8 +58,32 @@ Every setting can be overridden with `-Paglyn.<name>=…` or `AGLYN_<NAME>`:
   -Paglyn.authEmulatorHost=10.0.2.2:9299 -Paglyn.firestoreEmulatorHost=10.0.2.2:8289
 ```
 
+### Desktop (JVM)
+
+```bash
+./gradlew :desktop:run                              # Aglyn
+./gradlew :desktop:run -Paglyn.desktopApp=pos       # Aglyn POS
+# another stack: -Paglyn.jvmArgs="-Daglyn.firebaseProjectId=demo-aglyn-native -Daglyn.authEmulatorHost=127.0.0.1:9299 -Daglyn.firestoreEmulatorHost=127.0.0.1:8289 -Daglyn.autoSignIn=true"
+./gradlew :desktop:snapshots -Paglyn.snapshotDir=/tmp/shots   # offscreen PNGs of every screen
+./gradlew :desktop:packageMsi                       # on Windows
+```
+
+Desktop signs in through the Identity Toolkit REST API and reads Firestore
+through its REST API with the person's own ID token (the same rules), re-
+reading a visible list every 30 seconds. The session is kept in memory for
+now: the refresh token moves to the OS credential store (Windows Credential
+Manager) when that dependency is approved. The console opens in the system
+browser, and desktop has no push in v1. Menus: Go (⌘/Ctrl 1–3, ⌘/Ctrl ,),
+Workspace (⌘/Ctrl K switches site) and Account (⌘/Ctrl ⇧Q signs out).
+
 Release builds take no emulator host and default the console to
 `https://app.aglyn.com`; `AglynConfig.problems()` logs anything missing.
+
+## Test
+
+```bash
+./gradlew desktopTest          # every module's JVM tests, including the replayed console cases
+```
 
 ## Plugins
 
