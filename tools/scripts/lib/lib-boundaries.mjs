@@ -325,6 +325,15 @@ const IMPORT_SOURCE = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"]([^'
  * @param {string} repoRoot
  * @returns {Array<{name: string, root: string, alias: string | null, deepAlias: boolean, tags: string[], projectType: string}>}
  */
+/**
+ * True for a library that ships as an npm package. The native libraries
+ * (`libs/native/*`) are Gradle and SwiftPM modules: Nx runs their builds, but
+ * they have no package.json and no `@aglyn` alias (docs/PACKAGES.md, "Native").
+ */
+export function isNpmLibrary(project) {
+  return project.projectType === 'library' && !project.root.startsWith('libs/native/')
+}
+
 export function readPackageMap(repoRoot) {
   const paths = JSON.parse(readFileSync(join(repoRoot, 'tsconfig.base.json'), 'utf8')).compilerOptions.paths ?? {}
   const aliasByRoot = new Map()
