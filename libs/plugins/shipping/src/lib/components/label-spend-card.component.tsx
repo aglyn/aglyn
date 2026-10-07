@@ -74,6 +74,7 @@ export function LabelSpendCard(props: LabelSpendCardProps) {
     <CardDisplay
       header="Shipping labels"
       help={pluginDocsHelp('shipping', {
+        anchor: '#shipping-labels',
         title: 'Shipping labels',
         excerpt:
           'What shipping labels cost this workspace each month: how much was taken from your Stripe balance, how much went on the monthly invoice, and what voided labels gave back.',

@@ -137,6 +137,7 @@ export function CarrierAccountsCard(props: ShippingSettingsWidgetProps) {
       header="Carrier accounts"
       subheader="Every site in this workspace ships with these accounts."
       help={pluginDocsHelp('shipping', {
+        anchor: '#carrier-accounts',
         title: 'Carrier accounts',
         excerpt:
           'The carrier accounts your labels and checkout rates come from. Connect your own UPS or FedEx account to ship on its rates; labels on it are billed to you by the carrier.',
