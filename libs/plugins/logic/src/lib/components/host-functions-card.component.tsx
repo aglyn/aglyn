@@ -83,6 +83,12 @@ import {
   parseParameterOptions,
 } from '../model/parameter-options'
 import WhereUsedDialog from './where-used-dialog.component'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import {
+  HOST_LOGIC_ZONE,
+  LOGIC_FUNCTION_EDITOR_ZONE,
+  type LogicProposal,
+} from './logic-zones'
 import {
   fetchWhereUsed,
   summarizeDependents,
@@ -348,6 +354,46 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
       setDraft((previous) => (previous ? updater(previous) : previous)),
     [],
   )
+
+  /**
+   * The shell's zone renderer (AGL-3603), for what other plugins add beside
+   * Add function and inside a saved function's editor; `null` outside the
+   * console shell.
+   */
+  const ExtensionZone = useConsoleWidgetSlot()
+  /*
+   * Opens a function another plugin proposed in this editor, unsaved: a new
+   * one as Add function opens one — so the plan's cap is asked first — and a
+   * change to a saved one in place of what the editor holds. Save is the
+   * only write.
+   */
+  const propose = useCallback(
+    (proposal: LogicProposal) => {
+      if (proposal.kind !== 'function') return false
+      if (!proposal.functionId) {
+        const quota = checkQuota(org, 'functionsPerHost', functionCount)
+        if (!quota.allowed) {
+          enqueueSnackbar(`Function limit reached (${quota.limit}) — upgrade in Billing`, {
+            variant: 'warning',
+            persist: false,
+          })
+          return false
+        }
+      }
+      setTestArgs({})
+      setTestResult(null)
+      setDraft({ ...proposal.definition, id: proposal.functionId })
+      return true
+    },
+    [org, functionCount, enqueueSnackbar],
+  )
+  /*
+   * The saved function the editor has open, named as it is STORED: a rename
+   * being typed is not a different function.
+   */
+  const storedName = draft?.id
+    ? functions.find((row: any) => row.$id === draft.id)?.name ?? draft.name
+    : null
 
   const names = [
     ...(draft?.parameters ?? []).map((parameter) => parameter.name),
@@ -643,6 +689,18 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
     <CardDisplay
       header={'Functions'}
       help={pluginDocsHelp('bindings', { anchor: '#no-code-functions' })}
+      // Another way to start a function (AGL-3603), in the card's header.
+      actions={
+        ExtensionZone ? (
+          <ExtensionZone
+            slot={HOST_LOGIC_ZONE.id}
+            hostId={hostId}
+            orgId={org?.$id}
+            kind="function"
+            propose={propose}
+          />
+        ) : null
+      }
       contentGutterX
       contentGutterY
     >
@@ -759,6 +817,15 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
         >
+          {ExtensionZone && draft?.id && storedName != null ? (
+            <ExtensionZone
+              slot={LOGIC_FUNCTION_EDITOR_ZONE.id}
+              hostId={hostId}
+              orgId={org?.$id}
+              target={{ id: draft.id, name: storedName }}
+              propose={propose}
+            />
+          ) : null}
           <TextField
             label="Name"
             helperText={

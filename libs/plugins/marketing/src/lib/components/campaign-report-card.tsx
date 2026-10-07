@@ -63,9 +63,11 @@ import {
 } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
 import { emailSendTimeMs } from '../model/email-record'
 import {
+  CAMPAIGN_SEND_HOST_FIELD,
   campaignSendDisplay,
   campaignSendProgress,
 } from '../model/campaign-container'
+import { MarketingInsightsZone } from './marketing-insight-zones'
 import { campaignSendDoc, campaignSendReportDoc } from './campaign-queries'
 import {
   orgSiteHubPath,
@@ -324,6 +326,13 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
     )
   }
 
+  /*
+   * The figures in words, from a plugin (AGL-3603): the `marketingInsights`
+   * zone this plugin declares, handed the site the email was sent as — on the
+   * organization's hub too, where the page itself names no site.
+   */
+  const sentAs = String(campaign[CAMPAIGN_SEND_HOST_FIELD] ?? '').trim() || hostId
+
   /* The card, named so the page chrome above it is a plain list of
      what this surface publishes upward. */
   const card = (
@@ -332,7 +341,14 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
       help={reportDocsHelp}
       contentGutterX
       contentGutterY
-      HeaderProps={{ action: backButton }}
+      HeaderProps={{
+        action: (
+          <Stack direction="row" spacing={1}>
+            <MarketingInsightsZone hostId={sentAs} subject="campaign" campaign={subject} />
+            {backButton}
+          </Stack>
+        ),
+      }}
     >
       <Stack spacing={3}>
         {report.caveats.map((caveat) => (

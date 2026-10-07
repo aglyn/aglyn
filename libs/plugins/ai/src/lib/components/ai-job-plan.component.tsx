@@ -22,10 +22,11 @@ import {
   type AiBuildPlanEmbed,
 } from '../model/ai-build-plan'
 import type { AiJobReview, AiJobSummary } from '../model/ai-jobs.types'
-import { aiJobPlanCreditEstimate } from '../model/ai-site-job'
+import { aiJobCreditEstimate } from '../model/ai-build-job'
+import { aiBuildOpNoun } from '../model/ai-build-progress'
 import { aiSiteStarterFallbackOffered } from '../model/ai-job-failure-copy'
 import { AiSiteStarterFallback } from './ai-site-starter-fallback.component'
-import { Box, Button, Collapse, Stack, Typography } from '@mui/material'
+import { Box, Button, Checkbox, Collapse, FormControlLabel, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 
 /**
@@ -38,8 +39,11 @@ import { useState } from 'react'
  */
 export interface AiJobPlanProps {
   job: AiJobSummary
-  /** Confirms the plan, or tries the refused step again. */
-  onResume: (job: AiJobSummary) => void
+  /**
+   * Confirms the plan, or tries the refused step again. A build whose request
+   * asked to publish confirms with `publish` when its box is ticked (AGL-3616).
+   */
+  onResume: (job: AiJobSummary, options?: { publish?: boolean }) => void
   /** A resume for this job is in flight. */
   busy?: boolean
   /**
@@ -109,6 +113,9 @@ export function AiJobPlan({
   user,
 }: AiJobPlanProps): JSX.Element | null {
   const [detailsOpen, setDetailsOpen] = useState(false)
+  // Unticked until the person ticks it: a build publishes only when its
+  // request asked AND they confirm it here (AGL-3616).
+  const [publish, setPublish] = useState(false)
   const { plan, review } = job
   if (!plan && !review) return null
   const details = staff ? aiJobReviewDetails(review) : []
@@ -126,7 +133,8 @@ export function AiJobPlan({
   // holds, where what a step really costs is its model's tokens. A page job
   // counts the creations it builds before its page (AGL-3031).
   const estimate =
-    plan && waiting && review.reason === 'plan' ? aiJobPlanCreditEstimate(job.kind, plan) : 0
+    plan && waiting && review.reason === 'plan' ? aiJobCreditEstimate(job.kind, plan) : 0
+  const offersPublish = job.kind === 'build' && job.publishAsked === true && waiting && review.reason === 'plan'
   return (
     <Box sx={{ mt: 1 }}>
       {plan && (
@@ -160,6 +168,12 @@ export function AiJobPlan({
               {screen.sections.length
                 ? `: ${screen.sections.map((section) => section.name).join(', ')}`
                 : ''}
+            </Typography>
+          ))}
+          {(plan.items ?? []).map((item) => (
+            <Typography key={`item-${item.slot}`} variant="body2" role="listitem">
+              {`Makes the ${aiBuildOpNoun(item.op).toLowerCase()} ${item.name}`}
+              {item.why ? ` — ${item.why}` : ''}
             </Typography>
           ))}
           {(plan.embeds ?? []).map((embed, index) => (
@@ -231,6 +245,13 @@ export function AiJobPlan({
           {review.retryRefusal}
         </Typography>
       )}
+      {offersPublish && (
+        <FormControlLabel
+          sx={{ display: 'flex', mt: 1 }}
+          control={<Checkbox size="small" checked={publish} onChange={(event) => setPublish(event.target.checked)} />}
+          label={<Typography variant="body2">{'Publish the new pages when they are built'}</Typography>}
+        />
+      )}
       {waiting && (
         <Button
           size="small"
@@ -238,7 +259,7 @@ export function AiJobPlan({
           // Disabled with its reason above when the Free allowance left
           // cannot pay for another try (AGL-3594).
           disabled={busy || (review.reason !== 'plan' && Boolean(review.retryRefusal))}
-          onClick={() => onResume(job)}
+          onClick={() => onResume(job, offersPublish && publish ? { publish: true } : undefined)}
           sx={{ mt: 1 }}
         >
           {review.reason === 'plan' ? 'Confirm plan' : 'Try again'}

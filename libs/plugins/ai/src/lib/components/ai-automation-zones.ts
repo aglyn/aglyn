@@ -55,6 +55,11 @@ export interface ConsoleAutomationEditorZoneProps {
   orgId: string | undefined
   /** The automation the editor has open, as it is stored. */
   target: ConsoleAutomationTarget
+  /**
+   * Opens a listed action in the Actions editor in place of this one; `false`
+   * when the list has not read it yet. Handed by the Actions editor only.
+   */
+  openAction?: (actionId: string) => boolean
 }
 
 /** What the `automationRun` zone hands a widget. */
@@ -65,4 +70,28 @@ export interface ConsoleAutomationRunZoneProps {
   target: ConsoleAutomationTarget
   /** The run's entry in the site's activity log. */
   runId: string
+}
+
+/**
+ * What the `orgAutomations` zone hands a widget (AGL-3603): the workflows
+ * plugin's Org automations section, in its card's header, drawn for a member
+ * who may write the workspace's automations.
+ */
+export interface ConsoleOrgAutomationsZoneProps {
+  orgId: string
+  /** The host events an org automation may start on, as that plugin lists them. */
+  triggers: readonly string[]
+  /** The step types an org automation may hold, as that plugin lists them. */
+  steps: readonly string[]
+  /**
+   * Opens an automation in the section's editor as a NEW one, unsaved and
+   * switched off, for the person to place on sites and save. `false` when the
+   * editor could not take it — the plan lacks the actions builder, or it is
+   * not an automation the section can hold.
+   */
+  propose: (automation: {
+    name: string
+    trigger: { event: string; conditions?: ReadonlyArray<{ field: string; op: string; value?: string }>; combinator?: 'and' | 'or' }
+    steps: ReadonlyArray<Record<string, unknown> & { type: string }>
+  }) => boolean
 }

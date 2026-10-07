@@ -46,7 +46,7 @@ export function LogicConsolePage(props: ConsolePluginPageProps) {
         {
           // Broken-wiring audit (wave v7).
           size: { xs: 12 },
-          children: <HostReferenceHealthCard hostId={hostId} />,
+          children: <HostReferenceHealthCard hostId={hostId} orgId={org?.$id} />,
         },
       ]}
     />

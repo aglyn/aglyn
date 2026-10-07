@@ -96,8 +96,19 @@ generation — the
 [Aglyn AI add-on](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai),
 or the AI credits a Free workspace gets — it answers with a **Proposed change**
 card listing what would change: elements added, removed, moved or restyled,
-settings changed, and a page's search title or description filled in. Anything
-it could not match to your canvas is listed under **Left out**.
+settings changed, interactions added, and a page's search title or description
+filled in. Anything it could not match to your canvas is listed under **Left out**.
+
+- **Interactions on the selected element.** Ask "when this is clicked, show the
+  panel below" and the assistant proposes an
+  [interaction](../building-sites/besigner/interactions-and-custom-html.md) on the element:
+  something a visitor does to it — a click, a hover, scrolling it into view —
+  and the steps that follow, chosen from the presentational ones every plan
+  runs (show, hide or toggle an element, add or remove a class, scroll to or
+  play an element, open or close a drawer or menu, go to a page, show a
+  message). It is added beside anything the element already does, never in
+  place of it; edit or remove it under **Interactions** like any other. Ask
+  "what does this do?" and it explains the interactions the element carries.
 
 - **Nothing changes until you apply.** **Apply as draft** puts the changes on
   the open canvas as unsaved edits, all in one step, so a single **Undo** takes

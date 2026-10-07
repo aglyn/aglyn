@@ -40,6 +40,8 @@ import { BUNDLE_ID } from './constants/bundle-common'
 import { registerCommerceMediaPublishGuard } from './server/media-publish-guard'
 import { registerCommerceRecurringCharges } from './server/recurring-charges'
 import { registerProductCardReader } from './server/product-card'
+import { registerProductAiCapability } from './server/product-ai-capability'
+import { registerProductDraftWriter } from './server/product-drafts'
 import { registerCommerceTaxProfile } from './server/tax-profile'
 import { registerTaxReturnSource } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
 import { commerceTaxReturnSource } from './server/tax-return-source'
@@ -320,6 +322,12 @@ export function registerCommerceConsoleApi(): void {
   // What a product looks like to a surface that is not this plugin's — a
   // campaign email that features one asks here rather than importing the model.
   registerProductCardReader()
+  // …and a draft product another plugin asks for by name (AGL-3616): an AI
+  // build setting a store up from a brief, unpriced unless the brief priced it.
+  // The console runs AI jobs (AGL-3026).
+  registerProductDraftWriter()
+  // …and the operation an AI build plans for it, which that writer executes.
+  registerProductAiCapability()
   // …and why a file somebody is SELLING may not be made public (AGL-3080).
   // The media library asks before it hands an asset its permanent CDN URL
   // back; what a product is, and which of its fields hold paid media, is

@@ -21,6 +21,9 @@ import type {
   AiJobOutput,
   AiJobPlan,
   AiJobReview,
+  AiJobItemFailure,
+  AiJobItemLedger,
+  AiJobItemStatus,
   AiJobSitePublish,
 } from '../model/ai-jobs.types'
 import { AI_STEP_TIERS, type AiStepKind } from '../providers/catalog'
@@ -28,6 +31,8 @@ import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import { runAiRequest, type AiEffort, type AiSystemBlock } from '../runtime/ai-runtime'
 import type { AssistTokenUsage } from '../usage/assist-usage'
 import { aiJobStepBudget } from './ai-job-budget'
+import { aiOverlayCopyRequested } from '../model/ai-overlay-copy'
+import { runAiOverlayCopy } from './ai-job-overlay-copy'
 
 /**
  * The `text` step (AGL-2904): a brief in, a short piece of copy out.
@@ -128,6 +133,28 @@ export interface AiJobStepOutcome {
    * writes the job document itself.
    */
   sitePublish?: AiJobSitePublish
+  /**
+   * A `build` pass's unit and what it came to (AGL-3616), which the machine
+   * writes to the job's item ledger in the transaction that records the
+   * pass's spend. An item's failure is never the step's: it is a row, and
+   * the build goes on.
+   */
+  item?: AiJobItemOutcome
+  /** A `build`'s ledger to start from, written by the machine in the same transaction (AGL-3616). */
+  items?: AiJobItemLedger[]
+}
+
+/** What one `build` pass came to for the unit it ran (AGL-3616). */
+export interface AiJobItemOutcome {
+  slot: string
+  /** `running` while the unit asks for another pass of its own. */
+  status: AiJobItemStatus
+  failure?: AiJobItemFailure | null
+  /** Customer-safe: what the person should know about the item. */
+  note?: string | null
+  degradedBy?: string[]
+  /** The ids of the outputs this pass produced for the item. */
+  outputs?: string[]
 }
 
 export interface AiJobStepContext {
@@ -189,6 +216,15 @@ export function aiJobTextPrompt(job: Pick<AiJob, 'brief' | 'inputs'>): string {
 
 export const runAiJobTextStep: AiJobStepRunner = async ({ job, signal, modelFor }) => {
   const model = modelFor?.('job.text') ?? aiJobTextModel()
+  // Overlay copy (AGL-3603): the same one request, answered as fields.
+  if (aiOverlayCopyRequested(job.inputs)) {
+    return runAiOverlayCopy({
+      job,
+      model,
+      maxTokens: AI_JOB_TEXT_STEP_BUDGET.maxTokens(model),
+      ...(signal ? { signal } : {}),
+    })
+  }
   const result = await runAiRequest({
     model,
     system: AI_JOB_TEXT_SYSTEM,

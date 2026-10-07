@@ -92,6 +92,12 @@
       "@aglyn/plugins-forms/*": [
         "../../libs/plugins/forms/src/lib/*"
       ],
+      "@aglyn/plugins-funnels": [
+        "../../libs/plugins/funnels/src/index.ts"
+      ],
+      "@aglyn/plugins-funnels/*": [
+        "../../libs/plugins/funnels/src/lib/*"
+      ],
       "@aglyn/plugins-inbox": [
         "../../libs/plugins/inbox/src/index.ts"
       ],

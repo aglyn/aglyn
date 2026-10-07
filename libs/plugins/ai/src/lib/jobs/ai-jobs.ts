@@ -35,6 +35,7 @@ import {
   AI_JOB_TERMINAL_STATUSES,
   type AiJob,
   type AiJobApplied,
+  type AiJobItemLedger,
   type AiJobKind,
   type AiJobOutput,
   type AiJobPlan,
@@ -49,7 +50,6 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-bi
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { aiOverageReservationRefusal } from '../billing/ai-overage-gate'
 import { aiAllotmentRefusalText } from '../model/ai-allotments'
-import { aiJobPlanCreditEstimate } from '../model/ai-site-job'
 import { AI_OFF_FOR_SITE_COPY, isAiOffForSite } from '../model/ai-site-switch'
 import { resolveAiModelChoice } from '../providers/model-choice'
 import { aiOutputTargetType } from '../activity/ai-activity-actions'
@@ -87,10 +87,20 @@ import {
   type AssistReservation,
 } from '../usage/assist-usage'
 import {
+  aiJobItemRefundKey,
   aiJobRefundCredits,
   refundJobCredits,
   type AiJobRefundReason,
 } from '../usage/assist-job-refund'
+import {
+  aiBuildSettlement,
+  aiBuildUnits,
+  aiBuildRetryLedger,
+  aiBuildCreditEstimate,
+  aiLedgerUnits,
+  aiJobCreditEstimate,
+} from '../model/ai-build-job'
+import type { AiJobItemOutcome } from './ai-job-text-step'
 import { freeAssistAccount, type FreeAssistAccount } from '../usage/assist-free-taste'
 import { aiJobAutoConfirms } from './ai-job-auto-confirm'
 import { AI_SITE_GUIDED_BUILD_FAILED_COPY } from '../model/ai-job-failure-copy'
@@ -239,6 +249,7 @@ export const AI_PLANNED_JOB_KINDS: readonly AiJobKind[] = [
   'template',
   'form',
   'email',
+  'build',
 ]
 
 const stepRunners = new Map<AiJobKind, AiJobStepRunner>()
@@ -708,6 +719,9 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
       : null,
     ...(job.sitePublish ? { sitePublish: job.sitePublish } : {}),
     ...(job.kind === 'site' ? { siteInputs: aiSiteStartInputsOf(job.inputs) } : {}),
+    ...(job.items?.length ? { items: job.items } : {}),
+    ...(job.orchestration ? { orchestration: job.orchestration } : {}),
+    ...(job.kind === 'build' && job.inputs?.['publish'] === true ? { publishAsked: true } : {}),
   }
 }
 
@@ -879,6 +893,52 @@ export interface RecordStepInput {
    * caller resolves at once.
    */
   quiet?: boolean
+  /**
+   * A `build` job's ledger to start from (AGL-3616), kept in this write;
+   * absent keeps the one the job has.
+   */
+  items?: AiJobItemLedger[]
+  /**
+   * What this pass came to for the `build` item it ran (AGL-3616): the pass's
+   * `creditsSpent` is that item's, and lands on its row in this same
+   * transaction, with what was given back for it.
+   */
+  item?: AiJobItemRecord
+}
+
+/** One `build` pass as its item's row records it (AGL-3616). */
+export interface AiJobItemRecord extends AiJobItemOutcome {
+  /** Given back for this pass's failure, before the record. */
+  creditsRefunded?: number
+  refundKey?: string
+}
+
+/**
+ * A build's ledger with one pass applied (AGL-3616): the pass's credits on
+ * the item's row, its status, failure, note and outputs, and what was given
+ * back for it. Pure; the machine applies it inside `recordStep`.
+ */
+export function aiApplyJobItemRecord(
+  ledger: readonly AiJobItemLedger[],
+  record: AiJobItemRecord,
+  credits: number,
+): AiJobItemLedger[] {
+  return ledger.map((row) =>
+    row.slot !== record.slot
+      ? row
+      : {
+          ...row,
+          status: record.status,
+          creditsSpent: (row.creditsSpent ?? 0) + credits,
+          attemptCredits: (row.attemptCredits ?? 0) + credits,
+          creditsRefunded: (row.creditsRefunded ?? 0) + (record.creditsRefunded ?? 0),
+          ...(record.refundKey ? { refundKey: record.refundKey } : {}),
+          ...(record.failure !== undefined ? { failure: record.failure } : {}),
+          ...(record.note !== undefined ? { note: record.note } : {}),
+          ...(record.degradedBy?.length ? { degradedBy: record.degradedBy } : {}),
+          outputs: [...(row.outputs ?? []), ...(record.outputs ?? []).filter((id) => !(row.outputs ?? []).includes(id))],
+        },
+  )
 }
 
 /** One run of a step's runner, as the machine measured it (AGL-2937). */
@@ -990,6 +1050,10 @@ export async function recordStep(
     const remaining = steps.filter(
       (step) => step.status === 'pending' || step.status === 'running',
     ).length
+    // A build's item ledger moves with its spend, in this one write (AGL-3616).
+    const ledger = input.items ?? job.items ?? null
+    const items =
+      ledger && input.item ? aiApplyJobItemRecord(ledger, input.item, input.creditsSpent) : input.items ? ledger : null
     const settled = input.status !== 'pending'
     const ownsLease = job.lease?.owner === owner
     const parksForReview = Boolean(input.review) && !isAiJobTerminal(job.status)
@@ -1022,6 +1086,10 @@ export async function recordStep(
       // now, for the reason its credits are.
       ...(input.plan ? { plan: input.plan } : {}),
       ...(input.sitePublish ? { sitePublish: input.sitePublish } : {}),
+      ...(items ? { items } : {}),
+      ...(input.item?.creditsRefunded
+        ? { refundedCredits: (job.refundedCredits ?? 0) + input.item.creditsRefunded }
+        : {}),
       // A doctrine or limit review's sentence is the job's customer-safe
       // error, as a meter park's is; a plan waiting to be confirmed is not an
       // error.
@@ -1275,10 +1343,292 @@ async function failOurFailure(
   now: Date,
 ): Promise<AiJob> {
   const current = await getAiJob(firestore, orgId, jobId)
+  // A build that got as far as its items settles item by item (AGL-3616):
+  // what it delivered stands, and what it did not is given back per item.
+  if (current && aiJobSettlesByItem(current.kind) && current.items?.length && !isAiJobTerminal(current.status)) {
+    console.error('ai build stopped', { orgId, jobId, stepIndex: detail.stepIndex ?? null, error: detail.error })
+    return settleAiBuildJob(firestore, orgId, jobId, {
+      now,
+      free: refund.free,
+      stopped: { message, reason: refund.reason },
+    })
+  }
   if (current && !isAiJobTerminal(current.status)) {
     await refundOurFailure(firestore, orgId, current, { ...refund, now })
   }
   return failAiJob(firestore, orgId, jobId, message, detail, now)
+}
+
+// ── A build's settlement (AGL-3616) ──────────────────────────────────────
+
+/**
+ * The kinds settled item by item (AGL-3616): a build, and a site scaffold,
+ * which is the build's preset. Their step writes an item ledger; a failed
+ * item gives back its own spend and the rest goes on.
+ */
+export function aiJobSettlesByItem(kind: AiJobKind): boolean {
+  return kind === 'build' || kind === 'site'
+}
+
+/**
+ * Whether Try again may run a job's failed items: a finished build, done or
+ * failed; a site scaffold that delivered part of its site — one that built
+ * nothing starts over from its own answers instead.
+ */
+export function aiBuildRetryable(job: Pick<AiJob, 'kind' | 'status'>): boolean {
+  if (job.kind === 'build') return job.status === 'done' || job.status === 'failed'
+  return job.kind === 'site' && job.status === 'done'
+}
+
+/** What a build that delivered nothing says; its planning was given back too. */
+export const AI_BUILD_NOTHING_BUILT_COPY =
+  'Nothing in this request could be built. Try again, or ask for less at once.'
+
+/** What an item the build never reached says when the build stopped early. */
+export const AI_BUILD_NOT_REACHED_COPY = 'Not built: the build stopped before it reached this.'
+
+/**
+ * Gives back one build item's spend, or its planning's (`slot: 'plan'`),
+ * under the item key (job, slot, attempt), so a replayed pass gives back once
+ * and a later attempt is a give-back of its own. The credits given back and
+ * the key, or `null` when nothing was. Never throws.
+ */
+async function refundBuildCredits(
+  firestore: Firestore,
+  orgId: string,
+  job: AiJob,
+  input: {
+    slot: string
+    attempt: number
+    credits: number
+    reason: AiJobRefundReason
+    free?: FreeAssistAccount | null
+    now: Date
+  },
+): Promise<{ credits: number; key: string } | null> {
+  const credits = Math.max(0, Math.floor(input.credits))
+  if (credits <= 0) return null
+  try {
+    const free =
+      input.free !== undefined
+        ? input.free
+        : freeAssistAccount(
+            ((await firestore.collection('orgs').doc(orgId).get()).data() ?? {}) as Partial<AglynOrgBilling>,
+          )
+    const created = toMillis(job.createdAt as Instant)
+    const jobDay = assistUsageDay(created === null ? input.now : new Date(created))
+    const refund = await refundJobCredits(firestore, {
+      orgId,
+      free,
+      jobId: job.$id,
+      ordinal: 0,
+      credits,
+      month: assistUsageMonth(input.now),
+      day: assistUsageDay(input.now),
+      reason: input.reason,
+      item: { slot: input.slot, attempt: input.attempt, jobDay },
+    })
+    // A key the month already holds was given back by an earlier run of this pass.
+    if (refund.status !== 'returned' && refund.status !== 'duplicate') return null
+    return {
+      credits,
+      key: aiJobItemRefundKey({ day: jobDay, jobId: job.$id, slot: input.slot, attempt: input.attempt }),
+    }
+  } catch (error) {
+    console.error('ai build refund failed', { orgId, jobId: job.$id, slot: input.slot, error })
+    return null
+  }
+}
+
+/** What the build's plan step spent: its orchestration. */
+function aiBuildPlanCredits(job: Pick<AiJob, 'steps'>): number {
+  return job.steps.find((step) => step.name === AI_JOB_PLAN_STEP)?.creditsSpent ?? 0
+}
+
+/**
+ * Ends a build (AGL-3616), once nothing is left to build or the machine
+ * stopped it. A build that STOPPED — a provider failure, its attempts used up
+ * — fails the item it was on and gives back that attempt's spend, and leaves
+ * the items it never reached `skipped`. Then: anything delivered, and its
+ * planning is charged and the job is `done`, failed items and all; nothing
+ * delivered, and its planning is given back too and the job is `failed`.
+ */
+export async function settleAiBuildJob(
+  firestore: Firestore,
+  orgId: string,
+  jobId: string,
+  input: {
+    now: Date
+    free?: FreeAssistAccount | null
+    stopped?: { message: string; reason: AiJobRefundReason }
+  },
+): Promise<AiJob> {
+  const { now } = input
+  let job = await getAiJob(firestore, orgId, jobId)
+  if (!job || isAiJobTerminal(job.status)) return job as AiJob
+  const stopped = input.stopped
+  if (stopped && (job.items ?? []).some((row) => row.status === 'pending' || row.status === 'running')) {
+    const refunds = new Map<string, { credits: number; key: string }>()
+    for (const row of job.items ?? []) {
+      if (row.status !== 'running') continue
+      const refund = await refundBuildCredits(firestore, orgId, job, {
+        slot: row.slot,
+        attempt: row.attempt,
+        credits: row.attemptCredits ?? 0,
+        reason: stopped.reason,
+        free: input.free,
+        now,
+      })
+      if (refund) refunds.set(row.slot, refund)
+    }
+    job = (
+      await transition(firestore, orgId, jobId, (current) => {
+        if (isAiJobTerminal(current.status)) return null
+        let given = 0
+        const items = (current.items ?? []).map((row): AiJobItemLedger => {
+          if (row.status === 'running') {
+            const refund = refunds.get(row.slot)
+            given += refund?.credits ?? 0
+            return {
+              ...row,
+              status: 'failed',
+              failure: { ours: true, reason: stopped.reason, message: stopped.message },
+              creditsRefunded: (row.creditsRefunded ?? 0) + (refund?.credits ?? 0),
+              ...(refund ? { refundKey: refund.key } : {}),
+            }
+          }
+          return row.status === 'pending' ? { ...row, status: 'skipped', note: AI_BUILD_NOT_REACHED_COPY } : row
+        })
+        return {
+          items,
+          refundedCredits: (current.refundedCredits ?? 0) + given,
+          updatedAt: now,
+        }
+      })
+    ).job
+  }
+  // A site is delivered when a page is (AGL-3616): a form alone is not a
+  // site. A scaffold that owed no page (a deployment without the page kind)
+  // is delivered by whatever it did build.
+  const sitePages = job.kind === 'site' ? (job.items ?? []).filter((row) => row.op === 'page') : []
+  const delivered = sitePages.length
+    ? sitePages.some((row) => row.status === 'succeeded' || row.status === 'degraded')
+    : aiBuildSettlement(job.items ?? []).delivered
+  const planCredits = aiBuildPlanCredits(job)
+  if (delivered) {
+    await transition(firestore, orgId, jobId, (current) =>
+      isAiJobTerminal(current.status)
+        ? null
+        : { orchestration: { creditsSpent: planCredits, settled: 'charged' }, updatedAt: now },
+    )
+    return completeAiJob(firestore, orgId, jobId, now)
+  }
+  // A site that built no page gives back what its other parts cost too: it
+  // was not built, and its Try again starts over from its answers.
+  const parts = new Map<string, { credits: number; key: string }>()
+  if (job.kind === 'site') {
+    for (const row of job.items ?? []) {
+      const owed = Math.max(0, (row.creditsSpent ?? 0) - (row.creditsRefunded ?? 0))
+      if (owed <= 0 || row.status === 'failed') continue
+      const given = await refundBuildCredits(firestore, orgId, job, {
+        slot: row.slot,
+        attempt: row.attempt,
+        credits: owed,
+        reason: stopped?.reason ?? 'step-failure',
+        free: input.free,
+        now,
+      })
+      if (given) parts.set(row.slot, given)
+    }
+  }
+  const refund =
+    job.orchestration?.settled === 'refunded'
+      ? null
+      : await refundBuildCredits(firestore, orgId, job, {
+          slot: 'plan',
+          attempt: 1,
+          credits: planCredits,
+          reason: stopped?.reason ?? 'step-failure',
+          free: input.free,
+          now,
+        })
+  await transition(firestore, orgId, jobId, (current) =>
+    isAiJobTerminal(current.status)
+      ? null
+      : {
+          orchestration: {
+            creditsSpent: planCredits,
+            settled: refund || current.orchestration?.settled === 'refunded' ? 'refunded' : 'charged',
+          },
+          ...(refund || parts.size
+            ? {
+                refundedCredits:
+                  (current.refundedCredits ?? 0) +
+                  (refund?.credits ?? 0) +
+                  [...parts.values()].reduce((total, part) => total + part.credits, 0),
+                refundReason: stopped?.reason ?? 'step-failure',
+              }
+            : {}),
+          ...(parts.size
+            ? {
+                items: (current.items ?? []).map((row) => {
+                  const part = parts.get(row.slot)
+                  return part ? { ...row, creditsRefunded: (row.creditsRefunded ?? 0) + part.credits, refundKey: part.key } : row
+                }),
+              }
+            : {}),
+          updatedAt: now,
+        },
+  )
+  const nothing = job.kind === 'site' ? AI_SITE_GUIDED_BUILD_FAILED_COPY : AI_BUILD_NOTHING_BUILT_COPY
+  return failAiJob(firestore, orgId, jobId, stopped?.message ?? nothing, {
+    error: 'build delivered nothing',
+  }, now)
+}
+
+/**
+ * Try again on a build (AGL-3616): its failed items back to pending on their
+ * next attempt, with what they left unbuilt (`aiBuildRetryLedger`), and its
+ * generation step queued again. Never re-runs an item that succeeded, never
+ * re-asks the plan. Held at what the retried items are estimated to cost.
+ * `changed: false` for a job that is not a finished build, or has nothing to
+ * try again.
+ */
+export async function retryAiBuildJob(
+  firestore: Firestore,
+  orgId: string,
+  jobId: string,
+  now = new Date(),
+): Promise<{ job: AiJob; changed: boolean; retried: string[] }> {
+  let retried: string[] = []
+  const result = await transition(firestore, orgId, jobId, (current) => {
+    if (!aiBuildRetryable(current)) return null
+    const plan = current.plan?.status === 'confirmed' ? current.plan : null
+    if (!plan || !current.items?.length) return null
+    const next = aiBuildRetryLedger(current.items, current.kind === 'site' ? aiLedgerUnits(current.items) : aiBuildUnits(plan))
+    if (!next.ledger.some((row) => row.status === 'pending')) return null
+    retried = next.retried
+    return {
+      status: 'queued',
+      items: next.ledger,
+      steps: current.steps.map((step) =>
+        step.name === AI_JOB_PLAN_STEP
+          ? step
+          : { ...step, status: 'pending', attempts: 0, passes: 0, endedAt: null, error: null },
+      ),
+      review: null,
+      error: null,
+      lease: null,
+      creditsReserved: Math.max(
+        AI_JOB_STEP_RESERVE_CREDITS,
+        current.kind === 'site'
+          ? next.retried.length * AI_JOB_STEP_RESERVE_CREDITS
+          : aiBuildCreditEstimate(plan, { slots: new Set(next.retried) }),
+      ),
+      updatedAt: now,
+    }
+  })
+  return { ...result, retried: result.changed ? retried : [] }
 }
 
 /**
@@ -1298,6 +1648,14 @@ export async function resumeAiJob(
   jobId: string,
   actor: { uid: string },
   now = new Date(),
+  options: {
+    /**
+     * A build whose request asked to publish, confirmed with the plan card's
+     * box ticked (AGL-3616): kept on its inputs, which is what lets its last
+     * pass put its pages live.
+     */
+    publishConfirmed?: boolean
+  } = {},
 ): Promise<{ job: AiJob; changed: boolean }> {
   return transition(firestore, orgId, jobId, (current) => {
     if (current.status !== 'needs_review') return null
@@ -1317,16 +1675,21 @@ export async function resumeAiJob(
           },
         }
       : {}
+    const publish =
+      confirming && current.kind === 'build' && options.publishConfirmed && current.inputs?.['publish'] === true
+        ? { inputs: { ...current.inputs, publishConfirmed: true } }
+        : {}
     return {
       status: pending ? 'queued' : 'done',
       steps,
       review: null,
       error: null,
       ...confirmed,
+      ...publish,
       creditsReserved: pending
         ? Math.max(
             outstanding * AI_JOB_STEP_RESERVE_CREDITS,
-            confirming ? aiJobPlanCreditEstimate(current.kind, confirming) : 0,
+            confirming ? aiJobCreditEstimate(current.kind, confirming) : 0,
           )
         : 0,
       updatedAt: now,
@@ -1844,6 +2207,23 @@ export async function runAiJobStep(
   // for a person never continues: the review is what it waits on. The pass
   // cap is what stops a runner that never finishes: past it the pass is
   // recorded as the step's last, and what it produced stands.
+  // A build item that failed on our side gives back its own attempt's spend
+  // before its row is written (AGL-3616), so the row records what was given.
+  let itemRecord: AiJobItemRecord | undefined = aiJobSettlesByItem(job.kind) ? outcome.item : undefined
+  if (itemRecord?.status === 'failed' && itemRecord.failure?.ours) {
+    const slot = itemRecord.slot
+    const row = (outcome.items ?? job.items ?? []).find((one) => one.slot === slot)
+    const refund = await refundBuildCredits(firestore, orgId, job, {
+      slot,
+      attempt: row?.attempt ?? 1,
+      credits: (row?.attemptCredits ?? 0) + credits,
+      reason: itemRecord.failure.reason as AiJobRefundReason,
+      free: reservation.free ?? null,
+      now,
+    })
+    if (refund) itemRecord = { ...itemRecord, creditsRefunded: refund.credits, refundKey: refund.key }
+  }
+
   const review = outcome.review
   const continuing =
     !review &&
@@ -1864,6 +2244,8 @@ export async function runAiJobStep(
       ...(outcome.plan ? { plan: outcome.plan } : {}),
       ...(review ? { review } : {}),
       ...(outcome.sitePublish ? { sitePublish: outcome.sitePublish } : {}),
+      ...(aiJobSettlesByItem(job.kind) && outcome.items ? { items: outcome.items } : {}),
+      ...(itemRecord ? { item: itemRecord } : {}),
       // A park this call resolves at once (an auto-confirmed plan) or gives
       // back before it is told (a refusal on our side) is announced below.
       ...(review ? { quiet: true } : {}),
@@ -1936,6 +2318,17 @@ export async function runAiJobStep(
   }
   if (recorded.remaining > 0 || isAiJobTerminal(recorded.job.status)) {
     return { outcome: 'done', job: recorded.job }
+  }
+  // A build ends by its items (AGL-3616): done when anything was delivered.
+  if (aiJobSettlesByItem(job.kind) && step.name !== AI_JOB_PLAN_STEP && recorded.job.items?.length) {
+    // Items still open here are ones the pass cap cut off: the build stopped.
+    const open = aiBuildSettlement(recorded.job.items ?? []).open
+    const settled = await settleAiBuildJob(firestore, orgId, jobId, {
+      now,
+      free: reservation.free ?? null,
+      ...(open ? { stopped: { message: AI_UPSTREAM_FAILURE_COPY, reason: 'timeout' as const } } : {}),
+    })
+    return { outcome: settled.status === 'failed' ? 'failed' : 'done', job: settled }
   }
   return {
     outcome: 'done',

@@ -57,7 +57,7 @@ describe('workflows plugin', () => {
 describe('the zones its Automation page hosts (AGL-2919, AGL-3080)', () => {
   it('declares each under the id widgets register for, owned here and laid out bare', () => {
     registerWorkflowsConsole()
-    for (const id of ['hostAutomations', 'automationEditor', 'automationRun']) {
+    for (const id of ['hostAutomations', 'orgAutomations', 'automationEditor', 'automationRun']) {
       const zone = pluginZone(id)
       // A button beside Add action, one inside an open editor, one on a failed
       // run's row: the page places each, so a wrapper would add a gap it

@@ -47,6 +47,8 @@ import {
 import {
   AUTOMATION_EDITOR_ZONE,
   HOST_AUTOMATIONS_ZONE,
+  OPEN_ACTION_PARAM,
+  requestedActionId,
   type AutomationTarget,
 } from './workflow-zones'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -76,7 +78,7 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ceilingedWindow,
   collectionCeiling,
@@ -319,6 +321,21 @@ export function HostActionsCard(props: {
     setDraft(draftFromAction(action, action.$id))
     return true
   }, [])
+  /*
+   * An action the address names (AGL-3603): the Workflows section drafts one
+   * there and sends the reader here to open it. Opened once the list has read
+   * it, then dropped from the address so a reload does not reopen it.
+   */
+  const [requested, setRequested] = useState<string | null>(() =>
+    typeof window === 'undefined' ? null : requestedActionId(window.location.search),
+  )
+  useEffect(() => {
+    if (!requested || !openAction(requested)) return
+    setRequested(null)
+    const url = new URL(window.location.href)
+    url.searchParams.delete(OPEN_ACTION_PARAM)
+    window.history.replaceState(window.history.state, '', url.toString())
+  }, [requested, openAction, liveActions.length])
   /**
    * Element interactions are not listed here.
    *
@@ -906,6 +923,7 @@ export function HostActionsCard(props: {
               hostId={hostId}
               orgId={org?.$id}
               target={editorTarget}
+              openAction={openAction}
             />
           ) : null}
           {draft?.recipe ? (

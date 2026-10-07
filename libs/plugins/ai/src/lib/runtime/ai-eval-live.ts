@@ -781,6 +781,7 @@ export const AI_EVAL_UNRECORDED_DOORS: Readonly<Partial<Record<AiEvalKind, AiEva
   insight: { step: 'insight', file: 'jobs/ai-job-insight-step.ts' },
   crm: { step: 'crm', file: 'jobs/ai-job-crm-step.ts' },
   experiment: { step: 'experiment', file: 'jobs/ai-job-experiment-step.ts' },
+  logic: { step: 'logic', file: 'jobs/ai-job-logic-step.ts' },
 }
 
 /** Why a brief of this kind is skipped: where its door is, and that no recorder drives it. */

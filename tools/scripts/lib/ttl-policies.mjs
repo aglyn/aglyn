@@ -83,6 +83,18 @@ export const TTL_POLICIES = Object.freeze([
   // live on aglyn-main is recorded in the doc, not here. Nothing here applies
   // anything on import — only `set-firestore-ttl.mjs` does, and only when run.
   {
+    collection: 'funnelJourneys',
+    field: 'expiresAt',
+    // AGL-3605 — one recorded site visit, for funnels.
+    why: 'recorded site visits for funnels, 90 days',
+  },
+  {
+    collection: 'funnelResults',
+    field: 'expiresAt',
+    // AGL-3605 — a funnel's cached result.
+    why: 'cached funnel results, 2 days',
+  },
+  {
     collection: 'assistExchanges',
     field: 'expiresAt',
     // AGL-1972 — the verbatim question/answer/uid half of an Assist exchange.

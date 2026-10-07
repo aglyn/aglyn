@@ -89,9 +89,10 @@ import type { AiJobAdmissionRefusal } from './ai-job-admission'
  * host's routing map, which counts an unrouted screen too (AGL-1445); and a
  * form needs the plan to include the route's `entitlement` first, refused in
  * the route's own words, after which every form document counts against
- * `formsPerHost`. A reusable component counts against no allowance at all:
- * the route admits one on a plan with the `reusableComponents` entitlement
- * and refuses it otherwise, and so does the writer.
+ * `formsPerHost`. A reusable component counts against `componentsPerHost`
+ * (AGL-3615) — Free 1, every paid plan unlimited — over its LIVE documents,
+ * since a deleted component keeps its document with `deletedAt` stamped; on
+ * an unlimited plan nothing is counted.
  *
  * ── Applied to nothing ───────────────────────────────────────────────────
  *
@@ -185,6 +186,7 @@ export interface AiDraftBand {
     | 'sharedLayoutsPerHost'
     | 'templatesPerHost'
     | 'formsPerHost'
+    | 'componentsPerHost'
     | 'screensPerHost'
   /** The feature the plan must include before any document of the kind counts. */
   entitlement?: keyof OrgFeatureFlags
@@ -199,11 +201,10 @@ export const AI_DRAFT_BANDS: Readonly<Record<AiDraftKind, AiDraftBand>> = {
   // A saved form is counted against `formsPerHost` alone — Free 1 through
   // the ceiling — and is not behind `reusableComponents` (AGL-3597).
   form: { collection: 'forms', quotaKey: 'formsPerHost', label: 'forms' },
-  component: {
-    collection: 'components',
-    entitlement: 'reusableComponents',
-    label: 'reusable components',
-  },
+  // A reusable component is counted against `componentsPerHost` alone — Free
+  // 1, every paid plan unlimited — and is not behind `reusableComponents`
+  // (AGL-3615), the way a saved form left it.
+  component: { collection: 'components', quotaKey: 'componentsPerHost', label: 'reusable components' },
   screen: { collection: 'screens', quotaKey: 'screensPerHost', label: 'pages' },
 }
 
@@ -270,11 +271,33 @@ export function aiDraftBandRefusal(
             rows.map((row) => ({ id: row.id, kind: row.kind, deletedAt: row.deletedAt })),
             (routingMap ?? undefined) as never,
           ).size
-        : rows.length
+        : liveRows(kind, rows).length
   const quota = checkQuota(org, band.quotaKey, used)
   return quota.allowed
     ? null
     : `Your plan includes ${quota.limit} ${band.label} — upgrade in Billing for more`
+}
+
+/**
+ * The rows a kind's allowance counts: every one, except a component's, where
+ * a deletion stamps `deletedAt` and keeps the document — the route counts the
+ * live ones, so a Free site that deleted its one component may make another
+ * (AGL-3615).
+ */
+function liveRows<Row extends { deletedAt?: unknown }>(kind: AiDraftKind, rows: ReadonlyArray<Row>): ReadonlyArray<Row> {
+  return kind === 'component' ? rows.filter((row) => row.deletedAt == null) : rows
+}
+
+/**
+ * Whether a job builds a page's repeats as reusable components (AGL-3071,
+ * AGL-3615): only where the site's component allowance is unlimited. A
+ * finite one — Free's 1 — cannot hold every repeat a page or a site plan
+ * draws, and the doctrine's rule 1 would then demand components the plan may
+ * not create; so there the repeats are drawn inline and the allowance is the
+ * member's to spend, as it was while Free had no components at all.
+ */
+export function aiBuildsWithComponents(org: Partial<AglynOrgBilling> | null): boolean {
+  return !Number.isFinite(resolveOrgEntitlements(org).componentsPerHost)
 }
 
 /** The draft kinds a plan's creations land as, whose band a plan is told about (AGL-3030). */
@@ -312,7 +335,7 @@ function planCreation(
   const used =
     kind === 'template'
       ? rows.filter((row) => row.sourceType !== undefined && row.sourceType !== 'starter').length
-      : rows.length
+      : liveRows(kind, rows).length
   return refusal
     ? {
         allowed: false,
@@ -354,7 +377,7 @@ export function aiPlanCapabilitiesFrom(
   const unrestricted = aiUnrestrictedPlanCapabilities()
   const datasets = checkDatasetQuota(org, 0).limit > 0
   return {
-    reusableComponents: checkEntitlement(org, 'reusableComponents'),
+    reusableComponents: aiBuildsWithComponents(org),
     create: {
       ...unrestricted.create,
       component: planCreation('component', org, rows.component ?? null),

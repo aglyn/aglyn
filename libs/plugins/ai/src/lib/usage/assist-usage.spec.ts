@@ -1228,6 +1228,62 @@ describe('a CHEAP action and an EXPENSIVE one draw the band differently', () => 
   })
 })
 
+describe('pictures are metered per picture, on the same meter (AGL-3602)', () => {
+  const monthPath = `orgs/${ORG}/assistUsage/2026-08`
+  const NO_TOKENS = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
+
+  it('draws the billed per-picture rate and records our cost beside it', async () => {
+    expect(estimateAssistCostUsd({ ...NO_TOKENS, images: 2 }, 'gemini-3.1-flash-image')).toBe(0.2016)
+    expect(estimateAssistProviderCostUsd({ ...NO_TOKENS, images: 2 }, 'gemini-3.1-flash-image')).toBe(0.1344)
+    const store = firestore()
+    const signalId = await recordAssistCost(
+      store,
+      ORG,
+      {
+        route: '/api/ai/media/images',
+        hostId: 'host-1',
+        model: 'gemini-3.1-flash-image',
+        tier: 'entitled',
+        usage: { ...NO_TOKENS, images: 2 },
+        docsPaths: [],
+        stopReason: 'end_turn',
+        uid: 'u1',
+        kind: 'image',
+      },
+      NOW,
+    )
+    const month = mockDocs.get(monthPath) as Record<string, any>
+    expect(Number(month.estCostUsd)).toBe(0.2016)
+    expect(Number(month.providerCostUsd)).toBe(0.1344)
+    expect(Number(month.kinds?.image?.requests)).toBe(1)
+    // 202 credits against the site: $0.2016 of billed spend, rounded up.
+    expect(Number(month.byHost?.['host-1'])).toBe(202)
+    const signalDoc = mockDocs.get(`orgs/${ORG}/assistSignals/${signalId}`) as Record<string, any>
+    expect(signalDoc.images).toBe(2)
+    expect(signalDoc.kind).toBe('image')
+  })
+
+  it('a declined description draws nothing', async () => {
+    const store = firestore()
+    await recordAssistCost(
+      store,
+      ORG,
+      {
+        route: '/api/ai/media/images',
+        hostId: null,
+        model: 'gemini-3.1-flash-image',
+        tier: 'entitled',
+        usage: { ...NO_TOKENS, images: 0 },
+        docsPaths: [],
+        stopReason: 'refusal',
+        kind: 'image',
+      },
+      NOW,
+    )
+    expect(Number((mockDocs.get(monthPath) as Record<string, any>).estCostUsd)).toBe(0)
+  })
+})
+
 describe("the PLAN's band binds, and the operator default may not undercut it", () => {
   const monthPath = `orgs/${ORG}/assistUsage/2026-08`
   /**

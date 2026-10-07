@@ -2254,6 +2254,7 @@ after, never a reference to the plugin.
 | `org.seatAddons.changed` | the add-on checkout and the billing webhook | `{ orgId, actor, before, after }` — the `org.seatAddons` maps |
 | `org.permissions.changed` | the member, role and host-member routes | `{ orgId, actor, subject: { type, id?, name? }, permission, granted }` |
 | `host.records.removed` | the public API's deletes and a person's erasure, after the delete lands | `{ orgId, hostIds, collection, records: [{ id, data }] }` — each removed document as it stood |
+| `host.email.engaged` | the email delivery webhook, for a message tagged with a site, after the delivery log records it | `{ hostId, events: [{ to, type, at, firstOfType }] }` — opens and clicks only; `firstOfType` marks the first of its type for that message |
 | `billing.invoice.paid` | the billing webhook, once the invoice resolves to a workspace | `{ orgId, invoiceId, amountPaidCents, currency, paidOutOfBand, metadata }` |
 | `billing.invoice.failed` | the billing webhook | `{ orgId, invoiceId, amountDueCents, metadata }` |
 | `billing.invoice.closed` | the billing webhook, on `voided` and on `marked_uncollectible` | `{ orgId, invoiceId, reason: 'voided' \| 'uncollectible', metadata }` |

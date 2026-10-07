@@ -17,6 +17,7 @@
 'use client'
 
 import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import {
   mdiDeleteOutline,
   mdiContentCopy,
@@ -65,6 +66,7 @@ import {
 } from '../constants/list-queries'
 import { templateProvenance } from '../model/template-provenance'
 import { createEmailScreen } from '../utils/create-email-screen'
+import { HOST_EMAIL_TEMPLATES_ZONE } from './email-zones'
 import { emailTemplateSoftDelete } from '../utils/email-template-soft-delete'
 
 // The besigner route is `/[orgSlug]/hosts/[host]/screens/[screenId]/
@@ -114,10 +116,21 @@ const besignerHref = (
  */
 export function EmailScreensCard(props: {
   hostId: string
+  /** The org the site belongs to, handed to the create zone; `undefined` while it resolves. */
+  orgId?: string
   /** The emails hub URL, which every template route hangs beneath. */
   basePath: string
 }) {
-  const { hostId, basePath } = props
+  const { hostId, orgId, basePath } = props
+  /**
+   * The shell's zone renderer (AGL-3596), for other ways to start a design —
+   * the `hostEmailTemplates` zone this plugin declares; `null` outside the
+   * console shell, where there is no workspace to gate on.
+   */
+  const CreateZone = useConsoleWidgetSlot()
+  const createZone = CreateZone ? (
+    <CreateZone slot={HOST_EMAIL_TEMPLATES_ZONE.id} hostId={hostId} orgId={orgId} />
+  ) : null
   const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
@@ -307,24 +320,36 @@ export function EmailScreensCard(props: {
       contentGutterY
       HeaderProps={{
         action: (
-          <Button
-            size="small"
-            variant="contained"
-            onClick={() => void handleCreate()}
-          >
-            {'New template'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {createZone}
+            <Button
+              size="small"
+              variant="contained"
+              onClick={() => void handleCreate()}
+            >
+              {'New template'}
+            </Button>
+          </Stack>
         ),
       }}
     >
       {duplicate.dialog}
       <Stack spacing={1.5}>
         {emailScreens.length === 0 && !hasMore && !filtering ? (
-          <Typography variant="body2" color="text.secondary">
-            {'Design a reusable email here, then send it from a campaign. A ' +
-              'new template opens in the besigner with email-safe components ' +
-              'only.'}
-          </Typography>
+          <>
+            <Typography variant="body2" color="text.secondary">
+              {'Design a reusable email here, then send it from a campaign. A ' +
+                'new template opens in the besigner with email-safe components ' +
+                'only.'}
+            </Typography>
+            {/* Other ways to start a design, the header's zone again. */}
+            <Stack direction="row" spacing={1}>
+              {createZone}
+              <Button variant="contained" onClick={() => void handleCreate()}>
+                {'Create your first template'}
+              </Button>
+            </Stack>
+          </>
         ) : (
           <>
             <ListFilterChips

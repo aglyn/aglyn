@@ -47,7 +47,8 @@ import {
   type AiJobPhase,
 } from '../model/ai-job-activity'
 import type { AiInsightSurface } from '../model/ai-insight'
-import { cancelAiJobRequest, resumeAiJobRequest } from './ai-job-requests'
+import { cancelAiJobRequest, resumeAiJobRequest, type AiJobResumeOptions } from './ai-job-requests'
+import { aiBuildCanRetry, aiBuildItemRows, aiSitePartialCopy } from '../model/ai-build-progress'
 import { publishAiJob, type AiJobsOpenRequest } from './ai-jobs-store'
 import { AiPageBriefDialog } from './ai-page-brief-dialog.component'
 import { AiInsightDialog } from './ai-insight-dialog.component'
@@ -111,6 +112,15 @@ const STATE_COLOR: Record<AiJobActivityState, 'primary' | 'warning'> = {
   attention: 'warning',
   running: 'primary',
 }
+
+/** What each item state reads as in a row (AGL-3616). */
+const ITEM_STATE_LABELS = {
+  done: 'built',
+  active: 'building',
+  waiting: 'waiting',
+  failed: 'failed',
+  skipped: 'not built',
+} as const
 
 /** How long a job AI jobs was opened on stays highlighted. */
 const HIGHLIGHT_MS = 2_500
@@ -395,12 +405,12 @@ export function AssistJobsDrawer({
   // rule (AGL-2935). The door runs the next step inline and answers with the
   // job, so the row moves on without waiting for the stream.
   const resume = useCallback(
-    async (job: AiJobSummary) => {
+    async (job: AiJobSummary, options?: AiJobResumeOptions) => {
       if (!orgId) return
       setResuming(job.id)
       setNotice(null)
       // The same door the dialog that started the job confirms through (AGL-3593).
-      const { job: next, error } = await resumeAiJobRequest(user, orgId, job)
+      const { job: next, error } = await resumeAiJobRequest(user, orgId, job, options)
       if (next) patchJob(next)
       if (error) setNotice(error)
       setResuming(null)
@@ -534,6 +544,34 @@ export function AssistJobsDrawer({
                     {aiJobRefundCopy(job)}
                   </Typography>
                 )}
+                {/* A site that built part of itself says what, and that the rest was on us (AGL-3616). */}
+                {aiSitePartialCopy(job) && (
+                  <Typography variant="caption" color="text.secondary" component="div">
+                    {aiSitePartialCopy(job)}
+                  </Typography>
+                )}
+                {/* A build, item by item: where each stands, and what became of its credits (AGL-3616). */}
+                {job.items?.length ? (
+                  <Box component="ul" aria-label="Items" sx={{ m: 0, mt: 0.5, pl: 2 }}>
+                    {aiBuildItemRows(job).map((row) => (
+                      <Typography key={row.slot} component="li" variant="caption" data-item-state={row.state}>
+                        {`${row.label} — ${ITEM_STATE_LABELS[row.state]}`}
+                        {row.detail ? `. ${row.detail}` : ''}
+                      </Typography>
+                    ))}
+                  </Box>
+                ) : null}
+                {aiBuildCanRetry(job) ? (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    disabled={resuming === job.id}
+                    onClick={() => void resume(job, { retry: 'failed-items' })}
+                    sx={{ mt: 0.5 }}
+                  >
+                    {'Try again what failed'}
+                  </Button>
+                ) : null}
                 {restartHref(job) ? (
                   <Button size="small" variant="contained" component={AppLink} href={restartHref(job) as string} sx={{ mt: 0.5 }}>
                     {'Try again'}
@@ -597,7 +635,7 @@ export function AssistJobsDrawer({
                 })}
                 <AiJobPlan
                   job={job}
-                  onResume={(target) => void resume(target)}
+                  onResume={(target, options) => void resume(target, options)}
                   busy={resuming === job.id}
                   staff={isStaff}
                   user={user}

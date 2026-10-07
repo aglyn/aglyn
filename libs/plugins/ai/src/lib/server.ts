@@ -32,7 +32,10 @@ import { registerAiProductsJob } from './jobs/ai-job-products-step'
 import { registerAiEmailJob } from './jobs/ai-job-email-step'
 import { registerAiCampaignJob } from './jobs/ai-job-campaign-step'
 import { registerAiSiteJob } from './jobs/ai-job-site-step'
+import { registerAiBuildJob } from './jobs/ai-job-build-step'
+import { registerAiBuildCapabilities } from './jobs/ai-build-capabilities'
 import { registerAiWorkflowJob } from './jobs/ai-job-workflow-step'
+import { registerAiLogicJob } from './jobs/ai-job-logic-step'
 import { registerAiInsightJob } from './jobs/ai-job-insight-step'
 import { registerAiFigureReaders } from './insights/ai-figure-readers'
 import { registerAiTextGenerator } from './server/plugin-text-generation'
@@ -47,7 +50,9 @@ import { POST as createAiSiteBatch } from './server/ai-jobs-batch'
 import { GET as listAiJobs, POST as createAiJob } from './server/ai-jobs-route'
 import { POST as resumeAiJob } from './server/ai-jobs-resume'
 import { POST as aiGenerateComponent } from './server/ai-generate-component'
+import { POST as createAiMediaImages } from './server/ai-media-image'
 import { POST as applyAiSeoAudit } from './server/ai-seo-apply'
+import { POST as createAiExperimentVersions } from './server/ai-experiment-versions'
 import { POST as assistChat } from './server/assist-chat'
 import { POST as assistEditApplied } from './server/assist-edit-applied'
 import { POST as assistFeedback } from './server/assist-feedback'
@@ -118,12 +123,21 @@ function registerAiJobKinds(): void {
   // Automations drafted from a description, and explained, whose drafts the
   // workflows plugin writes on the resource-draft seam (AGL-2919).
   registerAiWorkflowJob()
+  // Site functions and variables proposed from a description, and functions
+  // explained, as proposals the logic editor opens unsaved (AGL-3603).
+  registerAiLogicJob()
   // Product copy, and a store's products, categories and discounts from a
   // brief, as proposals the commerce plugin's surfaces apply (AGL-2916).
   registerAiProductsJob()
   // The site scaffold, which builds a whole site through the steps above
   // (AGL-2911).
   registerAiSiteJob()
+  // A build from one request (AGL-3616): pages, creations and other
+  // plugins' drafts, through the steps above and the writers those plugins
+  // register, settled item by item. What this plugin lets a build make is
+  // registered on the core's capability contract like any plugin's.
+  registerAiBuildCapabilities()
+  registerAiBuildJob()
   // Insights (AGL-2915): a question about a site's figures, answered from
   // tables the figure readers return, and the weekly digest. The readers for
   // the platform's own records — page views, forms, datasets — are this
@@ -204,10 +218,18 @@ export function registerAiConsoleApi(): void {
   // A site SEO audit's "Apply all" (AGL-2910): content fixes as new
   // unpublished versions, listing values staged for their SEO cards.
   registerPluginApiRoute('ai/seo/apply', { web: applyAiSeoAudit })
+  // A page's or a section's A/B variants as draft versions (AGL-3603): the
+  // published version copied once per proposed variant, the variant's copy
+  // put in, stored unpublished for the experiment editor to pin.
+  registerPluginApiRoute('ai/experiments/versions', { web: createAiExperimentVersions })
   // Save the selection as a reusable component, with AI (AGL-2908): the
   // second entry point of the component job, from the besigner's Attributes
   // panel. It proposes, and the person's Apply writes.
   registerPluginApiRoute('ai/generate/component', { web: aiGenerateComponent })
+  // Pictures from a description, in Media (AGL-3602): photos and SVG
+  // illustrations, stored through the media upload route. POST only — the
+  // button draws from the shell's gates and asks nothing until it is used.
+  registerPluginApiRoute('ai/media/images', { web: createAiMediaImages })
   registerPluginApiRoute('ai/billing/credits', { web: billingCredits })
   registerPluginApiRoute('ai/billing/overage', { web: billingOverage })
   registerPluginApiRoute('ai/usage', { web: aiUsage })

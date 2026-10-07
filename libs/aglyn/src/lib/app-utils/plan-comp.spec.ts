@@ -527,7 +527,12 @@ describe('an uncapped comp lifts every cap (AGL-3049)', () => {
     const resolved = resolveOrgEntitlements(live)
     expect(resolved.screensPerHost).toBe(PLAN_ENTITLEMENTS.starter.screensPerHost)
     expect(resolved.contactsPerHost).toBe(2000)
-    expect(Object.values(resolved).includes(UNLIMITED)).toBe(false)
+    // Nothing lifted: the only uncapped axes are the ones Starter's own row
+    // leaves uncapped — reusable components since AGL-3615.
+    const uncapped = (row: Record<string, unknown>) =>
+      Object.keys(row).filter((key) => row[key] === UNLIMITED)
+    expect(uncapped(resolved)).toEqual(uncapped(PLAN_ENTITLEMENTS.starter))
+    expect(uncapped(resolved)).toEqual(['componentsPerHost'])
     expect(checkQuota(live, 'hostLimit', PLAN_ENTITLEMENTS.starter.hostLimit).allowed).toBe(false)
     // The paying workspace is priced as Starter's own terms say, not lifted
     // by the dormant comp: a comp in force would have made

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { marketingFigureReaders } from './marketing-figures'
+import { marketingFigureReaders, marketingOutcomeFigureReaders } from './marketing-figures'
 
 /**
  * Campaign and A/B testing results as figure tables (AGL-2915): the sends of
@@ -137,5 +137,163 @@ describe('A/B tests', () => {
       { test: 'Hero headline', variant: 'Shorter', shown: 1_000, conversions: 80, rate: 8, lift: 60, confidence: expect.any(Number) },
     ])
     expect(Number(read.table.rows[1]['confidence'])).toBeGreaterThan(99)
+  })
+})
+
+/**
+ * What the campaigns caused and earned (AGL-3603): conversions counted by
+ * aggregation over the window — never a record loaded — and revenue read from
+ * each window send's rollup, with neither kinds nor currencies added together.
+ */
+describe('campaign conversions and revenue', () => {
+  type Filter = [string, string, unknown]
+  /** Every aggregation the conversions reader asked, as its filters. */
+  let counted: Array<{ path: string; filters: Filter[] }> = []
+  /** Every keyed read the revenue reader made. */
+  let keyed: string[] = []
+
+  const attributions: Array<Record<string, unknown>> = [
+    { kind: 'form', channel: 'email', convertedAtMs: NOW.getTime() - 86_400_000 },
+    { kind: 'form', channel: 'email', convertedAtMs: NOW.getTime() - 2 * 86_400_000 },
+    { kind: 'form', channel: 'page', convertedAtMs: NOW.getTime() - 3 * 86_400_000 },
+    { kind: 'lead', channel: 'web', convertedAtMs: NOW.getTime() - 86_400_000 },
+    // Outside a 7-day window.
+    { kind: 'form', channel: 'email', convertedAtMs: NOW.getTime() - 20 * 86_400_000 },
+  ]
+
+  function outcomesFirestore(sends: Array<{ id: string; data: Record<string, unknown>; revenue?: Record<string, unknown> }>) {
+    const query = (path: string, filters: Filter[] = []): any => ({
+      where: (field: string, op: string, value: unknown) => query(path, [...filters, [field, op, value]]),
+      orderBy: () => query(path, filters),
+      limit: () => query(path, filters),
+      count: () => ({
+        get: async () => {
+          counted.push({ path, filters })
+          const matches = attributions.filter((record) =>
+            filters.every(([field, op, value]) => {
+              const actual = record[field] as number
+              if (op === '==') return actual === value
+              if (op === '>=') return actual >= (value as number)
+              if (op === '<') return actual < (value as number)
+              return false
+            }),
+          )
+          return { data: () => ({ count: matches.length }) }
+        },
+      }),
+      get: async () => ({
+        docs: sends
+          .filter((send) => filters.every(([field, , value]) => send.data[field] === value))
+          .map((send) => ({ id: send.id, data: () => send.data, get: (field: string) => send.data[field] })),
+      }),
+      doc: (id: string) => ({
+        collection: (name: string) => ({ doc: (report: string) => ({ path: `${path}/${id}/${name}/${report}`, id }) }),
+      }),
+    })
+    return {
+      collection: (root: string) => ({
+        doc: (id: string) => ({ collection: (name: string) => query(`${root}/${id}/${name}`) }),
+      }),
+      getAll: async (...refs: Array<{ path: string; id: string }>) =>
+        refs.map((ref) => {
+          keyed.push(ref.path)
+          const send = sends.find((entry) => entry.id === ref.id)
+          return { data: () => send?.revenue }
+        }),
+    } as unknown as FirebaseFirestore.Firestore
+  }
+
+  const outcomeReader = (id: string, firestore: FirebaseFirestore.Firestore) => {
+    const reader = marketingOutcomeFigureReaders(() => firestore).find((entry) => entry.id === id)
+    if (!reader) throw new Error(id)
+    return reader
+  }
+
+  beforeEach(() => {
+    counted = []
+    keyed = []
+  })
+
+  it('counts each kind’s credited conversions in the window by channel, never adding the kinds', async () => {
+    const read = await outcomeReader('marketing.conversions', outcomesFirestore([])).read({
+      orgId: 'org-1',
+      hostId: 'host-1',
+      days: 7,
+      now: NOW,
+      uid: null,
+      params: {},
+    })
+    if (read.ok === false) throw new Error(read.error)
+    expect(read.table.rows).toEqual([
+      { kind: 'Form submissions', credited: 3, email: 2, page: 1, web: 0, sequence: 0 },
+      { kind: 'Leads', credited: 1, email: 0, page: 0, web: 1, sequence: 0 },
+      { kind: 'Contacts', credited: 0, email: 0, page: 0, web: 0, sequence: 0 },
+      { kind: 'Bookings', credited: 0, email: 0, page: 0, web: 0, sequence: 0 },
+    ])
+    // No total row and no total column: the kinds are different records of one visit.
+    expect(read.table.rows.some((row) => /all|total/i.test(String(row['kind'])))).toBe(false)
+    // The site's own records, by aggregation only — every count names a kind and the window.
+    expect(new Set(counted.map((entry) => entry.path))).toEqual(new Set(['hosts/host-1/campaignAttributions']))
+    expect(counted).toHaveLength(4 * 5)
+    for (const { filters } of counted) {
+      expect(filters[0]).toEqual(['kind', '==', expect.any(String)])
+      expect(filters.map(([field, op]) => `${field}${op}`).slice(-2)).toEqual(['convertedAtMs>=', 'convertedAtMs<'])
+    }
+  })
+
+  it('reads the revenue rollup of each email sent in the window, one row per currency', async () => {
+    const firestore = outcomesFirestore([
+      {
+        id: 'c1',
+        data: { hostId: 'host-1', subject: 'Fall sale', sentAt: sentAt(1) },
+        revenue: { byCurrency: { usd: { grossCents: 12_000, refundedCents: 2_000, orders: 3 } } },
+      },
+      { id: 'c2', data: { hostId: 'host-1', subject: 'No sales', sentAt: sentAt(2) }, revenue: { byCurrency: {} } },
+      // Sent before the window: its rollup is never read.
+      { id: 'c3', data: { hostId: 'host-1', subject: 'Old', sentAt: sentAt(20) }, revenue: { byCurrency: { usd: { grossCents: 1, orders: 1 } } } },
+    ])
+    const read = await outcomeReader('marketing.revenue', firestore).read({
+      orgId: 'org-1',
+      hostId: 'host-1',
+      days: 7,
+      now: NOW,
+      uid: null,
+      params: {},
+    })
+    if (read.ok === false) throw new Error(read.error)
+    expect(keyed).toEqual(['orgs/org-1/campaigns/c1/reports/revenue', 'orgs/org-1/campaigns/c2/reports/revenue'])
+    expect(read.table.rows).toEqual([
+      { campaign: 'Fall sale', currency: 'USD', orders: 3, gross: 120, refunded: 20, net: 100 },
+    ])
+    expect(read.table.columns.find((column) => column.key === 'net')).toMatchObject({ kind: 'money', currency: 'USD' })
+  })
+
+  it('never puts two currencies in one money column', async () => {
+    const firestore = outcomesFirestore([
+      {
+        id: 'c1',
+        data: { hostId: 'host-1', subject: 'Fall sale', sentAt: sentAt(1) },
+        revenue: { byCurrency: { usd: { grossCents: 1_000, orders: 1 }, eur: { grossCents: 900, orders: 1 } } },
+      },
+    ])
+    const read = await outcomeReader('marketing.revenue', firestore).read({
+      orgId: 'org-1',
+      hostId: 'host-1',
+      days: 7,
+      now: NOW,
+      uid: null,
+      params: {},
+    })
+    if (read.ok === false) throw new Error(read.error)
+    expect(read.table.rows.map((row) => row['currency']).sort()).toEqual(['EUR', 'USD'])
+    expect(read.table.columns.find((column) => column.key === 'net')?.kind).toBe('number')
+  })
+
+  it('refuses a window the readers do not cover, and a read with no site', async () => {
+    const reader = outcomeReader('marketing.conversions', outcomesFirestore([]))
+    const base = { orgId: 'org-1', now: NOW, uid: null, params: {} }
+    expect((await reader.read({ ...base, hostId: 'host-1', days: 3 })).ok).toBe(false)
+    expect((await reader.read({ ...base, hostId: null, days: 7 })).ok).toBe(false)
+    expect(counted).toEqual([])
   })
 })

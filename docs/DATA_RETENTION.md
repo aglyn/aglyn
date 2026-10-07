@@ -78,7 +78,7 @@ enabled. Corrected in that file with this change.
 
 ### Declared and written, but the gcloud policy is OWED
 
-These four have `expiresAt` stamped by every writer and a `fieldOverrides`
+These have `expiresAt` stamped by every writer and a `fieldOverrides`
 entry in `cloud/firebase-firestore.indexes.json`, so nothing is at risk from an
 index deploy. **The `gcloud firestore fields ttls update` command has not been
 run**, so the timestamps are currently inert. They are listed separately rather
@@ -93,6 +93,8 @@ that blurs the two is worse than one that admits the gap. Commands in
 | `churnSurveyDetails` | `expiresAt` | **365 days** | The churn survey's ≤500 characters of free text, split off the survey document. | `_lib/retention.ts` `CHURN_SURVEY_DETAIL_RETENTION_DAYS` (AGL-1978) |
 | `apiIdempotency` | `expiresAt` | **30 days** | Replay keys **and the original response body** — for the REST API, a copy of the created record's `values`. | `api-idempotency.ts` `API_IDEMPOTENCY_RETENTION_DAYS` (AGL-1978) |
 | `imports` (under an email list) | `expiresAt` | **15 days** — 7 to apply, the 7-day undo window, and a day | An email list import's ledger: up to 25 sample shared-mailbox addresses **verbatim**, the file's column names that read as a bought list, the consent sample's counts, and the `uid` of whoever stated permission. Read only while its job can still write; each member's consent record keeps who attested, so nothing needs the ledger afterwards. | `list-members.server.ts` stamps `listImportLedgerExpiry(Date.now())` on every dry run (AGL-3549) |
+| `funnelJourneys` | `expiresAt` | **90 days** | One recorded site visit, for funnels: its steps in order (paths, record ids, event names) with server times and where it arrived from. Keyed by a random id held in one browser tab's session storage; recorded only on a site with a funnel and only with the visitor's analytics consent. A visit a form submission ended also carries the submitter's address (`personEmail`), so a drop-off follow-up can reach them; an anonymous visit identifies nobody. Deleted with the person by the funnels plugin's person eraser. | `journey-beacon.ts` stamps `journeyExpiresAt(now)` (AGL-3605) |
+| `funnelResults` | `expiresAt` | **2 days** | A funnel's computed result — counts and rates — cached by the results route. | `funnel-results.server.ts` stamps `expiresAt` (AGL-3605) |
 
 `apps/console/specs/retention-ttl-config.spec.ts` asserts every policy as
 a three-part configuration — declared in the index file, documented with a

@@ -22,14 +22,15 @@ import type {
   ConsoleHostLayoutsZoneProps,
   ConsoleHostScreensZoneProps,
   ConsoleHostTemplatesZoneProps,
+  ConsoleWidgetEntitlementProps,
 } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { mdiCreation } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
-import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { Button } from '@mui/material'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { AiBriefDialog, type AiBriefKind } from './ai-brief-dialog.component'
+import { AiUpsellButton } from './ai-upsell-dialog.component'
 
 /**
  * "Create with AI" (AGL-2907, AGL-3043, AGL-3051): a job from a brief, beside the
@@ -39,52 +40,38 @@ import { AiBriefDialog, type AiBriefKind } from './ai-brief-dialog.component'
  * zone. The Assist panel's AI jobs opens the same dialog for a page.
  */
 
-type Verdict = 'checking' | 'ready' | 'hidden'
-
-export interface AiDescribeButtonProps extends ConsoleHostScreensZoneProps {
+export interface AiDescribeButtonProps
+  extends ConsoleHostScreensZoneProps,
+    ConsoleWidgetEntitlementProps {
   /** The job the brief starts: what the page the button sits on lists. */
   kind: AiBriefKind
 }
 
 /**
- * Renders nothing until the jobs route has answered for this workspace: the
- * shell decided the plan, the member's permission and the site's AI switch
- * before mounting it, and the release flag is the route's to decide, so a 404
- * or a 403 there is this control staying absent. A lockdown is the start
- * door's to say, in the dialog, in its own words.
+ * Drawn at once, from the gates the shell already resolved client-side before
+ * mounting it: the plan, the member's `ai.generate`, the site's AI switch and
+ * the `release_ai_generative` flag (the widget's `releaseFlag`). Nothing is
+ * asked of a server to draw it (AGL-3601): the start door decides when the
+ * brief is sent, and its refusal — a plan, a permission, a lockdown — is said
+ * in the dialog, in its own words.
+ *
+ * On a plan that could buy the AI add-on and has not, the shell mounts it with
+ * `entitled={false}` and an `upgrade` link, and the same button opens the
+ * add-on's dialog instead of the brief, without asking anything either.
  */
-export function AiDescribeButton({ kind, hostId, orgId }: AiDescribeButtonProps) {
+export function AiDescribeButton({
+  kind,
+  hostId,
+  orgId,
+  entitled,
+  upgrade,
+}: AiDescribeButtonProps) {
   const { data: user } = useUser()
-  // Held in a ref so the probe keys on WHO is signed in, never on the
-  // identity of the object that says so.
-  const userRef = useRef(user)
-  userRef.current = user
-  const uid = user?.uid ?? null
-  const [verdict, setVerdict] = useState<Verdict>('checking')
   const [open, setOpen] = useState(false)
 
-  useEffect(() => {
-    if (!orgId || !uid) return
-    let active = true
-    void (async () => {
-      try {
-        const response = await authorizedFetch(
-          userRef.current,
-          `/api/ai/jobs?orgId=${encodeURIComponent(orgId)}&limit=1`,
-        )
-        if (active) {
-          setVerdict(response.status === 404 || response.status === 403 ? 'hidden' : 'ready')
-        }
-      } catch {
-        if (active) setVerdict('hidden')
-      }
-    })()
-    return () => {
-      active = false
-    }
-  }, [orgId, uid])
-
-  if (verdict !== 'ready') return null
+  if (entitled === false) {
+    return upgrade ? <AiUpsellButton kind={kind} upgrade={upgrade} /> : null
+  }
   return (
     <>
       <Button

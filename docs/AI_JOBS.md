@@ -522,7 +522,8 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
 
 - **The workspace.** `readAiPlanCapabilities` in `src/lib/jobs/ai-job-drafts.ts`
   answers every creation kind from the resolved entitlements and the site's counts,
-  in the draft writer's own band arithmetic: `reusableComponents` for a component,
+  in the draft writer's own band arithmetic: `componentsPerHost` alone for a component
+  (Free 1, unlimited from Starter since AGL-3615, live components only),
   `formsPerHost` alone for a saved form (Free 1 and up since AGL-3597), `sharedLayoutsPerHost` and
   `templatesPerHost` with the room each has left, and the plan's datasets. It reads
   only the collections a finite allowance counts. A theme change counts against
@@ -564,14 +565,15 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   (`plan-template-in-section`): each frames a whole screen. No system block changes, so
   the cached prefix is the same bytes. A plan confirmed before these rules still stops
   at the page and scaffold doors, which name such a reference as a component to create.
-- **Inline, where the workspace keeps no reusable components.** A workspace whose plan
-  lacks `reusableComponents` can place no component (it may save one form since
-  AGL-3597, but the page doctrine still keys on the component feature), so there — and
+- **Inline, where the workspace keeps no reusable components.** A workspace whose
+  component allowance is finite (`aiBuildsWithComponents` in `ai-job-drafts.ts`: Free's
+  one since AGL-3615) builds no repeat as a component — one component cannot hold every
+  repeat a plan draws, and the one is the member's to spend — so there — and
   only there — the doctrine builds inline: a form is a Form element the page carries,
   with its Form Fields inside it, and a list's repeated items are drawn in one section.
   Rules 1 and 3 state that exception, the plan rules accept it on those capabilities,
   and the tree rules accept it where `AiDoctrineTreeContext.reusableComponents` is
-  `false`, which the page step sets from the org's entitlement. Loose fields and a
+  `false`, which the page step sets from the same `aiBuildsWithComponents`. Loose fields and a
   form with no field to send are still refused. The tenant renders such a Form as
   authored (only a form bound by `formId` is replaced by its entity's design), and
   `/api/forms/submit` collects a submission with no `formId` under its `formName`,
@@ -1150,8 +1152,9 @@ draft.
 - **Drafts.** `writeAiDraft` writes the component as the host resources
   route's `reusableComponent` entry does: that entry's allow-list
   (`displayName`, `description`, `rootId`, `nodes`, `props`), msgpack nodes
-  and the route's stamps, admitted by the plan's `reusableComponents` feature
-  with the route's own refusal, and counted against no allowance. No version
+  and the route's stamps, counted against the plan's `componentsPerHost` over the
+  site's live components (Free 1, unlimited from Starter, AGL-3615) with the route's
+  own refusal. No version
   is written: the component's page mints the first when a member opens it,
   as it does for a component Use template creates. Nothing places the
   component until a member does.
@@ -1599,6 +1602,16 @@ the audit rows) and hands the same step back as `pending`, its attempts reset
 and its `passes` counted; `AI_JOB_STEP_MAX_PASSES` bounds it. Every pass is one
 reservation and one provider exchange, so a large site is a few beats of work,
 and the job's `creditsSpent` is what the whole audit cost.
+
+**A/B variants as draft versions** (AGL-3603). `POST /api/ai/experiments/versions
+{ orgId, hostId, jobId, screenId, nodeId? }` (`server/ai-experiment-versions.ts`) takes a
+finished `experiment` variants job for a page or a section and, with the same rungs as the
+apply below plus the `versioning` entitlement, copies the screen's published version once
+per proposed variant past the control, puts the variant's headline and body into the region
+under test (`runtime/experiment-variant-copy.ts`: first heading, first plain text after it,
+never rich text) and stores it as an unpublished version under `ab-{jobId}-{index}`, so a
+second press finds what the first made. The experiment card pins each version to its
+variant as an unsaved edit; nothing is published and no test is started.
 
 **Apply.** `POST /api/ai/seo/apply { orgId, hostId, jobId }`
 (`src/lib/server/ai-seo-apply.ts`) takes a finished audit. It opens a NEW
@@ -2467,9 +2480,21 @@ published, and goes one step further — the server writes no document at all.
   is cached.
 - **The proposal.** The model is offered one strict tool,
   `propose_canvas_edit` (`src/lib/server/assist-edit.ts`), whose ops are
-  `insertSubtree`, `updateProps`, `updateSx`, `move`, `remove`, `rename` and,
-  on a screen, `setSeo` — its field list is `SCREEN_SEO_TEXT_FIELDS`, the one
-  the Screen Properties form saves. The edit protocol and the doctrine's
+  `insertSubtree`, `updateProps`, `updateSx`, `move`, `remove`, `rename`,
+  `addInteraction` and, on a screen, `setSeo` — its field list is
+  `SCREEN_SEO_TEXT_FIELDS`, the one the Screen Properties form saves.
+  `addInteraction` (AGL-3603) adds one interaction to a described element in
+  the shape the element stores it (`NodeInteraction`): an event from
+  `ASSIST_EDIT_INTERACTION_EVENTS` (the element-scoped site events) and steps
+  from `ASSIST_EDIT_INTERACTION_STEPS` (basic presentational client steps —
+  no script, HTML, attribute, overlay, analytics or server step). Every
+  element a step acts on must be one the outline described, and its selector
+  is derived from that id, never taken from the model; the whole interaction
+  passes `validateInteraction`. On apply it is upserted beside the element's
+  own interactions (an id already in use is re-minted), a full element
+  (`NODE_MAX_INTERACTIONS`) is refused, and a target that has gone refuses
+  the whole apply. The selected element's own interactions ride the outline
+  as name, event and step kinds, so Assist can explain them. The edit protocol and the doctrine's
   palette catalog for the document's surface (`aiDoctrineCatalog`) ride one
   cached block per document kind; the outline rides a volatile one. The reply
   streams, so the tool call is held to the doctrine as a streamed answer
@@ -2604,18 +2629,64 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
   submitted. The answer arrives through `submit_explanation` (a summary, the
   points in order, what to check or change) and becomes a `text` output. It
   changes nothing.
+- **Revising an action (`revise`, AGL-3603).** A saved ACTION and a change
+  asked of it (the brief; Fix with AI sends a fixed one). The request is the
+  draft's — the same cached instructions and `submit_automation` tool, so the
+  ledger's `workflow-draft` prefix serves both — with the action's outline and
+  the change in the user turn instead of a description. The answer is held to
+  the vocabulary and matched to records exactly as a draft's, and written as
+  a NEW draft, OFF, under the job's draft id, named as the answer names it or
+  `<name> (revised)` when that is the saved action's own name. The saved
+  action is read and never written. The output note says what changed —
+  steps added, removed or changed, a changed trigger or conditions — worked
+  out in code from the two stored shapes (`aiAutomationRevisionChanges`). An
+  action holding what the vocabulary cannot write — a page event, an on-page
+  step, a trigger filter expression — is refused at admission and again in
+  the step, before the model is asked (`aiActionReviseBlocker`), so a revision
+  never drops a part the person did not ask to lose. A workflow of function
+  calls is never revised.
+- **A workspace's automation (`draft` with `scope: 'org'`, AGL-3603).** One of
+  the workspace's org automations, with no site named. The zone that asks for
+  it (`orgAutomations`, hosted by the workflows plugin in its Org automations
+  card's header) hands the widget what an org automation may start on and
+  hold; the widget sends them as comma-separated `triggers` and `steps`
+  inputs, which `readAiOrgAutomationVocabulary` intersects with the drafting
+  vocabulary — the zone can only narrow it. The request is the draft's — same
+  cached instructions and tool — with that vocabulary stated in the user turn
+  and held by the check (`holdAiAutomationAnswerToVocabulary`, so an answer
+  using anything else is re-asked), no site's forms listed, and the records
+  matched being the workspace's (`readAiOrgAutomationRecords`): its lists and
+  stages, and the live campaigns and datasets shared with every site, since
+  the draft opens placed on every site — the rule the editor's own pickers
+  keep. Nothing is written: the automation rides on an `orgAutomation` output
+  (`hostId: null`) as `proposal.automation` (name, trigger, steps), which the
+  widget (`ai-describe-org-automation.component.tsx`) hands to the zone's
+  `propose`; the section's editor opens it as a NEW automation, unsaved and
+  switched off, and the section's save route is the write. A description
+  that needs what only one site runs fails with a sentence saying to build it
+  as an action on that site.
 - **Admission.** Every mode needs a site of the job's own org with the
   Automation plugin on for it and past its release flag. A draft also needs
   the writer registered and the owner's `refusal` for the member; an
   explanation needs the automation to exist, and a run's explanation a FAILED
-  run of that automation.
+  run of that automation. A revision needs both: the draft's writer and
+  refusal, and the action it starts from, revisable. A workspace's automation
+  needs NO site, the plugin that registered the automation writer switched on
+  for the workspace and past its release flag, and the plan's `actions`
+  entitlement; nothing is written, so no allowance is asked until the person
+  saves.
 - **Where a member starts one.** Three widgets the AI plugin registers in the
   zones the workflows plugin hosts on the Automation page
   (`src/lib/components/ai-describe-automation.component.tsx` and
   `ai-explain-automation.component.tsx`): Create with AI beside Add action and
-  Recipes (`hostAutomations`), whose dialog follows the job and opens the draft
-  in the Actions editor; Explain it at the top of the editor of a saved action
-  or workflow (`automationEditor`); and Why did this fail? on each failed run
+  Recipes (`hostAutomations`) — also hosted in the Workflows card's header or
+  empty state, whose `openAction` goes to Actions with the action named
+  (`?action=`) — whose dialog follows the job and opens the draft in the
+  Actions editor; Explain it at the top of the editor of a saved action or
+  workflow (`automationEditor`); Change with AI and Fix with AI in the editor
+  of a saved action (`automationEditor`,
+  `ai-revise-automation.component.tsx`), which open the changed copy through
+  the zone's `openAction`; and Why did this fail? on each failed run
   in a run history (`automationRun`). Each is gated by `aiGenerative` and
   `ai.generate`, asks the jobs route once per member and workspace before it
   shows anything (`use-ai-job-run.ts`), and sits in a site zone, so a site
@@ -2652,6 +2723,55 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
   `release_ai_generative`; `assist-anthropic-subprocessor-gate.spec.ts`
   records both.
 
+## The logic kind
+
+AGL-3603. A site's Functions & Variables, by AI
+(`libs/plugins/ai/src/lib/jobs/ai-job-logic-step.ts`,
+`model/ai-logic-job.ts`, `tools/ai-logic-tool.ts`).
+
+- **Modes.** `inputs.mode` is `function` (a new function from a description,
+  or — with `functionId` — a saved function changed or fixed), `variable`
+  (one site variable) or `explain` (a saved function, in plain words). A job
+  created with no mode proposes a function.
+- **What the model is shown.** One cached rules block for all three answers
+  — the evaluator's grammar, built from `FUNCTION_BUILTIN_NAMES`; a
+  variable's stored forms; how to explain — on the `fields` doctrine scope.
+  The user turn carries the site's variables by name, type and value (60
+  listed, each value cut to 120 characters), the site's function names and,
+  for a change or an explanation, an outline of the saved function's own
+  definition. Functions and variables are core documents, read through the
+  Admin SDK in the logic page's window of 100 (`jobs/ai-logic-records.ts`).
+- **What is kept.** `submit_function` is held by `checkAiLogicFunction`:
+  names to `VARIABLE_NAME_PATTERN` and unique; a new function's name not the
+  site's already; every expression through `expressionSyntaxError`; every
+  assignment to the function's own parameters and locals, never a site
+  variable; every name read (`functionReferencedNames`) its own or a listed
+  site variable; `returnValue` its own; and one `evaluateHostFunction` run
+  with each parameter at a starting value and the site variables it reads as
+  `functionGlobals`. `submit_variable` is held by `checkAiLogicVariable` to
+  its type's stored form (a JSON object for a dictionary, a JSON list for a
+  collection). A failing answer is re-asked naming what failed.
+- **What it writes: nothing.** A function or a variable rides on a `logic`
+  output as `proposal` (`{ kind: 'function', functionId, definition }` or
+  `{ kind: 'variable', variable }`); an explanation is a `text` output. The
+  logic plugin's editors open a proposal unsaved, asking the plan's
+  `functionsPerHost` / `variablesPerHost` cap first for a new one, and the
+  editor's Save is the write.
+- **Admission.** A site of the job's org with the logic plugin on for it and
+  past its release flag; a change or an explanation also needs the function it
+  names to exist.
+- **Where a member starts one.** Widgets the AI plugin registers in the zones
+  the logic plugin hosts (`components/ai-logic.component.tsx`): Create with AI
+  in the Functions and Variables card headers (`hostLogic`); Explain it,
+  Change with AI and Fix with AI in a saved function's editor
+  (`logicFunctionEditor`); and Fix with AI on a broken reference an ACTION
+  holds (`logicReferenceIssue`), which starts a `workflow` job in `revise`
+  mode rather than a logic job. Each is gated by `aiGenerative` and
+  `ai.generate` and asks the jobs route once before it shows anything.
+- **Routing.** `job.logic` runs on the balanced tier with adaptive thinking
+  and a 3,000-token ceiling; its golden briefs are under
+  `tools/ai-eval/cases/logic`.
+
 ## The insight kind
 
 `insight` (AGL-2915) answers a question about a site's or a workspace's own figures, and makes
@@ -2662,11 +2782,34 @@ sees a record, and every insight a person reads is traced to the numbers it cite
   `libs/aglyn/src/lib/plugin-manager/plugin-figures.ts` by the plugin that owns its records: the
   commerce plugin's `commerce.sales` and `commerce.products` (`server/order-figures.ts`, on the
   Analytics tab card's own arithmetic in `model/order-figures.ts`), the bookings plugin's
-  `bookings.services`, the marketing plugin's `marketing.campaigns` and `marketing.experiments`,
+  `bookings.services`, the marketing plugin's `marketing.campaigns`, `marketing.experiments`,
+  `marketing.conversions` (attribution records counted by kind and channel over the window,
+  by aggregation only) and `marketing.revenue` (each window send's revenue rollup, one row per
+  currency), the funnels plugin's `funnels.overview` and `funnels.steps`
+  (`server/funnel-figures.ts`, on the Analytics surface, sold under `screenAnalytics`),
   and the data plugin's `datasets.summary` and `datasets.breakdown` (`server/dataset-figures.ts`,
   from its console-only server declarations). This plugin registers the readers for records the
   platform keeps (`src/lib/insights/ai-figure-readers.ts`): `traffic.summary`, `traffic.pages`,
-  `traffic.sources`, `traffic.daily` and `forms.performance`. A reader answers one compact
+  `traffic.sources`, `traffic.daily` and `forms.performance`. AGL-3603 adds the workflows
+  plugin's `automations.runs` (`libs/plugins/workflows/src/lib/server/automation-run-figures.ts`:
+  exact succeeded/failed totals as COUNT aggregates over the `activity` composite on `result` +
+  `createdAt`, and a per-automation split from at most 500 runs of each result projected to
+  `target`) and the CRM plugin's org-scoped `crm.pipeline` (open deals by pipeline and stage,
+  value and weighted value through `pipelineTotals`, at most 1,000 open deals on `status` +
+  `updatedAt`) and `crm.closed` (won and lost in the window on `status` + `closedAtMs`, at most
+  1,000 of each) (`libs/plugins/crm/src/lib/server/deal-figures.ts`), each scoped to a site's
+  shared deals by `scopedToHost` when a site is named, and the marketing plugin's
+  `marketing.overlays` (`libs/plugins/marketing/src/lib/server/overlay-figures.ts`: each bar and
+  popup's lifetime `stats` counters — views, clicks, click rate, dismissals — and its status, at
+  most 100 overlays, no window, the copy never read); every query is served by an index the
+  file already carries. The surfaces widen with them: `analytics` (also a site's dashboard)
+  offers `automations` and `crm` too, `crm-reports` offers `crm`, and three surfaces join —
+  `automations` (a site's Automation page), `bookings` (its Bookings page) and `workspace` (the
+  workspace's sites page and CRM Reports; no site needed; `crm` and `datasets`). The digest's
+  readers are unchanged. The "Ask AI about these numbers" tile
+  (`src/lib/components/ai-insight-card.component.tsx`) opens the same insight dialog from the
+  `hostDashboard` slot — which the dashboard and the Analytics page both draw — and from
+  `orgDashboard`, gated by `aiGenerative` and `ai.generate`. A reader answers one compact
   table — counts, sums and rates with a `source` label and the console page they come from —
   held to the contract by `normalizePluginFigureTable`: at most 25 rows and 8 typed columns, every
   text cell stripped of email addresses and phone numbers. A dataset breakdown reads at most 2,000
@@ -2674,7 +2817,7 @@ sees a record, and every insight a person reads is traced to the numbers it cite
   than three records into one row.
 - **Who may read what.** `aiInsightReaders` (`src/lib/insights/ai-insight-readers.ts`) offers a
   reader only when the surface asks about its kind of figures, the plan includes the feature it is
-  sold under (`commerceAnalytics`, `bookings`, `abTesting`, `dataStore`), and its plugin is past
+  sold under (`commerceAnalytics`, `bookings`, `abTesting`, `screenAnalytics`, `dataStore`), and its plugin is past
   its release flag and on for the site. A dataset reader reads what the asking member may see, and
   on a site only what is shared with it.
 - **Runner.** `src/lib/jobs/ai-job-insight-step.ts`. Two calls through `runAiRequest`, sharing one
@@ -2694,11 +2837,13 @@ sees a record, and every insight a person reads is traced to the numbers it cite
   serves it through the jobs read gate to the member who asked, or for a digest to any member who
   reaches its site, while they still reach it.
 - **Admission.** An ask names a surface a person asks from (`analytics`, `datasets`,
-  `crm-reports`), a site of the job's own org where the surface needs one, and at least one reader
+  `crm-reports`, `marketing`), a site of the job's own org where the surface needs one, and at least one reader
   the workspace may read; a `digest` job is refused at the door.
 - **The surface.** The Assist panel's AI jobs offer **Ask about your numbers** on a site's
-  Analytics, Data and CRM Reports pages and the workspace's Data page
-  (`components/ai-insight-dialog.component.tsx`): the question and a window, the answer with each
+  Analytics, Data, CRM Reports and Marketing pages and the workspace's Data page
+  (`components/ai-insight-dialog.component.tsx`), and the marketing plugin's Conversions
+  section and campaign report open the same dialog through their `marketingInsights` zone
+  (AGL-3603), with a question about what the page shows: the question and a window, the answer with each
   insight's cited rows and a link to the page they come from, and the member's weekly-insights
   switch. A job row with an insight output offers **View answer**.
 - **The weekly insights.** `POST /api/admin/ai-insights-digest`

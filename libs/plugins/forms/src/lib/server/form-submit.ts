@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import {
+  SITE_JOURNEY_ID_PATTERN,
+  SITE_JOURNEY_SUBMISSION_FIELD,
+} from '@aglyn/aglyn/app-utils/site-journey'
 import * as Aglyn from '@aglyn/aglyn/server'
 import { extractEmailFromFields } from '@aglyn/aglyn/server'
 import {
@@ -1028,8 +1032,15 @@ export async function POST(request: Request): Promise<Response> {
         ...submittedFields,
         ...(form ? { formId: form.id } : {}),
       },
-      // The visitor who submitted, by the address they typed if any (AGL-3376).
-      { actor: { kind: 'visitor', ...(submittedEmail ? { email: submittedEmail } : {}) } },
+      // The visitor who submitted, by the address they typed if any (AGL-3376),
+      // and the recorded visit this submission ends (AGL-3605), when the page
+      // sent one in the shape the recorder mints.
+      {
+        actor: { kind: 'visitor', ...(submittedEmail ? { email: submittedEmail } : {}) },
+        ...(SITE_JOURNEY_ID_PATTERN.test(String(payload[SITE_JOURNEY_SUBMISSION_FIELD] ?? ''))
+          ? { journeyId: String(payload[SITE_JOURNEY_SUBMISSION_FIELD]) }
+          : {}),
+      },
     )
     return json({ received: true, alerts })
   } catch (error) {

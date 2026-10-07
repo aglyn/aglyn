@@ -1,0 +1,119 @@
+---
+sidebar_position: 11.5
+title: "Marketing with AI: overlays, campaigns and your numbers"
+description: "Use Aglyn AI on your site's Marketing page: write announcement bar and popup copy, create a switched-off overlay or a draft campaign from a brief, and ask what your conversions and campaign figures mean."
+---
+
+# Marketing with AI
+
+Your site's **Marketing** page has its own AI doors. Each one sits beside the thing it
+works on, and each one stops short of anything a visitor or a recipient would see: an
+overlay it creates is switched off, a campaign it drafts is aimed at nobody, and copy it
+writes waits in the editor until you save it.
+
+## Write overlay copy {#write-overlay-copy}
+
+Open an announcement bar or a popup from **Marketing → Overlays** and the editor carries
+a **Write with AI** box among its fields.
+
+1. Say what the overlay is for — the offer, the news, who it is for. When the overlay
+   already has copy, that copy is sent too, so it can be improved rather than replaced;
+   you can leave the box empty to ask for exactly that.
+2. **Write with AI.** It writes a bar's one line, or a popup's headline, body and
+   button label, inside the lengths the editor allows.
+3. For a popup it also suggests **when it opens** — after a delay, on scroll or on exit
+   intent, the triggers the editor itself offers, with a value inside that trigger's
+   range — or leaves the trigger as it is.
+4. **Put in the fields** fills the editor's own fields. Nothing is saved until you press
+   **Save**; **Cancel** leaves the overlay as it was.
+
+It never writes the button's link, the pages the overlay shows on, its schedule, or
+whether it is switched on. Those are yours, in the same editor.
+
+## Create an overlay {#create-an-overlay}
+
+Beside **New bar** and **New popup**, and on the list while it is empty, **Create with
+AI** turns a brief into a new overlay.
+
+1. Choose **Popup** or **Announcement bar**, and say what it is for.
+2. **Create the overlay.** The copy is written as above, and the overlay is saved
+   **switched off** and opened in the editor.
+3. Add its link, its pages and its schedule, then turn it on from the list when you are
+   ready. Until then no visitor sees it.
+
+A fact the brief did not give — a discount, a date, a price — arrives in square brackets
+for you to fill rather than invented.
+
+## Create a campaign {#create-a-campaign}
+
+On **Marketing → Campaigns**, beside **Create campaign** and on the list while it is
+empty, **Create with AI** turns a brief into a campaign.
+
+1. On your organization's **Marketing** page, pick the site the campaign is placed on
+   and sent as. On a site's own page it is that site.
+2. Give it a name if you like, and say what the campaign is for.
+3. **Write the campaign.** The job writes an email design — with three subject lines
+   and three preheaders — and a **draft campaign** holding that email. Follow it in the
+   dialog or in **AI jobs**, then open the draft campaign.
+4. Pick who receives it, check the email and schedule it. Until you do, nothing is sent,
+   scheduled or queued, and the campaign is aimed at nobody.
+
+When your brief names one of your lists, the campaign's note says which one, and when
+that list's past campaigns were opened most — see
+[who receives it](../marketing-and-automation/email-campaigns/generate-with-ai.md#who-receives-it).
+
+**A plan that sends no campaign email** gets **Write a campaign email with AI** instead:
+the same dialog writes the email design on its own, which you can use once your plan
+sends campaigns. Upgrading is done in **Billing**.
+
+## Ask about these numbers {#ask-about-these-numbers}
+
+The **Conversions** section and each campaign's report carry **Ask AI about these
+numbers** in their header. It opens [Insights](../marketing-and-automation/analytics/insights.md)
+on the site the figures are — on your organization's Conversions section, the site you
+picked; on a campaign's report, the site the email was sent as — with a question about
+what the page shows already in the box. Change it if you like, pick a window, and ask.
+
+The answer reads your site's figures, the same ones these pages show:
+
+- **Campaign conversions** — form submissions, leads, contacts and bookings credited to a
+  campaign in the window, one row each, by the touch that earned the credit: a campaign
+  email, a page filed under a campaign, a labeled link or a sequence email. The rows are
+  never added together, because one visit can make a submission, a lead and a contact.
+  A conversion credited to nothing has no record and is not counted.
+- **Campaign revenue** — for each campaign email sent in the window, the orders credited to
+  it and the gross, refunded and net amounts, one row per currency; different currencies are
+  never added together.
+- Beside those, your campaign emails' delivery and engagement, your A/B tests, your forms,
+  your traffic and your store's sales, where your plan includes them.
+
+Every insight cites the rows its numbers come from. Nothing is changed or sent. The same
+question can be asked from the **Assist** panel anywhere on a site's **Marketing** page.
+
+## What is sent {#what-is-sent}
+
+For overlay copy: your brief, whether it is a bar or a popup, the triggers the editor
+offers, and the overlay's current copy when there is some. Nothing about your visitors,
+your figures or your other overlays is sent.
+
+For a campaign: your brief, the name you gave it and what your site already has — the
+same as [generating an email](../marketing-and-automation/email-campaigns/generate-with-ai.md).
+Your lists, contacts and past send figures are read on the server and are not sent.
+
+For a question about your numbers: the question, the window and the tables of totals the
+answer reads — never a visitor, contact, order or submission. See
+[Insights → Privacy](../marketing-and-automation/analytics/insights.md#privacy).
+
+## Who can use it {#who-can-use-it}
+
+The doors appear for a member who may generate with AI, on a workspace whose plan
+includes AI generation and on a site with AI switched on. The overlay doors also need
+marketing overlays in the plan. A campaign also needs the **Email** plugin on for the
+site. Each request is metered in AI credits like any other — see
+[credits and caps](overview.md#credits-and-caps).
+
+## Related {#related}
+
+- [Marketing overlays](../marketing-and-automation/marketing-overlays/overview.md) — the
+  bars and popups themselves.
+- [Aglyn AI](overview.md) — every AI door, and the rule that it only ever writes drafts.

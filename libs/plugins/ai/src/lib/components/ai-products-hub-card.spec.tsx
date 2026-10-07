@@ -82,6 +82,8 @@ jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => ({
 
 import type { ConsoleProductsHubZoneProps } from './ai-product-zones'
 import AiProductsHubCard from './ai-products-hub-card.component'
+import AiCreateProductsButton from './ai-products-create-button.component'
+import { AI_UPSELL_COPY } from './ai-upsell-dialog.component'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -353,5 +355,94 @@ describe('categories and discounts from a brief', () => {
       { name: 'Free shipping over $50', code: null, kind: 'free_shipping', valuePct: null, valueCents: null, minSubtotalCents: 5_000 },
     ])
     expect((await screen.findByRole('alert')).textContent).toContain('Discounts start switched off')
+  })
+})
+
+/*
+ * "Create with AI" beside Add product and in the empty catalog (AGL-3596),
+ * on the commerce plugin's `productsCreate` zone: a door to this card's
+ * Propose products brief, shown only while the card is here to take it. Its
+ * registration is held with the other doors' in `ai-describe-email.component.spec`.
+ */
+describe('Create with AI beside Add product', () => {
+  it('opens the card’s Propose products brief, which starts the catalog job', async () => {
+    render(
+      <>
+        <AiCreateProductsButton hostId="host-1" orgId={undefined} />
+        <AiProductsHubCard {...props({ products: [] })} />
+      </>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('What does the store sell?'), { target: { value: 'A candle studio' } })
+    mockFetch.mockImplementationOnce(async () => json({ job: catalogJob }))
+    fireEvent.click(screen.getByRole('button', { name: 'Propose products' }))
+    await waitFor(() => expect(posted()).toHaveLength(1))
+    expect(posted()[0]).toEqual({
+      orgId: 'org-1',
+      hostId: 'host-1',
+      kind: 'products',
+      brief: 'A candle studio',
+      inputs: { target: 'catalog' },
+    })
+  })
+
+  it('draws as soon as the card is on the page, before the card has read anything (AGL-3601)', () => {
+    // The card's list of recent proposals never answers: the door does not wait on it.
+    mockFetch.mockImplementation(() => new Promise(() => undefined))
+    render(
+      <>
+        <AiCreateProductsButton hostId="host-1" orgId={undefined} />
+        <AiProductsHubCard {...props()} />
+      </>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+    expect(screen.getByLabelText('What does the store sell?')).toBeTruthy()
+  })
+
+  it.each([403, 404])(
+    'still opens the brief when the list read answers %s, and the start door says why it refuses',
+    async (status) => {
+      mockFetch.mockImplementation(async () => json({ error: 'AI is switched off for this site.' }, status))
+      render(
+        <>
+          <AiCreateProductsButton hostId="host-1" orgId={undefined} />
+          <AiProductsHubCard {...props()} />
+        </>,
+      )
+      await waitFor(() => expect(mockFetch).toHaveBeenCalled())
+      fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+      fireEvent.change(screen.getByLabelText('What does the store sell?'), { target: { value: 'A candle studio' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Propose products' }))
+      expect(await screen.findByText('AI is switched off for this site.')).toBeTruthy()
+    },
+  )
+
+  it('opens the AI add-on on a plan without it, with no card and no request', () => {
+    render(
+      <AiCreateProductsButton
+        hostId="host-1"
+        orgId={undefined}
+        entitled={false}
+        upgrade={{ billingHref: '/acme/billing#addons', canManageBilling: true }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+    expect(screen.getByText(AI_UPSELL_COPY.product.title)).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('stays absent with no card on the page, and for another site’s card', async () => {
+    const { unmount } = render(
+      <>
+        <AiCreateProductsButton hostId="host-2" orgId={undefined} />
+        <AiProductsHubCard {...props()} />
+      </>,
+    )
+    await screen.findByRole('button', { name: 'Propose products' })
+    expect(screen.queryByRole('button', { name: 'Create with AI' })).toBeNull()
+    unmount()
+    render(<AiCreateProductsButton hostId="host-1" orgId={undefined} />)
+    expect(screen.queryByRole('button', { name: 'Create with AI' })).toBeNull()
   })
 })

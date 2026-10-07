@@ -17,6 +17,7 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `hostDashboard` | Host dashboard glance row, one card per capability | `hostId` |
 | `orgDashboard` | The organization's Sites page, above the site grid — the org-level twin of `hostDashboard`, rendered only for an org-wide member who may open the org-level CRM | `hostId` (always `null`), `orgMount`, `basePath` (the org-level hub's path) |
 | `commerceGlance` | Host dashboard commerce summary | `hostId` |
+| `hostAnalytics` | A site's **Analytics** page, below its traffic cards: a whole section a plugin computes, such as Funnels | `hostId`, `orgId` |
 | `orgData` | Organization → Data page body | `orgId`, `org` |
 | `besignerFunctions` | Besigner ƒx panel | `hostId` |
 | `hostArtifactPublish` | Wherever a console page offers to publish something it holds (a site's layouts, the organization's publish panel): the dialog that publishes it. The page keeps the control that opens it, and leaves that control out when no widget is registered here | `artifact` (`{ kind, hostId?, orgId?, artifactId?, displayName?, description? }`, or `null` while nothing is open), `onClose()` |
@@ -53,6 +54,7 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `hostTemplates` | A site's Templates page, beside Create Template: another way to start a template | `hostId`, `orgId` |
 | `hostLayouts` | A site's Layouts page, beside Templates and Create New Layout: another way to start a layout | `hostId`, `orgId` |
 | `hostComponents` | A site's Components page, beside Templates and Create Component: another way to start a reusable component | `hostId`, `orgId` |
+| `mediaLibrary` | The media library, beside **Upload media** and **New folder**, and again in an empty library's call to action: another way to add a file. Not drawn in a picker narrowed to video or PDFs | `hostId` (the site whose library is open; for the organization library, the site on screen, else `null`), `orgId`, `library` (`'host'` or `'org'`), `folderId` (the open folder, where new files land, or `null`), `onCreated(mediaIds)` (the library refreshes and selects the assets the widget added) |
 | `recordInsights` | A CRM contact's, company's, deal's or lead's page, under its header. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId` (`null` at the organization level), `orgId`, `record` (`{ kind, id, name }`), `proposeTask(task, key)` (opens the CRM's task form filled in; absent on a lead), and on a deal `stages`, `stageId` and `proposeStage(stageId, key)` (asks, then moves the deal through its stage route) |
 | `recordEmail` | Inside the CRM's one-to-one composer, under the message. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `record`, `subject`, `body`, `proposeDraft({ subject, body }, key)` (fills the composer, asking before it replaces a written message; Send is the member's) |
 | `importMapping` | Under the column matching of a CRM import drawer, and of the import wizard's Columns step on any surface that names the zone (see [Import and export](../guides/import-and-export.md)). Hosted by the CRM plugin and the wizard (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `collection`, `columns` (each `{ header, shape }`, where `shape` is `email`, `phone`, `number`, `date`, `yes-no`, `url`, `text` or `empty`; never a cell), `mapping`, `proposeMapping(mapping, key)` (replaces the drawer's matching; Import is the write) |
@@ -67,8 +69,10 @@ unloaded plugins.
 ## Zones a plugin hosts
 
 A zone can sit on a plugin's own surface rather than on a console page, such as `hostForms`
-on the forms plugin's Forms page, `hostAutomations`, `automationEditor` and `automationRun`
-on the workflows plugin's Automation page, or `recordInsights`, `recordEmail` and
+on the forms plugin's Forms page, `hostEmailTemplates` on the email plugin's templates
+list, `hostCampaigns` on the marketing plugin's Campaigns, `hostAutomations`, `automationEditor` and `automationRun`
+on the workflows plugin's Automation page, `orgAutomations` on its Org automations section, `hostLogic`, `logicFunctionEditor` and
+`logicReferenceIssue` on the logic plugin's Functions & Variables page, or `recordInsights`, `recordEmail` and
 `importMapping` on the CRM plugin's record pages, one-to-one composer and import drawers, and in the import wizard. A plugin cannot import the console's `PluginWidgetSlot`,
 so the shell hands its renderer down: read it with `useConsoleWidgetSlot()` from
 `@aglyn/aglyn` and draw the zone through it.
@@ -85,22 +89,34 @@ and the zone draws nothing.
 A plugin that hosts a zone also declares it, with `registerPluginZone` and a token that
 carries the props it hands each widget (see
 [Zones a plugin hosts](./plugin-manager-api.md#zones-a-plugin-hosts--plugin-zones) in the
-plugin-manager reference). The forms, workflows and commerce plugins declare these on
+plugin-manager reference). The forms, email, marketing, workflows and commerce plugins declare these on
 their own surfaces; a widget from another plugin restates the props it reads rather than
 importing the host's package:
 
 | Zone | Where it renders | Props your widget receives |
 | --- | --- | --- |
 | `hostForms` | A site's Forms page, the forms plugin's, beside Create Form: another way to start a form | `hostId`, `orgId` |
-| `hostAutomations` | The workflows plugin's Automation page, its Actions, beside **Add action** and **Recipes**: another way to start an automation | `hostId`, `orgId`, `openAction(actionId)` — opens a listed action in the Actions editor, and answers `false` for one the list has not read yet |
-| `automationEditor` | Inside the editor of one saved automation, an action or a workflow, on the Automation page | `hostId`, `orgId`, `target` (`{ type: 'action' \| 'workflow', id, name }`, the automation as it is stored) |
+| `hostEmailTemplates` | A site's email templates, the email plugin's, beside **New template** and in the empty list: another way to start an email design | `hostId`, `orgId` |
+| `hostAutomations` | The workflows plugin's Automation page: on Actions, beside **Add action** and **Recipes**; on Workflows, in the card's header, or its empty state while it has none. Another way to start an automation | `hostId`, `orgId`, `openAction(actionId)` — opens a listed action in the Actions editor (from Workflows, by going to Actions with the action named), and answers `false` for one the list has not read yet |
+| `orgAutomations` | The workflows plugin's workspace Org automations section, in the card's header, for a member who may write org automations. Another way to start one | `orgId`, `triggers` and `steps` — the host events an org automation may start on and the step types it may hold, as that plugin lists them — and `propose(automation)`, which opens `{ name, trigger, steps }` in the section's editor as a new automation, unsaved and switched off, and answers `false` when the plan lacks org automations or the automation is not one the section can hold |
+| `automationEditor` | Inside the editor of one saved automation, an action or a workflow, on the Automation page | `hostId`, `orgId`, `target` (`{ type: 'action' \| 'workflow', id, name }`, the automation as it is stored), and in an action's editor `openAction(actionId)` — opens another listed action, such as a copy the widget drafted, in its place |
 | `automationRun` | On each failed run in an automation's run history | `hostId`, `orgId`, `target` (as above), `runId` (the run's entry in the site's activity log) |
+| `hostLogic` | The logic plugin's Functions & Variables page, in the header of the Functions card and of the Variables card: another way to start one | `hostId`, `orgId`, `kind` (`'function'` or `'variable'`, the card it is drawn on), `propose(proposal)` — opens a proposal of that kind in the card's editor, unsaved, and answers `false` when it cannot (the plan's cap reached) |
+| `logicFunctionEditor` | Inside the editor of one saved function, on the Functions & Variables page | `hostId`, `orgId`, `target` (`{ id, name }`, the function as it is stored), `propose(proposal)` — replaces what the editor holds, unsaved |
+| `logicReferenceIssue` | On each broken reference the Reference health card lists | `hostId`, `orgId`, `issue` (`{ source, sourceId, sourceName, refType, missing }`) |
 | `productEditor` | The commerce product editor, under a product's description, tags and categories: copy proposed for the fields, which Save product writes | `hostId`, `orgId`, `product` (as the editor holds it), `categories`, `proposeValues(values, key)` — stages copy in the editor as unsaved edits |
 | `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
+| `productsCreate` | The commerce products page, beside **Add product** and in the empty catalog: another way to start a product | `hostId`, `orgId` (`undefined`: the page does not know the org; read it from the site) |
 | `productImport` | The commerce products import wizard's After import step: options for what happens to the imported products once they land | `hostId`, `orgId`, `count` (products the dry run creates), `options`, `setOption(key, on)` |
 | `orderDetail` | The commerce order dialog, above its actions: a widget that reads the order and records a shipment, such as buying a shipping label | `hostId`, `orgId`, `order` (`id`, `number`, `status`, `currency`, the buyer, `shippingAddress`, `lines` with each line's `fulfilledQuantity`, `remainingQuantity` and `requiresShipping`, `fulfillments`, `totals`, `testMode`), `recordFulfillment({ lineItems?, carrier, trackingNumber, trackingUrl?, labelUrl?, notify?, idempotencyKey })` — records a shipment through the dialog's own route and resolves with it |
 | `orderFulfillment` | Inside the order dialog's Fulfill items panel: a widget that fills in the carrier and tracking for the units picked | everything `orderDetail` hands, plus `selection` (the `{ lineItemId, quantity }` units picked in the panel) and `applyTracking({ carrier, trackingNumber, trackingUrl?, labelUrl? })` — fills the panel's fields for the merchant to confirm with Fulfill |
 | `returnDetail` | The commerce return dialog, above its actions: a widget that buys the buyer a return label | `hostId`, `orgId`, `return` (`id`, `status`, `orderId`, `orderNumber`, the buyer, `lines` with `name`, `quantity` and `reason`, `fromAddress` — the order's ship-to, where the parcel comes from — and `returnLabel` or `null`), `attachReturnLabel({ carrier, trackingNumber, labelUrl, trackingUrl? })` — attaches the label through the plugin's own route, which emails it to the buyer when the return is already approved |
+| `hostOverlays` | A site's **Marketing → Overlays** section, the marketing plugin's, beside **New bar** and **New popup** and again in the empty list: another way to start an overlay | `hostId`, `limits` (the longest each copy field may be), `triggers` (the popup triggers, each with its unit and range), `createOverlayDraft(kind, proposal)` — writes the overlay switched off, cut to the limits, and opens it in the editor |
+| `hostCampaigns` | The marketing plugin's **Campaigns** section, a site's or the organization's, beside **Create campaign** and again in the empty list: another way to start a campaign | `hostId` (`null` on the organization's hub), `orgId`, `sites` (on the organization's hub, the sites a campaign could be placed on, each `{ id, name }`; empty under a site) |
+| `marketingInsights` | In the header of the marketing plugin's **Conversions** section and of one campaign's report, beside the page's own actions: the figures in words | `hostId` (the site the figures are one site's: the site picked, or the site a campaign email was sent as; `null` when there is none yet), `subject` (`conversions` \| `campaign`), `campaign` (the campaign's subject line on its report, else `null`) |
+| `overlayEditor` | Among the fields of the marketing plugin's overlay editor: copy proposed for the bar or popup being edited, which the editor's **Save** writes | `hostId`, `overlayId` (empty while new), `kind` (`bar` \| `popup`), `copy` (the copy as the editor holds it), `limits`, `triggers`, `proposeValues(proposal, key)` — fills the fields unsaved |
+| `funnelsCreate` | The funnels plugin's Funnels card on a site's Analytics page, beside **New funnel** and in its empty state: another way to start a funnel | `hostId`, `orgId`, `propose(brief)` — asks the funnels plugin for a draft checked against the site and opens the editor on it; resolves to `null`, or a sentence saying why there is no draft |
+| `funnelInsight` | Under a funnel's results on the Funnels card: a control that explains them | `hostId`, `orgId`, `funnelName`, `days` (the range shown) |
 
 ## How a zone spaces your widget
 
@@ -116,10 +132,18 @@ page spaces it there:
 - `hostDashboard`, `commerceGlance` and `orgDashboard`: a tile of a dashboard
   grid.
 - `hostScreens`, `hostTemplates`, `hostLayouts`, `hostForms`,
-  `hostComponents` and `besignerToolbar`: a control in a row.
+  `hostEmailTemplates`, `productsCreate`, `hostComponents`, `mediaLibrary`
+  and `besignerToolbar`: a control in a row.
 - `hostAutomations`, `automationEditor` and `automationRun`: a control the
-  workflows plugin places beside its Actions buttons, in an automation's
-  editor, and on a failed run.
+  workflows plugin places beside its Actions buttons and in its Workflows
+  card's header, in an automation's editor, and on a failed run.
+- `orgAutomations`: a control the workflows plugin places in its Org
+  automations card's header.
+- `hostLogic`, `logicFunctionEditor` and `logicReferenceIssue`: a control the
+  logic plugin places in its Functions and Variables cards' headers, in a
+  function's editor, and on a broken reference.
+- `funnelsCreate` and `funnelInsight`: a control the funnels plugin places
+  beside **New funnel** and under a funnel's results.
 - `siteMember`: a section of a site user's drawer.
 - `besignerInspector` and `seoFields`: a section among a panel's own fields.
 - `besignerPageProperties`: a section of the Page Properties drawer's column.
@@ -131,6 +155,10 @@ page spaces it there:
   in its order dialog, above the actions and inside the Fulfill items panel.
 - `returnDetail`: a section the commerce plugin places in its return dialog,
   above the actions.
+- `hostOverlays`, `hostCampaigns`, `marketingInsights` and `overlayEditor`: a
+  control the marketing plugin places beside its New bar and New popup
+  buttons, beside Create campaign and in a report's header, and a section
+  among its overlay editor's fields.
 - `recordEmail` and `importMapping`: a section the CRM plugin places under its
   one-to-one composer's message and under an import drawer's or the import
   wizard's column matching.

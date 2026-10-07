@@ -3370,11 +3370,18 @@ match /{subcollection}/{document=**} {
 
 
 
+
+
+
+
+
+
+
 allow read: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 (isStaff() || (isHostMember(hostId) &&
 !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
-'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries'])));
+'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnelJourneys', 'funnelResults'])));
 
 
 
@@ -3503,11 +3510,18 @@ subcollection != 'orderWebhookSecrets' && (isStaff() ||
 'flowEnrollments', 'leads', 'siteMembers',
 'siteMemberCredentials', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
-'orderWebhookSecrets', 'orderWebhookDeliveries']) &&
+'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults']) &&
 
 
 
 !string(document).matches('.*/formSubmissions/[^/]+')));
+
+
+
+
+
+
+
 
 
 
@@ -3654,7 +3668,7 @@ subcollection != 'orderWebhookSecrets' && (isStaff() ||
 'flowEnrollments', 'leads', 'siteMembers',
 'siteMemberCredentials', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
-'orderWebhookSecrets', 'orderWebhookDeliveries'])));
+'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
 
 
 
@@ -3708,7 +3722,7 @@ subcollection != 'orderWebhookSecrets' && (isStaff() ||
 'campaignSequenceReports',
 'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
 'recordPages', 'printers', 'printJobs', 'returns', 'orderWebhooks',
-'orderWebhookSecrets', 'orderWebhookDeliveries'])));
+'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
 }
 
 

@@ -173,6 +173,12 @@ const AI_OUTPUT_TARGET_TYPES: Record<AiJobOutputResource, AiOutputTargetType> = 
   insight: 'content',
   // A CRM proposal (AGL-2917) writes nothing; the feed files it with content.
   crm: 'content',
+  // Another plugin's draft a build asked its writer for (AGL-3616).
+  draft: 'content',
+  // A logic proposal (AGL-3603) writes nothing either.
+  logic: 'content',
+  // So does an org automation's (AGL-3603): the editor's Save is the write.
+  orgAutomation: 'content',
 }
 
 export function aiOutputTargetType(resource: AiJobOutputResource): AiOutputTargetType {

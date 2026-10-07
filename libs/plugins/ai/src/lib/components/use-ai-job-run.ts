@@ -21,7 +21,6 @@ import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import {
   authorizedFetch,
   type MaybeTokenSource,
-  type TokenSource,
 } from '@aglyn/shared-util-http/authorized-token'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -40,79 +39,11 @@ import { publishAiJob } from './ai-jobs-store'
  * control stops following, and the job carries on in AI jobs.
  */
 
-/** Whether the jobs route serves a workspace: still asking, yes, or no. */
-export type AiJobsVerdict = 'checking' | 'ready' | 'hidden'
-
-/**
- * One answer per member and workspace, however many controls ask. The
- * automation run history draws a control on every failed run, and each asking
- * the route would be a request a row.
- */
-const verdicts = new Map<string, Promise<Exclude<AiJobsVerdict, 'checking'>>>()
-
-/** Forgets every answer, so the next control to mount asks the route again. */
-export function forgetAiJobsVerdicts(): void {
-  verdicts.clear()
-}
-
-function askJobsRoute(
-  user: MaybeTokenSource,
-  uid: string,
-  orgId: string,
-): Promise<Exclude<AiJobsVerdict, 'checking'>> {
-  const key = `${uid}\n${orgId}`
-  const known = verdicts.get(key)
-  if (known) return known
-  const answer = authorizedFetch(user, `/api/ai/jobs?orgId=${encodeURIComponent(orgId)}&limit=1`)
-    // The release flag off (404) and a plan or member without generation
-    // (403): the feature is not this workspace's, so the control is absent.
-    .then((response): Exclude<AiJobsVerdict, 'checking'> =>
-      response.status === 404 || response.status === 403 ? 'hidden' : 'ready',
-    )
-    .catch((): Exclude<AiJobsVerdict, 'checking'> => {
-      // A request that never arrived is no answer, so the next control asks again.
-      verdicts.delete(key)
-      return 'hidden'
-    })
-  verdicts.set(key, answer)
-  return answer
-}
-
-/**
- * Whether a control that starts a job should be drawn. The shell decided the
- * plan and the member's permission before mounting it; the release flag is the
- * route's to decide.
- */
-export function useAiJobsVerdict(
-  user: (TokenSource & { uid?: string | null }) | null | undefined,
-  orgId: string | undefined,
-): AiJobsVerdict {
-  // Held in a ref so the question keys on WHO is signed in, never on the
-  // identity of the object that says so.
-  const userRef = useRef(user)
-  userRef.current = user
-  const uid = user?.uid ?? null
-  const [verdict, setVerdict] = useState<AiJobsVerdict>('checking')
-
-  useEffect(() => {
-    if (!orgId || !uid) return
-    let active = true
-    setVerdict('checking')
-    void askJobsRoute(userRef.current, uid, orgId).then((answer) => {
-      if (active) setVerdict(answer)
-    })
-    return () => {
-      active = false
-    }
-  }, [orgId, uid])
-
-  return verdict
-}
-
 /** What a control asks the create door for. */
 export interface AiJobRequest {
   orgId: string
-  hostId: string
+  /** `null` for a job about the workspace rather than one site. */
+  hostId: string | null
   kind: AiJobKind
   brief: string
   inputs: Record<string, string>

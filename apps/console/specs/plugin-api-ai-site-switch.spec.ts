@@ -145,6 +145,7 @@ const SITE_DOORS: Record<string, 'GET' | 'POST' | 'PATCH'> = {
   'ai/jobs': 'POST',
   'ai/jobs/:jobId/resume': 'POST',
   'ai/seo/apply': 'POST',
+  'ai/experiments/versions': 'POST',
   'ai/generate/component': 'POST',
   'ai/usage': 'GET',
   'ai/allotments': 'GET',
