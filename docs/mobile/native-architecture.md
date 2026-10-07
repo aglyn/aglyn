@@ -4,10 +4,16 @@ AGL-3651 (iOS, Swift/SwiftUI), AGL-3652 (Android, Kotlin/Jetpack Compose) and
 AGL-3653 (desktop: macOS from the SwiftUI code, Windows from the Kotlin code
 through Compose Multiplatform). Project P-AGL-141.
 
-On 2026-10-07 Zach decided to build two native apps per platform alongside the
-React Native ones. The React Native apps in `apps/mobile` and
-`apps/pos-mobile` keep going, and the native apps replace them once they match
-feature for feature:
+On 2026-10-07 Zach decided to build two native apps per platform. Later the
+same day he dropped React Native: the native apps are now **the only apps**.
+`apps/mobile`, `apps/pos-mobile`, `libs/mobile/*`, each plugin's `src/mobile`,
+the RN dependencies, the RN mobile manifest, the Expo push sender and the RN
+CI job are removed from `main` once the native skeletons land (AGL-3651).
+Their unmerged work is parked, never to be merged, on
+`reference/rn-pos-mobile-agl3618`, `reference/rn-mobile-commerce-agl3621` and
+`reference/rn-mobile-workspace-agl3622`. Those branches and the RN code in
+history (up to the removal commit) are the functional reference for screens
+and behavior. The apps are:
 
 | app | bundle / package | what it is |
 | -- | -- | -- |
@@ -18,8 +24,8 @@ Both apps run on phone, tablet and desktop. UI quality is the bar. The iOS and
 macOS apps use SwiftUI with the standard navigation and controls. The Android
 and desktop apps use Material 3 with adaptive layouts.
 
-Everything the React Native foundation (AGL-3620) decided carries over, and
-this document reuses it:
+What the React Native foundation (AGL-3620) decided carries over, and this
+document reuses it:
 
 - the plugin `mobile` surface in `plugins.config.json`;
 - the deep-link grammar;
@@ -134,8 +140,9 @@ implementations live in `desktopMain`.
 
 ## 3. The foundations
 
-Each foundation mirrors a React Native lib. The RN lib is the functional
-reference: read it, match its behavior, and keep its specs' cases.
+Each foundation mirrors a React Native lib, now removed. Read it at the
+removal commit's parent or on the `reference/rn-*` branches, match its
+behavior, and keep its specs' cases.
 
 | concern | RN reference | Apple (`AglynKit`) | Kotlin (`libs/native/kotlin`) |
 | -- | -- | -- | -- |
@@ -196,19 +203,19 @@ A screen gets a `NativePluginContext`, the twin of `MobilePluginContext`:
 
 ### Generated native manifest
 
-`plugins.config.json` gains an optional `native` block inside a plugin's
-`mobile` block:
+A plugin's `mobile` block in `plugins.config.json` names its native
+registrars next to its declared contributions:
 
 ```json
 "mobile": {
-  "register": "registerRedirectsMobile",
   "contributes": { … },
-  "native": {
-    "ios": { "module": "AglynRedirectsPlugin", "register": "registerRedirectsNative" },
-    "android": { "package": "com.aglyn.plugins.redirects", "register": "registerRedirectsNative" }
-  }
+  "ios": { "module": "AglynRedirectsPlugin", "register": "registerRedirectsNative" },
+  "android": { "package": "com.aglyn.plugins.redirects", "register": "registerRedirectsNative" }
 }
 ```
+
+The RN registrar name (`register`) stays only until React Native is removed,
+and goes with it.
 
 `tools/scripts/generate-plugin-manifests.mjs` (with its rows built and
 validated in `tools/scripts/lib/native-manifest.mjs`, which has its own tests)
@@ -307,10 +314,10 @@ must not hand-copy them. `tools/scripts/generate-native-contracts.mjs`
 
 ## 6. Notification catalog
 
-`tools/scripts/generate-mobile-notification-catalog.mjs` already writes the
-member notification types as JSON for the RN app. It also writes
-`libs/native/contracts/notification-catalog.generated.json` (the same data),
-and both native settings screens read it. Taps use the same `MobilePushData`
+`tools/scripts/generate-mobile-notification-catalog.mjs` writes the member
+notification types to `libs/native/contracts/notification-catalog.generated.json`
+(it wrote them for the RN app before), and both native settings screens read
+it. Taps use the same `MobilePushData`
 (`type`, `link`, `orgId`, `hostId`) that `libs/aglyn/src/lib/app-utils/mobile-push.ts`
 defines, and the link resolves through the deep-link grammar.
 
@@ -333,11 +340,12 @@ background/surface. `--check` covers all three outputs.
 ## 8. Push
 
 The registry stays `users/{uid}/devices/{installId}`, one row per install, and
-its rules stay owner-only. It grows one field: `transport`, one of `expo`,
-`apns` or `fcm`, with `expo` as the default when absent, so existing RN rows
-keep working. The rules accept each token by transport:
+its rules stay owner-only. It grows one field: `transport`, either `apns` or
+`fcm`. Expo is out with React Native, so the rules no longer accept an Expo
+token, and the fan-out prunes any `expo` row it meets (no RN app was ever
+released, so such rows exist only on test devices). The rules accept each
+token by transport:
 
-- the Expo pattern, as now;
 - an APNs device token: hex, 64 to 200 characters;
 - an FCM registration token: `[A-Za-z0-9_:-]`, 100 to 4096 characters.
 
@@ -347,8 +355,8 @@ An APNs row also carries `apnsEnvironment` (`sandbox`/`production`) and
 Server side, all of it server-only, in `libs/tenant/data/admin/src/lib/server/`
 next to `push-delivery.ts`:
 
-- `push-delivery.ts` groups a user's devices by transport. Expo rows go to the
-  Expo sender, unchanged.
+- `push-delivery.ts` groups a user's devices by transport. The Expo sender
+  (`exp.host`) is deleted.
 - `push-apns.ts` sends over HTTP/2 (`node:http2`) to
   `api.push.apple.com` / `api.sandbox.push.apple.com`, with an ES256 provider
   JWT signed by `node:crypto` from `APNS_KEY_P8`, `APNS_KEY_ID` and
@@ -359,7 +367,8 @@ next to `push-delivery.ts`:
   project credentials the server already holds, so no new secret is needed.
   `messaging/registration-token-not-registered` prunes the row.
 - The kill switch (`mobile-push-switch.ts`) and the per-type preferences apply
-  to all three transports alike.
+  to both transports alike. Apple and Google are the push subprocessors
+  (AGL-3648).
 
 On desktop, macOS registers for APNs like iOS, with the `macos` platform and
 the same bundle ids. Windows has no push in v1, because WNS needs a Store
@@ -385,6 +394,10 @@ native walk. It fails when any of these holds:
 - **misplaced native source:** a `.swift`, `.kt` or `.kts` file outside
   `apps/ios`, `apps/android`, `libs/native` and `libs/plugins/*/src/{ios,android}`.
 
+With React Native gone, the guard's TypeScript rules for `libs/mobile` and
+plugin `src/mobile` go with it. `mobile-pure-modules.json` stays: it is now
+the list of pure modules the native generators (§5) may read.
+
 The only sanctioned crossings are the generated files of §3 and §5–§7. Their
 generators read the pure modules. Native code reads only their outputs. Specs
 for each rule live in `tools/scripts/lib/mobile-isolation.test.mjs`.
@@ -393,7 +406,7 @@ for each rule live in `tools/scripts/lib/mobile-isolation.test.mjs`.
 
 The functional reference is the console register
 (`libs/plugins/commerce/src/lib/components/console/pos/*`, `pos-api.ts`), plus
-the RN POS lane (AGL-3618). The native POS register is native, not a WebView:
+the RN POS lane (AGL-3618, `reference/rn-pos-mobile-agl3618`). The native POS register is native, not a WebView:
 
 - **Register:** category chips, search, barcode scan, quick keys, a product
   grid, and variants and modifiers (`product-modifiers` contracts).
@@ -413,8 +426,9 @@ Card readers by platform:
 | macOS / Windows | **Smart readers only** (WisePOS E, S700) through AGL-3607's server-driven flow (`/api/commerce/pos-readers`). Stripe's SDKs do not support Tap to Pay or Bluetooth there, and the UI does not offer them |
 
 The SDK flow needs a connection token scoped to the site's Location. That is
-the `commerce/pos-terminal-connection-token` route from the AGL-3618 lane.
-Whichever lane lands it first owns it, and the other adopts it.
+the `commerce/pos-terminal-connection-token` route, which the AGL-3618 lane
+wrote and parked on `reference/rn-pos-mobile-agl3618`. The native POS lands it
+on `main`, because it is server code with nothing RN in it.
 
 Peripherals live in the `AglynHardware` / `hardware` module:
 
@@ -462,7 +476,8 @@ drift or a crossing is red on every push.
 ## 12. Configuration and what Zach owes
 
 The apps build against the Firebase emulator stack and test configs by
-default (`apps/mobile/scripts/seed-emulator.mjs` seeds it). There are no real
+default. The seed script moves from `apps/mobile/scripts/seed-emulator.mjs` to
+`tools/scripts/seed-native-emulator.mjs` when React Native is removed. There are no real
 `GoogleService-Info.plist` or `google-services.json` files: the Firebase SDKs
 are configured in code from build settings (`FirebaseOptions`), which is also
 how the self-hosted builds are configured.
