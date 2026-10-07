@@ -20,6 +20,7 @@
   "libs/plugins/bookings/src/lib/components/booking.tsx": 2,
   "libs/plugins/commerce/src/lib/components/account.tsx": 2,
   "libs/plugins/commerce/src/lib/components/cart.tsx": 3,
+  "libs/plugins/commerce/src/lib/components/console/pos-ops/pos-receipt.ts": 2,
   "libs/plugins/commerce/src/lib/components/gate.tsx": 2,
   "libs/plugins/commerce/src/lib/components/gated-video.tsx": 2,
   "libs/plugins/commerce/src/lib/components/member-feed.tsx": 2,

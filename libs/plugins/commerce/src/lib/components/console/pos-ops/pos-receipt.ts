@@ -32,6 +32,8 @@ import { escapeHtml } from '../../../utils/escape-html'
  * drawer. That is the printer's setting, not this page's.
  *=========================================*/
 
+// Thermal paper prints one ink, so the receipt is black on white and never
+// takes the console theme's colors.
 export const POS_RECEIPT_STYLES = `
 @page { size: 80mm auto; margin: 0; }
 * { box-sizing: border-box; }
