@@ -289,6 +289,24 @@ export const FLAG_DOC_PAGES: Partial<
         'The theme editor page opens with a `:::info Plan availability` admonition for the editor itself, which ships on every plan and has nothing to do with this flag.',
     },
   ],
+
+  // AGL-3614. The flag closes the organization's Accounting tab, and each of
+  // the two guides is ABOUT connecting one ledger to it, so both take the
+  // admonition, whole-file. They are also `unlisted: true` until the flag is
+  // on, which keeps them out of the sidebar and the help registry; the
+  // disclosure is what covers a reader who arrives by direct link.
+  release_accounting: [
+    {
+      path: 'docs/commerce-and-bookings/commerce/connect-quickbooks-online.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/commerce-and-bookings/commerce/connect-xero.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+  ],
 }
 
 /**
