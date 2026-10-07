@@ -1,19 +1,19 @@
 ---
 sidebar_position: 3.5
 title: POS hardware
-description: Receipt and kitchen printers that print from any device with no driver, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels on a label printer.
+description: Card readers, a customer display tablet, receipt and kitchen printers that print from any device with no driver, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels on a label printer.
 ---
 
 # POS hardware
 
 The register runs in a browser, so it works on an iPad, an Android tablet, a
 laptop or a desktop at the counter. This page covers the hardware around it:
-a receipt printer, a kitchen printer, the cash drawer, barcode scanners and a
-label printer.
+a card reader, a customer display, a receipt printer, a kitchen printer, the
+cash drawer, barcode scanners and a label printer.
 
 :::info Plan availability
 POS hardware comes with POS, on **Pro** and above. There is no extra charge for
-printers or scanners.
+printers, scanners or customer displays.
 :::
 
 ## Recommended kit
@@ -25,6 +25,63 @@ printers or scanners.
 | Cash drawer | Any 24 V drawer with an RJ12 cable, such as the Star CD3-1616 or the APG Vasario | Plugs into the printer's drawer port and opens when the printer tells it to |
 | Barcode scanner | Any USB or Bluetooth scanner in keyboard mode, or the tablet's camera | A scanner types the code like a keyboard, so it needs no setup |
 | Label printer | Rollo, Zebra ZD421/ZD621 or GK420d, DYMO LabelWriter 4XL or 5XL, Brother QL-1100 | Prints product labels and 4x6 shipping labels on thermal stock |
+
+## Card readers
+
+The register takes card-present payments on Stripe's smart readers:
+
+| Reader | Notes |
+| --- | --- |
+| **Stripe Reader S700** / **S710** | Android-based smart reader for the countertop or the hand. |
+| **BBPOS WisePOS E** | Countertop smart reader. |
+
+Both are sold by Stripe. They are smart readers: each one talks to Stripe
+over its own internet connection, so it does not need to be plugged into
+or paired by Bluetooth with the device the register runs on. Card readers
+are shown in the console only when they are available for your store.
+
+**Getting a reader**
+
+Readers take payments through Aglyn's Stripe account, which pays your
+store out, so a reader is registered to your store in Aglyn rather than
+in a Stripe Dashboard of your own. Any supported reader can be added with
+the pairing code it shows, including one that was registered somewhere
+else before: generating a new pairing code on the reader and adding it
+here moves it to your store.
+
+Stripe sells its readers through the Terminal hardware shop in the Stripe
+Dashboard. If you buy one there with a Stripe account of your own, add it
+here with a fresh pairing code from the reader, as above. Use the pairing
+code rather than the reader's serial number or order number: those two
+only register a reader to the Stripe account that ordered it.
+
+**Setting one up**
+
+1. Charge the reader and switch it on. Stripe recommends leaving it plugged
+   in and on, even when not in use, so it receives software updates.
+2. Connect it to the internet: Wi-Fi from the reader's **Settings**, or
+   Ethernet through Stripe's optional dock or hub. Stripe's setup guides for
+   the [S700/S710](https://docs.stripe.com/terminal/payments/setup-reader/stripe-reader-s700)
+   and the [WisePOS E](https://docs.stripe.com/terminal/payments/setup-reader/bbpos-wisepos-e)
+   show where each setting is, including the admin passcode the reader's
+   **Settings** asks for.
+3. On the reader, open **Settings** and generate a pairing code.
+4. In the console, add the reader under **Commerce → Settings → POS
+   devices → Add card reader** with that code. The steps are in
+   [Card readers](pos-and-reservations.md#card-readers).
+
+**Network notes**
+
+- The reader must be **online** to take a payment. Its status in the
+  **POS devices** card reads **Online** or **Offline**, and the register
+  warns you before you charge an offline reader.
+- The reader does not need to be on the same network as the register; it
+  only needs its own internet connection. A wired connection through the
+  dock or hub is the steadier choice at a busy counter.
+- If a payment will not start because the reader is offline or busy,
+  check that it is on and connected, cancel the payment, and take it again
+  — or use **Card (QR)** or **Type card** for that sale.
+
 
 ## Receipt printers
 
@@ -177,6 +234,27 @@ printer prints from the browser:
    scale, never *Fit to page*.
 3. Print one label to check the barcode is sharp and nothing is cut off. The
    browser remembers these settings for the next label.
+
+## Customer display tablet
+
+Any tablet with a modern browser can be the customer display. It needs an
+internet connection, but not a sign-in: you pair it with a code from the
+register, as described in
+[Customer display](pos-and-reservations.md#customer-display).
+
+For a counter that runs all day:
+
+- Put the tablet on a stand facing the customer; landscape gives the
+  basket and the tip buttons the most room.
+- Keep it plugged in, and set the tablet not to sleep or lock while the
+  display page is open.
+- Use the tablet's own single-app or guided-access mode, if it has one, so
+  customers cannot leave the display page.
+- Add the display page to the home screen or bookmark it, so it can be
+  reopened quickly after a restart. A paired display stays paired until
+  you sign it out under **Commerce → Settings → POS devices**, remove its
+  register, or clear the tablet browser's data for the console.
+
 
 ## Related
 

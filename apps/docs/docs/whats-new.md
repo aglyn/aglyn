@@ -29,7 +29,42 @@ for the how-to.
   that sells online.
 -->
 
-## October 2026 — POS hardware (newest)
+## October 2026 — the register takes every payment (newest)
+
+- **[Split payments](commerce-and-bookings/commerce/pos-and-reservations.md#taking-payment)** —
+  **Charge** opens the sale and the register takes as many payments as it needs: type
+  less than the balance to split it across cash, cards, gift cards and room charges.
+  The sale is paid, and its stock taken, when the balance reaches zero. **Void sale**
+  hands back everything taken on it.
+- **[Card readers](commerce-and-bookings/commerce/pos-and-reservations.md#card-readers)** —
+  where card readers are available for your store, register a Stripe Reader S700 or
+  BBPOS WisePOS E under **Commerce → Settings → POS devices** with the code it shows,
+  and the customer taps, inserts or swipes there. A declined card can be retried on
+  the same charge.
+- **[Tips](commerce-and-bookings/commerce/pos-and-reservations.md#tips)** — turn on
+  **Ask for tips at the register** and set your percentages; the customer picks a tip
+  on the card reader or the customer display, or the cashier picks one. Tips are not
+  counted as sales and carry no platform fee.
+- **[Typed cards](commerce-and-bookings/commerce/pos-and-reservations.md#taking-payment)** —
+  **Type card** takes a card that is not present, such as a phone order, in Stripe's
+  own card form with its normal checks, 3-D Secure included.
+- **[Gift cards at the register](commerce-and-bookings/commerce/pos-and-reservations.md#taking-payment)** —
+  check a card's balance and apply it; it pays what it can and leaves the rest open.
+- **[A register made for tablets](commerce-and-bookings/commerce/pos-and-reservations.md#the-register)** —
+  photo tiles with stock and basket counts, **★ Quick keys** for your best sellers, a
+  sheet for sizes and modifiers with the price on its **Add** button, and basket lines
+  you tap to change. The products and the register sit side by side on a wide screen,
+  and on a smaller one the register slides up from a bar that always shows the total.
+- **[Modifiers](commerce-and-bookings/commerce/pos-and-reservations.md#modifiers)** —
+  add choices such as a milk or an extra shot to a product, free or priced, required or
+  optional, picked as the item is rung up.
+- **[Customer display](commerce-and-bookings/commerce/pos-and-reservations.md#customer-display)** —
+  pair a tablet facing the customer with a one-time code from the register. It shows
+  your logo and the basket as you ring it up, and lets the customer choose their tip and
+  their receipt. The [hardware guide](commerce-and-bookings/commerce/pos-hardware.md)
+  covers readers, scanners, printers and the tablet.
+
+## October 2026 — POS hardware
 
 - **[Cloud receipt printers](commerce-and-bookings/commerce/pos-hardware.md#receipt-printers)** —
   a Star CloudPRNT or Epson Server Direct Print printer prints the register's
