@@ -24,7 +24,7 @@ import { decrementVariantStock } from './reserve-stock'
 import { releasePromotionHold, settlePromotionSlot } from './promotion-hold'
 import { offlineFeeMonthKey } from './pos-fee-month'
 import { resetPosDisplay } from './pos-display'
-import { notifyOrderBuyer } from './order-notifications'
+import { notifyOrderBuyer, sendOrderReceipt } from './order-notifications'
 import { raiseOrderEvent } from './order-events'
 import { ORDER_PAID_EVENT } from '../model/order-events'
 
@@ -477,18 +477,21 @@ export async function completePosSale(
   // (AGL-3610, AGL-3611): the buyer-notification door claims each message
   // per channel, so a second completion path can never mail twice, and it
   // texts the receipt when the customer chose a text and a provider is on.
-  if (receipt?.channel === 'email' || receipt?.channel === 'sms' || contactEmail) {
-    const sent = await notifyOrderBuyer({ hostId, orderId: order.$id }, 'receipt', {
-      ...(contactEmail ? { email: contactEmail } : {}),
-    })
-    const failed =
-      sent.outcome === 'handled' && sent.channels.some((channel) => channel.outcome === 'failed')
-    if (failed && receipt && receipt.channel !== 'none' && receipt.channel !== 'print') {
+  if ((receipt?.channel === 'email' || receipt?.channel === 'sms') && receipt.to) {
+    // The customer named where it goes: it goes there, whatever else the
+    // order holds (AGL-3608).
+    const sent = await deliverChosenPosReceipt(
+      { hostId, orderId: order.$id },
+      { channel: receipt.channel, to: receipt.to, orderEmail: String(order.customerEmail ?? '') },
+    )
+    if (sent !== 'sent') {
       notes.push({
         event: 'receipt-unsent',
         detail: `The ${receipt.channel === 'sms' ? 'text' : 'email'} receipt could not be sent.`,
       })
     }
+  } else if (contactEmail) {
+    await notifyOrderBuyer({ hostId, orderId: order.$id }, 'receipt', { email: contactEmail })
   }
   await raiseOrderEvent(ORDER_PAID_EVENT, { hostId, orderId: order.$id, key: 'paid' }).catch(
     (error: unknown) => console.error('[pos-sale] order.paid event failed', error),
@@ -516,6 +519,42 @@ export async function completePosSale(
       console.error('[pos-sale] display reset failed', error),
     )
   }
+}
+
+/**
+ * Sends a receipt the customer (or the cashier for them) explicitly asked
+ * for, to the address or number they gave (AGL-3607, AGL-3608).
+ *
+ * It goes through the buyer-notification door first, so the order's
+ * once-per-channel marker is claimed and a completion that races this call
+ * cannot send a second copy. The door can skip it, though, for reasons that
+ * do not apply to a request made at the counter: the store switched
+ * automatic receipts or texts off, a receipt already went out on that
+ * channel to an earlier address, or the door would use the email the order
+ * was opened with rather than the one just typed. In each of those cases the
+ * receipt is sent explicitly, as the order dialog's "Resend receipt" does.
+ */
+export async function deliverChosenPosReceipt(
+  ref: { hostId: string; orderId: string },
+  input: { channel: 'email' | 'sms'; to: string; orderEmail?: string },
+): Promise<'sent' | 'failed' | 'not_configured'> {
+  const orderEmail = String(input.orderEmail ?? '').trim().toLowerCase()
+  const to = input.to.trim()
+  const doorAddressesIt = input.channel === 'sms' || !orderEmail || orderEmail === to.toLowerCase()
+  if (doorAddressesIt) {
+    const door = await notifyOrderBuyer(ref, 'receipt', input.channel === 'email' ? { email: to } : {})
+    const entry =
+      door.outcome === 'handled'
+        ? door.channels.find((channel) => channel.channel === input.channel)
+        : undefined
+    if (entry?.outcome === 'sent') return 'sent'
+    if (entry?.outcome === 'failed') return 'failed'
+    // Already sent to this very address: nothing more to do.
+    if (entry?.outcome === 'already' && input.channel === 'email') return 'sent'
+  }
+  const explicit = await sendOrderReceipt(ref, { channel: input.channel, to })
+  if (explicit.outcome === 'sent') return 'sent'
+  return explicit.outcome === 'not_configured' ? 'not_configured' : 'failed'
 }
 
 /**

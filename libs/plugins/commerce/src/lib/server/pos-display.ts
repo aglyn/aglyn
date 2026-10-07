@@ -19,6 +19,7 @@ import { createHash, randomBytes, randomInt } from 'crypto'
 import { consumeRateLimit, firebaseAdmin, getPluginConfig, getOrgForHost } from '@aglyn/tenant-data-admin'
 import type { PluginApiHandler, PluginApiRequest } from '@aglyn/aglyn/server'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import { pluginSmsAvailable } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
 import * as CommerceModel from '../model'
 import { posRegisterSettings } from '../plugin-config'
 import { authorizePosStaff, posQueryBody, posRequestBody } from './pos-auth'
@@ -77,6 +78,27 @@ function stateRef(hostId: string, registerId: string) {
 }
 
 /**
+ * The store's currency (`hosts/{hostId}/settings/store.currency`, lower
+ * case), which every figure on the customer's screen is formatted in. A
+ * store that never chose one is in the currency the register charges.
+ */
+export async function posDisplayCurrency(hostId: string): Promise<string> {
+  const snapshot = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(hostId)
+    .collection('settings')
+    .doc('store')
+    .get()
+    .catch(() => null)
+  const chosen = String(snapshot?.exists ? (snapshot.get('currency') ?? '') : '')
+    .trim()
+    .toLowerCase()
+  return /^[a-z]{3}$/.test(chosen) ? chosen : POS_CURRENCY
+}
+
+/**
  * Writes the display state whole, so nothing from the last prompt lingers —
  * a customer's typed address included. The currency is the store's, stamped
  * here so the screen never formats a figure in one the register made up.
@@ -88,7 +110,7 @@ export async function writePosDisplayState(
 ): Promise<void> {
   await stateRef(hostId, registerId).set({
     ...state,
-    currency: POS_CURRENCY,
+    currency: await posDisplayCurrency(hostId),
     hostId,
     registerId,
   })
@@ -113,6 +135,7 @@ export async function resetPosDisplay(hostId: string, registerId: string): Promi
 export async function finishPosDisplayReceipt(hostId: string, registerId: string): Promise<void> {
   const firestore = firebaseAdmin.app().firestore()
   const ref = stateRef(hostId, registerId)
+  const currency = await posDisplayCurrency(hostId)
   await firestore.runTransaction(async (transaction: any) => {
     const snapshot = await transaction.get(ref)
     if (!snapshot.exists) return
@@ -121,7 +144,7 @@ export async function finishPosDisplayReceipt(hostId: string, registerId: string
       transaction.set(ref, {
         mode: 'thanks',
         updatedAtMs: Date.now(),
-        currency: POS_CURRENCY,
+        currency,
         hostId,
         registerId,
       })
@@ -345,6 +368,11 @@ async function staffAction(
     }
     case 'push': {
       const state = CommerceModel.sanitizePosDisplayState(body['state'], Date.now())
+      // "Text" is never offered on a screen when the store cannot send one.
+      if (state.receipt && !pluginSmsAvailable()) {
+        const channels = state.receipt.channels.filter((channel) => channel !== 'sms')
+        state.receipt.channels = channels.length ? channels : ['print', 'none']
+      }
       await writePosDisplayState(hostId, registerId, state)
       return res.status(200).json({ ok: true, promptId: state.promptId ?? null })
     }

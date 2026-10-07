@@ -49,7 +49,14 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
+import { registerPluginSmsMessaging } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
 import { finishPosDisplayReceipt, posDisplayHandler, resetPosDisplay } from './pos-display'
+
+let mockSmsConfigured = true
+registerPluginSmsMessaging(
+  { isConfigured: () => mockSmsConfigured, send: async () => ({ outcome: 'sent', id: 'SM1' }) as any },
+  { pluginId: 'sms-spec' },
+)
 
 async function call(
   body: Record<string, unknown>,
@@ -90,6 +97,7 @@ const SITE = { hostId: 'host-1', registerId: 'register-1' }
 beforeEach(() => {
   resetFakeFirestore()
   mockRateAllowed = true
+  mockSmsConfigured = true
   fakeDocs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'editor' }, displayName: 'Bean Bar' })
   fakeDocs.set('hosts/host-1/registers/register-1', { name: 'Front' })
 })
@@ -201,6 +209,29 @@ describe('the end of a sale (AGL-3608)', () => {
     )
     expect(JSON.stringify(fakeDocs.get(STATE_KEY))).toContain('15550109999')
   }
+
+  it('never offers text on the screen when the store cannot send one', async () => {
+    const token = await pairDisplay()
+    mockSmsConfigured = false
+    await call(
+      {
+        action: 'push',
+        ...SITE,
+        state: { mode: 'receipt', promptId: 'r1', receipt: { channels: ['email', 'sms', 'none'] } },
+      },
+      { staff: true },
+    )
+    const poll = await call({ action: 'poll' }, { method: 'GET', token })
+    expect(poll.body.state.receipt.channels).toEqual(['email', 'none'])
+  })
+
+  it("formats in the store's chosen currency", async () => {
+    const token = await pairDisplay()
+    fakeDocs.set('hosts/host-1/settings/store', { currency: 'CAD' })
+    await call({ action: 'push', ...SITE, state: { mode: 'idle' } }, { staff: true })
+    const poll = await call({ action: 'poll' }, { method: 'GET', token })
+    expect(poll.body.state).toMatchObject({ currency: 'cad' })
+  })
 
   it('stamps the store currency on every state, whatever the register sent', async () => {
     const token = await pairDisplay()

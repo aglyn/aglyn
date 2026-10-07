@@ -141,6 +141,13 @@ describe('the customer display answer', () => {
     expect(print).toHaveBeenCalled()
   })
 
+  it('sends the display to its thank-you when the prompt goes unanswered', async () => {
+    const screenControl = display(null)
+    renderPanel({ context: context('ask', false), display: screenControl })
+    await waitFor(() => expect(screenControl.show).toHaveBeenCalledWith({ mode: 'thanks' }))
+    expect(mockTender).not.toHaveBeenCalled()
+  })
+
   it('does not offer text on the display when the store cannot send one', async () => {
     const screenControl = display(null)
     renderPanel({ context: context('ask', false), display: screenControl })

@@ -138,7 +138,12 @@ export function PosReceiptPanel(props: PosReceiptPanelProps) {
             offerMarketing: settings.displayMarketingOptIn,
           },
         })
-        if (!answer) return
+        if (!answer) {
+          // The cashier took the receipt over, or the customer walked away:
+          // the screen still ends on its thank-you, not a stale prompt.
+          await display.show({ mode: 'thanks' })
+          return
+        }
         if (answer.receiptChannel === 'email' && answer.email) {
           await sendReceipt('email', answer.email, answer.marketingOptIn === true)
         } else if (answer.receiptChannel === 'sms' && answer.phone) {

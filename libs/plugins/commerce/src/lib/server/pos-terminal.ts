@@ -29,6 +29,7 @@ import {
   posStripe,
   posStripeErrorMessage,
   posStripeTestMode,
+  posTerminalAvailable,
 } from './pos-stripe'
 import { applyPosPayment, readPosSale, type PosLiftedOrder, type PosPaymentOutcome } from './pos-sale'
 
@@ -422,6 +423,12 @@ function paymentIntentParams(
 export async function createCardPresentIntent(
   start: CardStart & { readerId?: string },
 ): Promise<PosPaymentOutcome & { clientSecret?: string; paymentIntentId?: string }> {
+  // Live card-present payments wait for Terminal to be switched on for the
+  // platform (`STRIPE_TERMINAL_LIVE_ENABLED`); the hidden controls are not
+  // the only gate.
+  if (!posTerminalAvailable()) {
+    return { ok: false, status: 409, error: 'Card readers are not available for this store yet.' }
+  }
   const destination = await posMerchantAccount(start.hostId, start.org)
   if (!destination) return { ok: false, status: 409, error: 'Card payments not set up' }
   const reserved = await reserveCardPayment(

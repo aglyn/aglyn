@@ -37,11 +37,30 @@ const mockContacts: any[] = []
 const mockSaleCompleted: any[] = []
 
 const mockNotified: any[] = []
+const mockResent: any[] = []
+const mockReceiptDoor: { next: any; resend: any } = { next: null, resend: null }
 const mockRaised: any[] = []
 jest.mock('./order-notifications', () => ({
   notifyOrderBuyer: async (ref: any, event: string, options: any) => {
     mockNotified.push({ ref, event, options })
-    return { outcome: 'handled', channels: [] }
+    if (mockReceiptDoor.next) {
+      const next = mockReceiptDoor.next
+      mockReceiptDoor.next = null
+      return next
+    }
+    return {
+      outcome: 'handled',
+      channels: [{ channel: options?.email ? 'email' : 'sms', outcome: 'sent' }],
+    }
+  },
+  sendOrderReceipt: async (ref: any, input: any) => {
+    mockResent.push({ ref, channel: input.channel, to: input.to })
+    if (mockReceiptDoor.resend) {
+      const resend = mockReceiptDoor.resend
+      mockReceiptDoor.resend = null
+      return resend
+    }
+    return { outcome: 'sent', channel: input.channel }
   },
 }))
 jest.mock('./order-events', () => ({
@@ -278,6 +297,9 @@ beforeEach(() => {
   mockContacts.length = 0
   mockSaleCompleted.length = 0
   mockNotified.length = 0
+  mockResent.length = 0
+  mockReceiptDoor.next = null
+  mockReceiptDoor.resend = null
   mockRaised.length = 0
   seedSale()
 })
@@ -358,6 +380,20 @@ describe('card readers', () => {
     expect(result.status).toBe(404)
     expect(stripeCalls).toHaveLength(0)
     expect(sale().payments).toHaveLength(0)
+  })
+
+  it('refuses a live card-present payment until Terminal is switched on for the platform', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_fake'
+    delete process.env.STRIPE_TERMINAL_LIVE_ENABLED
+    try {
+      const refused = await act({ action: 'card-present', amountCents: 5000, readerId: 'tmr_ours123' }, 'live')
+      expect(refused.status).toBe(409)
+      const sdk = await act({ action: 'card-present-sdk', amountCents: 5000 }, 'live-sdk')
+      expect(sdk.status).toBe(409)
+      expect(stripeCalls.some((call) => call.path === 'payment_intents')).toBe(false)
+    } finally {
+      process.env.STRIPE_SECRET_KEY = 'sk_test_fake'
+    }
   })
 
   it('authorizes on the reader, then captures with a fee that excludes the tip', async () => {
@@ -514,7 +550,45 @@ describe('receipts', () => {
       expect(mockNotified).toEqual([
         { ref: { hostId: 'host-1', orderId: 'sale-1' }, event: 'receipt', options: {} },
       ])
+      expect(mockResent).toHaveLength(0)
     })
+
+    it('still texts the customer who asked when the store turned automatic texts off', async () => {
+      await act({ action: 'cash', tenderedCents: 10_000 }, 'paid')
+      mockNotified.length = 0
+      mockResent.length = 0
+      // The door skips the text: the store's `texts` switch is off.
+      mockReceiptDoor.next = { outcome: 'handled', channels: [] }
+      const sent = await act({ action: 'receipt', channel: 'sms', to: '+1 (555) 010-0199' })
+      expect(sent.status).toBe(200)
+      expect(mockResent).toEqual([
+        { ref: { hostId: 'host-1', orderId: 'sale-1' }, channel: 'sms', to: '+15550100199' },
+      ])
+    })
+
+    it('sends one text for a double tap, and lets a failed one be retried', async () => {
+      await act({ action: 'cash', tenderedCents: 10_000 }, 'paid')
+      mockNotified.length = 0
+      mockResent.length = 0
+      mockReceiptDoor.next = { outcome: 'handled', channels: [{ channel: 'sms', outcome: 'failed', error: 'x' }] }
+      expect((await act({ action: 'receipt', channel: 'sms', to: '+15550100199' })).status).toBe(502)
+      expect((await act({ action: 'receipt', channel: 'sms', to: '+15550100199' })).status).toBe(200)
+      expect((await act({ action: 'receipt', channel: 'sms', to: '+15550100199' })).status).toBe(200)
+      expect(mockNotified).toHaveLength(2)
+    })
+  })
+
+  it('emails the address typed at the counter, not the one the sale was opened with', async () => {
+    await act({ action: 'cash', tenderedCents: 10_000 }, 'paid')
+    const order = sale()
+    fakeDocs.set(ORDER, { ...order, customerEmail: 'opened@example.com' })
+    mockNotified.length = 0
+    mockResent.length = 0
+    expect((await act({ action: 'receipt', channel: 'email', to: 'typed@example.com' })).status).toBe(200)
+    expect(mockNotified).toHaveLength(0)
+    expect(mockResent).toEqual([
+      { ref: { hostId: 'host-1', orderId: 'sale-1' }, channel: 'email', to: 'typed@example.com' },
+    ])
   })
 
   it('ends the customer display turn and drops the typed address once handled (AGL-3608)', async () => {
