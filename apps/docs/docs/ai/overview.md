@@ -43,7 +43,7 @@ Each capability has its own page, next to the thing it builds:
 | A page template | **Templates → Create with AI** | [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai) |
 | A reusable component | **Components → Create with AI** | [Generate a component](../building-sites/components/generate-a-component-with-aglyn-ai.md) |
 | A form | **Forms → Create with AI** | [Generate a form](generate-a-form.md) |
-| Images for your site | **Media → Create with AI** | [Create images with AI](create-images.md) |
+| Illustrations, icons, patterns, logo marks and photos | **Media → Create with AI** | [Create images with AI](create-images.md) |
 | A section on the canvas | The Besigner | [Generate a section](generate-section.md) |
 | Copy, rewritten or fresh | Any text in the Besigner | [Rewrite and write copy](copy-assist.md) |
 | A change to your theme | **Setup → Theme** | [Change your theme with AI](theme-assist.md) |
@@ -162,9 +162,9 @@ the copy of anything it is starting from. Each capability's page says exactly wh
 own job is sent: the CRM page lists what a record sends, and the automation page what is
 removed first.
 
-[Create images with AI](create-images.md#what-is-sent) is the one capability served by
-Google rather than by the assistant's own model: it sends the description you type, and
-nothing else of your site.
+A photo made with [Create images with AI](create-images.md#what-is-sent) is the one thing
+served by Google rather than by the assistant's own model: it sends the description you
+type and the shape you choose, and nothing else of your site.
 
 Your brief is customer text and is kept with the job for 180 days, then deleted. No
 contact, lead, deal, form submission or list member is read to build a page.

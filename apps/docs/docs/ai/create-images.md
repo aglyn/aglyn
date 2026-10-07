@@ -1,22 +1,24 @@
 ---
 sidebar_position: 14
 title: Create images with AI
-description: "An AI image generator inside the Aglyn media library: describe a picture, choose its shape and how many, and it is added to Media with alt text, ready to place on a page. Metered in AI credits."
+description: "An AI image generator in the Aglyn media library: describe a picture and get an SVG illustration, icon, pattern or logo mark, or a photo where photos are on, with alt text. Metered in AI credits."
 ---
 
 # Create images with AI
 
-**Create with AI** in the media library makes pictures from a description, such as
-*"a sunlit bakery counter with fresh sourdough loaves, warm morning light"*, and adds them
-to the library you have open. Each picture is stored the way a file you upload is stored:
-in the open folder, counted toward your storage, served from the same addresses, and with
-alt text written from your description.
+**Create with AI** in the media library makes pictures from a description and adds them
+to the library you have open. There are two kinds:
 
-:::note Availability
-Create with AI appears in Media only where image generation is turned on for the
-deployment your workspace runs on. If you do not see it beside **Upload media**, it is not
-on for your workspace yet.
-:::
+- **Illustration or icon**: a picture drawn as an SVG, sharp at any size. Choose an
+  **Illustration** (a spot illustration or small scene), an **Icon** (one color, or two
+  tones), a **Pattern** (a seamless background that tiles) or a **Logo mark** (a simple
+  symbol without lettering). Available wherever Aglyn AI is.
+- **Photo**: a picture made by Google's image models. Offered only where photo creation
+  is turned on for the deployment your workspace runs on; where it is not, the window
+  shows only Illustration or icon.
+
+Each picture is stored the way a file you upload is stored: in the open folder, counted
+toward your storage, served from the same addresses, and with alt text you can edit.
 
 ## Make a picture
 
@@ -24,11 +26,15 @@ on for your workspace yet.
    should land in.
 2. Choose **Create with AI**, beside **Upload media**. An empty library offers it beside
    its own **Upload media** button too.
-3. Describe the picture. Say what is in it, the setting and the light, and the style you
-   want: a photo, an illustration, a flat icon.
-4. Choose a shape: **Square 1:1**, **Landscape 4:3**, **Portrait 3:4**, **Wide 16:9** or
+3. Where photos are on, choose **Photo** or **Illustration or icon**. For an
+   illustration, choose its **Kind**.
+4. Describe the picture: what is in it, the setting, and the style you want.
+5. Choose a shape: **Square 1:1**, **Landscape 4:3**, **Portrait 3:4**, **Wide 16:9** or
    **Tall 9:16**, and how many pictures to make, from one to four.
-5. The window shows what the pictures will cost in credits before you start. Choose
+6. For an illustration, choose its colors: **Use my site's theme colors**, which reads
+   your site's theme, or **Choose colors** to pick up to six. The organization's library
+   belongs to no single site, so there you choose the colors.
+7. The window shows what the pictures will cost in credits before you start. Choose
    **Create**.
 
 The pictures appear in the library a few seconds later, selected, so you can move, tag or
@@ -37,51 +43,73 @@ an **Image** element, a gallery or anywhere else a media field asks for one.
 
 ## What each picture gets
 
-- **Alt text** written from your description. Edit it in the picture's details like any
-  other alt text; a description written for the generator is not always the best
-  description for a screen reader.
+- **Alt text.** A photo's is your description; an illustration's is a sentence the AI
+  writes about what it drew. Edit it in the picture's details like any other alt text.
 - **A file name** made from the first few words of your description, starting `ai-` and
-  numbered within the set.
-- **A record of how it was made**: the model, your description and the shape, kept with
-  the file.
-- **An invisible watermark.** The image service marks every picture it makes with Google's
-  SynthID watermark, so the picture can later be identified as generated. You cannot see
-  it, and it does not change how the picture looks.
+  numbered within the set: `.svg` for an illustration, the picture's own type for a photo.
+- **A record of how it was made**: the model, your description, the mode, the kind of
+  illustration and the shape, kept with the file.
+- **For a photo, an invisible watermark.** Google marks every picture its image models
+  make with its SynthID watermark, so the picture can later be identified as generated.
+  You cannot see it, and it does not change how the picture looks.
 
 ## Credits {#credits}
 
-Each picture is metered in [AI credits](overview.md#credits-and-caps) from the
-workspace's pool, at a fixed rate per picture that the window shows before you create
-anything. You are charged only for pictures that reach your library:
+Pictures are metered in [AI credits](overview.md#credits-and-caps) from the workspace's
+pool. The window shows an estimate before you create anything:
+
+| Mode | About, per picture | What it is made of |
+| --- | --- | --- |
+| Illustration or icon | 18 credits | The words the AI reads and writes to draw the SVG, at the same rates as other AI text |
+| Photo | 108 credits | The picture, plus the description and the thinking the image model does before it draws |
+
+What is charged is what was actually spent, so a picture can cost a little more or less
+than its estimate, and an illustration that needed a second attempt costs about twice its
+estimate. You are charged only for pictures that reach your library:
 
 - a picture the safety filter holds back is not charged;
+- an illustration that does not come out right is not charged. The window says
+  *This one's on us — you weren't charged.*
 - a picture your library could not store, because your storage is full for example, is
   not charged;
-- when the image service fails, nothing is charged.
+- when the AI service fails, nothing is charged.
 
 A Free workspace spends from its monthly allowance and is told before it starts when the
 pictures it asked for would cost more than it has left. A paid workspace past its included
 band keeps working at its plan's overage rate unless the workspace stops AI at the band,
 the same as every other AI request.
 
-## What it will not make {#safety}
+## Safe by construction {#safety}
 
-The image service checks every description and every picture against Google's safety
-filters, set to block content they rate as a medium risk or higher, and it does not make
-pictures of children. A description it declines is answered with a message and charges
-nothing; try describing the scene differently. Some pictures in a set can be held back
-while others arrive, and the window says how many were added.
+An illustration is checked before it is stored. It has to be one SVG in the shape you
+chose, no larger than 200 KB, and self-contained: no scripts, no links, no embedded images
+or web pages, and nothing loaded from anywhere else, such as a font. An illustration that
+fails the check is drawn again once with the problem pointed out; if the second one fails
+too, it is not stored and not charged. The media library then removes anything unsafe from
+every SVG it stores, as it does for an SVG you upload.
 
-Pictures of real, named people, brands and logos are not a good use of it. Use your own
-photographs for those.
+The AI declines to draw a real company's or organization's logo, a trademark or a
+recognizable brand symbol, a real, named person, and anything sexual, hateful, violent or
+otherwise unsafe; the window says why, and a declined request on a Free workspace costs
+nothing. A **Logo mark** is always a symbol without lettering.
+
+Photos are checked by Google's safety filters, set to block content they rate as a medium
+risk or higher, and Google's own policies refuse some content whatever is asked, such as
+photorealistic depictions of children or celebrities that its policies do not allow. A
+description that is declined is answered with a message and no picture is charged.
 
 ## What is sent {#what-is-sent}
 
-The description you type, the shape and the number of pictures are sent to Google's
-image models on Vertex AI. Nothing else is sent: no other content of your site, no file
-from your library, and no name, email address or account identifier. The pictures come
-back to Aglyn and are stored in your library; your description is kept with each picture
-as part of its record of how it was made.
+- **Illustration or icon:** your description, the kind and shape of picture, and your
+  site's theme colors or the colors you chose are sent to the AI service every other
+  Aglyn AI feature uses.
+- **Photo:** your description and the shape you chose are sent to Google's image models
+  on Vertex AI.
+
+Nothing else is sent: no other content of your site, no file from your library, and no
+name, email address or account identifier. The pictures come back to Aglyn and are stored
+in your library; your description is kept with each picture as part of its record of how
+it was made.
 
 ## Who can use it {#who-can-use-it}
 
