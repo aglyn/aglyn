@@ -115,7 +115,16 @@ final class AppModel {
     switch registry.resolve(link) {
     case .screen(let screen, let params)?: navigation.push(.screen(screen, params))
     case .besigner(let path)?: navigation.push(.besigner(path))
-    case .unavailable(let path)?: navigation.push(.unavailable(path))
+    case .unavailable(let path)?:
+      // The app's own screens answer the console's own pages.
+      if path.hasPrefix("/manage/notifications/settings") {
+        navigation.select(.notifications)
+        navigation.push(.notificationSettings)
+      } else if path.hasPrefix("/manage/notifications") {
+        navigation.select(.notifications)
+      } else {
+        navigation.push(.unavailable(path))
+      }
     case nil: break
     }
   }

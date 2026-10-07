@@ -2,8 +2,16 @@
   "$comment": "Workspace TypeScript modules the native generators may read (AGL-3620, AGL-3651): the contracts, theme and catalog generators refuse any other. check-mobile-isolation admits each one only while its own imports are pure: listed modules, platform-neutral packages, no DOM, no Node built-in, nothing web- or server-only. The list grows only with that proof; a module that mixes pure and web code is split, never listed.",
   "modules": [
     {
+      "path": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "why": "The site traffic card's figures: the window comparison, device split and top lists the Analytics page and the native screens show (AGL-3670)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/host-naming.ts",
       "why": "Reached by organizations: site naming and slug rules over strings."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-alt.ts",
+      "why": "Reached by event-write: the platform's cap for an image description; no imports."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/mobile-push.ts",
@@ -30,6 +38,10 @@
       "why": "Reached by organizations: the scope token grammar (org, host, consent group)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
+      "why": "The per-page traffic table's fold over screen day documents (AGL-3670)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/site-wide-outbox.ts",
       "why": "Reached by the Commerce app's product writes: the site-wide outbox document shape and keys."
     },
@@ -40,6 +52,38 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/tenant-apex.ts",
       "why": "Reached by host-naming: the tenant apex domain constants."
+    },
+    {
+      "path": "libs/aglyn/src/lib/foundation/definitions/contact.types.ts",
+      "why": "Reached by booking-contact-fields: contact shapes and the phone normalizer; no imports."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-contact-fields.ts",
+      "why": "What a service asks the booker for and how a booking's phone and address read (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-in-person.ts",
+      "why": "Where a booking stands for payment at the counter, and the in-person amount rules (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "why": "What may be done to a booking: check in, reschedule, cancel, refund; the routes' own refusals (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-price.ts",
+      "why": "How a service states its price (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-record.ts",
+      "why": "Reached by bookings: how a booking's CRM record and booker lines read (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "why": "The service dialog's defaults and what one save stores, shared by the console page and the native editors (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/bookings.ts",
+      "why": "The service shape, slot walk and the 24-hour reminder band the console's Bookings card counts (AGL-3670)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/constants/orders-list-query.ts",
@@ -106,6 +150,10 @@
       "why": "The print layout as plain text, for the app's share sheet (AGL-3621)."
     },
     {
+      "path": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
+      "why": "The one rule for what an event stores, shared by the Events page, the events import and the native editors (AGL-3670)."
+    },
+    {
       "path": "libs/plugins/redirects/src/lib/model/redirects.ts",
       "why": "The redirect rule's shape and evaluation order, shared by the console page, the tenant serve path and the Redirects mobile screen."
     },
@@ -120,6 +168,10 @@
     {
       "path": "libs/shared/util/email/src/lib/outbound-phishing-screen.ts",
       "why": "Reached by the redirects model: pattern tables and pure functions over text."
+    },
+    {
+      "path": "libs/shared/util/timestamp/src/lib/zoned-time.ts",
+      "why": "Reached by bookings: a moment on a zone's wall clock, through Intl; no imports."
     },
     {
       "path": "libs/shared/util/tools/src/lib/linear-regex.ts",

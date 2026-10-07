@@ -4,15 +4,27 @@
 // block in plugins.config.json.
 
 import AglynPluginHost
+import AglynBookingsPlugin
 import AglynCommercePlugin
+import AglynEventsCalendarPlugin
 import AglynRedirectsPlugin
 
 public enum NativePluginManifest {
   public static let entries: [NativePluginManifestEntry] = [
     NativePluginManifestEntry(
+      id: "bookings",
+      contributes: ["screens": ["bookings.booking", "bookings.calendar", "bookings.counter", "bookings.services"], "widgets": ["bookings.today"], "quickActions": ["bookings.open"], "deepLinks": ["bookings.page"]],
+      register: AglynBookingsPlugin.registerBookingsNative
+    ),
+    NativePluginManifestEntry(
       id: "commerce",
       contributes: ["screens": ["commerce.card-readers", "commerce.order", "commerce.orders", "commerce.product", "commerce.products", "commerce.register", "commerce.sales", "commerce.scan"], "tabs": ["commerce.orders-tab", "commerce.products-tab"], "widgets": ["commerce.sales-trend", "commerce.to-ship", "commerce.today"], "quickActions": ["commerce.new-product", "commerce.orders-to-ship", "commerce.scan"], "deepLinks": ["commerce.orders-page", "commerce.products-page"]],
       register: AglynCommercePlugin.registerCommerceNative
+    ),
+    NativePluginManifestEntry(
+      id: "events-calendar",
+      contributes: ["screens": ["events-calendar.events"], "quickActions": ["events-calendar.open"], "deepLinks": ["events-calendar.page"]],
+      register: AglynEventsCalendarPlugin.registerEventsCalendarNative
     ),
     NativePluginManifestEntry(
       id: "redirects",

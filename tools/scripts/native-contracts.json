@@ -93,9 +93,111 @@
         "HostProduct",
         "ProductVariant"
       ]
+    },
+    "libs/plugins/bookings/src/lib/model/booking-manage.ts": {
+      "types": [
+        "ManagedBooking",
+        "BookingState",
+        "BookingActions"
+      ],
+      "values": [
+        "BOOKING_STATE_LABELS"
+      ]
+    },
+    "libs/plugins/bookings/src/lib/model/booking-in-person.ts": {
+      "types": [
+        "BookingInPersonPayment",
+        "BookingInPersonState"
+      ],
+      "values": [
+        "BOOKING_IN_PERSON_MAX_CENTS",
+        "BOOKING_IN_PERSON_MIN_CENTS"
+      ]
+    },
+    "libs/plugins/bookings/src/lib/model/booking-price.ts": {
+      "types": [
+        "BookingPriceDisplay"
+      ],
+      "values": [
+        "BOOKING_PRICE_DISPLAYS",
+        "BOOKING_PRICE_LABELS"
+      ]
+    },
+    "libs/plugins/bookings/src/lib/model/booking-contact-fields.ts": {
+      "types": [
+        "BookingFieldAsk"
+      ],
+      "values": [
+        "BOOKING_FIELD_ASKS"
+      ]
+    },
+    "libs/plugins/bookings/src/lib/model/booking-service-form.ts": {
+      "types": [
+        "BookingServiceDraft",
+        "BookingServiceFields",
+        "BookingWindow"
+      ],
+      "values": [
+        "BOOKING_WEEKDAYS",
+        "BOOKING_SERVICE_NAME_MAX",
+        "BOOKING_SERVICE_DESCRIPTION_MAX"
+      ]
+    },
+    "libs/plugins/bookings/src/lib/model/bookings.ts": {
+      "values": [
+        "REMINDER_WINDOW_START_HOURS",
+        "REMINDER_WINDOW_END_HOURS",
+        "BOOKING_MAX_DAYS_AHEAD"
+      ]
+    },
+    "libs/plugins/events-calendar/src/lib/model/event-write.ts": {
+      "types": [
+        "EventWriteInput",
+        "EventStoredFields",
+        "EventWrite",
+        "EventStatus",
+        "EventRemovableField"
+      ],
+      "values": [
+        "EVENT_TITLE_MAX_LENGTH",
+        "EVENT_LOCATION_MAX_LENGTH",
+        "EVENT_ORGANIZER_MAX_LENGTH",
+        "EVENT_DESCRIPTION_MAX_LENGTH",
+        "EVENT_COVER_ALT_MAX_LENGTH",
+        "EVENT_DEFAULT_DURATION_MS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/analytics-summary.ts": {
+      "types": [
+        "DeviceSplitEntry"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts": {
+      "types": [
+        "ScreenTrafficRow"
+      ]
     }
   },
-  "ints": [],
+  "ints": [
+    "BookingActions.refundCents",
+    "BookingWindow.start",
+    "BookingWindow.end",
+    "BookingServiceFields.durationMinutes",
+    "BookingServiceFields.priceUsd",
+    "BookingInPersonPayment.amountCents",
+    "BookingInPersonPayment.serviceCents",
+    "BookingInPersonPayment.taxCents",
+    "BookingInPersonPayment.feeCents",
+    "BookingInPersonPayment.startedAtMs",
+    "BookingInPersonPayment.paidAtMs",
+    "EventWriteInput.startsAtMs",
+    "EventWriteInput.endsAtMs",
+    "EventStoredFields.startsAtMs",
+    "EventStoredFields.endsAtMs",
+    "DeviceSplitEntry.count",
+    "DeviceSplitEntry.percent",
+    "ScreenTrafficRow.total"
+  ],
   "json": [
     "ListQueryFilter.value",
     "ListQueryRefusal.clause"
@@ -1856,6 +1958,1524 @@
         ],
         [
           "text"
+        ]
+      ]
+    },
+    "bookingState": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "args": [
+        [
+          {},
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          },
+          1800000000000
+        ]
+      ]
+    },
+    "bookingActions": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "args": [
+        [
+          {},
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          },
+          1800000000000
+        ]
+      ]
+    },
+    "bookingOutstandingCents": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          }
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          }
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          }
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          }
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          }
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          }
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          }
+        ]
+      ]
+    },
+    "checkInRefusal": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "args": [
+        [
+          {},
+          true,
+          1800000000000
+        ],
+        [
+          {},
+          false,
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          true,
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          false,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          true,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          false,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          true,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          false,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          true,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          false,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          true,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          false,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          },
+          true,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          },
+          false,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          },
+          true,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          },
+          false,
+          1800000000000
+        ]
+      ]
+    },
+    "rescheduleRefusal": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "args": [
+        [
+          {},
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {},
+          1799996400000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          1799996400000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          1799996400000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          1799996400000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          1799996400000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          1799996400000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          },
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          },
+          1799996400000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          },
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          },
+          1799996400000,
+          1800000000000
+        ]
+      ]
+    },
+    "bookingDurationMs": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "args": [
+        [
+          {},
+          45
+        ],
+        [
+          {},
+          0
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          45
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          0
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          45
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          0
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          45
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          0
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          45
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          0
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          45
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          0
+        ]
+      ]
+    },
+    "bookingPriceText": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-price.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "priceUsd": 45
+          }
+        ],
+        [
+          {
+            "priceUsd": 45,
+            "priceDisplay": "varies"
+          }
+        ],
+        [
+          {
+            "priceDisplay": "estimate"
+          }
+        ],
+        [
+          {
+            "priceDisplay": "contact",
+            "priceUsd": 10
+          }
+        ],
+        [
+          {
+            "priceUsd": -3
+          }
+        ],
+        [
+          {
+            "priceUsd": "12.5"
+          }
+        ],
+        [
+          {
+            "priceDisplay": "weird",
+            "priceUsd": 20
+          }
+        ]
+      ]
+    },
+    "bookingChargeUsd": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-price.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "priceUsd": 45
+          }
+        ],
+        [
+          {
+            "priceUsd": 45,
+            "priceDisplay": "varies"
+          }
+        ],
+        [
+          {
+            "priceDisplay": "estimate"
+          }
+        ],
+        [
+          {
+            "priceDisplay": "contact",
+            "priceUsd": 10
+          }
+        ],
+        [
+          {
+            "priceUsd": -3
+          }
+        ],
+        [
+          {
+            "priceUsd": "12.5"
+          }
+        ],
+        [
+          {
+            "priceDisplay": "weird",
+            "priceUsd": 20
+          }
+        ]
+      ]
+    },
+    "bookingPriceDisplay": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-price.ts",
+      "args": [
+        [
+          "fixed"
+        ],
+        [
+          "varies"
+        ],
+        [
+          "estimate"
+        ],
+        [
+          "contact"
+        ],
+        [
+          "x"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "bookingInPersonState": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-in-person.ts",
+      "args": [
+        [
+          {},
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "inPersonPayment": {
+              "status": "pending"
+            }
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "inPersonPayment": {
+              "status": "paid"
+            }
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "paymentIntentId": "pi_1"
+          },
+          1800000000000
+        ]
+      ]
+    },
+    "bookingInPersonAmountProblem": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-in-person.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          49
+        ],
+        [
+          50
+        ],
+        [
+          1000000
+        ],
+        [
+          1000001
+        ],
+        [
+          "abc"
+        ],
+        [
+          2500.5
+        ]
+      ]
+    },
+    "bookingSuggestedCents": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-in-person.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "priceUsd": 45
+          }
+        ],
+        [
+          {
+            "priceUsd": 0.4
+          }
+        ],
+        [
+          {
+            "priceUsd": 45,
+            "priceDisplay": "varies"
+          }
+        ],
+        [
+          {
+            "priceUsd": 12.345,
+            "priceDisplay": "fixed"
+          }
+        ]
+      ]
+    },
+    "parseBookingWindows": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "args": [
+        [
+          "09:00-12:00, 13:00-17:30"
+        ],
+        [
+          "9:00 - 10:00, nonsense, 18:00-17:00, 23:00-24:30"
+        ],
+        [
+          ""
+        ],
+        [
+          "00:00-24:00"
+        ]
+      ]
+    },
+    "formatBookingWindows": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "args": [
+        [
+          [
+            {
+              "start": 540,
+              "end": 720
+            },
+            {
+              "start": 780,
+              "end": 1050
+            }
+          ]
+        ],
+        [
+          null
+        ],
+        [
+          []
+        ]
+      ]
+    },
+    "newBookingServiceDraft": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "args": [
+        [
+          "America/Chicago"
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "bookingServiceDraftFrom": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "name": "Color",
+            "durationMinutes": 45,
+            "priceUsd": 60,
+            "timezone": "Europe/Paris",
+            "description": "Hi",
+            "windows": {
+              "2": [
+                {
+                  "start": 600,
+                  "end": 660
+                }
+              ]
+            },
+            "priceDisplay": "nope",
+            "askPhone": "required",
+            "crmMeetingActivity": false,
+            "crmFollowUpTask": true
+          }
+        ]
+      ]
+    },
+    "bookingServiceFields": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "args": [
+        [
+          {
+            "name": "  Haircut  ",
+            "durationMinutes": "1000",
+            "priceUsd": "19.6",
+            "timezone": " ",
+            "description": "  Trim  ",
+            "windowText": [
+              "",
+              "09:00-17:00",
+              "bad",
+              "10:00-11:00, 12:00-13:00",
+              "",
+              "",
+              ""
+            ],
+            "crmMeetingActivity": true,
+            "crmFollowUpTask": false,
+            "askPhone": "optional",
+            "askAddress": "off",
+            "priceDisplay": "varies"
+          }
+        ],
+        [
+          {
+            "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "durationMinutes": "abc",
+            "priceUsd": "-3",
+            "timezone": "UTC",
+            "description": "",
+            "windowText": [
+              "",
+              "09:00-17:00",
+              "bad",
+              "10:00-11:00, 12:00-13:00",
+              "",
+              "",
+              ""
+            ],
+            "crmMeetingActivity": true,
+            "crmFollowUpTask": false,
+            "askPhone": "optional",
+            "askAddress": "off",
+            "priceDisplay": "varies"
+          }
+        ]
+      ]
+    },
+    "bookingServiceDraftProblem": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "args": [
+        [
+          {
+            "name": "  "
+          }
+        ],
+        [
+          {
+            "name": "Cut"
+          }
+        ]
+      ]
+    },
+    "isBookingReminderDue": {
+      "module": "libs/plugins/bookings/src/lib/model/bookings.ts",
+      "args": [
+        [
+          {
+            "status": "confirmed",
+            "email": "a@b.c",
+            "startsAtMs": 1800086400000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "email": "a@b.c",
+            "startsAtMs": 1800082800000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "email": "a@b.c",
+            "startsAtMs": 1800090000000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "email": "a@b.c",
+            "startsAtMs": 1800090000001
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "email": "a@b.c",
+            "startsAtMs": 1800079200000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "email": "a@b.c",
+            "startsAtMs": 1800086400000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "email": "a@b.c",
+            "startsAtMs": 1800086400000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800086400000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "email": "a@b.c",
+            "startsAtMs": 1800086400000,
+            "reminderSentAt": 123
+          },
+          1800000000000
+        ],
+        [
+          {},
+          1800000000000
+        ]
+      ]
+    },
+    "eventWrite": {
+      "module": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
+      "args": [
+        [
+          {
+            "title": "  Launch party  ",
+            "startsAtMs": 1800000000000,
+            "endsAtMs": 1800007200000,
+            "location": " Hall ",
+            "organizer": "Ada",
+            "description": "Bring a friend",
+            "coverImage": "/api/media/cdn/h1/m1",
+            "coverImageAlt": " A crowd ",
+            "status": "published"
+          }
+        ],
+        [
+          {
+            "title": "Talk",
+            "startsAtMs": 1800000000000,
+            "endsAtMs": null,
+            "location": "",
+            "organizer": null,
+            "description": "  ",
+            "coverImage": "",
+            "coverImageAlt": "orphan",
+            "status": "draft"
+          }
+        ],
+        [
+          {
+            "title": "Talk",
+            "startsAtMs": 1800000000000,
+            "endsAtMs": null,
+            "location": "",
+            "organizer": null,
+            "description": "  ",
+            "coverImage": "",
+            "coverImageAlt": "orphan",
+            "status": "draft"
+          },
+          {
+            "clearBlank": true
+          }
+        ],
+        [
+          {
+            "title": "Talk",
+            "startsAtMs": 1800000000000,
+            "endsAtMs": 1799999999000,
+            "location": "",
+            "organizer": null,
+            "description": "  ",
+            "coverImage": "",
+            "coverImageAlt": "orphan",
+            "status": "draft"
+          }
+        ],
+        [
+          {
+            "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "startsAtMs": 1800000000000,
+            "endsAtMs": 1800000000001,
+            "location": "llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll",
+            "organizer": "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+            "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "coverImage": "c",
+            "coverImageAlt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "status": "published"
+          }
+        ],
+        [
+          {
+            "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "startsAtMs": 1800000000000,
+            "endsAtMs": 1800000000001,
+            "location": "llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll",
+            "organizer": "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+            "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "coverImage": "c",
+            "coverImageAlt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "status": "published"
+          },
+          {
+            "clearBlank": true
+          }
+        ]
+      ]
+    },
+    "eventWriteProblem": {
+      "module": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
+      "args": [
+        [
+          {
+            "title": "",
+            "startsAtMs": 1800000000000
+          }
+        ],
+        [
+          {
+            "title": "  ",
+            "startsAtMs": 1800000000000
+          }
+        ],
+        [
+          {
+            "title": "x",
+            "startsAtMs": 0
+          }
+        ],
+        [
+          {
+            "title": "x",
+            "startsAtMs": 1800000000000
+          }
+        ]
+      ]
+    },
+    "eventEndsAtMs": {
+      "module": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
+      "args": [
+        [
+          1800000000000,
+          1800000000005
+        ],
+        [
+          1800000000000,
+          1800000000000
+        ],
+        [
+          1800000000000,
+          null
+        ],
+        [
+          1800000000000,
+          0
+        ],
+        [
+          1800000000000,
+          1799999999990
+        ]
+      ]
+    },
+    "eventStatusOf": {
+      "module": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
+      "args": [
+        [
+          "draft"
+        ],
+        [
+          " Published "
+        ],
+        [
+          "deleted"
+        ],
+        [
+          null
+        ],
+        [
+          3
+        ]
+      ]
+    },
+    "trafficDeltaPct": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "args": [
+        [
+          120,
+          100
+        ],
+        [
+          100,
+          120
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          0,
+          7
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          333,
+          1000
+        ]
+      ]
+    },
+    "deviceSplit": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "args": [
+        [
+          {
+            "mobile": 61,
+            "desktop": 39
+          }
+        ],
+        [
+          {
+            "desktop": 1,
+            "mobile": 1,
+            "tablet": 1
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "mobile": 0,
+            "desktop": -2
+          }
+        ],
+        [
+          {
+            "desktop": 2,
+            "mobile": 5,
+            "tablet": 3
+          }
+        ]
+      ]
+    },
+    "deviceSplitLabel": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "args": [
+        [
+          [
+            {
+              "device": "mobile",
+              "count": 61,
+              "percent": 61
+            },
+            {
+              "device": "desktop",
+              "count": 39,
+              "percent": 39
+            }
+          ]
+        ],
+        [
+          []
+        ]
+      ]
+    },
+    "deviceSplitValue": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "args": [
+        [
+          [
+            {
+              "device": "mobile",
+              "count": 61,
+              "percent": 61
+            },
+            {
+              "device": "desktop",
+              "count": 39,
+              "percent": 39
+            }
+          ]
+        ],
+        [
+          []
+        ]
+      ]
+    },
+    "rollUp": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "args": [
+        [
+          [
+            {
+              "paths": {
+                "/": 3,
+                "/a": 1
+              }
+            },
+            {
+              "paths": {
+                "/a": 5
+              }
+            },
+            {}
+          ],
+          "paths"
+        ],
+        [
+          [
+            {
+              "referrers": {
+                "google.com": 2
+              }
+            },
+            {
+              "referrers": {
+                "bing.com": 2,
+                "google.com": 1
+              }
+            }
+          ],
+          "referrers"
+        ]
+      ]
+    },
+    "formatDwell": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "args": [
+        [
+          0
+        ],
+        [
+          4400
+        ],
+        [
+          65000
+        ],
+        [
+          3600000
+        ],
+        [
+          3725000
+        ],
+        [
+          -5
+        ]
+      ]
+    },
+    "aggregateScreenDays": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
+      "args": [
+        [
+          [
+            {
+              "screenId": "home",
+              "day": "2026-10-01",
+              "total": 5,
+              "devices": {
+                "mobile": 3,
+                "desktop": 2
+              },
+              "referrers": {
+                "google.com": 2
+              }
+            },
+            {
+              "screenId": "home",
+              "day": "2026-10-02",
+              "total": 4,
+              "devices": {
+                "mobile": 1
+              },
+              "referrers": {
+                "bing.com": 3
+              }
+            },
+            {
+              "screenId": "about",
+              "total": 2,
+              "devices": {
+                "desktop": 2
+              }
+            },
+            {
+              "screenId": "",
+              "total": 9
+            },
+            {
+              "screenId": "x",
+              "total": 0
+            },
+            {
+              "screenId": "y",
+              "total": "3",
+              "devices": {
+                "tablet": "2",
+                "bad": -1
+              }
+            }
+          ]
+        ],
+        [
+          []
+        ]
+      ]
+    },
+    "topDevice": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
+      "args": [
+        [
+          {
+            "screenId": "a",
+            "total": 3,
+            "devices": {
+              "mobile": 1,
+              "desktop": 2
+            },
+            "referrers": {}
+          }
+        ],
+        [
+          {
+            "screenId": "a",
+            "total": 0,
+            "devices": {},
+            "referrers": {}
+          }
+        ]
+      ]
+    },
+    "topReferrer": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
+      "args": [
+        [
+          {
+            "screenId": "a",
+            "total": 3,
+            "devices": {},
+            "referrers": {
+              "x.com": 1,
+              "y.com": 4
+            }
+          }
+        ],
+        [
+          {
+            "screenId": "a",
+            "total": 0,
+            "devices": {},
+            "referrers": {}
+          }
         ]
       ]
     }

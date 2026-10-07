@@ -1,6 +1,7 @@
 package com.aglyn.shell
 
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assert as assertMatches
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -150,6 +151,9 @@ class ShellUiTest {
     }
   }
 
+  private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertState(on: Boolean): androidx.compose.ui.test.SemanticsNodeInteraction =
+    assertMatches(androidx.compose.ui.test.SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, if (on) "On" else "Off"))
+
   @Test
   fun notificationSettingsShowStoredAnswersAndWriteOneSwitch() = runComposeUiTest {
     val writer = RecordingWriter()
@@ -160,15 +164,49 @@ class ShellUiTest {
     setContent { com.aglyn.ui.AglynTheme(dark = false) { NotificationSettingsScreen(services, "u1") } }
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("notification-settings") > 0 }
     onNodeWithTag("notification-category-content").assertExists()
-    onNodeWithTag("push-switch-content.order").assertIsOff()
-    onNodeWithTag("push-switch-content.booking").assertIsOn()
+    onNodeWithTag("expand-content").performScrollTo().performClick()
+    onNodeWithTag("channel-content.order-push").performScrollTo().assertState(false)
+    onNodeWithTag("channel-content.booking-push").assertState(true)
+    // Orders are emailed until switched off; low stock is not.
+    onNodeWithTag("channel-content.order-email").assertState(true)
+    onNodeWithTag("channel-content.lowStock-email").assertState(false)
     // Desktop registers no push, so the screen says where push goes.
     onNodeWithTag("notification-settings-no-push").assertExists()
 
-    onNodeWithTag("push-switch-content.order").performScrollTo().performClick()
+    onNodeWithTag("channel-content.order-push").performScrollTo().performClick()
     waitUntil(timeoutMillis = 3_000) { writer.writes.isNotEmpty() }
     assertEquals("users/u1" to com.aglyn.core.accountPushWrite("content.order", true), writer.writes.single())
-    onNodeWithTag("push-switch-content.order").assertIsOn()
+    onNodeWithTag("channel-content.order-push").assertState(true)
+  }
+
+  @Test
+  fun aCategorySwitchWritesItsOneAnswer() = runComposeUiTest {
+    val writer = RecordingWriter()
+    val services = services(userDoc = emptyMap(), writer = writer)
+    setContent { com.aglyn.ui.AglynTheme(dark = false) { NotificationSettingsScreen(services, "u1") } }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("notification-settings") > 0 }
+    onNodeWithTag("channel-billing-email").performScrollTo().assertState(false).performClick()
+    waitUntil(timeoutMillis = 3_000) { writer.writes.isNotEmpty() }
+    assertEquals(
+      "users/u1" to mapOf("notificationSettings" to mapOf("account" to mapOf("billing" to mapOf("email" to true)))),
+      writer.writes.single(),
+    )
+  }
+
+  @Test
+  fun aTypeOverrideOffersToFollowItsCategoryAgain() = runComposeUiTest {
+    val writer = RecordingWriter()
+    val services = services(
+      userDoc = mapOf("notificationSettings" to mapOf("accountTypes" to mapOf("content.order" to mapOf("email" to false)))),
+      writer = writer,
+    )
+    setContent { com.aglyn.ui.AglynTheme(dark = false) { NotificationSettingsScreen(services, "u1") } }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("notification-settings") > 0 }
+    onNodeWithTag("expand-content").performScrollTo().performClick()
+    onNodeWithTag("channel-content.order-email").performScrollTo().assertState(false)
+    onNodeWithTag("reset-content.order").performScrollTo().performClick()
+    waitUntil(timeoutMillis = 3_000) { writer.writes.isNotEmpty() }
+    assertEquals("users/u1" to com.aglyn.core.notificationTypeResetWrite("content.order"), writer.writes.single())
   }
 
   @Test
@@ -176,9 +214,26 @@ class ShellUiTest {
     val services = services(userDoc = emptyMap(), writer = RecordingWriter(fail = true))
     setContent { com.aglyn.ui.AglynTheme(dark = false) { NotificationSettingsScreen(services, "u1") } }
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("notification-settings") > 0 }
-    onNodeWithTag("push-switch-content.order").assertIsOn().performScrollTo().performClick()
+    onNodeWithTag("channel-content-console").performScrollTo().assertState(true).performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("notification-settings-save-error") > 0 }
-    onNodeWithTag("push-switch-content.order").assertIsOn()
+    onNodeWithTag("channel-content-console").assertState(true)
+  }
+
+  @Test
+  fun theFeedMarksAllReadAndFiltersOnTheQuery() = runComposeUiTest {
+    val writer = RecordingWriter()
+    val services = services(userDoc = emptyMap(), writer = writer)
+    val navigator = ShellNavigator(ShellNavigator.NOTIFICATIONS)
+    setContent { AglynShell(services, navigator) }
+    onNodeWithTag("sign-in-email").performTextInput("dana@example.test")
+    onNodeWithTag("sign-in-password").performTextInput("right")
+    onNodeWithTag("sign-in-submit").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("notification-n1") > 0 }
+    onNodeWithTag("mark-read-n1").assertExists()
+    onNodeWithTag("notifications-mark-all").performClick()
+    waitUntil(timeoutMillis = 3_000) { writer.writes.isNotEmpty() }
+    assertEquals("users/u1/notifications/n1", writer.writes.single().first)
+    assertEquals(true, writer.writes.single().second["read"])
   }
 
   @Test

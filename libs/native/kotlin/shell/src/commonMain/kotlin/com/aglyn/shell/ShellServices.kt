@@ -129,6 +129,28 @@ internal class ShellPluginContext(
    * screen, the Besigner, or (for a console page nothing answers natively yet)
    * Home. Never a console page.
    */
+  fun showNotifications() = navigator.select(ShellNavigator.NOTIFICATIONS)
+
+  /** The workspace a notification is about, by name, when the person holds it. */
+  fun workspaceName(row: FeedNotification): String? {
+    val org = row.orgId?.let { id -> workspace.orgs.firstOrNull { it.id == id } }
+    val site = row.hostId?.let { id -> workspace.sites.firstOrNull { it.id == id } }
+    return listOfNotNull(org?.name, site?.name).joinToString(" · ").ifEmpty { null }
+  }
+
+  /**
+   * Follows a notification: first onto the workspace and site it is about
+   * (a booking at another site opens that site's bookings), then its link.
+   */
+  fun openNotification(row: FeedNotification) {
+    val link = row.link
+    val orgId = row.orgId ?: workspace.sites.firstOrNull { it.id == row.hostId }?.orgId
+    if (orgId != null && (orgId != workspace.org?.id || (row.hostId != null && row.hostId != workspace.site?.id))) {
+      services.workspace.select(orgId, row.hostId ?: workspace.site?.id?.takeIf { orgId == workspace.org?.id })
+    }
+    if (link != null) openLink(link)
+  }
+
   fun openLink(link: String) {
     when (val target = DeepLinks.resolve(link, services.registry.deepLinks())) {
       is NativeLinkTarget.Screen -> navigator.push(Route.Screen(target.screen, target.params))
@@ -143,7 +165,11 @@ internal class ShellPluginContext(
     val rest = DeepLinks.splitConsoleScope(path.substringBefore('?')).rest
     when {
       rest == "/screens" || rest.startsWith("/screens/") -> navigator.push(Route.Pages)
-      rest.startsWith("/notifications") -> navigator.select(ShellNavigator.NOTIFICATIONS)
+      rest.startsWith("/manage/notifications/settings") -> {
+        navigator.select(ShellNavigator.SETTINGS)
+        navigator.push(Route.NotificationSettings)
+      }
+      rest.startsWith("/notifications") || rest.startsWith("/manage/notifications") -> navigator.select(ShellNavigator.NOTIFICATIONS)
       rest.startsWith("/settings") -> navigator.select(ShellNavigator.SETTINGS)
       else -> navigator.select(ShellNavigator.HOME)
     }

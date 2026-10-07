@@ -128,3 +128,37 @@ public final class NoListener: FirestoreListening {
   public init() {}
   public func remove() {}
 }
+
+extension FirestoreReader {
+  /// One read of a query: the first answer its listener gives, then the listener stops.
+  @MainActor
+  public func readOnce(_ query: FirestoreQuery) async throws -> [FirestoreDocument] {
+    try await withCheckedThrowingContinuation { continuation in
+      var listener: FirestoreListening?
+      var done = false
+      listener = listen(query) { result in
+        guard !done else { return }
+        done = true
+        listener?.remove()
+        continuation.resume(with: result)
+      }
+      if done { listener?.remove() }
+    }
+  }
+
+  /// One read of a document.
+  @MainActor
+  public func readOnce(_ path: [String]) async throws -> FirestoreDocument? {
+    try await withCheckedThrowingContinuation { continuation in
+      var listener: FirestoreListening?
+      var done = false
+      listener = listenDocument(path) { result in
+        guard !done else { return }
+        done = true
+        listener?.remove()
+        continuation.resume(with: result)
+      }
+      if done { listener?.remove() }
+    }
+  }
+}

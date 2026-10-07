@@ -48,7 +48,7 @@ val embedMainJson = tasks.register<EmbedJson>("embedContractJson") {
   outputDir.set(layout.buildDirectory.dir("generated/contractJson/main"))
 }
 val embedTestJson = tasks.register<EmbedJson>("embedContractCaseJson") {
-  sources.from(contractsDir.resolve("function-cases.generated.json"), contractsDir.resolve("list-query-cases.generated.json"))
+  sources.from(contractsDir.resolve("function-cases.generated.json"), contractsDir.resolve("list-query-cases.generated.json"), contractsDir.resolve("notification-settings-cases.generated.json"))
   objectName.set("ContractCaseJson")
   outputDir.set(layout.buildDirectory.dir("generated/contractJson/test"))
 }
