@@ -103,6 +103,7 @@ final class AppModel {
       hostSlug: workspace?.site?.subdomain.isEmpty == false ? workspace?.site?.subdomain : workspace?.site?.id,
       firestore: reader,
       api: api,
+      writer: ReaderMergeWriter(reader),
       navigate: { [weak navigation] screen, params in navigation?.push(.screen(screen, params)) },
       openBesigner: { [weak navigation] path in navigation?.push(.besigner(path)) })
   }

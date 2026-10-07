@@ -112,6 +112,7 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
   private static func writable(_ value: Any) -> Any {
     switch value {
     case FirestoreSentinel.serverTimestamp: return FieldValue.serverTimestamp()
+    case FirestoreSentinel.delete: return FieldValue.delete()
     case let map as [String: Any]: return map.mapValues(writable)
     default: return value
     }
