@@ -918,6 +918,17 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   consoleDock: 'consoleDock',
   /**
+   * The console's top bar, among its own status controls just ahead of the
+   * notifications bell (AGL-3593), in both shells: a compact indicator a
+   * plugin keeps in view on every page — work in progress, something waiting
+   * on the reader — that opens the plugin's own surface when pressed. Props:
+   * {@link ConsoleTopBarZoneProps}, the dock's answers, because both sit
+   * above every route and answer the same questions. A widget here is one
+   * control in a row the bar spaces; it draws nothing at all when it has
+   * nothing to say, and never more than one small control.
+   */
+  consoleTopBar: 'consoleTopBar',
+  /**
    * A section at the bottom of the besigner's Attributes panel (AGL-2940),
    * under the selected element's own fields. Props: `hostId` (`null` on an
    * editor that names no site), and `node`, the selected element (AGL-2984)
@@ -1239,6 +1250,12 @@ export interface ConsoleDockZoneProps {
   /** The reader's verdict for every declared permission key on the site in view. */
   permissionsOnHost?: { loaded: boolean; granted: Readonly<Record<string, boolean>> }
 }
+
+/**
+ * What the `consoleTopBar` zone hands each widget (AGL-3593): the same
+ * answers the console dock gets, from the same shell resolution.
+ */
+export type ConsoleTopBarZoneProps = ConsoleDockZoneProps
 
 /** How one plugin's shelf of the template gallery stands (AGL-3080). */
 export type ConsoleTemplateGalleryShelfState = 'loading' | 'empty' | 'shown'

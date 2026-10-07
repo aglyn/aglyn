@@ -124,6 +124,9 @@ export const AI_JOB_TERMINAL_STATUSES: readonly AiJobStatus[] = [
 
 export type AiJobStepStatus = 'pending' | 'running' | 'done' | 'failed'
 
+/** The step a planned kind runs first (AGL-2935): its plan, before anything is built. */
+export const AI_JOB_PLAN_STEP = 'plan'
+
 export interface AiJobStep {
   /** Stable within the job (`plan`, `draft`, `generate`), unique per job. */
   name: string

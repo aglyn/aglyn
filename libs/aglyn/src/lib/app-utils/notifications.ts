@@ -89,6 +89,17 @@ export type AglynNotificationType =
   // mute governs the console notification while the person's own switch for
   // the digest governs the digest.
   | 'content.insightsDigest'
+  // An AI job the recipient started (AGL-3593): its plan is ready and waits
+  // for them to confirm it, it finished and its drafts are ready to open, or
+  // it stopped. Raised by the jobs machine where the job's state changes —
+  // on the beat as often as in a request — to the person who created the
+  // job, once per change. `content.` beside the insights digest: work on the
+  // workspace's sites arriving for the person, which the operational mute
+  // governs. The plan-ready one is how a person who left the dialog learns
+  // their site is waiting on them.
+  | 'content.aiJobNeedsYou'
+  | 'content.aiJobDone'
+  | 'content.aiJobFailed'
   // Marketplace review verdicts (AGL-432/653).
   | 'marketplace.review'
   // Support desk, staff audience (AGL-850): a subscriber opened or replied to
@@ -318,6 +329,9 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> = {
   'content.leadAssigned': 'Lead assigned to you',
   'content.crmDailyDigest': 'Daily CRM digest',
   'content.insightsDigest': 'Weekly insights',
+  'content.aiJobNeedsYou': 'AI job needs you',
+  'content.aiJobDone': 'AI job finished',
+  'content.aiJobFailed': 'AI job stopped',
   'marketplace.review': 'Listing review',
 
   'support.ticketOpened': 'New support ticket',
@@ -423,6 +437,10 @@ export const NOTIFICATION_TYPE_LEVELS: Record<
   'content.leadAssigned': 'neutral',
   'content.crmDailyDigest': 'neutral',
   'content.insightsDigest': 'neutral',
+  // A plan waits for the person; nothing is built until they confirm it.
+  'content.aiJobNeedsYou': 'warning',
+  'content.aiJobDone': 'success',
+  'content.aiJobFailed': 'warning',
   'marketplace.review': 'info',
   'support.ticketOpened': 'info',
   'support.ticketReply': 'info',
@@ -1129,7 +1147,8 @@ export function notificationOverriddenScopes(
  * Normalizing when the link is FOLLOWED repairs old and new alike, and keeps
  * working for emitters that haven't been migrated yet.
  *
- * Rewrites, in order:
+ * Rewrites, in order — each prefix also followed by a query string, as
+ * `/{hostDocId}?aiJob={id}` (AGL-3593):
  * - `/{hostDocId}` or `/{hostDocId}/rest` → `/{orgSlug}/hosts/{subdomain}/rest`
  * - `/org` or `/org/rest`                 → `/{orgSlug}/rest`
  * - `/hosts` (exactly)                    → `/{orgSlug}/hosts`
@@ -1164,7 +1183,7 @@ export function normalizeNotificationLink(
 
   if (orgSlug && hostId && hostSubdomain) {
     const prefix = `/${hostId}`
-    if (link === prefix || link.startsWith(`${prefix}/`)) {
+    if (link === prefix || link.startsWith(`${prefix}/`) || link.startsWith(`${prefix}?`)) {
       return `${buildRoute(Route.HOST_DASHBOARD, {
         orgSlug,
         host: hostSubdomain,
@@ -1173,7 +1192,7 @@ export function normalizeNotificationLink(
   }
 
   if (orgSlug) {
-    if (link === '/org' || link.startsWith('/org/')) {
+    if (link === '/org' || link.startsWith('/org/') || link.startsWith('/org?')) {
       return `${buildRoute(Route.ORG_HOME, { orgSlug })}${link.slice(
         '/org'.length,
       )}`

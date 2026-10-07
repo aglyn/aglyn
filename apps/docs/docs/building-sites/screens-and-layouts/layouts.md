@@ -130,7 +130,8 @@ and takes its colors and type from your theme.
 
 Open **Layouts** for the site and choose **Describe it**, beside **Templates** and **Create New
 Layout**. Write what the header, navigation and footer should hold, then choose **Plan the
-layout**, and open **AI jobs** in the Assist panel to read the plan and confirm it.
+layout**. The window shows the plan when it is ready, with **Confirm plan**; **Open AI jobs**
+follows the job in the Assist panel instead.
 
 A link in the layout goes only to a page that does what its words say, and one on a colored
 band, such as a footer in your primary color, uses the band's text color. Where the brief leaves

@@ -29,11 +29,12 @@ import { Box, Button, Collapse, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 
 /**
- * A job's plan and what it waits for (AGL-2935), inside the AI jobs drawer:
- * what the job reuses from the site, what it creates and why, the screens it
- * builds — and, while the job waits for a person, the one button that
- * confirms the plan or tries a refused step again. The drawer owns the
- * request; this renders.
+ * A job's plan and what it waits for (AGL-2935), inside the AI jobs drawer
+ * and the dialog that started the job (AGL-3593): what the job reuses from
+ * the site, what it creates and why, the screens it builds — and, while the
+ * job waits for a person, the one button that confirms the plan or tries a
+ * refused step again. Both send the same request (`resumeAiJobRequest`);
+ * this renders.
  */
 export interface AiJobPlanProps {
   job: AiJobSummary
@@ -47,6 +48,11 @@ export interface AiJobPlanProps {
    * allow from an answer that ignored its re-ask. A member reads the findings.
    */
   staff?: boolean
+  /**
+   * The signed-in user, for "Use the starter site instead" on a guided start
+   * that did not work out (AGL-3594); the action is drawn only when given.
+   */
+  user?: Parameters<typeof AiSiteStarterFallback>[0]['user']
 }
 
 /**
@@ -100,6 +106,7 @@ export function AiJobPlan({
   onResume,
   busy = false,
   staff = false,
+  user,
 }: AiJobPlanProps): JSX.Element | null {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const { plan, review } = job
@@ -238,7 +245,7 @@ export function AiJobPlan({
         </Button>
       )}
       {/* A guided start that did not work out can take the starter instead (AGL-3594). */}
-      {waiting && aiSiteStarterFallbackOffered(job) && <AiSiteStarterFallback job={job} />}
+      {waiting && user && aiSiteStarterFallbackOffered(job) && <AiSiteStarterFallback job={job} user={user} />}
     </Box>
   )
 }

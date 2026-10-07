@@ -32,8 +32,10 @@ of page it is. Then choose **Plan the page**.
 The job proposes a [plan](../../ai/how-aglyn-ai-builds.md#the-plan-comes-first) before it
 builds anything: the layout the page renders in, the components and forms it places, anything
 it needs to create first, the page's address and search title, and its sections from top to
-bottom. Open **AI jobs** in the Assist panel to read it, with what the whole job is estimated to
-use, then choose **Confirm plan** to build it, or cancel.
+bottom. The window shows it when it is ready, with what the whole job is estimated to use:
+choose **Confirm plan** to build it, or **Cancel job**. **Open AI jobs** follows the job in the
+Assist panel instead, and the **AI** chip in the top bar says **AI · plan ready** while the plan
+waits for you. When the page is built, **Open the draft page** opens it in the editor.
 
 When the page needs something your site does not have yet, such as a layout, a reusable
 component for cards that repeat, or a form, the plan lists it, and confirming builds it first,

@@ -1,0 +1,148 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import type { AglynNotification } from '@aglyn/aglyn/app-utils/notifications'
+import { aiJobKindNoun } from './ai-job-activity'
+import type { AiJobKind, AiJobOutput, AiJobReviewReason } from './ai-jobs.types'
+
+/** The besigner segment each versioned resource lives under. */
+export const AI_JOB_BESIGNER_SEGMENT: Partial<Record<AiJobOutput['resource'], string>> = {
+  screen: 'screens',
+  reusableComponent: 'components',
+  layout: 'layouts',
+  template: 'templates',
+  // An email design is a screen: it opens in the screen besigner, as the
+  // Emails page's own Edit design does.
+  emailScreen: 'screens',
+}
+
+/**
+ * The query parameter a console address carries to open AI jobs on one job
+ * (AGL-3593): the Assist panel reads it on arrival.
+ */
+export const AI_JOB_LINK_PARAM = 'aiJob'
+
+/** A change the person who started a job is told about. */
+export type AiJobNoticeTransition = 'needs-review' | 'done' | 'failed'
+
+/** The fields of a stored job a notice is written from. */
+export interface AiJobNoticeSource {
+  $id: string
+  orgId: string
+  hostId?: string | null
+  kind: AiJobKind
+  review?: { reason: AiJobReviewReason; message?: string | null } | null
+  outputs?: readonly AiJobOutput[] | null
+  error?: string | null
+}
+
+export type AiJobNotice = Pick<
+  AglynNotification,
+  'type' | 'title' | 'body' | 'link' | 'orgId' | 'hostId' | 'level'
+>
+
+/**
+ * Where a notice's link goes, in the stored form the console rewrites when it
+ * is followed (`normalizeNotificationLink`): `/{hostId}/…` for the job's site,
+ * `/org…` for a job of the workspace's.
+ *
+ * A job that is done leads to what it built (AGL-3593): several pages of the
+ * job's site open that site's Pages list, one versioned output opens in the
+ * editor on the version the job wrote. Everything else — a plan to confirm, a
+ * job that stopped, a done job with nothing of its own to open — opens AI
+ * jobs on the job.
+ */
+export function aiJobNoticeLink(job: AiJobNoticeSource, to: AiJobNoticeTransition): string {
+  const base = job.hostId ? `/${job.hostId}` : '/org'
+  if (to === 'done' && job.hostId) {
+    const own = (job.outputs ?? []).filter((output) => output.hostId === job.hostId)
+    const screens = own.filter((output) => output.resource === 'screen')
+    if (screens.length > 1) return `${base}/screens`
+    const versioned = own.find(
+      (output) => AI_JOB_BESIGNER_SEGMENT[output.resource] && output.versionId,
+    )
+    if (own.length === 1 && versioned) {
+      const segment = AI_JOB_BESIGNER_SEGMENT[versioned.resource]
+      return `${base}/${segment}/${versioned.id}/versions/${versioned.versionId}/besigner`
+    }
+  }
+  return `${base}?${AI_JOB_LINK_PARAM}=${encodeURIComponent(job.$id)}`
+}
+
+/**
+ * The in-app notification for one change of one job (AGL-3593), for the
+ * person who created it. Customer-safe throughout: a stopped job's sentence is
+ * the job's own `error`, which the machine writes as a fixed sentence.
+ */
+export function aiJobNotice(job: AiJobNoticeSource, to: AiJobNoticeTransition): AiJobNotice {
+  const noun = aiJobKindNoun(job.kind)
+  const scope = { orgId: job.orgId, ...(job.hostId ? { hostId: job.hostId } : {}) }
+  const link = aiJobNoticeLink(job, to)
+  if (to === 'needs-review') {
+    if (job.review?.reason === 'plan') {
+      return {
+        type: 'content.aiJobNeedsYou',
+        level: 'warning',
+        title:
+          noun === 'AI job'
+            ? 'Your plan is ready: confirm it to build'
+            : `Your ${noun} plan is ready: confirm it to build`,
+        body: 'Nothing is built until you confirm the plan. It waits in AI jobs.',
+        link,
+        ...scope,
+      }
+    }
+    return {
+      type: 'content.aiJobNeedsYou',
+      level: 'warning',
+      title: `Your ${noun === 'AI job' ? 'AI job' : `${noun} job`} needs you`,
+      body: job.review?.message || job.error || 'It stopped for your decision. It waits in AI jobs.',
+      link,
+      ...scope,
+    }
+  }
+  if (to === 'done') {
+    const pages = (job.outputs ?? []).filter((output) => output.resource === 'screen').length
+    const title =
+      job.kind === 'site' || pages > 1
+        ? 'Your site’s draft pages are ready'
+        : job.kind === 'page'
+          ? 'Your draft page is ready'
+          : noun === 'AI job'
+            ? 'Your AI job finished'
+            : `Your ${noun} is ready`
+    return {
+      type: 'content.aiJobDone',
+      level: 'success',
+      title,
+      body:
+        job.kind === 'insight' || job.kind === 'text'
+          ? 'Open AI jobs to read it.'
+          : 'Everything it built is an unpublished draft until you publish it.',
+      link,
+      ...scope,
+    }
+  }
+  return {
+    type: 'content.aiJobFailed',
+    level: 'warning',
+    title: `Your ${noun === 'AI job' ? 'AI job' : `${noun} job`} stopped`,
+    body: job.error || 'It stopped before it finished.',
+    link,
+    ...scope,
+  }
+}

@@ -714,6 +714,12 @@ describe('GET /api/ai/jobs — the read gate and the list', () => {
     const queued = await (await listJobs(get(`/api/ai/jobs?orgId=${ORG}&status=queued`))).json()
     expect(queued.jobs.map((job: { brief: string }) => job.brief)).toEqual(['second'])
   })
+
+  it('lists every job not yet settled for `status=active`, and no finished one (AGL-3593)', async () => {
+    await seedJobs()
+    const active = await (await listJobs(get(`/api/ai/jobs?orgId=${ORG}&status=active`))).json()
+    expect(active.jobs.map((job: { brief: string }) => job.brief)).toEqual(['second'])
+  })
 })
 
 describe('GET /api/ai/jobs/[jobId]/events', () => {

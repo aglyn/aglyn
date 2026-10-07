@@ -63,6 +63,7 @@ export {
   aiJobNextStepMinimumMs,
   aiJobPauseReaderRegistered,
   aiJobRunnerForStep,
+  aiJobTransitionListenerRegistered,
   aiJobStepMaxPasses,
   aiJobStepMinimumMs,
   aiJobStepNames,
@@ -175,6 +176,8 @@ interface Registered {
   routes: string[]
   /** Whether the jobs machine asks a workspace's AI pause before a claim (AGL-3037). */
   pauseReader: boolean
+  /** Whether the jobs machine tells a job's creator when it needs them or settles (AGL-3593). */
+  notifier: boolean
 }
 
 /**
@@ -201,7 +204,7 @@ function registered(plugin: Loaded): Registered {
     .map((job) => job.name)
     .sort()
   const routes = (listPluginApiRoutes() as string[]).slice().sort()
-  return { steps, admissions, passes, jobs, routes, pauseReader: plugin.aiJobPauseReaderRegistered() as boolean }
+  return { steps, admissions, passes, jobs, routes, pauseReader: plugin.aiJobPauseReaderRegistered() as boolean, notifier: plugin.aiJobTransitionListenerRegistered() as boolean }
 }
 
 /** The AI activity codes the activity registry holds, with their labels. */
@@ -336,6 +339,8 @@ describe('the AI plugin, loaded through a bundler that honors sideEffects', () =
     expect(bundled.routes).toContain(AI_JOBS_BEAT_PATH)
     // …and the jobs it runs ask a workspace's AI pause before they claim a step (AGL-3037).
     expect(bundled.pauseReader).toBe(true)
+    // …and tell the person who started a job when it needs them (AGL-3593).
+    expect(bundled.notifier).toBe(true)
     expect(bundled.jobs).toEqual([])
     expect(isolated(() => require('./server').registerAiApi)).toBeUndefined()
     const config = JSON.parse(readFileSync(resolve(PLUGIN_ROOT, '..', '..', '..', 'plugins.config.json'), 'utf8')) as {

@@ -61,6 +61,9 @@ import {
   aiSiteStartRefusal,
   type AiSiteStartAnswers,
 } from '../model/ai-site-start'
+import type { AiJobSummary } from '../model/ai-jobs.types'
+import { AiJobFollow } from './ai-job-follow.component'
+import { publishAiJob } from './ai-jobs-store'
 
 /**
  * The guided start (AGL-2918), on the `hostFirstRun` zone of the page a newly
@@ -106,8 +109,16 @@ import {
  * Confirming starts a `site` job, which PLANS first: the pages, their
  * addresses, the navigation, the layout, the contact form and a palette, with
  * an estimated cost beside the button that confirms it. Nothing is built
- * until the person confirms that plan in AI jobs, and everything it then
- * builds is an unpublished draft.
+ * until the person confirms that plan, and everything it then builds is an
+ * unpublished draft.
+ *
+ * ── It stays with the job (AGL-3593) ─────────────────────────────────────
+ *
+ * Once the job exists the dialog follows it live — planning, the plan with
+ * its Confirm, building, then the draft pages to open — so a person never has
+ * to leave it to get their site built. "Open AI jobs" follows the job in the
+ * Assist panel instead; it leaves the guided start the way every other exit
+ * does, because the dialog covers the panel it opens.
  */
 
 type Verdict = 'checking' | 'ready' | 'hidden'
@@ -118,6 +129,7 @@ const TITLE_ID = 'ai-site-start-title'
 export function AiSiteStartCard({
   hostId,
   orgId,
+  orgSlug,
   startBlank,
   leave,
 }: ConsoleHostFirstRunZoneProps) {
@@ -131,7 +143,8 @@ export function AiSiteStartCard({
   const [answers, setAnswers] = useState<AiSiteStartAnswers>(AI_SITE_START_ANSWERS)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
-  const [started, setStarted] = useState(false)
+  /** The site job "Plan my site" started, as the create door answered with it. */
+  const [started, setStarted] = useState<AiJobSummary | null>(null)
   // The Free taste's page band (AGL-3594), read off the verdict request.
   const [freeTaste, setFreeTaste] = useState(false)
 
@@ -196,7 +209,14 @@ export function AiSiteStartCard({
         )
         return
       }
-      setStarted(true)
+      const created = (payload?.job as AiJobSummary | undefined) ?? null
+      if (!created) {
+        setNotice('The site could not be started. Try again.')
+        return
+      }
+      // The indicator and the launcher count it from the moment it exists.
+      publishAiJob(created)
+      setStarted(created)
     } catch {
       setNotice('The site could not be started. Try again.')
     } finally {
@@ -263,11 +283,19 @@ export function AiSiteStartCard({
                 'confirm the plan, and everything it builds is an unpublished draft.'}
             </Typography>
             {notice && <Alert severity="info">{notice}</Alert>}
-            {started ? (
-              <Alert severity="success">
-                {'Your site is being planned. Open AI jobs in the Assist panel to read the plan ' +
-                  'and confirm it — nothing is built, and nothing is published, until you do.'}
-              </Alert>
+            {started && orgId ? (
+              <AiJobFollow
+                job={started}
+                orgId={orgId}
+                orgSlug={orgSlug}
+                user={user}
+                intro={
+                  'Your site is being planned. Review the plan here or in AI jobs, and confirm ' +
+                  'it to build — nothing is built, and nothing is published, until you do.'
+                }
+                // Full screen: AI jobs opens in the panel this dialog covers.
+                onOpenJobs={exit}
+              />
             ) : (
               <>
                 <Box>

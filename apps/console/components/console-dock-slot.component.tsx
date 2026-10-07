@@ -24,17 +24,16 @@ import useOrgScope, { useOrgSlug } from '../hooks/use-org-scope'
 import useReleaseFlags from '../hooks/use-release-flags'
 import { useUrlNamesOrg } from '../hooks/use-secondary-nav'
 import { HostIdContext } from './host-id-provider'
-import type { ConsoleReleaseVerdict } from '@aglyn/aglyn'
+import type { ConsoleDockZoneProps, ConsoleReleaseVerdict } from '@aglyn/aglyn'
 import PluginWidgetSlot from './plugin-widget-slot.component'
 
 /**
- * The console dock (AGL-2940): the `consoleDock` zone, mounted once above
- * every route boundary in both shells — a floating panel a plugin may draw
- * over any console page, such as an assistant — with the shell's own answers
- * handed down as props: which org the URL names and whether the membership
- * contradicts it, the site in view, the brand, the reader's plugin
- * permissions on that site, and a verdict for any release flag. A plugin
- * widget here reads no console hook; it renders what the shell resolved.
+ * The shell's answers for a zone that sits above every route — the console
+ * dock, and the top bar's (AGL-3593): which org the URL names and whether
+ * the membership contradicts it, the site in view, the brand, the reader's
+ * plugin permissions on that site, and a verdict for any release flag. A
+ * plugin widget in either reads no console hook; it renders what the shell
+ * resolved.
  *
  * `scopedOrgId` is the org a widget may speak for, act as, and be METERED
  * against — or `undefined` where the page named none (AGL-1130, AGL-1934).
@@ -46,7 +45,7 @@ import PluginWidgetSlot from './plugin-widget-slot.component'
  * staff bypass applied the way `useReleaseFlag` applies it, so the shell
  * names no plugin's flag: the widget asks for its own.
  */
-export default function ConsoleDockSlot() {
+export function useConsoleShellZoneProps(): ConsoleDockZoneProps {
   const { flags, isStaff } = useReleaseFlags()
   const releaseVerdict = useCallback(
     (key: string): ConsoleReleaseVerdict => {
@@ -71,19 +70,27 @@ export default function ConsoleDockSlot() {
   const orgSlug = useOrgSlug()
   const hostId = useContext(HostIdContext)
   const permissionsOnHost = usePermissionsOnHost(hostId)
-  return (
-    <PluginWidgetSlot
-      slot="consoleDock"
-      orgId={orgId}
-      org={org}
-      orgReady={orgReady}
-      scopedOrgId={scopedOrgId}
-      orgSlug={orgSlug}
-      hostId={hostId ?? null}
-      productName={branding.productName}
-      releaseVerdict={releaseVerdict}
-      isStaff={isStaff}
-      permissionsOnHost={permissionsOnHost}
-    />
-  )
+  return {
+    orgId,
+    org,
+    orgReady,
+    scopedOrgId,
+    orgSlug,
+    hostId: hostId ?? null,
+    productName: branding.productName,
+    releaseVerdict,
+    isStaff,
+    permissionsOnHost,
+  }
+}
+
+/**
+ * The console dock (AGL-2940): the `consoleDock` zone, mounted once above
+ * every route boundary in both shells — a floating panel a plugin may draw
+ * over any console page, such as an assistant — with the shell's own answers
+ * handed down as props ({@link useConsoleShellZoneProps}).
+ */
+export default function ConsoleDockSlot() {
+  const props = useConsoleShellZoneProps()
+  return <PluginWidgetSlot slot="consoleDock" {...props} />
 }

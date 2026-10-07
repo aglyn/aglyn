@@ -2368,6 +2368,7 @@
           "shell": true,
           "slots": [
             "consoleDock",
+            "consoleTopBar",
             "automationEditor",
             "automationRun",
             "besignerInspector",

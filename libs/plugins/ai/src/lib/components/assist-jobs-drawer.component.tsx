@@ -17,16 +17,10 @@
 
 import { checkEntitlement } from '@aglyn/aglyn'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
-import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import { formatBytes } from '@aglyn/aglyn/app-utils/measure-node-map'
-import {
-  pluginRecordHref,
-  pluginRecordListHref,
-} from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import {
   AI_JOB_TERMINAL_STATUSES,
   type AiJobOutput,
-  type AiJobStatus,
   type AiJobSummary,
 } from '../model/ai-jobs.types'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
@@ -44,10 +38,26 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  AI_JOB_PHASE_LABELS,
+  aiJobActivityCounts,
+  aiJobPhase,
+  aiJobsHeaderChips,
+  type AiJobActivityState,
+  type AiJobPhase,
+} from '../model/ai-job-activity'
 import type { AiInsightSurface } from '../model/ai-insight'
+import { cancelAiJobRequest, resumeAiJobRequest } from './ai-job-requests'
+import { publishAiJob, type AiJobsOpenRequest } from './ai-jobs-store'
 import { AiPageBriefDialog } from './ai-page-brief-dialog.component'
 import { AiInsightDialog } from './ai-insight-dialog.component'
 import { AiJobPlan } from './ai-job-plan.component'
+import { aiJobOutputHref, aiJobPrimaryLink } from './ai-job-links'
+import { readEventFrames } from './ai-job-events'
+
+// Where an output opens, and the stream reader, live beside the dialogs that
+// share them (AGL-3593); this module has always exported them.
+export { aiJobOutputHref, aiJobPrimaryLink, readEventFrames }
 
 /**
  * The AI jobs drawer inside the Assist panel (AGL-2904): the workspace's
@@ -61,6 +71,12 @@ import { AiJobPlan } from './ai-job-plan.component'
  * panel opens on every console page, and a list nobody asked for is a read
  * on every page view.
  *
+ * It opens EXPANDED while any of the workspace's jobs is moving or waiting
+ * for the person (AGL-3593) — the shared list the top-bar indicator reads
+ * says so — because a plan waiting behind a collapsed row is a site that
+ * never gets built. An "Open AI jobs" anywhere in the console expands it,
+ * scrolls to the job it names and highlights it for a moment.
+ *
  * Hidden — not disabled — unless the flag shows it AND the plan carries
  * `aiGenerative`: a released-off feature does not exist, and a plan without
  * it is sold the add-on on the Billing page, not here.
@@ -72,86 +88,32 @@ const LIST_LIMIT = 10
 /** How much of a brief a row shows. */
 const BRIEF_PREVIEW_CHARS = 90
 
-const STATUS_LABEL: Record<AiJobStatus, string> = {
-  queued: 'Queued',
-  running: 'Running',
-  needs_input: 'Needs attention',
-  needs_review: 'Needs review',
-  done: 'Done',
-  failed: 'Failed',
-  canceled: 'Canceled',
-}
-
-const STATUS_COLOR: Record<
-  AiJobStatus,
-  'default' | 'primary' | 'success' | 'error' | 'warning'
-> = {
+/**
+ * A row's chip says where the job stands in the words every AI surface uses
+ * (AGL-3593): a plan waiting to be confirmed is "Plan ready", never "Running"
+ * and never the machine's `needs_review`.
+ */
+const PHASE_COLOR: Record<AiJobPhase, 'default' | 'primary' | 'success' | 'error' | 'warning'> = {
   queued: 'default',
-  running: 'primary',
-  needs_input: 'warning',
-  needs_review: 'warning',
+  planning: 'primary',
+  'plan-ready': 'warning',
+  building: 'primary',
+  attention: 'warning',
   done: 'success',
   failed: 'error',
   canceled: 'default',
 }
 
-/** The besigner segment each versioned resource lives under. */
-const BESIGNER_SEGMENT: Partial<Record<AiJobOutput['resource'], string>> = {
-  screen: 'screens',
-  reusableComponent: 'components',
-  layout: 'layouts',
-  template: 'templates',
-  // An email design is a screen: it opens in the screen besigner, as the
-  // Emails page's own Edit design does.
-  emailScreen: 'screens',
+/** The header's count chips, colored as the rows they count. */
+const STATE_COLOR: Record<AiJobActivityState, 'primary' | 'warning'> = {
+  'needs-you': 'warning',
+  attention: 'warning',
+  running: 'primary',
 }
 
-/**
- * Where "open draft" goes, or `null` when the output has no page of its
- * own — a `text` output carries its copy on the job and is shown inline.
- * A versioned resource opens in the besigner on the version the job wrote;
- * one the console lists without a detail page opens its list; a `theme`
- * proposal opens the site's Theme section, where it is put in the editor.
- *
- * A console URL names a site by its SUBDOMAIN: the `[host]` segment resolves
- * through the member's host projection by subdomain, never by document id.
- * So an output that carries no `hostSubdomain` gets no link rather than one
- * that opens no site.
- */
-export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | null {
-  const host = output.hostSubdomain
-  if (!orgSlug || !host) return null
-  const segment = BESIGNER_SEGMENT[output.resource]
-  if (segment) {
-    const base = `/${orgSlug}/hosts/${host}/${segment}/${output.id}`
-    return output.versionId ? `${base}/versions/${output.versionId}/besigner` : base
-  }
-  if (output.resource === 'product') {
-    // The catalog a drafted product lands in: the commerce plugin's address
-    // for it (AGL-3080), or no link where commerce is not loaded.
-    return pluginRecordListHref('product', { orgSlug, host })
-  }
-  if (output.resource === 'workflow') {
-    // A drafted automation is an action (AGL-2919), listed switched off on
-    // the workflows plugin's list of actions, or no link where it is not loaded.
-    return pluginRecordListHref('action', { orgSlug, host })
-  }
-  if (output.resource === 'theme') {
-    return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
-  }
-  if (output.resource === 'form') {
-    // A new form has no version for the besigner to open: its own page — the
-    // forms plugin's address for it — mints the first one, and holds the
-    // routing and consent it declares.
-    return pluginRecordHref('form', { orgSlug, host }, output.id)
-  }
-  if (output.resource === 'campaign') {
-    // A campaign's page is the marketing plugin's, under the site: its
-    // address for the campaign (AGL-3080), or no link where it is not loaded.
-    return pluginRecordHref('campaign', { orgSlug, host }, output.id)
-  }
-  return null
-}
+/** How long a job AI jobs was opened on stays highlighted. */
+const HIGHLIGHT_MS = 2_500
+
 
 /**
  * The navigation entry a page job proposes for the page it built (AGL-2907),
@@ -166,34 +128,6 @@ export function aiJobNavigationProposal(output: AiJobOutput): string | null {
   return typeof label === 'string' && label.trim() ? label.trim() : null
 }
 
-/**
- * `data:` frames out of an SSE body, one parsed event per frame. Shared with
- * every panel that watches a job through the events route.
- */
-export async function readEventFrames(
-  body: ReadableStream<Uint8Array>,
-  onEvent: (event: Record<string, unknown>) => void,
-): Promise<void> {
-  const reader = body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const frames = buffer.split('\n\n')
-    buffer = frames.pop() ?? ''
-    for (const frame of frames) {
-      const line = frame.split('\n').find((part) => part.startsWith('data: '))
-      if (!line) continue
-      try {
-        onEvent(JSON.parse(line.slice('data: '.length)))
-      } catch {
-        // A torn frame is dropped; the next state event carries the whole job.
-      }
-    }
-  }
-}
 
 export interface AssistJobsDrawerProps {
   /** The org the panel is scoped to — `undefined` where the page named none. */
@@ -217,6 +151,18 @@ export interface AssistJobsDrawerProps {
    * `null` elsewhere, where no question about the figures is offered.
    */
   insight?: { surface: Exclude<AiInsightSurface, 'digest'>; host: string | null } | null
+  /**
+   * The workspace's jobs that are not yet settled, from the shared store the
+   * top-bar indicator reads (AGL-3593). The header counts them, and the
+   * drawer opens expanded while there is any. Absent, the drawer counts what
+   * it loaded itself.
+   */
+  inFlight?: readonly AiJobSummary[]
+  /**
+   * The latest request to open AI jobs (AGL-3593): a new `seq` expands the
+   * drawer, and a named job is scrolled to and highlighted.
+   */
+  focus?: AiJobsOpenRequest | null
 }
 
 export function AssistJobsDrawer({
@@ -229,9 +175,20 @@ export function AssistJobsDrawer({
   isStaff = false,
   hostId,
   insight,
+  inFlight,
+  focus,
 }: AssistJobsDrawerProps): JSX.Element | null {
   const entitled = orgReady && checkEntitlement(org as never, 'aiGenerative')
   const [expanded, setExpanded] = useState(false)
+  /**
+   * The person opened or closed the list themselves: from then on the
+   * expanded-by-default rule leaves their choice alone until the workspace
+   * changes.
+   */
+  const toggledRef = useRef(false)
+  /** The job AI jobs was opened on, highlighted for a moment once it is listed. */
+  const [highlight, setHighlight] = useState<string | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
   const [jobs, setJobs] = useState<AiJobSummary[]>([])
   const [loading, setLoading] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -248,6 +205,8 @@ export function AssistJobsDrawer({
   const watchingRef = useRef<string | null>(null)
 
   const patchJob = useCallback((next: AiJobSummary) => {
+    // Every counting surface moves with the row (AGL-3593).
+    publishAiJob(next)
     setJobs((prior) => {
       const index = prior.findIndex((job) => job.id === next.id)
       if (index === -1) return [next, ...prior].slice(0, LIST_LIMIT)
@@ -287,6 +246,8 @@ export function AssistJobsDrawer({
       // watch finish, so its outcome is not this session's to count.
       for (const job of payload.jobs) {
         if (AI_JOB_TERMINAL_STATUSES.includes(job.status)) trackedRef.current.add(job.id)
+        // A job the indicator still counts that has settled since leaves it.
+        publishAiJob(job)
       }
       setJobs(payload.jobs)
     } catch {
@@ -305,8 +266,46 @@ export function AssistJobsDrawer({
   useEffect(() => {
     setJobs([])
     setExpanded(false)
+    toggledRef.current = false
     watchingRef.current = null
   }, [orgId])
+
+  // Expanded by default while anything is moving or waiting (AGL-3593): a
+  // plan waiting to be confirmed behind a collapsed row is a site that never
+  // gets built. Otherwise collapsed, which reads nothing until asked.
+  const anyInFlight = (inFlight?.length ?? 0) > 0
+  useEffect(() => {
+    if (anyInFlight && !toggledRef.current) setExpanded(true)
+  }, [anyInFlight])
+
+  // A request to open AI jobs (AGL-3593): expand, read the list again so a
+  // job created a moment ago is in it, and highlight the job named.
+  const focusSeq = focus?.seq ?? 0
+  const focusJobId = focus?.jobId ?? null
+  const expandedRef = useRef(expanded)
+  expandedRef.current = expanded
+  useEffect(() => {
+    if (!focusSeq) return
+    toggledRef.current = true
+    setHighlight(focusJobId)
+    // An open list does not re-run the expand effect's read, so it reads here.
+    if (expandedRef.current) void load()
+    else setExpanded(true)
+    // Only a new request runs this; `load` and the job are read as they stand.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusSeq])
+
+  // Scroll to the highlighted job once it is listed, then let it fade.
+  const highlightListed = highlight !== null && jobs.some((job) => job.id === highlight)
+  useEffect(() => {
+    if (!highlight || !highlightListed) return undefined
+    const row = Array.from(
+      listRef.current?.querySelectorAll<HTMLElement>('[data-ai-job-id]') ?? [],
+    ).find((element) => element.dataset['aiJobId'] === highlight)
+    row?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+    const timer = setTimeout(() => setHighlight(null), HIGHLIGHT_MS)
+    return () => clearTimeout(timer)
+  }, [highlight, highlightListed])
 
   // Watch the most recent job that is still moving. One stream at a time:
   // the route re-reads a document every two seconds per open stream, and a
@@ -353,28 +352,16 @@ export function AssistJobsDrawer({
     }
   }, [expanded, orgId, watchedId, user, patchJob])
 
+  // The same door the dialog that started the job cancels through (AGL-3593).
   const cancel = useCallback(
     async (jobId: string) => {
       if (!orgId) return
-      try {
-        const response = await authorizedFetch(
-          user,
-          `/api/ai/jobs/${encodeURIComponent(jobId)}/cancel`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orgId }),
-          },
-        )
-        const payload = await response.json().catch(() => null)
-        if (!response.ok) {
-          setNotice(String(payload?.error ?? 'The job could not be canceled — try again.'))
-          return
-        }
-        if (payload?.job) patchJob(payload.job as AiJobSummary)
-      } catch {
-        setNotice('The job could not be canceled — try again.')
+      const { job, error } = await cancelAiJobRequest(user, orgId, jobId)
+      if (error) {
+        setNotice(error)
+        return
       }
+      if (job) patchJob(job)
     },
     [orgId, user, patchJob],
   )
@@ -390,42 +377,35 @@ export function AssistJobsDrawer({
       if (!orgId) return
       setResuming(job.id)
       setNotice(null)
-      try {
-        const response = await authorizedFetch(
-          user,
-          `/api/ai/jobs/${encodeURIComponent(job.id)}/resume`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orgId, hostId: job.hostId }),
-          },
-        )
-        const payload = await response.json().catch(() => null)
-        if (payload?.job) patchJob(payload.job as AiJobSummary)
-        if (!response.ok) {
-          setNotice(String(payload?.error ?? 'The job could not be resumed — try again.'))
-        }
-      } catch {
-        setNotice('The job could not be resumed — try again.')
-      } finally {
-        setResuming(null)
-      }
+      // The same door the dialog that started the job confirms through (AGL-3593).
+      const { job: next, error } = await resumeAiJobRequest(user, orgId, job)
+      if (next) patchJob(next)
+      if (error) setNotice(error)
+      setResuming(null)
     },
     [orgId, user, patchJob],
   )
 
   if (!visible || !orgId || !entitled) return null
 
-  const active = jobs.filter((job) => !AI_JOB_TERMINAL_STATUSES.includes(job.status)).length
+  // Counted by state, never as one "running" figure (AGL-3593): a plan waiting
+  // to be confirmed needs the person, and a stopped job is not moving.
+  const chips = aiJobsHeaderChips(aiJobActivityCounts(inFlight ?? jobs))
 
   return (
     <Box sx={{ mb: 2, borderBottom: 1, borderColor: 'divider', pb: 1 }}>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
           AI jobs
-          {active > 0 && (
-            <Chip size="small" color="primary" label={`${active} running`} sx={{ ml: 1 }} />
-          )}
+          {chips.map((chip) => (
+            <Chip
+              key={chip.state}
+              size="small"
+              color={STATE_COLOR[chip.state]}
+              label={chip.label}
+              sx={{ ml: 1 }}
+            />
+          ))}
         </Typography>
         {/* A question about the page's figures (AGL-2915). */}
         {insight && (
@@ -443,7 +423,10 @@ export function AssistJobsDrawer({
           size="small"
           aria-label={expanded ? 'Hide AI jobs' : 'Show AI jobs'}
           aria-expanded={expanded}
-          onClick={() => setExpanded((prior) => !prior)}
+          onClick={() => {
+            toggledRef.current = true
+            setExpanded((prior) => !prior)
+          }}
         >
           <MdiIcon
             path={expanded ? mdiChevronUp.path : mdiChevronDown.path}
@@ -465,20 +448,36 @@ export function AssistJobsDrawer({
             No AI jobs yet.
           </Typography>
         )}
-        <Stack spacing={1} sx={{ mt: 1 }} role="list" aria-label="AI jobs">
+        <Stack ref={listRef} spacing={1} sx={{ mt: 1 }} role="list" aria-label="AI jobs">
           {jobs.map((job) => {
             const stepsDone = job.steps.filter((step) => step.status === 'done').length
             const current = job.steps.find((step) => step.status === 'running')
             const terminal = AI_JOB_TERMINAL_STATUSES.includes(job.status)
+            const phase = aiJobPhase(job)
+            const primary = aiJobPrimaryLink(job, orgSlug)
+            const highlighted = highlight === job.id
             return (
               <Box
                 key={job.id}
                 role="listitem"
-                sx={{ borderRadius: 1, bgcolor: 'action.hover', px: 1.5, py: 1 }}
+                data-ai-job-id={job.id}
+                aria-current={highlighted ? 'true' : undefined}
+                sx={{
+                  borderRadius: 1,
+                  bgcolor: highlighted ? 'action.selected' : 'action.hover',
+                  outline: 2,
+                  outlineColor: highlighted ? 'primary.main' : 'transparent',
+                  transition: (theme) =>
+                    theme.transitions.create(['background-color', 'outline-color'], {
+                      duration: theme.transitions.duration.standard,
+                    }),
+                  px: 1.5,
+                  py: 1,
+                }}
               >
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                   <Chip size="small" variant="outlined" label={job.kind} />
-                  <Chip size="small" color={STATUS_COLOR[job.status]} label={STATUS_LABEL[job.status]} />
+                  <Chip size="small" color={PHASE_COLOR[phase]} label={AI_JOB_PHASE_LABELS[phase]} />
                   <Typography variant="caption" color="text.secondary" sx={{ flexGrow: 1 }}>
                     {stepsDone}/{job.steps.length} steps
                     {current ? ` — ${current.name}` : ''}
@@ -500,6 +499,18 @@ export function AssistJobsDrawer({
                     {job.error}
                   </Typography>
                 )}
+                {/* What a finished job built, first (AGL-3593). */}
+                {primary ? (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    component={AppLink}
+                    href={primary.href}
+                    sx={{ mt: 0.5 }}
+                  >
+                    {primary.label}
+                  </Button>
+                ) : null}
                 {job.outputs.map((output, index) => {
                   const href = aiJobOutputHref(output, orgSlug)
                   const navigation = aiJobNavigationProposal(output)
@@ -587,6 +598,8 @@ export function AssistJobsDrawer({
           orgId={orgId}
           hostId={hostId}
           user={user}
+          orgSlug={orgSlug}
+          isStaff={isStaff}
         />
       )}
     </Box>

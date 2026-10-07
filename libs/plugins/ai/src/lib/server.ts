@@ -20,6 +20,7 @@ import { registerAiDeclarations } from './declarations'
 import { AI_JOBS_BEAT_PATH } from './jobs/ai-jobs-beat'
 import { registerAiJobPlan } from './jobs/ai-job-plan-step'
 import { registerAiJobsPause } from './jobs/ai-jobs-pause'
+import { registerAiJobsNotify } from './jobs/ai-jobs-notify'
 import { registerAiComponentJob } from './jobs/ai-job-component-step'
 import { registerAiCrmJob } from './jobs/ai-job-crm-step'
 import { registerAiLayoutJob } from './jobs/ai-job-layout-step'
@@ -96,6 +97,9 @@ function registerAiJobKinds(): void {
   // The workspace AI pause the machine asks before it claims any step, so a
   // paused workspace's queued jobs spend nothing (AGL-3037).
   registerAiJobsPause()
+  // The person who started a job is told when it needs them, finishes or
+  // stops (AGL-3593), from the write that changed it.
+  registerAiJobsNotify()
   // The plan step every planned kind runs first (AGL-2935).
   registerAiJobPlan()
   // Components, layouts and templates (AGL-2908, AGL-2909).

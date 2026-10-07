@@ -72,11 +72,19 @@ If your workspace runs out of credits partway through, the job stops and waits r
 failing. What it had already built stays, and it carries on from there once there are credits
 again. You can also cancel it at any point and keep what it made.
 
-## Watching it build
+## Confirming and watching it build
 
-A site takes a while — each page is built a section at a time — so the job works in the
-background. Open **AI jobs** in the Assist panel to see which step it is on, what it has made
-so far, and to open any draft it has finished.
+After **Plan my site**, the window stays with the job. It shows the site being planned, then
+the plan with its estimate and **Confirm plan**, so you can confirm it without going anywhere
+else. Once you confirm, it shows the site building, and when it is done, **Open your draft
+pages** opens the site's **Pages** list, where every page waits as a draft.
+
+A site takes a while — each page is built a section at a time — so you do not have to wait in
+the window. **Open AI jobs** opens the Assist panel on the job instead, where you can see which
+step it is on, what it has made so far, and open any draft it has finished. While it works, the
+**AI** chip in the top bar says what it is doing, and a notification tells you when the plan is
+ready, when the site is built and if the job stops. See
+[Finding your AI jobs](./how-aglyn-ai-builds.md#finding-your-ai-jobs).
 
 ## Generate for several sites at once
 

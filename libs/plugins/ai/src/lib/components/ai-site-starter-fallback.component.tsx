@@ -18,7 +18,6 @@
 
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { useUser } from '@aglyn/tenant-feature-instance'
 import { Button, Typography } from '@mui/material'
 import { useCallback, useRef, useState } from 'react'
 import {
@@ -59,10 +58,17 @@ export async function requestAiStarterSite(
  * that did not work out offers — a site job that failed, was canceled, or
  * stopped for review — while it has built nothing. Draws nothing for any
  * other job. The AI jobs drawer places it on a failed or canceled row; the
- * plan card places it beside Try again.
+ * plan card places it beside Try again when it is handed the signed-in user.
+ * The user is a prop rather than read here, so a surface drawn outside the
+ * console's Firebase provider still renders.
  */
-export function AiSiteStarterFallback({ job }: { job: AiJobSummary }): JSX.Element | null {
-  const { data: user } = useUser()
+export function AiSiteStarterFallback({
+  job,
+  user,
+}: {
+  job: AiJobSummary
+  user: Parameters<typeof authorizedFetch>[0]
+}): JSX.Element | null {
   const userRef = useRef(user)
   userRef.current = user
   const [state, setState] = useState<'idle' | 'busy' | 'provisioned' | 'unchanged' | 'failed'>('idle')

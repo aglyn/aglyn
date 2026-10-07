@@ -24,10 +24,6 @@
 const mockFetch = jest.fn()
 const mockTrack = jest.fn()
 const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
-jest.mock('@aglyn/tenant-feature-instance', () => ({
-  __esModule: true,
-  useUser: () => ({ data: mockUser }),
-}))
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   __esModule: true,
   authorizedFetch: (...args: unknown[]) => mockFetch(...args),
@@ -318,7 +314,7 @@ describe('a guided start that did not work out offers the starter instead (AGL-3
     mockFetch.mockReset()
     mockTrack.mockReset()
     mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ provisioned: true, screenId: 'scrHome' }) })
-    render(<AiJobPlan job={REFUSED} onResume={jest.fn()} />)
+    render(<AiJobPlan job={REFUSED} onResume={jest.fn()} user={mockUser as never} />)
     fireEvent.click(screen.getByRole('button', { name: 'Use the starter site instead' }))
     await screen.findByText(/now has the starter home page/)
     expect(mockFetch.mock.calls[0][1]).toBe('/api/hosts/starter')
@@ -328,7 +324,12 @@ describe('a guided start that did not work out offers the starter instead (AGL-3
   })
 
   it('is not offered beside a plan waiting to be confirmed', () => {
-    render(<AiJobPlan job={job()} onResume={jest.fn()} />)
+    render(<AiJobPlan job={job()} onResume={jest.fn()} user={mockUser as never} />)
+    expect(screen.queryByRole('button', { name: 'Use the starter site instead' })).toBeNull()
+  })
+
+  it('is drawn only where the surface hands it the signed-in user', () => {
+    render(<AiJobPlan job={REFUSED} onResume={jest.fn()} />)
     expect(screen.queryByRole('button', { name: 'Use the starter site instead' })).toBeNull()
   })
 })
