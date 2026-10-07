@@ -391,6 +391,7 @@
         "serverDeclarations": "registerCommerceServerDeclarations",
         "consoleServerDeclarations": "registerCommerceConsoleServerDeclarations",
         "tenantEmails": "commerceTenantEmails",
+        "subprocessors": "commerceSubprocessors",
         "planEntitlements": "commercePlanEntitlements",
         "starterTemplates": "commerceStarterTemplates"
       },
