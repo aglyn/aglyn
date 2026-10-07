@@ -451,6 +451,12 @@ export interface AiJobItemFailure {
   reason: AiJobItemFailureReason
   /** Customer-safe. */
   message: string
+  /**
+   * The checks' own sentence behind a `doctrine-refused` failure (AGL-3596),
+   * rule numbers and all: kept on the job for staff and debugging, never on
+   * the wire a customer reads.
+   */
+  detail?: string
 }
 
 export interface AiJobItemLedger {
@@ -478,6 +484,12 @@ export interface AiJobItemLedger {
   degradedBy?: string[]
   /** Customer-safe: what the person should know about this item. */
   note?: string | null
+  /**
+   * When this attempt settled, as an ISO string (AGL-3596): the moment the
+   * next item started, which is what its progress row counts from. Absent
+   * while the item is open, and on a ledger written before it was kept.
+   */
+  settledAt?: string | null
 }
 
 /** Whether a build's own planning was charged or given back (AGL-3616). */
@@ -646,6 +658,13 @@ export interface AiJobSummary {
    * on every other kind.
    */
   siteInputs?: Record<string, unknown> | null
+  /**
+   * Whether the machine confirms this job's plan itself (AGL-3594): a guided
+   * site start. Its plan parks for the instant the confirmation takes, and a
+   * surface reads that park as the build going on (AGL-3596). Absent on every
+   * other job.
+   */
+  autoConfirm?: boolean
   /** A `build` job's items (AGL-3616); absent on every other job. */
   items?: AiJobItemLedger[]
   /**

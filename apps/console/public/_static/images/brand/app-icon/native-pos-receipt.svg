@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- The Aglyn POS receipt, on the app icon's 1024 grid: the paper with a torn edge, two line items and a primary-blue total. The mark is printed in the space above the line items. -->
+  <defs>
+    <filter id="paper-shadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="15.36"/>
+      <feOffset dy="12.288" result="blur"/>
+      <feFlood flood-color="#001A33" flood-opacity="0.22"/>
+      <feComposite in2="blur" operator="in"/>
+    </filter>
+  </defs>
+  <path d="M215.04 153.6H808.96V824.32L759.47 870.4L709.97 824.32L660.48 870.4L610.99 824.32L561.49 870.4L512 824.32L462.51 870.4L413.01 824.32L363.52 870.4L314.03 824.32L264.53 870.4L215.04 824.32Z" fill="#FFFFFF" filter="url(#paper-shadow)"/>
+  <path d="M215.04 153.6H808.96V824.32L759.47 870.4L709.97 824.32L660.48 870.4L610.99 824.32L561.49 870.4L512 824.32L462.51 870.4L413.01 824.32L363.52 870.4L314.03 824.32L264.53 870.4L215.04 824.32Z" fill="#FFFFFF"/>
+  <path d="M362.5 650.24H661.5A14.34 14.34 0 0 1 661.5 678.91H362.5A14.34 14.34 0 0 1 362.5 650.24Z" fill="#E5E9ED"/>
+  <path d="M362.5 711.68H518.14A14.34 14.34 0 0 1 518.14 740.35H362.5A14.34 14.34 0 0 1 362.5 711.68Z" fill="#E5E9ED"/>
+  <path d="M587.78 711.68H661.5A14.34 14.34 0 0 1 661.5 740.35H587.78A14.34 14.34 0 0 1 587.78 711.68Z" fill="#00B0FF"/>
+</svg>

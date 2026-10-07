@@ -21,6 +21,7 @@ import { SHIPPING_ENTITLEMENT, SHIPPING_PLUGIN_ID } from './constants/bundle-com
 
 const ShippingSettingsCard = lazy(() => import('./components/shipping-settings-card.component'))
 const CarrierAccountsCard = lazy(() => import('./components/carrier-accounts-card.component'))
+const OwnAccountsCard = lazy(() => import('./components/own-accounts-card.component'))
 const OrderLabelsWidget = lazy(() => import('./components/order-labels-widget.component'))
 const ReturnLabelWidget = lazy(() => import('./components/return-label-widget.component'))
 const OrdersBatchWidget = lazy(() => import('./components/orders-batch-widget.component'))
@@ -46,6 +47,12 @@ export function registerShippingConsole(): void {
         widgetId: 'shipping-label-settings',
         title: 'Shipping labels',
         Component: ShippingSettingsCard,
+      },
+      {
+        slot: 'commerceSettings',
+        widgetId: 'shipping-own-accounts',
+        title: 'Your shipping accounts',
+        Component: OwnAccountsCard,
       },
       {
         slot: 'commerceSettings',

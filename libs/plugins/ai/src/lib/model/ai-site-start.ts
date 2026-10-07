@@ -232,8 +232,11 @@ export function aiSiteStartBrief(answers: AiSiteStartAnswers): string {
  * without a prompt of their own.
  *
  * The per-site variables an agency batch fills — the business name, the city,
- * the brand — are left empty: this is one person's own site, and its name is
- * on the site already.
+ * the brand — are left empty here: the questions never ask them. The name is
+ * the site's own, and the create door fills it from the site
+ * (`aiJobAdmittedInputs`, AGL-3596) when the job is started — a job that
+ * reached the model with no name had the model invent one for its header and
+ * footer.
  */
 export function aiSiteStartInputs(
   answers: AiSiteStartAnswers,

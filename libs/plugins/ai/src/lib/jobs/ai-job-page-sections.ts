@@ -35,6 +35,9 @@ import {
   type AiGenerationCheck,
 } from '../runtime/ai-doctrine'
 import {
+  aiSettleCutHeadings,
+  aiSettleDisagreeingNodes,
+  aiSettleGridItems,
   detectCutLines,
   detectDisagreeingNodes,
   isAiLinkElement,
@@ -211,6 +214,54 @@ export interface AiPageSectionPromptInput {
   reusableComponents?: boolean
   /** The dataset this page is the record template of; absent for a page that is one page. */
   record?: AiPageRecordTemplate | null
+  /**
+   * The site's other pages a link may go to by id (AGL-3596): a guided
+   * start's pages are minted on its plan before any is built, so the Home
+   * page is built before the Contact page its buttons go to exists.
+   */
+  linkablePages?: readonly AiLinkablePage[]
+}
+
+/** A page of the site a section may link by its id, built or still to come. */
+export interface AiLinkablePage {
+  id: string
+  label: string
+  slug: string
+}
+
+/**
+ * The pages a section may link by id beyond the ones the site has built, and
+ * the one page a link that names no destination can only mean (AGL-3596).
+ * `planned` are a guided start's pages, minted on its plan (the input the
+ * layout reads them from); `own` are this page's ids, which neither counts.
+ * The link target is the site's one page that is neither its home nor this
+ * page, where it has exactly one, built or planned: a two-page guided start's
+ * Contact page, which its Home hero's "Book an appointment" goes to.
+ */
+export function aiPageLinkablePages(
+  inventory: AiSiteInventory | null,
+  planned: readonly AiLinkablePage[],
+  own: ReadonlyArray<string | null | undefined>,
+): { linkablePages: AiLinkablePage[]; linkTarget: string | null } {
+  const mine = new Set(own.filter((id): id is string => Boolean(id)))
+  const home = new Set(aiHomeScreenIds(inventory))
+  const isHome = (slug: string): boolean => slug.replace(/^\/+|\/+$/g, '') === ''
+  const linkablePages = planned.filter((page) => !mine.has(page.id))
+  const targets = new Set([
+    ...(inventory?.screens ?? [])
+      .filter((row) => !row.template && !home.has(row.id) && !isHome(row.slug))
+      .map((row) => row.id),
+    ...linkablePages.filter((page) => !isHome(page.slug)).map((page) => page.id),
+  ])
+  for (const id of mine) targets.delete(id)
+  return { linkablePages, linkTarget: targets.size === 1 ? [...targets][0] : null }
+}
+
+/** The line a section request names the site's other pages in. */
+export function aiPageSectionLinkablePagesLine(pages: readonly AiLinkablePage[]): string | null {
+  if (!pages.length) return null
+  const listed = pages.map((page) => `${page.label} (${page.slug || '/'}, id "${page.id}")`).join(', ')
+  return `Other pages of this site: ${listed}. A button or link that goes to one sets its "screenId" to that id.`
 }
 
 /** What a section request says where the workspace keeps no reusable components. */
@@ -323,6 +374,7 @@ export function aiPageSectionPrompt(input: AiPageSectionPromptInput): string {
       : section.items && section.uses.length
         ? [AI_PAGE_SECTION_INSTANCE_LINE]
         : []),
+    ...(input.linkablePages?.length ? [aiPageSectionLinkablePagesLine(input.linkablePages) as string] : []),
     `Keep this section to at most ${input.maxElements} elements.`,
   ].join('\n')
 }
@@ -406,11 +458,16 @@ export function aiPageCheckContext(
     embeds?: AiDoctrineTreeContext['plannedEmbeds']
     /** A record template's tokens, which its links and images may name (AGL-3475). */
     recordTokens?: readonly string[]
+    /** The site's pages still to be built that a link may go to by id (AGL-3596). */
+    linkablePages?: readonly AiLinkablePage[]
   } = {},
 ): AiDoctrineTreeContext {
+  const tree = aiNodeTreeContextFromInventory(inventory)
+  const screenIds = [...new Set([...(tree.screenIds ?? []), ...(options.linkablePages ?? []).map((page) => page.id)])]
   return {
     brand: inventory?.theme ? { colors: inventory.theme.colors, fonts: inventory.theme.fonts } : null,
-    ...aiNodeTreeContextFromInventory(inventory),
+    ...tree,
+    ...(tree.screenIds || options.linkablePages?.length ? { screenIds } : {}),
     homeScreenIds: aiHomeScreenIds(inventory),
     ...(options.reusableComponents === false ? { reusableComponents: false } : {}),
     ...(options.sections?.length ? { pageSections: options.sections } : {}),
@@ -432,6 +489,12 @@ export interface AiPageSectionCheckInput {
    */
   section: Pick<AiBuildPlanSection, 'name' | 'uses' | 'items'>
   inventory: AiSiteInventory | null
+  /**
+   * The one page a link that goes nowhere can only mean, where the site has
+   * exactly one page besides its home and this one (AGL-3596): a guided
+   * start's Contact page. Absent or `null`, such a link is re-asked.
+   */
+  linkTarget?: string | null
 }
 
 /** The parts of an answer the violations name, as the model wrote them, capped as the doctrine caps a re-ask. */
@@ -452,7 +515,8 @@ function offendingOf(raw: unknown, violations: readonly AiDoctrineViolation[]): 
 /**
  * The check a section's answer is held to: a repeated item written once drawn
  * into its copies (AGL-3053), then the palette validator on the section, with
- * any line it cut at its ceiling refused (AGL-3076), the doctrine's page check
+ * any line it cut at its ceiling refused (AGL-3076), a Grid container's items
+ * sized where rule 12 has one answer (AGL-3596), the doctrine's page check
  * on the page with the section added, and the plan line — every component it
  * names placed as an instance, every form bound by its id (rule 7), and as
  * many items as it promised (AGL-3024). Violations
@@ -465,7 +529,10 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
   const components = new Set((input.inventory?.components ?? []).map((row) => row.id))
   const forms = new Set((input.inventory?.forms ?? []).map((row) => row.id))
   return (answer) => {
-    const raw = aiAnswerTree(answer)
+    // A child named and never written, an element written and held by
+    // nothing, and a heading whose first clause fits its ceiling are settled
+    // where each has one reading (AGL-3596).
+    const raw = aiSettleCutHeadings(aiSettleDisagreeingNodes(aiAnswerTree(answer)))
     // Before anything is drawn or dropped: a repeated item written and never
     // placed is content the section loses silently, and a child named and
     // never written ends the pass with nothing to answer (AGL-3143).
@@ -473,7 +540,12 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
     if (disagreeing.length) {
       return { value: null, violations: disagreeing, ...offendingOf(raw, disagreeing) }
     }
-    const drawn = expandAiRepeatedItems(raw, { inline: input.context.reusableComponents === false, noun: 'section' })
+    // A repeated item is drawn inline where the workspace keeps no reusable
+    // components, and where this section's plan line places none (AGL-3596):
+    // there is then no component it could be drawing by hand, and a paid
+    // guided start's "Why choose us" was refused for rule 1 with nothing to place.
+    const inline = input.context.reusableComponents === false || !input.section.uses.some((ref) => components.has(ref))
+    const drawn = expandAiRepeatedItems(raw, { inline, noun: 'section' })
     if (drawn.ok === false) {
       return { value: null, violations: drawn.violations, ...offendingOf(raw, drawn.violations) }
     }
@@ -493,9 +565,18 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
         ],
       }
     }
-    const wrapper = validated.nodes[validated.rootId] as unknown as AiDoctrineNode | undefined
-    const top = (wrapper?.nodes ?? []).filter((id) => validated.nodes[id])
-    const sectionNode = top.length === 1 ? (validated.nodes[top[0]] as unknown as AiDoctrineNode) : null
+    const drawnNodes = isRecord(drawn.tree) && isRecord(drawn.tree['nodes']) ? drawn.tree['nodes'] : {}
+    // A Grid container's items are sized, and an element straight in one is
+    // put in an item, before the page check reads them: that rule has one
+    // answer, the size its re-ask would name (AGL-3596). Read off the section
+    // as the palette validator stored it, with what the model wrote beside it.
+    const { nodes: settled } = aiSettleGridItems(
+      { rootId: validated.rootId, nodes: validated.nodes as unknown as Record<string, AiDoctrineNode> },
+      { written: (id) => drawnNodes[validated.sourceIds[id] ?? id] },
+    )
+    const wrapper = settled[validated.rootId] as AiDoctrineNode | undefined
+    const top = (wrapper?.nodes ?? []).filter((id) => settled[id])
+    const sectionNode = top.length === 1 ? settled[top[0]] : null
     if (!sectionNode || sectionNode.componentId !== 'section') {
       return {
         value: null,
@@ -517,10 +598,7 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
     )
     modelIds[sectionId] = written(validated.sourceIds[minted] ?? minted)
     const sectionNodes: Record<string, Record<string, unknown>> = {}
-    for (const { id, node } of walkTree({
-      rootId: minted,
-      nodes: validated.nodes as unknown as Record<string, AiDoctrineNode>,
-    })) {
+    for (const { id, node } of walkTree({ rootId: minted, nodes: settled })) {
       const stored = { ...(node as unknown as Record<string, unknown>) }
       if (id === minted) {
         stored['$id'] = sectionId
@@ -530,7 +608,6 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
       }
       sectionNodes[id === minted ? sectionId : id] = stored
     }
-    const drawnNodes = isRecord(drawn.tree) && isRecord(drawn.tree['nodes']) ? drawn.tree['nodes'] : {}
     // What the model wrote of one of the section's nodes, by the id the page stores it under.
     const drawnIdOf = (stored: string): string =>
       validated.sourceIds[stored === sectionId ? minted : stored] ?? stored
@@ -538,12 +615,23 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
     // element interaction to that section's root, whose id is minted from the
     // plan before the section is built (AGL-3097).
     const sections = input.context.pageSections ?? []
+    // A link that names no destination at all, on a site with one page it can
+    // only mean, goes to that page (AGL-3596); one inside a form is the form's
+    // own button, which rule 10 asks to take out.
+    const inForm = (id: string): boolean => {
+      for (let at = sectionNodes[id]?.['parentId']; typeof at === 'string'; at = sectionNodes[at]?.['parentId']) {
+        if (sectionNodes[at]?.['componentId'] === 'form') return true
+      }
+      return false
+    }
     for (const [id, node] of Object.entries(sectionNodes)) {
       const props = isRecord(node['props']) ? node['props'] : {}
       if (!isAiLinkElement(node['componentId']) || props['screenId'] || props['href']) continue
       const target = aiPageLinkTarget(drawnNodes[drawnIdOf(id)], sections)
       if (target?.kind === 'section') {
         node['interactions'] = [aiPageScrollInteraction(input.sectionIds[target.section], sections[target.section])]
+      } else if (!target && input.linkTarget && !inForm(id)) {
+        node['props'] = { ...props, screenId: input.linkTarget }
       }
     }
     const section: AiPageSection = { rootId: sectionId, nodes: sectionNodes as unknown as NodesMap, load: null }

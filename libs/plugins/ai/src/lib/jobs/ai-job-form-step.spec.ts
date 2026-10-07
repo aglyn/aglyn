@@ -534,7 +534,9 @@ describe('the form step', () => {
     expect(outcome.usage.inputTokens).toBe(USAGE.inputTokens * 2)
     expect(outcome.review).toEqual({
       reason: 'doctrine',
-      message: expect.stringContaining('Rule 3'),
+      // The rule's own words are staff reading; the customer reads the plain refusal (AGL-3596).
+      message: 'Aglyn AI couldn’t build this cleanly, so we stopped rather than give you something broken.',
+      detail: expect.stringContaining('Rule 3'),
       findings: [{ rule: 3, code: 'lead-routing-has-no-email-field', message: expect.any(String), nodeIds: ['survey'] }],
       // The form, and each field under it by the names of what it sets, never a label (AGL-3078).
       outline: [

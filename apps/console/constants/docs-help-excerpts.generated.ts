@@ -216,6 +216,7 @@ export const DOCS_HELP_EXCERPTS = {
   troubleshooting: 'Fix the common reasons a custom domain won\'t verify or attach.',
   uptimeAndStatus: 'The live status page, what it does and does not show, and why there is no committed uptime percentage yet.',
   usePirateShip: 'Export unshipped orders for Pirate Ship, buy the labels there, then import its shipment report to mark each order shipped and email tracking links. Works for Shippo and EasyPost too.',
+  useShippingeasy: 'Connect your ShippingEasy account so paid orders go there as they are paid, and each label you buy marks the order shipped and emails your customer the tracking link.',
   useShipstation: 'Connect ShipStation to your Aglyn store as a Custom Store, so it imports the orders you still have to ship and each label you buy there marks the order shipped and emails your customer the tracking link.',
   versionsAndPublishing: 'Every page, layout and reusable component keeps named versions — publish one, roll back to an older one, or schedule one to go live.',
   video: 'The Video element — the poster frame that decides what a visitor downloads, captions, the lightbox, and the fields a video search result reads.',

@@ -106,5 +106,6 @@ shipment, so you can tell the connection is working.
 ## Related
 
 - [Use Pirate Ship with Aglyn](use-pirate-ship.md)
+- [Use ShippingEasy with Aglyn](use-shippingeasy.md)
 - [Import and export store data](store-import-and-export.md)
 - [Commerce](overview.md#orders)

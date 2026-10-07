@@ -142,7 +142,7 @@ export function useAiJobById(
 const ROW_ICON: Readonly<Record<Exclude<AiSiteBuildRowState, 'active'>, { path: string; color: string; label: string }>> = {
   done: { path: mdiCheckCircle.path, color: 'success.main', label: 'Done' },
   waiting: { path: mdiClockOutline.path, color: 'text.disabled', label: 'Waiting' },
-  failed: { path: mdiAlertCircle.path, color: 'error.main', label: 'Stopped' },
+  failed: { path: mdiAlertCircle.path, color: 'error.main', label: 'Couldn’t be built' },
   skipped: { path: mdiMinusCircleOutline.path, color: 'text.disabled', label: 'Not built' },
 }
 

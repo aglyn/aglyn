@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost, logHostActivity } from '@aglyn/tenant-data-admin'
 import { readCommerceSecretKeyring } from './order-webhooks'
 import { prepareOpenOrders } from './orders-shipping-prepare'
+import { SHIPPINGEASY_ACTIONS, shippingEasyConnectorAction, type ShippingEasyAction } from './shippingeasy'
 import {
   SHIPSTATION_CONNECTIONS,
   mintShipStationCredentials,
@@ -28,8 +29,12 @@ import {
 } from './shipstation'
 
 /*
- * THE CONSOLE'S SIDE OF THE SHIPSTATION CONNECTION (AGL-3613):
- * `commerce/shipping-connectors`.
+ * THE CONSOLE'S SIDE OF THE SHIPPING CONNECTORS (AGL-3613, AGL-3633):
+ * `commerce/shipping-connectors`. One door for every connector card: it
+ * proves the caller and the site once, then answers for the connector the
+ * request names (`connector`, `shipstation` when absent). ShippingEasy's
+ * actions are `shippingEasyConnectorAction` in `./shippingeasy`; what follows
+ * is ShipStation's.
  *
  * - GET `?hostId=` — whether ShipStation can be connected on this deployment
  *   (`available`: commerce's secret keyring exists), whether it is, its
@@ -70,7 +75,12 @@ function statusOf(connection: ShipStationConnection | null, available: boolean):
 const ACTIVITY = { type: 'commerce:shipStation', id: 'shipstation', name: 'ShipStation' } as const
 
 const ACTIONS = ['status', 'connect', 'rotate', 'reveal', 'disconnect'] as const
-type Action = (typeof ACTIONS)[number]
+type Action = (typeof ACTIONS)[number] | ShippingEasyAction
+
+/** The shipping apps the card route manages. `shipstation` when a request names none. */
+const CONNECTORS = ['shipstation', 'shippingeasy'] as const
+type Connector = (typeof CONNECTORS)[number]
+const CONNECTOR_NAMES: Readonly<Record<Connector, string>> = { shipstation: 'ShipStation', shippingeasy: 'ShippingEasy' }
 
 export const shippingConnectorsHandler: Aglyn.PluginApiHandler = async (req, res) => {
   if (req.method !== 'GET' && req.method !== 'POST') {
@@ -89,8 +99,11 @@ export const shippingConnectorsHandler: Aglyn.PluginApiHandler = async (req, res
   }
   const hostId = String((req.method === 'GET' ? req.query['hostId'] : body['hostId']) ?? '')
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(hostId)) return res.status(400).json({ error: 'Missing hostId' })
+  const connector = String((req.method === 'GET' ? req.query['connector'] : body['connector']) ?? 'shipstation') as Connector
+  if (!CONNECTORS.includes(connector)) return res.status(400).json({ error: 'Unknown connector' })
   const action = (req.method === 'GET' ? 'status' : String(body['action'] ?? '')) as Action
-  if (!ACTIONS.includes(action) || (req.method === 'POST' && action === 'status')) {
+  const known: readonly string[] = connector === 'shippingeasy' ? SHIPPINGEASY_ACTIONS : ACTIONS
+  if (!known.includes(action) || (req.method === 'POST' && action === 'status')) {
     return res.status(400).json({ error: 'Unknown action' })
   }
 
@@ -105,7 +118,7 @@ export const shippingConnectorsHandler: Aglyn.PluginApiHandler = async (req, res
     const adminOnly = action !== 'status'
     if (adminOnly ? role !== 'admin' : role !== 'admin' && role !== 'editor') {
       return res.status(403).json({
-        error: adminOnly ? 'Only a site admin can manage the ShipStation connection' : 'Not permitted',
+        error: adminOnly ? `Only a site admin can manage the ${CONNECTOR_NAMES[connector]} connection` : 'Not permitted',
       })
     }
     const owner = await getOrgForHost(hostId)
@@ -113,10 +126,22 @@ export const shippingConnectorsHandler: Aglyn.PluginApiHandler = async (req, res
       return res.status(403).json({ error: 'Selling is not enabled' })
     }
 
+    const actor = { uid: decoded.uid, email: decoded.email ?? null }
+    if (connector === 'shippingeasy') {
+      const answer = await shippingEasyConnectorAction({
+        hostId,
+        action: action as ShippingEasyAction,
+        body,
+        actor,
+        log: (what, target) => logHostActivity(hostId, actor, what, target),
+        prepareOpenOrders,
+      })
+      return res.status(answer.status).json(answer.body)
+    }
+
     const keyring = readCommerceSecretKeyring()
     const available = keyring !== null
     const ref = firestore.collection(SHIPSTATION_CONNECTIONS).doc(hostId)
-    const actor = { uid: decoded.uid, email: decoded.email ?? null }
 
     if (action === 'status') {
       const doc = await ref.get()

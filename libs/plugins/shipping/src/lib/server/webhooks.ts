@@ -17,7 +17,12 @@
 
 import type { PluginTrackingStatus } from '@aglyn/aglyn/plugin-manager/plugin-shipment-records'
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import { easypostTrackingStatus, shippoTrackingStatus } from '../model/tracking-status'
+import {
+  easypostTrackingStatus,
+  easyshipTrackingStatus,
+  sendcloudTrackingStatus,
+  shippoTrackingStatus,
+} from '../model/tracking-status'
 import type { ShippingProviderId } from '../providers/types'
 import { readEasypostWebhookSecret, readShippoWebhookSecrets } from './config'
 
@@ -197,4 +202,114 @@ export function verifyEasypostWebhook(input: {
     }
   }
   return { ok: true, events }
+}
+
+/**
+ * SENDCLOUD (AGL-3632): the merchant's own integration posts
+ * `parcel_status_changed` to the workspace's webhook address, signed with
+ * that integration's secret key — `Sendcloud-Signature`, the hex HMAC-SHA256
+ * of the raw body. The secret is the merchant's, opened from the workspace's
+ * connection by the route; an absent one refuses everything.
+ */
+export function verifySendcloudWebhook(input: {
+  rawBody: string
+  signatureHeader: string | null
+  secret: string
+}): WebhookVerdict {
+  if (!input.secret) return { ok: false, status: 404, error: 'Not configured' }
+  const expected = createHmac('sha256', input.secret).update(input.rawBody, 'utf8').digest('hex')
+  const given = String(input.signatureHeader ?? '').trim().toLowerCase()
+  if (!given || !safeEqual(given, expected)) return { ok: false, status: 401, error: 'Bad signature' }
+  let body: Record<string, any>
+  try {
+    body = JSON.parse(input.rawBody)
+  } catch {
+    return { ok: false, status: 400, error: 'Unreadable body' }
+  }
+  if (String(body?.['action'] ?? '') !== 'parcel_status_changed') return { ok: true, events: [] }
+  const parcel = (body['parcel'] ?? {}) as Record<string, any>
+  const trackingNumber = String(parcel['tracking_number'] ?? '').trim()
+  const status = sendcloudTrackingStatus(parcel['status']?.['id'])
+  if (!trackingNumber || !status) return { ok: true, events: [] }
+  const atMs = Number(body['timestamp'])
+  return {
+    ok: true,
+    events: [
+      {
+        kind: 'tracking',
+        providerId: 'sendcloud',
+        trackingNumber,
+        status,
+        ...(parcel['status']?.['message'] ? { detail: String(parcel['status']['message']).slice(0, 300) } : {}),
+        atMs: Number.isFinite(atMs) && atMs > 0 ? atMs : Date.now(),
+        test: false,
+      },
+    ],
+  }
+}
+
+const base64url = (buffer: Buffer) => buffer.toString('base64url')
+
+/**
+ * EASYSHIP (AGL-3632): each event carries `X-EASYSHIP-SIGNATURE`, a JWT
+ * signed HS256 with the webhook's secret key (`webh_…`), which the merchant
+ * pasted when connecting. The token is verified — algorithm, signature and,
+ * when it carries one, its expiry — before the body is read. The tracking
+ * event's body is read for the first object naming a tracking number and a
+ * status, since Easyship nests it under the event's own key.
+ */
+export function verifyEasyshipWebhook(input: {
+  rawBody: string
+  signatureHeader: string | null
+  secret: string
+  nowMs?: number
+}): WebhookVerdict {
+  if (!input.secret) return { ok: false, status: 404, error: 'Not configured' }
+  const parts = String(input.signatureHeader ?? '').trim().split('.')
+  if (parts.length !== 3 || parts.some((part) => !part)) return { ok: false, status: 401, error: 'Bad signature' }
+  const [encodedHeader, encodedPayload, signature] = parts
+  let header: Record<string, unknown>
+  let claims: Record<string, unknown>
+  try {
+    header = JSON.parse(Buffer.from(encodedHeader, 'base64url').toString('utf8'))
+    claims = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'))
+  } catch {
+    return { ok: false, status: 401, error: 'Bad signature' }
+  }
+  if (header['alg'] !== 'HS256') return { ok: false, status: 401, error: 'Bad signature' }
+  const expected = base64url(createHmac('sha256', input.secret).update(`${encodedHeader}.${encodedPayload}`).digest())
+  if (!safeEqual(signature, expected)) return { ok: false, status: 401, error: 'Bad signature' }
+  const exp = Number(claims?.['exp'])
+  if (Number.isFinite(exp) && exp > 0 && exp * 1000 + SIGNATURE_TOLERANCE_MS < (input.nowMs ?? Date.now())) {
+    return { ok: false, status: 401, error: 'Signature expired' }
+  }
+  let body: Record<string, any>
+  try {
+    body = JSON.parse(input.rawBody)
+  } catch {
+    return { ok: false, status: 400, error: 'Unreadable body' }
+  }
+  const eventType = String(body?.['event_type'] ?? '').toLowerCase().replace(/[^a-z]/g, '')
+  if (eventType !== 'shipmenttrackingstatuschanged') return { ok: true, events: [] }
+  const found = [body['tracking_status_changed'], body['shipment_tracking_status_changed'], body['data'], body].find(
+    (candidate) => candidate && typeof candidate === 'object' && candidate['tracking_number'] && candidate['status'],
+  ) as Record<string, any> | undefined
+  const trackingNumber = String(found?.['tracking_number'] ?? '').trim()
+  const status = easyshipTrackingStatus(found?.['status'])
+  if (!trackingNumber || !status) return { ok: true, events: [] }
+  const atMs = Date.parse(String(found?.['updated_at'] ?? found?.['created_at'] ?? ''))
+  return {
+    ok: true,
+    events: [
+      {
+        kind: 'tracking',
+        providerId: 'easyship',
+        trackingNumber,
+        status,
+        detail: String(found?.['status']).slice(0, 300),
+        atMs: Number.isFinite(atMs) ? atMs : input.nowMs ?? Date.now(),
+        test: false,
+      },
+    ],
+  }
 }

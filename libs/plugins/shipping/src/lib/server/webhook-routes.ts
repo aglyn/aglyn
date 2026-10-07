@@ -16,11 +16,18 @@
  */
 
 import { SHIPPING_COLLECTIONS } from '../constants/bundle-common'
-import { readShippingConfig } from './config'
-import { shippingDb } from './db'
+import { readOwnAccountKinds, readShippingConfig, readShippingKeyring } from './config'
+import { isDocumentId, shippingDb } from './db'
+import { openOwnAccount, readOwnAccount } from './own-accounts'
 import { settleVoid } from './labels'
 import { applyTrackingEvent, trackerDocId, type StoredTracker } from './trackers'
-import { verifyEasypostWebhook, verifyShippoWebhook, type ParsedWebhookEvent } from './webhooks'
+import {
+  verifyEasypostWebhook,
+  verifyEasyshipWebhook,
+  verifySendcloudWebhook,
+  verifyShippoWebhook,
+  type ParsedWebhookEvent,
+} from './webhooks'
 
 /**
  * The providers' webhook doors (AGL-3612): machine routes, so the console's
@@ -85,4 +92,65 @@ export async function easypostWebhookRoute(request: Request): Promise<Response> 
   })
   if ('error' in verdict) return Response.json({ error: verdict.error }, { status: verdict.status })
   return Response.json({ ok: true, applied: await applyEvents(verdict.events) })
+}
+
+/**
+ * The merchant-account webhooks (AGL-3632): one address per WORKSPACE
+ * (`?org=`), because each is signed with that workspace's own secret —
+ * Sendcloud's secret key, Easyship's webhook secret key — opened from its
+ * connection. A workspace with no such connection, or a deployment that no
+ * longer offers the service, refuses with 404 like an unset secret. A
+ * verified event moves only a parcel of that workspace's.
+ */
+async function ownAccountSecret(
+  orgId: string,
+  kind: 'easyship' | 'sendcloud',
+): Promise<string> {
+  if (!isDocumentId(orgId) || !readOwnAccountKinds().includes(kind)) return ''
+  const keyring = readShippingKeyring()
+  if (!keyring) return ''
+  const stored = await readOwnAccount(orgId, kind).catch(() => null)
+  if (!stored) return ''
+  try {
+    const opened = openOwnAccount(stored, keyring)
+    return (kind === 'sendcloud' ? opened.apiSecret : opened.webhookSecret) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+async function applyOwnAccountEvents(orgId: string, events: ParsedWebhookEvent[]): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {}
+  for (const event of events) {
+    if (event.kind !== 'tracking') continue
+    const outcome = await applyTrackingEvent({ ...event, orgId })
+    counts[outcome] = (counts[outcome] ?? 0) + 1
+  }
+  return counts
+}
+
+export async function sendcloudWebhookRoute(request: Request): Promise<Response> {
+  if (request.method !== 'POST') return Response.json({ error: 'Method not allowed' }, { status: 405 })
+  const orgId = new URL(request.url).searchParams.get('org') ?? ''
+  const rawBody = await request.text()
+  const verdict = verifySendcloudWebhook({
+    rawBody,
+    signatureHeader: request.headers.get('sendcloud-signature'),
+    secret: await ownAccountSecret(orgId, 'sendcloud'),
+  })
+  if ('error' in verdict) return Response.json({ error: verdict.error }, { status: verdict.status })
+  return Response.json({ ok: true, applied: await applyOwnAccountEvents(orgId, verdict.events) })
+}
+
+export async function easyshipWebhookRoute(request: Request): Promise<Response> {
+  if (request.method !== 'POST') return Response.json({ error: 'Method not allowed' }, { status: 405 })
+  const orgId = new URL(request.url).searchParams.get('org') ?? ''
+  const rawBody = await request.text()
+  const verdict = verifyEasyshipWebhook({
+    rawBody,
+    signatureHeader: request.headers.get('x-easyship-signature'),
+    secret: await ownAccountSecret(orgId, 'easyship'),
+  })
+  if ('error' in verdict) return Response.json({ error: verdict.error }, { status: verdict.status })
+  return Response.json({ ok: true, applied: await applyOwnAccountEvents(orgId, verdict.events) })
 }

@@ -175,7 +175,7 @@ for the how-to.
   paid, and the items go back in stock. Receipts print on an **80 mm** roll, with a
   gift receipt option.
 
-## October 2026 — ShipStation, Pirate Ship and shipping spreadsheets
+## October 2026 — ShipStation, ShippingEasy, Pirate Ship and shipping spreadsheets
 
 - **[Use ShipStation with Aglyn](commerce-and-bookings/commerce/use-shipstation.md)** —
   connect your store to ShipStation as a Custom Store from the new **ShipStation** card
@@ -183,6 +183,12 @@ for the how-to.
   with weights, SKUs and options, and each label you buy there marks the order shipped
   in Aglyn and emails your customer the tracking link, once. Canceled and refunded
   orders follow to ShipStation on its next import.
+- **[Use ShippingEasy with Aglyn](commerce-and-bookings/commerce/use-shippingeasy.md)** —
+  connect your own ShippingEasy account from the new **ShippingEasy** card under your
+  store's **Settings**. Each order goes to ShippingEasy as soon as it is paid, with
+  weights, SKUs and options; each label you buy there marks the order shipped in Aglyn
+  and emails your customer the tracking link, once; and canceled or refunded orders are
+  canceled there.
 - **[Use Pirate Ship with Aglyn](commerce-and-bookings/commerce/use-pirate-ship.md)** —
   **Export for shipping** on the Orders card writes the orders still to ship as a
   spreadsheet Pirate Ship, Shippo or EasyPost reads, and **Import tracking** takes the

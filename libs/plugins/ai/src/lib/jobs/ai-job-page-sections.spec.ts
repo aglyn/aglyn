@@ -55,10 +55,12 @@ import {
   AI_PAGE_SECTION_TOOL,
   aiEmptyPage,
   aiPageCheckContext,
+  aiPageLinkablePages,
   aiPageRecordNote,
   aiPageRecordTemplate,
   aiPageRecordTokens,
   aiPageSectionCheck,
+  aiPageSectionLinkablePagesLine,
   aiPageSectionNodeId,
   aiPageSectionPrompt,
   aiPageSectionSmaller,
@@ -201,36 +203,28 @@ describe('a section that breaks the page’s rules', () => {
     },
   })
 
-  it('is refused for the repeated item it wrote and never placed, by the item’s own id (AGL-3143)', () => {
-    // Read as an empty grid, the answer was "an element meant to hold content
-    // is empty — remove it, or fill it", of a container whose content was
-    // already written one line away.
+  it('places a repeated item it wrote beside the empty row meant to hold it (AGL-3143, AGL-3596)', () => {
+    // Read as an empty grid, the answer was once "an element meant to hold
+    // content is empty — remove it, or fill it", of a container whose content
+    // was already written one line away. The one item held by nothing goes in
+    // the one element that holds nothing.
     const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, section: { name: 'x', uses: [], items: 0 }, inventory: fixture.inventory })({
       tree: JSON.stringify(practiceAreas(null)),
     })
-    expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
-      { rule: 16, code: 'orphan-node', nodeIds: ['practice_item', 'practice_card', 'practice_card_text'] },
-    ])
-    const reask = aiReaskMessage('page-section', 'submit_section', result.violations, result.offending)
-    expect(reask).toContain('List it under the element it belongs in, or take it out. (nodes practice_item')
-    expect(Object.keys(result.offending ?? {})).toContain('practice_item')
+    expect(result.violations).toEqual([])
+    const stored = Object.values((result.value as AiPageSection).nodes) as unknown as Array<{ componentId: string; props: Record<string, unknown>; nodes: string[] }>
+    const grid = stored.find((node) => node.componentId === 'muiGrid' && node.props['container'] === true)
+    expect(grid?.nodes).toHaveLength(2)
   })
 
-  it('is refused for the children it named and never wrote, naming what is missing (AGL-3143)', () => {
-    // The pass that ended the build: four cells listed, one written. The
-    // sanitizer under the palette validator refuses this as `Missing node
-    // "card2"`, which reached the model as "the answer could not be used as a
-    // section" — no rule, no node, and nothing to change.
+  it('takes the children it named and never wrote out of the list that names them (AGL-3143, AGL-3596)', () => {
+    // The pass that ended a build: four cells listed, one written. The
+    // sanitizer under the palette validator once refused this as `Missing node
+    // "card2"`, which reached the model with no rule, no node and nothing to change.
     const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, section: { name: 'x', uses: [], items: 0 }, inventory: fixture.inventory })({
       tree: JSON.stringify(practiceAreas(['practice_item', 'card2', 'card3'])),
     })
-    expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
-      { rule: null, code: 'missing-child', nodeIds: ['practice_grid'] },
-    ])
-    expect(result.violations[0].detail).toBe('Listed under "nodes" and missing from the answer: "card2", "card3".')
-    expect(aiReaskMessage('page-section', 'submit_section', result.violations, result.offending)).toContain(
-      'Write each one, or take its name out of the list of what this holds.',
-    )
+    expect(result.violations).toEqual([])
   })
 
   it('keeps the section once the item it wrote is placed', () => {
@@ -316,15 +310,8 @@ describe('a section that breaks the page’s rules', () => {
       })
       return result.violations.map(({ rule, code, message, nodeIds }) => ({ rule, code, message, nodeIds }))
     }
-    // A container written as text: the page stores the row with no container at all.
-    expect(check((nodes) => (nodes['b8'].props = { container: 'True', spacing: '3' }))).toEqual([
-      {
-        rule: 12,
-        code: 'grid-container-text',
-        message: expect.stringContaining('This Grid\'s "container" is the text "True", not true'),
-        nodeIds: ['b8'],
-      },
-    ])
+    // A container written as the text "True" can mean nothing but true, and is settled so (AGL-3596).
+    expect(check((nodes) => (nodes['b8'].props = { container: 'True', spacing: '3' }))).toEqual([])
     // The heading and the row stacked in a Grid with a column direction: the page stores no direction.
     expect(check((nodes) => (nodes['b9'] = { componentId: 'muiGrid', props: { direction: 'column' }, nodes: ['b7', 'b8'] }))).toEqual([
       {
@@ -348,6 +335,42 @@ describe('a section that breaks the page’s rules', () => {
         nodeIds: ['b2', 'b4', 'b6'],
       },
     ])
+  })
+
+  it('keeps a row of cards whose items the model left unsized, sized as an object, or left out, sized as the re-ask would name them (AGL-3596)', () => {
+    // A production Home page was refused after its re-ask for these shapes, which have one answer each.
+    const answer = structuredClone(fixture.answers[1])
+    const nodes = answer.nodes as Record<string, { componentId: string; props?: Record<string, unknown>; nodes?: string[] }>
+    const [loose] = nodes['b6'].nodes ?? []
+    nodes['b2'].props = {}
+    nodes['b4'].props = { size: { xs: 12, md: 6 } }
+    nodes['b8'].nodes = ['b2', 'b4', loose]
+    delete nodes['b6']
+    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, section: screen.sections[1], inventory: fixture.inventory })({
+      tree: JSON.stringify(answer),
+    })
+    expect(result.violations).toEqual([])
+    const stored = Object.values((result.value as AiPageSection).nodes) as unknown as Array<{
+      $id: string
+      componentId: string
+      parentId: string | null
+      props: Record<string, unknown>
+      nodes: string[]
+    }>
+    const row = stored.find((node) => node.componentId === 'muiGrid' && node.props['container'] === true)
+    const items = (row?.nodes ?? []).map((id) => stored.find((node) => node.$id === id))
+    expect(items.map((item) => [item?.componentId, item?.props['size'], item?.parentId === row?.$id])).toEqual([
+      ['muiGrid', 'xs:12 md:4', true],
+      ['muiGrid', 'xs:12 md:6', true],
+      ['muiGrid', 'xs:12 md:4', true],
+    ])
+    // The card placed straight in the row now sits in the item minted for it.
+    const card = stored.find((node) => node.$id === items[2]?.nodes[0])
+    expect([card?.componentId, card?.parentId]).toEqual([nodes[loose].componentId, items[2]?.$id])
+    // The page the section joins passes the page check as the last pass runs it.
+    const page = aiPageWithSection(firstPage(), result.value as AiPageSection, sectionIds)
+    const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', context)
+    expect(report.violations.filter((violation) => violation.rule === 12)).toEqual([])
   })
 
   it('is refused for a subhead cut short, an empty list item and a button that goes nowhere, each named by the model’s own id with what to write instead (AGL-3072)', () => {
@@ -425,7 +448,29 @@ describe('a section that breaks the page’s rules', () => {
   })
 
   it('is refused for a subhead the palette validator cut at 120 characters, naming the model’s node and the ceiling before the cut words (AGL-3076)', () => {
-    // The live hero subhead as the model most likely wrote it; the page stored its first 120 characters.
+    // The live hero subhead as the model most likely wrote it, less the clause
+    // breaks a settle would cut at (AGL-3596); the page stored its first 120 characters.
+    const answer = structuredClone(fixture.answers[0])
+    answer.nodes['a2'].props = {
+      variant: 'h5',
+      component: 'p',
+      children:
+        'We are a client-focused law firm guiding individuals and families and businesses through the moments that matter most with clear advice and steady support.',
+    }
+    const result = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, section: fixture.plan.screens[0].sections[0], inventory: fixture.inventory })({
+      tree: JSON.stringify(answer),
+    })
+    expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
+      { rule: 14, code: 'copy-cut-at-ceiling', nodeIds: ['a2'] },
+    ])
+    // The re-ask quotes the line whole, as the model wrote it, and says where it was cut.
+    expect(result.offending?.['a2']).toEqual(answer.nodes['a2'])
+    expect(aiReaskMessage('page-section', 'submit_section', result.violations, result.offending)).toContain(
+      'A line in a heading style holds at most 120 characters, and "We are a client-focused law firm guiding individuals…" runs past them, so it was cut off where they end. Write it whole within 120 characters, or give a longer line a subtitle or body style. (nodes a2)',
+    )
+  })
+
+  it('keeps a heading past its ceiling to its first whole clause where one fits, rather than refusing the cut (AGL-3596)', () => {
     const answer = structuredClone(fixture.answers[0])
     answer.nodes['a2'].props = {
       variant: 'h5',
@@ -436,15 +481,9 @@ describe('a section that breaks the page’s rules', () => {
     const result = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, section: fixture.plan.screens[0].sections[0], inventory: fixture.inventory })({
       tree: JSON.stringify(answer),
     })
-    expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
-      { rule: 14, code: 'copy-cut-at-ceiling', nodeIds: ['a2'] },
-      { rule: 14, code: 'dangling-word', nodeIds: ['a2'] },
-    ])
-    // The re-ask quotes the line whole, as the model wrote it, and says where it was cut.
-    expect(result.offending?.['a2']).toEqual(answer.nodes['a2'])
-    expect(aiReaskMessage('page-section', 'submit_section', result.violations, result.offending)).toContain(
-      'A line in a heading style holds at most 120 characters, and "We are a client-focused law firm guiding individuals,…" runs past them, so it was cut off where they end. Write it whole within 120 characters, or give a longer line a subtitle or body style. (nodes a2)',
-    )
+    expect(result.violations).toEqual([])
+    const lines = Object.values((result.value as AiPageSection).nodes).map((node) => (node as { props?: Record<string, unknown> }).props?.['children'])
+    expect(lines).toContain('We are a client-focused law firm guiding individuals, families and businesses through the moments that matter most')
   })
 
   it('is unreadable unless it is exactly one Section inside the document wrapper', () => {
@@ -887,13 +926,33 @@ describe('a repeated item written once (AGL-3053)', () => {
     expect(JSON.stringify(onceNodes)).not.toMatch(/\{\{|"repeat"/)
   })
 
-  it('refuses an item DRAWN once where the workspace keeps reusable components, telling the model to place instances (rule 1)', () => {
-    const result = checkCards(fixture.answers[1], aiPageCheckContext(fixture.inventory))
+  it('refuses an item DRAWN once where the section places a component the workspace keeps, telling the model to place instances (rule 1)', () => {
+    const inventory = { ...fixture.inventory, components: [{ id: 'cmp-practice', name: 'Practice area card', props: { title: 'text' } }] }
+    const result = aiPageSectionCheck({
+      page: heroPage(),
+      sectionIds,
+      index: 1,
+      context: aiPageCheckContext(inventory),
+      section: { name: 'x', uses: ['cmp-practice'], items: 0 },
+      inventory,
+    })({ tree: JSON.stringify(fixture.answers[1]) })
     expect(result.value).toBeNull()
     expect(result.violations).toEqual([
       expect.objectContaining({ rule: 1, code: 'repeat-not-inline', nodeIds: ['b5'], detail: expect.stringContaining('reusableInstance') }),
     ])
     expect(Object.keys(result.offending ?? {})).toEqual(['b5'])
+  })
+
+  it('draws an item written once inline where the workspace keeps components and the section places none (AGL-3596)', () => {
+    // A paid guided start's "Why choose us" was refused for rule 1 with no component to place.
+    const two = cardsWith('b5', (node) => ({ ...node, repeat: (node['repeat'] as unknown[]).slice(0, 2) }))
+    const result = checkCards(two, aiPageCheckContext(fixture.inventory))
+    expect(result.violations).toEqual([])
+    expect(JSON.stringify(result.value?.nodes)).not.toMatch(/\{\{|"repeat"/)
+    // Three copies or more are still a component to make, which rule 1 asks the plan for.
+    expect(checkCards(fixture.answers[1], aiPageCheckContext(fixture.inventory)).violations.map((violation) => violation.code)).toEqual([
+      'repeated-subtree',
+    ])
   })
 
   it('refuses a copy that leaves a placeholder without its value, quoting the item as the model wrote it', () => {
@@ -951,6 +1010,50 @@ describe('a repeated item written once (AGL-3053)', () => {
         code: 'tree-lineage',
         detail: 'Typography (b2) cannot hold other elements, but lists b2x',
       }),
+    ])
+  })
+})
+
+describe('a link to a page the site builds after this one (AGL-3596)', () => {
+  const fixture = AI_PAGE_BRIEF_FIXTURES[0]
+  const screen = fixture.plan.screens[0]
+  const sectionIds = screen.sections.map((_, index) => aiPageSectionNodeId('job-links', index))
+  const home = fixture.inventory.screens.filter((row) => row.slug === '/')
+  const inventory = { ...fixture.inventory, screens: home }
+  const contact = { id: 'planned-contact', label: 'Contact', slug: '/contact' }
+  const hero = (button: Record<string, unknown>) => {
+    const answer = structuredClone(fixture.answers[0])
+    answer.nodes['a3'].props = button
+    return answer
+  }
+
+  it('names the planned pages and holds as the one target the page that is neither home nor this one', () => {
+    expect(aiPageLinkablePages(inventory, [{ id: 'planned-home', label: 'Home', slug: '/' }, contact], ['planned-home'])).toEqual({
+      linkablePages: [contact],
+      linkTarget: 'planned-contact',
+    })
+    // Two pages it could mean: none is chosen.
+    expect(aiPageLinkablePages(inventory, [contact, { id: 'planned-about', label: 'About', slug: '/about' }], []).linkTarget).toBeNull()
+    expect(aiPageSectionLinkablePagesLine([contact])).toBe(
+      'Other pages of this site: Contact (/contact, id "planned-contact"). A button or link that goes to one sets its "screenId" to that id.',
+    )
+  })
+
+  it('sends a button that names no destination to that page, and keeps one the model linked there itself', () => {
+    const context = aiPageCheckContext(inventory, { linkablePages: [contact] })
+    const check = (button: Record<string, unknown>, linkTarget: string | null) =>
+      aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, section: screen.sections[0], inventory, linkTarget })({
+        tree: JSON.stringify(hero(button)),
+      })
+    const settled = check({ children: 'Book an appointment', variant: 'contained' }, 'planned-contact')
+    expect(settled.violations).toEqual([])
+    const button = Object.values((settled.value as AiPageSection).nodes).find((node) => (node as { componentId: string }).componentId === 'muiButton')
+    expect((button as { props: Record<string, unknown> }).props['screenId']).toBe('planned-contact')
+    // Written with the planned page's id, the palette validator keeps it.
+    expect(check({ children: 'Book an appointment', variant: 'contained', screenId: 'planned-contact' }, null).violations).toEqual([])
+    // With no one page it can only mean, it is re-asked.
+    expect(check({ children: 'Book an appointment', variant: 'contained' }, null).violations.map((violation) => violation.code)).toEqual([
+      'link-without-destination',
     ])
   })
 })
