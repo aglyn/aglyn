@@ -149,7 +149,7 @@ behavior, and keep its specs' cases.
 | config | `libs/mobile/core/src/lib/config.ts` | `AglynConfig` from Info.plist keys set by xcconfig (`AGLYN_CONSOLE_URL`, `AGLYN_FIREBASE_*`, `AGLYN_AUTH_EMULATOR_HOST`, `AGLYN_FIRESTORE_EMULATOR_HOST`, `AGLYN_BRAND_NAME`), same validation (`https` except local hosts, no emulator on a non-local console) | `AglynConfig` from `BuildConfig` fields (Android) / a properties file (desktop), same rules |
 | auth | `auth.tsx` | Firebase iOS SDK Auth (email/password; Google when configured), Keychain persistence, emulator via `useEmulator` | Android: Firebase Android SDK. Desktop: Identity Toolkit REST (`accounts:signInWithPassword`, `securetoken` refresh), refresh token in the OS credential store; same emulator switch |
 | API client | `api-client.ts` | `ConsoleAPIClient` (`URLSession`, async/await): bearer ID token, one forced refresh on 401, GET/idempotent retries on network/502/503/504 with 400·2ⁿ ms backoff, `Idempotency-Key`, `ConsoleAPIError(status, message)` with `consoleErrorMessage` wording | the same, on Ktor client (`OkHttp` engine on Android, `Java` engine on desktop) + kotlinx.serialization |
-| Firestore reads | `live-doc.ts`, `list-query.ts` | Firebase iOS SDK snapshot listeners; `ListQuery` runs the generated list declarations (§5) as SDK constraints, a page at a time plus one probe row | Android: Firebase Android SDK listeners. Desktop: **Firestore REST** (§4) |
+| Firestore reads | `live-doc.ts`, `list-query.ts` | Firebase iOS SDK snapshot listeners; `ListQuery` runs the generated list declarations (§5) as SDK constraints, a page at a time plus one probe row | Android: Firebase Android SDK listeners. Desktop: **Firestore REST + gRPC `Listen`** (§4) |
 | workspace + site | `workspace.tsx`, `org-access.ts` | `WorkspaceStore` (`@Observable`): `users/{uid}/orgs`, `users/{uid}/hostMemberships where orgId ==`, persisted pick | `WorkspaceStore` (`StateFlow`), same queries |
 | console WebView | `libs/mobile/webview` | `WKWebView` signed in by POSTing the ID token to `/api/auth/session` (the console's own route; HttpOnly `__session` cookie into `WKHTTPCookieStore`); origin-checked bridge with the same method allowlist as `bridge-protocol.ts`; native back | Android `WebView` + `CookieManager`; desktop: the system browser with a one-time session handoff, because the JVM has no first-party WebView |
 | deep links | `plugin-host/src/lib/deep-links.ts` | the same grammar: strip `/{org}/hosts/{host}`, match registered patterns, otherwise WebView. Universal links on the console origin, plus the `aglyn://` scheme | App Links + `aglyn://`; desktop: `aglyn://` URL handler (macOS via the app, Windows via MSIX protocol registration) |
@@ -242,34 +242,78 @@ Validation fails the generator in these cases:
 `generate:plugin-manifests:check` covers the native outputs, and the web
 manifests stay byte-identical because no web generator reads `mobile`.
 
-## 4. Desktop data access (AGL-3653): decided
+## 4. Firebase client per platform: decided
 
-**Desktop reads Firestore through the Firestore REST API (v1) with the user's
-own ID token as the bearer.** The same security rules apply, so there is no
-privileged path.
+Each Firebase client option was checked against its current official docs and
+repositories on 2026-10-07, and one was chosen per platform.
 
-Why REST, and not the console API routes: the console itself reads most lists
-straight from Firestore, and no route serves them. Routing desktop reads
-through new routes would mean writing a privileged read path per list, which
-is exactly what rule 4 forbids. REST is the same database and the same rules,
-and it carries the same query shape: `runQuery` takes a `structuredQuery`
-that the generated list declarations (§5) translate into, just as the SDKs'
-constraints do.
+| option | platforms | Auth (email/password · Google · custom token) | Firestore realtime / offline | Storage | App Check | Messaging | support | rules apply |
+| -- | -- | -- | -- | -- | -- | -- | -- | -- |
+| **firebase-ios-sdk** (SPM) | iOS, native macOS, Catalyst | ✓ · ✓ (GoogleSignIn-iOS, iOS and macOS) · ✓; Auth "partial" on macOS | ✓ / ✓ | ✓ | DeviceCheck, App Attest (macOS 11+), custom, debug | ✓ | official; iOS GA, macOS and Catalyst "official beta" | ✓ |
+| **Firebase Android SDK** (BoM) | Android only | ✓ · ✓ · ✓ | ✓ / ✓ | ✓ | Play Integrity | ✓ | official GA | ✓ |
+| **Firebase C++ SDK**, desktop | Windows, macOS, Linux | ✓ | ✓ | ✓ | debug and custom only | stub | desktop is **beta, "not for publicly shipping code"**; no Java binding, so JNI glue and per-OS native libraries | ✓ |
+| **GitLive firebase-kotlin-sdk** | Android, iOS, JVM, JS | wraps the official SDKs; on the JVM, only what firebase-java-sdk offers | 23% of the Firestore API | 64% | — | 5% | community; v2.7.0 (2026-09-02), active | ✓ |
+| **GitLive firebase-java-sdk** (its JVM backend) | JVM | ✓ · **✗** · ✓ | ✓ / ✓ | **✗** | — | — | community **alpha**; last release and commit 2025-10-19; Apache-2.0 | ✓ |
+| **Firestore REST + gRPC** with the user's ID token; Auth via Identity Toolkit REST | any | ✓ · ✓ (`signInWithIdp` after a loopback OAuth flow) · ✓ | gRPC `Listen` ✓ / **no offline cache** | our API routes | custom provider only | — | official public Google APIs | ✓ |
+| **JS SDK in a WebView2 / JS engine** | any | ✓ | ✓ / IndexedDB | ✓ | reCAPTCHA | — | official SDK, unofficial host; the data layer would sit behind a JS bridge | ✓ |
+| **Aglyn console API routes** as a backend-for-frontend | any | through our session | ✗ realtime | ✓ (today) | n/a | — | ours; a new route per list | only by re-implementing them |
+| **Firebase Admin SDK** | servers | — | — | — | — | — | privileged environments only | **✗, bypasses rules: ruled out** |
 
-What REST lacks is realtime listeners. So `desktopMain`'s `FirestoreReader`:
+| platform | choice | why |
+| -- | -- | -- |
+| **iOS / iPadOS** | firebase-ios-sdk (SPM) + GoogleSignIn-iOS | Official GA, with full coverage: offline Firestore, FCM/APNs, App Attest. |
+| **macOS** (native, not Catalyst) | firebase-ios-sdk (SPM) + GoogleSignIn-iOS | The same Swift code as iOS. "Official beta", but Firestore, Storage, Functions, Messaging and App Check are all supported. The "partial" Auth cell is tested against the methods we use (email/password, Google, custom token). |
+| **Android** | Firebase Android SDK (BoM) | Official GA, full coverage. |
+| **Windows** (Compose Desktop / JVM) | **Identity Toolkit REST for Auth, Firestore REST for reads, grpc-java `Listen` for realtime, all with the user's ID token. Writes and uploads stay on our console API routes.** | It is the only option built on official, production Google APIs with the rules enforced. The C++ desktop SDK is officially not for shipping. GitLive's JVM SDK is alpha, untouched since 2025-10, and lacks Google sign-in and Storage. |
 
-- refreshes on focus, on pull and on a 30-second timer while a list is
-  visible;
-- pages with `startAt` cursors on the same order fields.
+How this shapes the code:
 
-gRPC `Listen` would give realtime, but it is not worth its weight in v1. The
-reader interface lets a later swap stay local.
+- **The Kotlin code shares an Aglyn interface, not a Firebase wrapper.**
+  `commonMain` declares `AuthSession` (state, ID token, sign-in and sign-out)
+  and `FirestoreReader` (get, query by the generated list plans, and `observe`
+  as a `Flow`). `androidMain` implements them with the official SDK and
+  `desktopMain` with the REST/gRPC client. GitLive is not used in
+  `commonMain`.
+- **`desktopMain` paging.** It pages with `runQuery` `structuredQuery`
+  cursors, translated from the same generated declarations (§5).
+- **Desktop realtime.** `Listen` runs over gRPC with
+  `Authorization: Bearer <ID token>`, and the stream is re-opened when the
+  token refreshes. Firestore's docs confirm the rules for ID-token REST
+  calls. That `Listen` accepts a Firebase ID token is how the client SDKs
+  work, but the docs do not state it, so a spike proves it before the
+  Windows build depends on it.
+- **If the spike fails,** desktop falls back to REST with refresh on focus,
+  on pull, and every 30 seconds while a list is visible. It never falls back
+  to the C++ SDK. Desktop starts online-only with an in-memory cache.
+- **Desktop Google sign-in** follows Google's recommended flow for desktop
+  apps. The app opens the system browser and the redirect comes back to a
+  loopback address, using PKCE. The resulting Google ID token goes to
+  `accounts:signInWithIdp`. The refresh token is kept in the OS credential
+  store: Windows Credential Manager through JNA, and Keychain on macOS for
+  development runs of the JVM build.
+- **App Check enforcement on Firestore must wait** until a desktop custom
+  provider exists, because Windows has no built-in attestation. Turning it
+  on earlier would lock Windows out.
+- **The macOS app is the SwiftUI build,** so the JVM desktop target ships
+  only for Windows (and Linux, which is not committed).
 
-Writes stay on the console API routes, the same as on every platform.
+Sources:
 
-Auth on desktop uses the Identity Toolkit REST endpoints (§3). The refresh
-token is kept in the OS credential store: Keychain on macOS, which never
-runs the JVM build in production, and Windows Credential Manager through JNA.
+- [firebase-ios-sdk README, Apple platforms](https://github.com/firebase/firebase-ios-sdk#building-with-firebase-on-apple-platforms)
+- [Firebase library support by platform](https://firebase.google.com/docs/ios/learn-more#firebase_library_support_by_platform)
+- [GoogleSignIn-iOS](https://github.com/google/GoogleSignIn-iOS)
+- [Android setup](https://firebase.google.com/docs/android/setup)
+- [C++ desktop workflow](https://firebase.google.com/docs/cpp/setup#desktop-workflow)
+- [C++ App Check debug provider](https://firebase.google.com/docs/app-check/cpp/debug-provider)
+- [firebase-kotlin-sdk](https://github.com/GitLiveApp/firebase-kotlin-sdk)
+- [firebase-java-sdk](https://github.com/GitLiveApp/firebase-java-sdk)
+- [Firestore REST and the rules](https://firebase.google.com/docs/firestore/use-rest-api)
+- [Firestore RPC reference (`Listen` is gRPC/WebChannel only)](https://docs.cloud.google.com/firestore/docs/reference/rpc/google.firestore.v1)
+- [Identity Platform REST](https://docs.cloud.google.com/identity-platform/docs/use-rest-api)
+- [OAuth for desktop apps (loopback + PKCE)](https://developers.google.com/identity/protocols/oauth2/native-app)
+- [Server client libraries bypass rules](https://firebase.google.com/docs/firestore/security/get-started)
+- [Admin SDK is for privileged environments](https://firebase.google.com/docs/admin/setup)
+- [App Check custom providers](https://firebase.google.com/docs/app-check/custom-provider)
 
 ## 5. Shared contracts codegen
 
