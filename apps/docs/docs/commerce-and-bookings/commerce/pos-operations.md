@@ -120,7 +120,7 @@ can still type an email for the receipt.
 Tap **Return** on the register, then type the order number, **scan the
 barcode** at the foot of the receipt, or enter the customer's email.
 
-1. Pick the items coming back and how many of each.
+1. Pick the items coming back, how many of each, and the reason.
 2. Leave **Put the items back in stock** on to restock them at the register's
    location.
 3. Refund. The money goes back to how the customer paid:
@@ -138,6 +138,11 @@ yourself; a payment can never take back more than it paid.
 Each unit's refund is its price less its share of any discount, plus its
 share of the tax, so returning items one at a time refunds exactly what
 returning them together would.
+
+Every register return is also listed under [**Returns**](orders-and-returns.md#returns), beside the returns
+customers ask for online, already marked refunded. Items a customer has
+already asked to return online are held for that return: the register shows
+them as **In an online return** and will not refund them a second time.
 
 **Exchanges:** after the return, tap **Ring up the exchange** to start a new
 sale for the same customer.
