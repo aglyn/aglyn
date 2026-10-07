@@ -54,6 +54,7 @@ import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiGenerationWorstCaseOnTierMs, aiJobStepBudget } from './ai-job-budget'
 import { aiJobBriefLine, aiPlanReferenceLines } from './ai-job-generation'
 import { aiLayoutSitePages } from './ai-job-layout-site-pages'
+import { aiLayoutInventedContactViolations } from './ai-layout-site-facts'
 
 /**
  * A page built in the compact layout language (AGL-3660): the page step's
@@ -358,7 +359,13 @@ export function aiLayoutPageCheck(
         scrollTargetIds: input.sectionIds,
       },
     )
-    const violations: AiDoctrineViolation[] = report.violations
+    // A street address or opening hours the job was never given is invented
+    // (rule 14, AGL-3596), the same check a layout is held to; a phone number
+    // or an email the compiler already writes as its gap.
+    const violations: AiDoctrineViolation[] = [
+      ...report.violations,
+      ...aiLayoutInventedContactViolations({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: stored.nodes }, input.targets.facts),
+    ]
     return {
       value: violations.length
         ? null
