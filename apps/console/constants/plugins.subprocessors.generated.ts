@@ -265,19 +265,19 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
       {
         host: "api.aftership.com",
         disposition: "not-a-subprocessor",
-        reason: "The AfterShip adapter (`libs/plugins/post-purchase/src/lib/providers/aftership.ts`), with the API key the merchant connected from their own AfterShip account: starts following each parcel the merchant ships. The merchant chose AfterShip and the data lands in the merchant's account.",
+        reason: "The AfterShip adapter (`libs/plugins/post-purchase/src/lib/providers/aftership.ts`), with the API key the merchant connected from their own AfterShip account: starts following each parcel the merchant ships. Customer-chosen: the merchant chose AfterShip and the data lands in the merchant's account.",
         dataReceived: "For each parcel: its tracking number and carrier, the order's id and number, the buyer's name, and the site's id. No address, email, phone or payment detail.",
       },
       {
         host: "api.route.com",
         disposition: "not-a-subprocessor",
-        reason: "The Route adapter (`libs/plugins/post-purchase/src/lib/providers/route.ts`), with the secret token the merchant connected from their own Route account: quotes package protection at the cart and opens, updates and cancels the policy a buyer pays for. The merchant chose Route and the data lands in the merchant's account.",
+        reason: "The Route adapter (`libs/plugins/post-purchase/src/lib/providers/route.ts`), with the secret token the merchant connected from their own Route account: quotes package protection at the cart and opens, updates and cancels the policy a buyer pays for. Customer-chosen: the merchant chose Route and the data lands in the merchant's account.",
         dataReceived: "For a quote: the basket's shipped items (name, SKU, quantity, price) and subtotal. For a policy: the order's id, number and date, the buyer's name, email and delivery address, the covered items, the premium paid, and each parcel's tracking number and carrier. No phone or payment detail.",
       },
       {
         host: "ws.narvar.com",
         disposition: "not-a-subprocessor",
-        reason: "The Narvar adapter (`libs/plugins/post-purchase/src/lib/providers/narvar.ts`), with the account id and auth token the merchant connected from their own Narvar account: sends each order and its parcels so Narvar can run the merchant's tracking page and notifications. The merchant chose Narvar and the data lands in the merchant's account.",
+        reason: "The Narvar adapter (`libs/plugins/post-purchase/src/lib/providers/narvar.ts`), with the account id and auth token the merchant connected from their own Narvar account: sends each order and its parcels so Narvar can run the merchant's tracking page and notifications. Customer-chosen: the merchant chose Narvar and the data lands in the merchant's account.",
         dataReceived: "For each order: its number, date, status and currency, the items (name, SKU, quantity, price), the buyer's name, email and delivery address, and each parcel's tracking number, carrier and ship date. No phone or payment detail.",
       },
     ],
