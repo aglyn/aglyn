@@ -16,39 +16,14 @@
  */
 'use client'
 
-import {
-  type CrmLeadFields,
-  type CrmLeadStatus,
-  type CrmPicklist,
-  crmLeadStatusOptions,
-} from '@aglyn/aglyn'
 import { ListItemText, MenuItem } from '@mui/material'
+import type { LeadStatusChoice } from '../model/lead-status-choices'
 
-/**
- * The meanings a person sets by hand from a lead's status select: every one
- * but Qualified, which only a conversion sets (AGL-2608, AGL-3512).
- */
-export const LEAD_STATUS_HAND_SET: readonly CrmLeadStatus[] = [
-  'new',
-  'nurturing',
-  'working',
-  'unqualified',
-]
-
-/** One choice of a lead status select: the org's label, and the meaning it sets. */
-export interface LeadStatusChoice {
-  label: string
-  status: CrmLeadStatus
-  inactive: boolean
-}
-
-/** What a lead status select offers a lead: the org's active values of the hand-set meanings, and its own. */
-export function leadStatusChoices(
-  picklist: CrmPicklist,
-  lead: Pick<CrmLeadFields, 'status' | 'statusLabel'>,
-): LeadStatusChoice[] {
-  return crmLeadStatusOptions(picklist, LEAD_STATUS_HAND_SET, lead)
-}
+export {
+  LEAD_STATUS_HAND_SET,
+  type LeadStatusChoice,
+  leadStatusChoices,
+} from '../model/lead-status-choices'
 
 /**
  * The select's items, by label (AGL-3512). An Unqualified value ends in "…"

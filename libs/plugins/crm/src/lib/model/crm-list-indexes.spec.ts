@@ -21,7 +21,7 @@ import {
   type ListQueryDeclaration,
   listQueryIndexes,
   missingListQueryIndexes,
-} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+} from '@aglyn/shared-util-tools/list-query/list-query-plan'
 import { COMPANY_LIST_DECLARATION } from '../constants/company-filters'
 import { contactIndexShapes } from '../constants/contact-filters'
 import {

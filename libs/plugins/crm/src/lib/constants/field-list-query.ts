@@ -20,7 +20,7 @@ import {
   LIST_QUERY_ID_PATH,
   type ListQueryDeclaration,
   type ListQueryFilter,
-} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+} from '@aglyn/shared-util-tools/list-query/list-query-plan'
 
 /*
  * WHAT THE CRM › FIELDS TABLE ASKS FIRESTORE (AGL-3335).

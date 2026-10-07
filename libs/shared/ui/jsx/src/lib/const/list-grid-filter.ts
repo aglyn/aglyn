@@ -22,16 +22,26 @@ import {
   getGridSingleSelectOperators,
   getGridStringOperators,
   type GridColDef,
-  type GridFilterItem,
   type GridFilterOperator,
 } from '@mui/x-data-grid'
 import {
-  gridFilterRequests,
   type ListFilterField,
   type ListFilterKind,
-  type ListFilterRequest,
   listFilterOperators,
 } from './list-filter'
+import {
+  type ListFilterClause,
+  type ListFilterOption,
+  SELECT_TO_GRID,
+} from '@aglyn/shared-util-tools/list-query/list-filter-codecs'
+
+export {
+  type ListFilterClause,
+  type ListFilterOption,
+  type ListGridFilterCodec,
+  listPlainCodec,
+  listSelectCodec,
+} from '@aglyn/shared-util-tools/list-query/list-filter-codecs'
 
 /*
  * ONE path from a list's filter clauses to the data grid's own Filters panel
@@ -50,17 +60,6 @@ import {
  * `is` back as `equals`, and a list whose clauses were stored in some other
  * shape says so with a codec.
  */
-
-/** One clause a list is narrowed by; `label` names a picked value on a chip. */
-export interface ListFilterClause extends ListFilterRequest {
-  label?: string
-}
-
-/** A choice for a field whose value is picked rather than typed. */
-export interface ListFilterOption {
-  value: string
-  label: string
-}
 
 const operatorPool = (kind: ListFilterKind): GridFilterOperator[] => {
   switch (kind) {
@@ -142,62 +141,6 @@ export function hiddenFilterColumns(
       ...listFilterColumn(fields, field.column),
     }))
     .filter((column) => column.filterable)
-}
-
-/** The grid operator each stored select operator shows as. */
-const SELECT_TO_GRID: Readonly<Record<string, string>> = {
-  equals: 'is',
-  doesNotEqual: 'not',
-  isAnyOf: 'isAnyOf',
-}
-const SELECT_FROM_GRID: Readonly<Record<string, string>> = {
-  is: 'equals',
-  not: 'doesNotEqual',
-  isAnyOf: 'isAnyOf',
-}
-
-/**
- * How one field's stored clause and the panel's item translate. A field
- * with choices uses {@link listSelectCodec}; a typed one,
- * {@link listPlainCodec}. A list whose clauses predate the panel supplies
- * its own.
- */
-export interface ListGridFilterCodec {
-  toItem: (clause: ListFilterClause) => Pick<GridFilterItem, 'operator' | 'value'> | null
-  toClause: (item: GridFilterItem) => ListFilterClause | null
-}
-
-/** The panel's item as a clause, through the grammar's one notion of "usable". */
-const plainClause = (item: GridFilterItem): ListFilterClause | null =>
-  gridFilterRequests({ items: [item] })[0] ?? null
-
-/** A typed field: the stored operator IS the grid's. */
-export const listPlainCodec: ListGridFilterCodec = {
-  toItem: (clause) => ({
-    operator: clause.op,
-    value: clause.value === '' ? undefined : clause.value,
-  }),
-  toClause: plainClause,
-}
-
-/** A picked field: `equals` shows as `is`, and `isAnyOf` holds a comma list. */
-export const listSelectCodec: ListGridFilterCodec = {
-  toItem: (clause) => {
-    const operator = SELECT_TO_GRID[clause.op]
-    if (!operator) return null
-    return {
-      operator,
-      value:
-        operator === 'isAnyOf'
-          ? clause.value.split(',').map((entry) => entry.trim()).filter(Boolean)
-          : clause.value,
-    }
-  },
-  toClause: (item) => {
-    const op = SELECT_FROM_GRID[String(item.operator)]
-    const request = op ? plainClause(item) : null
-    return request && op ? { ...request, op } : null
-  },
 }
 
 /** The select operators a field's allowed clause operators map to. */

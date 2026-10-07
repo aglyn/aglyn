@@ -16,7 +16,7 @@
  */
 
 import { crmLeadListFields, effectiveCrmLeadSourcePicklist } from '@aglyn/aglyn'
-import { LIST_QUERY_DISJUNCTIONS } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { LIST_QUERY_DISJUNCTIONS } from '@aglyn/shared-util-tools/list-query/list-query-plan'
 import { contactQueryClause } from '../constants/contact-filters'
 import { leadsByLeadSource } from './crm-reports'
 import {

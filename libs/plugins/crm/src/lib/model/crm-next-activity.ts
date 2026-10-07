@@ -29,6 +29,7 @@
  */
 
 import type { CrmDeal, CrmTask, CrmViewFilterClause } from '@aglyn/aglyn/app-utils/crm'
+import type { ListFilterField } from '@aglyn/shared-util-tools/list-query/list-filter'
 
 /** The field on a contact, a company and a deal — the one name every list reads. */
 export const CRM_NEXT_ACTIVITY_FIELD = 'nextTaskAtMs'
@@ -176,3 +177,24 @@ export function stuckDeals<T extends Pick<CrmDeal, 'status' | 'nextTaskAtMs'>>(
   const stuck = deals.filter((deal) => deal.status === 'open' && hasNoNextActivity(deal))
   return { count: stuck.length, deals: stuck }
 }
+
+/**
+ * "No next activity" as a filter of the grid's own panel (AGL-3313): the
+ * Next activity column offers "is empty", which stores the clause
+ * `isNoNextActivityClause` names, so a view saved with the old toggle on
+ * reopens filtered the same way. Asked of the query as `nextTaskAtMs ==
+ * null` (AGL-3321): every contact, company and deal is created carrying
+ * `null`, and the task writers put `null` back when nothing is left
+ * scheduled.
+ */
+export const CRM_NEXT_ACTIVITY_FILTER_FIELD: ListFilterField = {
+  column: CRM_NEXT_ACTIVITY_FIELD,
+  kind: 'date',
+  path: CRM_NEXT_ACTIVITY_FIELD,
+  presence: 'nullable',
+  storedAs: 'millis',
+  operators: ['isEmpty'],
+}
+
+/** What the clause reads as on a chip. */
+export const CRM_NEXT_ACTIVITY_FILTER_HEADER = 'Next activity'
