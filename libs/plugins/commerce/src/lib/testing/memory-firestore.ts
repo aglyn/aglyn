@@ -25,7 +25,7 @@
  * interleave, which is what a race spec needs.
  *
  * Supports: `collection().doc()`, `get`, `set` (with `merge`), `create`,
- * `update`, `delete`; queries with `==` and `in`, `orderBy`, `limit`;
+ * `update`, `delete`; queries with `==`, `in` and `array-contains`, `orderBy`, `limit`;
  * `runTransaction` with `get` (document or query), `set`, `update`;
  * `batch()`. Field paths are top-level only.
  */
@@ -139,7 +139,7 @@ export class MemoryCollection {
     return new MemoryDoc(this.store, `${this.path}/${id ?? this.store.nextId()}`)
   }
 
-  where(field: string, op: '==' | 'in', value: unknown): MemoryQuery {
+  where(field: string, op: MemoryFilterOp, value: unknown): MemoryQuery {
     return new MemoryQuery(this.store, this.path).where(field, op, value)
   }
 
@@ -235,8 +235,10 @@ export class MemoryDoc {
   }
 }
 
+export type MemoryFilterOp = '==' | 'in' | 'array-contains'
+
 export class MemoryQuery {
-  private filters: Array<{ field: string; op: '==' | 'in'; value: unknown }> = []
+  private filters: Array<{ field: string; op: MemoryFilterOp; value: unknown }> = []
   private order: { field: string; direction: 'asc' | 'desc' } | null = null
   private max = Infinity
 
@@ -253,7 +255,7 @@ export class MemoryQuery {
     return next
   }
 
-  where(field: string, op: '==' | 'in', value: unknown): MemoryQuery {
+  where(field: string, op: MemoryFilterOp, value: unknown): MemoryQuery {
     const next = this.clone()
     next.filters.push({ field, op, value })
     return next
@@ -279,7 +281,9 @@ export class MemoryQuery {
         this.filters.every(({ field, op, value }) =>
           op === 'in'
             ? (value as unknown[]).includes(stored.data[field])
-            : stored.data[field] === value,
+            : op === 'array-contains'
+              ? Array.isArray(stored.data[field]) && stored.data[field].includes(value)
+              : stored.data[field] === value,
         ),
       )
     if (this.order) {

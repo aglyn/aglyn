@@ -64,6 +64,7 @@ data class HostOrder(
     val buyerNotifications: Map<String, HostOrderBuyerNotificationsValue>? = null,
     val cashierId: String? = null,
     val channel: OrderChannel? = null,
+    val channelSource: OrderChannelSource? = null,
     val checkoutSessionId: String? = null,
     val couponCode: String? = null,
     val createdAtMs: Double? = null,
@@ -515,6 +516,7 @@ data class OrderAddress(
 @Serializable(with = OrderChannelSerializer::class)
 enum class OrderChannel(val raw: String) {
     DRAFT("draft"),
+    MARKETPLACE("marketplace"),
     ONLINE("online"),
     POS("pos"),
     SUBSCRIPTION("subscription"),
@@ -523,6 +525,31 @@ enum class OrderChannel(val raw: String) {
 
 internal object OrderChannelSerializer :
     RawEnumSerializer<OrderChannel>("com.aglyn.contracts.OrderChannel", OrderChannel.entries, OrderChannel.UNKNOWN, { it.raw })
+
+@Serializable
+data class OrderChannelSource(
+    val channelId: String,
+    val channelLabel: String,
+    val currency: String,
+    val externalOrderId: String,
+    val externalRef: String,
+    val fees: List<OrderChannelSourceFeesItem>? = null,
+    val feesTotalCents: Double? = null,
+    val lines: List<OrderChannelSourceLinesItem>,
+    val taxRemittedByChannel: Boolean,
+)
+
+@Serializable
+data class OrderChannelSourceFeesItem(
+    val amountCents: Double,
+    val label: String,
+)
+
+@Serializable
+data class OrderChannelSourceLinesItem(
+    val externalLineId: String,
+    val lineIndex: Double,
+)
 
 @Serializable
 data class OrderDispute(
