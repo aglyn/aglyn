@@ -112,7 +112,7 @@ describe('the email platforms card', () => {
     await waitFor(() => expect(routes.syncNow).toHaveBeenCalledWith('klaviyo'))
   })
 
-  it('shows the sync log in the shared list table, a page at a time', async () => {
+  it('pages the sync log with the shared footer', async () => {
     const entries = Array.from({ length: 12 }, (_, n) => ({ id: `e${n}`, atMs: 1000 - n, kind: 'run' as const, message: `Run ${n}` }))
     const routes = api({
       list: jest.fn(async () => ({ available: [{ id: 'klaviyo' as const, apiKey: true, oauth: false }], connections: [connection()] })),
@@ -120,8 +120,10 @@ describe('the email platforms card', () => {
     })
     render(<MarketingPlatformsCard hostId="h" api={routes} />)
     expect(await screen.findByText('Run 0')).toBeTruthy()
-    // The shared footer starts on the smallest page size.
+    // The shared footer starts on the smallest page size, and turns the page.
     expect(screen.queryByText('Run 11')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /next page/i }))
+    expect(await screen.findByText('Run 11')).toBeTruthy()
   })
 
   it('asks before disconnecting, and disconnects only on yes', async () => {

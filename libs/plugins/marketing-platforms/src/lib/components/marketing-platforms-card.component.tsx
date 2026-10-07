@@ -20,13 +20,26 @@
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
-import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { StatusChip, type StatusTone } from '@aglyn/shared-ui-jsx/components/status-chip.component'
-import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { useClientPagination } from '@aglyn/shared-ui-jsx/hooks/use-client-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { Alert, Button, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography } from '@mui/material'
-import type { GridColDef } from '@mui/x-data-grid'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  Alert,
+  Button,
+  CircularProgress,
+  FormControlLabel,
+  List,
+  ListItem,
+  ListItemText,
+  MenuItem,
+  Stack,
+  Switch,
+  TextField,
+  Typography,
+} from '@mui/material'
+import { useCallback, useEffect, useState } from 'react'
 import {
   MARKETING_PROVIDERS,
   type MarketingConnectionLogEntry,
@@ -428,14 +441,15 @@ function ConnectionDetails(props: {
 }
 
 /**
- * The connection's sync log, newest first, in the console's shared list
- * table and its footer. The store keeps a connection's latest rows only, so
- * one read is the whole log and the table pages it.
+ * The connection's sync log, newest first: the shared paged list and its
+ * footer. The store keeps a connection's latest rows only, so one read is the
+ * whole log and the list pages it in memory.
  */
 function ConnectionLog(props: { api: MarketingPlatformsApi; provider: MarketingProviderId }) {
   const { api, provider } = props
   const [rows, setRows] = useState<MarketingConnectionLogEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const pagination = useClientPagination(rows ?? [])
 
   useEffect(() => {
     let live = true
@@ -448,25 +462,6 @@ function ConnectionLog(props: { api: MarketingPlatformsApi; provider: MarketingP
     }
   }, [api, provider])
 
-  const columns = useMemo<GridColDef<MarketingConnectionLogEntry>[]>(
-    () => [
-      {
-        field: 'atMs',
-        headerName: 'When',
-        width: 190,
-        valueFormatter: (value: number) => formatTime(value),
-      },
-      {
-        field: 'kind',
-        headerName: 'Result',
-        width: 150,
-        renderCell: ({ row }) => <StatusChip label={LOG_KIND[row.kind].label} tone={LOG_KIND[row.kind].tone} />,
-      },
-      { field: 'message', headerName: 'What happened', flex: 1, minWidth: 240, sortable: false },
-    ],
-    [],
-  )
-
   return (
     <CardDisplay
       variant="outlined"
@@ -477,17 +472,34 @@ function ConnectionLog(props: { api: MarketingPlatformsApi; provider: MarketingP
     >
       {error ? (
         <Alert severity="error">{error}</Alert>
+      ) : rows === null ? (
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }} role="status">
+          <CircularProgress size={18} />
+          <Typography variant="body2" color="text.secondary">
+            Loading the sync log…
+          </Typography>
+        </Stack>
+      ) : rows.length ? (
+        <>
+          <List dense disablePadding>
+            {pagination.pageItems.map((row) => (
+              <ListItem key={row.id} divider disableGutters sx={{ alignItems: 'flex-start' }}>
+                <ListItemText
+                  primary={
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <StatusChip label={LOG_KIND[row.kind].label} tone={LOG_KIND[row.kind].tone} variant="outlined" />
+                      <span>{row.message}</span>
+                    </Stack>
+                  }
+                  secondary={formatTime(row.atMs)}
+                />
+              </ListItem>
+            ))}
+          </List>
+          <ListPagination {...pagination.paginationProps} />
+        </>
       ) : (
-        <ListTable
-          rows={rows ?? []}
-          loading={rows === null}
-          columns={columns}
-          getRowId={(row: MarketingConnectionLogEntry) => row.id}
-          rowHeight={TABLE_ROW_HEIGHT}
-          noRowsLabel="Nothing has run yet"
-          quickFilter={false}
-          disableColumnFilter
-        />
+        <EmptyStateComponent compact label="Nothing has run yet." />
       )}
     </CardDisplay>
   )
