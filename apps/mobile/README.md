@@ -56,7 +56,7 @@ Regenerate the derived files after these changes:
 - `notifyUsers` sends every notification the person's preferences allow to their devices through the Expo Push API. A type that has no push answer follows the console feed. The push code is server-only and loaded lazily, so published sites never load it.
 - Each type has its own switch under Settings → Push notifications, stored at `notificationSettings.accountTypes.{type}.push`.
 - Tapping a push opens its link natively when a plugin registered a deep link for it. Otherwise the link opens in the console WebView.
-- Push is off until the server sets `MOBILE_PUSH_ENABLED=1`. Registration on the phone does nothing until the app is built with `EAS_PROJECT_ID`.
+- Push is on by default. `MOBILE_PUSH_ENABLED=0` on the server is the kill switch: no push is sent and no delivery code is loaded. The Expo Push API relay sends only where the server also sets `EXPO_PUSH_RELAY=1`, because Expo is not on the Subprocessors list. Registration on the phone does nothing until the app is built with `EAS_PROJECT_ID`.
 
 ## What Zach owes before release
 
@@ -66,6 +66,6 @@ Regenerate the derived files after these changes:
 4. **Google sign-in (optional):** create the iOS and web OAuth client ids, and set `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` and `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`. Until both are set, the button stays hidden.
 5. **Google Play Console:** create the app "Aglyn" with package `com.aglyn.app`, and complete its store listing, content rating and data-safety form.
 6. **App Store Connect:** create the app record, its store listing, its privacy labels and a TestFlight group.
-7. **Legal:** add Expo (push relay) to the Subprocessors list, alongside Apple (APNs) and Google (FCM), before `MOBILE_PUSH_ENABLED=1` goes live in production. A notification's title and body pass through all three.
+7. **Legal:** done (AGL-3648). The Subprocessors list names Apple (APNs) and Google (FCM) for push: a notification's title and body and the device push token. Expo is not on it, so the Expo relay stays off in production (`EXPO_PUSH_RELAY` unset).
 8. **Universal links:** set `EXPO_PUBLIC_CONSOLE_URL` to the production console, which adds `applinks:` for it, and serve `apple-app-site-association` and `assetlinks.json` from the console origin.
 9. **npm:** hand-publish `@aglyn/mobile-core`, `-ui`, `-webview` and `-plugin-host` once (`npm run publish:packages -- --only <name> --publish`), then run `npm run trust:packages -- --set`. Until then they stay `private`.

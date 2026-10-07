@@ -16,7 +16,7 @@
  */
 
 import type { Firestore } from 'firebase-admin/firestore'
-import { deliverPush, EXPO_PUSH_URL, mobilePushEnabled, pushMessage } from './push-delivery'
+import { deliverPush, EXPO_PUSH_URL, expoPushRelayEnabled, mobilePushEnabled, pushMessage } from './push-delivery'
 
 const DAY = 24 * 60 * 60 * 1000
 const NOW = Date.UTC(2026, 9, 7)
@@ -74,12 +74,31 @@ const ORDER = {
   hostId: 'host-1',
 }
 
-const ON = { MOBILE_PUSH_ENABLED: '1' }
+const ON = { EXPO_PUSH_RELAY: '1' }
 
 describe('push delivery (AGL-3620)', () => {
-  it('is off unless the deployment switches it on', async () => {
-    expect(mobilePushEnabled({})).toBe(false)
+  it('is on unless the deployment pulls the kill switch (AGL-3648)', async () => {
+    expect(mobilePushEnabled({})).toBe(true)
     expect(mobilePushEnabled({ MOBILE_PUSH_ENABLED: '1' })).toBe(true)
+    expect(mobilePushEnabled({ MOBILE_PUSH_ENABLED: '' })).toBe(true)
+    expect(mobilePushEnabled({ MOBILE_PUSH_ENABLED: '0' })).toBe(false)
+    expect(mobilePushEnabled({ MOBILE_PUSH_ENABLED: ' 0 ' })).toBe(false)
+    const { db } = fakeDb({ 'uid-a': { d1: { token: TOKEN_A, lastSeen: NOW } } })
+    const { impl, calls } = fakeFetch(() => ({ data: [] }))
+    const result = await deliverPush(['uid-a'], ORDER, {
+      db,
+      fetch: impl,
+      env: { ...ON, MOBILE_PUSH_ENABLED: '0' },
+      now: () => NOW,
+    })
+    expect(calls).toHaveLength(0)
+    expect(result).toEqual({ sent: 0, pruned: 0, failed: 0 })
+  })
+
+  it('sends through Expo only for a deployment that opts in to the relay (AGL-3648)', async () => {
+    expect(expoPushRelayEnabled({})).toBe(false)
+    expect(expoPushRelayEnabled({ EXPO_PUSH_RELAY: '0' })).toBe(false)
+    expect(expoPushRelayEnabled({ EXPO_PUSH_RELAY: ' 1 ' })).toBe(true)
     const { db } = fakeDb({ 'uid-a': { d1: { token: TOKEN_A, lastSeen: NOW } } })
     const { impl, calls } = fakeFetch(() => ({ data: [] }))
     const result = await deliverPush(['uid-a'], ORDER, { db, fetch: impl, env: {}, now: () => NOW })

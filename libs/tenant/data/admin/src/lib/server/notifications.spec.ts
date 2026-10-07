@@ -700,11 +700,13 @@ describe('the mobile push channel (AGL-3620)', () => {
     userDocs.clear()
     mockPushed.length = 0
     emailConfigured = false
-    process.env['MOBILE_PUSH_ENABLED'] = '1'
+    delete process.env['MOBILE_PUSH_ENABLED']
+    process.env['EXPO_PUSH_RELAY'] = '1'
   })
 
   afterAll(() => {
     delete process.env['MOBILE_PUSH_ENABLED']
+    delete process.env['EXPO_PUSH_RELAY']
   })
 
   it('pushes what the feed shows to somebody who never answered for push', async () => {
@@ -734,8 +736,15 @@ describe('the mobile push channel (AGL-3620)', () => {
     expect(mockPushed).toEqual([{ uids: ['uid-b'], type: 'content.order' }])
   })
 
-  it('never loads delivery while the deployment has push switched off', async () => {
-    delete process.env['MOBILE_PUSH_ENABLED']
+  it('never loads the Expo relay for a deployment that has not opted in', async () => {
+    delete process.env['EXPO_PUSH_RELAY']
+    await notifyUsers(['uid-a'], ORDER)
+    expect(mockPushed).toHaveLength(0)
+    expect(written).toHaveLength(1)
+  })
+
+  it('never loads delivery while the deployment has pulled the kill switch', async () => {
+    process.env['MOBILE_PUSH_ENABLED'] = '0'
     await notifyUsers(['uid-a'], ORDER)
     expect(mockPushed).toHaveLength(0)
     expect(written).toHaveLength(1)

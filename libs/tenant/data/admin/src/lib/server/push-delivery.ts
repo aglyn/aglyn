@@ -24,10 +24,11 @@
  * preferences say push, so no client bundle and no request that notifies
  * nobody loads it.
  *
- * Off until `MOBILE_PUSH_ENABLED=1`: the notification's title and body leave
- * for Expo, Apple and Google, which the Subprocessors list must name before a
- * production deployment turns it on. `EXPO_ACCESS_TOKEN`, when set, is sent
- * as the bearer Expo's enhanced push security requires.
+ * Sends only when the deployment opts in with `EXPO_PUSH_RELAY=1` and has
+ * not pulled the `MOBILE_PUSH_ENABLED=0` kill switch: the title and body
+ * would pass through Expo, which is not on the Subprocessors list.
+ * `EXPO_ACCESS_TOKEN`, when set, is sent as the bearer Expo's enhanced push
+ * security requires.
  */
 
 import {
@@ -40,6 +41,9 @@ import {
 import { normalizeNotificationLink } from '@aglyn/aglyn/server'
 import type { AglynNotification } from '@aglyn/aglyn/server'
 import type { DocumentReference, Firestore } from 'firebase-admin/firestore'
+import { expoPushRelayEnabled, mobilePushEnabled } from './mobile-push-switch'
+
+export { expoPushRelayEnabled, mobilePushEnabled }
 
 export const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
 
@@ -49,9 +53,6 @@ export const EXPO_PUSH_BATCH = 100
 /** The most messages one notification sends, whatever the audience. */
 const MAX_MESSAGES = 1000
 
-export function mobilePushEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return (env['MOBILE_PUSH_ENABLED'] ?? '').trim() === '1'
-}
 
 export type PushPayload = Omit<AglynNotification, '$id' | 'createdAt' | 'readAt'>
 
@@ -137,7 +138,7 @@ export async function deliverPush(
 ): Promise<PushDeliveryResult> {
   const result: PushDeliveryResult = { sent: 0, pruned: 0, failed: 0 }
   const env = deps.env ?? process.env
-  if (!uids.length || !mobilePushEnabled(env)) return result
+  if (!uids.length || !mobilePushEnabled(env) || !expoPushRelayEnabled(env)) return result
   const send = deps.fetch ?? fetch
   const now = (deps.now ?? Date.now)()
   try {

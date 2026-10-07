@@ -1015,6 +1015,28 @@ export const SDK_EGRESS: Record<string, SdkEgress> = {
     publishedOn: '2026-08-05',
   },
   /**
+   * The native apps receive push straight from the platform's own push
+   * service: Apple's for an iPhone or iPad, Google's for an Android device.
+   * Neither host is a literal in our source, so the token is the collection
+   * every registered device push token is stored in, which any sender reads.
+   */
+  'Apple Push Notification service': {
+    token: 'MOBILE_DEVICES_COLLECTION',
+    entity: 'Apple Inc.',
+    reason:
+      'Delivery of a mobile push notification to the mobile app on an iPhone or iPad, to the device push token the app registered.',
+    dataReceived: "The notification's title and body, and the device push token.",
+    publishedOn: '2026-10-07',
+  },
+  'Firebase Cloud Messaging': {
+    token: 'MOBILE_DEVICES_COLLECTION',
+    entity: 'Google LLC (Firebase / Google Cloud)',
+    reason:
+      'Delivery of a mobile push notification to the mobile app on an Android device, to the device push token the app registered.',
+    dataReceived: "The notification's title and body, and the device push token.",
+    publishedOn: '2026-10-07',
+  },
+  /**
    * App Check's attestation traffic is browser-side and reaches Google's
    * reCAPTCHA endpoints under a host the provider chooses. The admin API we
    * call ourselves is the separate `recaptchaenterprise.googleapis.com` entry.
