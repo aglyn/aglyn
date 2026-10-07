@@ -45,6 +45,15 @@ import {
   ORDER_TRANSFER_GROUPS,
   type GiftCardPlannedRow,
 } from './records-transfer'
+import { ORDER_SHIPPING_PRESETS } from './shipping-presets'
+import {
+  TRACKING_DEFAULT_POLICY,
+  TRACKING_MATCH_KEYS,
+  TRACKING_TRANSFER_FIELDS,
+  TRACKING_TRANSFER_GROUPS,
+  matchTrackingRows,
+  type TrackingPlannedRow,
+} from './tracking-transfer'
 import {
   COMMERCE_CATEGORIES_TRANSFER,
   COMMERCE_COUPONS_TRANSFER,
@@ -52,6 +61,7 @@ import {
   COMMERCE_GIFT_CARDS_TRANSFER,
   COMMERCE_ORDERS_TRANSFER,
   COMMERCE_PRODUCTS_TRANSFER,
+  COMMERCE_TRACKING_TRANSFER,
 } from './transfer-keys'
 
 /*
@@ -65,6 +75,7 @@ import {
 const productsServer = () => import('./products.server')
 const recordsServer = () => import('./records.server')
 const giftCardsServer = () => import('./gift-cards.server')
+const trackingServer = () => import('./tracking.server')
 
 /** A resource whose store-touching hooks load `pick(module)` on first use. */
 function deferred(
@@ -140,6 +151,9 @@ export function registerCommerceTransferResources(): void {
     deferred(async () => (await recordsServer()).ordersTransfer, {
       fields: catalog({ standard: ORDER_TRANSFER_FIELDS, groups: ORDER_TRANSFER_GROUPS }),
       matchKeys: [{ fieldId: 'id', normalizer: 'aglynId' }],
+      // Pirate Ship, Shippo, EasyPost and any tool (AGL-3613): the orders
+      // card's Export for shipping opens on one of these.
+      presets: ORDER_SHIPPING_PRESETS,
       invariants: [
         {
           id: 'orders-export-only',
@@ -195,6 +209,37 @@ export function registerCommerceTransferResources(): void {
         ['count', 'plan'],
       ),
       planGate: async (subject) => (await import('./gift-cards-plan')).giftCardsPlanRefusal(subject.org),
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  // A file of tracking numbers ships the orders it names (AGL-3613): each
+  // row is a parcel, recorded through the order's own shipment paths, and
+  // the buyer is emailed as for any shipment. Rows are matched by order
+  // number with the resource's own `match`, so two parcels of one order are
+  // two rows rather than a duplicate.
+  registerPluginTransferResource(
+    COMMERCE_TRACKING_TRANSFER,
+    {
+      fields: catalog({ standard: TRACKING_TRANSFER_FIELDS, groups: TRACKING_TRANSFER_GROUPS }),
+      matchKeys: TRACKING_MATCH_KEYS,
+      defaultPolicy: TRACKING_DEFAULT_POLICY,
+      invariants: [
+        {
+          id: 'tracking-parcel',
+          label: 'A parcel for an order that can ship',
+          check: (row) => {
+            const planned = row as TrackingPlannedRow
+            return planned.verdict === 'update' && !planned.tracking ? 'This row records nothing.' : null
+          },
+        },
+      ],
+      readPage: async (ctx, cursor, fieldIds, options) =>
+        (await trackingServer()).readTrackingPage(ctx, cursor, fieldIds, options),
+      lookup: async (ctx, requests) => (await trackingServer()).lookupTrackingOrders(ctx, requests),
+      match: (_ctx, input) => ({ outcomes: matchTrackingRows(input.rows, input.lookup) }),
+      plan: async (ctx, input) => (await trackingServer()).planTracking(ctx, input),
+      apply: async (ctx, chunk, writer) => (await trackingServer()).applyTracking(ctx, chunk, writer),
+      revert: async (ctx, snapshot, decisions) => (await trackingServer()).revertTracking(ctx, snapshot, decisions),
     },
     { pluginId: BUNDLE_ID },
   )

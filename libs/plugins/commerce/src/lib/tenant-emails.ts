@@ -690,5 +690,162 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         'You’re receiving this because this address was entered on ' +
         '{{host.businessName}}’s signup form.',
     },
+    ...returnTenantEmails(),
+  ]
+}
+
+/** The items a return covers, one per line. */
+const RETURN_ITEMS_TOKEN = {
+  name: 'return.items',
+  description: 'The items being returned, one per line, with the reason',
+  sample: '1× House Blend — Arrived damaged',
+} as const
+
+/** The merchant's note on a return; empty when they left none. */
+const RETURN_NOTE_TOKEN = {
+  name: 'return.note',
+  description: 'The store’s note to the buyer on this return; empty when none',
+  sample: 'Please include the original packaging.',
+} as const
+
+/**
+ * The return emails (AGL-3611): one to the store when a buyer asks, and one
+ * to the buyer at each answer. Their own block, beside the order emails
+ * rather than among them, because those belong to the order notifications.
+ */
+function returnTenantEmails(): readonly TenantEmailEntry[] {
+  return [
+    {
+      key: 'return-requested',
+      name: 'Return requested',
+      description:
+        'Tells the store a buyer asked to return items, with what and why, so ' +
+        'someone can approve or decline it.',
+      pluginId: 'commerce',
+      plugin: 'Commerce',
+      control: 'besigner',
+      defaultSubject: 'Return requested for order {{order.number}}',
+      mergeTokens: [
+        ORDER_NUMBER_TOKEN,
+        RETURN_ITEMS_TOKEN,
+        {
+          name: 'buyer.email',
+          description: 'The buyer’s email',
+          sample: 'buyer@example.com',
+        },
+        {
+          name: 'return.customerNote',
+          description: 'What the buyer wrote; empty when they wrote nothing',
+          sample: 'The lid was cracked.',
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: 'A buyer asked for a return', variant: 'heading' },
+        {
+          block: 'text',
+          text: '{{buyer.email}} wants to return items from order {{order.number}}.',
+          variant: 'body',
+        },
+        { block: 'text', text: '{{return.items}}', variant: 'body' },
+        { block: 'text', text: '{{return.customerNote}}', variant: 'body' },
+        {
+          block: 'text',
+          text: 'Approve or decline it under Products → Returns.',
+          variant: 'caption',
+        },
+      ],
+      footerReason: 'You’re receiving this because you manage {{host.businessName}}.',
+    },
+    {
+      key: 'return-approved',
+      name: 'Return approved',
+      description:
+        'Tells the buyer their return was approved and how to send the items ' +
+        'back, with the return label when the store attached one.',
+      pluginId: 'commerce',
+      plugin: 'Commerce',
+      control: 'besigner',
+      defaultSubject: 'Your return for order {{order.number}} is approved',
+      mergeTokens: [
+        ORDER_NUMBER_TOKEN,
+        RETURN_ITEMS_TOKEN,
+        RETURN_NOTE_TOKEN,
+        {
+          name: 'return.label',
+          description:
+            'A sentence with the return label link and its tracking; empty ' +
+            'when the store attached no label',
+          sample: 'Print your return label: https://labels.example.com/r/123',
+        },
+        ORDER_STATUS_URL_TOKEN,
+      ],
+      defaultBody: [
+        { block: 'text', text: 'Your return is approved', variant: 'heading' },
+        {
+          block: 'text',
+          text: '{{host.businessName}} approved the return of:',
+          variant: 'body',
+        },
+        { block: 'text', text: '{{return.items}}', variant: 'body' },
+        { block: 'text', text: '{{return.note}}', variant: 'body' },
+        { block: 'text', text: '{{return.label}}', variant: 'body' },
+        { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
+      ],
+      footerReason: ORDER_FOOTER_REASON,
+    },
+    {
+      key: 'return-declined',
+      name: 'Return declined',
+      description: 'Tells the buyer their return was declined, with the store’s note.',
+      pluginId: 'commerce',
+      plugin: 'Commerce',
+      control: 'besigner',
+      defaultSubject: 'About your return for order {{order.number}}',
+      mergeTokens: [ORDER_NUMBER_TOKEN, RETURN_ITEMS_TOKEN, RETURN_NOTE_TOKEN, ORDER_STATUS_URL_TOKEN],
+      defaultBody: [
+        { block: 'text', text: 'We could not accept this return', variant: 'heading' },
+        {
+          block: 'text',
+          text: '{{host.businessName}} declined the return of:',
+          variant: 'body',
+        },
+        { block: 'text', text: '{{return.items}}', variant: 'body' },
+        { block: 'text', text: '{{return.note}}', variant: 'body' },
+        { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
+      ],
+      footerReason: ORDER_FOOTER_REASON,
+    },
+    {
+      key: 'return-refunded',
+      name: 'Return refunded',
+      description: 'Tells the buyer their return was received and refunded, and how much.',
+      pluginId: 'commerce',
+      plugin: 'Commerce',
+      control: 'besigner',
+      defaultSubject: 'Your refund for order {{order.number}}',
+      mergeTokens: [
+        ORDER_NUMBER_TOKEN,
+        RETURN_ITEMS_TOKEN,
+        {
+          name: 'return.refundTotal',
+          description: 'The amount refunded for this return',
+          sample: '$24.00',
+        },
+        ORDER_STATUS_URL_TOKEN,
+      ],
+      defaultBody: [
+        { block: 'text', text: 'Your return is refunded', variant: 'heading' },
+        {
+          block: 'text',
+          text:
+            '{{host.businessName}} received your return and refunded ' +
+            '{{return.refundTotal}} to your original payment method.',
+          variant: 'body',
+        },
+        { block: 'text', text: '{{return.items}}', variant: 'body' },
+        { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
+      ],
+      footerReason: ORDER_FOOTER_REASON,
+    },
   ]
 }

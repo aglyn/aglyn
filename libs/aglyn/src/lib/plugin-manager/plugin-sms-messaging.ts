@@ -51,6 +51,14 @@ export interface PluginSmsSendRequest {
   purpose: 'transactional'
   /** A short label for logs, e.g. `'order-shipped'`. */
   context?: string
+  /**
+   * Keeps the text out of the recipient's night. Given, a text that would
+   * land between 9 PM and 8 AM in `timeZone` (an IANA name) is held and
+   * delivered at 8 AM there instead; the outcome is still `sent`, with
+   * `scheduledForMs`. Omit it for a text the recipient is waiting on right
+   * now — a receipt at the counter, a sign-in code — which goes at once.
+   */
+  quietHours?: { timeZone: string }
 }
 
 export type PluginSmsSendOutcome =
@@ -61,6 +69,8 @@ export type PluginSmsSendOutcome =
       /** The number as sent, E.164. */
       to: string
       segments: number
+      /** Held for the recipient's morning: when it will be delivered. */
+      scheduledForMs?: number
     }
   /** No provider credentials: nothing was attempted. */
   | { status: 'not-configured' }

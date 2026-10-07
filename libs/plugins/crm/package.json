@@ -34,6 +34,7 @@
     "@aglyn/shared-util-email": "1.0.0-beta.229",
     "@aglyn/shared-util-http": "1.0.0-beta.229",
     "@aglyn/shared-util-timestamp": "1.0.0-beta.229",
+    "@aglyn/shared-util-tools": "1.0.0-beta.229",
     "@aglyn/tenant-data-admin": "1.0.0-beta.229",
     "@aglyn/tenant-feature-instance": "1.0.0-beta.229",
     "@aglyn/tenant-runtime": "1.0.0-beta.229",

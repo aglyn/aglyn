@@ -30,6 +30,11 @@ export interface SmsProviderSendInput {
   body: string
   /** A sender override; the adapter's configured sender otherwise. */
   from?: string
+  /**
+   * Deliver at this instant instead of now (quiet hours). The adapter hands
+   * it to the vendor's scheduler; at least 15 minutes ahead.
+   */
+  sendAtMs?: number
 }
 
 export type SmsProviderSendResult =

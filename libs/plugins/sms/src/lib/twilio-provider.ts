@@ -66,7 +66,15 @@ export function createTwilioSmsProvider(
       }
       const form = new URLSearchParams({ To: input.to, Body: input.body })
       if (input.from) form.set('From', input.from)
-      else form.set('MessagingServiceSid', messagingServiceSid)
+      // A scheduled message must go through the Messaging Service, so a held
+      // text names it even beside a sender override.
+      if (!input.from || input.sendAtMs) {
+        form.set('MessagingServiceSid', messagingServiceSid)
+      }
+      if (input.sendAtMs) {
+        form.set('ScheduleType', 'fixed')
+        form.set('SendAt', new Date(input.sendAtMs).toISOString())
+      }
       let response: Response
       try {
         response = await doFetch(

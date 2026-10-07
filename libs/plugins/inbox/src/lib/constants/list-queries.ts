@@ -16,13 +16,13 @@
  */
 
 import { scopedSearch } from '@aglyn/aglyn/app-utils/name-search'
-import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
-import type { ListFilterOption } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListFilterField } from '@aglyn/shared-util-tools/list-query/list-filter'
+import type { ListFilterOption } from '@aglyn/shared-util-tools/list-query/list-filter-codecs'
 import type {
   ListQueryDeclaration,
   ListQueryFilter,
   ListQueryRequest,
-} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+} from '@aglyn/shared-util-tools/list-query/list-query-plan'
 
 /*
  * WHAT EACH INBOX LIST CAN BE ASKED, ON ITS FIRESTORE QUERY (AGL-3321).

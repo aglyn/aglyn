@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
+import type { ListFilterField } from '@aglyn/shared-util-tools/list-query/list-filter'
 
-import { CRM_NEXT_ACTIVITY_FILTER_FIELD } from '../components/crm-next-activity-column'
-import type { ListQueryDeclaration, ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { CRM_NEXT_ACTIVITY_FILTER_FIELD } from '../model/crm-next-activity'
+import type { ListQueryDeclaration, ListQuerySort } from '@aglyn/shared-util-tools/list-query/list-query-plan'
 import { CRM_LIST_SEARCH } from '../model/crm-list-query'
 
 /*

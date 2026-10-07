@@ -85,6 +85,7 @@ import { collectionMembershipHandler } from './server/collection-membership'
 import { draftOrderHandler } from './server/draft-order'
 import { fulfillOrderHandler } from './server/fulfill-order'
 import { orderReceiptSendHandler } from './server/order-receipt-send'
+import { orderStatusHandler } from './server/order-status'
 import { giftCardsHandler } from './server/gift-cards'
 import { memberPostHandler } from './server/member-post'
 import { orderAnalyticsHandler } from './server/order-analytics'
@@ -101,6 +102,7 @@ import {
 import { processRestockHandler, scanRestockAlerts } from './server/process-restock'
 import { scanStockDecrements } from './server/reconcile-stock'
 import { refundHandler } from './server/refund'
+import { returnRequestHandler, returnsHandler } from './server/returns'
 import { scanSupplierDeliveries } from './server/supplier-outbox'
 import { supplierUpdateHandler } from './server/supplier-update'
 
@@ -270,6 +272,9 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('commerce/notify-restock', notifyRestockHandler)
   // GA-safe order projection for the storefront `purchase` (AGL-1641).
   registerPluginApiRoute('commerce/order-analytics', orderAnalyticsHandler)
+  // The guest order-status page's data (AGL-3610), behind the signed link in
+  // every buyer email — a recipient link, so it outlives the site's gates.
+  registerPluginApiRoute('commerce/order-status', orderStatusHandler, { recipientLink: true })
   // What became of a session the shopper was returned from (AGL-3606).
   registerPluginApiRoute('commerce/checkout-status', checkoutStatusHandler)
   registerPluginApiRoute('commerce/product', productHandler)
@@ -281,6 +286,9 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('commerce/stream', streamHandler)
   registerPluginApiRoute('commerce/subscription-portal', subscriptionPortalHandler)
   registerPluginApiRoute('commerce/reviews', reviewsHandler)
+  // A buyer's return request (AGL-3611), from their account or the signed
+  // order-status link.
+  registerPluginApiRoute('commerce/return-request', returnRequestHandler)
   registerPluginApiRoute('membership/account', membershipAccountHandler)
   registerPluginApiRoute('membership/content', membershipContentHandler)
   registerPluginApiRoute('membership/login', membershipLoginHandler)
@@ -399,7 +407,15 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/process-abandoned', processAbandonedHandler)
   registerPluginApiRoute('commerce/process-restock', processRestockHandler)
   registerPluginApiRoute('commerce/refund', refundHandler)
+  // Returns (AGL-3611): approve, decline, receive with restock, refund
+  // through the route above, a label from a shipping plugin.
+  registerPluginApiRoute('commerce/returns', returnsHandler)
   registerPluginApiRoute('commerce/supplier-update', supplierUpdateHandler)
+  // Stamps the open orders that predate the shipping fields, before an
+  // export for shipping (AGL-3613).
+  registerPluginApiRoute('commerce/orders-shipping-prepare', async (req, res) =>
+    (await import('./server/orders-shipping-prepare')).ordersShippingPrepareHandler(req, res),
+  )
   // The store's sales as figure tables (AGL-2915), for the AI plugin's
   // insights to read by id rather than by reading orders. The console runs
   // insight jobs, so the console surface registers them.

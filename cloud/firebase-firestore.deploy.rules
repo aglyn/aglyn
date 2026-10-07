@@ -3262,6 +3262,19 @@ allow update, delete: if isStaff() ||
 
 
 
+match /returns/{returnId} {
+allow read: if isStaff() || canReadHostSensitive(hostId);
+}
+match /orderWebhooks/{endpointId} {
+allow read: if isStaff() || canReadHostSensitive(hostId);
+}
+match /orderWebhookDeliveries/{deliveryId} {
+allow read: if isStaff() || canReadHostSensitive(hostId);
+}
+
+
+
+
 
 
 
@@ -3365,8 +3378,10 @@ match /{subcollection}/{document=**} {
 
 
 allow read: if subcollection != 'siteMemberCredentials' &&
+subcollection != 'orderWebhookSecrets' &&
 (isStaff() || (isHostMember(hostId) &&
 !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
+'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries',
 'funnelJourneys', 'funnelResults'])));
 
 
@@ -3477,7 +3492,8 @@ allow read: if subcollection != 'siteMemberCredentials' &&
 
 
 
-allow create: if subcollection != 'siteMemberCredentials' && (isStaff() ||
+allow create: if subcollection != 'siteMemberCredentials' &&
+subcollection != 'orderWebhookSecrets' && (isStaff() ||
 ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
 !(subcollection in ['screens', 'layouts', 'variables',
 'functions', 'workflows', 'services', 'redirects',
@@ -3494,7 +3510,9 @@ allow create: if subcollection != 'siteMemberCredentials' && (isStaff() ||
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
 'siteMemberCredentials', 'recordPages', 'printers',
-'printJobs', 'funnels', 'funnelJourneys', 'funnelResults']) &&
+'printJobs', 'returns', 'orderWebhooks',
+'orderWebhookSecrets', 'orderWebhookDeliveries',
+'funnels', 'funnelJourneys', 'funnelResults']) &&
 
 
 
@@ -3618,7 +3636,23 @@ allow create: if subcollection != 'siteMemberCredentials' && (isStaff() ||
 
 
 
-allow update: if subcollection != 'siteMemberCredentials' && (isStaff() ||
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+allow update: if subcollection != 'siteMemberCredentials' &&
+subcollection != 'orderWebhookSecrets' && (isStaff() ||
 ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
 !(subcollection in ['screens', 'layouts', 'components', 'installs',
 'templates', 'collections', 'datasets', 'orders', 'registers',
@@ -3635,7 +3669,9 @@ allow update: if subcollection != 'siteMemberCredentials' && (isStaff() ||
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
 'siteMemberCredentials', 'recordPages', 'printers',
-'printJobs', 'funnels', 'funnelJourneys', 'funnelResults'])));
+'printJobs', 'returns', 'orderWebhooks',
+'orderWebhookSecrets', 'orderWebhookDeliveries',
+'funnels', 'funnelJourneys', 'funnelResults'])));
 
 
 
@@ -3672,7 +3708,8 @@ allow update: if subcollection != 'siteMemberCredentials' && (isStaff() ||
 
 
 
-allow delete: if subcollection != 'siteMemberCredentials' && (isStaff() ||
+allow delete: if subcollection != 'siteMemberCredentials' &&
+subcollection != 'orderWebhookSecrets' && (isStaff() ||
 ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
 !(subcollection in ['screens', 'layouts', 'components',
 'collections', 'datasets', 'orders', 'registers', 'webhooks',
@@ -3687,8 +3724,9 @@ allow delete: if subcollection != 'siteMemberCredentials' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-'recordPages', 'printers', 'printJobs', 'funnels', 'funnelJourneys',
-'funnelResults'])));
+'recordPages', 'printers', 'printJobs', 'returns', 'orderWebhooks',
+'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels',
+'funnelJourneys', 'funnelResults'])));
 }
 
 

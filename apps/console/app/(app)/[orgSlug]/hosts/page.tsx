@@ -79,7 +79,7 @@ import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 import {
   describeHostStatus,
   describeSiteAllowance,
-} from '../../../../utils/host-status'
+} from '@aglyn/aglyn/app-utils/host-status'
 import {
   SITE_CARDS_PAGE_SIZE,
   SITE_FILTER_FIELDS,
@@ -87,7 +87,7 @@ import {
   SITE_FILTER_OPTIONS,
   SITE_LIST_DECLARATION,
   siteListBase,
-} from '../../../../utils/site-list-query'
+} from '@aglyn/aglyn/app-utils/site-list-query'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
 import useOrgPermissions from '../../../../hooks/use-org-permissions'
 import { usePendingInvites } from '../../../../hooks/use-pending-invites'
@@ -280,7 +280,7 @@ interface SitesCardsProps {
  * ordered by name (or newest first, under a Created range) — and each
  * card is the host document the page already holds (`useOrgHosts`) for a
  * row the query returned, joined by id and never used to narrow anything.
- * See `utils/site-list-query.ts` for what it offers and why the rest is not
+ * See `@aglyn/aglyn/app-utils/site-list-query` for what it offers and why the rest is not
  * offered.
  *
  * Paged by the query: the cards grow twelve at a time under "Load more",

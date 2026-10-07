@@ -21,16 +21,16 @@ import {
   type CrmListCollection,
   type CrmListFieldsContext,
   crmListFields,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/crm'
 import { scopedSearch } from '@aglyn/aglyn/app-utils/name-search'
-import type { ListFilterField, ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
-import type { ListFilterOption } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { listQueryRefusals } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import type { ListFilterField, ListFilterRequest } from '@aglyn/shared-util-tools/list-query/list-filter'
+import type { ListFilterOption } from '@aglyn/shared-util-tools/list-query/list-filter-codecs'
+import { listQueryRefusals } from '@aglyn/shared-util-tools/list-query/list-query-refusals'
 import type {
   ListQueryDeclaration,
   ListQueryFilter,
   ListQueryPlan,
-} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+} from '@aglyn/shared-util-tools/list-query/list-query-plan'
 
 /*
  * THE CRM LISTS ON THEIR QUERIES (AGL-3321).

@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-import type { ListFilterField, ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
-import type { ListGridFilterCodec } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListFilterField, ListFilterRequest } from '@aglyn/shared-util-tools/list-query/list-filter'
+import type { ListGridFilterCodec } from '@aglyn/shared-util-tools/list-query/list-filter-codecs'
 import type {
   ListQueryDeclaration,
   ListQueryFilter,
   ListQuerySort,
-} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+} from '@aglyn/shared-util-tools/list-query/list-query-plan'
 import { crmPicklistKey, type CrmViewFilterClause } from '@aglyn/aglyn/app-utils/crm'
-import { CRM_NEXT_ACTIVITY_FILTER_FIELD } from '../components/crm-next-activity-column'
+import { CRM_NEXT_ACTIVITY_FILTER_FIELD } from '../model/crm-next-activity'
 import {
   CRM_LIST_SEARCH,
   crmAnyOf,

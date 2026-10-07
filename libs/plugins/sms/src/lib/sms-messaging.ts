@@ -28,6 +28,7 @@ import {
   SMS_USAGE_COLLECTION,
 } from './constants'
 import type { SmsProvider, SmsProviderSendResult } from './sms-provider'
+import { quietHoursSendAt } from './quiet-hours'
 
 /**
  * The platform's text message service (AGL-3610), registered against core's
@@ -43,6 +44,9 @@ import type { SmsProvider, SmsProviderSendResult } from './sms-provider'
  *      who replied STOP is a statutory violation per message.
  *   4. A WORKSPACE TO BILL — the site's workspace, or no send.
  *   5. UNDER THE RATE — a per-workspace hourly ceiling.
+ *   5a. OUTSIDE QUIET HOURS — when the caller names the recipient's zone, a
+ *      text that would land between 9 PM and 8 AM is scheduled for 8 AM
+ *      (`quiet-hours.ts`) rather than sent now.
  *   6. SENT, THEN METERED — `orgs/{orgId}/smsUsage/{YYYY-MM}` gains the
  *      message, its segments and its cost, which the monthly usage sweep bills
  *      at cost (see `sms-usage-meter.ts`).
@@ -86,7 +90,17 @@ export function createSmsMessaging(deps: SmsMessagingDeps): PluginSmsMessaging {
         if (!rate.allowed) return { status: 'rate-limited' }
         const body = String(request.body ?? '').trim().slice(0, SMS_MAX_BODY_CHARS)
         if (!body) return { status: 'failed', error: 'Empty message' }
-        const result = await deps.provider.send({ to, body })
+        // Quiet hours: held for 8 AM in the recipient's zone, by the vendor's
+        // scheduler. A STOP that arrives overnight still wins — the vendor's
+        // opt-out list refuses the held message when it comes due.
+        const sendAtMs = request.quietHours?.timeZone
+          ? quietHoursSendAt(now(), request.quietHours.timeZone)
+          : null
+        const result = await deps.provider.send({
+          to,
+          body,
+          ...(sendAtMs ? { sendAtMs } : {}),
+        })
         if (!result.ok) {
           const refusal = result as Extract<SmsProviderSendResult, { ok: false }>
           if (refusal.invalidNumber) return { status: 'invalid-number' }
@@ -124,7 +138,13 @@ export function createSmsMessaging(deps: SmsMessagingDeps): PluginSmsMessaging {
           .catch((error) => {
             console.error('[sms] usage meter write failed', { orgId, month, error })
           })
-        return { status: 'sent', id: result.id, to, segments: result.segments }
+        return {
+          status: 'sent',
+          id: result.id,
+          to,
+          segments: result.segments,
+          ...(sendAtMs ? { scheduledForMs: sendAtMs } : {}),
+        }
       } catch (error) {
         console.error('[sms] send failed', { context: request.context, error })
         return {

@@ -295,6 +295,8 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
       const units = releasedLines.reduce((sum, line) => sum + line.quantity, 0)
       const patch: Record<string, unknown> = {
         status: 'cancelled',
+        // What a shipping tool's feed asks to learn of the cancel (AGL-3613).
+        updatedAtMs: atMs,
         timeline: CommerceModel.appendOrderEvent(
           order,
           'cancelled',

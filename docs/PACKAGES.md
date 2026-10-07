@@ -165,7 +165,7 @@ marked where it sits.
 | `shared-ui-color-picker` | `@aglyn/shared-ui-color-picker` | `libs/shared/ui/color-picker` | `scope:shared` `type:ui` | `.`, `./*` |
 | `shared-ui-email-campaigns` | `@aglyn/shared-ui-email-campaigns` | `libs/shared/ui/email-campaigns` | `scope:shared` `type:ui` | `.`, `./*` — the bulk-send reporting math (`model/send-report`: a send's counters, a rate with its denominator named, the link rollup), divided by every plugin that mails in bulk. The campaign model it once held is the Marketing plugin's (AGL-3080); see [Violations](#violations). |
 | `shared-ui-json-editor` | `@aglyn/shared-ui-json-editor` | `libs/shared/ui/json-editor` | `scope:shared` `type:ui` | `.`, `./*` |
-| `shared-ui-jsx` | `@aglyn/shared-ui-jsx` | `libs/shared/ui/jsx` | `scope:shared` `type:ui` | `.`, `./*` — also the one list-table filter path every plugin's lists use: `./components/list-table.component`, `./const/list-filter`, `./const/list-grid-filter`, `./hooks/use-list-grid-filter`, `./const/list-query-plan`, `./components/list-query-notices.component`, `./components/list-filter-chips.component` (AGL-3317, AGL-3321) |
+| `shared-ui-jsx` | `@aglyn/shared-ui-jsx` | `libs/shared/ui/jsx` | `scope:shared` `type:ui` | `.`, `./*` — also the one list-table filter path every plugin's lists use: `./components/list-table.component`, `./const/list-filter`, `./const/list-grid-filter`, `./hooks/use-list-grid-filter`, `./const/list-query-plan` (both re-export `@aglyn/shared-util-tools/list-query/*`), `./components/list-query-notices.component`, `./components/list-filter-chips.component` (AGL-3317, AGL-3321) |
 | `shared-ui-jsx-forms` | `@aglyn/shared-ui-jsx-forms` | `libs/shared/ui/jsx-forms` | `scope:shared` `type:ui` | `.`, `./*` |
 | `shared-ui-next` | `@aglyn/shared-ui-next` | `libs/shared/ui/next` | `scope:shared` `type:ui` | `.`, `./*` |
 | `shared-ui-snackstack` | `@aglyn/shared-ui-snackstack` | `libs/shared/ui/snackstack` | `scope:shared` `type:ui` | `.`, `./*` |
@@ -180,7 +180,7 @@ marked where it sits.
 | `shared-util-next` | `@aglyn/shared-util-next` | `libs/shared/util/next` | `scope:shared` `type:util` | `.`, `./*` |
 | `shared-util-rest-api` | `@aglyn/shared-util-rest-api` | `libs/shared/util/rest-api` | `scope:shared` `type:util` | `.`, `./*` |
 | `shared-util-timestamp` | `@aglyn/shared-util-timestamp` | `libs/shared/util/timestamp` | `scope:shared` `type:util` | `.`, `./*` |
-| `shared-util-tools` | `@aglyn/shared-util-tools` | `libs/shared/util/tools` | `scope:shared` `type:util` | `.`, `./*` |
+| `shared-util-tools` | `@aglyn/shared-util-tools` | `libs/shared/util/tools` | `scope:shared` `type:util` | `.`, `./*` — also the pure list filter grammar under `./list-query/*` (`list-filter`, `list-query-plan`, `list-filter-codecs`, `list-filter-sentence`, `list-query-refusals`): no React, no MUI, so the native app plans the same Firestore queries the console does (AGL-3622) |
 | `shared-util-vendor` | `@aglyn/shared-util-vendor` | `libs/shared/util/vendor` | `scope:shared` `type:util` | `.`, `./*` |
 
 ### Apps and deploy units

@@ -3258,6 +3258,19 @@ service cloud.firestore {
           (canReadHostSensitive(hostId) && isVerified() &&
             !hostWritesFrozen(hostId));
       }
+      // Returns, merchant webhook endpoints and their delivery log
+      // (AGL-3611): read by whoever reads the order book they describe, and
+      // written only by their routes. `orderWebhookSecrets` has no block:
+      // the signing secrets are no client's to read.
+      match /returns/{returnId} {
+        allow read: if isStaff() || canReadHostSensitive(hostId);
+      }
+      match /orderWebhooks/{endpointId} {
+        allow read: if isStaff() || canReadHostSensitive(hostId);
+      }
+      match /orderWebhookDeliveries/{deliveryId} {
+        allow read: if isStaff() || canReadHostSensitive(hostId);
+      }
       // Order STATUS is server-owned (AGL-1827). Every transition goes
       // through an Admin-SDK route that re-asks ORDER_TRANSITIONS inside the
       // transaction that writes it — cancel (AGL-1808/1818), fulfil and
@@ -3365,8 +3378,10 @@ service cloud.firestore {
         // counts on the Admin SDK. A member gets the counts, never the visits.
         // A result is that route's cache, served by the route.
         allow read: if subcollection != 'siteMemberCredentials' &&
+          subcollection != 'orderWebhookSecrets' &&
           (isStaff() || (isHostMember(hostId) &&
             !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
+              'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries',
               'funnelJourneys', 'funnelResults'])));
         // THE EXCLUSION LISTS ARE THE MECHANISM. Sibling match blocks are OR'd
         // and the LOOSER one wins, so a dedicated deny (or a tighter dedicated
@@ -3477,7 +3492,8 @@ service cloud.firestore {
         //    the suspend flag and a delete that strands no credential.
         //    `siteMemberCredentials` holds the password hashes; the `!=` that
         //    opens all four statements keeps every client out, staff included.
-        allow create: if subcollection != 'siteMemberCredentials' && (isStaff() ||
+        allow create: if subcollection != 'siteMemberCredentials' &&
+          subcollection != 'orderWebhookSecrets' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
               'functions', 'workflows', 'services', 'redirects',
@@ -3494,7 +3510,9 @@ service cloud.firestore {
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
               'siteMemberCredentials', 'recordPages', 'printers',
-              'printJobs', 'funnels', 'funnelJourneys', 'funnelResults']) &&
+              'printJobs', 'returns', 'orderWebhooks',
+              'orderWebhookSecrets', 'orderWebhookDeliveries',
+              'funnels', 'funnelJourneys', 'funnelResults']) &&
             // The org Inbox's collection-group read (AGL-3303) lists EVERY
             // `formSubmissions` collection, at any depth, filed under the org
             // a row names, so none may be minted beneath another name here.
@@ -3508,6 +3526,21 @@ service cloud.firestore {
         //    or off with it, so the funnels routes are its only writer; members
         //    still READ funnels here. Journeys are written by the site
         //    collector and results by the results route, both on the Admin SDK.
+        //
+        //  - `orderWebhookSecrets` (AGL-3611) is also beside
+        //    `siteMemberCredentials` at the head of every allow above, so not
+        //    even staff reads or writes a merchant's sealed signing secrets
+        //    from a browser.
+        //
+        //  - `returns`, `orderWebhooks`, `orderWebhookSecrets` and
+        //    `orderWebhookDeliveries` (AGL-3611): a return decides what a
+        //    refund pays and what goes back on the shelf, a webhook endpoint
+        //    decides where the order book is posted, and a delivery row is the
+        //    log of what was sent. Their routes (`/api/commerce/returns`,
+        //    `/api/commerce/order-webhooks`) are the only writers. READ is on
+        //    the read list too and comes back through the dedicated blocks
+        //    below, to the order book's readers only; the secrets have no
+        //    reader at all.
         //
         //  - `printers` and `printJobs` (AGL-3619): a register's cloud receipt
         //    printers and their queue. A printer's `deviceId` and
@@ -3618,7 +3651,8 @@ service cloud.firestore {
         //    the whole live site off-platform with no publish step. That makes
         //    it a publish act (AGL-2334) rather than authoring, so the block
         //    below re-grants both on `canPublishHostContent`.
-        allow update: if subcollection != 'siteMemberCredentials' && (isStaff() ||
+        allow update: if subcollection != 'siteMemberCredentials' &&
+          subcollection != 'orderWebhookSecrets' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
@@ -3635,7 +3669,9 @@ service cloud.firestore {
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
               'siteMemberCredentials', 'recordPages', 'printers',
-              'printJobs', 'funnels', 'funnelJourneys', 'funnelResults'])));
+              'printJobs', 'returns', 'orderWebhooks',
+              'orderWebhookSecrets', 'orderWebhookDeliveries',
+              'funnels', 'funnelJourneys', 'funnelResults'])));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -3672,7 +3708,8 @@ service cloud.firestore {
         // would leave an author able to remove a publisher's redirect outright,
         // which is the same routing decision in the other direction and is
         // exactly the AGL-2334 `components` argument.
-        allow delete: if subcollection != 'siteMemberCredentials' && (isStaff() ||
+        allow delete: if subcollection != 'siteMemberCredentials' &&
+          subcollection != 'orderWebhookSecrets' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components',
               'collections', 'datasets', 'orders', 'registers', 'webhooks',
@@ -3687,8 +3724,9 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-              'recordPages', 'printers', 'printJobs', 'funnels', 'funnelJourneys',
-              'funnelResults'])));
+              'recordPages', 'printers', 'printJobs', 'returns', 'orderWebhooks',
+              'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels',
+              'funnelJourneys', 'funnelResults'])));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only

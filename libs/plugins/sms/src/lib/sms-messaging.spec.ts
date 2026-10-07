@@ -167,6 +167,36 @@ describe('createSmsMessaging (AGL-3610)', () => {
     expect(fake.send).not.toHaveBeenCalled()
   })
 
+  it('holds a quiet-hours text for 8 AM in the recipient zone, and sends a daytime one now', async () => {
+    // NOW is 12:00 UTC = 7:00 AM in Chicago (CDT): inside quiet hours.
+    const night = provider({ ok: true, id: 'SM-held', segments: 1 })
+    const held = await messaging(night).send({
+      ...REQUEST,
+      quietHours: { timeZone: 'America/Chicago' },
+    })
+    const eightAm = Date.UTC(2026, 9, 6, 13)
+    expect(held).toEqual({
+      status: 'sent',
+      id: 'SM-held',
+      to: '+15555550100',
+      segments: 1,
+      scheduledForMs: eightAm,
+    })
+    expect(night.send).toHaveBeenCalledWith(
+      expect.objectContaining({ sendAtMs: eightAm }),
+    )
+    // The same instant is 1 PM in London: sent at once.
+    const day = provider({ ok: true, id: 'SM-now', segments: 1 })
+    const sent = await messaging(day).send({
+      ...REQUEST,
+      quietHours: { timeZone: 'Europe/London' },
+    })
+    expect(sent).not.toHaveProperty('scheduledForMs')
+    expect(day.send).toHaveBeenCalledWith(
+      expect.not.objectContaining({ sendAtMs: expect.anything() }),
+    )
+  })
+
   it('keys the month in UTC', () => {
     expect(smsUsageMonth(Date.UTC(2026, 9, 31, 23, 59))).toBe('2026-10')
     expect(smsUsageMonth(Date.UTC(2026, 10, 1, 0, 1))).toBe('2026-11')

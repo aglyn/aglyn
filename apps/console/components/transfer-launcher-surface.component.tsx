@@ -130,6 +130,7 @@ export function TransferLauncherSurface({ state, orgId, getIdToken, onClose }: T
         {...(launch.title ? { title: launch.title } : {})}
         {...(launch.selection?.length ? { selection: launch.selection } : {})}
         {...(launch.filter ? { filter: launch.filter } : {})}
+        {...(launch.preset ? { preset: launch.preset } : {})}
       />
     )
   }

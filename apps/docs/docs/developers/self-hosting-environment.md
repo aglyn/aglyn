@@ -789,6 +789,24 @@ as a link domain — the workspace router owns every name there — and a domain
 whose campaign email already has a provider tracking host on `links.` cannot be
 set up, because both would need the same name.
 
+### Text messages {#sms}
+
+The SMS plugin texts order receipts and order updates through a Twilio
+Messaging Service. Leave all three variables unset and nothing offers a text:
+order notifications go by email only. Set them on the console **and** the
+tenant runtime, since both send order notifications.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `TWILIO_ACCOUNT_SID` | Feature | Runtime | `AC…`, the Twilio account. |
+| `TWILIO_AUTH_TOKEN` | Feature | Runtime | Signs every API call, and verifies the `X-Twilio-Signature` on inbound texts. An unsigned inbound text is refused. |
+| `TWILIO_MESSAGING_SERVICE_SID` | Feature | Runtime | `MG…`, the Messaging Service every text is sent through. Register its sender for A2P 10DLC before texting US numbers. Texts held for quiet hours are scheduled on this service. |
+
+Point the Messaging Service's incoming-message webhook at
+`POST https://<console>/api/sms/inbound`. A reply of STOP is then recorded on
+the platform's own suppression list, which is checked before every send, and
+START lifts it.
+
 ---
 
 ## Analytics and advertising {#analytics}

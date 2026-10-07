@@ -23,16 +23,16 @@ import {
   crmContactCustomColumn,
   crmFacetKey,
   crmFacetKeyValue,
-  EMAIL_STATE_STATUSES,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/crm'
+import { EMAIL_STATE_STATUSES } from '@aglyn/aglyn/app-utils/email-state'
 import type {
   ListFilterField,
   ListFilterRequest,
-} from '@aglyn/shared-ui-jsx/const/list-filter'
+} from '@aglyn/shared-util-tools/list-query/list-filter'
 import type {
   ListQueryDeclaration,
   ListQuerySort,
-} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+} from '@aglyn/shared-util-tools/list-query/list-query-plan'
 import {
   CRM_LIST_SEARCH,
   type CrmClauseAsked,
