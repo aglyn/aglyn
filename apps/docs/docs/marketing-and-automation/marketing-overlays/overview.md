@@ -98,6 +98,20 @@ When several overlays match a page, the first bar and the first popup (by order)
 The single announcement bar and popup on the same page remain as your always-on default
 surfaces; configured overlays take priority over them.
 
+## Write and create overlays with AI {#with-ai}
+
+With [Aglyn AI](../../ai/overview.md) on your workspace, two more controls appear here:
+
+- **Write with AI**, among the overlay editor's fields, writes a bar's text or a popup's
+  headline, body and button label from a brief, and for a popup suggests one of the
+  triggers above. It fills the fields unsaved; **Save** is still yours.
+- **Create with AI**, beside **New bar** and **New popup**, turns a brief into a new
+  overlay that is saved **switched off** and opened in the editor, so no visitor sees it
+  until you add its link and turn it on.
+
+Neither writes a link, the pages an overlay shows on, its schedule or its on-switch. See
+[Marketing with AI](../../ai/marketing-with-ai.md#write-overlay-copy).
+
 ## Variables and site details in copy {#variables-in-copy}
 
 A bar's text and a popup's headline and body are filled in when the page renders:

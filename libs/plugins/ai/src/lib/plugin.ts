@@ -82,6 +82,10 @@ import {
   AiExplainAutomation,
   AiExplainRunFailure,
 } from './components/ai-explain-automation.component'
+import {
+  AiCreateOverlayButton,
+  AiOverlayEditorCard,
+} from './components/ai-overlay-cards.component'
 import AiProductCopyCard from './components/ai-product-copy-card.component'
 import AiProductImportOption from './components/ai-product-import-option.component'
 import AiProductsHubCard from './components/ai-products-hub-card.component'
@@ -570,6 +574,27 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiExperimentResultCard,
+      },
+      // Overlays by AI (AGL-3603), in the zones the marketing plugin's
+      // overlays list hosts: "Create with AI" beside New bar and New popup,
+      // and "Write with AI" among the overlay editor's fields. Both start a
+      // `text` job asked for overlay copy; neither writes — the list saves a
+      // created overlay switched off, and the editor's Save is the write.
+      {
+        slot: 'hostOverlays',
+        widgetId: 'ai-create-overlay',
+        title: 'Create an overlay with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiCreateOverlayButton,
+      },
+      {
+        slot: 'overlayEditor',
+        widgetId: 'ai-overlay-copy',
+        title: 'Write overlay copy with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiOverlayEditorCard,
       },
     ],
   })

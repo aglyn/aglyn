@@ -441,6 +441,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/marketing-and-automation/marketing-overlays/overview',
     title: 'Marketing Overlays',
   },
+  marketingWithAi: {
+    path: '/ai/marketing-with-ai',
+    title: 'Marketing with AI: overlays, campaigns and your numbers',
+  },
   media: {
     path: '/content-and-data/media/overview',
     title: 'Media Library & CDN',
@@ -848,7 +852,8 @@ export const DOCS_HELP_ANCHORS = {
   maintenanceMode: ['#turn-it-on', '#tips', '#related'],
   manageAccount: ['#account', '#sign-in-methods', '#email-addresses', '#what-each-address-does', '#removing-an-address', '#if-your-organization-uses-single-sign-on', '#profile-image', '#basic-info', '#contact-details', '#security', '#related'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#contributes--where-the-plugin-loads', '#config--settings-without-writing-a-settings-screen', '#listing--version-documents', '#review--trust-lifecycle', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
-  marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#variables-in-copy', '#engagement-stats', '#across-your-sites', '#related'],
+  marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#with-ai', '#variables-in-copy', '#engagement-stats', '#across-your-sites', '#related'],
+  marketingWithAi: ['#write-overlay-copy', '#create-an-overlay', '#what-is-sent', '#who-can-use-it', '#related'],
   media: ['#organize', '#filter-and-search', '#views', '#tags', '#custom-metadata', '#file-info', '#upload', '#size-and-plan-limits', '#storage', '#edit-images', '#download-file', '#deliver-over-cdn', '#urls-are-stable', '#page-elements-point-at-the-asset-not-at-a-link', '#hotlinking-and-your-visitors', '#delivery-line', '#who-an-asset-is-shared-with', '#private-files', '#members-videos-are-private', '#approved-image-hosts', '#adding-an-approved-image-host', '#approved-image-host-troubleshooting', '#reference', '#variant-widths', '#media-cache', '#tag-limits', '#over-the-api', '#components', '#related'],
   megaMenuWithInteractions: ['#what-youll-build', '#1-insert-the-mega-menu', '#2-build-the-columns', '#3-make-it-open-on-hover', '#prefer-primitives-insert-the-dropdown-panel-preset', '#4-add-a-mobile-drawer-optional', '#5-test-and-publish', '#how-it-works-under-the-hood', '#troubleshooting', '#related'],
   members: ['#1-turn-user-accounts-on-for-the-site', '#2-the-built-in-sign-in-and-sign-up-pages', '#3-design-an-account-page', '#4-gate-screens-to-members', '#gate-part-of-a-page-not-all-of-it', '#5-manage-members-from-the-console', '#suspend--reactivate', '#password-help', '#related'],

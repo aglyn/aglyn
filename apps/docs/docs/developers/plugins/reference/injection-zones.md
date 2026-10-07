@@ -85,7 +85,7 @@ and the zone draws nothing.
 A plugin that hosts a zone also declares it, with `registerPluginZone` and a token that
 carries the props it hands each widget (see
 [Zones a plugin hosts](./plugin-manager-api.md#zones-a-plugin-hosts--plugin-zones) in the
-plugin-manager reference). The forms, workflows and commerce plugins declare these on
+plugin-manager reference). The forms, workflows, commerce and marketing plugins declare these on
 their own surfaces; a widget from another plugin restates the props it reads rather than
 importing the host's package:
 
@@ -98,6 +98,8 @@ importing the host's package:
 | `productEditor` | The commerce product editor, under a product's description, tags and categories: copy proposed for the fields, which Save product writes | `hostId`, `orgId`, `product` (as the editor holds it), `categories`, `proposeValues(values, key)` — stages copy in the editor as unsaved edits |
 | `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
 | `productImport` | The commerce products import wizard's After import step: options for what happens to the imported products once they land | `hostId`, `orgId`, `count` (products the dry run creates), `options`, `setOption(key, on)` |
+| `hostOverlays` | A site's **Marketing → Overlays** section, the marketing plugin's, beside **New bar** and **New popup** and again in the empty list: another way to start an overlay | `hostId`, `limits` (the longest each copy field may be), `triggers` (the popup triggers, each with its unit and range), `createOverlayDraft(kind, proposal)` — writes the overlay switched off, cut to the limits, and opens it in the editor |
+| `overlayEditor` | Among the fields of the marketing plugin's overlay editor: copy proposed for the bar or popup being edited, which the editor's **Save** writes | `hostId`, `overlayId` (empty while new), `kind` (`bar` \| `popup`), `copy` (the copy as the editor holds it), `limits`, `triggers`, `proposeValues(proposal, key)` — fills the fields unsaved |
 
 ## How a zone spaces your widget
 
@@ -124,6 +126,9 @@ page spaces it there:
 - `productEditor`, `productsHub` and `productImport`: a section the commerce
   plugin places among its product editor's fields, above its catalog table,
   and in its import wizard's After import step.
+- `hostOverlays` and `overlayEditor`: a control the marketing plugin places
+  beside its New bar and New popup buttons, and a section among its overlay
+  editor's fields.
 - `recordEmail` and `importMapping`: a section the CRM plugin places under its
   one-to-one composer's message and under an import drawer's or the import
   wizard's column matching.

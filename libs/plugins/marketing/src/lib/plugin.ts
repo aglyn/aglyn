@@ -33,6 +33,7 @@ import {
   EXPERIMENT_RESULT_ZONE,
   EXPERIMENT_VARIANTS_ZONE,
 } from './components/experiment-zones'
+import { HOST_OVERLAYS_ZONE, OVERLAY_EDITOR_ZONE } from './components/overlay-zones'
 import {
   MARKETING_CONSOLE_SECTIONS,
   MARKETING_ORG_CONSOLE_SECTIONS,
@@ -169,6 +170,22 @@ export function registerMarketingConsole(): void {
     CAMPAIGN_DESIGN_PREVIEW_ZONE,
     'A sent email as an inbox receives it',
     'On one message’s page. A widget here renders the stored design, or the plain-text body, through the renderer the send path uses.',
+  )
+  /*
+   * The overlays list's two positions (AGL-3603): another way to start an
+   * overlay beside New bar and New popup, and copy proposed among the
+   * editor's fields. What each hands a widget is carried on its token in
+   * `components/overlay-zones`; neither lets a widget write.
+   */
+  bareZone(
+    HOST_OVERLAYS_ZONE,
+    'Start an overlay',
+    'On a site’s Overlays section, beside New bar and New popup: another way to start an announcement bar or a popup. A widget hands proposed copy to `createOverlayDraft`; the list writes the overlay switched off and opens it in the editor.',
+  )
+  bareZone(
+    OVERLAY_EDITOR_ZONE,
+    'An overlay’s copy',
+    'Among the overlay editor’s fields. A widget is handed the copy as the editor holds it, the field limits and the popup triggers, and proposes copy through `proposeValues`, which fills the fields unsaved; the editor’s Save is the write.',
   )
   registerMarketingRecordRoutes()
   // The site's overlays, for another plugin's picker to list (AGL-3080).

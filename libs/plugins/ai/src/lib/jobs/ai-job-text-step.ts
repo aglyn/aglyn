@@ -28,6 +28,8 @@ import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import { runAiRequest, type AiEffort, type AiSystemBlock } from '../runtime/ai-runtime'
 import type { AssistTokenUsage } from '../usage/assist-usage'
 import { aiJobStepBudget } from './ai-job-budget'
+import { aiOverlayCopyRequested } from '../model/ai-overlay-copy'
+import { runAiOverlayCopy } from './ai-job-overlay-copy'
 
 /**
  * The `text` step (AGL-2904): a brief in, a short piece of copy out.
@@ -189,6 +191,15 @@ export function aiJobTextPrompt(job: Pick<AiJob, 'brief' | 'inputs'>): string {
 
 export const runAiJobTextStep: AiJobStepRunner = async ({ job, signal, modelFor }) => {
   const model = modelFor?.('job.text') ?? aiJobTextModel()
+  // Overlay copy (AGL-3603): the same one request, answered as fields.
+  if (aiOverlayCopyRequested(job.inputs)) {
+    return runAiOverlayCopy({
+      job,
+      model,
+      maxTokens: AI_JOB_TEXT_STEP_BUDGET.maxTokens(model),
+      ...(signal ? { signal } : {}),
+    })
+  }
   const result = await runAiRequest({
     model,
     system: AI_JOB_TEXT_SYSTEM,

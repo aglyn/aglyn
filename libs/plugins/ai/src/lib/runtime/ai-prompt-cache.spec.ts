@@ -60,6 +60,9 @@ import { AI_JOB_PAGE_INSTRUCTIONS, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-p
 import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
 import { AI_JOB_TEMPLATE_INSTRUCTIONS } from '../jobs/ai-job-template-step'
 import { AI_JOB_TEXT_SYSTEM } from '../jobs/ai-job-text-step'
+import { AI_OVERLAY_SYSTEM } from '../jobs/ai-job-overlay-copy'
+import { AI_OVERLAY_COPY_CEILINGS } from '../model/ai-overlay-copy'
+import { aiOverlayTool } from '../tools/ai-overlay-tool'
 import { AI_JOB_THEME_INSTRUCTIONS } from '../jobs/ai-job-theme-step'
 import {
   AI_JOB_WORKFLOW_DRAFT_INSTRUCTIONS,
@@ -256,6 +259,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     step: 'job.text',
     caches: false,
     why: 'one short rule block; the brief is the whole request',
+  },
+  'jobs/ai-job-overlay-copy.ts': {
+    step: 'job.text',
+    caches: false,
+    why: "a text job asked for overlay copy (AGL-3603): the overlay rules and the acceptable-use block are under the balanced tier's minimum; the brief, the triggers and the current copy are the request",
   },
   'server/plugin-text-generation.ts': {
     step: 'job.text',
@@ -538,6 +546,13 @@ const REQUESTS: Record<string, Composed> = {
     blocks: () => [...AI_JOB_TEXT_SYSTEM],
     tools: () => [],
   },
+  // Overlay copy (AGL-3603): a popup's tool is the larger of the two shapes.
+  'overlay-popup': {
+    door: 'jobs/ai-job-overlay-copy.ts',
+    step: 'job.text',
+    blocks: () => [...AI_OVERLAY_SYSTEM],
+    tools: () => [aiOverlayTool('popup', AI_OVERLAY_COPY_CEILINGS, ['delay', 'scroll', 'exit'])],
+  },
   // The copy assistant's three modes. Their prompts are short and two of the
   // three run on a model whose minimum they cannot reach, so the breakpoints
   // they carry are a statement about the blocks rather than a saving — which
@@ -718,6 +733,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // The text step marks a breakpoint its prompt is far too short to fill.
       // It costs nothing and it caches nothing; the brief is the request.
       text: { prefixTokens: 128, minimum: 1_024, caches: false, toolsStable: true },
+      'overlay-popup': { prefixTokens: 866, minimum: 1_024, caches: false, toolsStable: true },
       'copy.element': { prefixTokens: 339, minimum: 4_096, caches: false, toolsStable: true },
       'copy.blog': { prefixTokens: 340, minimum: 1_024, caches: false, toolsStable: true },
       'copy.section': { prefixTokens: 694, minimum: 1_024, caches: false, toolsStable: true },
