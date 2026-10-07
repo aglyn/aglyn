@@ -535,6 +535,8 @@ describe('a guided start, snapshot by snapshot (AGL-3596)', () => {
       ['Publishing your site', 'waiting'],
     ])
     expect(rows[3]).toMatchObject({ hint: AI_SITE_PAGE_HINT, startedAt: '2026-10-07T17:12:45.000Z', sections: ['hero', 'services'] })
+    // The plan keeps its credits once the items take over (prod 2026-10-07, job yazWNJr9k-).
+    expect(rows[0].credits).toBe(12)
     // The next item counts from the failed one's settle.
     const next = aiSiteBuildRows(SNAPSHOTS[7][1])
     expect(next.map((row) => row.state)).toEqual(['done', 'done', 'done', 'failed', 'active', 'waiting'])

@@ -100,8 +100,15 @@ export function aiSiteBuildRows(
   if (job.items?.length) {
     const site = job.kind !== 'build'
     const pages = (job.items ?? []).filter((row) => row.op === 'page')
+    // The plan keeps the credits it used once the items take over the page.
+    const planStep = job.steps.find((step) => step.name === 'plan')
     return [
-      { id: 'plan', label: site ? 'Planning your pages' : 'Planning what to build', state: 'done' },
+      {
+        id: 'plan',
+        label: site ? 'Planning your pages' : 'Planning what to build',
+        state: 'done',
+        ...(planStep ? { credits: Math.max(0, Math.floor(planStep.creditsSpent ?? 0)) } : {}),
+      },
       ...aiBuildItemRows(job).map((row, index) => {
         const ledger = (job.items ?? [])[index]
         // A site keeps the scaffold's own words for each stage (AGL-3596).
