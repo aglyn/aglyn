@@ -174,7 +174,7 @@ function step(deps: { writer: PluginResourceDraftWriter; seen: AiJob[]; publish?
   })
 }
 
-const context = (handed: AiJob) => ({ job: handed, stepIndex: 1, now: NOW, firestore, org: { plan: 'pro' } })
+const context = (handed: AiJob) => ({ job: handed, stepIndex: 1, now: NOW, firestore, org: { plan: 'pro' as const } })
 
 describe('the build step (AGL-3616)', () => {
   it('starts the ledger, writes another plugin’s draft through its own writer, and goes on', async () => {
@@ -204,7 +204,8 @@ describe('the build step (AGL-3616)', () => {
     expect(seen[0].brief).toContain('In the “booking” section, place the Booking block for the booking service “Consult”.')
     // The item's reference is not a record the page step can place.
     expect(seen[0].plan?.screens[0]?.sections[0]?.uses).toEqual([])
-    expect(outcome).toMatchObject({ continue: false, item: { slot: 'p0', status: 'succeeded' } })
+    expect(outcome.continue).toBeUndefined()
+    expect(outcome).toMatchObject({ item: { slot: 'p0', status: 'succeeded' } })
   })
 
   it('an owner’s check that refuses the content fails the item on our side; a refusal skips it', async () => {

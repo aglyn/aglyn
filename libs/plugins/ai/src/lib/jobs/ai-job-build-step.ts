@@ -47,7 +47,13 @@ import type {
 import { AI_SITE_MAX_SECTIONS } from '../model/ai-site-job'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import { aiModelForStep } from '../providers/routing'
-import { AiUpstreamError } from '../runtime/ai-runtime'
+import {
+  AI_BUILD_UNIT_EMPTY_COPY,
+  aiBuildBuiltRefs,
+  aiUnitErrorRetryable,
+  aiUnitFailure,
+  aiUnitSpend,
+} from './ai-build-unit-outcome'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { ASSIST_RETURNED_USD_FIELD, assistSpendAfterReturnsUsd } from '../usage/assist-credit-returns'
 import { freeAccountUsageRef, freeAssistAccount, type AssistMeteredOrg } from '../usage/assist-free-taste'
@@ -67,7 +73,7 @@ import {
   aiPluginDraftWriter,
   type AiPluginDraftWriterLookup,
 } from './ai-job-plugin-drafts'
-import { aiSitePageWritten, aiSiteResolvedRef, type AiSiteBuiltRef } from './ai-job-site-step'
+import { aiSitePageWritten, aiSiteResolvedRef } from './ai-job-site-step'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
   type AiJobItemOutcome,
@@ -122,14 +128,10 @@ export const AI_BUILD_NO_PLAN_COPY = 'This build has no confirmed plan to build.
 export const aiBuildUnavailableCopy = (noun: string): string =>
   `Not built: ${aiArticle(noun)} cannot be made on this site right now.`
 
-/** What a unit that finished without reporting anything says. */
-export const AI_BUILD_UNIT_EMPTY_COPY = 'It could not be built this time.'
 
 /** What a page that was reported built but holds none of its plan says. */
 export const AI_BUILD_PAGE_NOT_WRITTEN_COPY = 'The page was not written from its plan.'
 
-/** What a unit's model declining the request says. */
-export const AI_BUILD_UNIT_REFUSED_COPY = 'The AI declined to build this one.'
 
 /**
  * The most passes a build's step may take: every unit at a page's worst — its
@@ -157,30 +159,6 @@ export function aiBuildUnitJobKind(unit: AiBuildUnit, ops: AiBuildOps): AiJobKin
 /** The id a unit's job, and so its draft, is named by. */
 export function aiBuildUnitJobId(job: Pick<AiJob, '$id'>, unit: AiBuildUnit): string {
   return unit.creation?.id ?? unit.screen?.id ?? unit.item?.id ?? `${job.$id}-${unit.slot}`
-}
-
-/**
- * What the build has created that a later unit can name: each delivered
- * creation's record, by its plan name. A creation's first output is the
- * record it wrote.
- */
-export function aiBuildBuiltRefs(
-  units: readonly AiBuildUnit[],
-  ledger: readonly AiJobItemLedger[],
-  outputs: readonly Pick<AiJobOutput, 'id' | 'label'>[],
-): Map<string, AiSiteBuiltRef> {
-  const rows = new Map(ledger.map((row) => [row.slot, row]))
-  const built = new Map<string, AiSiteBuiltRef>()
-  for (const unit of units) {
-    const creation = unit.creation
-    const row = rows.get(unit.slot)
-    if (!creation || !row || !aiBuildItemDelivered(row) || !row.outputs.length) continue
-    if (creation.kind !== 'layout' && creation.kind !== 'form' && creation.kind !== 'component') continue
-    const id = row.outputs[0]
-    const label = outputs.find((output) => output.id === id)?.label || creation.name
-    built.set(creation.name.toLowerCase(), { id, label, kind: creation.kind })
-  }
-  return built
 }
 
 /**
@@ -370,7 +348,7 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
       ...spent,
       ...init,
       item,
-      continue: item.status === 'running' || othersOpen(unit.slot),
+      ...(item.status === 'running' || othersOpen(unit.slot) ? { continue: true } : {}),
     })
 
     // What its dependencies came to.
@@ -482,45 +460,14 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
     } catch (error) {
       // A provider that will answer later is the machine's to retry; anything
       // else is this item's failure, and the build goes on.
-      if (error instanceof AiUpstreamError && error.retryable) throw error
-      if ((error as { name?: string } | null)?.name === 'AbortError' || (error as { name?: string } | null)?.name === 'TimeoutError') {
-        throw error
-      }
+      if (aiUnitErrorRetryable(error)) throw error
       console.error('ai build unit threw', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
       return settle(failed(unit.slot, { ours: true, reason: 'provider', message: AI_BUILD_UNIT_EMPTY_COPY }))
     }
-    const spent: AiJobStepOutcome = {
-      outputs: outcome.outputs,
-      usage: outcome.usage,
-      estCostUsd: outcome.estCostUsd,
-      model: outcome.model,
-      stopReason: outcome.stopReason,
-      ...(outcome.effort ? { effort: outcome.effort } : {}),
-    }
+    const spent = aiUnitSpend(outcome)
     const ids = outcome.outputs.map((output) => output.id)
-    if (outcome.refused) {
-      return settle(failed(unit.slot, { ours: false, reason: 'refused', message: AI_BUILD_UNIT_REFUSED_COPY }, { outputs: ids }), spent)
-    }
-    if (outcome.review) {
-      // A building rule still broken after its re-ask is ours (AGL-3596); a
-      // site at an allowance is the workspace's to change.
-      const ours = outcome.review.reason === 'doctrine'
-      return settle(
-        failed(
-          unit.slot,
-          { ours, reason: ours ? 'doctrine-refused' : 'review', message: outcome.review.message || AI_BUILD_UNIT_EMPTY_COPY },
-          { outputs: ids },
-        ),
-        spent,
-      )
-    }
-    if (outcome.failure) {
-      return settle(failed(unit.slot, { ours: true, reason: 'step-failure', message: outcome.failure }, { outputs: ids }), spent)
-    }
-    if (outcome.continue) return settle({ slot: unit.slot, status: 'running', outputs: ids }, spent)
-    if (!outcome.outputs.length) {
-      return settle(failed(unit.slot, { ours: true, reason: 'step-failure', message: AI_BUILD_UNIT_EMPTY_COPY }), spent)
-    }
+    const stopped = aiUnitFailure(unit.slot, outcome)
+    if (stopped) return settle(stopped, spent)
     // A page counts as built only when its plan's sections are in it (AGL-3596).
     if (unit.screen && job.hostId) {
       const page = outcome.outputs.find((output) => output.resource === 'screen')

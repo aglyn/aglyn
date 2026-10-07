@@ -25,6 +25,7 @@ import {
   aiJobNextStepMinimumMs,
   aiJobSummary,
   getAiJob,
+  aiBuildRetryable,
   resumeAiJob,
   retryAiBuildJob,
   runAiJobStep,
@@ -32,7 +33,7 @@ import {
 } from '../jobs/ai-jobs'
 import type { AiJob } from '../model/ai-jobs.types'
 import { aiBuildFreeBalanceRefusal, aiBuildFreeTaste } from '../jobs/ai-job-build-step'
-import { aiBuildCreditEstimate, aiBuildRetryLedger, aiBuildUnits } from '../model/ai-build-job'
+import { aiBuildCreditEstimate, aiBuildRetryLedger, aiBuildUnits, aiLedgerUnits } from '../model/ai-build-job'
 import { aiGateLadder } from '../runtime/ai-gate'
 import { releaseAssistMessage } from '../usage/assist-usage'
 
@@ -209,14 +210,16 @@ async function aiBuildRetryRefusal(
   job: AiJob,
 ): Promise<{ status: 400 | 403 | 404 | 409; error: string } | null> {
   const plan = job.plan?.status === 'confirmed' ? job.plan : null
-  if (job.kind !== 'build' || !plan || !job.items?.length || (job.status !== 'done' && job.status !== 'failed')) {
+  if (!aiBuildRetryable(job) || !plan || !job.items?.length) {
     return { status: 409, error: 'Only a finished build can try its failed items again' }
   }
   const site = await aiJobSiteRefusal({ firestore: gate.firestore, org: gate.org, hostId: job.hostId ?? null })
   if (site) return site
-  const { retried } = aiBuildRetryLedger(job.items, aiBuildUnits(plan))
+  const { retried } = aiBuildRetryLedger(job.items, job.kind === 'site' ? aiLedgerUnits(job.items) : aiBuildUnits(plan))
   if (!retried.length) return { status: 409, error: 'Nothing in this build is left to try again' }
-  if (!aiBuildFreeTaste(gate.org)) return null
+  // A site's retried parts are its own pages and creations, held by the
+  // reservation each pass takes; a build's are estimated against the Free taste.
+  if (job.kind === 'site' || !aiBuildFreeTaste(gate.org)) return null
   const refusal = await aiBuildFreeBalanceRefusal({
     firestore: gate.firestore,
     org: gate.org,

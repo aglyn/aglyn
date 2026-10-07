@@ -535,3 +535,18 @@ export function aiBuildRetryLedger(
   })
   return { ledger: next, retried }
 }
+
+/**
+ * Units read back off a ledger alone (AGL-3616), for a job whose units are
+ * not a build plan's — a site scaffold's: each row as its unit, and every
+ * page built after the layouts and forms the ledger holds.
+ */
+export function aiLedgerUnits(ledger: readonly AiJobItemLedger[]): AiBuildUnit[] {
+  const creations = ledger.filter((row) => row.op === 'layout' || row.op === 'form').map((row) => row.slot)
+  return ledger.map((row) => ({
+    slot: row.slot,
+    op: row.op,
+    label: row.label,
+    deps: row.op === 'page' ? creations : [],
+  }))
+}

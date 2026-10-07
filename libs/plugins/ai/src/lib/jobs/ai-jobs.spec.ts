@@ -2723,3 +2723,123 @@ describe('a build from one request settles item by item (AGL-3616)', () => {
     expect(Object.keys(month['creditReturns'] as object)).toEqual([job.items?.find((row) => row.slot === 'c1')?.refundKey])
   })
 })
+
+describe('a guided site start settles page by page, as a build does (AGL-3616)', () => {
+  const spend = { usage: USAGE, estCostUsd: 0.006, model: 'claude-sonnet-5', stopReason: 'tool_use' }
+  const titles = ['Home', 'About', 'Services', 'Contact']
+  const sitePlan = (): AiJobPlan => ({
+    reuse: [],
+    create: [{ kind: 'form', name: 'Contact', why: 'People write in.', duplicateOf: null, fields: ['email'], id: 'form-1' }],
+    screens: titles.map((title, index) => ({
+      title,
+      slug: index === 0 ? '/' : `/${title.toLowerCase()}`,
+      layout: null,
+      template: null,
+      duplicateOf: null,
+      nav: true,
+      seoTitle: title,
+      seoDescription: title,
+      sections: [{ name: `${title} hero`, uses: index === 3 ? ['new:Contact'] : [], items: 0 }],
+      record: null,
+      id: `page-${index}`,
+    })),
+    status: 'proposed',
+    labels: {},
+    proposedAt: NOW as never,
+    confirmedAt: null,
+    confirmedBy: null,
+  })
+  let failing = new Set<string>()
+  const published: string[][] = []
+
+  beforeEach(() => {
+    failing = new Set(['Home'])
+    published.length = 0
+    registerAiJobPlanStep(async () => ({
+      outputs: [],
+      ...spend,
+      plan: sitePlan(),
+      review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+    }))
+    const runners: Record<string, AiJobStepRunner> = {
+      form: async ({ job }) => ({ outputs: [{ resource: 'form', id: job.$id, hostId: 'host-1', label: 'Contact' }], ...spend }),
+      page: async ({ job }) => {
+        const title = job.plan?.screens[0]?.title ?? ''
+        return failing.has(title)
+          ? { outputs: [], ...spend, failure: `${title} could not be written.` }
+          : { outputs: [{ resource: 'screen', id: job.$id, hostId: 'host-1', label: title }], ...spend }
+      },
+    }
+    registerAiJobStep(
+      'site',
+      createAiJobSiteStep({
+        runnerFor: ((kind: string) => runners[kind] ?? null) as never,
+        readNodes: async () => ({ versionId: 'v', nodes: new Proxy({}, { has: () => true }) as never }),
+        publish: async (_firestore, input) => {
+          published.push(input.outputs.map((output) => output.label))
+          return { liveUrl: 'https://x.aglyn.app/', published: [], drafts: [] }
+        },
+      }),
+    )
+  })
+  afterEach(() => registerAiJobPlanStep(null))
+
+  async function guidedStart(): Promise<AiJob> {
+    const job = await createAiJob(
+      firestore,
+      {
+        orgId: ORG,
+        hostId: 'host-1',
+        kind: 'site',
+        brief: 'A site for a dog groomer.',
+        inputs: { businessType: 'dog groomer', pages: 4, welcomeEmail: false, autoConfirm: true },
+        createdBy: 'uid-1',
+      },
+      NOW,
+    )
+    for (let pass = 0; pass < 20; pass += 1) {
+      await runAiJobStep(firestore, ORG, job.$id, { owner: 'beat-1', now: NOW })
+      const stored = (await getAiJob(firestore, ORG, job.$id)) as AiJob
+      if (['done', 'failed'].includes(stored.status)) return stored
+    }
+    throw new Error('the site never settled')
+  }
+
+  it('a page that fails is given back alone; the rest is built, published and charged', async () => {
+    const job = await guidedStart()
+    expect(job.status).toBe('done')
+    expect(job.items?.map((row) => [row.label, row.status])).toEqual([
+      ['Contact', 'succeeded'],
+      ['Home', 'failed'],
+      ['About', 'succeeded'],
+      ['Services', 'succeeded'],
+      ['Contact', 'succeeded'],
+    ])
+    expect(job.items?.find((row) => row.label === 'Home')).toMatchObject({ creditsRefunded: 6, failure: { ours: true } })
+    expect(job.refundedCredits).toBe(6)
+    expect(job.orchestration).toEqual({ creditsSpent: 6, settled: 'charged' })
+    // Only what was built goes live.
+    expect(published).toEqual([['About', 'Services', 'Contact']])
+  })
+
+  it('Try again builds only the failed page', async () => {
+    const first = await guidedStart()
+    failing = new Set()
+    const retried = await retryAiBuildJob(firestore, ORG, first.$id, NOW)
+    expect(retried.retried).toEqual(['p0'])
+    for (let pass = 0; pass < 5; pass += 1) await runAiJobStep(firestore, ORG, first.$id, { owner: 'beat-1', now: NOW })
+    const job = (await getAiJob(firestore, ORG, first.$id)) as AiJob
+    expect(job.status).toBe('done')
+    expect(job.items?.find((row) => row.slot === 'p0')).toMatchObject({ status: 'succeeded', attempt: 2 })
+  })
+
+  it('a site that built no page fails, every credit given back, and is started over from its answers', async () => {
+    failing = new Set(titles)
+    const job = await guidedStart()
+    expect(job.status).toBe('failed')
+    expect(job.refundedCredits).toBe(job.creditsSpent)
+    expect(job.orchestration).toEqual({ creditsSpent: 6, settled: 'refunded' })
+    // Not tried item by item: its Try again reopens the guided start.
+    expect((await retryAiBuildJob(firestore, ORG, job.$id, NOW)).changed).toBe(false)
+  })
+})
