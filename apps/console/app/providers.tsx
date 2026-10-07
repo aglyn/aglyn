@@ -19,11 +19,11 @@
 import { ConfirmationProviderComponent } from '@aglyn/shared-ui-jsx/components/confirmation-provider.component'
 import { LoadingLayoutAppComponent } from '@aglyn/shared-ui-jsx/components/loading-layout-app.component'
 import { SnackbarProvider } from '@aglyn/shared-ui-snackstack'
+import { withThemeCssVarProvider } from '@aglyn/shared-ui-theme'
 import {
-  consoleThemeDark,
-  consoleThemeLight,
-  withThemeCssVarProvider,
-} from '@aglyn/shared-ui-theme'
+  consoleAppThemeDark,
+  consoleAppThemeLight,
+} from '@aglyn/shared-ui-theme/console-app.theme'
 import type { ReactNode } from 'react'
 import ConsoleBrandingEffects from '../components/console-branding-effects.component'
 import EditHintBounce from '../components/edit-hint-bounce.component'
@@ -86,7 +86,7 @@ const ThemeStack = withThemeCssVarProvider(
       </LoadingLayoutAppComponent>
     </FirebaseAppLayout>
   ),
-  { theme: { light: consoleThemeLight, dark: consoleThemeDark } },
+  { theme: { light: consoleAppThemeLight, dark: consoleAppThemeDark } },
 )
 
 export default function Providers({ children, nonce }: ProvidersProps) {
