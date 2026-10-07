@@ -230,6 +230,11 @@ export interface AnalyticsEventParams {
    * A site actually went live.
    */
   site_published: { first_publish?: boolean }
+  /**
+   * Custom: no GA4 equivalent (AGL-3594). How a person chose to start a new
+   * site in the guided start: the ready-made starter, or AI.
+   */
+  site_start_choice: { choice: 'starter' | 'ai' }
   /** Custom: no GA4 equivalent. Stripe Connect onboarding completed. */
   stripe_connected: Record<string, never>
 
@@ -938,6 +943,7 @@ const TAXONOMY_EVENT_NAMES: Record<AnalyticsEventName, true> = {
   org_created: true,
   host_created: true,
   site_published: true,
+  site_start_choice: true,
   stripe_connected: true,
   begin_checkout: true,
   purchase: true,

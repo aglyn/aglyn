@@ -48,6 +48,13 @@ import type { ComponentType } from 'react'
 // the object that carries it.
 const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
 
+const mockTrack = jest.fn()
+jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
+  __esModule: true,
+  ...jest.requireActual('@aglyn/aglyn/app-utils/analytics-events'),
+  trackEvent: (...args: unknown[]) => mockTrack(...args),
+}))
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useUser: () => ({ data: mockUser }),
@@ -138,12 +145,23 @@ afterEach(() => {
   for (const [url] of mockFetch.mock.calls) expect(String(url)).toMatch(/^\/api\/ai\/jobs/)
 })
 
-/** Renders the dialog once the jobs route has admitted this workspace. */
-async function openCard(patch: Partial<ConsoleHostFirstRunZoneProps> = {}) {
+/** Renders the dialog on its first step, once the jobs route has admitted this workspace. */
+async function openChoice(
+  patch: Partial<ConsoleHostFirstRunZoneProps> = {},
+  verdict: Record<string, unknown> = { jobs: [] },
+) {
   const Widget = widget()
-  mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
+  mockFetch.mockResolvedValueOnce(json(verdict))
   const view = render(<Widget {...zoneProps(patch)} />)
-  await screen.findByText('Start this site with AI')
+  await screen.findByText('How do you want to start?')
+  return view
+}
+
+/** Renders the dialog and takes the AI card to the questions (AGL-3594). */
+async function openCard(patch: Partial<ConsoleHostFirstRunZoneProps> = {}) {
+  const view = await openChoice(patch)
+  fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+  await screen.findByText('Tell us about your site')
   return view
 }
 
@@ -407,7 +425,7 @@ describe('the questions become a site scaffold', () => {
     await openCard()
     expect(screen.getByLabelText(/What kind of site are you creating\?/)).toBeTruthy()
     expect(screen.getByLabelText(/Who is it for\?/)).toBeTruthy()
-    expect(screen.getByText('Which of these do you like?')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Look & layout' })).toBeTruthy()
     AI_SITE_START_EXAMPLES.forEach((_example, index) => expect(exampleChip(index)).toBeTruthy())
   })
 
@@ -499,10 +517,9 @@ describe('the questions become a site scaffold', () => {
 
 describe('a Free workspace’s guided start (AGL-3594)', () => {
   async function openFreeCard() {
-    const Widget = widget()
-    mockFetch.mockResolvedValueOnce(json({ jobs: [], freeTaste: true }))
-    render(<Widget {...zoneProps()} />)
-    await screen.findByText('Start this site with AI')
+    await openChoice({}, { jobs: [], freeTaste: true })
+    await screen.findByText('Up to 2 pages on the Free plan')
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
     await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
   }
 
@@ -614,6 +631,50 @@ describe('watching and confirming in place (AGL-3593)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open AI jobs' }))
     await waitFor(() => expect(request.jobId).toBe('job-1'))
     expect(request.seq).toBeGreaterThan(0)
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('step 1: how the site starts (AGL-3594)', () => {
+  beforeEach(() => mockTrack.mockReset())
+
+  it('offers the starter site and AI as two cards, each with its icon and its title as its name', async () => {
+    await openChoice()
+    const starter = screen.getByRole('button', { name: 'Start from the starter site' })
+    const ai = screen.getByRole('button', { name: 'Start with AI' })
+    expect(starter.querySelector('[data-icon="page-layout-header-footer"]')).toBeTruthy()
+    expect(ai.querySelector('[data-icon="creation"]')).toBeTruthy()
+    expect(screen.getByLabelText('Step 1 of 2')).toBeTruthy()
+    // The questions wait for step 2.
+    expect(screen.queryByLabelText(/What kind of site are you creating\?/)).toBeNull()
+  })
+
+  it('takes the starter site through the zone’s startBlank, once', async () => {
+    await openChoice()
+    fireEvent.click(screen.getByRole('button', { name: 'Start from the starter site' }))
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+    expect(mockTrack).toHaveBeenCalledWith('site_start_choice', { choice: 'starter' })
+  })
+
+  it('takes AI to the questions, and Back returns to the choice', async () => {
+    await openChoice()
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    expect(await screen.findByLabelText(/What kind of site are you creating\?/)).toBeTruthy()
+    expect(screen.getByLabelText('Step 2 of 2')).toBeTruthy()
+    expect(mockTrack).toHaveBeenCalledWith('site_start_choice', { choice: 'ai' })
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByText('How do you want to start?')).toBeTruthy()
+    expect(mockStartBlank).not.toHaveBeenCalled()
+  })
+
+  it('says what Free gets on the AI card, and nothing of it on a paid workspace', async () => {
+    await openChoice()
+    expect(screen.queryByText('Up to 2 pages on the Free plan')).toBeNull()
+  })
+
+  it('keeps Skip, close and Escape on the first step, each the starter', async () => {
+    await openChoice()
+    fireEvent.click(screen.getByRole('button', { name: 'Skip and start blank' }))
     expect(mockStartBlank).toHaveBeenCalledTimes(1)
   })
 })

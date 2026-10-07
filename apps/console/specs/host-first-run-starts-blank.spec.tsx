@@ -40,6 +40,8 @@
 
 import { fireEvent, render, screen } from '@testing-library/react'
 
+const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
+
 /** The widgets the registry answers with for `hostFirstRun`. */
 let mockWidgets: Array<Record<string, unknown>> = []
 /** The props the zone handed the widget on its last render. */
@@ -52,6 +54,9 @@ function MockFirstRunWidget(props: Record<string, unknown>) {
       <span>{'guided start'}</span>
       <button type="button" onClick={props['startBlank'] as () => void}>
         {'Skip and start blank'}
+      </button>
+      <button type="button" onClick={props['leave'] as () => void}>
+        {'Close after starting'}
       </button>
     </div>
   )
@@ -70,7 +75,7 @@ jest.mock('@aglyn/aglyn', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => ({}),
-  useUser: () => ({ data: { uid: 'u1' } }),
+  useUser: () => ({ data: mockUser }),
 }))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
@@ -270,6 +275,24 @@ describe('before the site has been read', () => {
 })
 
 describe('starting blank', () => {
+  it('asks for the starter site, and closing after a guided start began does not (AGL-3594)', async () => {
+    const original = global.fetch
+    const fetchSpy = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ provisioned: false }) }) as unknown as Response)
+    global.fetch = fetchSpy as unknown as typeof fetch
+    const view = render(<HostSetupDetailsSection />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Close after starting' }))
+    expect(fetchSpy).not.toHaveBeenCalled()
+    view.unmount()
+    window.localStorage.clear()
+    render(<HostSetupDetailsSection />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip and start blank' }))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const starter = (fetchSpy.mock.calls as unknown as Array<[unknown, RequestInit]>).find(([url]) => String(url).includes('/api/hosts/starter'))
+    expect(starter).toBeTruthy()
+    expect(JSON.parse(String(starter?.[1].body))).toEqual({ hostId: 'host-1' })
+    global.fetch = original
+  })
+
   it('leaves the person on the ordinary page with nothing created', async () => {
     render(<HostSetupDetailsSection />)
     fireEvent.click(await screen.findByRole('button', { name: 'Skip and start blank' }))
