@@ -44,6 +44,7 @@ import { createIdUrlSafe } from '@aglyn/aglyn/foundation/constants/app'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import { NodeType, type NodesMap } from '@aglyn/aglyn/types/nodes'
 import type { AiComponentPropTypes } from '../model/ai-site-inventory'
+import { AI_ICON_COMPONENT_ID, aiIconOfId } from './ai-icon-library'
 import {
   AI_COMPONENT_VISIBILITY_PROPS,
   isAiComponentPropToken,
@@ -160,6 +161,15 @@ export interface AiNodeTreeContext {
    * Absent: such a token is dropped like any value the field cannot hold.
    */
   definesComponent?: boolean
+  /**
+   * The tree was composed by the platform's own code — the layout language
+   * compiler (AGL-3660) — and not written by a model. The surface's code-only
+   * elements are then admitted (an Icon, and a layout's Drawer with its Menu
+   * Button), and an Icon keeps the id and the path the icon library gives
+   * the id it names (`ai-icon-library.ts`): the path is the library's, never
+   * the tree's. Absent: a model's tree, held to the surface's catalog.
+   */
+  codeBuilt?: boolean
 }
 
 /**
@@ -1016,12 +1026,22 @@ function validate(
   // is no value a dropdown, a switch, an address or a visibility directive
   // admits. Copy keeps its tokens without lifting, as the text they are.
   const definesComponent = context?.definesComponent === true
+  const codeBuilt = context?.codeBuilt === true
   const mediaByNodeId = new Map<string, Record<string, string>>()
   const boundByNodeId = new Map<string, Record<string, string>>()
+  // A code-built Icon's drawing, from the library by the id it names (AGL-3660).
+  const iconByNodeId = new Map<string, { iconId: string; iconPath: string }>()
   const forSanitizer: Record<string, unknown> = {}
   for (const [id, node] of Object.entries(nodes)) {
     if (!isRecord(node) || !isRecord(node.props)) {
       forSanitizer[id] = node
+      continue
+    }
+    if (codeBuilt && node.componentId === AI_ICON_COMPONENT_ID) {
+      const { iconId, iconPath: _iconPath, ...rest } = node.props
+      const icon = aiIconOfId(iconId)
+      if (icon) iconByNodeId.set(id, { iconId: icon.id, iconPath: icon.path })
+      forSanitizer[id] = { ...node, props: rest }
       continue
     }
     const entry = AI_PALETTE[String(node.componentId)]
@@ -1065,10 +1085,11 @@ function validate(
   }
   // An instance is admitted only where the caller grounded it in the site's
   // components; the reference itself is checked on the node below.
+  const surfaceAllow = codeBuilt ? [...definition.allow, ...(definition.codeOnly ?? [])] : definition.allow
   const allow =
     refs.componentIds && INSTANCE_SURFACES.has(surface)
-      ? [...definition.allow, REUSABLE_INSTANCE_COMPONENT_ID]
-      : definition.allow
+      ? [...surfaceAllow, REUSABLE_INSTANCE_COMPONENT_ID]
+      : surfaceAllow
   const sanitized = sanitizePortableDefinition(
     { rootId, nodes: forSanitizer },
     { componentIds: allow },
@@ -1149,6 +1170,7 @@ function validate(
         const lifted = mediaByNodeId.get(id) ?? {}
         const kept = boundByNodeId.get(id) ?? {}
         for (const key of Object.keys(raw.props)) {
+          if (iconByNodeId.has(id) && (key === 'iconId' || key === 'iconPath')) continue
           if (
             key !== 'sx' &&
             lifted[key] === undefined &&
@@ -1257,7 +1279,7 @@ function validate(
       pluginId: entry.pluginId,
       parentId,
       nodes: children,
-      props: { ...propsResult.props, ...reference.kept, ...boundProps },
+      props: { ...propsResult.props, ...reference.kept, ...boundProps, ...iconByNodeId.get(id) },
       ...(sx ? { sx } : {}),
       ...(hiddenByNodeId.has(id) ? { hidden: true } : {}),
     }
