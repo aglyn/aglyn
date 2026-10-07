@@ -23,7 +23,7 @@ import {
   isHostPluginEnabled,
 } from '@aglyn/aglyn'
 import { bookingsPageHref } from '../model/bookings-record-routes'
-import { BOOKING_PATH_DEFAULT, bookingLinkFor } from '../model/bookings'
+import { BOOKING_PATH_DEFAULT, bookingLinkFor, bookingServiceIsOffered } from '../model/bookings'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { mdiCalendarClock, mdiContentCopy } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -189,7 +189,8 @@ export function BookMeetingDialog(props: BookMeetingDialogProps) {
     { idField: '$id' },
   )
   const services = (serviceDocs ?? [])
-    .filter((service) => !service['deletedAt'])
+    // A draft takes no bookings (AGL-3616), so it has no link to hand out.
+    .filter((service) => bookingServiceIsOffered(service))
     .sort((a, b) => String(a['name'] ?? '').localeCompare(String(b['name'] ?? '')))
 
   // Where services are set up, for the empty state — addressable only

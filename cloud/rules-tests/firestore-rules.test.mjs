@@ -671,6 +671,11 @@ beforeEach(async () => {
       screenId: 'screen-1', nodes: { root: {} },
     })
     await setDoc(doc(db, 'hosts', HOST, 'variables', 'var-1'), { name: 'v', value: '1' })
+    // A booking service a draft writer made (AGL-3616), so activating it on
+    // the Bookings page can be told apart from creating one.
+    await setDoc(doc(db, 'hosts', HOST, 'services', 'svc-draft'), {
+      name: 'Estimate visit', durationMinutes: 60, status: 'draft',
+    })
     // An existing webhook, so the AGL-1360 create/update split can be told
     // apart: create is API-only, update (the soft delete) stays client-side.
     await setDoc(doc(db, 'hosts', HOST, 'webhooks', 'wh1'), {
@@ -1100,6 +1105,24 @@ describe('hosts', () => {
         setDoc(doc(authed(EDITOR), 'hosts', HOST, coll, 'new-doc'), { name: 'x' }),
       )
     }
+    // A draft service is activated, and sent back to draft, by an editor on
+    // the Bookings page (AGL-3616): one field on a service that exists. A
+    // viewer may do neither, and a draft still cannot be created directly —
+    // the writer that makes one runs on the Admin SDK, inside its allowance.
+    await assertSucceeds(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'services', 'svc-draft'), { status: 'active' }),
+    )
+    await assertSucceeds(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'services', 'svc-draft'), { status: 'draft' }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(VIEWER), 'hosts', HOST, 'services', 'svc-draft'), { status: 'active' }),
+    )
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'services', 'svc-new'), {
+        name: 'x', durationMinutes: 30, status: 'draft',
+      }),
+    )
     // Webhooks joined the API-only creates (AGL-1360). WEBHOOK_MAX_PER_HOST
     // was enforced ONLY by the console counting the rows its Firestore
     // listener held; with `persistentLocalCache` that count could be

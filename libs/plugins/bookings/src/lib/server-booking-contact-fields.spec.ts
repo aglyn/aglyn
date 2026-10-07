@@ -297,3 +297,30 @@ describe('a service that asks for neither — the default', () => {
     expect(rows()[0]).not.toHaveProperty('phone')
   })
 })
+
+/**
+ * The booking route refuses a draft service (AGL-3616): the directory never
+ * lists one, but a request can name any service id by hand.
+ */
+describe('a draft service', () => {
+  afterEach(() => {
+    delete state.service.status
+  })
+
+  it('takes no booking, and writes nothing', async () => {
+    state.service.status = 'draft'
+    const res = makeRes()
+    await bookHandler(makeReq({ phone: '512-555-0107', address: '12 Oak St' }), res)
+    expect(res.statusCode).toBe(404)
+    expect(res.body).toEqual({ error: 'Unknown service' })
+    expect(rows()).toEqual([])
+  })
+
+  it('books once activated', async () => {
+    state.service.status = 'active'
+    const res = makeRes()
+    await bookHandler(makeReq({ phone: '512-555-0107', address: '12 Oak St' }), res)
+    expect(res.statusCode).toBe(200)
+    expect(rows()).toHaveLength(1)
+  })
+})
