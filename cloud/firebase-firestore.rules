@@ -2348,6 +2348,29 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Tax services (AGL-3631): a site's connection to the merchant's OWN
+    // Avalara AvaTax or TaxJar account, its credential sealed; each product's
+    // tax code; the customers the merchant recorded as exempt; and each
+    // order as it was recorded with the service. Written and read by the
+    // tax-engines plugin's server half through the Admin SDK only. Deny ALL
+    // client access, staff and the owner included: a client that could read a
+    // connection could carry off a sealed credential, one that could write an
+    // exemption could make its own purchases tax-free, and one that could
+    // write a record could mark an unrecorded sale recorded. Org erasure
+    // destroys all four by the `orgId` field.
+    match /taxEngineConnections/{hostId} {
+      allow read, write: if false;
+    }
+    match /taxEngineProductCodes/{codeId} {
+      allow read, write: if false;
+    }
+    match /taxEngineExemptions/{exemptionId} {
+      allow read, write: if false;
+    }
+    match /taxEngineTransactions/{transactionId} {
+      allow read, write: if false;
+    }
+
     // REST API idempotency records (AGL-618): dedupe POSTs by Idempotency-Key.
     // Written and read by the Admin SDK only.
     match /apiIdempotency/{keyHash} {

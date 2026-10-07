@@ -105,6 +105,8 @@
       "@aglyn/plugins-themes/*": ["./libs/plugins/themes/src/lib/*"],
       "@aglyn/plugins-sms": ["./libs/plugins/sms/src/index.ts"],
       "@aglyn/plugins-sms/*": ["./libs/plugins/sms/src/lib/*"],
+      "@aglyn/plugins-tax-engines": ["./libs/plugins/tax-engines/src/index.ts"],
+      "@aglyn/plugins-tax-engines/*": ["./libs/plugins/tax-engines/src/lib/*"],
       "@aglyn/plugins-video-delivery": ["./libs/plugins/video-delivery/src/index.ts"],
       "@aglyn/plugins-video-delivery/*": ["./libs/plugins/video-delivery/src/lib/*"],
       "@aglyn/shared-data-enums": ["./libs/shared/data/enums/src/index.ts"],

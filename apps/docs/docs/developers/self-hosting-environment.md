@@ -855,6 +855,21 @@ public internet, must never have them.
 Register `https://<console>/api/accounting/oauth/callback` as the redirect URI
 in both developer apps. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
 
+### Tax services {#tax-engines}
+
+A merchant can connect their **own** Avalara AvaTax or TaxJar account for the
+sales tax at checkout and the register. The deployment holds no vendor account:
+each merchant brings their own credentials, and the deployment holds only the
+key those credentials are sealed under. Leave it unset and no Tax service card
+appears, checkout and the register tax at each store's own rates, and nothing
+is sent to either vendor. Set it on the console **and** the tenant runtime,
+since checkout asks the service from the tenant and the console records paid
+orders and refunds.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `TAX_ENGINES_TOKEN_KEY` | Feature | Runtime | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored AvaTax license key and TaxJar API token with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a credential opened under an old key is sealed again under the new one the next time its store is taxed. **Losing the key loses every connection**: each merchant connects their account again, and until they do their store taxes at its own rates. |
+
 ---
 
 ## Mobile apps and push {#mobile}

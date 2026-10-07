@@ -190,6 +190,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "keeps": "Labels already bought, their tracking and their charges are kept, and Shipping keeps working on the workspace’s other sites."
     }
   },
+  {
+    "id": "tax-engines",
+    "label": "Tax services",
+    "alwaysOnForWorkspace": true,
+    "description": "Sales tax from your own Avalara AvaTax or TaxJar account at checkout and the register.",
+    "siteOff": {
+      "stops": "Switching Tax services off for this site stops checkout and the register asking its connected tax service, which then use the site’s own tax rates, and stops recording its paid orders there.",
+      "keeps": "The connection, product tax codes and exempt customers are kept, and orders already recorded stay recorded."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -214,6 +224,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "workflows": "routes",
   "accounting": "console-only",
   "shipping": "console-only",
+  "tax-engines": "console-only",
 }
 
 /**
@@ -2140,6 +2151,26 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "shipping",
     "name": "shippingQuoteCache",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "tax-engines",
+    "name": "taxEngineConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "tax-engines",
+    "name": "taxEngineProductCodes",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "tax-engines",
+    "name": "taxEngineExemptions",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "tax-engines",
+    "name": "taxEngineTransactions",
     "orgField": "orgId"
   },
 ]

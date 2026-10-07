@@ -101,6 +101,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-shipping/server'),
   },
   {
+    id: 'tax-engines',
+    apiPrefixes: ["tax-engines"],
+    register: {"consoleApi":"registerTaxEnginesConsoleApi"},
+    load: () => import('@aglyn/plugins-tax-engines/server'),
+  },
+  {
     id: 'funnels',
     apiPrefixes: ["funnels"],
     register: {"consoleApi":"registerFunnelsConsoleApi"},

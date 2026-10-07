@@ -7593,6 +7593,20 @@
       ]
     },
     {
+      "collectionGroup": "taxEngineExemptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "hostId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "email",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "shippingLabels",
       "queryScope": "COLLECTION",
       "fields": [

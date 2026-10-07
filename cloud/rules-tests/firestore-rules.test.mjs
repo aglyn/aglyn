@@ -13565,6 +13565,53 @@ describe('shipping records are the server’s alone (AGL-3612)', () => {
   })
 })
 
+describe('tax service records are the server’s alone (AGL-3631)', () => {
+  // A site's connection holds the merchant's sealed AvaTax or TaxJar
+  // credential; the exemptions decide who pays no tax; the records say which
+  // sales the service holds. All four are written and read by the
+  // tax-engines plugin's routes and event handlers through the Admin SDK.
+  const DOCS = [
+    ['taxEngineConnections', HOST],
+    ['taxEngineProductCodes', `${HOST}__prod-1`],
+    ['taxEngineExemptions', `${HOST}__abc`],
+    ['taxEngineTransactions', `${HOST}__order-1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of DOCS) {
+        await setDoc(doc(db, name, id), {
+          orgId: ORG,
+          hostId: HOST,
+          sealedApiToken: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of DOCS) {
+        const ref = doc(db, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, name), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, name, `${HOST}__new`), { orgId: ORG, hostId: HOST }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
 describe('ShipStation credentials are server-only (AGL-3613)', () => {
   const connection = (db) => doc(db, 'commerceShipStationConnections', HOST)
 

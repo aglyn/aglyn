@@ -2714,6 +2714,56 @@
       }
     },
     {
+      "id": "tax-engines",
+      "package": "@aglyn/plugins-tax-engines",
+      "register": {
+        "console": "registerTaxEnginesConsole",
+        "consoleApi": "registerTaxEnginesConsoleApi",
+        "serverDeclarations": "registerTaxEnginesServerDeclarations",
+        "subprocessors": "taxEnginesSubprocessors"
+      },
+      "apiPrefixes": ["tax-engines"],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's connection to its own Avalara or TaxJar account, the credential sealed (AGL-3631). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "taxEngineConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One product's tax code at the connected tax service (AGL-3631).",
+          "name": "taxEngineProductCodes",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "A customer the merchant recorded as tax-exempt, by email (AGL-3631).",
+          "name": "taxEngineExemptions",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One order as recorded with the tax service, and the refunds reversed against it (AGL-3631).",
+          "name": "taxEngineTransactions",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 21,
+        "$comment": "Outside sales tax engines (AGL-3631): a merchant connects their OWN Avalara AvaTax or TaxJar account, and commerce asks it for tax through core's core.tax-engine contract; paid orders and refunds are recorded there through commerce's order events. It never imports commerce. No `requires` edge, for the reason shipping gives: a workspace cannot switch it off, so an edge to commerce would refuse every set that switches commerce off; instead it runs only on a site where commerce is on (site-context.ts). On for every workspace, off for a site only when that site says so, and no release flag: every surface hides itself until the deployment sets TAX_ENGINES_TOKEN_KEY, the key merchants' credentials are sealed under. Aglyn holds no vendor account.",
+        "label": "Tax services",
+        "alwaysOnForWorkspace": true,
+        "description": "Sales tax from your own Avalara AvaTax or TaxJar account at checkout and the register.",
+        "siteOff": {
+          "stops": "Switching Tax services off for this site stops checkout and the register asking its connected tax service, which then use the site’s own tax rates, and stops recording its paid orders there.",
+          "keeps": "The connection, product tax codes and exempt customers are kept, and orders already recorded stay recorded."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": ["commerceSettings", "orderDetail", "productEditor"]
+        }
+      }
+    },
+    {
       "id": "video-delivery",
       "package": "@aglyn/plugins-video-delivery",
       "register": {

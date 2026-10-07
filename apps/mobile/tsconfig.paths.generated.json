@@ -210,6 +210,12 @@
       "@aglyn/plugins-sms/*": [
         "../../libs/plugins/sms/src/lib/*"
       ],
+      "@aglyn/plugins-tax-engines": [
+        "../../libs/plugins/tax-engines/src/index.ts"
+      ],
+      "@aglyn/plugins-tax-engines/*": [
+        "../../libs/plugins/tax-engines/src/lib/*"
+      ],
       "@aglyn/plugins-video-delivery": [
         "../../libs/plugins/video-delivery/src/index.ts"
       ],

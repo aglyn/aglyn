@@ -2350,6 +2350,29 @@ allow read, write: if false;
 
 
 
+
+
+
+
+
+
+
+
+match /taxEngineConnections/{hostId} {
+allow read, write: if false;
+}
+match /taxEngineProductCodes/{codeId} {
+allow read, write: if false;
+}
+match /taxEngineExemptions/{exemptionId} {
+allow read, write: if false;
+}
+match /taxEngineTransactions/{transactionId} {
+allow read, write: if false;
+}
+
+
+
 match /apiIdempotency/{keyHash} {
 allow read, write: if false;
 }
