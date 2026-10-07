@@ -197,6 +197,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "AGL-3620. Two are the store identity `com.aglyn.app` (iOS bundle identifier and Android package), which a rebuilt app replaces with its own store listing and which no request is ever sent to. The third is the `??` default of EXPO_PUBLIC_CONSOLE_URL, the same variable and default `readMobileConfig` reads at runtime; a self-host build sets it and the universal-link host follows.",
   },
   {
+    file: 'libs/aglyn/src/lib/app-utils/mobile-push.ts',
+    count: 1,
+    reason:
+      "AGL-3651. `com.aglyn.app` is the Aglyn app's bundle identifier, which APNs takes as the push topic; it reads as `aglyn.app` but names a store listing, not a host, and no request is sent to it. A rebuilt app registers under its own bundle id.",
+  },
+  {
     file: 'libs/mobile/core/src/lib/config.ts',
     count: 1,
     reason:
