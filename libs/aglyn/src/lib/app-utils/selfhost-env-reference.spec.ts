@@ -119,6 +119,13 @@ const INDIRECT_READS: Record<string, string> = {
   TWILIO_ACCOUNT_SID: 'libs/plugins/sms/src/lib/twilio-provider.ts',
   TWILIO_AUTH_TOKEN: 'libs/plugins/sms/src/lib/twilio-provider.ts',
   TWILIO_MESSAGING_SERVICE_SID: 'libs/plugins/sms/src/lib/twilio-provider.ts',
+  SHIPPO_API_TOKEN: 'libs/plugins/shipping/src/lib/server/config.ts',
+  EASYPOST_API_KEY: 'libs/plugins/shipping/src/lib/server/config.ts',
+  SHIPPING_PROVIDER: 'libs/plugins/shipping/src/lib/server/config.ts',
+  SHIPPING_TOKEN_KEY: 'libs/plugins/shipping/src/lib/server/config.ts',
+  SHIPPO_WEBHOOK_TOKEN: 'libs/plugins/shipping/src/lib/server/config.ts',
+  SHIPPO_WEBHOOK_HMAC_SECRET: 'libs/plugins/shipping/src/lib/server/config.ts',
+  EASYPOST_WEBHOOK_SECRET: 'libs/plugins/shipping/src/lib/server/config.ts',
 }
 
 /**

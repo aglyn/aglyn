@@ -808,6 +808,30 @@ Point the Messaging Service's incoming-message webhook at
 the platform's own suppression list, which is checked before every send, and
 START lifts it.
 
+### Shipping labels {#shipping}
+
+The Shipping plugin buys carrier labels, quotes live rates at checkout and
+follows parcels through Shippo or EasyPost, one managed account (Shippo) or
+child user (EasyPost) per workspace under your platform credential. Without a
+provider credential **and** the sealing key, the plugin is not configured:
+every card, rate kind and route answers as though it did not exist, and
+checkout uses the seller's own rates. Set the provider variables on the
+console **and** the tenant runtime, because the storefront's cart and
+buy-now ask for rates in the tenant.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `SHIPPO_API_TOKEN` | Feature | Runtime | The platform's Shippo token. Set, Shippo is the provider. |
+| `EASYPOST_API_KEY` | Feature | Runtime | The platform's EasyPost key. The provider when `SHIPPO_API_TOKEN` is unset, or when `SHIPPING_PROVIDER` says `easypost`. |
+| `SHIPPING_PROVIDER` | Optional | Runtime | `easypost` to prefer EasyPost while both credentials are set. Anything else, or unset, prefers Shippo. |
+| `SHIPPING_TOKEN_KEY` | Feature | Runtime | 32 random bytes, base64. Seals every stored account id and child key. A comma-separated list rotates: the first key seals, the rest only open. |
+| `SHIPPO_WEBHOOK_TOKEN` | Feature | Runtime, console | The token Shippo's tracking webhook URL carries as `?token=`. |
+| `SHIPPO_WEBHOOK_HMAC_SECRET` | Optional | Runtime, console | Shippo's HMAC secret. When set, the `Shippo-Auth-Signature` header is verified as well. |
+| `EASYPOST_WEBHOOK_SECRET` | Feature | Runtime, console | The `webhook_secret` EasyPost signs each event with (`X-Hmac-Signature`). |
+
+Point the provider's webhook at `POST https://<console>/api/shipping/webhooks/shippo?token=…`
+or `POST https://<console>/api/shipping/webhooks/easypost`.
+
 ### Accounting: QuickBooks Online and Xero {#accounting}
 
 The Accounting plugin posts sales, refunds, fees and payouts to a workspace's
