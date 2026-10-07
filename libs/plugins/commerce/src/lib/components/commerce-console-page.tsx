@@ -38,6 +38,7 @@ import ProductsHubCard from './console/products-hub-card.component'
 import RecoveryQueueCard from './console/recovery-queue-card.component'
 import RegistersCard from './console/registers-card.component'
 import RegisterHardwareCards from './console/register-hardware-card.component'
+import PosDevicesCard from './console/pos-devices-card.component'
 import ReservationsCard from './console/reservations-card.component'
 import ReturnSettingsCard from './console/return-settings-card.component'
 import ReturnsCard from './console/returns-card.component'
@@ -172,6 +173,7 @@ function sectionBody(
               size: { xs: 12 },
               children: <RegisterHardwareCards hostId={hostId} />,
             },
+            { size: { xs: 12 }, children: <PosDevicesCard hostId={hostId} /> },
             {
               size: { xs: 12 },
               children: <ShippingSettingsCard hostId={hostId} />,
