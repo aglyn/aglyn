@@ -78,7 +78,7 @@ import { storefrontTaxModeOf } from './storefront-tax'
 import { recordStorefrontTax } from './storefront-tax-record'
 import { enqueueSupplierDelivery } from './supplier-outbox'
 import { notifyOrderBuyer, onlineReceiptExtras } from './order-notifications'
-import { ORDER_PAID_EVENT } from '../model/order-events'
+import { ORDER_PAID_EVENT, ORDER_REFUNDED_EVENT } from '../model/order-events'
 import { raiseOrderEvent } from './order-events'
 import { handlePosStripeEvent } from './pos-terminal'
 import { notifyPosSaleCompleted } from './pos-sale'
@@ -5143,6 +5143,26 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     const snapshot = lookup.snapshot
     const hostId = String(snapshot.ref.parent.parent?.id ?? '')
     const external = await recordExternalRefund(snapshot.ref, object)
+    if (external && hostId) {
+      // A Stripe Dashboard refund is a refund to every subscriber too
+      // (AGL-3645): accounting books it and the merchant's webhooks hear it,
+      // as they do a console refund. Keyed by the charge's refunded total,
+      // which the record above only ever advances once per amount.
+      const latestRefund = (object?.refunds?.data ?? [])[0]
+      await raiseOrderEvent(ORDER_REFUNDED_EVENT, {
+        hostId,
+        orderId: snapshot.id,
+        key: `external-refund:${String(object?.id ?? paymentIntentId)}:${Number(object?.amount_refunded ?? 0)}`,
+        extra: {
+          refund: {
+            id: latestRefund?.id ? String(latestRefund.id) : null,
+            amountCents: external.newCents,
+            lineItemIds: [],
+            full: external.fullyRefunded,
+          },
+        },
+      })
+    }
     if (external && hostId && snapshot.ref.parent.parent) {
       const outcome = await applyExternalRefundToGiftCards({
         firestore: firebaseAdmin.app().firestore(),

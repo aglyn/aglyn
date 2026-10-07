@@ -302,6 +302,16 @@ jest.mock(
   }),
 )
 
+// The order events this webhook raises (AGL-3645), recorded rather than
+// written through the outbox, whose writer this suite's double does not model.
+const mockRaisedOrderEvents: Array<{ event: string; request: any }> = []
+jest.mock('./order-events', () => ({
+  ...jest.requireActual('./order-events'),
+  raiseOrderEvent: async (event: { id: string }, request: any) => {
+    mockRaisedOrderEvents.push({ event: event.id, request })
+  },
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => {
   // The REAL `updateExisting`, from its leaf path: it is what distinguishes
   // gRPC NOT_FOUND from every other failure.
@@ -1936,6 +1946,25 @@ describe('a refund made outside the console (AGL-3363)', () => {
     await deliver('charge.refunded', refunded(1234))
     expect(order().externalRefundedCents).toBe(1234)
     expect(riskNotices.filter((notice) => notice.kind === 'gift-card-hold')).toHaveLength(1)
+  })
+
+  it('raises order.refunded once for the Dashboard refund, and not for a console refund’s own event (AGL-3645)', async () => {
+    mockRaisedOrderEvents.length = 0
+    const refundEvents = () => mockRaisedOrderEvents.filter((entry) => entry.event === 'order.refunded').map((entry) => entry.request)
+    await deliver('charge.refunded', { ...refunded(1234), refunds: { data: [{ id: 're_dash' }] } })
+    await deliver('charge.refunded', { ...refunded(1234), refunds: { data: [{ id: 're_dash' }] } })
+    // The second delivery is the same fact: the record refuses it, and the
+    // key would fold it into the first event besides.
+    expect(refundEvents()).toHaveLength(1)
+    expect(refundEvents()[0]).toEqual({
+      hostId: 'host-1',
+      orderId: 'order-1',
+      key: 'external-refund:ch_1:1234',
+      extra: { refund: { id: 're_dash', amountCents: 1234, lineItemIds: [], full: false } },
+    })
+    docs.set('hosts/host-1/orders/order-1', { ...docs.get('hosts/host-1/orders/order-1'), refundedCents: 8000 })
+    await deliver('charge.refunded', refunded(8000, true))
+    expect(refundEvents()).toHaveLength(1)
   })
 
   it('a refund on a charge that is no order’s is left alone', async () => {
