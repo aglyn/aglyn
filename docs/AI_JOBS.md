@@ -1814,6 +1814,35 @@ Assist panel.
   and asks the same admission of the plan before it is kept, so such a plan is
   refused before a member is shown a Confirm (AGL-3030).
 
+### Pictures on a layout-language page
+
+The layout language's compiler writes a picture as an empty slot: a frame at a
+stock shape, a placeholder icon, and an Image carrying the model's description
+as its alt text and no source (`ai-layout-compiler.ts`). The compiler stays
+pure. Once the page has passed its check, the page step hands the stored tree
+to `aiResolveLayoutPictures` (`src/lib/layout-language/ai-layout-pictures.ts`,
+AGL-3660), which fills every empty slot and takes the icon out of its frame:
+
+- **Role.** The first section's picture is the hero; a picture whose section or
+  description is about people (about, team, owner, staff, a therapist…) is an
+  about picture; the rest are gallery pictures.
+- **Starter photos.** Each slot gets one of the starter photos every new site
+  ships with (`DEFAULT_SITE_IMAGES`, served at `/_static/starter/` by both the
+  tenant and the console, credited in the CREDITS file beside them). The hero
+  draws from the wide photos, an about picture leads with the owner, and the
+  gallery from the rest. The hero's and the gallery's pools are rotated by the
+  job's seed (its origin job id and the page), so sites do not all open with
+  the same photo, and no photo repeats on a page while one is unused. The hero
+  loads eagerly; the others lazily. These are the platform's own files on the
+  site's own origin, so the tenant image-sink inventory needs no new entry.
+- **A source of found photos.** `aiResolveLayoutPictures` takes an optional
+  source that answers a photo, or nothing, per slot; a slot it leaves empty, or
+  a source that throws, takes a starter photo. A picture never fails a job: on
+  any error the page keeps its slots as the compiler wrote them. The resolver
+  costs no AI credits.
+- **The cap.** The compiler's per-page picture cap is unchanged; the resolver
+  only fills the slots the compiler wrote.
+
 ### A repeated item written once
 
 A workspace that keeps no reusable components draws a repeated item where it repeats
