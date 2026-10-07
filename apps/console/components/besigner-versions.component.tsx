@@ -18,6 +18,7 @@
 
 import { canvas, decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn'
 import {
+  ICON_VARIANT_CLOSE,
   ICON_VARIANT_DATE_TIME,
   ICON_VARIANT_MENU_DOWN,
   ICON_VARIANT_MODIFY_DELETE,
@@ -798,6 +799,17 @@ export const BesignerVersionsComponent = observer(
               component="span"
               sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
             >
+              {/* Where the element picker keeps its close: on a phone the
+                  dialog fills the screen and the Close action is a scroll
+                  away, below every version. */}
+              <IconButton
+                edge="start"
+                color="inherit"
+                onClick={() => setOpen(false)}
+                aria-label="close"
+              >
+                <MdiIcon path={ICON_VARIANT_CLOSE.path} />
+              </IconButton>
               {'Versions'}
               <HelpTip
                 {...docsHelp('versionsAndPublishing', {
