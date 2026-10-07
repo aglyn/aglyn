@@ -73,6 +73,7 @@ let payloads: any[] = []
 
 // The register's operations (AGL-3609) have specs of their own; this one
 // reads the page around them.
+let mockCashierAssertion: string | undefined
 jest.mock('./pos-ops/register-ops', () => ({
   PosOperationsBar: () => null,
   PosCustomerLookup: () => null,
@@ -85,14 +86,16 @@ jest.mock('./pos-ops/register-ops', () => ({
     returnPolicy: '',
   }),
   usePosCashier: () => ({
-    cashier: null,
-    assertion: undefined,
+    cashier: mockCashierAssertion ? { uid: 'cashier-2', name: 'Bo' } : null,
+    assertion: mockCashierAssertion,
     locked: false,
     switchTo: () => undefined,
     signOutCashier: () => undefined,
     lock: () => undefined,
     unlock: () => undefined,
   }),
+  usePosSaleReceipt: () => ({ order: null, print: () => false }),
+  usePosRegisterHasPrinter: () => false,
 }))
 
 jest.mock('firebase/firestore', () => ({
@@ -348,6 +351,23 @@ describe('POS settlement takes one tap and makes one sale (AGL-1682)', () => {
     expect(screen.queryByText(/^Charge /)).toBeNull()
     expect(screen.getByText('Show QR')).toBeTruthy()
     expect(moneyRequests().filter((entry) => entry.body?.payment === 'open')).toHaveLength(1)
+  })
+
+  it('rings and takes payment as the cashier a PIN switched in (AGL-3609)', async () => {
+    mockCashierAssertion = 'assertion-token'
+    try {
+      await openSale()
+      fireEvent.click(screen.getByText('Cash'))
+      fireEvent.change(screen.getByLabelText('Cash received ($)'), { target: { value: '5' } })
+      fireEvent.click(screen.getByText('Take cash'))
+      await waitFor(() => expect(moneyRequests().some((entry) => entry.body?.action === 'cash')).toBe(true))
+      const open = moneyRequests().find((entry) => entry.body?.payment === 'open')
+      const cash = moneyRequests().find((entry) => entry.body?.action === 'cash')
+      expect(open?.body.cashierAssertion).toBe('assertion-token')
+      expect(cash?.body.cashierAssertion).toBe('assertion-token')
+    } finally {
+      mockCashierAssertion = undefined
+    }
   })
 
   it('sends the cash tender as cash, with what the customer handed over', async () => {

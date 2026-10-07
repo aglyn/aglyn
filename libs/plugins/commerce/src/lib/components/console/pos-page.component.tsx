@@ -66,6 +66,14 @@ import {
   type PosSaleSummary,
 } from './pos/pos-api'
 import { PosCartPanel, type RegisterLine } from './pos/pos-cart-panel.component'
+import {
+  PosCustomerLookup,
+  PosLastReceipt,
+  PosOperationsBar,
+  usePosCashier,
+  usePosOpsSettings,
+  type PosSelectedCustomer,
+} from './pos-ops/register-ops'
 import { POS_QUICK_KEYS, POS_TOUCH_PX, PosProductGrid } from './pos/pos-product-grid.component'
 import { PosItemDialog, posItemNeedsChoice, type PosItemChoice } from './pos/pos-item-dialog.component'
 import { PosReceiptPanel } from './pos/pos-receipt-panel.component'
@@ -295,7 +303,9 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
 
   const [lines, setLines] = useState<RegisterLine[]>([])
   const [discountPct, setDiscountPct] = useState(0)
-  const [customerEmail, setCustomerEmail] = useState('')
+  // The customer the lookup attached (AGL-3609); their email is the sale's.
+  const [customer, setCustomer] = useState<PosSelectedCustomer | null>(null)
+  const customerEmail = customer?.email ?? ''
   const [locationId, setLocationId] = useState('')
   const [registerId, setRegisterId] = useState('')
   useEffect(() => {
@@ -304,6 +314,18 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     setRegisterId(first.$id)
     if (first.locationId) setLocationId(first.locationId)
   }, [usableRegisters, registerId])
+  const registerName = String(
+    usableRegisters.find((register: any) => register.$id === registerId)?.name ?? '',
+  )
+  // Who is ringing (AGL-3609): a PIN-switched cashier, and the idle lock.
+  const opsSettings = usePosOpsSettings(hostId)
+  const cashier = usePosCashier({
+    hostId,
+    registerId,
+    autoLockMinutes: opsSettings.autoLockMinutes,
+  })
+  // The last completed sale, whose receipt can still be printed (AGL-3609).
+  const [lastReceipt, setLastReceipt] = useState<{ orderId: string } | null>(null)
 
   const [context, setContext] = useState<PosRegisterContext | null>(null)
   // Keyed on the uid, not the user object: a session refresh hands back a
@@ -496,6 +518,8 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
         lines,
         discountPct,
         ...(customerEmail ? { customerEmail } : {}),
+        ...(customer ? { customer } : {}),
+        ...(cashier.assertion ? { cashierAssertion: cashier.assertion } : {}),
         ...(locationId ? { locationId } : {}),
       })
       setSaleLines(lines)
@@ -516,16 +540,17 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
       chargeInFlight.current = false
       setOpening(false)
     }
-  }, [lines, user, registerId, hostId, discountPct, customerEmail, locationId, notify])
+  }, [lines, user, registerId, hostId, discountPct, customerEmail, customer, cashier.assertion, locationId, notify])
 
   const resetSale = useCallback(() => {
+    if (sale?.status === 'paid') setLastReceipt({ orderId: sale.orderId })
     setSale(null)
     setSaleLines([])
     setLines([])
     setDiscountPct(0)
-    setCustomerEmail('')
+    setCustomer(null)
     setSheetOpen(false)
-  }, [])
+  }, [sale])
 
   // The customer display mirrors the basket while nothing else is on it.
   const mirrored = sale ? saleLines : lines
@@ -676,6 +701,21 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
           ))}
         </TextField>
       ) : null}
+      {registerId ? (
+        <PosOperationsBar
+          hostId={hostId}
+          registerId={registerId}
+          {...(registerName ? { registerName } : {})}
+          cashier={cashier}
+          onExchange={(returned) =>
+            setCustomer(
+              returned.email || returned.name
+                ? { kind: 'none', id: '', name: returned.name ?? '', email: returned.email, phone: null }
+                : null,
+            )
+          }
+        />
+      ) : null}
       <PosCartPanel
         lines={sale ? saleLines : lines}
         shortfalls={sale ? [] : shortfalls}
@@ -705,8 +745,9 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
         }}
         discountPct={discountPct}
         onDiscountPct={setDiscountPct}
-        customerEmail={customerEmail}
-        onCustomerEmail={setCustomerEmail}
+        customer={
+          sale ? null : <PosCustomerLookup hostId={hostId} value={customer} onChange={setCustomer} />
+        }
         locked={Boolean(sale)}
       />
       {sale && user ? (
@@ -715,10 +756,12 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
             user={user}
             hostId={hostId}
             sale={sale}
-            lines={saleLines}
             context={context}
             display={display}
             onNewSale={resetSale}
+            registerId={registerId}
+            {...(registerName ? { registerName } : {})}
+            {...(cashier.cashier ? { cashierName: cashier.cashier.name } : {})}
             notify={notify}
           />
         ) : (
@@ -736,6 +779,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
               setSaleLines([])
             }}
             onTipChange={setPendingTipCents}
+            {...(cashier.assertion ? { cashierAssertion: cashier.assertion } : {})}
             notify={notify}
           />
         )
@@ -757,6 +801,14 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
           >
             {opening ? 'Pricing…' : `Charge ${usd(estimateCents)}`}
           </Button>
+          {lastReceipt ? (
+            <PosLastReceipt
+              hostId={hostId}
+              orderId={lastReceipt.orderId}
+              {...(registerName ? { registerName } : {})}
+              {...(cashier.cashier ? { cashierName: cashier.cashier.name } : {})}
+            />
+          ) : null}
         </>
       )}
     </Stack>

@@ -134,6 +134,10 @@ export function openPosSale(
     lines: unknown[]
     discountPct: number
     customerEmail?: string
+    /** The person the register's customer lookup attached (AGL-3609). */
+    customer?: unknown
+    /** A PIN-switched cashier's signed assertion (AGL-3609). */
+    cashierAssertion?: string
     locationId?: string
   },
 ) {

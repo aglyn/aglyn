@@ -16,6 +16,7 @@
  */
 'use client'
 
+import type { ReactNode } from 'react'
 import { Box, Button, ButtonBase, IconButton, Stack, TextField, Typography } from '@mui/material'
 import type { ModifierSelection, StockShortfall } from '../../../model'
 import { POS_TOUCH_PX } from './pos-product-grid.component'
@@ -42,8 +43,8 @@ export interface PosCartPanelProps {
   onEdit?: (index: number) => void
   discountPct: number
   onDiscountPct: (value: number) => void
-  customerEmail: string
-  onCustomerEmail: (value: string) => void
+  /** The register's customer lookup (AGL-3609), under the discount. */
+  customer?: ReactNode
   /** Lines can no longer change: a sale is open against them. */
   locked: boolean
 }
@@ -51,7 +52,7 @@ export interface PosCartPanelProps {
 /**
  * The basket (AGL-3607): lines with large quantity steppers, the stock
  * warning under any line the shelf cannot cover (AGL-2357, said and never
- * enforced), the cashier's discount and the receipt address.
+ * enforced), the cashier's discount and the customer the sale is for.
  */
 export function PosCartPanel(props: PosCartPanelProps) {
   const { lines, locked } = props
@@ -140,15 +141,8 @@ export function PosCartPanel(props: PosCartPanelProps) {
           sx={{ width: 120 }}
           slotProps={{ htmlInput: { inputMode: 'numeric' } }}
         />
-        <TextField
-          label="Customer email"
-          value={props.customerEmail}
-          onChange={(event) => props.onCustomerEmail(event.target.value)}
-          disabled={locked}
-          sx={{ flex: 1 }}
-          slotProps={{ htmlInput: { inputMode: 'email', autoComplete: 'off' } }}
-        />
       </Stack>
+      {props.customer}
     </Stack>
   )
 }

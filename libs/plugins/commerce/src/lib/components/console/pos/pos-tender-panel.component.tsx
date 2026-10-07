@@ -87,6 +87,8 @@ export interface PosTenderPanelProps {
   onVoided: () => void
   /** The tip chosen for the next payment, before it is taken. */
   onTipChange?: (tipCents: number) => void
+  /** A PIN-switched cashier (AGL-3609) takes each payment they start. */
+  cashierAssertion?: string
   notify: (message: string, variant: 'success' | 'error' | 'warning' | 'info') => void
 }
 
@@ -145,7 +147,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
           hostId,
           sale.orderId,
           action,
-          body,
+          starts && props.cashierAssertion ? { ...body, cashierAssertion: props.cashierAssertion } : body,
           starts ? newAttemptKey() : undefined,
         )
         onSale(result.sale)
@@ -162,7 +164,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
         setBusy(false)
       }
     },
-    [user, hostId, sale.orderId, onSale, notify],
+    [user, hostId, sale.orderId, onSale, notify, props.cashierAssertion],
   )
 
   // Card payments still waiting are checked every two seconds: the reader,

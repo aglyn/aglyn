@@ -30,6 +30,15 @@ jest.mock('./pos-api', () => {
   return { ...actual, posTender: (...args: unknown[]) => mockTender(...args) }
 })
 
+// The thermal receipt (AGL-3609) is the operations module's; here it is the
+// call that prints it, and whether the register has a cloud printer.
+const mockPrint = jest.fn((_gift?: boolean) => true)
+let mockHasPrinter = false
+jest.mock('../pos-ops/register-ops', () => ({
+  usePosSaleReceipt: () => ({ order: { status: 'paid' }, print: (gift?: boolean) => mockPrint(gift) }),
+  usePosRegisterHasPrinter: () => mockHasPrinter,
+}))
+
 import { PosReceiptPanel, type PosReceiptPanelProps } from './pos-receipt-panel.component'
 import type { PosDisplayControl } from './use-pos-display'
 
@@ -70,7 +79,6 @@ function renderPanel(overrides: Partial<PosReceiptPanelProps>) {
     user: {} as never,
     hostId: 'host-1',
     sale: SALE,
-    lines: [],
     context: context('manual', false),
     display: display(null),
     onNewSale: jest.fn(),
@@ -81,7 +89,11 @@ function renderPanel(overrides: Partial<PosReceiptPanelProps>) {
   return props
 }
 
-beforeEach(() => mockTender.mockClear())
+beforeEach(() => {
+  mockTender.mockClear()
+  mockPrint.mockClear()
+  mockHasPrinter = false
+})
 
 describe('text receipts', () => {
   it('are not offered when the store cannot send a text', () => {
@@ -127,18 +139,27 @@ describe('the customer display answer', () => {
     await waitFor(() => expect(mockTender).toHaveBeenCalledWith({}, 'host-1', 'sale-1', 'receipt', sent))
   })
 
-  it('records a print choice too, so the display says thank you', async () => {
-    const print = jest.fn()
-    jest.spyOn(window, 'open').mockReturnValue({
-      document: { write: jest.fn(), close: jest.fn() },
-      focus: jest.fn(),
-      print,
-    } as never)
+  it('prints the thermal receipt for a print choice, and records it so the display says thank you', async () => {
     renderPanel({ context: context('ask', false), display: display({ promptId: 'p', atMs: 1, receiptChannel: 'print' }) })
     await waitFor(() =>
       expect(mockTender).toHaveBeenCalledWith({}, 'host-1', 'sale-1', 'receipt', { channel: 'print' }),
     )
-    expect(print).toHaveBeenCalled()
+    expect(mockPrint).toHaveBeenCalledWith(undefined)
+  })
+
+  it('leaves the printing to the register\'s cloud printer when it has one', async () => {
+    mockHasPrinter = true
+    renderPanel({ context: context('print', false) })
+    await waitFor(() =>
+      expect(mockTender).toHaveBeenCalledWith({}, 'host-1', 'sale-1', 'receipt', { channel: 'print' }),
+    )
+    expect(mockPrint).not.toHaveBeenCalled()
+  })
+
+  it('prints a gift receipt on the cashier\'s tap', () => {
+    renderPanel({})
+    fireEvent.click(screen.getByRole('button', { name: 'Gift receipt' }))
+    expect(mockPrint).toHaveBeenCalledWith(true)
   })
 
   it('sends the display to its thank-you when the prompt goes unanswered', async () => {

@@ -19,59 +19,25 @@
 import { Alert, Button, Stack, TextField, Typography } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as CommerceModel from '../../../model'
-import { escapeHtml } from '../../../utils/escape-html'
+import { usePosRegisterHasPrinter, usePosSaleReceipt } from '../pos-ops/register-ops'
 import { posTender, PosRequestError, usd, type PosRegisterContext, type PosSaleSummary } from './pos-api'
-import type { RegisterLine } from './pos-cart-panel.component'
 import { POS_TOUCH_PX } from './pos-product-grid.component'
 import type { PosDisplayControl } from './use-pos-display'
 
 type User = Parameters<typeof posTender>[0]
 
-/**
- * Prints a receipt through the browser (any printer with a system driver).
- * ESCAPED (AGL-2283) and printed from the opener, never from a script written
- * into the receipt: the popup inherits the console's CSP (AGL-523).
- */
-export function printPosReceipt(input: {
-  lines: RegisterLine[]
-  sale: PosSaleSummary
-}): void {
-  const win = window.open('', '_blank', 'width=320,height=600')
-  if (!win) return
-  const payments = input.sale.payments
-    .filter((payment) => payment.status === 'succeeded')
-    .map((payment) => escapeHtml(CommerceModel.describeOrderPayment({ ...payment, atMs: 0 })))
-  const change = input.sale.payments.reduce((sum, payment) => sum + (payment.changeCents ?? 0), 0)
-  win.document.write(
-    `<pre style="font-family:monospace;font-size:12px">` +
-      input.lines
-        .map(
-          (line) =>
-            `${escapeHtml(line.quantity)}x ${escapeHtml(line.name)}` +
-            `${line.variantLabel ? ` (${escapeHtml(line.variantLabel)})` : ''}` +
-            `  ${usd(line.unitAmountCents * line.quantity)}`,
-        )
-        .join('\n') +
-      `\n\nTOTAL  ${usd(input.sale.totalCents)}` +
-      (input.sale.tipCents ? `\nTIP    ${usd(input.sale.tipCents)}` : '') +
-      `\n${payments.join('\n')}` +
-      (change ? `\nCHANGE ${usd(change)}` : '') +
-      `\n${escapeHtml(new Date().toLocaleString())}` +
-      `</pre>`,
-  )
-  win.document.close()
-  win.focus()
-  win.print()
-}
-
 export interface PosReceiptPanelProps {
   user: User
   hostId: string
   sale: PosSaleSummary
-  lines: RegisterLine[]
   context: PosRegisterContext | null
   display: PosDisplayControl
   onNewSale: () => void
+  /** The register the sale rang on, for its receipt printer and header. */
+  registerId?: string
+  registerName?: string
+  /** The cashier a PIN switched in (AGL-3609), as the receipt prints them. */
+  cashierName?: string
   notify: (message: string, variant: 'success' | 'error' | 'warning' | 'info') => void
 }
 
@@ -87,6 +53,16 @@ export function PosReceiptPanel(props: PosReceiptPanelProps) {
   const [sent, setSent] = useState('')
   const asked = useRef(false)
   const settings = props.context?.settings
+  // The 80 mm receipt the register's operations print (AGL-3609), read back
+  // from the stored sale; on a register with a cloud printer the server
+  // prints it there instead of the browser.
+  const receipt = usePosSaleReceipt({
+    hostId,
+    orderId: sale.orderId,
+    ...(props.registerName ? { registerName: props.registerName } : {}),
+    ...(props.cashierName ? { cashierName: props.cashierName } : {}),
+  })
+  const hasPrinter = usePosRegisterHasPrinter(hostId, props.registerId)
   const change = sale.payments.reduce((sum, payment) => sum + (payment.changeCents ?? 0), 0)
 
   // A text receipt is offered only when the store can send one (AGL-3610).
@@ -120,15 +96,24 @@ export function PosReceiptPanel(props: PosReceiptPanelProps) {
     [user, hostId, sale.orderId, notify],
   )
 
+  /** Prints on the register's cloud printer when it has one, else in the browser. */
+  const printReceipt = useCallback(async () => {
+    if (!hasPrinter) receipt.print()
+    await sendReceipt('print')
+  }, [hasPrinter, receipt, sendReceipt])
+
   // Once per sale: print when the store always prints, or hand the choice to
   // the customer's screen when it asks and a display is paired.
   useEffect(() => {
     if (asked.current || !settings) return
-    asked.current = true
     if (settings.receiptDefault === 'print') {
-      printPosReceipt({ lines: props.lines, sale })
+      // The receipt prints from the stored sale, so it waits for that read.
+      if (!receipt.order) return
+      asked.current = true
+      void printReceipt()
       return
     }
+    asked.current = true
     if (settings.receiptDefault === 'ask' && display.connected) {
       void (async () => {
         const answer = await display.ask({
@@ -149,14 +134,13 @@ export function PosReceiptPanel(props: PosReceiptPanelProps) {
         } else if (answer.receiptChannel === 'sms' && answer.phone) {
           await sendReceipt('sms', answer.phone)
         } else if (answer.receiptChannel === 'print') {
-          printPosReceipt({ lines: props.lines, sale })
-          await sendReceipt('print')
+          await printReceipt()
         } else {
           await sendReceipt('none')
         }
       })()
     }
-  }, [settings, display, props.lines, sale, sendReceipt, smsReceipts])
+  }, [settings, display, receipt.order, printReceipt, sendReceipt, smsReceipts])
 
   return (
     <Stack spacing={1.5}>
@@ -223,18 +207,24 @@ export function PosReceiptPanel(props: PosReceiptPanelProps) {
       <Stack direction="row" spacing={1}>
         <Button
           variant="outlined"
+          disabled={!receipt.order}
           onClick={() => {
-            printPosReceipt({ lines: props.lines, sale })
-            // The cashier answered for the customer: the display's receipt
+            // The cashier answers for the customer: the display's receipt
             // prompt ends with a thank-you rather than waiting it out.
-            if (display.asking === 'receipt') {
-              display.cancelAsk()
-              void sendReceipt('print')
-            }
+            display.cancelAsk()
+            void printReceipt()
           }}
           sx={{ minHeight: POS_TOUCH_PX, flex: 1 }}
         >
           {'Print receipt'}
+        </Button>
+        <Button
+          variant="outlined"
+          disabled={!receipt.order}
+          onClick={() => receipt.print(true)}
+          sx={{ minHeight: POS_TOUCH_PX, flex: 1 }}
+        >
+          {'Gift receipt'}
         </Button>
         <Button
           variant="contained"

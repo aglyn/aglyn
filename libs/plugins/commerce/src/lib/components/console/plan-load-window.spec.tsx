@@ -81,6 +81,8 @@ jest.mock('./pos-ops/register-ops', () => ({
     lock: () => undefined,
     unlock: () => undefined,
   }),
+  usePosSaleReceipt: () => ({ order: null, print: () => false }),
+  usePosRegisterHasPrinter: () => false,
 }))
 
 // The register panel renders beside the grid on a wide screen and in a

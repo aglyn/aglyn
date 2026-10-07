@@ -210,11 +210,13 @@ settings** card, decides what happens first:
 
 Whatever the setting, the cashier can always type an address into **Email
 receipt to** and tap **Send**, type a phone number into **Text receipt to**
-and tap **Text**, or tap **Print receipt**. Text receipts are shown only
-when text messages are available for your store. Receipts print
-through the browser's print dialog, so any receipt printer with a system
-print driver works; see [POS hardware](pos-hardware.md#receipt-printers).
-Tap **New sale** to start the next one.
+and tap **Text**, or tap **Print receipt** (or **Gift receipt**, which
+leaves the prices off). Text receipts are shown only when text messages are
+available for your store. Receipts print on the 80 mm layout described in
+[Printed receipts](pos-operations.md#printed-receipts), through the
+browser's print dialog, so any receipt printer with a system print driver
+works; see [POS hardware](pos-hardware.md#receipt-printers). Tap **New sale**
+to start the next one.
 
 ## Card readers
 

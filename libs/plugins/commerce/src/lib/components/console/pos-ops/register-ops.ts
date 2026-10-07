@@ -23,5 +23,7 @@
 export { PosCustomerLookup, type PosSelectedCustomer } from './pos-customer-lookup.component'
 export { PosLastReceipt } from './pos-last-receipt.component'
 export { PosOperationsBar } from './pos-operations-bar.component'
-export { usePosOpsSettings } from './pos-receipt-actions.component'
+export { usePosOpsSettings, usePosRegisterHasPrinter } from './pos-receipt-actions.component'
 export { usePosCashier } from './use-pos-cashier'
+export { usePosSaleReceipt, type PosSaleReceipt } from './use-pos-sale-receipt'
+export { PosReceiptActions } from './pos-receipt-actions.component'
