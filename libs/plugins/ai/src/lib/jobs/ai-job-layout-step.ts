@@ -69,6 +69,7 @@ import {
 } from './ai-job-generation'
 import { aiPlanRegionViolations, aiPlannedLayoutRegions } from './ai-job-plan-conformance'
 import { aiLayoutSitePages, aiLayoutSitePagesLines, aiLayoutWithSitePages } from './ai-job-layout-site-pages'
+import { aiLayoutInventedContactViolations, aiLayoutWithSiteName } from './ai-layout-site-facts'
 import type { AiJobStepRunner } from './ai-job-text-step'
 import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
@@ -210,6 +211,25 @@ export function aiLayoutReuseCheck(
     }
     return violations
   }
+}
+
+/**
+ * Every check the layout door adds to the doctrine's: the reuse and region
+ * checks above, and no contact detail the brief does not give (AGL-3596).
+ */
+export function aiLayoutChecks(
+  inventory: AiSiteInventory | null,
+  plan: AiJobPlan | null,
+  brief: string,
+): (tree: AiValidatedTree) => AiDoctrineViolation[] {
+  const reuse = aiLayoutReuseCheck(inventory, plan)
+  return (tree) => [
+    ...reuse(tree),
+    ...aiLayoutInventedContactViolations(
+      { rootId: tree.rootId, nodes: tree.nodes as unknown as Record<string, AiDoctrineNode> },
+      brief,
+    ).map((violation) => ({ ...violation, nodeIds: aiModelNodeIds(violation.nodeIds ?? [], tree.sourceIds) })),
+  ]
 }
 
 /**
@@ -374,13 +394,15 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
       maxTokens: AI_JOB_LAYOUT_STEP_BUDGET.maxTokens(model),
       ...(AI_ROUTING_TABLE['job.layout'].thinking ? { thinking: AI_ROUTING_TABLE['job.layout'].thinking } : {}),
       ...(AI_ROUTING_TABLE['job.layout'].effort ? { effort: AI_ROUTING_TABLE['job.layout'].effort } : {}),
-      extend: aiLayoutReuseCheck(inventory, plan),
+      extend: aiLayoutChecks(inventory, plan, job.brief),
+      // The site's name is written as the token that reads it (AGL-3596).
+      complete: (tree: unknown) =>
+        aiLayoutWithSiteName(
+          sitePages.length ? aiLayoutWithSitePages(tree, sitePages, { homeScreenIds: aiHomeScreenIds(inventory) }) : tree,
+          typeof job.inputs?.['businessName'] === 'string' ? job.inputs['businessName'] : null,
+        ),
       ...(sitePages.length
-        ? {
-            context: { screenIds: [...inventory.screens.map((screen) => screen.id), ...sitePages.map((page) => page.id)] },
-            complete: (tree: unknown) =>
-              aiLayoutWithSitePages(tree, sitePages, { homeScreenIds: aiHomeScreenIds(inventory) }),
-          }
+        ? { context: { screenIds: [...inventory.screens.map((screen) => screen.id), ...sitePages.map((page) => page.id)] } }
         : {}),
       ...(signal ? { signal } : {}),
     })
