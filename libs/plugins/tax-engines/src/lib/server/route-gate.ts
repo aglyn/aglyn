@@ -21,6 +21,7 @@ import type { SecretBoxKeyring } from '@aglyn/shared-util-tools/secret-box'
 import { readTaxEnginesKeyring, TAX_ENGINES_NOT_CONFIGURED_MESSAGE } from './config'
 import { resolveTaxEngineSite } from './site-context'
 import { isDocumentId } from './store'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /**
  * THE GATE EVERY CONSOLE ROUTE CLIMBS (AGL-3631). The console's dispatcher
@@ -79,7 +80,8 @@ export async function taxEnginesGate(
   let decoded
   try {
     decoded = await firebaseAdmin.app().auth().verifyIdToken(authorization.slice('Bearer '.length))
-  } catch {
+  } catch (error) {
+    if (!isRefusedIdToken(error)) throw error
     return taxError(401, 'Unauthenticated')
   }
   if (!isEmailVerified(decoded) && !isImpersonationSession(decoded)) {
