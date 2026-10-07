@@ -169,7 +169,10 @@ export interface ParsedSubcollectionRules {
   excluded: { create: string[]; update: string[]; delete: string[] }
   /** Collections with a dedicated `match` block, which can RE-GRANT. */
   dedicated: string[]
-  /** Excluded from all three AND re-granted by nothing: denied outright. */
+  /**
+   * Excluded from all three AND re-granted by nothing: denied outright. A
+   * dedicated block that allows only `read` re-grants no write.
+   */
   serverOnly: string[]
 }
 
@@ -245,11 +248,21 @@ export function parseHostSubcollectionRules(
       ),
     ),
   ]
+  // A dedicated block re-grants only what it allows. One that allows nothing
+  // but `read` (a server-written collection opened to the people who read
+  // what it describes) writes nothing, so the exclusion lists still decide.
+  const grantsWrite = (name: string): boolean =>
+    [...host.matchAll(new RegExp(`match\\s+\\/${name}\\/[^{]*\\{`, 'g'))].some(
+      (header) =>
+        /\ballow\b[^:;]*\b(write|create|update|delete)\b/.test(
+          rawBlockBody(host.slice(header.index), header[0]),
+        ),
+    )
   const serverOnly = excluded.create.filter(
     (name) =>
       excluded.update.includes(name) &&
       excluded.delete.includes(name) &&
-      !dedicated.includes(name),
+      !(dedicated.includes(name) && grantsWrite(name)),
   )
   return { excluded, dedicated, serverOnly }
 }
