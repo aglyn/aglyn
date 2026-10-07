@@ -40,8 +40,8 @@
     "budget": 10240
   },
   "logic": {
-    "baseline": 26059,
-    "budget": 32768
+    "baseline": 35091,
+    "budget": 44032
   },
   "marketing": {
     "baseline": 50528,
