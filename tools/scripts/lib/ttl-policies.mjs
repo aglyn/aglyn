@@ -186,4 +186,12 @@ export const TTL_POLICIES = Object.freeze([
     // (`LIST_IMPORT_LEDGER_RETENTION_MS`).
     why: 'email list import ledgers (sample addresses), 15 days',
   },
+  {
+    collection: 'orderWebhookDeliveries',
+    field: 'expiresAt',
+    // AGL-3611 — one signed order-webhook delivery under
+    // `hosts/{hostId}/orderWebhookDeliveries/{deliveryId}`, with the request
+    // body it posted (`ORDER_WEBHOOK_LOG_RETENTION_MS`).
+    why: 'order webhook delivery logs (order payloads), 30 days',
+  },
 ])

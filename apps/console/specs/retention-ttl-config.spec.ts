@@ -232,6 +232,12 @@ const POLICIES: Array<{
     writers: ['libs/plugins/email/src/lib/transfer/list-members.server.ts'],
     stamp: 'expiresAt: listImportLedgerExpiry(',
   },
+  // AGL-3611: a signed order webhook's delivery log, request body included.
+  {
+    collectionGroup: 'orderWebhookDeliveries',
+    writers: ['libs/plugins/commerce/src/lib/server/order-webhooks.ts'],
+    stamp: 'expiresAt: expiresAt(now)',
+  },
 ]
 
 describe('Firestore TTL policies are declared, documented and written', () => {
