@@ -963,6 +963,12 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
+    'libs/plugins/funnels/src/lib/components/funnel-results.component.tsx',
+    "One funnel's results by source (AGL-3605): at most `FUNNEL_SOURCE_ROWS` sources and " +
+      'an Other row, ranked by the compute, beside the step figures they ' +
+      'break down. A summary of one result, not a list to page through.',
+  ],
+  [
     'apps/console/components/transfer-hub/org-package-import.component.tsx',
     'The dry run of ONE package file (AGL-3535): a row per item the file ' +
       'carries, each with the choice it needs, beside the references and ' +
@@ -1960,7 +1966,8 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     //
     // 70 since the CRM's imports moved onto the transfer wizard (AGL-3528):
     // the shared CSV import drawer, and its preview table, are gone.
-    expect(NOT_A_LIST).toHaveLength(70)
+    // 71 with a funnel's results by source (AGL-3605), bounded by the compute.
+    expect(NOT_A_LIST).toHaveLength(71)
   })
 })
 

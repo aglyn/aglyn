@@ -19,6 +19,7 @@
 // The POST climbs `aiGateLadder`, whose lockdown rung is the verdict, and
 // every stored picture also passes the upload route's.
 
+import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import { MEDIA_ALT_MAX_LENGTH } from '@aglyn/aglyn/app-utils/media-alt'
 import { aiMediaCreditsPerPicture } from '../model/ai-media-credits'
 import { aiSvgThemePalette, isAiSvgColor } from '../model/ai-svg'
@@ -292,17 +293,16 @@ async function annotateStoredImage(
     input.library === 'org'
       ? gate.firestore.collection('orgs').doc(input.orgId)
       : gate.firestore.collection('hosts').doc(String(input.hostId))
-  await scopeRef
-    .collection('media')
-    .doc(mediaId)
-    .update({
-      alt,
-      // The library's "Alt text is missing" filter key, which the upload
-      // route wrote as false before the alt existed.
-      hasAlt: alt.length > 0,
-      description: 'Created with AI from a description.',
-      aiGenerated: { ...provenance, createdAt: new Date() },
-    })
+  const mediaRef = scopeRef.collection('media').doc(mediaId)
+  const stored = ((await mediaRef.get()).data() ?? {}) as Parameters<typeof mediaFilterKeys>[0]
+  await mediaRef.update({
+    alt,
+    description: 'Created with AI from a description.',
+    aiGenerated: { ...provenance, createdAt: new Date() },
+    // What the library filters by, restamped with the alt now set: the upload
+    // route wrote "Alt text is missing" before the alt existed.
+    ...mediaFilterKeys({ ...stored, alt }),
+  })
 }
 
 /** The colors an illustration is drawn in. */

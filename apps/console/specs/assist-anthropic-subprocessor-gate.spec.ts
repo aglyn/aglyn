@@ -128,6 +128,14 @@ const AI_DOORS = new Map<string, string>([
  */
 const MENTIONS_ONLY = new Map<string, string>([
   [
+    'libs/plugins/ai/src/lib/jobs/ai-job-site-plan-live.spec.ts',
+    "The guided start's live plan eval (AGL-3596). It checks the key is SET before it runs, and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter above, and what it sends is ten fixed sample briefs written in the spec, never a customer's content. CI never sets the switch, so CI never calls the provider.",
+  ],
+  [
+    'libs/plugins/ai/src/lib/server/assist-chat-build-rung.spec.ts',
+    "A spec of Assist's build offer (AGL-3616) that sets a placeholder key so the chat route believes a provider is configured. Every provider call in it is mocked; it sends nothing anywhere.",
+  ],
+  [
     'tools/scripts/bootstrap-platform.mjs',
     'The provisioning script that SETS the key on the Vercel projects. Not a data flow — it is the act that starts every data flow above, and therefore the step AGL-1909 orders after publication.',
   ],

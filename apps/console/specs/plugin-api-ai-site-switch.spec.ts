@@ -150,6 +150,9 @@ const SITE_DOORS: Record<string, 'GET' | 'POST' | 'PATCH'> = {
   'ai/usage': 'GET',
   'ai/allotments': 'GET',
   'ai/models': 'GET',
+  // Create images with AI (AGL-3602): a site's library names its `hostId`; the
+  // organization's library names none and is a workspace call.
+  'ai/media/images': 'POST',
 }
 
 /**

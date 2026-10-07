@@ -235,7 +235,7 @@ export const PLUGIN_DOCS = {
   funnels: {
     path: '/marketing-and-automation/analytics/funnels',
     title: 'Funnels',
-    excerpt: 'Measure how visitors move through the steps you care about — pages, forms, bookings, cart and orders — with drop-off, conversion and time between steps, build or explain a funnel with Aglyn AI, and follow up with the people who dropped off.',
+    excerpt: 'See how visitors move through the steps you care about, where they drop off and how long each step takes; build or explain a funnel with Aglyn AI, and follow up with people who dropped off.',
   },
   installYourFirstPlugin: {
     path: '/guides/install-your-first-plugin',

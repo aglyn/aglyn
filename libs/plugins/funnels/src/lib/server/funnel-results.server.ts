@@ -64,10 +64,11 @@ export async function readJourneys(
   endMs: number,
   cap: number = FUNNEL_JOURNEY_READ_CAP,
 ): Promise<{ journeys: JourneyForCompute[]; capped: boolean }> {
+  // The host collection is spelled out (FUNNEL_JOURNEYS_COLLECTION) so the repo's sweeps find it.
   const base = firestore
     .collection('hosts')
     .doc(hostId)
-    .collection(FUNNEL_JOURNEYS_COLLECTION)
+    .collection('funnelJourneys')
     .where('startedAt', '>=', Timestamp.fromMillis(startMs))
     .where('startedAt', '<', Timestamp.fromMillis(endMs))
     .orderBy('startedAt', 'desc')
@@ -109,10 +110,11 @@ export async function funnelResult(options: {
 }): Promise<FunnelResult> {
   const now = options.now ?? Date.now()
   const { firestore, hostId, funnelId, from, to } = options
+  // The host collection is spelled out (FUNNEL_RESULTS_COLLECTION) so the repo's sweeps find it.
   const cacheRef = firestore
     .collection('hosts')
     .doc(hostId)
-    .collection(FUNNEL_RESULTS_COLLECTION)
+    .collection('funnelResults')
     .doc(funnelResultKey(funnelId, options.version, from, to))
   const live = options.endMs > now
   const ttl = live ? LIVE_RESULT_TTL_MS : CLOSED_RESULT_TTL_MS
