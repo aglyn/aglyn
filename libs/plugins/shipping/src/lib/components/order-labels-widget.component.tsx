@@ -109,6 +109,12 @@ export interface PublicLabel {
   createdAtMs: number
 }
 
+/** The address check kept for an order: taken once it was paid, or from this dialog. */
+export interface PublicAddressCheck extends PluginShippingAddressCheck {
+  source: 'checkout' | 'console'
+  checkedAtMs: number
+}
+
 const BADGE_LABELS = { cheapest: 'Cheapest', fastest: 'Fastest', best_value: 'Best value' } as const
 
 const STATUS_LABELS: Record<string, string> = {
@@ -152,16 +158,20 @@ export function OrderLabelsWidget(props: OrderLabelsWidgetProps) {
   const request = useShippingFetch()
   const { enqueueSnackbar } = useSnackbar()
   const [labels, setLabels] = useState<PublicLabel[]>([])
+  const [addressCheck, setAddressCheck] = useState<PublicAddressCheck | null>(null)
   const [dialog, setDialog] = useState<null | 'outbound' | 'return'>(null)
 
   const loadLabels = useCallback(async () => {
     try {
-      const answer = await request<{ labels: PublicLabel[] }>(SHIPPING_API_ROUTES.labels, {
-        query: { hostId, recordId: order.id },
-      })
+      const answer = await request<{ labels: PublicLabel[]; addressCheck?: PublicAddressCheck | null }>(
+        SHIPPING_API_ROUTES.labels,
+        { query: { hostId, recordId: order.id } },
+      )
       setLabels(answer.labels)
+      setAddressCheck(answer.addressCheck ?? null)
     } catch {
       setLabels([])
+      setAddressCheck(null)
     }
   }, [hostId, order.id, request])
 
@@ -195,6 +205,16 @@ export function OrderLabelsWidget(props: OrderLabelsWidgetProps) {
           {'Buy label'}
         </Button>
       </Stack>
+      {addressCheck?.verdict === 'invalid' && shippable ? (
+        <Alert severity="error" sx={{ mt: 1 }}>
+          {`The carrier cannot deliver to this order’s address. ${addressCheck.messages.join(' ')}`.trim()}
+        </Alert>
+      ) : null}
+      {addressCheck?.verdict === 'corrected' && shippable ? (
+        <Alert severity="warning" sx={{ mt: 1 }}>
+          {'The carrier suggests a corrected address for this order. Review it under Buy label.'}
+        </Alert>
+      ) : null}
       <Stack spacing={1} sx={{ mt: 1 }}>
         {labels.map((label) => (
           <Stack key={label.labelId} direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}>
@@ -238,7 +258,12 @@ export function OrderLabelsWidget(props: OrderLabelsWidgetProps) {
           hostId={hostId}
           order={order}
           kind={dialog}
-          onClose={() => setDialog(null)}
+          initialCheck={dialog === 'outbound' ? addressCheck : null}
+          onClose={() => {
+            setDialog(null)
+            // A check taken in the dialog replaces the kept one.
+            void loadLabels()
+          }}
           onBought={async (label) => {
             setDialog(null)
             enqueueSnackbar('Label bought', { variant: 'success' })
@@ -256,13 +281,15 @@ interface BuyLabelDialogProps {
   hostId: string
   order: OrderLabelsWidgetProps['order']
   kind: 'outbound' | 'return'
+  /** The order's kept address check, shown until the address is checked again. */
+  initialCheck?: PluginShippingAddressCheck | null
   onClose: () => void
   onBought: (label: PublicLabel) => void | Promise<void>
 }
 
 /** Pick a box, the units and a rate, then buy. */
 export function BuyLabelDialog(props: BuyLabelDialogProps) {
-  const { hostId, order, kind, onClose, onBought } = props
+  const { hostId, order, kind, initialCheck, onClose, onBought } = props
   const request = useShippingFetch()
   const [settings, setSettings] = useState<ShippingHostSettings | null>(null)
   const [presetId, setPresetId] = useState<string>('')
@@ -279,7 +306,7 @@ export function BuyLabelDialog(props: BuyLabelDialogProps) {
   const [rateId, setRateId] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [check, setCheck] = useState<PluginShippingAddressCheck | null>(null)
+  const [check, setCheck] = useState<PluginShippingAddressCheck | null>(initialCheck ?? null)
   const [shipTo, setShipTo] = useState<PluginShippingAddress | null>(null)
   const [attemptKey, setAttemptKey] = useState(() => newAttemptKey())
 

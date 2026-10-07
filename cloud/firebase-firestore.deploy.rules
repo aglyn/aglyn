@@ -884,6 +884,11 @@ allow read, write: if false;
 }
 
 
+match /shippingAddressChecks/{checkId} {
+allow read, write: if false;
+}
+
+
 
 
 

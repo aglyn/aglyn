@@ -37,6 +37,11 @@ Under **Products → Settings**:
 
 ## Buy a label
 
+Each paid order's address is checked with the carrier as soon as the order
+comes in. When the carrier cannot deliver to it, or suggests a correction,
+the order shows a warning above its labels, so you can contact the customer
+before you buy one.
+
 Open an order and choose **Buy label**:
 
 1. **Check address** asks the carrier whether it can deliver to the order's

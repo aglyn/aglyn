@@ -13421,6 +13421,7 @@ describe('shipping records are the server’s alone (AGL-3612)', () => {
     ['shippingAccounts', 'shippo_live'],
     ['shippingHostSettings', HOST],
     ['shippingLabels', 'lbl_1'],
+    ['shippingAddressChecks', `${HOST}__order-1`],
   ]
   const TOP_DOCS = [
     ['shippingTrackers', 'trk_1'],

@@ -155,6 +155,15 @@ describe('once a provider is configured', () => {
     expect(screen.getByRole('button', { name: 'Return label' })).toBeTruthy()
   })
 
+  it('warns of an address the carrier could not deliver to, checked when the order was paid', async () => {
+    request.mockResolvedValue({
+      labels: [],
+      addressCheck: { verdict: 'invalid', messages: ['Unknown street'], suggested: null, source: 'checkout', checkedAtMs: 1 },
+    })
+    render(<OrderLabelsWidget hostId="host-1" order={ORDER} />)
+    expect(await screen.findByText(/The carrier cannot deliver to this order’s address\. Unknown street/)).toBeTruthy()
+  })
+
   it('offers batch labels only while orders are selected', () => {
     const { container, rerender } = render(<OrdersBatchWidget hostId="host-1" selectedOrderIds={[]} />)
     expect(container.innerHTML).toBe('')

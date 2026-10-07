@@ -424,6 +424,22 @@ describe('address validation', () => {
     expect(given.status).toBe(200)
     expect(shippoCalls.filter((one) => one.url.includes('/v2/addresses/validate'))).toHaveLength(2)
   })
+
+  it('keeps a check of the order’s own address for the order, never a typed one', async () => {
+    const before = await read(await call(labelsRoute, { query: { hostId: HOST, recordId: 'order-1' } }))
+    expect(before.body.addressCheck).toBeNull()
+    await call(addressValidateRoute, {
+      body: { hostId: HOST, recordId: 'order-1', address: { line1: '9 Z St', city: 'Boston', postalCode: '02108', country: 'US' } },
+    })
+    expect((await read(await call(labelsRoute, { query: { hostId: HOST, recordId: 'order-1' } }))).body.addressCheck).toBeNull()
+    await call(addressValidateRoute, { body: { hostId: HOST, recordId: 'order-1' } })
+    const after = await read(await call(labelsRoute, { query: { hostId: HOST, recordId: 'order-1' } }))
+    expect(after.body.addressCheck).toMatchObject({
+      verdict: 'corrected',
+      source: 'console',
+      suggested: { postalCode: '02108-1234' },
+    })
+  })
 })
 
 describe('batch labels', () => {

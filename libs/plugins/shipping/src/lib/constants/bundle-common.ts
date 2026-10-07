@@ -35,6 +35,8 @@ export const SELLER_PLUGIN_ID = 'commerce'
  *   ship-from, label format and checkout services.
  * - `orgs/{orgId}/shippingLabels/{labelId}`: every label bought, its cost and
  *   how that cost was recovered.
+ * - `orgs/{orgId}/shippingAddressChecks/{hostId}__{recordId}`: whether the
+ *   carrier can deliver to an order's address, checked once it is paid.
  * - `shippingTrackers/{trackerId}` (top level): a tracking number's org,
  *   site and record, so a carrier's webhook finds what it is about.
  * - `shippingQuoteCache/{key}` (top level): checkout quotes, ten minutes.
@@ -43,6 +45,7 @@ export const SHIPPING_COLLECTIONS = {
   accounts: 'shippingAccounts',
   hostSettings: 'shippingHostSettings',
   labels: 'shippingLabels',
+  addressChecks: 'shippingAddressChecks',
   trackers: 'shippingTrackers',
   quoteCache: 'shippingQuoteCache',
 } as const

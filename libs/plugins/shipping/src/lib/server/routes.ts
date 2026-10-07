@@ -34,6 +34,7 @@ import {
   readDebitConsent,
   writeDebitConsent,
 } from './account-store'
+import { readAddressCheck, writeAddressCheck, type StoredAddressCheck } from './address-checks'
 import { readShippingConfig } from './config'
 import { isDocumentId, orgRef } from './db'
 import {
@@ -105,6 +106,18 @@ export function publicLabel(label: StoredLabel) {
     createdAtMs: label.createdAtMs,
     purchasedAtMs: label.purchasedAtMs ?? null,
     voidedAtMs: label.voidedAtMs ?? null,
+  }
+}
+
+/** A kept address check as the console reads it. */
+export function publicAddressCheck(entry: StoredAddressCheck | null) {
+  if (!entry) return null
+  return {
+    verdict: entry.check.verdict,
+    messages: entry.check.messages ?? [],
+    suggested: entry.check.suggested ?? null,
+    source: entry.source,
+    checkedAtMs: entry.checkedAtMs,
   }
 }
 
@@ -332,8 +345,11 @@ export const labelsRoute: Handler = methods(['GET'], async (request) => {
   const recordId = new URL(request.url).searchParams.get('recordId') ?? ''
   if (!isDocumentId(recordId)) return shippingError(400, 'Missing recordId')
   try {
-    const labels = await listRecordLabels(gate.actor.orgId, gate.actor.hostId, recordId)
-    return shippingJson({ labels: labels.map(publicLabel) })
+    const [labels, addressCheck] = await Promise.all([
+      listRecordLabels(gate.actor.orgId, gate.actor.hostId, recordId),
+      readAddressCheck(gate.actor.orgId, gate.actor.hostId, recordId),
+    ])
+    return shippingJson({ labels: labels.map(publicLabel), addressCheck: publicAddressCheck(addressCheck) })
   } catch (error) {
     return flowRefusal(error)
   }
@@ -381,12 +397,24 @@ export const addressValidateRoute: Handler = methods(['POST'], async (request) =
   try {
     let address = normalizeShippingAddress(gate.body['address'])
     const recordId = String(gate.body['recordId'] ?? '')
-    if (!address && isDocumentId(recordId)) {
+    // Only a check of the order's OWN address is kept as the order's: a typed
+    // correction is a candidate until a label is bought for it.
+    const ofRecord = !address && isDocumentId(recordId)
+    if (ofRecord) {
       address = (await readRecord(gate.actor.hostId, recordId)).shipTo
     }
     if (!address) return shippingError(400, 'Name an address or an order')
     const account = await openedAccount(gate)
     const check = await gate.config.provider.validateAddress(account, address)
+    if (ofRecord) {
+      await writeAddressCheck(gate.actor.orgId, {
+        hostId: gate.actor.hostId,
+        recordId,
+        address,
+        check,
+        source: 'console',
+      })
+    }
     return shippingJson({ address, check })
   } catch (error) {
     return flowRefusal(error)

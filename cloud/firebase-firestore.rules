@@ -882,6 +882,11 @@ service cloud.firestore {
       match /shippingLabels/{labelId} {
         allow read, write: if false;
       }
+      // Whether the carrier can deliver to a paid order's address (AGL-3612),
+      // checked by the shipping plugin's server and shown by its routes.
+      match /shippingAddressChecks/{checkId} {
+        allow read, write: if false;
+      }
 
       // Outreach (AGL-2974): the mailboxes reps connect, the sequences they
       // send and each prospect's enrollment in one. Read through
