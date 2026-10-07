@@ -83,6 +83,8 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
   'libs/tenant/runtime/src/lib/apply-publish-schedule.ts':
     'unpublishes the placeholder home page, a screen that exists (AGL-3408)',
   'libs/plugins/ai/src/lib/server/ai-seo-apply.ts': 'creates a version under a screen that exists',
+  'libs/plugins/ai/src/lib/jobs/ai-site-publish.ts':
+    'merge-sets the publish fields of screens the job wrote, and trashes the starter home; creates a layout version (AGL-3596)',
   'libs/plugins/forms/src/lib/server/form-submit.ts':
     'writes submissions and counters; reads the page’s screen for the campaigns it is filed under (AGL-3461)',
   'libs/plugins/data/src/lib/record-pages/record-pages-route.ts':
@@ -99,8 +101,6 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
   'tools/scripts/backfill-reconstructed-activity.mjs': 'writes activity entries about screens',
   'tools/scripts/backfill-scheme-dark.mjs': 'rewrites themes on hosts; updates artifacts that exist',
   'tools/scripts/backfill-theme-history.mjs': 'writes theme history; names screens in its rules fixture',
-  'tools/scripts/generate-plugin-manifests.mjs':
-    'writes generated source files; names `screens` as a site-export bundle key no plugin may take',
 }
 
 /** The collection, spelled as a literal. */

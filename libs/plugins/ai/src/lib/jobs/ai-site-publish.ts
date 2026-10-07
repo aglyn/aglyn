@@ -17,6 +17,7 @@
 
 import { isFirstPublishedRoute } from '@aglyn/aglyn/app-utils/analytics-events'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
+import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
 import {
   blockingRouteOwner,
   normalizeScreenSlug,
@@ -70,10 +71,15 @@ export function aiJobPublishesSite(job: Pick<AiJob, 'kind' | 'inputs'>): boolean
   return job.kind === 'site' && job.inputs?.['autoConfirm'] === true
 }
 
-/** Where a site answers, from its subdomain. */
-export function aiSiteLiveUrl(subdomain: string | null | undefined): string | null {
-  const name = String(subdomain ?? '').trim()
-  return name ? `https://${name}.aglyn.app/` : null
+/**
+ * Where a site answers: its custom domain, else its subdomain under the
+ * deployment's tenant apex — never a hard-coded platform host, so a
+ * self-hosted deployment links to its own sites.
+ */
+export function aiSiteLiveUrl(host: { cname?: unknown; subdomain?: unknown }): string | null {
+  const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+  const origin = hostPublicOrigin({ cname: text(host.cname) || null, subdomain: text(host.subdomain) || null })
+  return origin ? `${origin}/` : null
 }
 
 /** The sentences a page that stayed a draft is reported with. */
@@ -189,7 +195,7 @@ export async function aiPublishGuidedSite(
   const hostRef = firestore.collection('hosts').doc(hostId)
   const host = await hostRef.get()
   const result: AiJobSitePublish = {
-    liveUrl: aiSiteLiveUrl(host.get('subdomain')),
+    liveUrl: aiSiteLiveUrl({ cname: host.get('cname'), subdomain: host.get('subdomain') }),
     published: [],
     drafts: [],
   }
