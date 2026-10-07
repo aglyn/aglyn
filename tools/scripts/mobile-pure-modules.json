@@ -18,6 +18,14 @@
       "why": "Whether a member reaches the whole workspace and the scope tokens their reads are admitted by, read by the app's org access (AGL-3622)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/payment-risk.ts",
+      "why": "An order's payment-risk signals and their pure summaries; the native contracts emit the order's paymentRisk from it (AGL-3651)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/platform-brand.ts",
+      "why": "Reached by payment-risk: the platform brand name constants, no imports."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
       "why": "Reached by organizations: the scope token grammar (org, host, consent group)."
     },
@@ -52,6 +60,10 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "why": "The order record shape and its pure helpers, read by the Commerce app order and sales screens (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
+      "why": "The register's payment ledger, display and receipt shapes and their pure helpers, imports nothing; the native contracts emit an order's payments from it (AGL-3651)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-receipt.ts",
@@ -112,6 +124,10 @@
     {
       "path": "libs/shared/util/tools/src/lib/linear-regex.ts",
       "why": "Reached by the redirects model: a linear-time regular-expression engine, plain TypeScript."
+    },
+    {
+      "path": "libs/shared/util/tools/src/lib/list-query/list-filter-codecs.ts",
+      "why": "The list filter option and clause shapes and their codecs over the pure filter grammar; the native contracts emit the option shape the list declarations' choices use (AGL-3651)."
     },
     {
       "path": "libs/shared/util/tools/src/lib/list-query/list-filter-sentence.ts",

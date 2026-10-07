@@ -442,6 +442,11 @@ jobs:
       - run: npm run check:native-fonts
       # And the logo, wordmark and app icons, from the SVGs the console serves.
       - run: npm run generate:native-brand-assets:check
+      # The native apps' shared contracts (types, list declarations, label maps
+      # and the list planner's cases) come from the pure TypeScript modules; a
+      # change to one of them stales the Swift and Kotlin it generates.
+      - run: npm run test:native-contracts
+      - run: npm run generate:native-contracts:check
       # And the notification catalog the app's push settings list (AGL-3620):
       # a new notification type or category stales it.
       - run: npm run generate:mobile-notification-catalog:check

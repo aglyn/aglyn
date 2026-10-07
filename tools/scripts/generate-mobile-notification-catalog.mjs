@@ -58,6 +58,25 @@ export function catalogFrom(notifications) {
   return { categories }
 }
 
+/**
+ * The native apps' catalog: the same categories and types, plus each type's
+ * level (red, amber, green, blue or routine) and the levels loudest first, so
+ * a native notification row tints as the console's does.
+ */
+export function nativeCatalogFrom(notifications) {
+  const { categories } = catalogFrom(notifications)
+  return {
+    levels: notifications.NOTIFICATION_LEVELS.map((id) => ({ id, label: notifications.NOTIFICATION_LEVEL_LABELS[id] })),
+    categories: categories.map((category) => ({
+      ...category,
+      types: category.types.map((type) => ({
+        ...type,
+        level: notifications.NOTIFICATION_TYPE_LEVELS[type.type] ?? 'neutral',
+      })),
+    })),
+  }
+}
+
 export function catalogContent(catalog, reader = "the Aglyn app's push settings (AGL-3620)") {
   return `${JSON.stringify(
     {
@@ -79,7 +98,10 @@ async function main() {
   const catalog = catalogFrom(notifications)
   const outputs = [
     { file: CATALOG_FILE, content: catalogContent(catalog) },
-    { file: NATIVE_CATALOG_FILE, content: catalogContent(catalog, "the native apps' push settings") },
+    {
+      file: NATIVE_CATALOG_FILE,
+      content: catalogContent(nativeCatalogFrom(notifications), "the native apps' push settings and notification rows"),
+    },
   ]
   if (process.argv.includes('--check')) {
     const drifted = outputs.filter(({ file, content }) => {

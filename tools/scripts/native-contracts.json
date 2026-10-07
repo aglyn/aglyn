@@ -1,0 +1,102 @@
+{
+  "$comment": "What tools/scripts/generate-native-contracts.mjs emits for the native apps (docs/mobile/native-architecture.md \u00a75). Every module must be on tools/scripts/mobile-pure-modules.json. `types` become Swift/Kotlin types, `values` become contracts.generated.json entries (typed by ContractValues). `ints` narrows a number field to an integer, `json` reads a field as raw JSON, `omit` leaves a field out; each names `Type.field` and must match a field the run emits. `listQueryCases` names the list declarations whose planner cases are recorded.",
+  "modules": {
+    "libs/shared/util/tools/src/lib/list-query/list-query-plan.ts": {
+      "types": [
+        "ListQueryDeclaration",
+        "ListQueryRequest",
+        "ListQueryPlan",
+        "ListQueryFilter",
+        "ListQuerySort",
+        "ListQueryOp"
+      ],
+      "values": [
+        "LIST_QUERY_ID_PATH",
+        "LIST_QUERY_DISJUNCTIONS"
+      ]
+    },
+    "libs/shared/util/tools/src/lib/list-query/list-filter.ts": {
+      "types": [
+        "ListFilterField",
+        "ListFilterKind",
+        "ListFilterRequest"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/name-search.ts": {
+      "values": [
+        "NAME_TOKEN_MAX_PREFIX",
+        "NAME_TOKEN_LIMIT",
+        "SCOPED_SEARCH_JOIN"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/constants/orders-list-query.ts": {
+      "values": [
+        "ORDER_LIST_QUERY",
+        "ORDER_LIST_HEADERS",
+        "ORDER_LIST_SELECT_FIELDS",
+        "ORDER_STATUS_OPTIONS",
+        "ORDER_CHANNEL_OPTIONS",
+        "ORDER_DISPUTE_OPTIONS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/constants/product-list-query.ts": {
+      "values": [
+        "PRODUCT_LIST_QUERY",
+        "PRODUCT_LIST_BASE",
+        "PRODUCT_LIST_HEADERS",
+        "PRODUCT_LIST_OPTIONS",
+        "PRODUCT_LIST_SELECT_FIELDS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-orders.ts": {
+      "types": [
+        "OrderStatus",
+        "OrderChannel",
+        "HostOrder"
+      ],
+      "values": [
+        "ORDER_STATUS_LABELS",
+        "ORDER_CHANNEL_LABELS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/product-modifiers.ts": {
+      "types": [
+        "ProductModifierGroup",
+        "ProductModifierOption",
+        "OrderLineModifier",
+        "ModifierSelection"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-receipt.ts": {
+      "types": [
+        "ReceiptData",
+        "ReceiptLine",
+        "ReceiptTender"
+      ]
+    },
+    "libs/plugins/redirects/src/lib/model/redirects.ts": {
+      "types": [
+        "HostRedirect"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/mobile-push.ts": {
+      "types": [
+        "MobileDevice",
+        "MobilePushData",
+        "AccountPushSettings"
+      ]
+    }
+  },
+  "ints": [],
+  "json": [
+    "ListQueryFilter.value",
+    "ListQueryRefusal.clause"
+  ],
+  "omit": [],
+  "listQueryCases": {
+    "ORDER_LIST_QUERY": {},
+    "PRODUCT_LIST_QUERY": {
+      "base": "PRODUCT_LIST_BASE"
+    }
+  }
+}

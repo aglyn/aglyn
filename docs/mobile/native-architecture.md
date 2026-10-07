@@ -371,6 +371,39 @@ must not hand-copy them. `tools/scripts/generate-native-contracts.mjs`
   platform's unit tests replay every case, so the ports cannot drift from the
   console.
 
+### As built
+
+- `tools/scripts/native-contracts.json` names the modules and, per module,
+  the `types` and `values` to emit. `ints`, `json` and `omit` name fields
+  (`Type.field`) that read as an integer, as raw JSON, or not at all. A key
+  that matches no emitted field fails the run, so the list cannot go stale.
+  `listQueryCases` names the declarations whose planner cases are recorded.
+- Named types follow references: an interface's fields pull in the types
+  they name, and each must be declared in a pure module. An inline object or
+  literal union is named after its owner and field, as in `HostOrderReceiptRequest`
+  or `OrderFulfillmentStatus`. A union of whole numbers and a whole-number
+  constant are integers. Every other number is a `Double`, unless `ints`
+  says otherwise. `unknown` is `ContractJSON` (Swift) / `JsonElement`
+  (Kotlin).
+- Swift: each enum is `String, Codable, CaseIterable, Hashable, Sendable`,
+  with an `unknown` case (`unrecognized` when a value is already named
+  `unknown`) that a value it does not know decodes to. Operator values are
+  named as words: `==` is `equal` and `<=` is `lessThanOrEqual`. Each
+  struct is `Codable, Hashable, Sendable`, with `public var` fields and a
+  memberwise `public init`.
+- Kotlin: each enum is an `enum class X(val raw: String)` with an `UNKNOWN`
+  entry, serialized through a generated `XSerializer : RawEnumSerializer`.
+  Each struct is a `@Serializable data class`, with optional fields `= null`.
+  The `contracts` module needs `kotlinx-serialization-json`.
+- `ContractValues` (both platforms) decodes `contracts.generated.json`. Each
+  value is a property named after its export in camel case
+  (`ORDER_LIST_QUERY` → `orderListQuery`).
+- `list-query-cases.generated.json` holds `timeZone` (`UTC`), the planner's
+  `normalizers` replayed over sample words (`key`, `token`, `reversed`,
+  `tokens`), and one case per field operator, sort, search and refusal
+  shape. Each case carries the request and the plan; a date is
+  `{ "$date": ISO }`.
+
 ## 6. Notification catalog
 
 `tools/scripts/generate-mobile-notification-catalog.mjs` writes the member
