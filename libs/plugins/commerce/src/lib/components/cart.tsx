@@ -50,6 +50,7 @@ import {
   useState,
 } from 'react'
 import { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
+import { CheckoutReturnNotice } from './checkout-return-notice'
 
 /**
  * The Payment Element (AGL-1944), lazily. Stripe.js and its React wrapper are
@@ -570,6 +571,14 @@ function CartLines(props: {
             clientSecret={nativeCheckout.clientSecret}
             publishableKey={nativeCheckout.publishableKey}
             payLabel={checkoutLabel || 'Pay now'}
+            defaultEmail={email}
+            // An expired or unloadable session is replaced, never replayed:
+            // the old attempt key would hand back the dead session.
+            onRestart={() => {
+              attemptKey.current = ''
+              setNativeCheckout(null)
+              void handleCheckout()
+            }}
             // The session is left open on cancel, deliberately: it is what the
             // AGL-323 abandoned-cart recovery emails are built on, and expiring
             // it would be a write against the merchant's Stripe account made
@@ -707,6 +716,7 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   if (variant === 'inline') {
     return (
       <Box ref={ref} {...rest}>
+        <CheckoutReturnNotice hostId={hostId} siteFetch={siteFetch} />
         <CartLines
           hostId={hostId}
           cart={cart}
@@ -721,6 +731,7 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
 
   return (
     <Box ref={ref} {...rest} sx={[{ display: 'inline-flex' }, ...nodeSx]}>
+      <CheckoutReturnNotice hostId={hostId} siteFetch={siteFetch} />
       <IconButton aria-label="Cart" onClick={() => setOpen(true)}>
         <Badge badgeContent={cart?.count ?? 0} color="primary">
           <SvgIcon>

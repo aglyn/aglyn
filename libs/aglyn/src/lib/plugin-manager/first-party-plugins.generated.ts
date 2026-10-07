@@ -2020,6 +2020,7 @@ export const PLUGIN_USAGE_METERS_DECLARED: readonly ResolvedPluginUsageMeter[] =
   {"pluginId":"crm","id":"records"},
   {"pluginId":"data","id":"dataset-storage"},
   {"pluginId":"ai","id":"assist"},
+  {"pluginId":"sms","id":"sms-texts"},
 ]
 
 /**

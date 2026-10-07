@@ -27,6 +27,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-workflows/declarations.server')).registerWorkflowsServerDeclarations()
     ;(await import('@aglyn/plugins-ai/declarations')).registerAiDeclarations()
     ;(await import('@aglyn/plugins-ai/declarations.server')).registerAiServerDeclarations()
+    ;(await import('@aglyn/plugins-sms/declarations.server')).registerSmsServerDeclarations()
     ;(await import('@aglyn/plugins-video-delivery/declarations.server')).registerVideoDeliveryServerDeclarations()
     ;(await import('@aglyn/plugins-funnels/declarations.server')).registerFunnelsServerDeclarations()
   })()

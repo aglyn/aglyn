@@ -635,8 +635,9 @@ function tenantFormActionDirective(
  * would loosen this to the bare host rather than break the page.
  */
 const SCRIPT_ORIGINS = [
-  // Stripe Checkout. `loadStripe` injects the tag at module scope in
-  // `apps/console/components/embedded-checkout-dialog.component.tsx:61`.
+  // Stripe.js. `loadStripe` injects the tag from
+  // `apps/console/utils/browser-stripe.ts`, which the Billing page's card form,
+  // open-invoices card and pending-charge confirmation share.
   // Not path-scoped: `js.stripe.com` is a dedicated host, and Stripe moves the
   // bundle path between versions (`/v3/`, `/basil/`) without notice — a path
   // here would break checkout on their schedule, in the enforcing follow-up.
@@ -1317,7 +1318,7 @@ function configuredOrigin(raw) {
  * loader catches and logs, so the page renders with the feature simply absent.
  *
  * `api.stripe.com` is the storefront Payment Element. `storefront-payment-
- * element.tsx` mounts Stripe's `CheckoutProvider`, whose session and confirm
+ * element.tsx` mounts Stripe's `CheckoutElementsProvider`, whose session and confirm
  * calls go to that host from the top document — the payment iframes are a
  * separate `frame-src` question. Without it a shopper's card submit fails at
  * the last step of a purchase, which is the most expensive moment on the site
@@ -1334,10 +1335,26 @@ function configuredOrigin(raw) {
  *
  * What is NOT here, because it was measured absent: Firebase. The tenant runs
  * no client Firestore, Auth or App Check — every read is server-side through
- * the Admin SDK — so a published page never opens a `*.googleapis.com`
- * connection, and naming one would authorize an egress that does not exist.
+ * the Admin SDK — so a published page never opens a Firebase
+ * `*.googleapis.com` connection, and naming a wildcard would authorize an
+ * egress that does not exist. `fonts.googleapis.com` below is a stylesheet
+ * fetch, not an API, and only from an open in-page checkout.
  */
-const TENANT_CONNECT_ORIGINS = ['https://api.stripe.com']
+const TENANT_CONNECT_ORIGINS = [
+  'https://api.stripe.com',
+  // The in-page checkout's theme font (AGL-3606). `elementsOptions.fonts`
+  // hands Stripe.js a Google Fonts `cssSrc`, and Stripe.js FETCHES that
+  // stylesheet from the top document (measured 2026-10-06: initiator `fetch`,
+  // origin the page) before passing the faces into its frames. Without this
+  // the fetch is refused and the payment fields fall back to a system font.
+  //
+  // Measured in the same session and deliberately NOT here: the Shipping
+  // Address Element's autocomplete. Stripe runs it in its own
+  // `js.stripe.com/v3/google-maps-inner` frame, which the Places requests
+  // leave from under Stripe's policy, not this one — so naming
+  // `maps.googleapis.com` would authorize an egress this page never makes.
+  'https://fonts.googleapis.com',
+]
 
 function tenantConnectSrcDirective(
   isProduction,

@@ -2266,6 +2266,39 @@ recognizes its own by it; every other handler ignores the event. They are
 awaited in the route rather than deferred, because a plugin's decision about
 whether a workspace may keep spending must not lag the payment that settled it.
 
+## Plugin events — `plugin-domain-events` (`/server`)
+
+Events a plugin raises for other plugins, with payloads the raising plugin
+declares. A subscriber reaches an event by its name and never imports the
+plugin that raises it.
+
+| Call | What it does |
+| --- | --- |
+| `definePluginDomainEvent<Payload>(name)` | A typed token for one event name: dotted lower-case words, the first naming what it is about (`order.paid`). A subscriber in another plugin restates the payload type and defines its own token under the same name. |
+| `declarePluginDomainEvents([{ event, label, description, payloadKeys? }], { pluginId? })` | Declares the events a plugin raises. One plugin owns a name; a second declaring it throws. |
+| `subscribePluginDomainEvent(event, handler, { pluginId?, name? })` | Subscribes from `serverDeclarations`. `name` keeps two handlers of one plugin apart. The handler gets `{ id, event, hostId, orgId, occurredAtMs, attempt, payload }`. |
+| `listPluginDomainEvents()` / `listPluginDomainEventSubscribers(event)` | What is declared and who listens, for pickers and diagnostics. |
+
+Raising goes through the outbox in the admin data lib
+(`@aglyn/tenant-data-admin/server/plugin-event-outbox`): `stagePluginEvent`
+inside the transaction that writes the fact, or `raisePluginEvent` after it.
+Both take a `key` naming the occurrence, so the same fact raised twice is one
+event. A core job delivers the outbox every minute.
+
+Delivery is **at least once, per subscriber**. A handler that throws is
+retried alone, with backoff from 30 seconds to 12 hours, eight times, and the
+event is then kept as a dead letter with each subscriber's last error. A
+subscriber that already took the event is not called again, but a handler
+can still see an event twice (it succeeded and the record of that did not
+land), so dedupe on the envelope's `id`. A locked site's events wait until
+the lock lifts.
+
+The commerce plugin raises `order.paid`, `order.fulfilled` (once per
+shipment), `order.delivered`, `order.refunded` (once per refund),
+`order.cancelled`, `return.requested` and `return.refunded`. Each payload
+carries `order` in the public API's order shape (`GET /v1/sites/{siteId}/orders/{orderId}`), plus
+`fulfillment`, `refund` or `return` where the event has one.
+
 ## Site beacons — `plugin-site-beacons` (`/server`)
 
 A published page reports what visitors did through one collector, and the

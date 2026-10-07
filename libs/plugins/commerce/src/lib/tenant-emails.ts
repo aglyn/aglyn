@@ -17,6 +17,28 @@
 
 import type { TenantEmailEntry } from '@aglyn/shared-util-email'
 
+/** The human order number every buyer order email names (AGL-3610). */
+const ORDER_NUMBER_TOKEN = {
+  name: 'order.number',
+  description: 'The order number, as the store shows it',
+  sample: '#1042',
+} as const
+
+/**
+ * The buyer's private order-status page (AGL-3610): a signed link, so it
+ * opens without an account and only for this order.
+ */
+const ORDER_STATUS_URL_TOKEN = {
+  name: 'order.statusUrl',
+  description:
+    'Link to the order status page: status, shipments and tracking. Private ' +
+    'to the buyer; it needs no account',
+  sample: 'https://shop.example.com/order-status?o=ord_123&t=…',
+} as const
+
+const ORDER_FOOTER_REASON =
+  'You’re receiving this because you placed an order with {{host.businessName}}.'
+
 /**
  * The emails a site sends its own customers through Commerce (AGL-769/770).
  *
@@ -64,6 +86,8 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
             'The Receipt footer from the store settings; empty when none is set',
           sample: 'Returns are accepted within 30 days.',
         },
+        ORDER_NUMBER_TOKEN,
+        ORDER_STATUS_URL_TOKEN,
       ],
       defaultBody: [
         { block: 'text', text: 'Thanks for your purchase!', variant: 'heading' },
@@ -75,14 +99,203 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         { block: 'text', text: '{{order.summary}}', variant: 'body' },
         { block: 'text', text: 'Total charged: {{order.total}}', variant: 'body' },
         { block: 'text', text: '{{store.receiptFooter}}', variant: 'body' },
+        { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
         {
           block: 'text',
           text: 'Order reference: {{order.ref}}',
           variant: 'caption',
         },
       ],
-      footerReason:
-        'You’re receiving this because you placed an order with {{host.businessName}}.',
+      footerReason: ORDER_FOOTER_REASON,
+    },
+    {
+      key: 'order-shipped',
+      name: 'Order shipped',
+      description:
+        'Tells the buyer part or all of their order is on its way, with the ' +
+        'carrier and a tracking link when the shipment has one. Sent once per ' +
+        'shipment.',
+      pluginId: 'commerce',
+      plugin: 'Commerce',
+      control: 'besigner',
+      defaultSubject: 'Your order {{order.number}} has shipped',
+      mergeTokens: [
+        ORDER_NUMBER_TOKEN,
+        {
+          name: 'shipment.summary',
+          description: 'The items in this shipment, one per line',
+          sample: '2× House Blend',
+        },
+        {
+          name: 'shipment.carrier',
+          description: 'The carrier; empty when none was recorded',
+          sample: 'UPS',
+        },
+        {
+          name: 'shipment.trackingNumber',
+          description: 'The tracking number; empty when none was recorded',
+          sample: '1Z999AA10123456784',
+        },
+        {
+          name: 'shipment.tracking',
+          description:
+            'A sentence with the carrier, tracking number and tracking link; ' +
+            'empty when the shipment has no tracking number',
+          sample:
+            'Tracking: UPS 1Z999AA10123456784 — https://www.ups.com/track?tracknum=1Z999AA10123456784',
+        },
+        {
+          name: 'shipment.remaining',
+          description:
+            'A sentence saying how many items are still to ship; empty when ' +
+            'this shipment completes the order',
+          sample: '1 more item will ship separately.',
+        },
+        ORDER_STATUS_URL_TOKEN,
+      ],
+      defaultBody: [
+        { block: 'text', text: 'Your order is on its way', variant: 'heading' },
+        {
+          block: 'text',
+          text: '{{host.businessName}} shipped items from order {{order.number}}.',
+          variant: 'body',
+        },
+        { block: 'text', text: '{{shipment.summary}}', variant: 'body' },
+        { block: 'text', text: '{{shipment.tracking}}', variant: 'body' },
+        { block: 'text', text: '{{shipment.remaining}}', variant: 'body' },
+        { block: 'button', label: 'Track your order', href: '{{order.statusUrl}}' },
+      ],
+      footerReason: ORDER_FOOTER_REASON,
+    },
+    {
+      key: 'order-delivered',
+      name: 'Order delivered',
+      description: 'Tells the buyer their order was marked delivered.',
+      pluginId: 'commerce',
+      plugin: 'Commerce',
+      control: 'besigner',
+      defaultSubject: 'Your order {{order.number}} was delivered',
+      mergeTokens: [
+        ORDER_NUMBER_TOKEN,
+        {
+          name: 'order.summary',
+          description: 'The ordered items, one per line',
+          sample: '2× House Blend',
+        },
+        ORDER_STATUS_URL_TOKEN,
+      ],
+      defaultBody: [
+        { block: 'text', text: 'Your order was delivered', variant: 'heading' },
+        {
+          block: 'text',
+          text:
+            '{{host.businessName}} marked order {{order.number}} as delivered.',
+          variant: 'body',
+        },
+        { block: 'text', text: '{{order.summary}}', variant: 'body' },
+        { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
+        {
+          block: 'text',
+          text:
+            'If something is missing or not right, reply to this email or ' +
+            'contact {{host.businessName}}.',
+          variant: 'caption',
+        },
+      ],
+      footerReason: ORDER_FOOTER_REASON,
+    },
+    {
+      key: 'order-refunded',
+      name: 'Order refunded',
+      description:
+        'Tells the buyer a refund was issued, for how much and, when the ' +
+        'store refunded named items, which ones. Sent once per refund.',
+      pluginId: 'commerce',
+      plugin: 'Commerce',
+      control: 'besigner',
+      defaultSubject: 'Refund for your order {{order.number}}',
+      mergeTokens: [
+        ORDER_NUMBER_TOKEN,
+        {
+          name: 'refund.amount',
+          description: 'The amount of this refund',
+          sample: '$12.00',
+        },
+        {
+          name: 'refund.summary',
+          description:
+            'The refunded items, one per line; empty when the refund was by ' +
+            'amount only',
+          sample: '1× House Blend',
+        },
+        {
+          name: 'refund.note',
+          description:
+            'Whether the order is now fully refunded, as a sentence',
+          sample: 'Your order has been refunded in full.',
+        },
+        ORDER_STATUS_URL_TOKEN,
+      ],
+      defaultBody: [
+        { block: 'text', text: 'Your refund is on its way', variant: 'heading' },
+        {
+          block: 'text',
+          text:
+            '{{host.businessName}} refunded {{refund.amount}} on order ' +
+            '{{order.number}}.',
+          variant: 'body',
+        },
+        { block: 'text', text: '{{refund.summary}}', variant: 'body' },
+        { block: 'text', text: '{{refund.note}}', variant: 'body' },
+        {
+          block: 'text',
+          text:
+            'Refunds go back to the original payment method and usually ' +
+            'appear within 5 to 10 business days, depending on your bank.',
+          variant: 'caption',
+        },
+        { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
+      ],
+      footerReason: ORDER_FOOTER_REASON,
+    },
+    {
+      key: 'order-cancelled',
+      name: 'Order canceled',
+      description: 'Tells the buyer their order was canceled.',
+      pluginId: 'commerce',
+      plugin: 'Commerce',
+      control: 'besigner',
+      defaultSubject: 'Your order {{order.number}} was canceled',
+      mergeTokens: [
+        ORDER_NUMBER_TOKEN,
+        {
+          name: 'order.summary',
+          description: 'The ordered items, one per line',
+          sample: '2× House Blend',
+        },
+        {
+          name: 'cancel.note',
+          description:
+            'What happens to the payment, as a sentence; empty when nothing ' +
+            'was paid',
+          sample:
+            'Any payment you made will be refunded, and you will get a ' +
+            'separate email when it is.',
+        },
+        ORDER_STATUS_URL_TOKEN,
+      ],
+      defaultBody: [
+        { block: 'text', text: 'Your order was canceled', variant: 'heading' },
+        {
+          block: 'text',
+          text: '{{host.businessName}} canceled order {{order.number}}.',
+          variant: 'body',
+        },
+        { block: 'text', text: '{{order.summary}}', variant: 'body' },
+        { block: 'text', text: '{{cancel.note}}', variant: 'body' },
+        { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
+      ],
+      footerReason: ORDER_FOOTER_REASON,
     },
     {
       key: 'sale-notification',

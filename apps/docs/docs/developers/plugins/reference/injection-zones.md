@@ -99,6 +99,8 @@ importing the host's package:
 | `productEditor` | The commerce product editor, under a product's description, tags and categories: copy proposed for the fields, which Save product writes | `hostId`, `orgId`, `product` (as the editor holds it), `categories`, `proposeValues(values, key)` — stages copy in the editor as unsaved edits |
 | `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
 | `productImport` | The commerce products import wizard's After import step: options for what happens to the imported products once they land | `hostId`, `orgId`, `count` (products the dry run creates), `options`, `setOption(key, on)` |
+| `orderDetail` | The commerce order dialog, above its actions: a widget that reads the order and records a shipment, such as buying a shipping label | `hostId`, `orgId`, `order` (`id`, `number`, `status`, `currency`, the buyer, `shippingAddress`, `lines` with each line's `fulfilledQuantity`, `remainingQuantity` and `requiresShipping`, `fulfillments`, `totals`, `testMode`), `recordFulfillment({ lineItems?, carrier, trackingNumber, trackingUrl?, labelUrl?, notify?, idempotencyKey })` — records a shipment through the dialog's own route and resolves with it |
+| `orderFulfillment` | Inside the order dialog's Fulfill items panel: a widget that fills in the carrier and tracking for the units picked | everything `orderDetail` hands, plus `selection` (the `{ lineItemId, quantity }` units picked in the panel) and `applyTracking({ carrier, trackingNumber, trackingUrl?, labelUrl? })` — fills the panel's fields for the merchant to confirm with Fulfill |
 | `funnelsCreate` | The funnels plugin's Funnels card on a site's Analytics page, beside **New funnel** and in its empty state: another way to start a funnel | `hostId`, `orgId`, `propose(brief)` — asks the funnels plugin for a draft checked against the site and opens the editor on it; resolves to `null`, or a sentence saying why there is no draft |
 | `funnelInsight` | Under a funnel's results on the Funnels card: a control that explains them | `hostId`, `orgId`, `funnelName`, `days` (the range shown) |
 
@@ -129,6 +131,8 @@ page spaces it there:
 - `productEditor`, `productsHub` and `productImport`: a section the commerce
   plugin places among its product editor's fields, above its catalog table,
   and in its import wizard's After import step.
+- `orderDetail` and `orderFulfillment`: a section the commerce plugin places
+  in its order dialog, above the actions and inside the Fulfill items panel.
 - `recordEmail` and `importMapping`: a section the CRM plugin places under its
   one-to-one composer's message and under an import drawer's or the import
   wizard's column matching.

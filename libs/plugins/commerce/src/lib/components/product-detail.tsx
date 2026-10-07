@@ -47,6 +47,7 @@ import { ID as PRODUCT_REVIEWS_ID } from './product-reviews'
 import { ID as RELATED_PRODUCTS_ID } from './related-products'
 import { readLocalWishlist, toggleWishlist } from './wishlist'
 import { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
+import { CheckoutReturnNotice } from './checkout-return-notice'
 
 /**
  * The Payment Element (AGL-1944), behind a lazy boundary rather than a plain
@@ -532,6 +533,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
           ...nodeSx,
         ]}
       >
+        <CheckoutReturnNotice hostId={hostId} siteFetch={siteFetch} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           {galleryImage ? (
             <Box
@@ -757,6 +759,13 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 clientSecret={nativeCheckout.clientSecret}
                 publishableKey={nativeCheckout.publishableKey}
                 payLabel={buyLabel || (subscribing ? 'Subscribe' : 'Pay now')}
+                // An expired or unloadable session is replaced, never
+                // replayed: the old attempt key would hand back the dead one.
+                onRestart={() => {
+                  attemptKey.current = ''
+                  setNativeCheckout(null)
+                  void handleBuy()
+                }}
                 // Cancelling drops the form and leaves the session open —
                 // deliberately. The shopper may come back to the same
                 // attempt key, and an abandoned session is what the AGL-323

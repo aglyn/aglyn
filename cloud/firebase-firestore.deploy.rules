@@ -2310,6 +2310,22 @@ allow read, write: if false;
 
 
 
+match /posDisplayPairings/{codeHash} {
+allow read, write: if false;
+}
+match /posDisplayTokens/{tokenHash} {
+allow read, write: if false;
+}
+match /posDisplayStates/{stateId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
 
 
 
@@ -3472,16 +3488,31 @@ allow create: if subcollection != 'siteMemberCredentials' && (isStaff() ||
 'authors', 'carts', 'memberPosts', 'pluginSettings',
 'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
 'inventoryReconciliation', 'stockHolds', 'themeHistory',
+'terminal', 'terminalReaders',
 'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'recordPages',
-'funnels', 'funnelJourneys', 'funnelResults']) &&
+'siteMemberCredentials', 'recordPages', 'printers',
+'printJobs', 'funnels', 'funnelJourneys', 'funnelResults']) &&
 
 
 
 !string(document).matches('.*/formSubmissions/[^/]+')));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3598,12 +3629,13 @@ allow update: if subcollection != 'siteMemberCredentials' && (isStaff() ||
 'checkouts',
 'giftCards', 'stripeTaxRates', 'restockAlerts',
 'inventoryReconciliation', 'stockHolds', 'themeHistory',
+'terminal', 'terminalReaders',
 'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'recordPages',
-'funnels', 'funnelJourneys', 'funnelResults'])));
+'siteMemberCredentials', 'recordPages', 'printers',
+'printJobs', 'funnels', 'funnelJourneys', 'funnelResults'])));
 
 
 
@@ -3650,11 +3682,13 @@ allow delete: if subcollection != 'siteMemberCredentials' && (isStaff() ||
 'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
 'stripeTaxRates', 'restockAlerts',
 'inventoryReconciliation', 'stockHolds', 'themeHistory',
+'terminal', 'terminalReaders',
 'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-'recordPages', 'funnels', 'funnelJourneys', 'funnelResults'])));
+'recordPages', 'printers', 'printJobs', 'funnels', 'funnelJourneys',
+'funnelResults'])));
 }
 
 
