@@ -95,7 +95,13 @@ export const SELF_HOSTED_FONT_CACHE_CONTROL =
  */
 const stylesheets = createSettledValueCache<string, GoogleFontFace[] | null>()
 const fileSizes = createSettledValueCache<string, number | null>()
-const deliveries = createSettledValueCache<string, GoogleFontFace[] | null>()
+/** A family's delivery, and whether it was chosen with every fact in hand. */
+interface Delivery {
+  faces: GoogleFontFace[] | null
+  /** False when a sheet or a size was missing and the statics were the default. */
+  decided: boolean
+}
+const deliveries = createSettledValueCache<string, Delivery>()
 
 /** Test seam: the process caches would otherwise leak between cases. */
 export function resetSelfHostedFontsForTests(): void {
@@ -216,34 +222,42 @@ function deliveryFor(
   // request for one it lacks is refused, and a slanted upright is what the
   // browser would draw anyway.
   const italics = facts?.italics?.length ? offeredWeights(need.italics, facts.italics) : []
-  const faces: Face[] = [
+  const wanted: Face[] = [
     ...weights.map((weight) => ({ weight, style: 'normal' as const })),
     ...italics.map((weight) => ({ weight, style: 'italic' as const })),
   ]
-  const key = `${need.family.toLowerCase()}|${faces.map((face) => `${face.style[0]}${face.weight}`).join(',')}`
-  return deliveries.readThrough(
-    key,
-    async () => {
-      if (!facts?.variableWeights) return facesOneByOne(need.family, faces)
-      const combinedUrl = googleFontSheetUrl(need.family, faces)
-      const [statics, combined] = await Promise.all([
-        facesOneByOne(need.family, faces),
-        combinedUrl ? facesFor(combinedUrl) : Promise.resolve(null),
-      ])
-      if (!statics || !combined) return statics ?? combined
-      const drawn = offeredWeights(need.textWeights.length ? need.textWeights : weights, facts.weights)
-      const staticPaths = [...new Set(drawn.map((weight) => latinFileOf(statics, weight)))]
-      const combinedPath = latinFileOf(combined, drawn[0] ?? 400)
-      if (!combinedPath || staticPaths.some((path) => !path)) return statics
-      const [combinedSize, ...staticSizes] = await Promise.all(
-        [combinedPath, ...(staticPaths as string[])].map(fileSize),
-      )
-      if (!combinedSize || staticSizes.some((size) => !size)) return statics
-      const staticTotal = (staticSizes as number[]).reduce((sum, size) => sum + size, 0)
-      return combinedSize < staticTotal ? combined : statics
-    },
-    (result) => (result ? STYLESHEET_TTL_MS : FAILURE_TTL_MS),
-  )
+  const key = `${need.family.toLowerCase()}|${wanted.map((face) => `${face.style[0]}${face.weight}`).join(',')}`
+  return deliveries
+    .readThrough(
+      key,
+      async (): Promise<Delivery> => {
+        if (!facts?.variableWeights) {
+          const faces = await facesOneByOne(need.family, wanted)
+          return { faces, decided: !!faces }
+        }
+        const combinedUrl = googleFontSheetUrl(need.family, wanted)
+        const [statics, combined] = await Promise.all([
+          facesOneByOne(need.family, wanted),
+          combinedUrl ? facesFor(combinedUrl) : Promise.resolve(null),
+        ])
+        if (!statics || !combined) return { faces: statics ?? combined, decided: false }
+        const drawn = offeredWeights(need.textWeights.length ? need.textWeights : weights, facts.weights)
+        const staticPaths = [...new Set(drawn.map((weight) => latinFileOf(statics, weight)))]
+        const combinedPath = latinFileOf(combined, drawn[0] ?? 400)
+        if (!combinedPath || staticPaths.some((path) => !path)) return { faces: statics, decided: false }
+        const [combinedSize, ...staticSizes] = await Promise.all(
+          [combinedPath, ...(staticPaths as string[])].map(fileSize),
+        )
+        if (!combinedSize || staticSizes.some((size) => !size)) return { faces: statics, decided: false }
+        const staticTotal = (staticSizes as number[]).reduce((sum, size) => sum + size, 0)
+        return { faces: combinedSize < staticTotal ? combined : statics, decided: true }
+      },
+      // A choice made without every sheet and size is the statics by default,
+      // so it is kept only as long as a failure: the next render after that
+      // asks again rather than serving the default for a day.
+      (result) => (result.decided ? STYLESHEET_TTL_MS : FAILURE_TTL_MS),
+    )
+    .then((result) => result.faces)
 }
 
 /** The category a stack's generic keyword names, for a font with none recorded. */

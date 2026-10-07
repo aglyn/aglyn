@@ -216,6 +216,24 @@ describe('the loader picks faces, delivery and fallbacks (AGL-3656)', () => {
     expect(fonts?.preloads).toEqual(['/api/fonts/inter/v20/var.woff2'])
   })
 
+  it('asks again within minutes when it chose without the sizes, not a day later', async () => {
+    catalog(INTER)
+    jest.useFakeTimers({ doNotFake: ['setTimeout', 'clearTimeout', 'setImmediate', 'queueMicrotask', 'nextTick'] })
+    try {
+      // The sizes cannot be read: the statics are the default.
+      fetchMock.mockImplementation(google({}))
+      const first = await selfHostedThemeFonts(THEME, { baseTypography: BASE })
+      expect(first?.css).not.toContain('/var.woff2')
+      // Six minutes on, the sizes answer and the variable file is smaller.
+      jest.setSystemTime(Date.now() + 6 * 60 * 1000)
+      fetchMock.mockImplementation(google({ var: 30_000, s400: 24_000, s900: 23_000, s300: 22_000, s500: 24_000, s700: 24_000 }))
+      const second = await selfHostedThemeFonts(THEME, { baseTypography: BASE })
+      expect(second?.css).toContain('/var.woff2')
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('still sizes the fallback when Google cannot be read, and never links Google', async () => {
     catalog(INTER)
     fetchMock.mockRejectedValue(new Error('offline'))
