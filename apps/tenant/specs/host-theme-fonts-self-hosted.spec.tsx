@@ -43,6 +43,13 @@ jest.mock('@aglyn/shared-ui-theme/util/host-theme', () => ({
     'https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap',
 }))
 
+const mockPreload = jest.fn()
+jest.mock('react-dom', () => ({
+  __esModule: true,
+  ...jest.requireActual('react-dom'),
+  preload: (...args: unknown[]) => mockPreload(...args),
+}))
+
 const mockSelfHosted = jest.fn()
 jest.mock('@aglyn/tenant-runtime/self-hosted-fonts', () => ({
   __esModule: true,
@@ -106,15 +113,17 @@ describe('theme fonts on a published page (AGL-3485)', () => {
     const style = found.find((node) => node.type === 'style')
     expect(style?.props.children).toContain('/api/fonts/inter/v18/a.woff2')
     expect(style?.props.precedence).toBeTruthy()
-    const preload = found.find(
-      (node) => node.type === 'link' && node.props.rel === 'preload',
-    )
-    expect(preload?.props).toMatchObject({
+    // Once, through React's own preload: a `<link rel="preload">` beside it
+    // put every face in the head twice (AGL-3656).
+    expect(mockPreload).toHaveBeenCalledTimes(1)
+    expect(mockPreload).toHaveBeenCalledWith('/api/fonts/inter/v18/a.woff2', {
       as: 'font',
       type: 'font/woff2',
-      href: '/api/fonts/inter/v18/a.woff2',
       crossOrigin: 'anonymous',
     })
+    expect(
+      found.some((node) => node.type === 'link' && node.props.rel === 'preload'),
+    ).toBe(false)
     // Nothing render-blocking, and nothing asked of Google.
     expect(
       found.some(

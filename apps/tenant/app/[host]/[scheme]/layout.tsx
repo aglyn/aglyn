@@ -22,6 +22,7 @@ import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { searchEngineVerificationMeta } from '@aglyn/aglyn/app-utils/search-engine-verification'
 import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
 import { selfHostedThemeFonts } from '@aglyn/tenant-runtime/self-hosted-fonts'
+import { preload } from 'react-dom'
 import { parseSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
 import type { ReactNode } from 'react'
 import getSiteNav from '../../../utils/get-site-nav'
@@ -84,6 +85,12 @@ export default async function HostLayout({
   const fontsHref = selfHostedFonts
     ? undefined
     : getGoogleFontsUrl(hostTheme?.fonts)
+  // `preload()` rather than a `<link>` element (AGL-3656): React already
+  // emits a preload for a `<link rel="preload">` it renders, and rendered
+  // both, every published page asked for its body font twice in its head.
+  for (const href of selfHostedFonts?.preloads ?? []) {
+    preload(href, { as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' })
+  }
   // The navigation loader's logo is a THIRD reader of `logoUrl`, alongside the
   // manifest icon and the white-label badge, and it resolved none of the stored
   // forms (AGL-1407). Site-RELATIVE is correct here — unlike the manifest icon,
@@ -342,23 +349,11 @@ export default async function HostLayout({
         <meta key={name} name={name} content={content} />
       ))}
       {selfHostedFonts ? (
-        <>
-          {selfHostedFonts.preloads.map((href) => (
-            <link
-              key={href}
-              rel="preload"
-              as="font"
-              type="font/woff2"
-              href={href}
-              crossOrigin="anonymous"
-            />
-          ))}
-          {/* Hoisted into the head by React (`href` + `precedence`). The
-              rules are rebuilt from validated fields, never echoed. */}
-          <style href="aglyn-theme-fonts" precedence="default">
-            {selfHostedFonts.css}
-          </style>
-        </>
+        // Hoisted into the head by React (`href` + `precedence`). The rules
+        // are rebuilt from validated fields, never echoed.
+        <style href="aglyn-theme-fonts" precedence="default">
+          {selfHostedFonts.css}
+        </style>
       ) : fontsHref ? (
         <>
           <link
