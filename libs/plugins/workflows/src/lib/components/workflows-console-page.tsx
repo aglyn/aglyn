@@ -46,6 +46,8 @@ function sectionBody(
   section: WorkflowsConsoleSectionId,
   hostId: string,
   org: Partial<AglynOrgBilling> | undefined,
+  /** The Actions section's address, where a drafted action is opened. */
+  actionsHref?: string,
 ): ReactNode {
   switch (section) {
     case 'workflows':
@@ -58,7 +60,11 @@ function sectionBody(
          */
         <Stack spacing={1}>
           <RunQuotaLine hostId={hostId} org={org} counter="workflowRuns" />
-          <HostWorkflowsCard hostId={hostId} org={org} />
+          <HostWorkflowsCard
+            hostId={hostId}
+            org={org}
+            actionsHref={actionsHref}
+          />
         </Stack>
       )
     case 'actions':
@@ -181,7 +187,12 @@ export function WorkflowsConsolePage(props: ConsolePluginPageProps) {
 
   return (
     <HubSections sections={sections}>
-      {sectionBody(section as WorkflowsConsoleSectionId, hostId, org)}
+      {sectionBody(
+        section as WorkflowsConsoleSectionId,
+        hostId,
+        org,
+        sections.find((one) => one.id === 'actions')?.href,
+      )}
     </HubSections>
   )
 }

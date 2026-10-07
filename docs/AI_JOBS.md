@@ -2617,18 +2617,40 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
   submitted. The answer arrives through `submit_explanation` (a summary, the
   points in order, what to check or change) and becomes a `text` output. It
   changes nothing.
+- **Revising an action (`revise`, AGL-3603).** A saved ACTION and a change
+  asked of it (the brief; Fix with AI sends a fixed one). The request is the
+  draft's — the same cached instructions and `submit_automation` tool, so the
+  ledger's `workflow-draft` prefix serves both — with the action's outline and
+  the change in the user turn instead of a description. The answer is held to
+  the vocabulary and matched to records exactly as a draft's, and written as
+  a NEW draft, OFF, under the job's draft id, named as the answer names it or
+  `<name> (revised)` when that is the saved action's own name. The saved
+  action is read and never written. The output note says what changed —
+  steps added, removed or changed, a changed trigger or conditions — worked
+  out in code from the two stored shapes (`aiAutomationRevisionChanges`). An
+  action holding what the vocabulary cannot write — a page event, an on-page
+  step, a trigger filter expression — is refused at admission and again in
+  the step, before the model is asked (`aiActionReviseBlocker`), so a revision
+  never drops a part the person did not ask to lose. A workflow of function
+  calls is never revised.
 - **Admission.** Every mode needs a site of the job's own org with the
   Automation plugin on for it and past its release flag. A draft also needs
   the writer registered and the owner's `refusal` for the member; an
   explanation needs the automation to exist, and a run's explanation a FAILED
-  run of that automation.
+  run of that automation. A revision needs both: the draft's writer and
+  refusal, and the action it starts from, revisable.
 - **Where a member starts one.** Three widgets the AI plugin registers in the
   zones the workflows plugin hosts on the Automation page
   (`src/lib/components/ai-describe-automation.component.tsx` and
   `ai-explain-automation.component.tsx`): Create with AI beside Add action and
-  Recipes (`hostAutomations`), whose dialog follows the job and opens the draft
-  in the Actions editor; Explain it at the top of the editor of a saved action
-  or workflow (`automationEditor`); and Why did this fail? on each failed run
+  Recipes (`hostAutomations`) — also hosted in the Workflows card's header or
+  empty state, whose `openAction` goes to Actions with the action named
+  (`?action=`) — whose dialog follows the job and opens the draft in the
+  Actions editor; Explain it at the top of the editor of a saved action or
+  workflow (`automationEditor`); Change with AI and Fix with AI in the editor
+  of a saved action (`automationEditor`,
+  `ai-revise-automation.component.tsx`), which open the changed copy through
+  the zone's `openAction`; and Why did this fail? on each failed run
   in a run history (`automationRun`). Each is gated by `aiGenerative` and
   `ai.generate`, asks the jobs route once per member and workspace before it
   shows anything (`use-ai-job-run.ts`), and sits in a site zone, so a site

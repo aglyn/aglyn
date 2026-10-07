@@ -62,7 +62,8 @@ export interface AutomationTarget {
 /**
  * The editor of one SAVED automation — an action or a workflow — on the
  * Automation page (AGL-2919). A widget here reads the automation as it is
- * stored and changes nothing in the editor.
+ * stored and changes nothing in the editor; what it drafts is a new
+ * automation, which `openAction` opens.
  */
 export interface AutomationEditorZoneProps {
   hostId: string
@@ -70,6 +71,13 @@ export interface AutomationEditorZoneProps {
   orgId: string | undefined
   /** The automation the editor has open, as it is stored. */
   target: AutomationTarget
+  /**
+   * Opens a listed action in the Actions editor in place of the one open —
+   * a changed copy a widget drafted, say — and answers `false` when the id
+   * names no action the list has read yet (AGL-3603). The Actions editor
+   * hands it; a workflow's editor does not.
+   */
+  openAction?: (actionId: string) => boolean
 }
 
 /**
@@ -95,3 +103,22 @@ export const AUTOMATION_EDITOR_ZONE =
 
 export const AUTOMATION_RUN_ZONE =
   definePluginZone<AutomationRunZoneProps>('automationRun')
+
+/**
+ * The query parameter that asks the Actions section to open one of its
+ * actions in the editor once its list has read it (AGL-3603) — how the
+ * Workflows section's `openAction` hands over an action a widget drafted
+ * there, since the action lives in the other section.
+ */
+export const OPEN_ACTION_PARAM = 'action'
+
+/** The Actions section's address, opening `actionId` in its editor. */
+export function openActionHref(actionsHref: string, actionId: string): string {
+  return `${actionsHref}?${OPEN_ACTION_PARAM}=${encodeURIComponent(actionId)}`
+}
+
+/** The action the address asks the Actions section to open, or `null`. */
+export function requestedActionId(search: string): string | null {
+  const id = new URLSearchParams(search).get(OPEN_ACTION_PARAM)
+  return id && /^[A-Za-z0-9_-]{1,128}$/.test(id) ? id : null
+}

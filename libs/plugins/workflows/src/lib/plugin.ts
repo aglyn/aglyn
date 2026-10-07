@@ -88,7 +88,7 @@ export function registerWorkflowsConsole(): void {
       surface: 'console',
       layout: 'bare',
       description:
-        'On the Automation page, beside Add action and Recipes: another way to start an automation. `openAction` opens a listed action in the Actions editor; a widget here writes nothing through the page.',
+        'On the Automation page, beside Add action and Recipes, and in the Workflows card’s header or empty state: another way to start an automation. `openAction` opens a listed action in the Actions editor; a widget here writes nothing through the page.',
     },
     { pluginId: BUNDLE_ID },
   )
@@ -99,7 +99,7 @@ export function registerWorkflowsConsole(): void {
       surface: 'console',
       layout: 'bare',
       description:
-        'Inside the editor of one saved automation, an action or a workflow. A widget here reads the automation as it is stored and changes nothing in the editor.',
+        'Inside the editor of one saved automation, an action or a workflow. A widget here reads the automation as it is stored and changes nothing in the editor; in an action’s editor, `openAction` opens another listed action, such as a copy the widget drafted, in its place.',
     },
     { pluginId: BUNDLE_ID },
   )

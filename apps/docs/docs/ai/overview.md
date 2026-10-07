@@ -56,6 +56,7 @@ Each capability has its own page, next to the thing it builds:
 | Announcement bar and popup copy, or a new overlay | **Marketing → Overlays** | [Marketing with AI](marketing-with-ai.md#write-overlay-copy) |
 | What your analytics mean | **Analytics → Insights** | [Insights](../marketing-and-automation/analytics/insights.md) |
 | What your campaigns caused and earned | **Marketing → Conversions**, or a campaign's report | [Marketing with AI](marketing-with-ai.md#ask-about-these-numbers) |
+| An automation, or a change to one you have | **Automation → Create with AI**, or a saved action's editor | [Automations with AI](automations-with-ai.md) |
 | A change to the page you have open | The Assist panel, in the Besigner | [Edits in the Besigner](../getting-started/aglyn-assist.md#edits-in-the-besigner) |
 
 Everything in that table follows the same building rules — reuse before creating, your
@@ -63,15 +64,6 @@ theme's colors and spacing, one reusable component for a repeat, images from you
 library with alt text, and a measured size. They are written out on
 [How Aglyn AI builds](how-aglyn-ai-builds.md), and every plan and every generated
 document is checked against them before you see it.
-
-### Not available yet {#not-yet}
-
-- **Drafting an automation from a description.** The door exists on
-  **Automation → Actions**, and what it is meant to do is on
-  [Explain automations with AI](automations-with-ai.md) — but a draft is
-  currently cut short at its size ceiling and can arrive with one step where the
-  description asked for several, so it is not open. **Explain an automation** and
-  **Why did this fail?** on the same pages are unaffected.
 
 ## The Aglyn AI add-on {#the-add-on}
 

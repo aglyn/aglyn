@@ -55,6 +55,11 @@ export interface ConsoleAutomationEditorZoneProps {
   orgId: string | undefined
   /** The automation the editor has open, as it is stored. */
   target: ConsoleAutomationTarget
+  /**
+   * Opens a listed action in the Actions editor in place of this one; `false`
+   * when the list has not read it yet. Handed by the Actions editor only.
+   */
+  openAction?: (actionId: string) => boolean
 }
 
 /** What the `automationRun` zone hands a widget. */
