@@ -407,6 +407,11 @@
       },
       "mobile": {
         "$comment": "AGL-3621: the Aglyn app's store screens. Orders (list, detail, fulfill, refund, receipt print and share), products (list, edit, camera photos to the DAM, stock), barcode scan, and the sales and traffic dashboard; list and detail split side by side on tablets.",
+        "ios": {
+          "$comment": "AGL-3651: the Aglyn POS register (item grid, basket, checkout, receipt) and its card readers on iPhone, iPad and Mac; Tap to Pay and Bluetooth readers through the Stripe Terminal SDK on iPhone and iPad, smart readers everywhere. The Aglyn app's store screens open the console's pages until their native versions land.",
+          "module": "AglynCommercePlugin",
+          "register": "registerCommerceNative"
+        },
         "android": {
           "$comment": "AGL-3652: the Aglyn POS register (item grid, basket, checkout, receipt), its card readers panel and today's bookings at the counter; the Aglyn app's store screens open the console's pages until their native versions land.",
           "package": "com.aglyn.plugins.commerce",
