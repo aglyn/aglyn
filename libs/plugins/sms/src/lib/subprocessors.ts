@@ -22,10 +22,9 @@ import type { PluginSubprocessorDeclaration } from '@aglyn/aglyn/plugin-manager/
  *
  * ⚠ NOTHING REACHES TWILIO UNTIL `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`
  * AND `TWILIO_MESSAGING_SERVICE_SID` ARE SET — the adapter reports itself
- * unconfigured and every surface offers email only. The /legal/subprocessors
- * row for Twilio must be published BEFORE those are set; `publishedOn`
- * records the date this declaration was written for that row, and is to be
- * moved to the page's change-log date when the row goes up.
+ * unconfigured and every surface offers email only. `publishedOn` is the
+ * /legal/subprocessors change-log date that put Twilio on the page, ahead of
+ * those variables (AGL-3666).
  */
 export function smsSubprocessors(): PluginSubprocessorDeclaration[] {
   return [
@@ -35,7 +34,7 @@ export function smsSubprocessors(): PluginSubprocessorDeclaration[] {
       region: 'United States',
       purpose:
         'Delivery of text messages a site sends its own customers, such as order receipts and shipping updates',
-      publishedOn: '2026-10-06',
+      publishedOn: '2026-10-07',
       reason:
         'The Messages REST API, reached only from the SMS plugin’s Twilio adapter (`libs/plugins/sms/src/lib/twilio-provider.ts`) when a site texts a buyer an order update or a merchant re-sends a receipt by text. Inbound STOP replies arrive from Twilio on a signed webhook.',
       dataReceived:
