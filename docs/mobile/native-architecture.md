@@ -267,8 +267,8 @@ repositories on 2026-10-07, and one was chosen per platform.
 | **firebase-ios-sdk** (SPM) | iOS, native macOS, Catalyst | ✓ · ✓ (GoogleSignIn-iOS, iOS and macOS) · ✓; Auth "partial" on macOS | ✓ / ✓ | ✓ | DeviceCheck, App Attest (macOS 11+), custom, debug | ✓ | official; iOS GA, macOS and Catalyst "official beta" | ✓ |
 | **Firebase Android SDK** (BoM) | Android only | ✓ · ✓ · ✓ | ✓ / ✓ | ✓ | Play Integrity | ✓ | official GA | ✓ |
 | **Firebase C++ SDK**, desktop | Windows, macOS, Linux | ✓ | ✓ | ✓ | debug and custom only | stub | desktop is **beta, "not for publicly shipping code"**; no Java binding, so JNI glue and per-OS native libraries | ✓ |
-| **GitLive firebase-kotlin-sdk** | Android, iOS, JVM, JS | wraps the official SDKs; on the JVM, only what firebase-java-sdk offers | 23% of the Firestore API | 64% | — | 5% | community; v2.7.0 (2026-09-02), active | ✓ |
-| **GitLive firebase-java-sdk** (its JVM backend) | JVM | ✓ · **✗** · ✓ | ✓ / ✓ | **✗** | — | — | community **alpha**; last release and commit 2025-10-19; Apache-2.0 | ✓ |
+| **GitLive firebase-kotlin-sdk** | Android, iOS, JVM, JS | wraps the official SDKs; on the JVM, only what firebase-java-sdk offers | 23% of the Firestore API | 64% | — | 5% | unofficial; v2.7.0 (2026-09-02), active | ✓ |
+| **GitLive firebase-java-sdk** (its JVM backend) | JVM | ✓ · **✗** · ✓ | ✓ / ✓ | **✗** | — | — | unofficial **alpha**; last release and commit 2025-10-19; Apache-2.0 | ✓ |
 | **Firestore REST + gRPC** with the user's ID token; Auth via Identity Toolkit REST | any | ✓ · ✓ (`signInWithIdp` after a loopback OAuth flow) · ✓ | gRPC `Listen` ✓ / **no offline cache** | our API routes | custom provider only | — | official public Google APIs | ✓ |
 | **JS SDK in a WebView2 / JS engine** | any | ✓ | ✓ / IndexedDB | ✓ | reCAPTCHA | — | official SDK, unofficial host; the data layer would sit behind a JS bridge | ✓ |
 | **Aglyn console API routes** as a backend-for-frontend | any | through our session | ✗ realtime | ✓ (today) | n/a | — | ours; a new route per list | only by re-implementing them |
