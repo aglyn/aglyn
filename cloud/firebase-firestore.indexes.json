@@ -7843,6 +7843,33 @@
       ]
     },
     {
+      "collectionGroup": "funnelJourneys",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "funnelJourneys",
+      "fieldPath": "steps",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "funnelJourneys",
+      "fieldPath": "source",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "funnelResults",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "funnelResults",
+      "fieldPath": "result",
+      "indexes": []
+    },
+    {
       "collectionGroup": "screenAnalytics",
       "fieldPath": "expiresAt",
       "ttl": true,

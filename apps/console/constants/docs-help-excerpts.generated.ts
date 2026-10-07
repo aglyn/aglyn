@@ -108,6 +108,7 @@ export const DOCS_HELP_EXCERPTS = {
   firstPartySurfaces: 'How to make a new site of ours — a forum, a status page, a second domain — count its visitors\' first touch: register its host, include one script tag. Nothing else, and nothing to configure on a self-hosted install.',
   firstPlugin: 'The full loop — scaffold, develop against a live workspace, verify, publish, install, uninstall.',
   forms: 'Add forms to your site, collect submissions in an inbox, and write them into datasets.',
+  funnels: 'Measure how visitors move through the steps you care about — pages, forms, bookings, cart and orders — with drop-off, conversion and time between steps, and build or explain a funnel with Aglyn AI.',
   generateAComponentWithAglynAi: 'Describe a block your site repeats, or point at one already on a page, and Aglyn AI makes it a reusable component with typed properties bound to the elements that show them.',
   generateAForm: 'An AI form generator inside Aglyn: describe the form you need and a build job makes it as a draft on the Forms page, with its fields, required answers, marketing consent and routing already agreed.',
   generateAPage: 'An AI landing page generator built into the canvas: describe a page and Aglyn AI plans it, then builds it section by section as an unpublished draft from your own theme, layout, components and forms.',

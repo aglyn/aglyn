@@ -64,6 +64,7 @@ import AiSiteSeoStartCard from './components/ai-site-seo-start-card.component'
 import AiSiteStartCard from './components/ai-site-start-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
 import AiDescribeAutomationButton from './components/ai-describe-automation.component'
+import { AiFunnelAskButton, AiFunnelCreateButton } from './components/ai-funnel-zones.component'
 import AiCrmEmailDraft from './components/ai-crm-email-draft.component'
 import AiCrmImportMapping from './components/ai-crm-import-mapping.component'
 import AiCrmRecordCard from './components/ai-crm-record-card.component'
@@ -430,6 +431,24 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiDescribeAutomationButton,
+      },
+      // Funnels by AI (AGL-3605), in the zones the funnels plugin hosts on
+      // its card: a draft from a description, and its results explained.
+      {
+        slot: 'funnelsCreate',
+        widgetId: 'ai-describe-funnel',
+        title: 'Describe a funnel',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiFunnelCreateButton,
+      },
+      {
+        slot: 'funnelInsight',
+        widgetId: 'ai-explain-funnel',
+        title: 'Ask AI about this funnel',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiFunnelAskButton,
       },
       {
         slot: 'automationEditor',

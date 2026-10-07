@@ -137,6 +137,11 @@ const MOUNTS: Record<
     props: Record<string, unknown>
   }
 > = {
+  hostAnalytics: {
+    file: 'apps/console/app/(app)/[orgSlug]/hosts/[host]/analytics/page.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1', orgId: 'org-1' },
+  },
   orgBillingUsage: {
     file: 'apps/console/app/(app)/[orgSlug]/billing/(sections)/usage/page.tsx',
     how: 'slot',

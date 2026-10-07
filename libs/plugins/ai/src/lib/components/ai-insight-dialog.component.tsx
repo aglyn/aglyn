@@ -87,6 +87,12 @@ export interface AiInsightDialogProps {
   uid: string | null
   /** An answered job to show rather than a question to ask. */
   jobId?: string | null
+  /**
+   * The question the box opens with, for a control that asks about one thing
+   * on the page — "Ask AI about this funnel" (AGL-3605). The person can edit
+   * it before asking; nothing is asked until they do.
+   */
+  initialQuestion?: string
 }
 
 type Phase = 'ask' | 'working' | 'answer'
@@ -196,7 +202,12 @@ export function AiInsightDialog(props: AiInsightDialogProps) {
     } else {
       setAnswer(null)
       setPhase('ask')
+      if (props.initialQuestion) {
+        setQuestion(props.initialQuestion.slice(0, AI_INSIGHT_QUESTION_MAX_CHARS))
+      }
     }
+    // The opening question is read when the dialog opens, never mid-edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, jobId, readAnswer])
 
   // The person's own weekly-insights switch, read when the dialog opens.

@@ -22,7 +22,7 @@ Open the **Assist** panel on one of these pages and choose **Ask about your numb
 **AI jobs**:
 
 - a site's **Analytics** page — traffic, top pages, where visits came from, forms, bookings,
-  campaigns, A/B tests and store sales;
+  campaigns, A/B tests, store sales and [funnels](funnels.md);
 - a site's **CRM → Reports** page — the same figures, for questions about where people came
   from and what they did;
 - a site's **Data** page, or your organization's **Data** page — your datasets.

@@ -17,6 +17,7 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `hostDashboard` | Host dashboard glance row, one card per capability | `hostId` |
 | `orgDashboard` | The organization's Sites page, above the site grid — the org-level twin of `hostDashboard`, rendered only for an org-wide member who may open the org-level CRM | `hostId` (always `null`), `orgMount`, `basePath` (the org-level hub's path) |
 | `commerceGlance` | Host dashboard commerce summary | `hostId` |
+| `hostAnalytics` | A site's **Analytics** page, below its traffic cards: a whole section a plugin computes, such as Funnels | `hostId`, `orgId` |
 | `orgData` | Organization → Data page body | `orgId`, `org` |
 | `besignerFunctions` | Besigner ƒx panel | `hostId` |
 | `hostArtifactPublish` | Wherever a console page offers to publish something it holds (a site's layouts, the organization's publish panel): the dialog that publishes it. The page keeps the control that opens it, and leaves that control out when no widget is registered here | `artifact` (`{ kind, hostId?, orgId?, artifactId?, displayName?, description? }`, or `null` while nothing is open), `onClose()` |
@@ -98,6 +99,8 @@ importing the host's package:
 | `productEditor` | The commerce product editor, under a product's description, tags and categories: copy proposed for the fields, which Save product writes | `hostId`, `orgId`, `product` (as the editor holds it), `categories`, `proposeValues(values, key)` — stages copy in the editor as unsaved edits |
 | `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
 | `productImport` | The commerce products import wizard's After import step: options for what happens to the imported products once they land | `hostId`, `orgId`, `count` (products the dry run creates), `options`, `setOption(key, on)` |
+| `funnelsCreate` | The funnels plugin's Funnels card on a site's Analytics page, beside **New funnel** and in its empty state: another way to start a funnel | `hostId`, `orgId`, `propose(brief)` — asks the funnels plugin for a draft checked against the site and opens the editor on it; resolves to `null`, or a sentence saying why there is no draft |
+| `funnelInsight` | Under a funnel's results on the Funnels card: a control that explains them | `hostId`, `orgId`, `funnelName`, `days` (the range shown) |
 
 ## How a zone spaces your widget
 
@@ -117,6 +120,8 @@ page spaces it there:
 - `hostAutomations`, `automationEditor` and `automationRun`: a control the
   workflows plugin places beside its Actions buttons, in an automation's
   editor, and on a failed run.
+- `funnelsCreate` and `funnelInsight`: a control the funnels plugin places
+  beside **New funnel** and under a funnel's results.
 - `siteMember`: a section of a site user's drawer.
 - `besignerInspector` and `seoFields`: a section among a panel's own fields.
 - `besignerPageProperties`: a section of the Page Properties drawer's column.

@@ -83,6 +83,10 @@ import {
 } from 'react'
 import { primeVisitorConsent, useVisitorConsent } from './use-visitor-consent'
 import { claimDailyVisit } from './visit-claim'
+import {
+  configureSiteJourney,
+  hostRecordsJourneys,
+} from '@aglyn/aglyn/app-utils/site-journey'
 
 /** What the server renders, and a page with no adapter loaded yet. */
 const NO_PROVIDERS: readonly AnalyticsProvider[] = Object.freeze([])
@@ -492,6 +496,20 @@ export default function SiteAnalytics({
   // resolved gate: held in memory while unresolved, written once granted,
   // erased on a refusal. A page without the capture keeps only the answer.
   setPageFirstTouchStorage(analyticsStorageAllowed)
+  // A visit's ordered steps (AGL-3605), for the funnels a site defines. The id
+  // that ties them together leaves the browser, so it takes the same resolved
+  // analytics gate as the tag — `null` while unresolved records nothing and
+  // forgets nothing — and the beacon's own environment gate. Only a site that
+  // records journeys sends any. See `site-journey.ts`.
+  configureSiteJourney({
+    hostId,
+    enabled:
+      !hostRecordsJourneys(host as { funnelRecording?: unknown } | null) ||
+      (typeof window !== 'undefined' && !analyticsBeaconMaySend())
+        ? false
+        : analyticsStorageAllowed,
+    path: typeof window === 'undefined' ? null : window.location.pathname,
+  })
 
   return (
     <>

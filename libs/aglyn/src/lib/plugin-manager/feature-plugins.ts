@@ -668,6 +668,16 @@ export const CONSOLE_WIDGET_SLOTS = {
   orgDashboard: 'orgDashboard',
   /** Host dashboard commerce summary. Props: hostId, org. */
   commerceGlance: 'commerceGlance',
+  /**
+   * A site's Analytics page, below its own traffic cards (AGL-3605): a
+   * section of analytics a plugin computes from what the site records — a
+   * funnel, say. Props: hostId, orgId (the workspace, or undefined while it
+   * loads).
+   *
+   * A section rather than a glance, so a widget here owns a whole card: its
+   * own range picker, its own plan answer and its own empty state.
+   */
+  hostAnalytics: 'hostAnalytics',
   /** Org Data page body. Props: orgId, org. */
   orgData: 'orgData',
   /** Besigner functions (ƒx) panel. Props: hostId. */

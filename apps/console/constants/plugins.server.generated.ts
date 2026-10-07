@@ -82,4 +82,10 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     register: {"consoleApi":"registerAiConsoleApi"},
     load: () => import('@aglyn/plugins-ai/server'),
   },
+  {
+    id: 'funnels',
+    apiPrefixes: ["funnels"],
+    register: {"consoleApi":"registerFunnelsConsoleApi"},
+    load: () => import('@aglyn/plugins-funnels/server'),
+  },
 ]

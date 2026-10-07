@@ -23,6 +23,7 @@ import {
   trackEventBeforeNavigation,
   type AnalyticsItem,
 } from '@aglyn/aglyn/app-utils/analytics-events'
+import { recordSiteJourneyStep } from '@aglyn/aglyn/app-utils/site-journey'
 import { isPaymentsNotConfigured } from '@aglyn/aglyn/app-utils/payments-configured'
 import { storefrontPaymentsNotConfiguredText } from '../constants/storefront-payments'
 import * as CommerceModel from '../model'
@@ -295,6 +296,8 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       }).catch(() => null)
       if (response?.ok) {
         setAdded(true)
+        // A funnel step (AGL-3605): the product, by its id.
+        recordSiteJourneyStep('cart', resolved.id)
         // Priced (AGL-1591's shape, completed): the resolved variant's price
         // and the chosen quantity are both known here and both come from the
         // server's product payload, so GA4's "value added to cart" is a real

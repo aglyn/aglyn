@@ -53,6 +53,7 @@ Each capability has its own page, next to the thing it builds:
 | A campaign | **Campaigns** | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md) |
 | Variants for an A/B test, and its result in words | **Marketing → Experiments** | [A/B tests by AI](ab-tests-with-ai.md) |
 | What your analytics mean | **Analytics → Insights** | [Insights](../marketing-and-automation/analytics/insights.md) |
+| A funnel from a description, and what its drop-off means | **Analytics → Funnels** | [Funnels](../marketing-and-automation/analytics/funnels.md#create-with-ai) |
 | A change to the page you have open | The Assist panel, in the Besigner | [Edits in the Besigner](../getting-started/aglyn-assist.md#edits-in-the-besigner) |
 
 Everything in that table follows the same building rules — reuse before creating, your
