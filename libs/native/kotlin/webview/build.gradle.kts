@@ -20,6 +20,7 @@ kotlin {
   sourceSets {
     commonMain.dependencies {
       api(project(":native-core"))
+      implementation(project(":native-plugin-host"))
       implementation(project(":native-ui"))
       implementation(libs.compose.ui.backhandler)
     }

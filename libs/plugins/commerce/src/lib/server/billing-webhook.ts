@@ -80,6 +80,10 @@ import { recordStorefrontTax } from './storefront-tax-record'
 import { enqueueSupplierDelivery } from './supplier-outbox'
 import { notifyOrderBuyer, onlineReceiptExtras } from './order-notifications'
 import { ORDER_PAID_EVENT, ORDER_REFUNDED_EVENT } from '../model/order-events'
+import {
+  checkoutExtrasCents,
+  decodeCheckoutExtrasMetadata,
+} from '@aglyn/aglyn/plugin-manager/plugin-checkout-extras'
 import { raiseOrderEvent } from './order-events'
 import { handlePosStripeEvent } from './pos-terminal'
 import { notifyPosSaleCompleted } from './pos-sale'
@@ -3547,6 +3551,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // transaction for the notices below (AGL-3432). The document id is
         // the Stripe session id, which appears nowhere in the console.
         let cartOrderNumber: number | undefined
+        // The optional lines the buyer took (AGL-3635), read back off the
+        // session they were charged on; never re-quoted here.
+        const cartExtras = decodeCheckoutExtrasMetadata(object?.metadata)
         const created = await firestore.runTransaction(async (transaction) => {
           const [existing, counter] = await Promise.all([
             transaction.get(orderRef),
@@ -3562,7 +3569,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const totals = CommerceModel.computeCheckoutSessionTotals(
             lineItems,
             object,
-            { feeCents: Number(feeCents ?? 0) },
+            { feeCents: Number(feeCents ?? 0), extrasCents: checkoutExtrasCents(cartExtras) },
           )
           // With the fields the orders list queries by (AGL-3321).
           transaction.set(orderRef, CommerceModel.withOrderListFields(orderRef.id, {
@@ -3571,6 +3578,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             channel: 'online',
             lineItems,
             totals,
+            ...(cartExtras.length ? { extras: cartExtras } : {}),
             // WHICH TAX THIS SALE CARRIED (AGL-2451). `totals.taxCents` above
             // says how much; this says who computed it, which is the fact that
             // decides whose registration the money is held under. The same
@@ -3745,6 +3753,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 `${line.quantity}× ${line.name}${
                   line.variantLabel ? ` (${line.variantLabel})` : ''
                 } — $${((line.unitAmountCents * line.quantity) / 100).toFixed(2)}`,
+            )
+            .concat(
+              // Optional lines the buyer took (AGL-3635), as charged.
+              cartExtras.map((extra) => `${extra.label} — $${(extra.amountCents / 100).toFixed(2)}`),
             )
             .join('\n')
           // The keys assigned above the gate (AGL-2149); the receipt only

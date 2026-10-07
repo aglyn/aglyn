@@ -8,7 +8,7 @@ The native Kotlin apps (AGL-3652, AGL-3653). One Gradle root builds:
 | `:pos` | **Aglyn POS** (`com.aglyn.pos`; debug builds are `com.aglyn.pos.dev`) |
 | `:desktop` | both apps on the JVM desktop: `AglynDesktop` and `AglynPosDesktop` (Windows ships from here) |
 | `:plugin-manifest` | every plugin's native registrar, from the generated `PluginManifest.generated.kt` |
-| `:native-*` | the shared foundation in `libs/native/kotlin` (`core`, `ui`, `plugin-host`, `webview`, `shell`, `contracts`, `hardware`) |
+| `:native-*` | the shared foundation in `libs/native/kotlin` (`core`, `ui`, `plugin-host`, `webview`, `shell`, `contracts`, `hardware`, and the Android-only `camera`) |
 | `:plugin-<id>` | a plugin's `src/android` module, from `native-plugins.generated.properties` |
 
 The architecture is `docs/mobile/native-architecture.md`.
@@ -70,11 +70,19 @@ Every setting can be overridden with `-Paglyn.<name>=…` or `AGLYN_<NAME>`:
 ```
 
 Desktop signs in through the Identity Toolkit REST API and reads Firestore
-through its REST API with the person's own ID token (the same rules), re-
-reading a visible list every 30 seconds. The session is kept in memory for
-now: the refresh token moves to the OS credential store (Windows Credential
-Manager) when that dependency is approved. The console opens in the system
-browser, and desktop has no push in v1. Menus: Go (⌘/Ctrl 1–3, ⌘/Ctrl ,),
+through its REST API with the person's own ID token (the same rules). A
+visible document or list is a gRPC `Listen` stream opened with a freshly
+minted ID token and re-opened before that token's hour is up; a stream that
+cannot be held three times in a row falls back to re-reading every 30
+seconds. The refresh token is kept in Windows Credential Manager (through
+JNA), so the next launch signs straight back in; a macOS or Linux run keeps it
+in memory and signs in each launch. Every area is a native screen; the
+Besigner, the only web content, opens inside the app window (WebView2 on
+Windows) and never in the system browser. Desktop has no push in v1 (Settings → Notifications still edits which
+types reach the person's phones and tablets).
+
+To watch `Listen` work against the emulator stack:
+`AGLYN_LISTEN_EMULATOR=127.0.0.1:8289 AGLYN_LISTEN_AUTH=127.0.0.1:9299 AGLYN_LISTEN_PROJECT=demo-aglyn-native ./gradlew :native-core:desktopTest --tests '*ListenTest*'`. Menus: Go (⌘/Ctrl 1 Home, 2 Notifications, 3 Pages, 4 Orders, ⌘/Ctrl , Settings),
 Workspace (⌘/Ctrl K switches site) and Account (⌘/Ctrl ⇧Q signs out).
 
 The desktop register takes cards on smart readers only. A keyboard-wedge
@@ -84,6 +92,31 @@ Enter or Tab is a scan, not typing). A network receipt printer is named with
 print as ESC/POS and a cash sale kicks the drawer. Register shortcuts:
 ⌘/Ctrl F search, ⌘/Ctrl Enter or F12 charge, ⌘/Ctrl + and − the last line's
 quantity, ⌘/Ctrl H hold the basket, Esc closes the item sheet.
+
+### Aglyn POS on Android: card readers and the camera
+
+The POS app carries the Stripe Terminal Android SDK (`com.stripe:stripeterminal`
+and `stripeterminal-taptopay`); the Aglyn app does not. Card readers → This
+device offers **Use Tap to Pay** (an NFC device on Android 13+) and **Find
+Bluetooth readers** (Stripe M2, WisePad 3, Chipper 2X), after asking for
+location and nearby devices. Connection tokens come from
+`/api/commerce/pos-terminal-connection-token` for the open site, scoped to its
+Terminal Location; readers never connect on behalf of a merchant, because
+card-present payments settle on the platform account. A connected reader
+becomes the first card tender; the payment is the shared
+`collectCardPayment` sequence (retrieve → collect → confirm, which
+authorizes; the server captures). The reader's prompts show on the checkout
+screen, and a reader update is offered (or required) on the readers screen.
+
+Every build uses the SDK's **simulated** readers until live readers are
+switched on with `-Paglyn.terminalLiveReaders=true` on a release build, which
+needs Stripe Terminal live mode. Tap to Pay's PIN screens run in the SDK's
+`:stripetaptopay` process, where the app does nothing on start.
+
+The register's camera button scans barcodes with CameraX and ML Kit's bundled
+model (`libs/native/kotlin/camera`, provided to the kit's `BarcodeScanSheet`
+through `LocalCameraScanner`). Each code goes through the same barcode-then-SKU
+lookup as a keyboard-wedge scan, and the sheet stays open for the next item.
 
 Release builds take no emulator host and default the console to
 `https://app.aglyn.com`; `AglynConfig.problems()` logs anything missing.
@@ -99,9 +132,8 @@ Release builds take no emulator host and default the console to
 A plugin's native screens live in `libs/plugins/<id>/src/android`, a KMP module
 whose registrar registers the ids its `mobile.contributes` block declares in
 `plugins.config.json`. `npm run generate:plugin-manifests` writes the manifest
-and properties files from the plugin's `mobile.android` block. Until a plugin's
-block lands, `native-plugins.properties` and `NativePlugins.kt` carry it, and a
-generated entry always wins.
+and properties files from the plugin's `mobile.android` block; the apps load
+`NativePluginManifest.entries` and nothing else.
 
 ## What Zach owes
 

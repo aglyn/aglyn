@@ -75,6 +75,7 @@ data class HostOrder(
     val discountBy: String? = null,
     val discountPct: Double? = null,
     val dispute: OrderDispute? = null,
+    val extras: List<OrderExtra>? = null,
     val feeCents: Double? = null,
     val fulfillments: List<OrderFulfillment>? = null,
     val invoiceId: String? = null,
@@ -94,7 +95,7 @@ data class HostOrder(
     val restockCheck: OrderRestockCheck? = null,
     val shiftId: String? = null,
     val shippingAddress: OrderAddress? = null,
-    val status: OrderStatus,
+    val status: OrderStatus? = null,
     val subscriptionId: String? = null,
     val taxMode: HostOrderTaxMode? = null,
     val timeline: List<OrderTimelineEvent>? = null,
@@ -178,6 +179,14 @@ enum class HostRedirectKind(val raw: String) {
 
 internal object HostRedirectKindSerializer :
     RawEnumSerializer<HostRedirectKind>("com.aglyn.contracts.HostRedirectKind", HostRedirectKind.entries, HostRedirectKind.UNKNOWN, { it.raw })
+
+@Serializable
+data class ListFilterClause(
+    val field: String,
+    val label: String? = null,
+    val op: String,
+    val value: String,
+)
 
 @Serializable
 data class ListFilterField(
@@ -447,6 +456,16 @@ data class OrderDispute(
 )
 
 @Serializable
+data class OrderExtra(
+    val amountCents: Double,
+    val id: String,
+    val key: String,
+    val label: String,
+    val pluginId: String,
+    val quoteRef: String? = null,
+)
+
+@Serializable
 data class OrderFulfillment(
     val atMs: Double,
     val cancelledAtMs: Double? = null,
@@ -622,6 +641,20 @@ enum class OrderStatus(val raw: String) {
 internal object OrderStatusSerializer :
     RawEnumSerializer<OrderStatus>("com.aglyn.contracts.OrderStatus", OrderStatus.entries, OrderStatus.UNKNOWN, { it.raw })
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = OrderStatusColorValueSerializer::class)
+enum class OrderStatusColorValue(val raw: String) {
+    DEFAULT("default"),
+    ERROR("error"),
+    INFO("info"),
+    SUCCESS("success"),
+    WARNING("warning"),
+    UNKNOWN(""),
+}
+
+internal object OrderStatusColorValueSerializer :
+    RawEnumSerializer<OrderStatusColorValue>("com.aglyn.contracts.OrderStatusColorValue", OrderStatusColorValue.entries, OrderStatusColorValue.UNKNOWN, { it.raw })
+
 @Serializable
 data class OrderTimelineEvent(
     val atMs: Double,
@@ -631,13 +664,14 @@ data class OrderTimelineEvent(
 
 @Serializable
 data class OrderTotals(
-    val discountCents: Double,
-    val feeCents: Double,
-    val itemsCents: Double,
-    val shippingCents: Double,
-    val taxCents: Double,
+    val discountCents: Double? = null,
+    val extrasCents: Double? = null,
+    val feeCents: Double? = null,
+    val itemsCents: Double? = null,
+    val shippingCents: Double? = null,
+    val taxCents: Double? = null,
     val tipCents: Double? = null,
-    val totalCents: Double,
+    val totalCents: Double? = null,
 )
 
 @Serializable
@@ -764,12 +798,14 @@ data class ContractValues(
     @SerialName("LIST_QUERY_ID_PATH") val listQueryIdPath: String,
     @SerialName("NAME_TOKEN_LIMIT") val nameTokenLimit: Long,
     @SerialName("NAME_TOKEN_MAX_PREFIX") val nameTokenMaxPrefix: Long,
+    @SerialName("OPEN_DISPUTE_CLAUSE") val openDisputeClause: ListFilterClause,
     @SerialName("ORDER_CHANNEL_LABELS") val orderChannelLabels: Map<String, String>,
     @SerialName("ORDER_CHANNEL_OPTIONS") val orderChannelOptions: List<ListFilterOption>,
     @SerialName("ORDER_DISPUTE_OPTIONS") val orderDisputeOptions: List<ListFilterOption>,
     @SerialName("ORDER_LIST_HEADERS") val orderListHeaders: Map<String, String>,
     @SerialName("ORDER_LIST_QUERY") val orderListQuery: ListQueryDeclaration,
     @SerialName("ORDER_LIST_SELECT_FIELDS") val orderListSelectFields: List<String>,
+    @SerialName("ORDER_STATUS_COLOR") val orderStatusColor: Map<String, OrderStatusColorValue>,
     @SerialName("ORDER_STATUS_LABELS") val orderStatusLabels: Map<String, String>,
     @SerialName("ORDER_STATUS_OPTIONS") val orderStatusOptions: List<ListFilterOption>,
     @SerialName("PRODUCT_LIST_BASE") val productListBase: List<ListQueryFilter>,

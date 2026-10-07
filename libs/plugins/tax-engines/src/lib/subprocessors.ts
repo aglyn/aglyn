@@ -42,7 +42,7 @@ export function taxEnginesSubprocessors(): PluginSubprocessorDeclaration[] {
       entity: 'Avalara, Inc.',
       region: 'United States',
       purpose:
-        'Sales tax calculation and transaction recording in a merchant’s own Avalara AvaTax account, when the merchant connects one',
+        'Sales tax calculation and recording, in a merchant’s own Avalara account when the merchant connects one',
       publishedOn: '2026-10-07',
       reason:
         'AvaTax REST v2, reached only from the tax-engines plugin’s adapter (`libs/plugins/tax-engines/src/lib/providers/avalara.ts`) with the merchant’s own credentials: a quote at checkout and the POS, a committed sale when an order is paid, a refund or void when it is refunded or canceled, and address checks.',
@@ -62,7 +62,7 @@ export function taxEnginesSubprocessors(): PluginSubprocessorDeclaration[] {
       entity: 'TaxJar (a Stripe company)',
       region: 'United States',
       purpose:
-        'Sales tax calculation and transaction recording in a merchant’s own TaxJar account, when the merchant connects one',
+        'Sales tax calculation and recording, in a merchant’s own TaxJar account when the merchant connects one',
       publishedOn: '2026-10-07',
       reason:
         'TaxJar API v2, reached only from the tax-engines plugin’s adapter (`libs/plugins/tax-engines/src/lib/providers/taxjar.ts`) with the merchant’s own API token: a quote at checkout and the POS, an order transaction when an order is paid, a refund transaction or deletion when it is refunded or canceled, and address checks.',

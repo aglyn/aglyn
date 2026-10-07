@@ -10,6 +10,10 @@ compose-material-icons = "1.7.3"
 coroutines = "1.11.0"
 serialization = "1.11.0"
 ktor = "3.6.0"
+jna = "5.19.1"
+grpc = "1.62.2"
+protobuf = "3.25.5"
+firestore-protos = "3.21.0"
 androidx-activity = "1.13.0"
 androidx-core = "1.19.1"
 androidx-splashscreen = "1.2.0"
@@ -18,6 +22,11 @@ firebase-auth = "24.2.0"
 firebase-firestore = "26.6.0"
 firebase-messaging = "25.1.3"
 firebase-installations = "19.1.2"
+# Stripe Terminal Android (Tap to Pay + Bluetooth readers), Aglyn POS only.
+stripe-terminal = "5.8.2"
+# Camera barcode scanning: CameraX preview + ML Kit's bundled barcode model.
+camerax = "1.6.2"
+mlkit-barcode = "17.3.0"
 junit = "4.13.2"
 android-compileSdk = "37"
 android-minSdk = "26"
@@ -34,6 +43,12 @@ ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-java = { module = "io.ktor:ktor-client-java", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+grpc-okhttp = { module = "io.grpc:grpc-okhttp", version.ref = "grpc" }
+grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
+grpc-protobuf-lite = { module = "io.grpc:grpc-protobuf-lite", version.ref = "grpc" }
+protobuf-java-util = { module = "com.google.protobuf:protobuf-java-util", version.ref = "protobuf" }
+firestore-protos = { module = "com.google.api.grpc:proto-google-cloud-firestore-v1", version.ref = "firestore-protos" }
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose-multiplatform" }
 compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose-multiplatform" }
 compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-multiplatform" }
@@ -52,6 +67,13 @@ firebase-auth = { module = "com.google.firebase:firebase-auth", version.ref = "f
 firebase-firestore = { module = "com.google.firebase:firebase-firestore", version.ref = "firebase-firestore" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging", version.ref = "firebase-messaging" }
 firebase-installations = { module = "com.google.firebase:firebase-installations", version.ref = "firebase-installations" }
+stripe-terminal = { module = "com.stripe:stripeterminal", version.ref = "stripe-terminal" }
+stripe-terminal-taptopay = { module = "com.stripe:stripeterminal-taptopay", version.ref = "stripe-terminal" }
+androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
+androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
+androidx-camera-mlkit-vision = { module = "androidx.camera:camera-mlkit-vision", version.ref = "camerax" }
+mlkit-barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version.ref = "mlkit-barcode" }
 junit = { module = "junit:junit", version.ref = "junit" }
 
 [plugins]

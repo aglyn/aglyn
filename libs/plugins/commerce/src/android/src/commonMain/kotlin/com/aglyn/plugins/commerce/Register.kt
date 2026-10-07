@@ -3,6 +3,12 @@ package com.aglyn.plugins.commerce
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.pluginhost.NativePluginRegistrar
 import com.aglyn.pluginhost.PosPlacement
+import com.aglyn.pluginhost.ScreenLayout
+import com.aglyn.pluginhost.WidgetSize
+import com.aglyn.plugins.commerce.orders.COMMERCE_ORDERS_SCREEN
+import com.aglyn.plugins.commerce.orders.COMMERCE_ORDER_SCREEN
+import com.aglyn.plugins.commerce.orders.OrdersScreen
+import com.aglyn.plugins.commerce.orders.OrdersToShipWidget
 import com.aglyn.plugins.commerce.pos.CardReadersScreen
 import com.aglyn.plugins.commerce.pos.RegisterScreen
 
@@ -17,10 +23,12 @@ const val COMMERCE_CARD_READERS_SCREEN = "commerce.card-readers"
  * the card readers panel. Bookings taken at the counter are the Bookings
  * plugin's own POS screen.
  *
- * Aglyn: the store screens declared for the app (orders, products, scan,
- * sales) are served by the console's own pages here until their native
- * versions land; their tabs, Home cards and quick actions stay out of the
- * app (no `apps`) rather than lead to a page that only opens the console.
+ * Aglyn: the site's orders natively (list beside the picked order, ship,
+ * deliver, refund, cancel, resend the receipt), an Orders tab, the
+ * orders-to-ship Home card and its quick action. Products, scan and sales
+ * are declared and show a native "coming to the app" state until their
+ * native screens land; their tabs, Home cards and quick actions stay out of
+ * the app (no `apps`) until then.
  */
 fun registerCommerceNative(r: NativePluginRegistrar) {
   r.screen(
@@ -40,21 +48,26 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
     placement = PosPlacement.MENU,
   ) { context, _ -> CardReadersScreen(context) }
 
-  r.consoleScreen("commerce.orders", "Orders", "/products/orders")
-  r.consoleScreen("commerce.order", "Order", "/products/orders")
-  r.consoleScreen("commerce.products", "Products", "/products")
-  r.consoleScreen("commerce.product", "Product", "/products")
-  r.consoleScreen("commerce.scan", "Scan", "/products")
-  r.consoleScreen("commerce.sales", "Sales", "/products/orders")
+  r.screen(COMMERCE_ORDERS_SCREEN, title = "Orders", requiresSite = true, icon = "receipt", layout = ScreenLayout.LIST_DETAIL) { context, params ->
+    OrdersScreen(context, initialOrderId = params["order"])
+  }
+  r.screen(COMMERCE_ORDER_SCREEN, title = "Order", requiresSite = true, icon = "receipt", layout = ScreenLayout.LIST_DETAIL) { context, params ->
+    OrdersScreen(context, initialOrderId = params["order"] ?: params["orderId"])
+  }
+  r.upcomingScreen("commerce.products", "Products", icon = "inventory")
+  r.upcomingScreen("commerce.product", "Product", icon = "inventory")
+  r.upcomingScreen("commerce.scan", "Scan stock", icon = "qr_code_scanner")
+  r.upcomingScreen("commerce.sales", "Sales", icon = "insights")
   r.deepLink("commerce.orders-page", path = "/products/orders", screen = "commerce.orders")
   r.deepLink("commerce.products-page", path = "/products", screen = "commerce.products")
 
   val none = emptySet<NativeApp>()
-  r.tab("commerce.orders-tab", title = "Orders", icon = "receipt", screen = "commerce.orders", order = 100, apps = none)
+  r.tab("commerce.orders-tab", title = "Orders", icon = "receipt", screen = COMMERCE_ORDERS_SCREEN, order = 100)
   r.tab("commerce.products-tab", title = "Products", icon = "inventory", screen = "commerce.products", order = 110, apps = none)
   r.widget("commerce.today", title = "Today", order = 100, requiresSite = true, apps = none) { }
   r.widget("commerce.sales-trend", title = "Last 7 days", order = 110, requiresSite = true, apps = none) { }
-  r.quickAction("commerce.orders-to-ship", "Ship orders", "inventory", 100, requiresSite = true, screen = "commerce.orders", apps = none)
+  r.widget("commerce.to-ship", title = "To ship", order = 90, size = WidgetSize.HALF, requiresSite = true) { context -> OrdersToShipWidget(context) }
+  r.quickAction("commerce.orders-to-ship", "Ship orders", "local_shipping", 100, requiresSite = true, screen = COMMERCE_ORDERS_SCREEN)
   r.quickAction("commerce.new-product", "New product", "inventory", 110, requiresSite = true, screen = "commerce.product", apps = none)
   r.quickAction("commerce.scan", "Scan stock", "inventory", 120, requiresSite = true, screen = "commerce.scan", apps = none)
 }

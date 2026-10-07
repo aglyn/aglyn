@@ -6,7 +6,7 @@ import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.use
 import com.aglyn.pluginhost.NativeApp
-import com.aglyn.plugins.manifest.NativePlugins
+import com.aglyn.plugins.manifest.NativePluginManifest
 import com.aglyn.shell.AglynShell
 import com.aglyn.shell.DesktopShell
 import com.aglyn.shell.PosShell
@@ -22,8 +22,7 @@ import java.io.File
 /**
  * A development tool, not a test: renders the desktop shells offscreen
  * against the live emulator stack named by -Daglyn.* and writes PNGs of each
- * screen, so desktop screenshots need no screen-recording permission. The
- * Console destination is left out: it opens the system browser.
+ * screen, so desktop screenshots need no screen-recording permission.
  *
  *   ./gradlew :desktop:snapshots -Paglyn.snapshotDir=/path -Paglyn.jvmArgs="-Daglyn.firebaseProjectId=…"
  */
@@ -31,7 +30,7 @@ fun main() = runBlocking {
   val dir = File(System.getProperty("aglyn.snapshotDir") ?: "build/snapshots").apply { mkdirs() }
   val env = DesktopShell.envFromSystem()
 
-  val aglyn = DesktopShell.services(NativeApp.AGLYN, env, NativePlugins.entries)
+  val aglyn = DesktopShell.services(NativeApp.AGLYN, env, NativePluginManifest.entries)
   aglyn.auth.signInWithEmail(aglyn.debugSignIn!!.first, aglyn.debugSignIn!!.second)
   val navigator = ShellNavigator()
   for (dark in listOf(false, true)) {
@@ -44,10 +43,21 @@ fun main() = runBlocking {
     shoot(dir, "aglyn-desktop-switcher", dark, before = { navigator.select(ShellNavigator.HOME); navigator.push(Route.Switcher) }) { AglynShell(aglyn, navigator, dark = it) }
     navigator.select(ShellNavigator.HOME)
   }
+  // The store's orders live on the seeded store site (-Daglyn.snapshotStoreSite).
+  System.getProperty("aglyn.snapshotStoreSite")?.let { site ->
+    aglyn.workspace.selectSite(site)
+    for (dark in listOf(false, true)) {
+      val suffix = if (dark) "-dark" else ""
+      shoot(dir, "aglyn-desktop-orders$suffix", dark, before = { navigator.select(ShellNavigator.screenKey("commerce.orders")) }) { AglynShell(aglyn, navigator, dark = it) }
+      shoot(dir, "aglyn-desktop-order$suffix", dark, before = { navigator.push(Route.Screen("commerce.order", mapOf("order" to "o-1043"))) }) { AglynShell(aglyn, navigator, dark = it) }
+    }
+    shoot(dir, "aglyn-desktop-orders-narrow", false, width = 420, height = 860, before = { navigator.select(ShellNavigator.screenKey("commerce.orders")) }) { AglynShell(aglyn, navigator, dark = it) }
+    shoot(dir, "aglyn-desktop-home-store", false, before = { navigator.select(ShellNavigator.HOME) }) { AglynShell(aglyn, navigator, dark = it) }
+  }
   aglyn.auth.signOut()
   shoot(dir, "aglyn-desktop-sign-in", false) { AglynShell(aglyn, ShellNavigator(), dark = it) }
 
-  val pos = DesktopShell.services(NativeApp.POS, env, NativePlugins.entries)
+  val pos = DesktopShell.services(NativeApp.POS, env, NativePluginManifest.entries)
   shoot(dir, "pos-desktop-sign-in", false) { PosShell(pos, dark = it) }
   pos.auth.signInWithEmail(pos.debugSignIn!!.first, pos.debugSignIn!!.second)
   shoot(dir, "pos-desktop-register", false) { PosShell(pos, dark = it) }

@@ -898,6 +898,20 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Post-purchase (AGL-3635): one site's AfterShip, Route and Narvar
+      // switches with the credentials its merchant connected, sealed under
+      // POST_PURCHASE_TOKEN_KEY, and what each service was told about an
+      // order — the Route policy a buyer paid for, the parcels followed.
+      // Server-written AND server-read: the plugin's routes serve what the
+      // console shows. A client that could write the settings could point a
+      // store's protection premium at someone else's account.
+      match /postPurchaseHostSettings/{hostId} {
+        allow read, write: if false;
+      }
+      match /postPurchaseOrders/{recordId} {
+        allow read, write: if false;
+      }
+
       // Outreach (AGL-2974): the mailboxes reps connect, the sequences they
       // send and each prospect's enrollment in one. Read through
       // `canReadOutreach()` above.
@@ -2410,6 +2424,26 @@ service cloud.firestore {
       }
     }
     match /marketingPlatformEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    // Fulfillment networks (AGL-3634): a site's connection to the merchant's
+    // OWN ShipBob or Amazon Multi-Channel Fulfillment account — its grant
+    // sealed, its webhook token's hash, its settings, stock count and log —
+    // and each paid order's hand-off to a network. Written and read by the
+    // fulfillment-networks plugin's server half through the Admin SDK only.
+    // Deny ALL client access, staff and the owner included: a client that
+    // could read a connection could carry off a sealed grant, and one that
+    // could write a hand-off could mark units held or shipped that were not,
+    // which a label buyer and the stock count both act on. Org erasure
+    // destroys both by the `orgId` field.
+    match /fulfillmentNetworkConnections/{connectionId} {
+      allow read, write: if false;
+      match /log/{entryId} {
+        allow read, write: if false;
+      }
+    }
+    match /fulfillmentNetworkOrders/{handOffId} {
       allow read, write: if false;
     }
 

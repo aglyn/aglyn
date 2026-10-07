@@ -181,6 +181,10 @@ const PLUGIN_TOPICS = {
   // until the deployment sets MARKETING_PLATFORMS_TOKEN_KEY; see
   // PLUGIN_UNLISTED_TOPICS.
   emailPlatforms: '/marketing-and-automation/email-campaigns/email-platforms',
+  // The Fulfillment networks cards under the store's Settings and the order
+  // dialog's section (AGL-3634). Unlisted until the deployment offers a
+  // network; see PLUGIN_UNLISTED_TOPICS.
+  fulfillmentNetworks: '/commerce-and-bookings/commerce/fulfillment-networks',
   events: '/content-and-data/events/overview',
   forms: '/content-and-data/forms/overview',
   funnels: '/marketing-and-automation/analytics/funnels',
@@ -250,6 +254,10 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // The Email platforms cards draw nothing until the console holds
   // MARKETING_PLATFORMS_TOKEN_KEY, the same gate the guide waits on (AGL-3639).
   'emailPlatforms',
+  // The Fulfillment networks cards draw nothing until the console holds
+  // FULFILLMENT_NETWORKS_TOKEN_KEY and a network's app, the gate the guide
+  // waits on (AGL-3634).
+  'fulfillmentNetworks',
 ])
 
 // ── Docs parsing ──────────────────────────────────────────────────────────

@@ -107,6 +107,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-shipping/server'),
   },
   {
+    id: 'post-purchase',
+    apiPrefixes: ["post-purchase"],
+    register: {"consoleApi":"registerPostPurchaseConsoleApi"},
+    load: () => import('@aglyn/plugins-post-purchase/server'),
+  },
+  {
     id: 'tax-engines',
     apiPrefixes: ["tax-engines"],
     register: {"consoleApi":"registerTaxEnginesConsoleApi"},
@@ -117,6 +123,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     apiPrefixes: ["marketing-platforms"],
     register: {"consoleApi":"registerMarketingPlatformsConsoleApi"},
     load: () => import('@aglyn/plugins-marketing-platforms/server'),
+  },
+  {
+    id: 'fulfillment-networks',
+    apiPrefixes: ["fulfillment-networks"],
+    register: {"consoleApi":"registerFulfillmentNetworksConsoleApi"},
+    load: () => import('@aglyn/plugins-fulfillment-networks/server'),
   },
   {
     id: 'sales-channels',

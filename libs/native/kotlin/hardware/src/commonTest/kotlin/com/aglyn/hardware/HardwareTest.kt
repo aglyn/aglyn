@@ -192,8 +192,8 @@ class CardCollectorTest {
   }
 
   @Test
-  fun theSdkStubIsUnavailableAndNeverCollects() = runTest {
-    val reader = StripeTerminalSdkCollector()
+  fun aDeviceWithoutAReaderIsUnavailableAndNeverCollects() = runTest {
+    val reader = UnavailableCardCollector()
     assertIs<CardCollectorState.Unavailable>(reader.state.value)
     val outcome = reader.collect(CardCollectRequest("pi_123456789", "pi_123456789_secret_abcdefghij", 1000))
     assertIs<CardCollectOutcome.Failed>(outcome)

@@ -106,5 +106,13 @@
   "fonts": {
     "baseline": 4059,
     "budget": 5120
+  },
+  "post-purchase": {
+    "baseline": 3128,
+    "budget": 4096
+  },
+  "fulfillment-networks": {
+    "baseline": 5611,
+    "budget": 7168
   }
 }

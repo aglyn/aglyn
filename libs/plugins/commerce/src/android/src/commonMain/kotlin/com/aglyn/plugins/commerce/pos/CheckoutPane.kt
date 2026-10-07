@@ -1,5 +1,9 @@
 package com.aglyn.plugins.commerce.pos
 
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import com.aglyn.hardware.deviceReaders
+import kotlinx.coroutines.flow.MutableStateFlow
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -266,6 +270,11 @@ private fun GiftCardStep(model: RegisterModel, checkout: Checkout, state: Checko
 @Composable
 private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutState, step: CheckoutStep.Card, fmt: (Long) -> String) {
   val reader = model.readers.firstOrNull { it.label == step.readerLabel }
+  // A device reader says what it wants ("Insert the card."); a smart reader shows it on its own screen.
+  val devicePrompt by (
+    (if (reader is DeviceReaderService) model.cardCollector?.deviceReaders?.prompt else null)
+      ?: remember { MutableStateFlow<String?>(null) }
+    ).collectAsState()
   Column(
     Modifier.fillMaxWidth().padding(vertical = space(3f)).testTag("pos-card-waiting"),
     horizontalAlignment = Alignment.CenterHorizontally,
@@ -281,6 +290,15 @@ private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutSt
       style = MaterialTheme.typography.bodyLarge,
       textAlign = TextAlign.Center,
     )
+    devicePrompt?.let {
+      Text(
+        it,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("pos-reader-prompt"),
+      )
+    }
     OutlinedButton(onClick = { reader?.let { model.act { checkout.cancelCard(it) } } }, enabled = step.paymentId != null) { Text("Cancel payment") }
   }
 }

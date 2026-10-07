@@ -34,6 +34,9 @@ android {
   }
 
   buildTypes {
+    // Stripe Terminal's real readers (Tap to Pay, Bluetooth). Off: the SDK's
+    // simulated readers only, until Stripe Terminal live mode is set up.
+    val liveReaders = setting("terminalLiveReaders", "false").toBoolean().toString()
     val emulatorProject = setting("firebaseProjectId", "demo-aglyn")
     debug {
       applicationIdSuffix = ".dev"
@@ -48,6 +51,7 @@ android {
       // The seeded emulator member (tools/scripts/seed-native-emulator.mjs), for the debug sign-in form only.
       buildConfigField("String", "DEBUG_EMAIL", quoted("mobile-owner@example.test"))
       buildConfigField("String", "DEBUG_PASSWORD", quoted("seed-$emulatorProject-mobile"))
+      buildConfigField("boolean", "TERMINAL_LIVE_READERS", "false")
     }
     release {
       isMinifyEnabled = true
@@ -62,6 +66,7 @@ android {
       buildConfigField("String", "FIRESTORE_EMULATOR_HOST", quoted(""))
       buildConfigField("String", "DEBUG_EMAIL", quoted(""))
       buildConfigField("String", "DEBUG_PASSWORD", quoted(""))
+      buildConfigField("boolean", "TERMINAL_LIVE_READERS", liveReaders)
     }
   }
 }
@@ -69,7 +74,13 @@ android {
 dependencies {
   implementation(project(":native-shell"))
   implementation(project(":plugin-manifest"))
+  implementation(project(":native-camera"))
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.core.splashscreen)
+  // Card-on-device: Tap to Pay and Bluetooth readers (Aglyn POS only, never the Aglyn app).
+  implementation(libs.stripe.terminal)
+  implementation(libs.stripe.terminal.taptopay)
+  testImplementation(libs.junit)
+  testImplementation(libs.kotlinx.coroutines.test)
 }

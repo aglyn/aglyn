@@ -34,9 +34,9 @@ import { SHIPPO_API_BASE } from './providers/shippo'
  *
  * ⚑ Both flows are OFF until their environment variables are set
  * (`server/config.ts`): with neither `SHIPPO_API_TOKEN` nor
- * `EASYPOST_API_KEY` no request leaves for either host. The rows have to be
- * on the published Subprocessors page before either variable is set in
- * production.
+ * `EASYPOST_API_KEY` no request leaves for either host. `publishedOn` is the
+ * Subprocessors change-log date that put both rows on the page, ahead of
+ * either variable (AGL-3666).
  */
 
 const DATA_RECEIVED =
@@ -47,8 +47,8 @@ export const SHIPPO_SUBPROCESSOR: PluginSubprocessorDeclaration = {
   entity: 'Popout, Inc. (Shippo)',
   region: 'United States',
   purpose:
-    'Shipping for merchants who sell physical goods: live carrier rates at checkout, shipping labels, address validation and parcel tracking',
-  publishedOn: '2026-10-06',
+    'Shipping for merchants who sell physical goods: carrier rates, shipping labels, address validation and parcel tracking',
+  publishedOn: '2026-10-07',
   reason:
     "The Shippo adapter (`libs/plugins/shipping/src/lib/providers/shippo.ts`), Platform Accounts: one managed account per workspace, every call the platform's token with the managed account's id. Reached from the shipping plugin's checkout quoter and its console label, address and carrier-account routes, only while `SHIPPO_API_TOKEN` and `SHIPPING_TOKEN_KEY` are set.",
   dataReceived: DATA_RECEIVED,
@@ -59,8 +59,8 @@ export const EASYPOST_SUBPROCESSOR: PluginSubprocessorDeclaration = {
   entity: 'Simpler Postage, Inc. (EasyPost)',
   region: 'United States',
   purpose:
-    'Shipping for merchants who sell physical goods: live carrier rates at checkout, shipping labels, address validation and parcel tracking',
-  publishedOn: '2026-10-06',
+    'Shipping for merchants who sell physical goods: carrier rates, shipping labels, address validation and parcel tracking',
+  publishedOn: '2026-10-07',
   reason:
     "The EasyPost adapter (`libs/plugins/shipping/src/lib/providers/easypost.ts`), Child Users: one child user per workspace, acting with its own key. The alternative to Shippo, reached only while `EASYPOST_API_KEY` and `SHIPPING_TOKEN_KEY` are set and Shippo's token is not (or `SHIPPING_PROVIDER` names EasyPost).",
   dataReceived: DATA_RECEIVED,
