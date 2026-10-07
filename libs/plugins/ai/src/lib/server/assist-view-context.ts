@@ -337,6 +337,116 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     technical: ['Route: /[orgSlug]/hosts/[host]/analytics.'],
     actions: [],
   },
+  // The Marketing hub's sections (AGL-3603), one view each, ahead of the site
+  // dashboard that would otherwise take them.
+  {
+    key: 'host-marketing-campaigns',
+    match: /^\/[^/]+\/hosts\/[^/]+\/marketing\/campaigns(\/|$)/,
+    screen: 'Marketing → Campaigns — the email campaigns sent from this site.',
+    plain: [
+      'A campaign groups the emails you send to a set of lists over a window of dates.',
+      'Create campaign starts an empty one. Create with AI writes an email design and a draft campaign from a brief; it is sent to nobody until you pick its lists and schedule it.',
+      'Open a campaign to see its report: delivery, opens, clicks, conversions and revenue, each with the population it is measured against.',
+    ],
+    technical: [
+      'Route: /[orgSlug]/hosts/[host]/marketing/campaigns; one campaign is .../marketing/campaigns/[campaignId].',
+      'Campaigns and their sends belong to the organization (orgs/[orgId]/emailCampaigns and orgs/[orgId]/campaigns); a site lists the ones placed on it.',
+    ],
+    actions: [
+      orgAction(
+        'open.host.marketing.campaigns',
+        'Open Campaigns',
+        'the campaigns sent from this site',
+        '/[orgSlug]/hosts/[host]/marketing/campaigns',
+      ),
+    ],
+  },
+  {
+    key: 'host-marketing-overlays',
+    match: /^\/[^/]+\/hosts\/[^/]+\/marketing\/overlays(\/|$)/,
+    screen: 'Marketing → Overlays — the announcement bars and popups shown on this site.',
+    plain: [
+      'Each bar or popup has its own schedule, the pages it shows on, and an on-switch.',
+      'When several match a page, the first bar and the first popup in the list show; the arrows change the order.',
+      'Create with AI writes a new bar or popup and saves it switched off; Write with AI in the editor fills its copy, unsaved until you save.',
+    ],
+    technical: [
+      'Route: /[orgSlug]/hosts/[host]/marketing/overlays.',
+      'Overlays are documents at hosts/[host]/overlays/[overlayId], gated by the marketingOverlays plan entitlement.',
+    ],
+    actions: [
+      orgAction(
+        'open.host.marketing.overlays',
+        'Open Overlays',
+        'the announcement bars and popups on this site',
+        '/[orgSlug]/hosts/[host]/marketing/overlays',
+      ),
+    ],
+  },
+  {
+    key: 'host-marketing-conversions',
+    match: /^\/[^/]+\/hosts\/[^/]+\/marketing\/conversions(\/|$)/,
+    screen: 'Marketing → Conversions — what this site’s campaigns caused.',
+    plain: [
+      'Form submissions, leads, contacts and bookings credited to a campaign, one kind at a time.',
+      'The kinds are never added together: one visit can make a submission, a lead and a contact.',
+      'Ask AI about these numbers explains the figures in words, citing the rows each number comes from.',
+    ],
+    technical: [
+      'Route: /[orgSlug]/hosts/[host]/marketing/conversions; .../conversions/[campaignId] narrows the list to one campaign.',
+      'Each credit is a record in hosts/[host]/campaignAttributions, keyed by kind and the record it credits.',
+    ],
+    actions: [
+      orgAction(
+        'open.host.marketing.conversions',
+        'Open Conversions',
+        'the conversions this site’s campaigns were credited with',
+        '/[orgSlug]/hosts/[host]/marketing/conversions',
+      ),
+    ],
+  },
+  {
+    key: 'host-marketing-experiments',
+    match: /^\/[^/]+\/hosts\/[^/]+\/marketing\/experiments(\/|$)/,
+    screen: 'Marketing → A/B testing — the experiments running on this site.',
+    plain: [
+      'An A/B test shows each visitor one of up to four variants of a page, a section or an email, and counts conversions for each.',
+      'Write variants with AI sits in a test’s editor, and Explain this result with AI below its results.',
+    ],
+    technical: [
+      'Route: /[orgSlug]/hosts/[host]/marketing/experiments.',
+      'Experiments are documents at hosts/[host]/experiments/[experimentId], gated by the abTesting plan entitlement.',
+    ],
+    actions: [
+      orgAction(
+        'open.host.marketing.experiments',
+        'Open A/B testing',
+        'the A/B tests on this site',
+        '/[orgSlug]/hosts/[host]/marketing/experiments',
+      ),
+    ],
+  },
+  {
+    key: 'host-marketing',
+    match: /^\/[^/]+\/hosts\/[^/]+\/marketing(\/|$)/,
+    screen: 'Marketing — this site’s campaigns, conversions, overlays and A/B tests.',
+    plain: [
+      'The sections are Overview, Campaigns, Conversions, Overlays and A/B testing, in the rail beside the page.',
+      'Campaigns are shared with the rest of the workspace; overlays, A/B tests and conversions are this site’s own.',
+    ],
+    technical: [
+      'Route: /[orgSlug]/hosts/[host]/marketing, with each section a route beneath it.',
+      'The workspace-wide view is /[orgSlug]/marketing.',
+    ],
+    actions: [
+      orgAction(
+        'open.host.marketing',
+        'Open Marketing',
+        'this site’s Marketing page, on its first section',
+        '/[orgSlug]/hosts/[host]/marketing',
+      ),
+    ],
+  },
   {
     key: 'host-setup',
     match: /^\/[^/]+\/hosts\/[^/]+\/setup(\/|$)/,
@@ -400,6 +510,33 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
         'Open Sites',
         'every site in this workspace',
         '/[orgSlug]/hosts',
+      ),
+    ],
+  },
+  {
+    key: 'org-marketing',
+    match: /^\/[^/]+\/marketing(\/|$)/,
+    screen: 'Marketing — campaigns, conversions, overlays and A/B tests across every site in this workspace.',
+    plain: [
+      'The same sections as a site’s Marketing page, each answering for every site at once.',
+      'Campaigns belong to the workspace; overlays, A/B tests and conversions are each one site’s, so editing them happens on that site.',
+    ],
+    technical: [
+      'Route: /[orgSlug]/marketing, with /campaigns, /conversions, /overlays and /experiments beneath it.',
+      'A site’s own hub is /[orgSlug]/hosts/[host]/marketing.',
+    ],
+    actions: [
+      orgAction(
+        'open.org.marketing.campaigns',
+        'Open Campaigns',
+        'every campaign in this workspace',
+        '/[orgSlug]/marketing/campaigns',
+      ),
+      orgAction(
+        'open.org.marketing.conversions',
+        'Open Conversions',
+        'the conversions credited to campaigns, one site at a time',
+        '/[orgSlug]/marketing/conversions',
       ),
     ],
   },
