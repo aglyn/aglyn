@@ -227,7 +227,7 @@ export function AiJobsListPage({ hostId, basePath }: ConsolePluginPageProps) {
                     divider={index < state.jobs.length - 1}
                     sx={{ display: 'block', py: 1.5 }}
                   >
-                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}>
+                    <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}>
                       <Chip size="small" variant="outlined" label={aiJobKindLabel(job.kind)} />
                       <Chip size="small" color={PHASE_COLOR[phase]} label={AI_JOB_PHASE_LABELS[phase]} />
                       <Box sx={{ flexGrow: 1 }} />
