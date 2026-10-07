@@ -202,4 +202,11 @@ export const TTL_POLICIES = Object.freeze([
     // prints (`PRINT_JOB_RETENTION_MS`).
     why: 'register print jobs (receipt content), 7 days',
   },
+  {
+    collection: 'shippingQuoteCache',
+    field: 'expiresAt',
+    // AGL-3612 — cached carrier rates (10 minutes) and held label quotes
+    // (30 minutes); both are also refused by age on read.
+    why: 'cached carrier rate quotes, 30 minutes',
+  },
 ])

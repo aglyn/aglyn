@@ -244,6 +244,16 @@ const POLICIES: Array<{
     writers: ['libs/plugins/commerce/src/lib/server/print-queue.ts'],
     stamp: 'expiresAt: new Date(nowMs + PRINT_JOB_RETENTION_MS)',
   },
+  // AGL-3612: live carrier rates — checkout's ten-minute cache and the
+  // half-hour hold on a label quote share one collection.
+  {
+    collectionGroup: 'shippingQuoteCache',
+    writers: [
+      'libs/plugins/shipping/src/lib/server/quote-cache.ts',
+      'libs/plugins/shipping/src/lib/server/labels.ts',
+    ],
+    stamp: 'expiresAt: new Date(',
+  },
 ]
 
 describe('Firestore TTL policies are declared, documented and written', () => {
