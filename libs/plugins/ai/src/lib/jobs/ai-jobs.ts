@@ -94,6 +94,7 @@ import {
 import { freeAssistAccount, type FreeAssistAccount } from '../usage/assist-free-taste'
 import { aiJobAutoConfirms } from './ai-job-auto-confirm'
 import { AI_SITE_GUIDED_BUILD_FAILED_COPY } from '../model/ai-job-failure-copy'
+import { aiSiteStartInputsOf } from '../model/ai-site-start'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
@@ -682,6 +683,7 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
         }
       : null,
     ...(job.sitePublish ? { sitePublish: job.sitePublish } : {}),
+    ...(job.kind === 'site' ? { siteInputs: aiSiteStartInputsOf(job.inputs) } : {}),
   }
 }
 
