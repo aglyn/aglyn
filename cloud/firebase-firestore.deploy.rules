@@ -2317,6 +2317,17 @@ allow read, write: if false;
 
 
 
+match /commerceShipStationConnections/{hostId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
 
 match /outreachLinks/{linkId} {
 allow read, write: if false;

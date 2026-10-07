@@ -749,6 +749,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/commerce-and-bookings/commerce/use-pirate-ship',
     title: 'Use Pirate Ship with Aglyn',
   },
+  useShipstation: {
+    path: '/commerce-and-bookings/commerce/use-shipstation',
+    title: 'Use ShipStation with Aglyn',
+  },
   versionsAndPublishing: {
     path: '/building-sites/screens-and-layouts/versions-and-publishing',
     title: 'Versions & scheduled publishing',
@@ -962,6 +966,7 @@ export const DOCS_HELP_ANCHORS = {
   troubleshooting: ['#checklist', '#verified-but-not-serving', '#the-site-loads-for-some-people-and-not-others', '#still-stuck', '#related'],
   uptimeAndStatus: ['#the-status-page', '#there-is-no-committed-uptime-percentage', '#where-the-platform-runs', '#reporting-an-outage'],
   usePirateShip: ['#export', '#labels', '#import', '#related'],
+  useShipstation: ['#connect', '#what-imports', '#ship', '#manage', '#troubleshooting', '#related'],
   versionsAndPublishing: ['#the-versions-dialog', '#publish--roll-back', '#scheduled-publishing', '#plan-requirements', '#related'],
   video: ['#video-source', '#video-preload', '#video-captions', '#video-lightbox', '#video-wistia', '#video-play-from-a-button', '#video-seo', '#related'],
   views: ['#the-views-control', '#a-view-is-a-link', '#filters', '#filters-on-the-contacts-list', '#filters-on-the-other-lists', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],

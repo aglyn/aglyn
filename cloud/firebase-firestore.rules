@@ -2310,6 +2310,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ShipStation Custom Store connections (AGL-3613), one document per site,
+    // keyed by the host id: the username and the password SEALED with the
+    // secret box, which together let ShipStation's servers read every
+    // shippable order's name and address and record shipments. Deny ALL
+    // client access, staff included: the console card connects, shows,
+    // rotates and disconnects through `commerce/shipping-connectors` on the
+    // Admin SDK, and the ShipStation route reads it server-side.
+    match /commerceShipStationConnections/{hostId} {
+      allow read, write: if false;
+    }
+
     // Outreach short tracking links (AGL-3297): what one link in a sent
     // sequence email points at — the org, the enrollment, the step and the
     // destination — keyed by the link's random id. Written by the sending

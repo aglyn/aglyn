@@ -13470,3 +13470,47 @@ describe('shipping records are the server’s alone (AGL-3612)', () => {
     }
   })
 })
+
+describe('ShipStation credentials are server-only (AGL-3613)', () => {
+  const connection = (db) => doc(db, 'commerceShipStationConnections', HOST)
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(connection(context.firestore()), {
+        hostId: HOST,
+        username: 'aglyn-abc123',
+        sealedPassword: 'sb1.tss1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        passwordKeyId: 'tss1',
+        createdAtMs: 1,
+        createdBy: OWNER,
+      })
+    })
+  })
+
+  it('no client reads a site’s connection: not its admin, not staff, not a stranger', async () => {
+    await mustDeny('the site owner reading the ShipStation connection', getDoc(connection(authed(OWNER))))
+    await mustDeny('a site editor reading the ShipStation connection', getDoc(connection(authed(EDITOR))))
+    await mustDeny('staff reading the ShipStation connection', getDoc(connection(authed(STAFF, { staff: true }))))
+    await mustDeny('a visitor reading the ShipStation connection', getDoc(connection(anon())))
+    await mustDeny(
+      'the site owner listing ShipStation connections',
+      getDocs(collection(authed(OWNER), 'commerceShipStationConnections')),
+    )
+  })
+
+  it('no client writes one: the console connects, rotates and disconnects on the Admin SDK', async () => {
+    await mustDeny(
+      'the site owner replacing the sealed password',
+      setDoc(connection(authed(OWNER)), { hostId: HOST, username: 'mine', sealedPassword: 'x' }),
+    )
+    await mustDeny(
+      'staff replacing the sealed password',
+      updateDoc(connection(authed(STAFF, { staff: true })), { sealedPassword: 'x' }),
+    )
+    await mustDeny('the site owner disconnecting from the browser', deleteDoc(connection(authed(OWNER))))
+    await mustDeny(
+      'a stranger minting a connection for another site',
+      setDoc(doc(authed('uid-stranger'), 'commerceShipStationConnections', 'other-host'), { username: 'x' }),
+    )
+  })
+})

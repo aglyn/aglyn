@@ -438,6 +438,23 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/orders-shipping-prepare', async (req, res) =>
     (await import('./server/orders-shipping-prepare')).ordersShippingPrepareHandler(req, res),
   )
+  // ShipStation's Custom Store endpoint (AGL-3613): ShipStation's servers
+  // pull the order feed and post shipments back with the site's own Basic
+  // credentials, so it is a MACHINE's route and asks the site's commerce,
+  // plan, release and lockdown gates itself once the credentials prove the
+  // site. Loaded on its first call, never with the console API surface.
+  registerPluginApiRoute(
+    'commerce/shipstation/:hostId',
+    {
+      web: async (request, context) =>
+        (await import('./server/shipstation')).shipStationRoute(request, context),
+    },
+    { machine: true },
+  )
+  // The ShipStation card's connect, show, new password and disconnect.
+  registerPluginApiRoute('commerce/shipping-connectors', async (req, res) =>
+    (await import('./server/shipping-connectors')).shippingConnectorsHandler(req, res),
+  )
   // The store's sales as figure tables (AGL-2915), for the AI plugin's
   // insights to read by id rather than by reading orders. The console runs
   // insight jobs, so the console surface registers them.
