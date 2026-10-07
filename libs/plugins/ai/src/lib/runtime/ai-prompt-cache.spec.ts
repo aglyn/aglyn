@@ -771,8 +771,10 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'logic-function': { prefixTokens: 1_556, minimum: 1_024, caches: true, toolsStable: true },
       'logic-variable': { prefixTokens: 1_087, minimum: 1_024, caches: true, toolsStable: true },
       'logic-explain': { prefixTokens: 1_077, minimum: 1_024, caches: true, toolsStable: true },
-      'insight-read': { prefixTokens: 883, minimum: 1_024, caches: false, toolsStable: true },
-      'insight-answer': { prefixTokens: 923, minimum: 1_024, caches: false, toolsStable: true },
+      // Both insight requests are up 60 or 61 at AGL-3663: a site's published
+      // state comes only from its Site status table, never from its traffic.
+      'insight-read': { prefixTokens: 944, minimum: 1_024, caches: false, toolsStable: true },
+      'insight-answer': { prefixTokens: 983, minimum: 1_024, caches: false, toolsStable: true },
       // A product's copy, a catalog, and categories with discounts (AGL-2916):
       // the whole doctrine, each generation's rules and its tool, which clear
       // the balanced tier's minimum, so a bulk job reads the prefix once a
