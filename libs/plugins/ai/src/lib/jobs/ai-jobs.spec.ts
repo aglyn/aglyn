@@ -259,10 +259,12 @@ import {
   registerAiJobStep,
   registerAiJobTransitionListener,
   resumeAiJob,
+  retryAiBuildJob,
   runAiJobStep,
   sweepAiJobs,
   type AiJobStepRun,
 } from './ai-jobs'
+import { createAiJobBuildStep } from './ai-job-build-step'
 import { AI_SITE_PAGES, aiJobPlanCreditEstimate } from '../model/ai-site-job'
 import { AI_SITE_GUIDED_BUILD_FAILED_COPY } from '../model/ai-job-failure-copy'
 import type { AiBuildPlan } from '../model/ai-build-plan'
@@ -2496,5 +2498,228 @@ describe('telling the person about a job’s changes (AGL-3593)', () => {
       'ai job transition listener failed',
       expect.objectContaining({ jobId: job.$id, to: 'done' }),
     )
+  })
+})
+
+describe('a build from one request settles item by item (AGL-3616)', () => {
+  const spend = { usage: USAGE, estCostUsd: 0.006, model: 'claude-sonnet-5', stopReason: 'tool_use' }
+  /** What each kind's fake runner does on its next call, by kind. */
+  let behavior: Record<string, (job: AiJob) => Record<string, unknown>> = {}
+  const handed: AiJob[] = []
+  const runnerFor = (kind: string) =>
+    behavior[kind]
+      ? (async (context: { job: AiJob }) => {
+          handed.push(context.job)
+          return { outputs: [], ...spend, ...behavior[kind](context.job) }
+        }) as unknown as AiJobStepRunner
+      : null
+  const out = (resource: string, id: string, label = id) => ({ resource, id, hostId: 'host-1', label })
+  const plan = (): AiJobPlan => ({
+    reuse: [],
+    create: [
+      { kind: 'layout', name: 'Main', why: 'One header and footer.', duplicateOf: null, fields: ['header', 'main', 'footer'], id: 'layout-1' },
+      { kind: 'form', name: 'Contact', why: 'People write in.', duplicateOf: null, fields: ['email'], id: 'form-1' },
+    ],
+    screens: [
+      {
+        title: 'Contact',
+        slug: '/contact',
+        layout: 'new:Main',
+        template: null,
+        duplicateOf: null,
+        nav: true,
+        seoTitle: 'Contact',
+        seoDescription: 'Get in touch',
+        sections: [{ name: 'contact form', uses: ['new:Contact'], items: 0 }],
+        record: null,
+        id: 'page-1',
+      },
+      {
+        title: 'About',
+        slug: '/about',
+        layout: 'new:Main',
+        template: null,
+        duplicateOf: null,
+        nav: true,
+        seoTitle: 'About',
+        seoDescription: 'Who we are',
+        sections: [{ name: 'story', uses: [], items: 0 }],
+        record: null,
+        id: 'page-2',
+      },
+    ],
+    status: 'proposed',
+    labels: {},
+    proposedAt: NOW as never,
+    confirmedAt: null,
+    confirmedBy: null,
+  })
+  const ops = new Map(
+    (require('./ai-build-capabilities') as typeof import('./ai-build-capabilities')).AI_OWNED_CAPABILITIES.map(
+      (one) => [one.op, one],
+    ),
+  )
+  const sectionsOf = (unitJobId: string, count: number) =>
+    Object.fromEntries(Array.from({ length: count }, (_, index) => [aiPageSectionNodeId(unitJobId, index), {}]))
+
+  beforeEach(() => {
+    handed.length = 0
+    behavior = {
+      layout: (job) => ({ outputs: [out('layout', job.$id, 'Main')] }),
+      form: (job) => ({ outputs: [out('form', job.$id, 'Contact')] }),
+      page: (job) => ({ outputs: [out('screen', job.$id, job.plan?.screens[0]?.title ?? 'Page')] }),
+    }
+    registerAiJobPlanStep(async () => ({
+      outputs: [],
+      ...spend,
+      plan: plan(),
+      review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+    }))
+    registerAiJobStep(
+      'build',
+      createAiJobBuildStep({
+        runnerFor: runnerFor as never,
+        opsFor: async () => ops,
+        admissionFor: async () => null,
+        readNodes: async (_firestore, input) => ({ versionId: 'v1', nodes: sectionsOf(input.id, 1) as never }),
+      }),
+    )
+    mockDocs.set('orgs/org-free', { plan: 'free', ownerUid: 'owner-1' })
+  })
+  afterEach(() => registerAiJobPlanStep(null))
+
+  /** A confirmed build, run until it settles. */
+  async function built(orgId = ORG): Promise<AiJob> {
+    const job = await createAiJob(
+      firestore,
+      { orgId, hostId: 'host-1', kind: 'build', brief: 'Two pages and a contact form.', createdBy: 'uid-1' },
+      NOW,
+    )
+    expect((await runAiJobStep(firestore, orgId, job.$id, { owner: 'route-1', now: NOW })).outcome).toBe('needs_review')
+    await resumeAiJob(firestore, orgId, job.$id, { uid: 'uid-1' }, NOW)
+    return runToEnd(orgId, job.$id)
+  }
+  async function runToEnd(orgId: string, jobId: string): Promise<AiJob> {
+    for (let pass = 0; pass < 20; pass += 1) {
+      await runAiJobStep(firestore, orgId, jobId, { owner: 'beat-1', now: NOW })
+      const stored = (await getAiJob(firestore, orgId, jobId)) as AiJob
+      if (['done', 'failed', 'canceled'].includes(stored.status)) return stored
+    }
+    throw new Error('the build never settled')
+  }
+
+  it('plans first, then builds each unit in dependency order, one pass each, and is done', async () => {
+    expect(aiJobStepNames('build')).toEqual([AI_JOB_PLAN_STEP, 'generate'])
+    const job = await built()
+    expect(handed.map((one) => one.kind)).toEqual(['layout', 'form', 'page', 'page'])
+    expect(job).toMatchObject({ status: 'done', orchestration: { creditsSpent: 6, settled: 'charged' } })
+    expect(job.items?.map((row) => [row.slot, row.op, row.status, row.creditsSpent])).toEqual([
+      ['c0', 'layout', 'succeeded', 6],
+      ['c1', 'form', 'succeeded', 6],
+      ['p0', 'page', 'succeeded', 6],
+      ['p1', 'page', 'succeeded', 6],
+    ])
+    // The ledger and the bill agree: every pass's credits are on one row, the plan's on the orchestration.
+    expect(job.creditsSpent).toBe(6 + 4 * 6)
+    expect(job.refundedCredits ?? 0).toBe(0)
+    // The page that places the form is told the form's id, and renders inside the built layout.
+    const contact = handed.find((one) => one.kind === 'page' && one.plan?.screens[0]?.title === 'Contact') as AiJob
+    expect(contact.plan?.screens[0]).toMatchObject({ layout: 'layout-1', sections: [{ uses: ['form-1'] }] })
+    expect(contact.$id).toBe('page-1')
+  })
+
+  it('a failed form is its row, given back at once; the page that placed it is built without it; the job is done', async () => {
+    behavior.form = () => ({ failure: 'The form could not be built.' })
+    const job = await built()
+    expect(job.status).toBe('done')
+    const rows = Object.fromEntries((job.items ?? []).map((row) => [row.slot, row]))
+    expect(rows['c1']).toMatchObject({
+      status: 'failed',
+      creditsSpent: 6,
+      creditsRefunded: 6,
+      failure: { ours: true, reason: 'step-failure', message: 'The form could not be built.' },
+      refundKey: expect.stringMatching(/^job-refund-\d{8}-item-.+-c1-1$/),
+    })
+    expect(rows['p0']).toMatchObject({ status: 'degraded', degradedBy: ['c1'], note: expect.stringContaining('“Contact” could not be created') })
+    expect(rows['p1'].status).toBe('succeeded')
+    const contact = handed.find((one) => one.kind === 'page' && one.plan?.screens[0]?.title === 'Contact') as AiJob
+    expect(contact.plan?.screens[0]?.sections[0]?.uses).toEqual([])
+    expect(contact.brief).toContain('without the form “Contact”')
+    // Charged for what succeeded only: the failed form's credits are back.
+    expect(job).toMatchObject({ creditsSpent: 30, refundedCredits: 6, orchestration: { settled: 'charged' } })
+    expect(mockDocs.get(`orgs/${ORG}/assistUsage/${assistUsageMonth(NOW)}`)).toMatchObject({ returnedUsd: 0.006 })
+  })
+
+  it('a model declining one item is not ours: it fails, is charged, and the build goes on', async () => {
+    behavior.layout = () => ({ refused: true, stopReason: 'refusal' })
+    const job = await built()
+    const layout = job.items?.find((row) => row.slot === 'c0')
+    expect(layout).toMatchObject({ status: 'failed', creditsRefunded: 0, failure: { ours: false, reason: 'refused' } })
+    // Pages fall back to the site's own layout.
+    expect(job.items?.find((row) => row.slot === 'p1')).toMatchObject({ status: 'degraded', note: expect.stringContaining('site’s own layout') })
+    expect(handed.filter((one) => one.kind === 'page').map((one) => one.plan?.screens[0]?.layout)).toEqual([null, null])
+    expect(job.status).toBe('done')
+  })
+
+  it('nothing delivered: every item given back, the planning too, and the job failed', async () => {
+    for (const kind of ['layout', 'form', 'page']) behavior[kind] = () => ({ failure: 'Could not be built.' })
+    const job = await built()
+    expect(job.status).toBe('failed')
+    expect(job.orchestration).toEqual({ creditsSpent: 6, settled: 'refunded' })
+    expect(job.refundedCredits).toBe(job.creditsSpent)
+    expect(job.items?.every((row) => row.status === 'failed')).toBe(true)
+  })
+
+  it('Try again runs only the failed item and what it left unbuilt, under the same draft ids', async () => {
+    behavior.form = () => ({ failure: 'The form could not be built.' })
+    const first = await built()
+    expect(first.status).toBe('done')
+    behavior.form = (job) => ({ outputs: [out('form', job.$id, 'Contact')] })
+    handed.length = 0
+    const retried = await retryAiBuildJob(firestore, ORG, first.$id, NOW)
+    expect(retried.changed).toBe(true)
+    expect(retried.retried).toEqual(['c1'])
+    expect(retried.job).toMatchObject({ status: 'queued', creditsReserved: 50 })
+    // The page that kept its draft is not rebuilt; it says what it needs.
+    expect(retried.job.items?.find((row) => row.slot === 'p0')).toMatchObject({
+      status: 'degraded',
+      note: expect.stringContaining('edit this page'),
+    })
+    const job = await runToEnd(ORG, first.$id)
+    expect(handed.map((one) => [one.kind, one.$id])).toEqual([['form', 'form-1']])
+    expect(job.items?.find((row) => row.slot === 'c1')).toMatchObject({ status: 'succeeded', attempt: 2, creditsSpent: 12, creditsRefunded: 6 })
+    expect(job.status).toBe('done')
+    // Nothing left to try: a second retry changes nothing.
+    expect((await retryAiBuildJob(firestore, ORG, first.$id, NOW)).changed).toBe(false)
+  })
+
+  it('a provider that throws for one item fails that item, not the build', async () => {
+    behavior.form = () => {
+      throw new AiUpstreamError(400, false, 'req-x')
+    }
+    const job = await built()
+    expect(job.items?.find((row) => row.slot === 'c1')).toMatchObject({ status: 'failed', failure: { ours: true, reason: 'provider' } })
+    expect(job.status).toBe('done')
+  })
+
+  it('a pass a unit continues keeps the item running, and its credits all land on its row', async () => {
+    let pagePasses = 0
+    behavior.page = (job) => {
+      pagePasses += 1
+      return pagePasses === 1 ? { continue: true } : { outputs: [out('screen', job.$id, 'Contact')] }
+    }
+    const job = await built()
+    expect(job.items?.find((row) => row.slot === 'p0')).toMatchObject({ status: 'succeeded', creditsSpent: 12 })
+  })
+
+  it('a give-back that already landed is not given twice when its pass is replayed', async () => {
+    const { aiJobItemRefundKey } = require('../usage/assist-job-refund') as typeof import('../usage/assist-job-refund')
+    const key = aiJobItemRefundKey({ day: '2026-09-14', jobId: 'job-1', slot: 'c1', attempt: 1 })
+    expect(key).toBe(aiJobItemRefundKey({ day: '2026-09-14', jobId: 'job-1', slot: 'c1', attempt: 1 }))
+    expect(key).not.toBe(aiJobItemRefundKey({ day: '2026-09-14', jobId: 'job-1', slot: 'c1', attempt: 2 }))
+    behavior.form = () => ({ failure: 'The form could not be built.' })
+    const job = await built()
+    const month = mockDocs.get(`orgs/${ORG}/assistUsage/${assistUsageMonth(NOW)}`) as Record<string, unknown>
+    expect(Object.keys(month['creditReturns'] as object)).toEqual([job.items?.find((row) => row.slot === 'c1')?.refundKey])
   })
 })

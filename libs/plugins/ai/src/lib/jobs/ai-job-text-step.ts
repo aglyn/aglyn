@@ -21,6 +21,9 @@ import type {
   AiJobOutput,
   AiJobPlan,
   AiJobReview,
+  AiJobItemFailure,
+  AiJobItemLedger,
+  AiJobItemStatus,
   AiJobSitePublish,
 } from '../model/ai-jobs.types'
 import { AI_STEP_TIERS, type AiStepKind } from '../providers/catalog'
@@ -128,6 +131,28 @@ export interface AiJobStepOutcome {
    * writes the job document itself.
    */
   sitePublish?: AiJobSitePublish
+  /**
+   * A `build` pass's unit and what it came to (AGL-3616), which the machine
+   * writes to the job's item ledger in the transaction that records the
+   * pass's spend. An item's failure is never the step's: it is a row, and
+   * the build goes on.
+   */
+  item?: AiJobItemOutcome
+  /** A `build`'s ledger to start from, written by the machine in the same transaction (AGL-3616). */
+  items?: AiJobItemLedger[]
+}
+
+/** What one `build` pass came to for the unit it ran (AGL-3616). */
+export interface AiJobItemOutcome {
+  slot: string
+  /** `running` while the unit asks for another pass of its own. */
+  status: AiJobItemStatus
+  failure?: AiJobItemFailure | null
+  /** Customer-safe: what the person should know about the item. */
+  note?: string | null
+  degradedBy?: string[]
+  /** The ids of the outputs this pass produced for the item. */
+  outputs?: string[]
 }
 
 export interface AiJobStepContext {

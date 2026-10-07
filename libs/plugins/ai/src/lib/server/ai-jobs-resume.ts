@@ -26,9 +26,13 @@ import {
   aiJobSummary,
   getAiJob,
   resumeAiJob,
+  retryAiBuildJob,
   runAiJobStep,
   writeAiJobAudit,
 } from '../jobs/ai-jobs'
+import type { AiJob } from '../model/ai-jobs.types'
+import { aiBuildFreeBalanceRefusal, aiBuildFreeTaste } from '../jobs/ai-job-build-step'
+import { aiBuildCreditEstimate, aiBuildRetryLedger, aiBuildUnits } from '../model/ai-build-job'
 import { aiGateLadder } from '../runtime/ai-gate'
 import { releaseAssistMessage } from '../usage/assist-usage'
 
@@ -88,6 +92,19 @@ export async function POST(
     await release()
     return Response.json({ error: 'That job belongs to another site' }, { status: 400 })
   }
+  // Try again on a build (AGL-3616): its failed items and what they left
+  // unbuilt, never what succeeded, and never its plan again.
+  const retryFailedItems = payload?.['retry'] === 'failed-items'
+  if (retryFailedItems) {
+    const refusal = await aiBuildRetryRefusal(gate, existing).catch((error: unknown) => {
+      console.error('ai build retry admission failed', { orgId: gate.orgId, jobId, error })
+      return { status: 500 as const, error: 'The AI job could not be resumed' }
+    })
+    if (refusal) {
+      await release()
+      return Response.json({ error: refusal.error, job: aiJobSummary(existing, new Date()) }, { status: refusal.status })
+    }
+  }
   // A confirmed plan runs the step that writes, and an allowance free when the
   // job was created may be used by now (AGL-2909): the kind is asked again
   // before anything runs, and a refusal leaves the job waiting for review.
@@ -125,13 +142,11 @@ export async function POST(
     }
   }
   const now = new Date()
-  const { job, changed } = await resumeAiJob(
-    gate.firestore,
-    gate.orgId,
-    jobId,
-    { uid: gate.uid },
-    now,
-  )
+  const { job, changed } = retryFailedItems
+    ? await retryAiBuildJob(gate.firestore, gate.orgId, jobId, now)
+    : await resumeAiJob(gate.firestore, gate.orgId, jobId, { uid: gate.uid }, now, {
+        publishConfirmed: payload?.['publish'] === true,
+      })
   if (!changed) {
     await release()
     return Response.json(
@@ -147,7 +162,7 @@ export async function POST(
     jobId,
     after: {
       status: job.status,
-      reason: existing.review?.reason ?? null,
+      reason: retryFailedItems ? 'retry-failed-items' : (existing.review?.reason ?? null),
       kind: existing.kind,
     },
   })
@@ -182,6 +197,33 @@ export async function POST(
     return Response.json({ job: aiJobSummary(latest ?? job, now) }, { status: 200 })
   }
   return Response.json({ job: aiJobSummary(run.job) }, { status: 200 })
+}
+
+/**
+ * Why a build's Try again cannot run (AGL-3616), or `null`: it is not a
+ * finished build, the site switched AI off, or — on the Free taste — the
+ * month's Free credits do not cover what the retried items are estimated at.
+ */
+async function aiBuildRetryRefusal(
+  gate: { firestore: FirebaseFirestore.Firestore; org: object | null },
+  job: AiJob,
+): Promise<{ status: 400 | 403 | 404 | 409; error: string } | null> {
+  const plan = job.plan?.status === 'confirmed' ? job.plan : null
+  if (job.kind !== 'build' || !plan || !job.items?.length || (job.status !== 'done' && job.status !== 'failed')) {
+    return { status: 409, error: 'Only a finished build can try its failed items again' }
+  }
+  const site = await aiJobSiteRefusal({ firestore: gate.firestore, org: gate.org, hostId: job.hostId ?? null })
+  if (site) return site
+  const { retried } = aiBuildRetryLedger(job.items, aiBuildUnits(plan))
+  if (!retried.length) return { status: 409, error: 'Nothing in this build is left to try again' }
+  if (!aiBuildFreeTaste(gate.org)) return null
+  const refusal = await aiBuildFreeBalanceRefusal({
+    firestore: gate.firestore,
+    org: gate.org,
+    estimate: aiBuildCreditEstimate(plan, { slots: new Set(retried) }),
+    now: new Date(),
+  })
+  return refusal ? { status: 403, error: refusal } : null
 }
 
 export const dynamic = 'force-dynamic'

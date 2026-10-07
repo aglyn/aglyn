@@ -24,6 +24,7 @@ import { isAssistCreditReturnKey } from './assist-credit-returns-write'
 import {
   AI_JOB_REFUNDS_PER_DAY,
   aiJobRefundCredits,
+  aiJobItemRefundKey,
   aiJobRefundKey,
   aiJobRefundsOn,
 } from './assist-job-refund'
@@ -56,6 +57,29 @@ describe('a job that failed on our side gives back what it spent (AGL-3594)', ()
     }
     expect(aiJobRefundsOn(returns, '2026-10-06')).toBe(2)
     expect(aiJobRefundsOn(null, '2026-10-06')).toBe(0)
+    expect(AI_JOB_REFUNDS_PER_DAY).toBe(3)
+  })
+})
+
+describe('a build gives back item by item, counted once a job toward the day (AGL-3616)', () => {
+  it('keys an item by its job, slot and attempt, in the shape the writer takes', () => {
+    const key = aiJobItemRefundKey({ day: '2026-10-06', jobId: 'f0UzIs7Lcl', slot: 'p2', attempt: 1 })
+    expect(key).toBe('job-refund-20261006-item-f0UzIs7Lcl-p2-1')
+    expect(isAssistCreditReturnKey(key)).toBe(true)
+    expect(aiJobItemRefundKey({ day: '2026-10-06', jobId: 'f0UzIs7Lcl', slot: 'p2', attempt: 2 })).not.toBe(key)
+    expect(isAssistCreditReturnKey(aiJobItemRefundKey({ day: '2026-10-06', jobId: 'y'.repeat(99), slot: 'plan', attempt: 9 }))).toBe(true)
+  })
+
+  it('counts a ten-item build’s give-backs as one toward the daily bound', () => {
+    const items = Object.fromEntries(
+      Array.from({ length: 10 }, (_, index) => [aiJobItemRefundKey({ day: '2026-10-06', jobId: 'build-1', slot: `i${index}`, attempt: 1 }), {}]),
+    )
+    const returns = {
+      ...items,
+      [aiJobItemRefundKey({ day: '2026-10-06', jobId: 'build-1', slot: 'plan', attempt: 1 })]: {},
+      [aiJobRefundKey({ day: '2026-10-06', jobId: 'other', ordinal: 0 })]: {},
+    }
+    expect(aiJobRefundsOn(returns, '2026-10-06')).toBe(2)
     expect(AI_JOB_REFUNDS_PER_DAY).toBe(3)
   })
 })

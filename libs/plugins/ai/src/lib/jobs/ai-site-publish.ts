@@ -66,6 +66,16 @@ export interface AiSitePublishDeps {
   dropCache?: typeof dropPluginSiteCache
 }
 
+/**
+ * Whether a build puts its pages live (AGL-3616): only where its request
+ * asked to (`publish`, set by Assist's proposal) AND the member ticked the
+ * plan card's box when confirming (`publishConfirmed`, set by the resume
+ * door). Every other build leaves drafts.
+ */
+export function aiJobPublishesBuild(job: Pick<AiJob, 'kind' | 'inputs'>): boolean {
+  return job.kind === 'build' && job.inputs?.['publish'] === true && job.inputs?.['publishConfirmed'] === true
+}
+
 /** Whether a finished job of this shape publishes what it built. */
 export function aiJobPublishesSite(job: Pick<AiJob, 'kind' | 'inputs'>): boolean {
   return job.kind === 'site' && job.inputs?.['autoConfirm'] === true
