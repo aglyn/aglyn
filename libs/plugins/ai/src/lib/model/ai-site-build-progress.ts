@@ -16,6 +16,7 @@
  */
 
 import { aiJobKindNoun } from './ai-job-activity'
+import { aiJobRefundCopy } from './ai-job-failure-copy'
 import type { AiJobSummary } from './ai-jobs.types'
 
 /**
@@ -58,32 +59,63 @@ export function aiSiteBuildPhase(job: Pick<AiJobSummary, 'status'>): AiSiteBuild
   }
 }
 
+/** The creations a scaffold builds before its pages, in its build order, and what each row says. */
+const CREATION_ROWS: ReadonlyArray<{ kind: string; resource: string; label: (name: string) => string }> = [
+  { kind: 'theme-change', resource: 'theme', label: () => 'Choosing your colors' },
+  { kind: 'layout', resource: 'layout', label: (name) => `Building the header and footer: ${name}` },
+  { kind: 'form', resource: 'form', label: (name) => `Building the form: ${name}` },
+]
+
+/**
+ * One row a stage: planning, then each creation the plan builds before its
+ * pages — the colors, the layout, the form — then each page (AGL-3596). A
+ * scaffold builds them in that order and reports each as an output when it
+ * is written, so the first row without its output is where the build is, and
+ * where a failure stopped it: a layout that broke is the layout's row, never
+ * the first page's.
+ */
 export function aiSiteBuildRows(
   job: Pick<AiJobSummary, 'status' | 'steps' | 'plan' | 'outputs' | 'review'>,
 ): AiSiteBuildRow[] {
   const phase = aiSiteBuildPhase(job)
   const planStep = job.steps.find((step) => step.name === 'plan')
   const planDone = planStep?.status === 'done' || Boolean(job.plan)
-  const stoppedHere = (active: boolean) => (phase === 'failed' || phase === 'stopped') && active
-  const planActive = !planDone
+  const stopped = phase === 'failed' || phase === 'stopped'
   const rows: AiSiteBuildRow[] = [
     {
       id: 'plan',
       label: 'Planning your pages',
-      state: planDone ? 'done' : stoppedHere(planActive) ? 'failed' : phase === 'working' ? 'active' : 'waiting',
+      state: planDone ? 'done' : stopped ? 'failed' : phase === 'working' ? 'active' : 'waiting',
     },
   ]
+  const built = new Map<string, number>()
+  for (const output of job.outputs) built.set(output.resource, (built.get(output.resource) ?? 0) + 1)
+  const take = (resource: string): boolean => {
+    const left = built.get(resource) ?? 0
+    if (left <= 0) return false
+    built.set(resource, left - 1)
+    return true
+  }
+  const stages: Array<{ id: string; label: string; resource: string }> = []
+  for (const row of CREATION_ROWS) {
+    const creation = job.plan?.create.find((entry) => entry.kind === row.kind)
+    if (creation) stages.push({ id: row.resource, label: row.label(creation.name), resource: row.resource })
+  }
   const pages = job.plan?.screens ?? []
-  const written = job.outputs.filter((output) => output.resource === 'screen').length
   pages.forEach((page, index) => {
-    const done = index < written || phase === 'done'
-    const current = !done && index === written && planDone
-    rows.push({
-      id: `page-${index}`,
-      label: `Writing page ${index + 1} of ${pages.length}: ${page.title}`,
-      state: done ? 'done' : stoppedHere(current) ? 'failed' : current && phase === 'working' ? 'active' : 'waiting',
-    })
+    stages.push({ id: `page-${index}`, label: `Writing page ${index + 1} of ${pages.length}: ${page.title}`, resource: 'screen' })
   })
+  let reached = false
+  for (const stage of stages) {
+    const done = phase === 'done' || take(stage.resource)
+    const current = !done && !reached && planDone
+    if (current) reached = true
+    rows.push({
+      id: stage.id,
+      label: stage.label,
+      state: done ? 'done' : current && stopped ? 'failed' : current && phase === 'working' ? 'active' : 'waiting',
+    })
+  }
   return rows
 }
 
@@ -101,10 +133,13 @@ export function aiSiteBuildCreditsLine(
   const phase = aiSiteBuildPhase(job)
   // What the job made, by its kind; a job that names none is a site's.
   const subject = !job.kind || job.kind === 'site' ? 'This site' : aiJobKindNoun(job.kind) === 'AI job' ? 'This AI job' : `This ${aiJobKindNoun(job.kind)}`
-  if (refunded > 0 && net === 0) return `Nothing was charged — we refunded ${refunded} credits.`
+  // A failure on our side says so in the words every surface uses (AGL-3596),
+  // from the job's recorded give-back.
+  const refund = phase === 'working' || phase === 'done' ? null : aiJobRefundCopy(job)
+  if (refund && refunded > 0) return refund
   if (phase === 'done') return `${subject} used ${net} credits.`
   if (phase === 'working') return `Credits used so far: ${net}`
-  if (refunded > 0) return `${subject} used ${net} credits — we refunded ${refunded}.`
+  if (refund) return `${subject} used ${net} credits. ${refund}`
   return net > 0 ? `${subject} used ${net} credits.` : null
 }
 

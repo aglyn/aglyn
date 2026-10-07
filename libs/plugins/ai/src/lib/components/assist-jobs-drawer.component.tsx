@@ -52,7 +52,8 @@ import { publishAiJob, type AiJobsOpenRequest } from './ai-jobs-store'
 import { AiPageBriefDialog } from './ai-page-brief-dialog.component'
 import { AiInsightDialog } from './ai-insight-dialog.component'
 import { AiJobPlan } from './ai-job-plan.component'
-import { aiJobOutputHref, aiJobPrimaryLink } from './ai-job-links'
+import { aiJobOutputHref, aiJobPrimaryLink, aiSiteBuildHref } from './ai-job-links'
+import { aiJobRefundCopy } from '../model/ai-job-failure-copy'
 import { readEventFrames } from './ai-job-events'
 
 // Where an output opens, and the stream reader, live beside the dialogs that
@@ -113,6 +114,23 @@ const STATE_COLOR: Record<AiJobActivityState, 'primary' | 'warning'> = {
 
 /** How long a job AI jobs was opened on stays highlighted. */
 const HIGHLIGHT_MS = 2_500
+
+/**
+ * Where a guided start that ended unbuilt is tried again (AGL-3596): its
+ * "Building your site" page, opened on its own answers (`?retry=1`). Only for
+ * a job of the site the console is on, whose subdomain the address names;
+ * `null` otherwise.
+ */
+export function aiJobRestartHref(
+  job: Pick<AiJobSummary, 'id' | 'kind' | 'status' | 'hostId' | 'siteInputs'>,
+  input: { orgSlug: string; hostId?: string | null; pathname: string },
+): string | null {
+  if (job.kind !== 'site' || (job.status !== 'failed' && job.status !== 'canceled')) return null
+  if (!job.siteInputs || !job.hostId || job.hostId !== input.hostId) return null
+  const subdomain = /^\/[^/]+\/hosts\/([^/?#]+)/.exec(input.pathname)?.[1] ?? null
+  const href = aiSiteBuildHref(input.orgSlug, subdomain, job.id)
+  return href ? `${href}?retry=1` : null
+}
 
 /** What a job cost the person: what it spent, less what we refunded. */
 function netCredits(job: Pick<AiJobSummary, 'creditsSpent' | 'refundedCredits'>): number {
@@ -454,6 +472,12 @@ export function AssistJobsDrawer({
         )}
         <Stack ref={listRef} spacing={1} sx={{ mt: 1 }} role="list" aria-label="AI jobs">
           {jobs.map((job) => {
+            const restartHref = (row: AiJobSummary) =>
+              aiJobRestartHref(row, {
+                orgSlug,
+                hostId,
+                pathname: typeof window === 'undefined' ? '' : window.location.pathname,
+              })
             const stepsDone = job.steps.filter((step) => step.status === 'done').length
             const current = job.steps.find((step) => step.status === 'running')
             const terminal = AI_JOB_TERMINAL_STATUSES.includes(job.status)
@@ -504,6 +528,17 @@ export function AssistJobsDrawer({
                     {job.error}
                   </Typography>
                 )}
+                {/* What became of its credits, from the job's recorded give-back (AGL-3596). */}
+                {aiJobRefundCopy(job) && (
+                  <Typography variant="caption" color="text.secondary" component="div">
+                    {aiJobRefundCopy(job)}
+                  </Typography>
+                )}
+                {restartHref(job) ? (
+                  <Button size="small" variant="contained" component={AppLink} href={restartHref(job) as string} sx={{ mt: 0.5 }}>
+                    {'Try again'}
+                  </Button>
+                ) : null}
                 {/* What a finished job built, first (AGL-3593). */}
                 {primary ? (
                   <Button
