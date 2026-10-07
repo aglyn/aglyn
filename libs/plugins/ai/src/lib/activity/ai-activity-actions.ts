@@ -177,6 +177,8 @@ const AI_OUTPUT_TARGET_TYPES: Record<AiJobOutputResource, AiOutputTargetType> = 
   draft: 'content',
   // A logic proposal (AGL-3603) writes nothing either.
   logic: 'content',
+  // So does an org automation's (AGL-3603): the editor's Save is the write.
+  orgAutomation: 'content',
 }
 
 export function aiOutputTargetType(resource: AiJobOutputResource): AiOutputTargetType {

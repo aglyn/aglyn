@@ -112,7 +112,8 @@ export function useAiJobsVerdict(
 /** What a control asks the create door for. */
 export interface AiJobRequest {
   orgId: string
-  hostId: string
+  /** `null` for a job about the workspace rather than one site. */
+  hostId: string | null
   kind: AiJobKind
   brief: string
   inputs: Record<string, string>

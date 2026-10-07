@@ -975,6 +975,47 @@ export function readAiAutomationAnswer(
   })
 }
 
+/**
+ * An answer already read, held as well to an org automation's narrower
+ * vocabulary (AGL-3603): its trigger one the vocabulary names, and every step
+ * a type it names. A refusal names what the vocabulary holds, so the re-ask
+ * can pick from it. An answer that says the automation cannot be built is
+ * left as it is.
+ */
+export function holdAiAutomationAnswerToVocabulary(
+  result: AiGenerationCheckResult<AiAutomationAnswer>,
+  vocabulary: { triggers: readonly HostEventType[]; steps: readonly AiAutomationStepType[] },
+): AiGenerationCheckResult<AiAutomationAnswer> {
+  const answer = result.value
+  if (!answer || answer.unsupported) return result
+  const reader: Reader = { violations: [...result.violations], offending: Object.entries(result.offending ?? {}) }
+  if (!vocabulary.triggers.includes(answer.trigger.event)) {
+    refuse(
+      reader,
+      'automation-trigger',
+      `An org automation starts only on one of: ${vocabulary.triggers.join(', ')}. Pick one of them, or answer with unsupported "no-trigger".`,
+      'trigger.event',
+      answer.trigger.event,
+    )
+  }
+  answer.steps.forEach((step, index) => {
+    if (vocabulary.steps.includes(step.type)) return
+    refuse(
+      reader,
+      'automation-step-type',
+      `An org automation uses only these steps: ${vocabulary.steps.join(', ')}. Leave "${step.type}" out, or answer with unsupported "no-step".`,
+      `steps[${index}]`,
+      step.type,
+    )
+  })
+  if (reader.violations.length === result.violations.length) return result
+  return {
+    value: null,
+    violations: reader.violations,
+    ...(reader.offending.length ? { offending: Object.fromEntries(reader.offending) } : {}),
+  }
+}
+
 // ── Reading an explanation ────────────────────────────────────────────────
 
 export interface AiWorkflowExplanation {

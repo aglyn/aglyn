@@ -21,7 +21,7 @@ import {
   pluginRecordIndex,
   type PluginIndexedRecord,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
-import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { ORG_SCOPE_TOKEN, scopeCovers, visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { listOrgContainers } from '@aglyn/tenant-data-admin/server/org-containers'
 import type {
   AiAutomationForm,
@@ -97,7 +97,7 @@ async function placedCampaigns(
  */
 async function indexed(
   kind: string,
-  scope: { orgId?: string; hostId: string },
+  scope: { orgId?: string; hostId: string | null },
   keep: (record: PluginIndexedRecord) => boolean = () => true,
 ): Promise<AiAutomationNamedRecord[]> {
   const owner = pluginRecordIndex(kind)
@@ -162,11 +162,44 @@ export async function readAiAutomationRecords(
 }
 
 /**
+ * The WORKSPACE's records an org automation may name (AGL-3603): its lists,
+ * and, with the CRM, its pipelines' stages; and the live campaigns and the
+ * datasets shared with every site. The draft opens placed on every site, so
+ * it names only what every site can use — the rule the Org automations
+ * editor's own pickers keep (`scopeCovers`); anything else stays a
+ * placeholder the person picks once the sites are chosen. Forms, workflows
+ * and webhooks are one site's each, and an org automation names none of
+ * them, so none are read.
+ */
+/** The placement an org automation's draft opens on: every site. */
+const EVERY_SITE: readonly string[] = [ORG_SCOPE_TOKEN]
+
+export async function readAiOrgAutomationRecords(
+  firestore: Firestore,
+  input: { orgId: string; crm: boolean },
+): Promise<AiAutomationRecords> {
+  const org = firestore.collection('orgs').doc(input.orgId)
+  const [datasets, lists, campaigns, stages] = await Promise.all([
+    indexed('dataset', { orgId: input.orgId, hostId: null }, (record) =>
+      scopeCovers(record.facts['visibleTo'] as string[] | undefined, EVERY_SITE),
+    ),
+    named(org.collection('lists'), ['name', 'deletedAt'], live, (data) => text(data['name'])),
+    listOrgContainers(firestore, 'campaign', input.orgId, AI_WORKFLOW_RECORDS_WINDOW).then((containers) =>
+      containers
+        .filter((container) => container.live && container.name && scopeCovers(container.visibleTo, EVERY_SITE))
+        .map((container) => ({ id: container.id, name: container.name })),
+    ),
+    input.crm ? readStages(input.orgId, null) : Promise.resolve([] as AiAutomationNamedRecord[]),
+  ])
+  return { forms: [], datasets, lists, campaigns, workflows: [], webhooks: [], stages }
+}
+
+/**
  * The stages of the pipelines the site can see, asked of the plugin that keeps
  * pipelines (its `pipeline` record index), never read from its collection. No
  * index means no plugin keeps pipelines in this process: no stage to name.
  */
-async function readStages(orgId: string, hostId: string): Promise<AiAutomationNamedRecord[]> {
+async function readStages(orgId: string, hostId: string | null): Promise<AiAutomationNamedRecord[]> {
   const pipelines = pluginRecordIndex('pipeline')
   if (!pipelines) return []
   const { records } = await pipelines.index.list({ orgId, hostId, limit: AI_WORKFLOW_PIPELINES_WINDOW })

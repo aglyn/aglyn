@@ -24,6 +24,27 @@ mean more than one of — is left as a placeholder for you to pick. When it is r
 it** opens it in the Actions editor; from **Workflows**, that takes you to **Actions**, where
 it is listed.
 
+## Draft an org automation {#org-automations}
+
+An [org automation](../marketing-and-automation/workflows-and-actions/org-automations.md) is
+written once for your workspace and runs on the sites you choose. On your workspace's
+**Automation → Org automations**, choose **Create with AI** in the card's header and describe
+what should happen, and when — *"when someone books on any of our sites, make them a contact,
+tag them booked and send them a welcome email"*.
+
+The automation is drafted from what an org automation can do: it starts only on something the
+server sees — a form, a lead, a booking, a member or a CRM event — and uses only the steps every
+site runs the same way, so nothing that belongs to one site's pages, workflows or webhooks. It
+opens placed on every site, so a campaign or dataset is filled in only when it is shared with
+every site. A list, campaign or dataset your workspace does not have, that is shared with only
+some sites, or that the words could mean more than one of, is left as a placeholder for you to
+pick once you have chosen the sites.
+
+**Nothing is saved for you.** **Open in the editor** opens it in the org automation editor as a
+new automation, **switched off**. Choose the sites it runs on, check its steps, and save it with
+the editor's own **Save** — or close the editor, and nothing changes. When it is right, switch it
+on from the list.
+
 ## Change or fix an automation {#change}
 
 Open a saved action and use the box under **Explain it**:
@@ -65,6 +86,10 @@ and how to fix it. Opening it again shows the same answer.
   names of your site's forms (with their field names) and datasets. The names of your lists,
   campaigns, workflows, webhooks and pipeline stages are not sent; the words of the answer are
   matched to them on Aglyn's side.
+- **To draft an org automation:** your description, what your plan lets automations use, what
+  an org automation can start on and do, and the names of your workspace's datasets. No site's
+  forms are sent; the names of your lists, campaigns and pipeline stages are matched on Aglyn's
+  side, as for a site's automation.
 - **To change or fix one:** the same, plus how the action is set up, as for an explanation
   below.
 - **To explain an automation:** how it is set up, including the text of its emails and messages
@@ -79,6 +104,9 @@ No contact, lead, deal, form submission or list member is read for any of them.
 ## Who can use it {#who-can-use-it}
 
 These jobs need the **Generate with AI** permission, on a site whose Automation plugin is on.
+Drafting an org automation needs the same permission in the workspace, Automation switched on
+for it, and a plan with org automations; only members who can edit org automations see
+**Create with AI** there.
 See [who can use Aglyn AI](overview.md#who-can-use-it). A site that has
 [switched AI off](overview.md#switch-ai-off-for-one-site) shows none of these controls. Each
 job spends AI credits; an automation's own runs count against your workspace's action runs,
