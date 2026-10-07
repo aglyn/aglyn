@@ -80,11 +80,86 @@ export interface ProductVariant {
   imageUrl?: string
 }
 
+/** A product's packed size and customs facts (AGL-3612). */
+export interface ProductShippingFacts {
+  lengthCm?: number | null
+  widthCm?: number | null
+  heightCm?: number | null
+  /** Harmonized System tariff code. */
+  hsCode?: string
+  /** ISO-3166 alpha-2 country the product was made in. */
+  originCountry?: string
+}
+
+/** A place's postal address, in parts (AGL-3612). Country is ISO-3166 alpha-2. */
+export interface PostalAddress {
+  line1?: string
+  line2?: string
+  city?: string
+  state?: string
+  postalCode?: string
+  country?: string
+  phone?: string
+}
+
 /** `hosts/{hostId}/locations/{id}` doc (AGL-286). */
 export interface InventoryLocation {
   name: string
   isDefault?: boolean
+  /** Free text, as the location was first described. */
   address?: string
+  /**
+   * The same place as a postal address (AGL-3612), so parcels can ship from
+   * it. Optional: a location written before this has only `address`.
+   */
+  postalAddress?: PostalAddress
+}
+
+/** A product's packed size for one unit, when all three sides are known. */
+export function productParcelDimensions(
+  product: Pick<HostProduct, 'shipping'> | null | undefined,
+): { lengthCm: number; widthCm: number; heightCm: number } | undefined {
+  const facts = product?.shipping
+  const side = (value: unknown) => {
+    const number = Number(value)
+    return Number.isFinite(number) && number > 0 ? Math.min(number, 300) : 0
+  }
+  const lengthCm = side(facts?.lengthCm)
+  const widthCm = side(facts?.widthCm)
+  const heightCm = side(facts?.heightCm)
+  return lengthCm && widthCm && heightCm ? { lengthCm, widthCm, heightCm } : undefined
+}
+
+/** A stored product's shipping facts made safe (AGL-3612); never throws. */
+export function normalizeProductShippingFacts(value: unknown): ProductShippingFacts | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Record<string, unknown>
+  const facts: ProductShippingFacts = {}
+  for (const side of ['lengthCm', 'widthCm', 'heightCm'] as const) {
+    const number = Number(raw[side])
+    if (raw[side] !== null && raw[side] !== undefined && Number.isFinite(number) && number > 0) {
+      facts[side] = Math.min(Math.round(number * 10) / 10, 300)
+    }
+  }
+  const hsCode = String(raw['hsCode'] ?? '').replace(/[^0-9.]/g, '').slice(0, 14)
+  if (hsCode) facts.hsCode = hsCode
+  const originCountry = String(raw['originCountry'] ?? '').trim().toUpperCase()
+  if (/^[A-Z]{2}$/.test(originCountry)) facts.originCountry = originCountry
+  return Object.keys(facts).length ? facts : undefined
+}
+
+/** A stored location's postal address made safe (AGL-3612); never throws. */
+export function normalizePostalAddress(value: unknown): PostalAddress | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Record<string, unknown>
+  const address: PostalAddress = {}
+  for (const field of ['line1', 'line2', 'city', 'state', 'postalCode', 'phone'] as const) {
+    const text = String(raw[field] ?? '').trim().slice(0, 120)
+    if (text) address[field] = text
+  }
+  const country = String(raw['country'] ?? '').trim().toUpperCase()
+  if (/^[A-Z]{2}$/.test(country)) address.country = country
+  return Object.keys(address).length ? address : undefined
 }
 
 /**
@@ -183,6 +258,13 @@ export interface HostProduct {
   gatedVideos?: Array<{ url: string; title?: string }>
   /** Manual related products for the upsell block (AGL-325). */
   relatedProductIds?: string[]
+  /**
+   * What one unit ships as (AGL-3612): its packed size, for a carrier to
+   * price, and its customs facts, for a parcel that crosses a border. Weight
+   * stays per variant. Absent means unknown, and a label is priced in the
+   * merchant's default box.
+   */
+  shipping?: ProductShippingFacts
   /** Buying this issues a gift-card code for its price (AGL-322). */
   giftCard?: boolean
   /** Tracked-total at/below this alerts host managers (AGL-281). */
@@ -518,6 +600,11 @@ export interface ProductCopyValues {
   optionNames?: string[]
   seoTitle?: string
   seoDescription?: string
+  /**
+   * Packed size and customs facts (AGL-3612), merged over what the product
+   * has; a side set to `null` is cleared.
+   */
+  shipping?: Partial<ProductShippingFacts>
 }
 
 /**
@@ -528,12 +615,17 @@ export interface ProductCopyValues {
  * variant, only when they name each option once with a name of its own.
  */
 export function productCopyPatch(
-  product: Pick<HostProduct, 'options' | 'variants' | 'seo'>,
+  product: Pick<HostProduct, 'options' | 'variants' | 'seo' | 'shipping'>,
   values: ProductCopyValues,
-): Partial<Pick<HostProduct, 'description' | 'tags' | 'categoryIds' | 'seo' | 'options' | 'variants'>> {
+): Partial<Pick<HostProduct, 'description' | 'tags' | 'categoryIds' | 'seo' | 'options' | 'variants' | 'shipping'>> {
   const patch: Partial<
-    Pick<HostProduct, 'description' | 'tags' | 'categoryIds' | 'seo' | 'options' | 'variants'>
+    Pick<HostProduct, 'description' | 'tags' | 'categoryIds' | 'seo' | 'options' | 'variants' | 'shipping'>
   > = {}
+  if (values.shipping && typeof values.shipping === 'object') {
+    // Stored whole, never `undefined`: the editor's save is a full `setDoc`,
+    // which refuses an undefined field. Nothing known is an empty map.
+    patch.shipping = normalizeProductShippingFacts({ ...product.shipping, ...values.shipping }) ?? {}
+  }
   if (typeof values.description === 'string') patch.description = values.description
   if (Array.isArray(values.tags)) {
     patch.tags = [...new Set(values.tags.map((tag) => tag.trim()).filter(Boolean))]

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { merchantAccountReadiness } from '@aglyn/tenant-data-admin/server/payment-provider'
+import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { readOrgBilling } from '@aglyn/tenant-data-admin'
 import {
   labelChargeCents,
@@ -72,12 +72,17 @@ async function connectedAccountFor(org: Record<string, unknown>): Promise<string
   if (!ownerUid) return null
   const profile = await shippingDb().collection('profiles').doc(ownerUid).get()
   const accountId = profile.get('stripeAccountId')
-  const readiness = merchantAccountReadiness({
-    accountId,
-    chargesEnabled: profile.get('stripeChargesEnabled'),
-    accountLivemode: profile.get('stripeAccountLivemode'),
-  })
-  return readiness === 'ready' && typeof accountId === 'string' ? accountId : null
+  // The same gate every charge door asks (AGL-2471): charges enabled, and
+  // the account's recorded mode matching this deployment's.
+  const ready = merchantAccountIsReady(
+    {
+      accountId,
+      chargesEnabled: profile.get('stripeChargesEnabled'),
+      accountLivemode: profile.get('stripeAccountLivemode'),
+    },
+    { subject: `shipping label debit for owner ${ownerUid}` },
+  )
+  return ready && typeof accountId === 'string' ? accountId : null
 }
 
 /**

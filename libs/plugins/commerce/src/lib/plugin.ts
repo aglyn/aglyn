@@ -36,6 +36,7 @@ import { registerCommerceRecordRoutes } from './model/commerce-record-routes'
 import { registerCommerceZones } from './components/console/product-zones'
 import { registerCommerceOrderZones } from './components/console/order-zones'
 import { registerCommerceReturnZones } from './components/console/return-zones'
+import { registerCommerceStoreZones } from './components/console/store-zones'
 import { registerCommerceTransferUi } from './transfer/register-transfer-ui'
 import { COMMERCE_SEARCH_SOURCES } from './model/commerce-search-sources'
 import { COMMERCE_CONFIG_SCHEMA } from './plugin-config'
@@ -66,6 +67,8 @@ export function registerCommerceConsole(): void {
   // …and the return dialog's (AGL-3611), where a shipping plugin's widget
   // buys the buyer a return label and attaches it through this plugin's route.
   registerCommerceReturnZones()
+  // The orders list's bulk actions and the store's Settings (AGL-3612).
+  registerCommerceStoreZones()
   // Its import and export resources' names and the products wizard's own
   // step (AGL-3531); the server halves register from the console's server
   // declarations.

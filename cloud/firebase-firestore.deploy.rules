@@ -873,6 +873,25 @@ orgCarriesOutreach(orgId);
 
 
 
+match /shippingAccounts/{accountId} {
+allow read, write: if false;
+}
+match /shippingHostSettings/{hostId} {
+allow read, write: if false;
+}
+match /shippingLabels/{labelId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
 
 match /outreachMailboxes/{mailboxId} {
 allow read: if canReadOutreach();
@@ -2295,6 +2314,21 @@ allow read, write: if false;
 
 
 match /outreachLinks/{linkId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+match /shippingTrackers/{trackerId} {
+allow read, write: if false;
+}
+match /shippingQuoteCache/{key} {
 allow read, write: if false;
 }
 

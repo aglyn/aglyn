@@ -29,6 +29,11 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
+import {
+  CARRIER_POSTAL_CODE_MESSAGE,
+  planCheckoutShippingWithCarriers,
+  type CarrierShippingPlan,
+} from './carrier-shipping'
 import { readCartId } from './cart-cookie'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import {
@@ -352,15 +357,30 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       .collection('settings')
       .doc('store')
       .get()
-    const shippingPlan = hasPhysicalLine
-      ? CommerceModel.planCheckoutShipping(
-          storeSettings.get('shipping') as
+    // A live carrier rate (AGL-3612) is quoted here too, before the session,
+    // for the destination the shopper declared; a store with none plans from
+    // its table exactly as before. See `carrier-shipping.ts`.
+    const shippingPlan: CarrierShippingPlan = hasPhysicalLine
+      ? await planCheckoutShippingWithCarriers({
+          hostId,
+          settings: storeSettings.get('shipping') as
             | CommerceModel.ShippingSettings
             | undefined,
-          { subtotalCents: itemsCents, totalGrams },
-          body.shippingCountry,
-        )
+          cart: { subtotalCents: itemsCents, totalGrams },
+          destination: {
+            country: body.shippingCountry,
+            postalCode: body.shippingPostalCode,
+          },
+        })
       : { countries: CommerceModel.CHECKOUT_SHIPPING_COUNTRIES, options: [] }
+    if (shippingPlan.needsPostalCode) {
+      return res.status(400).json({
+        error: CARRIER_POSTAL_CODE_MESSAGE,
+        needsShippingCountry: true,
+        needsShippingPostalCode: true,
+        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+      })
+    }
     // The shopper is asked, then the answer is ENFORCED (AGL-1721): a declared
     // destination narrows `allowed_countries` to itself, so the rate resolved
     // for it is the only one on the session and no other address can be
@@ -1012,6 +1032,11 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       }),
     ).forEach(([key, value]) => params.set(key, value))
     params.set('metadata[type]', 'commerce-cart')
+    // The postal code live carrier rates were quoted for (AGL-3612), so the
+    // order can show it beside the address the shopper then entered.
+    if (shippingPlan.quotedPostalCode) {
+      params.set('metadata[shippingQuotePostalCode]', shippingPlan.quotedPostalCode)
+    }
     params.set('metadata[hostId]', hostId)
     params.set('metadata[cartId]', cartId)
     params.set('metadata[feeCents]', String(Math.max(0, feeCents)))

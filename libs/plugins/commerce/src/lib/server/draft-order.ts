@@ -20,6 +20,10 @@ import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
+import {
+  planCheckoutShippingWithCarriers,
+  type CarrierShippingPlan,
+} from './carrier-shipping'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import {
   type PromotionSlotHold,
@@ -387,18 +391,33 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
     // Stripe Tax mode leaves this 0 at composition time and the webhook folds
     // the computed figure in — the same additive shape AGL-1792 used for
     // shipping, and for the same reason: only Stripe knows it.
-    const shippingPlan =
+    // Live carrier rates (AGL-3612), quoted for the destination the manager
+    // names; see `carrier-shipping.ts`.
+    const shippingPlan: CarrierShippingPlan =
       (product.type ?? 'physical') === 'physical'
-        ? CommerceModel.planCheckoutShipping(
-            shippingSettings,
-            {
+        ? await planCheckoutShippingWithCarriers({
+            hostId,
+            settings: shippingSettings,
+            cart: {
               subtotalCents: itemsCents,
               totalGrams:
                 Math.max(0, Number(variant.weightGrams ?? 0)) * quantity,
+              ...(quantity === 1 ? { parcel: CommerceModel.productParcelDimensions(product) } : {}),
             },
-            body.shippingCountry,
-          )
+            destination: {
+              country: body.shippingCountry,
+              postalCode: body.shippingPostalCode,
+            },
+          })
         : { countries: CommerceModel.CHECKOUT_SHIPPING_COUNTRIES, options: [] }
+    if (shippingPlan.needsPostalCode) {
+      return res.status(400).json({
+        error: 'Enter the postal code this order ships to.',
+        needsShippingCountry: true,
+        needsShippingPostalCode: true,
+        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+      })
+    }
     if (shippingPlan.refusal === 'destination-required') {
       return res.status(400).json({
         error: 'Choose where this order ships to.',
@@ -677,6 +696,9 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       'metadata[productId]': productId,
       ...(variantId ? { 'metadata[variantId]': variantId } : {}),
       'metadata[feeCents]': String(feeCents),
+      ...(shippingPlan.quotedPostalCode
+        ? { 'metadata[shippingQuotePostalCode]': shippingPlan.quotedPostalCode }
+        : {}),
       // WHAT THE WEBHOOK SETTLES (AGL-305), in the field names the
       // `checkout.session.completed` branch already reads for the cart. The
       // hold key's ABSENCE is what tells it to fall back to the unconditional

@@ -119,6 +119,15 @@ export interface OrderFulfillment {
   trackingUrl?: string
   /** A shipping label bought for this parcel, when a shipping plugin bought one. */
   labelUrl?: string
+  /** The shipping plugin's id for that label (AGL-3612), so a retry finds this shipment. */
+  labelRef?: string
+  /**
+   * Where the carrier says the parcel is (AGL-3612): `pre_transit`,
+   * `in_transit`, `out_for_delivery`, `delivered`, `exception` or `returned`,
+   * written by a tracking webhook through the shipment-records seam.
+   */
+  trackingStatus?: string
+  trackingStatusAtMs?: number
   /** Absent reads as `active`; a cancelled fulfillment ships nothing. */
   status?: 'active' | 'cancelled'
   cancelledAtMs?: number

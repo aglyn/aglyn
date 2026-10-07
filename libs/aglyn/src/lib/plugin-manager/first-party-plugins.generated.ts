@@ -376,6 +376,7 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "relatedProductIds",
         "giftCard",
         "lowStockThreshold",
+        "shipping",
         "createdAtMs",
         "updatedAtMs",
         "nameLower",
@@ -418,7 +419,8 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
       "fields": [
         "name",
         "isDefault",
-        "address"
+        "address",
+        "postalAddress"
       ]
     }
   },

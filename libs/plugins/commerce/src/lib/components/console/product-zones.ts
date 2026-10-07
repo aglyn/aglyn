@@ -56,6 +56,17 @@ export interface ConsoleProductDraft {
   mediaUrls: string[]
   seoTitle: string
   seoDescription: string
+  /**
+   * What one unit ships as (AGL-3612): packed size and customs facts, as the
+   * editor holds them. A side nobody set is `null`.
+   */
+  shipping: {
+    lengthCm: number | null
+    widthCm: number | null
+    heightCm: number | null
+    hsCode: string
+    originCountry: string
+  }
 }
 
 /**
@@ -70,6 +81,17 @@ export interface ConsoleProductCopyValues {
   optionNames?: string[]
   seoTitle?: string
   seoDescription?: string
+  /**
+   * Packed size and customs facts (AGL-3612), merged over the product's; a
+   * side set to `null` is cleared.
+   */
+  shipping?: Partial<{
+    lengthCm: number | null
+    widthCm: number | null
+    heightCm: number | null
+    hsCode: string
+    originCountry: string
+  }>
 }
 
 /**

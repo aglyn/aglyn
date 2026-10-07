@@ -63,6 +63,12 @@ for the how-to.
 - **[Resend receipt](commerce-and-bookings/commerce/order-notifications.md#resend-receipt)**
   — from any order, to the customer or to another address.
 
+## October 2026 — shipping from a postal address
+
+- **[Shipping](commerce-and-bookings/commerce/shipping.md)** — zones, rates and local
+  pickup on a page of their own, and each inventory location now carries the postal
+  address it ships from.
+
 ## October 2026 — checkout on your own site
 
 - **[Returns](commerce-and-bookings/commerce/orders-and-returns.md#returns)** — buyers ask

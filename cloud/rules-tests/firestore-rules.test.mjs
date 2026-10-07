@@ -13409,3 +13409,63 @@ describe('returns, order webhooks and the event outbox are the server’s (AGL-3
     }
   })
 })
+
+describe('shipping records are the server’s alone (AGL-3612)', () => {
+  // Every one is written and read through the Admin SDK by the shipping
+  // plugin's routes: an account's sealed ids and the consent a balance debit
+  // stands on, each site's label settings, the labels the usage meter
+  // invoices, the trackers a carrier's webhook resolves and the quotes a
+  // label is bought from. The org owner and staff are refused like everyone,
+  // because none of them has a client surface to break.
+  const ORG_DOCS = [
+    ['shippingAccounts', 'shippo_live'],
+    ['shippingHostSettings', HOST],
+    ['shippingLabels', 'lbl_1'],
+  ]
+  const TOP_DOCS = [
+    ['shippingTrackers', 'trk_1'],
+    ['shippingQuoteCache', 'q_shp_1'],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of ORG_DOCS) {
+        await setDoc(doc(db, 'orgs', ORG, name, id), { orgId: ORG, hostId: HOST, costCents: 625 })
+      }
+      for (const [name, id] of TOP_DOCS) {
+        await setDoc(doc(db, name, id), { orgId: ORG, hostId: HOST, recordId: 'order-1' })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of ORG_DOCS) {
+        const ref = doc(db, 'orgs', ORG, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(
+          `${who} listing ${name}`,
+          getDocs(query(collection(db, 'orgs', ORG, name), limit(10))),
+        )
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { costCents: 0 }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+      for (const [name, id] of TOP_DOCS) {
+        const ref = doc(db, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, name), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, name, 'new'), { orgId: ORG }))
+      }
+    }
+  })
+})

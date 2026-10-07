@@ -657,6 +657,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/content-and-data/crm/sharing',
     title: 'Share records across sites',
   },
+  shipping: {
+    path: '/commerce-and-bookings/commerce/shipping',
+    title: 'Shipping',
+  },
   siteBackupAndPackages: {
     path: '/building-sites/site-backup-and-packages',
     title: 'Site backup and packages',
@@ -935,6 +939,7 @@ export const DOCS_HELP_ANCHORS = {
   serviceAndLocationPagesFromADataset: ['#1-model-the-data', '#2-design-the-template', '#3-make-it-the-record-template', '#4-link-to-the-pages', '#what-visitors-and-search-engines-get', '#when-records-go-away', '#locations-team-members-portfolio', '#related'],
   settings: ['#companies', '#create-companies-from-work-email-domains', '#default-owner', '#assignment-rules', '#round-robin', '#email-templates', '#email-capture', '#your-sending-addresses', '#recipes', '#related'],
   sharing: ['#what-a-shared-record-looks-like', '#share-a-record-by-hand', '#several-records-at-once', '#sharing-rules', '#access-read-only-or-read-and-edit', '#sharing-is-not-consent', '#who-can-do-this', '#related'],
+  shipping: ['#zones-and-rates', '#where-parcels-ship-from'],
   siteBackupAndPackages: ['#what-a-package-carries', '#download-a-backup', '#export-items', '#import-a-package', '#1-upload', '#2-items', '#3-missing-items', '#4-changes', '#5-review', '#6-import', '#undo-an-import', '#moving-a-site-to-another-of-your-sites'],
   siteProtection: ['#where-these-controls-live', '#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#the-layout-built-in-pages-use', '#configure-it', '#related'],

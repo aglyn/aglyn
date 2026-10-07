@@ -66,7 +66,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 jest.mock('@aglyn/tenant-data-admin/server/payment-provider', () => ({
-  merchantAccountReadiness: (input: { accountId?: unknown }) => (input.accountId ? 'ready' : 'not-connected'),
+  merchantAccountIsReady: (input: { accountId?: unknown }) => Boolean(input.accountId),
 }))
 
 jest.mock('@aglyn/aglyn/app-utils/plan-entitlements', () => ({

@@ -1387,6 +1387,13 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     mediaUrls: current.mediaUrls ?? [],
     seoTitle: current.seo?.title ?? '',
     seoDescription: current.seo?.description ?? '',
+    shipping: {
+      lengthCm: current.shipping?.lengthCm ?? null,
+      widthCm: current.shipping?.widthCm ?? null,
+      heightCm: current.shipping?.heightCm ?? null,
+      hsCode: current.shipping?.hsCode ?? '',
+      originCountry: current.shipping?.originCountry ?? '',
+    },
   })
   const seoSubject = useContentStable({
     kind: 'product',

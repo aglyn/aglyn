@@ -22,13 +22,18 @@ import {
   registerPluginRecordIndex,
   type PluginRecordIndex,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import {
+  registerPluginShipmentRecords,
+  type PluginShipmentRecords,
+} from '@aglyn/aglyn/plugin-manager/plugin-shipment-records'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_OPERATOR_ALERTS } from './constants/operator-alerts'
 import { registerCommerceEventTriggers } from './server/order-event-triggers'
 
 /**
  * The commerce plugin's server declarations: the light registrations core
- * reads at boot, before any surface loads.
+ * reads at boot, before any surface loads — among them its orders as a label
+ * buyer reads and writes them, through core's `core.shipment-records`.
  *
  * Its operator alerts (AGL-3377), so Staff → Operator alerts lists them and
  * staff can switch them before the first one is ever raised; and the indexes
@@ -45,6 +50,20 @@ export function registerCommerceServerDeclarations(): void {
   registerPluginRecordIndex('productCategory', lazyIndex('productCategoryRecordIndex'), {
     pluginId: BUNDLE_ID,
   })
+  // Orders, as a label buyer reads and writes them (AGL-3612): read the
+  // lines and the address, write a shipment, record tracking. The module and
+  // the Admin SDK load with the first call.
+  registerPluginShipmentRecords(lazyShipmentRecords, { pluginId: BUNDLE_ID })
+}
+
+const loadShipmentRecords = async () =>
+  (await import('./server/shipment-records')).commerceShipmentRecords
+
+const lazyShipmentRecords: PluginShipmentRecords = {
+  read: async (hostId, recordId) => (await loadShipmentRecords()).read(hostId, recordId),
+  recordShipment: async (write) => (await loadShipmentRecords()).recordShipment(write),
+  recordTracking: async (update) => (await loadShipmentRecords()).recordTracking(update),
+  shipFromAddresses: async (hostId) => (await loadShipmentRecords()).shipFromAddresses(hostId),
 }
 
 type IndexName = 'productRecordIndex' | 'productCategoryRecordIndex'

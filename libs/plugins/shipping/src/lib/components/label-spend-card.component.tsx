@@ -17,7 +17,8 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material'
+import ScrollTable from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import { TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { SHIPPING_API_ROUTES } from '../constants/api-routes'
 import { formatCents, useShippingFetch } from './shipping-api'
@@ -75,7 +76,7 @@ export function LabelSpendCard(props: LabelSpendCardProps) {
           ? `Labels are charged at the carrier’s price plus ${markupPct}%.`
           : 'Labels are charged at the carrier’s price, with nothing added.'}
       </Typography>
-      <Table size="small">
+      <ScrollTable size="small">
         <TableHead>
           <TableRow>
             <TableCell>{'Month'}</TableCell>
@@ -96,7 +97,7 @@ export function LabelSpendCard(props: LabelSpendCardProps) {
             </TableRow>
           ))}
         </TableBody>
-      </Table>
+      </ScrollTable>
     </CardDisplay>
   )
 }

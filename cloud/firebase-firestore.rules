@@ -864,6 +864,25 @@ service cloud.firestore {
           orgCarriesOutreach(orgId);
       }
 
+      // Shipping (AGL-3612): the workspace's account at the carrier platform
+      // (its ids sealed under SHIPPING_TOKEN_KEY, and the member's consent to
+      // label charges being taken from the Stripe balance), each site's label
+      // settings, and every label bought with its cost and how that cost was
+      // recovered. Server-written AND server-read: the shipping routes serve
+      // what the console shows. A client that could write a label could
+      // change what the usage meter invoices; one that could write the
+      // account could forge the consent a balance debit stands on. Unmatched
+      // org subcollections deny already; these carry the record.
+      match /shippingAccounts/{accountId} {
+        allow read, write: if false;
+      }
+      match /shippingHostSettings/{hostId} {
+        allow read, write: if false;
+      }
+      match /shippingLabels/{labelId} {
+        allow read, write: if false;
+      }
+
       // Outreach (AGL-2974): the mailboxes reps connect, the sequences they
       // send and each prospect's enrollment in one. Read through
       // `canReadOutreach()` above.
@@ -2295,6 +2314,21 @@ service cloud.firestore {
     // point a link already in somebody's inbox anywhere. Org erasure destroys
     // them by the `orgId` field.
     match /outreachLinks/{linkId} {
+      allow read, write: if false;
+    }
+
+    // Shipping (AGL-3612): which workspace, site and order a tracking number
+    // belongs to, so a carrier platform's webhook finds the parcel it names;
+    // and checkout's carrier quotes, kept ten minutes, with the quote a label
+    // is bought from. Written and read by the shipping plugin's server half
+    // through the Admin SDK only. Deny ALL client access: a client that could
+    // write a tracker could point a carrier's delivery at another workspace's
+    // order, and one that could write a held quote could buy a label at a
+    // price nobody quoted. Org erasure destroys both by the `orgId` field.
+    match /shippingTrackers/{trackerId} {
+      allow read, write: if false;
+    }
+    match /shippingQuoteCache/{key} {
       allow read, write: if false;
     }
 

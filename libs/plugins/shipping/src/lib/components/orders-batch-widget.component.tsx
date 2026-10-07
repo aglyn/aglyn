@@ -17,6 +17,7 @@
 'use client'
 
 import type { PluginShippingAddress } from '@aglyn/aglyn/plugin-manager/plugin-shipping-rates'
+import ScrollTable from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -27,7 +28,6 @@ import {
   DialogTitle,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -171,7 +171,7 @@ export function OrdersBatchWidget(props: OrdersBatchWidgetProps) {
               </Button>
             </Stack>
             {rows ? (
-              <Table size="small">
+              <ScrollTable size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell>{'Order'}</TableCell>
@@ -203,7 +203,7 @@ export function OrdersBatchWidget(props: OrdersBatchWidgetProps) {
                     )
                   })}
                 </TableBody>
-              </Table>
+              </ScrollTable>
             ) : null}
             {rows ? (
               <Typography variant="body2">{`Total for labels on discounted rates: ${formatCents(total)}`}</Typography>

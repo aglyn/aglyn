@@ -561,6 +561,7 @@ export async function buyLabel(
         carrier: String(purchased.carrier ?? ''),
         trackingNumber: bought.trackingNumber,
         ...(bought.trackingUrl ? { trackingUrl: bought.trackingUrl } : {}),
+        ...(/^https:\/\//.test(bought.labelUrl) ? { labelUrl: bought.labelUrl } : {}),
         labelRef: labelId,
         actorUid: actor.uid,
       })
@@ -614,7 +615,7 @@ export async function voidLabel(
       error instanceof ShippingProviderError ? error.detail || error.message : 'The label could not be voided.'
     throw new ShippingFlowError(message, 502)
   }
-  return settleVoid(actor.orgId, labelId, status)
+  return (await settleVoid(actor.orgId, labelId, status)) ?? label
 }
 
 /** Records a void's state, and gives the charge back once the provider refunded. */
@@ -622,9 +623,14 @@ export async function settleVoid(
   orgId: string,
   labelId: string,
   status: ProviderVoidStatus,
-): Promise<StoredLabel> {
+): Promise<StoredLabel | null> {
   const ref = labelsRef(orgId).doc(labelId)
-  const label = (await ref.get()).data() as StoredLabel
+  const label = (await ref.get()).data() as StoredLabel | undefined
+  // A provider redelivers and reorders refund events: a label nobody here
+  // holds has nothing to settle, and a voided one is final — a late
+  // rejection or pending must not walk it back.
+  if (!label) return null
+  if (label.status === 'voided') return label
   const nowMs = Date.now()
   if (status === 'rejected') {
     await ref.set({ status: 'void_rejected', voidRequestedAtMs: nowMs }, { merge: true })

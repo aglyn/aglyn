@@ -83,6 +83,7 @@ import { subscriptionPortalHandler } from './server/subscription-portal'
 import { reviewsHandler } from './server/reviews'
 import { connectHandler } from './server/connect'
 import { cancelOrderHandler } from './server/cancel-order'
+import { carrierRatesAvailabilityHandler } from './server/carrier-rates-availability'
 import { collectionMembershipHandler } from './server/collection-membership'
 import { draftOrderHandler } from './server/draft-order'
 import { fulfillOrderHandler } from './server/fulfill-order'
@@ -355,6 +356,8 @@ export function registerCommerceConsoleApi(): void {
   // the release depends on the transition rule, and a client write could not
   // re-ask it under the same lock that flips the status.
   registerPluginApiRoute('commerce/cancel-order', cancelOrderHandler)
+  // Whether live carrier rates can be offered on this site (AGL-3612).
+  registerPluginApiRoute('commerce/shipping/carrier-rates', carrierRatesAvailabilityHandler)
   registerPluginApiRoute('commerce/connect', connectHandler)
   registerPluginApiRoute('commerce/draft-order', draftOrderHandler)
   // Fulfil + mark-delivered with the transition re-asked under the write

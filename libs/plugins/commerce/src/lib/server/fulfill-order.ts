@@ -16,6 +16,7 @@
  */
 
 import * as CommerceModel from '../model'
+import { announcePluginShipment } from '@aglyn/aglyn/plugin-manager/plugin-shipment-records'
 import { createResourceUid, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { notifyOrderBuyer } from './order-notifications'
@@ -57,6 +58,8 @@ export interface RecordShipmentRequest {
   trackingUrl?: string
   /** A label a shipping plugin bought for this parcel. */
   labelUrl?: string
+  /** That plugin's id for the label (AGL-3612), kept on the fulfillment. */
+  labelRef?: string
   /** Whether the buyer is to be told; recorded on the fulfillment. Default on. */
   notify?: boolean
   /**
@@ -294,6 +297,7 @@ export async function recordOrderShipment(
         lines,
         ...trackingFields(carrier, trackingNumber, explicitUrl),
         ...(labelUrl ? { labelUrl } : {}),
+        ...(request.labelRef ? { labelRef: String(request.labelRef).slice(0, 80) } : {}),
         status: 'active',
         notify: request.notify !== false,
         atMs,
@@ -332,6 +336,18 @@ export async function recordOrderShipment(
   // shipment — see `order-notifications.ts`. A retry returns `already` above
   // and never reaches here. A merchant who unticked "Notify customer"
   // (AGL-3611) recorded the shipment with `notify: false`, and nobody is told.
+  // Every shipment recorded, by any door, is announced (AGL-3612), so a
+  // plugin that follows parcels can follow one typed in by hand too.
+  if (result.outcome === 'recorded' && result.fulfillment?.trackingNumber) {
+    await announcePluginShipment({
+      hostId,
+      recordId: orderId,
+      shipmentId: result.fulfillment.id,
+      ...(result.fulfillment.carrier ? { carrier: result.fulfillment.carrier } : {}),
+      trackingNumber: result.fulfillment.trackingNumber,
+      ...(request.labelRef ? { labelRef: request.labelRef } : {}),
+    })
+  }
   if (result.outcome === 'recorded' && result.fulfillment?.notify !== false) {
     await notifyOrderBuyer(
       { hostId, orderId },
@@ -587,6 +603,16 @@ export const fulfillOrderHandler: PluginApiHandler = async (req, res) => {
               trackingUrl: body.trackingUrl,
             })
           : await cancelOrderFulfillment({ hostId, orderId, fulfillmentId })
+      // A corrected tracking number is a parcel to follow (AGL-3612).
+      if (change.outcome === 'updated' && action === 'update-tracking' && change.fulfillment.trackingNumber) {
+        await announcePluginShipment({
+          hostId,
+          recordId: orderId,
+          shipmentId: change.fulfillment.id,
+          ...(change.fulfillment.carrier ? { carrier: change.fulfillment.carrier } : {}),
+          trackingNumber: change.fulfillment.trackingNumber,
+        })
+      }
       if (change.outcome === 'no_such_order') return res.status(404).json({ error: 'Unknown order' })
       if (change.outcome === 'no_such_fulfillment') {
         return res.status(404).json({ error: 'That shipment is no longer on this order' })

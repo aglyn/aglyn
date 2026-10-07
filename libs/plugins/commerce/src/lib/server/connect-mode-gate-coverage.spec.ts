@@ -65,6 +65,9 @@ const DOORS = [
   // Not a charge, but the same claim one step earlier: publishing a PAID
   // listing tells a seller they are set up to sell (AGL-2471).
   'marketplace/src/lib/server/publish-preconditions.ts',
+  // A label's cost taken from the merchant's balance by an account debit
+  // (AGL-3612): a charge against the connected account itself.
+  'shipping/src/lib/server/label-billing.ts',
 ]
 
 const read = (relative: string) =>

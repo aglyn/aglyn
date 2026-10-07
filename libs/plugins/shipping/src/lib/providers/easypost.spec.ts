@@ -152,4 +152,47 @@ describe('EasyPost, through child users', () => {
     ).toEqual({ weightGrams: 1200, lengthCm: 20, widthCm: 30, heightCm: 5 })
     expect(badgeRates([])).toEqual([])
   })
+
+  it('follows a tracking number as the child and reads its status', async () => {
+    const { calls, fetchImpl } = recordingFetch([
+      { status: 'delivered', status_detail: 'arrived_at_destination', updated_at: '2026-10-06T15:00:00Z', public_url: 'https://track.easypost.com/x' },
+      {},
+      { status: 'something_new' },
+    ])
+    const provider = createEasypostProvider({ apiKey: 'EZTKplatform', fetchImpl })
+    const tracking = await provider.getTracking(CHILD, { carrier: 'USPS', trackingNumber: '9400' })
+    expect(calls[0]).toMatchObject({
+      url: `${EASYPOST_API_BASE}/trackers`,
+      method: 'POST',
+      body: { tracker: { tracking_code: '9400', carrier: 'USPS' } },
+    })
+    expect(calls[0].headers['Authorization']).toBe(basic('EZTKchild'))
+    expect(tracking).toEqual({
+      status: 'delivered',
+      detail: 'arrived_at_destination',
+      atMs: Date.parse('2026-10-06T15:00:00Z'),
+      trackingUrl: 'https://track.easypost.com/x',
+    })
+    await provider.registerTracker(CHILD, { carrier: 'USPS', trackingNumber: '9401', reference: 'h/o' })
+    expect(calls[1]).toMatchObject({ url: `${EASYPOST_API_BASE}/trackers`, body: { tracker: { tracking_code: '9401', carrier: 'USPS' } } })
+    // A status the adapter does not know is never guessed forward.
+    await expect(provider.getTracking(CHILD, { carrier: 'USPS', trackingNumber: '9400' })).resolves.toMatchObject({ status: 'pre_transit' })
+  })
+
+  it('lists the child’s carrier accounts, EasyPost’s own and the merchant’s', async () => {
+    const { calls, fetchImpl } = recordingFetch([
+      [
+        { id: 'ca_ep_usps', type: 'UspsAccount', readable: 'USPS', billing_type: 'easypost', description: 'USPS' },
+        { id: 'ca_ep_ups', type: 'UpsAccount', readable: 'UPS', billing_type: 'carrier', description: 'My UPS' },
+        { type: 'FedexAccount' },
+      ],
+    ])
+    const provider = createEasypostProvider({ apiKey: 'EZTKplatform', fetchImpl })
+    const accounts = await provider.listCarrierAccounts(CHILD)
+    expect(calls[0]).toMatchObject({ url: `${EASYPOST_API_BASE}/carrier_accounts`, method: 'GET' })
+    expect(accounts).toEqual([
+      { id: 'ca_ep_usps', carrier: 'usps', carrierName: 'USPS', active: true, platformOwned: true, authorization: 'connected' },
+      { id: 'ca_ep_ups', carrier: 'ups', carrierName: 'UPS', active: true, platformOwned: false, authorization: 'connected' },
+    ])
+  })
 })

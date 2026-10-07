@@ -278,4 +278,75 @@ describe('Shippo, through platform accounts', () => {
     expect(connected?.authorizeUrl).toBe('https://www.ups.com/lasso/signin?x=1')
     expect(connected?.carrierAccount).toMatchObject({ platformOwned: false, authorization: 'pending' })
   })
+
+  it('reads a parcel’s tracking as the managed account, out for delivery by substatus', async () => {
+    const { calls, fetchImpl } = recordingFetch([
+      {
+        body: {
+          tracking_status: {
+            status: 'TRANSIT',
+            substatus: { code: 'out_for_delivery' },
+            status_details: 'Out for delivery today',
+            status_date: '2026-10-06T14:00:00Z',
+          },
+          tracking_url_provider: 'https://tools.usps.com/go/TrackConfirmAction?tLabels=9400',
+        },
+      },
+      { body: { tracking_status: { status: 'UNKNOWN' } } },
+    ])
+    const provider = createShippoProvider({ token: 'tok', fetchImpl })
+    const tracking = await provider.getTracking(ACCOUNT, { carrier: 'usps', trackingNumber: '9400 1' })
+    expect(calls[0]).toMatchObject({ url: `${SHIPPO_API_BASE}/tracks/usps/9400%201`, method: 'GET' })
+    expect(calls[0].headers['SHIPPO-ACCOUNT-ID']).toBe('acct_managed_1')
+    expect(tracking).toEqual({
+      status: 'out_for_delivery',
+      detail: 'Out for delivery today',
+      atMs: Date.parse('2026-10-06T14:00:00Z'),
+      trackingUrl: 'https://tools.usps.com/go/TrackConfirmAction?tLabels=9400',
+    })
+    // A status the adapter cannot read is never guessed forward.
+    await expect(provider.getTracking(ACCOUNT, { carrier: 'usps', trackingNumber: '9400' })).resolves.toMatchObject({
+      status: 'pre_transit',
+    })
+  })
+
+  it('lists carrier accounts, telling Shippo’s own from the merchant’s, and switches one off', async () => {
+    const { calls, fetchImpl } = recordingFetch([
+      {
+        body: {
+          results: [
+            { object_id: 'ca_usps', carrier: 'usps', carrier_name: 'USPS', account_id: 'shippo-usps', active: true, is_shippo_account: true },
+            {
+              object_id: 'ca_ups',
+              carrier: 'ups',
+              carrier_name: 'UPS ',
+              account_id: '94567e',
+              active: false,
+              is_shippo_account: false,
+              object_info: { authentication: { status: 'authorization_pending' } },
+            },
+            { carrier: 'fedex' },
+          ],
+        },
+      },
+      { body: {} },
+    ])
+    const provider = createShippoProvider({ token: 'tok', fetchImpl })
+    const accounts = await provider.listCarrierAccounts(ACCOUNT)
+    expect(calls[0].url).toBe(`${SHIPPO_API_BASE}/carrier_accounts?results=100`)
+    expect(accounts).toEqual([
+      { id: 'ca_usps', carrier: 'usps', carrierName: 'USPS', active: true, platformOwned: true, authorization: 'connected' },
+      {
+        id: 'ca_ups',
+        carrier: 'ups',
+        carrierName: 'UPS',
+        accountNumber: '94567e',
+        active: false,
+        platformOwned: false,
+        authorization: 'pending',
+      },
+    ])
+    await provider.setCarrierAccountActive?.(ACCOUNT, 'ca_ups', true)
+    expect(calls[1]).toMatchObject({ url: `${SHIPPO_API_BASE}/carrier_accounts/ca_ups`, method: 'PUT', body: { active: true } })
+  })
 })

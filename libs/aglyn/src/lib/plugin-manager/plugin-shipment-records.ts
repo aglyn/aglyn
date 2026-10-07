@@ -115,6 +115,8 @@ export interface PluginShipmentWrite {
   carrier: string
   trackingNumber: string
   trackingUrl?: string
+  /** The label's file, an https URL the seller may show beside the shipment. */
+  labelUrl?: string
   labelRef?: string
   /** The member who bought the label, for the record's timeline. */
   actorUid?: string

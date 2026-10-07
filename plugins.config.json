@@ -478,6 +478,7 @@
               "relatedProductIds",
               "giftCard",
               "lowStockThreshold",
+              "shipping",
               "createdAtMs",
               "updatedAtMs",
               "nameLower",
@@ -514,7 +515,7 @@
             "activityNoun": "inventory location",
             "quotaKey": "inventoryLocations",
             "entitlement": "commerce",
-            "fields": ["name", "isDefault", "address"]
+            "fields": ["name", "isDefault", "address", "postalAddress"]
           }
         },
         {

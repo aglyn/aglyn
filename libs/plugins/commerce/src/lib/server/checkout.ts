@@ -23,6 +23,11 @@ import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
+import {
+  CARRIER_POSTAL_CODE_MESSAGE,
+  planCheckoutShippingWithCarriers,
+  type CarrierShippingPlan,
+} from './carrier-shipping'
 import { readActiveMemberSession } from './membership'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import {
@@ -677,17 +682,35 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       | undefined
     const shipsPhysically =
       (lifted.type ?? 'physical') === 'physical' && !isSubscription
-    const shippingPlan = shipsPhysically
-      ? CommerceModel.planCheckoutShipping(
-          shippingSettings,
-          {
+    // Live carrier rates (AGL-3612) are quoted here, before the session,
+    // for the destination the shopper declared; see `carrier-shipping.ts`.
+    const shippingPlan: CarrierShippingPlan = shipsPhysically
+      ? await planCheckoutShippingWithCarriers({
+          hostId,
+          settings: shippingSettings,
+          cart: {
             subtotalCents: listUnitAmountCents * quantity,
             totalGrams:
               Math.max(0, Number(variant.weightGrams ?? 0)) * quantity,
+            ...(quantity === 1 ? { parcel: CommerceModel.productParcelDimensions(lifted) } : {}),
           },
-          body.shippingCountry,
-        )
+          destination: {
+            country: body.shippingCountry,
+            postalCode: body.shippingPostalCode,
+          },
+        })
       : { countries: CommerceModel.CHECKOUT_SHIPPING_COUNTRIES, options: [] }
+    if (shippingPlan.needsPostalCode) {
+      await releaseCouponSlot()
+      await releaseStock()
+      await claim.release()
+      return res.status(400).json({
+        error: CARRIER_POSTAL_CODE_MESSAGE,
+        needsShippingCountry: true,
+        needsShippingPostalCode: true,
+        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+      })
+    }
     if (shippingPlan.refusal === 'destination-required') {
       // A deterministic ask the shopper answers and retries under the same
       // key — released, not burned (AGL-1697). The tax rate possibly minted
@@ -970,6 +993,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       ...(variantId ? { 'metadata[variantId]': variantId } : {}),
       'metadata[quantity]': String(quantity),
       'metadata[feeCents]': String(feeCents),
+      // The postal code live carrier rates were quoted for (AGL-3612).
+      ...(shippingPlan.quotedPostalCode
+        ? { 'metadata[shippingQuotePostalCode]': shippingPlan.quotedPostalCode }
+        : {}),
       // WHAT THE MERCHANT WAS ACTUALLY PAID, on the sales where Aglyn fixed it
       // (AGL-1956). Only a Stripe Tax sale carries this: it is the one shape
       // where `transfer.amount` is no longer `charge.amount`, so it is the one

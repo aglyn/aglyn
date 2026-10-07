@@ -419,7 +419,8 @@ switch; including commerce is your plan's. See
 ## Shipping & taxes
 
 - **Shipping zones** own countries ('*' = rest of world); rates are flat,
-  free-over-subtotal, or subtotal/weight tiers; optional local pickup.
+  free-over-subtotal, or subtotal/weight tiers; optional local pickup. See
+  [Shipping](./shipping.md).
 - **Taxes**: manual per-region rates (state beats country, VAT-style
   inclusive pricing supported) or **Stripe Tax** automatic calculation;
   products can be tax-exempt.

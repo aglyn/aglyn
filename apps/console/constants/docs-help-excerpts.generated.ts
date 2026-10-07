@@ -191,6 +191,7 @@ export const DOCS_HELP_EXCERPTS = {
   serviceAndLocationPagesFromADataset: 'Give every record of a dataset its own page from one design — a page per service, per location or per team member, each at its own address, with search titles from your fields and every page in the sitemap.',
   settings: 'What the CRM does on its own for every site — whether a company is created from a contact\'s work email domain, who a new contact is assigned to, the address that files replies on a record, and each site\'s recipes.',
   sharing: 'Let another of your sites see a lead, a contact, a company or a deal — one record by hand, a selection from a list, or every record a sharing rule matches, now and later — without sharing the person\'s consent.',
+  shipping: 'Shipping zones and rates, local pickup, and the postal address each inventory location ships from.',
   siteBackupAndPackages: 'Download a site or the items you pick as one package, import one into any of your sites, compare each item with the site\'s copy and choose how to handle it before anything is written, and undo an import.',
   siteProtection: 'Password-protect pages, design custom error pages, and put your site in maintenance mode.',
   siteSearch: 'Let visitors search your site\'s pages, blog entries, and dataset records with a built-in search page.',

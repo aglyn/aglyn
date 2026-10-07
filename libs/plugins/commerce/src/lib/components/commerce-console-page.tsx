@@ -47,6 +47,19 @@ import StoreSettingsCard from './console/store-settings-card.component'
 import StorefrontTaxSummaryCard from './console/storefront-tax-summary-card.component'
 import SuppliersCard from './console/suppliers-card.component'
 import TaxSettingsCard from './console/tax-settings-card.component'
+import { COMMERCE_SETTINGS_ZONE } from './console/store-zones'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+
+/**
+ * The `commerceSettings` zone (AGL-3612): other plugins' settings for the
+ * store — label settings and carrier accounts — under the store's own.
+ */
+function CommerceSettingsZone(props: { hostId: string }) {
+  const WidgetSlot = useConsoleWidgetSlot()
+  return WidgetSlot ? (
+    <WidgetSlot slot={COMMERCE_SETTINGS_ZONE.id} hostId={props.hostId} orgId={undefined} />
+  ) : null
+}
 
 /**
  * The body of one commerce section, built only when that section is the one
@@ -161,6 +174,10 @@ function sectionBody(
             {
               size: { xs: 12 },
               children: <OrderWebhooksCard hostId={hostId} />,
+            },
+            {
+              size: { xs: 12 },
+              children: <CommerceSettingsZone hostId={hostId} />,
             },
           ]}
         />
