@@ -39,6 +39,7 @@ kotlin {
       dependencies {
         implementation(kotlin("test"))
         implementation(libs.compose.ui.test)
+        implementation(libs.ktor.client.mock)
         implementation(compose.desktop.currentOs)
       }
     }
