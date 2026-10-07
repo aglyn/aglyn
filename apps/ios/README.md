@@ -32,7 +32,7 @@ Xcode 16 or later (the project uses synchronized folders), iOS 17+ and macOS 14+
 (cd cloud && firebase emulators:start --only auth,firestore --project demo-aglyn)
 node tools/scripts/seed-native-emulator.mjs   # prints the seeded sign-in
 
-open apps/ios/Aglyn.xcodeproj                  # run the Aglyn or AglynPOS scheme on a simulator or My Mac
+open apps/ios/Aglyn.xcodeproj                  # run the Aglyn or AglynPOS scheme (the app is "Aglyn POS") on a simulator or My Mac
 ```
 
 `Config/Emulator.xcconfig` is the default configuration: the Auth emulator on
