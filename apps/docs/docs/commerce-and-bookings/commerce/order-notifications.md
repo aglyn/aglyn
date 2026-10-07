@@ -98,7 +98,9 @@ anywhere in your console.
 
 When text messages are available, the **Customer notifications** settings get an
 **Also send as texts** switch, and **Resend receipt** can send by text. Customers
-can reply STOP to any text to stop receiving them.
+can reply STOP to any text to stop receiving them. Receipts are texted right
+away; texts about shipping, delivery, refunds and cancellations that would
+arrive between 9 PM and 8 AM in your site's time zone are held until 8 AM.
 
 ## Related
 
