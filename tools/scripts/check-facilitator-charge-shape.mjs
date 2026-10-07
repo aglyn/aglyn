@@ -159,6 +159,15 @@ const HAND_ROLLED = new Map([
       'correct branch of the shared emitter would return anyway.',
   ],
   [
+    'libs/plugins/commerce/src/lib/server/pos-terminal.ts',
+    'Each card payment against a register sale (AGL-3607): the sale was ' +
+      'priced by `pos-order.ts`, whose entry above is why its tax is always ' +
+      'the merchant-configured flat rate, and a card payment is a share of ' +
+      'that same total plus a tip that carries no tax at all. The fee is the ' +
+      'card share of the platform take plus the card cost, set at creation ' +
+      'and re-stated at capture once the reader reports a tip.',
+  ],
+  [
     'libs/plugins/commerce/src/lib/server/reserve.ts',
     'A reservation charges the merchant-configured lodging rate as an ' +
       'ordinary line item. `automatic_tax` would compute a GOODS rate on a ' +

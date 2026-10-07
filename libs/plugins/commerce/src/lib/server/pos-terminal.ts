@@ -408,7 +408,8 @@ function paymentIntentParams(
 /**
  * Creates (or finds) the card-present PaymentIntent for one payment WITHOUT
  * choosing how the card is collected: reserves the amount in the ledger and
- * creates a manual-capture destination charge `on_behalf_of` the merchant,
+ * creates a manual-capture destination charge to the merchant (settled on
+ * Aglyn's platform account, with no `on_behalf_of`, as ToS §10.7 states),
  * keyed by the payment so a retry returns the same intent.
  *
  * Two collectors use it. {@link startCardPresentPayment} pushes the intent
@@ -439,7 +440,6 @@ export async function createCardPresentIntent(
       payment_method_types:
         POS_CURRENCY === 'usd' ? ['card_present'] : ['card_present', 'interac_present'],
       capture_method: 'manual',
-      on_behalf_of: destination,
       ...(start.readerId ? { 'metadata[readerId]': start.readerId } : {}),
       description: 'In-store purchase',
     }),

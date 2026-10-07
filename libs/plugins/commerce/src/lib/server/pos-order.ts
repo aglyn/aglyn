@@ -754,8 +754,9 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       // tender, and paid by the ledger. The fee on `totals` is the TAKE alone;
       // each card payment adds Stripe's processing cost to its own payout
       // fee, and `pos-sale.ts` restates `feeCents` from what actually paid
-      // when the balance reaches zero.
-      const orderRef = hostRef.collection('orders').doc()
+      // when the balance reaches zero. Named like every console resource,
+      // never by an auto-id.
+      const orderRef = hostRef.collection('orders').doc(Aglyn.createResourceUid())
       const counterRef = hostRef.collection('counters').doc('orders')
       const openTotals = CommerceModel.computeOrderTotals(lineItems, {
         discountCents,

@@ -365,7 +365,9 @@ describe('card readers', () => {
     expect(started.status).toBe(200)
     const create = stripeCalls.find((call) => call.path === 'payment_intents')!
     expect(create.params.get('capture_method')).toBe('manual')
-    expect(create.params.get('on_behalf_of')).toBe('acct_merchant')
+    // Settlement stays on the platform account (ToS §10.7), like every
+    // other storefront charge: a destination charge with no `on_behalf_of`.
+    expect(create.params.has('on_behalf_of')).toBe(false)
     expect(create.params.get('transfer_data[destination]')).toBe('acct_merchant')
     expect(create.params.getAll('payment_method_types[]')).toEqual(['card_present'])
     expect(create.params.get('metadata[kind]')).toBe('pos')
