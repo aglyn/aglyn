@@ -131,6 +131,22 @@ export function productParcelDimensions(
   return lengthCm && widthCm && heightCm ? { lengthCm, widthCm, heightCm } : undefined
 }
 
+/**
+ * Shipping facts as the product editor stages them, keystroke by keystroke
+ * (AGL-3647): {@link normalizeProductShippingFacts}, except that a country
+ * of origin being typed keeps its first letter. The editor runs this on
+ * every keystroke, and the strict form drops anything short of two letters,
+ * so the field could never be typed into. Readers normalize what is stored.
+ */
+export function draftProductShippingFacts(value: unknown): ProductShippingFacts | undefined {
+  const facts = normalizeProductShippingFacts(value)
+  const typed = String((value as Record<string, unknown> | null)?.['originCountry'] ?? '')
+    .trim()
+    .toUpperCase()
+  if (/^[A-Z]$/.test(typed)) return { ...facts, originCountry: typed }
+  return facts
+}
+
 /** A stored product's shipping facts made safe (AGL-3612); never throws. */
 export function normalizeProductShippingFacts(value: unknown): ProductShippingFacts | undefined {
   if (!value || typeof value !== 'object') return undefined
@@ -633,7 +649,7 @@ export function productCopyPatch(
   if (values.shipping && typeof values.shipping === 'object') {
     // Stored whole, never `undefined`: the editor's save is a full `setDoc`,
     // which refuses an undefined field. Nothing known is an empty map.
-    patch.shipping = normalizeProductShippingFacts({ ...product.shipping, ...values.shipping }) ?? {}
+    patch.shipping = draftProductShippingFacts({ ...product.shipping, ...values.shipping }) ?? {}
   }
   if (typeof values.description === 'string') patch.description = values.description
   if (Array.isArray(values.tags)) {
