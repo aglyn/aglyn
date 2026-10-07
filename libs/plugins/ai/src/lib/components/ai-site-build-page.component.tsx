@@ -25,6 +25,7 @@ import {
   mdiCheckCircle,
   mdiChevronDown,
   mdiClockOutline,
+  mdiMinusCircleOutline,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import type { MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
@@ -57,6 +58,8 @@ import { AiSiteStartCard } from './ai-site-start-card.component'
 import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
 import { followAiJobEvents } from './ai-job-events'
 import { aiSiteBuildDoneLinks } from './ai-job-links'
+import { AiJobPlan } from './ai-job-plan.component'
+import { aiBuildCanRetry } from '../model/ai-build-progress'
 import { resumeAiJobRequest } from './ai-job-requests'
 import { useAiJobSite } from './ai-job-site'
 import { AiSiteStarterFallback } from './ai-site-starter-fallback.component'
@@ -139,6 +142,7 @@ const ROW_ICON: Readonly<Record<Exclude<AiSiteBuildRowState, 'active'>, { path: 
   done: { path: mdiCheckCircle.path, color: 'success.main', label: 'Done' },
   waiting: { path: mdiClockOutline.path, color: 'text.disabled', label: 'Waiting' },
   failed: { path: mdiAlertCircle.path, color: 'error.main', label: 'Stopped' },
+  skipped: { path: mdiMinusCircleOutline.path, color: 'text.disabled', label: 'Not built' },
 }
 
 function RowIcon({ state }: { state: AiSiteBuildRowState }) {
@@ -211,11 +215,29 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
     if (!orgId || !job || typeof job !== 'object') return
     setBusy(true)
     setNotice(null)
-    const decision = await resumeAiJobRequest(user, orgId, job)
+    // A finished build tries again only what failed (AGL-3616).
+    const decision = await resumeAiJobRequest(
+      user,
+      orgId,
+      job,
+      aiBuildCanRetry(job) ? { retry: 'failed-items' } : {},
+    )
     if (decision.job) setJob(decision.job)
     if (decision.error) setNotice(decision.error)
     setBusy(false)
   }, [orgId, job, user, setJob])
+  const confirmPlan = useCallback(
+    async (target: AiJobSummary, options: { publish?: boolean } = {}) => {
+      if (!orgId) return
+      setBusy(true)
+      setNotice(null)
+      const decision = await resumeAiJobRequest(user, orgId, target, options)
+      if (decision.job) setJob(decision.job)
+      if (decision.error) setNotice(decision.error)
+      setBusy(false)
+    },
+    [orgId, user, setJob],
+  )
 
   const ready = job && typeof job === 'object' ? job : null
   const copy = ready ? aiJobPageCopy(ready, PLATFORM_BRAND_NAME) : null
@@ -279,7 +301,9 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
   const sitePublish = ready.kind === 'site' && phase === 'done' ? (ready.sitePublish ?? null) : null
   const liveUrl = sitePublish && sitePublish.published.length > 0 ? sitePublish.liveUrl : null
   const retryRefusal = ready.review?.retryRefusal
-  const canRetry = phase === 'stopped' && ready.review?.reason === 'doctrine'
+  const buildRetry = aiBuildCanRetry(ready)
+  const canRetry = (phase === 'stopped' && ready.review?.reason === 'doctrine') || buildRetry
+  const buildPlanWaiting = ready.kind === 'build' && phase === 'stopped' && ready.review?.reason === 'plan'
   // A guided start that ended without building its site starts over from its
   // own answers, as a fresh job: the questions reopen filled in.
   const restartAnswers =
@@ -301,12 +325,20 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
                 <Box sx={{ width: (theme) => theme.spacing(3), display: 'flex', justifyContent: 'center' }}>
                   <RowIcon state={row.state} />
                 </Box>
-                <Typography
-                  variant="body1"
-                  color={row.state === 'waiting' ? 'text.secondary' : 'text.primary'}
-                >
-                  {row.label}
-                </Typography>
+                <Box>
+                  <Typography
+                    variant="body1"
+                    color={row.state === 'waiting' || row.state === 'skipped' ? 'text.secondary' : 'text.primary'}
+                  >
+                    {row.label}
+                  </Typography>
+                  {/* A build item's failure, note or refund (AGL-3616). */}
+                  {row.detail ? (
+                    <Typography variant="body2" color="text.secondary">
+                      {row.detail}
+                    </Typography>
+                  ) : null}
+                </Box>
               </Stack>
             ))}
           </Stack>
@@ -330,6 +362,10 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
           leave={() => setRetrying(false)}
         />
       ) : null}
+      {buildPlanWaiting ? (
+        // A build's plan, confirmed here as in the chat (AGL-3616).
+        <AiJobPlan job={ready} busy={busy} onResume={(target, options) => void confirmPlan(target, options)} />
+      ) : null}
       {sitePublish && sitePublish.drafts.length > 0 && (
         // The pages the publish left as drafts, each with its plain reason;
         // Edit your pages is where they are fixed and published.
@@ -348,6 +384,13 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
             {'Open Edit your pages to fix and publish them.'}
           </Typography>
         </Alert>
+      )}
+      {phase === 'done' && buildRetry && (
+        <Box>
+          <Button variant="outlined" disabled={busy} onClick={() => void tryAgain()}>
+            {'Try again what failed'}
+          </Button>
+        </Box>
       )}
       {phase === 'done' && (
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>

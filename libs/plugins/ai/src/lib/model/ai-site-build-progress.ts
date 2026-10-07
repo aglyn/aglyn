@@ -17,6 +17,7 @@
 
 import { aiJobKindNoun } from './ai-job-activity'
 import { aiJobRefundCopy } from './ai-job-failure-copy'
+import { aiBuildItemRows, aiBuildOutcomeLine, aiSitePartialCopy } from './ai-build-progress'
 import type { AiJobSummary } from './ai-jobs.types'
 
 /**
@@ -32,12 +33,14 @@ import type { AiJobSummary } from './ai-jobs.types'
  * Pure: no React, no request. The page and its spec read the same rows.
  */
 
-export type AiSiteBuildRowState = 'done' | 'active' | 'waiting' | 'failed'
+export type AiSiteBuildRowState = 'done' | 'active' | 'waiting' | 'failed' | 'skipped'
 
 export interface AiSiteBuildRow {
   id: string
   label: string
   state: AiSiteBuildRowState
+  /** What the person should know about this row (AGL-3616): a build item's failure, note or refund. */
+  detail?: string | null
 }
 
 /** Where the whole job stands, as the page's header and actions read it. */
@@ -75,9 +78,37 @@ const CREATION_ROWS: ReadonlyArray<{ kind: string; resource: string; label: (nam
  * the first page's.
  */
 export function aiSiteBuildRows(
-  job: Pick<AiJobSummary, 'status' | 'steps' | 'plan' | 'outputs' | 'review'>,
+  job: Pick<AiJobSummary, 'status' | 'steps' | 'plan' | 'outputs' | 'review'> & Partial<Pick<AiJobSummary, 'items' | 'kind'>>,
 ): AiSiteBuildRow[] {
   const phase = aiSiteBuildPhase(job)
+  // A build is read off its item ledger (AGL-3616): one row an item, each with
+  // its own state and what became of its credits.
+  if (job.items?.length) {
+    const site = job.kind !== 'build'
+    const pages = (job.items ?? []).filter((row) => row.op === 'page')
+    return [
+      { id: 'plan', label: site ? 'Planning your pages' : 'Planning what to build', state: 'done' },
+      ...aiBuildItemRows(job).map((row, index) => {
+        const ledger = (job.items ?? [])[index]
+        // A site keeps the scaffold's own words for each stage (AGL-3596).
+        const label =
+          !site || !ledger
+            ? row.label
+            : ledger.op === 'theme'
+              ? 'Choosing your colors'
+              : ledger.op === 'layout'
+                ? `Building the header and footer: ${ledger.label}`
+                : ledger.op === 'form'
+                  ? `Building the form: ${ledger.label}`
+                  : ledger.op === 'page'
+                    ? `Writing page ${pages.indexOf(ledger) + 1} of ${pages.length}: ${ledger.label}`
+                    : ledger.op === 'email'
+                      ? 'Writing your welcome email'
+                      : row.label
+        return { id: row.slot, label, state: row.state, detail: row.detail }
+      }),
+    ]
+  }
   const planStep = job.steps.find((step) => step.name === 'plan')
   const planDone = planStep?.status === 'done' || Boolean(job.plan)
   const stopped = phase === 'failed' || phase === 'stopped'
@@ -160,10 +191,12 @@ export interface AiJobPageCopy {
  * guided start — built drafts, and says that instead.
  */
 export function aiJobPageCopy(
-  job: Pick<AiJobSummary, 'kind' | 'status' | 'review' | 'error'> & Partial<Pick<AiJobSummary, 'sitePublish'>>,
+  job: Pick<AiJobSummary, 'kind' | 'status' | 'review' | 'error'> & Partial<Pick<AiJobSummary, 'sitePublish' | 'items'>>,
   brand: string,
 ): AiJobPageCopy {
   const phase = aiSiteBuildPhase(job)
+  // A build is what the person asked for, item by item (AGL-3616).
+  if (job.kind === 'build') return aiBuildPageCopy(job, brand)
   const noun = job.kind === 'site' ? 'site' : aiJobKindNoun(job.kind)
   const generic = noun === 'AI job'
   // `products` is the one plural noun.
@@ -180,14 +213,22 @@ export function aiJobPageCopy(
   }
   if (phase === 'done') {
     const published = job.sitePublish?.published.length ?? 0
+    // Part of the site was built (AGL-3616): what was, what was not, and its credits.
+    const partial = job.kind === 'site' ? aiSitePartialCopy({ items: job.items, status: job.status }) : null
     if (job.kind === 'site' && published > 0) {
       return {
         heading: 'Your site is live',
-        lede: job.sitePublish?.drafts.length
-          ? 'Your pages are published, except the ones listed below, which stayed drafts.'
-          : 'Your pages are published, and anyone can visit your site now.',
+        lede: [
+          partial,
+          job.sitePublish?.drafts.length
+            ? 'Your pages are published, except the ones listed below, which stayed drafts.'
+            : 'Your pages are published, and anyone can visit your site now.',
+        ]
+          .filter(Boolean)
+          .join(' '),
       }
     }
+    if (partial) return { heading: 'Your site is ready', lede: `${partial} Your new pages are drafts. Publish them when you’re happy.` }
     if (job.kind === 'site' && job.sitePublish) {
       return {
         heading: 'Your site is ready',
@@ -208,5 +249,45 @@ export function aiJobPageCopy(
   return {
     heading: generic ? 'Your AI job stopped' : `Your ${noun} ${noun.endsWith('s') ? 'were' : 'was'} not built`,
     lede: why ?? (generic ? 'Something went wrong running this job.' : `Something went wrong building your ${noun}.`),
+  }
+}
+
+/** A build's page heading and sentence (AGL-3616). */
+function aiBuildPageCopy(
+  job: Pick<AiJobSummary, 'status' | 'review' | 'error'> & Partial<Pick<AiJobSummary, 'items' | 'sitePublish'>>,
+  brand: string,
+): AiJobPageCopy {
+  const phase = aiSiteBuildPhase(job)
+  const outcome = aiBuildOutcomeLine({ items: job.items ?? [], status: job.status })
+  if (phase === 'working') {
+    return {
+      heading: 'Building what you asked for',
+      lede: `${brand} AI is building each part in turn. You can leave this page; it keeps going.`,
+    }
+  }
+  if (phase === 'stopped') {
+    return {
+      heading: job.review?.reason === 'plan' ? 'Your plan is ready' : 'Your build needs you',
+      lede: job.review?.message ?? job.error ?? 'It waits for your decision.',
+    }
+  }
+  if (phase === 'done') {
+    const failed = (job.items ?? []).some((row) => row.status === 'failed' || row.status === 'skipped')
+    const live = job.sitePublish?.published.length ?? 0
+    return {
+      heading: failed ? 'Most of it is ready' : 'Everything you asked for is ready',
+      lede: [
+        outcome,
+        live ? 'Your new pages are published.' : 'Everything it built is an unpublished draft until you publish it.',
+        failed ? 'Try again builds only what failed.' : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+    }
+  }
+  if (phase === 'canceled') return { heading: 'Your build was canceled', lede: 'The job was canceled.' }
+  return {
+    heading: 'Nothing could be built',
+    lede: [job.error ?? 'Something went wrong building what you asked for.', outcome].filter(Boolean).join(' '),
   }
 }

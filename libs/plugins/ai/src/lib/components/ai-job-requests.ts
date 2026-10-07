@@ -38,6 +38,15 @@ export interface AiJobDecision {
 }
 
 /**
+ * What a resume asks beyond confirming (AGL-3616): a build's plan confirmed
+ * with its publish box ticked, or a finished build's failed items tried again.
+ */
+export interface AiJobResumeOptions {
+  publish?: boolean
+  retry?: 'failed-items'
+}
+
+/**
  * Confirms a plan, or tries again a step whose answer broke a building rule
  * (AGL-2935). The door runs the next step inline and answers with the job.
  */
@@ -45,6 +54,7 @@ export async function resumeAiJobRequest(
   user: MaybeTokenSource,
   orgId: string,
   job: Pick<AiJobSummary, 'id' | 'hostId'>,
+  options: AiJobResumeOptions = {},
 ): Promise<AiJobDecision> {
   try {
     const response = await authorizedFetch(
@@ -53,7 +63,12 @@ export async function resumeAiJobRequest(
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orgId, hostId: job.hostId }),
+        body: JSON.stringify({
+          orgId,
+          hostId: job.hostId,
+          ...(options.publish ? { publish: true } : {}),
+          ...(options.retry ? { retry: options.retry } : {}),
+        }),
       },
     )
     const payload = await response.json().catch(() => null)
