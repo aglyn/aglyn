@@ -46,6 +46,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { AI_PLUGIN_ID } from '../constants'
 import { AI_SITE_BUILD_HREF } from '../model/ai-job-notice'
 import type { AiJobSummary } from '../model/ai-jobs.types'
+import type { LazyWidget } from '../lazy-widget'
 import { registerAiConsole } from '../plugin'
 import { AiJobsPage } from './ai-jobs-page.component'
 
@@ -90,7 +91,7 @@ beforeEach(() => {
 })
 
 describe('the route the plugin registers (AGL-3596)', () => {
-  it('is one unlisted address under the site, titled AI jobs, whose records are Building your site', () => {
+  it('is one unlisted address under the site, titled AI jobs, whose records are Building your site', async () => {
     registerAiConsole()
     const extension = listConsoleExtensions([AI_PLUGIN_ID]).find((entry) => entry.pluginId === AI_PLUGIN_ID)
     const item = extension?.navItems?.find((navItem) => navItem.href === AI_SITE_BUILD_HREF)
@@ -100,9 +101,10 @@ describe('the route the plugin registers (AGL-3596)', () => {
         recordTitle: 'Building your site',
         unlisted: true,
         ownsSubtree: true,
-        Component: AiJobsPage,
       }),
     )
+    // Registered lazily (AGL-3649): the stand-in loads the page when drawn.
+    expect(await (item?.Component as LazyWidget).load()).toBe(AiJobsPage)
   })
 
   it('opens one job’s page when the address names a job', async () => {

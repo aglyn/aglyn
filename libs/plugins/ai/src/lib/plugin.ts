@@ -16,96 +16,335 @@
  */
 
 import { PLATFORM_BRAND_NAME, registerConsoleExtension } from '@aglyn/aglyn'
-import { AiCollaboratorPermissionsCell } from './components/ai-collaborator-permissions-column.component'
-import { AiSaveAsComponent } from './components/ai-save-as-component.component'
-import {
-  AiGenerateSectionControl,
-  AiRewriteControl,
-} from './components/besigner-ai-controls.component'
-import {
-  AiAssistProviderOnHost,
-  AssistPanelOnHost,
-} from './components/ai-permissions-on-host.component'
-import AiCreditsCard from './components/ai-credits-card.component'
-import AiJobsTopBarIndicator from './components/ai-jobs-indicator.component'
-import {
-  AiCollaboratorCreditsCell,
-  AiCollaboratorCreditsHeader,
-  AiMemberCreditsCell,
-  AiMemberCreditsHeader,
-} from './components/ai-credits-columns.component'
-import { AssistSignalsPage } from './components/assist-signals-page.component'
-import BillingAssistOverageCard from './components/billing-assist-overage-card.component'
-import { AiTopUsersCard } from './components/billing-ai-top-users.component'
-import { AiAllotmentsCard } from './components/billing-ai-allotments.component'
-import {
-  AiCollaboratorAllotmentCell,
-  AiCollaboratorAllotmentHeader,
-  AiSiteAllotmentCard,
-} from './components/host-ai-allotments.component'
-import MemberAiAllotmentCard from './components/member-ai-allotment-card.component'
-import MemberAiUsageCard from './components/member-ai-usage-card.component'
-import AiThemeProposalCard from './components/ai-theme-proposal-card.component'
-import StaffOrgAiCard from './components/staff-org-ai-card.component'
-import {
-  StaffOrgUsageAiCreditsCell,
-  StaffOrgUsageAiOverageCell,
-  StaffOrgUsageAiPool,
-  StaffOrgUsageAssistCell,
-} from './components/staff-org-usage-ai-columns.component'
-import {
-  StaffOrgsAiSpendCell,
-  StaffOrgsAiSpendHeader,
-} from './components/staff-orgs-ai-spend-column.component'
-import StaffUserAiUsageCard from './components/staff-user-ai-usage-card.component'
-import AiSeoAuditCard from './components/ai-seo-audit-card.component'
-import AiSiteBatchCard from './components/ai-site-batch-card.component'
-import AiSiteSeoStartCard from './components/ai-site-seo-start-card.component'
-import AiSiteStartCard from './components/ai-site-start-card.component'
-import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
-import AiDescribeAutomationButton from './components/ai-describe-automation.component'
-import AiReviseAutomation from './components/ai-revise-automation.component'
-import AiDescribeOrgAutomationButton from './components/ai-describe-org-automation.component'
-import { AiInsightHostCard, AiInsightOrgCard } from './components/ai-insight-card.component'
-import {
-  AiLogicCreateButton,
-  AiLogicFixReference,
-  AiLogicFunctionTools,
-} from './components/ai-logic.component'
-import { AiFunnelAskButton, AiFunnelCreateButton } from './components/ai-funnel-zones.component'
-import AiCrmEmailDraft from './components/ai-crm-email-draft.component'
-import AiCrmImportMapping from './components/ai-crm-import-mapping.component'
-import AiCrmRecordCard from './components/ai-crm-record-card.component'
-import AiDescribePageButton from './components/ai-describe-page.component'
-import AiMediaCreateButton from './components/ai-media-create.component'
-import {
-  AiDescribeComponentButton,
-  AiDescribeFormButton,
-  AiDescribeLayoutButton,
-  AiDescribeTemplateButton,
-} from './components/ai-describe-button.component'
-import { AiDescribeEmailButton } from './components/ai-describe-email.component'
-import {
-  AiExperimentResultCard,
-  AiExperimentVariantsCard,
-} from './components/ai-experiment-cards.component'
-import {
-  AiExplainAutomation,
-  AiExplainRunFailure,
-} from './components/ai-explain-automation.component'
-import AiCreateCampaignButton from './components/ai-campaign-create.component'
-import AiMarketingInsightButton from './components/ai-marketing-insight.component'
-import {
-  AiCreateOverlayButton,
-  AiOverlayEditorCard,
-} from './components/ai-overlay-cards.component'
-import AiProductCopyCard from './components/ai-product-copy-card.component'
-import AiProductImportOption from './components/ai-product-import-option.component'
-import AiProductsHubCard from './components/ai-products-hub-card.component'
-import AiCreateProductsButton from './components/ai-products-create-button.component'
-import AiJobsPage from './components/ai-jobs-page.component'
+import { LinearProgress } from '@mui/material'
+import { createElement } from 'react'
+import { AiAssistProviderOnHost } from './components/ai-assist-provider-on-host.component'
 import { AI_PLUGIN_ID } from './constants'
 import { registerAiDeclarations } from './declarations'
+import { lazyWidget } from './lazy-widget'
+
+/*
+ * Every component below is registered by name and loaded the first time the
+ * shell draws it (AGL-3649); see `lazyWidget`. The console loads this plugin
+ * on every screen, so a static import of a component here is downloaded by
+ * every reader of every page, staff cards included.
+ */
+
+/** What a page shows while its code arrives. */
+const PAGE_LOADING = createElement(LinearProgress, { 'aria-label': 'Loading' })
+
+const AiCollaboratorPermissionsCell = lazyWidget(
+  'AiCollaboratorPermissionsCell',
+  () =>
+    import('./components/ai-collaborator-permissions-column.component').then(
+      (m) => m.AiCollaboratorPermissionsCell,
+    ),
+)
+const AiSaveAsComponent = lazyWidget('AiSaveAsComponent', () =>
+  import('./components/ai-save-as-component.component').then(
+    (m) => m.AiSaveAsComponent,
+  ),
+)
+const AiGenerateSectionControl = lazyWidget('AiGenerateSectionControl', () =>
+  import('./components/besigner-ai-controls.component').then(
+    (m) => m.AiGenerateSectionControl,
+  ),
+)
+const AiRewriteControl = lazyWidget('AiRewriteControl', () =>
+  import('./components/besigner-ai-controls.component').then(
+    (m) => m.AiRewriteControl,
+  ),
+)
+const AssistPanelOnHost = lazyWidget('AssistPanelOnHost', () =>
+  import('./components/ai-permissions-on-host.component').then(
+    (m) => m.AssistPanelOnHost,
+  ),
+)
+const AiCreditsCard = lazyWidget('AiCreditsCard', () =>
+  import('./components/ai-credits-card.component').then((m) => m.default),
+)
+const AiJobsTopBarIndicator = lazyWidget('AiJobsTopBarIndicator', () =>
+  import('./components/ai-jobs-indicator.component').then((m) => m.default),
+)
+const AiCollaboratorCreditsCell = lazyWidget('AiCollaboratorCreditsCell', () =>
+  import('./components/ai-credits-columns.component').then(
+    (m) => m.AiCollaboratorCreditsCell,
+  ),
+)
+const AiCollaboratorCreditsHeader = lazyWidget(
+  'AiCollaboratorCreditsHeader',
+  () =>
+    import('./components/ai-credits-columns.component').then(
+      (m) => m.AiCollaboratorCreditsHeader,
+    ),
+)
+const AiMemberCreditsCell = lazyWidget('AiMemberCreditsCell', () =>
+  import('./components/ai-credits-columns.component').then(
+    (m) => m.AiMemberCreditsCell,
+  ),
+)
+const AiMemberCreditsHeader = lazyWidget('AiMemberCreditsHeader', () =>
+  import('./components/ai-credits-columns.component').then(
+    (m) => m.AiMemberCreditsHeader,
+  ),
+)
+const AssistSignalsPage = lazyWidget(
+  'AssistSignalsPage',
+  () =>
+    import('./components/assist-signals-page.component').then(
+      (m) => m.AssistSignalsPage,
+    ),
+  PAGE_LOADING,
+)
+const BillingAssistOverageCard = lazyWidget('BillingAssistOverageCard', () =>
+  import('./components/billing-assist-overage-card.component').then(
+    (m) => m.default,
+  ),
+)
+const AiTopUsersCard = lazyWidget('AiTopUsersCard', () =>
+  import('./components/billing-ai-top-users.component').then(
+    (m) => m.AiTopUsersCard,
+  ),
+)
+const AiAllotmentsCard = lazyWidget('AiAllotmentsCard', () =>
+  import('./components/billing-ai-allotments.component').then(
+    (m) => m.AiAllotmentsCard,
+  ),
+)
+const AiCollaboratorAllotmentCell = lazyWidget(
+  'AiCollaboratorAllotmentCell',
+  () =>
+    import('./components/host-ai-allotments.component').then(
+      (m) => m.AiCollaboratorAllotmentCell,
+    ),
+)
+const AiCollaboratorAllotmentHeader = lazyWidget(
+  'AiCollaboratorAllotmentHeader',
+  () =>
+    import('./components/host-ai-allotments.component').then(
+      (m) => m.AiCollaboratorAllotmentHeader,
+    ),
+)
+const AiSiteAllotmentCard = lazyWidget('AiSiteAllotmentCard', () =>
+  import('./components/host-ai-allotments.component').then(
+    (m) => m.AiSiteAllotmentCard,
+  ),
+)
+const MemberAiAllotmentCard = lazyWidget('MemberAiAllotmentCard', () =>
+  import('./components/member-ai-allotment-card.component').then(
+    (m) => m.default,
+  ),
+)
+const MemberAiUsageCard = lazyWidget('MemberAiUsageCard', () =>
+  import('./components/member-ai-usage-card.component').then((m) => m.default),
+)
+const AiThemeProposalCard = lazyWidget('AiThemeProposalCard', () =>
+  import('./components/ai-theme-proposal-card.component').then(
+    (m) => m.default,
+  ),
+)
+const StaffOrgAiCard = lazyWidget('StaffOrgAiCard', () =>
+  import('./components/staff-org-ai-card.component').then((m) => m.default),
+)
+const StaffOrgUsageAiCreditsCell = lazyWidget(
+  'StaffOrgUsageAiCreditsCell',
+  () =>
+    import('./components/staff-org-usage-ai-columns.component').then(
+      (m) => m.StaffOrgUsageAiCreditsCell,
+    ),
+)
+const StaffOrgUsageAiOverageCell = lazyWidget(
+  'StaffOrgUsageAiOverageCell',
+  () =>
+    import('./components/staff-org-usage-ai-columns.component').then(
+      (m) => m.StaffOrgUsageAiOverageCell,
+    ),
+)
+const StaffOrgUsageAiPool = lazyWidget('StaffOrgUsageAiPool', () =>
+  import('./components/staff-org-usage-ai-columns.component').then(
+    (m) => m.StaffOrgUsageAiPool,
+  ),
+)
+const StaffOrgUsageAssistCell = lazyWidget('StaffOrgUsageAssistCell', () =>
+  import('./components/staff-org-usage-ai-columns.component').then(
+    (m) => m.StaffOrgUsageAssistCell,
+  ),
+)
+const StaffOrgsAiSpendCell = lazyWidget('StaffOrgsAiSpendCell', () =>
+  import('./components/staff-orgs-ai-spend-column.component').then(
+    (m) => m.StaffOrgsAiSpendCell,
+  ),
+)
+const StaffOrgsAiSpendHeader = lazyWidget('StaffOrgsAiSpendHeader', () =>
+  import('./components/staff-orgs-ai-spend-column.component').then(
+    (m) => m.StaffOrgsAiSpendHeader,
+  ),
+)
+const StaffUserAiUsageCard = lazyWidget('StaffUserAiUsageCard', () =>
+  import('./components/staff-user-ai-usage-card.component').then(
+    (m) => m.default,
+  ),
+)
+const AiSeoAuditCard = lazyWidget('AiSeoAuditCard', () =>
+  import('./components/ai-seo-audit-card.component').then((m) => m.default),
+)
+const AiSiteBatchCard = lazyWidget('AiSiteBatchCard', () =>
+  import('./components/ai-site-batch-card.component').then((m) => m.default),
+)
+const AiSiteSeoStartCard = lazyWidget('AiSiteSeoStartCard', () =>
+  import('./components/ai-site-seo-start-card.component').then(
+    (m) => m.default,
+  ),
+)
+const AiSiteStartCard = lazyWidget('AiSiteStartCard', () =>
+  import('./components/ai-site-start-card.component').then((m) => m.default),
+)
+const AiSeoFieldsCard = lazyWidget('AiSeoFieldsCard', () =>
+  import('./components/ai-seo-fields-card.component').then((m) => m.default),
+)
+const AiDescribeAutomationButton = lazyWidget(
+  'AiDescribeAutomationButton',
+  () =>
+    import('./components/ai-describe-automation.component').then(
+      (m) => m.default,
+    ),
+)
+const AiReviseAutomation = lazyWidget('AiReviseAutomation', () =>
+  import('./components/ai-revise-automation.component').then((m) => m.default),
+)
+const AiDescribeOrgAutomationButton = lazyWidget(
+  'AiDescribeOrgAutomationButton',
+  () =>
+    import('./components/ai-describe-org-automation.component').then(
+      (m) => m.default,
+    ),
+)
+const AiInsightHostCard = lazyWidget('AiInsightHostCard', () =>
+  import('./components/ai-insight-card.component').then(
+    (m) => m.AiInsightHostCard,
+  ),
+)
+const AiInsightOrgCard = lazyWidget('AiInsightOrgCard', () =>
+  import('./components/ai-insight-card.component').then(
+    (m) => m.AiInsightOrgCard,
+  ),
+)
+const AiLogicCreateButton = lazyWidget('AiLogicCreateButton', () =>
+  import('./components/ai-logic.component').then((m) => m.AiLogicCreateButton),
+)
+const AiLogicFixReference = lazyWidget('AiLogicFixReference', () =>
+  import('./components/ai-logic.component').then((m) => m.AiLogicFixReference),
+)
+const AiLogicFunctionTools = lazyWidget('AiLogicFunctionTools', () =>
+  import('./components/ai-logic.component').then((m) => m.AiLogicFunctionTools),
+)
+const AiFunnelAskButton = lazyWidget('AiFunnelAskButton', () =>
+  import('./components/ai-funnel-zones.component').then(
+    (m) => m.AiFunnelAskButton,
+  ),
+)
+const AiFunnelCreateButton = lazyWidget('AiFunnelCreateButton', () =>
+  import('./components/ai-funnel-zones.component').then(
+    (m) => m.AiFunnelCreateButton,
+  ),
+)
+const AiCrmEmailDraft = lazyWidget('AiCrmEmailDraft', () =>
+  import('./components/ai-crm-email-draft.component').then((m) => m.default),
+)
+const AiCrmImportMapping = lazyWidget('AiCrmImportMapping', () =>
+  import('./components/ai-crm-import-mapping.component').then((m) => m.default),
+)
+const AiCrmRecordCard = lazyWidget('AiCrmRecordCard', () =>
+  import('./components/ai-crm-record-card.component').then((m) => m.default),
+)
+const AiDescribePageButton = lazyWidget('AiDescribePageButton', () =>
+  import('./components/ai-describe-page.component').then((m) => m.default),
+)
+const AiMediaCreateButton = lazyWidget('AiMediaCreateButton', () =>
+  import('./components/ai-media-create.component').then((m) => m.default),
+)
+const AiDescribeComponentButton = lazyWidget('AiDescribeComponentButton', () =>
+  import('./components/ai-describe-button.component').then(
+    (m) => m.AiDescribeComponentButton,
+  ),
+)
+const AiDescribeFormButton = lazyWidget('AiDescribeFormButton', () =>
+  import('./components/ai-describe-button.component').then(
+    (m) => m.AiDescribeFormButton,
+  ),
+)
+const AiDescribeLayoutButton = lazyWidget('AiDescribeLayoutButton', () =>
+  import('./components/ai-describe-button.component').then(
+    (m) => m.AiDescribeLayoutButton,
+  ),
+)
+const AiDescribeTemplateButton = lazyWidget('AiDescribeTemplateButton', () =>
+  import('./components/ai-describe-button.component').then(
+    (m) => m.AiDescribeTemplateButton,
+  ),
+)
+const AiDescribeEmailButton = lazyWidget('AiDescribeEmailButton', () =>
+  import('./components/ai-describe-email.component').then(
+    (m) => m.AiDescribeEmailButton,
+  ),
+)
+const AiExperimentResultCard = lazyWidget('AiExperimentResultCard', () =>
+  import('./components/ai-experiment-cards.component').then(
+    (m) => m.AiExperimentResultCard,
+  ),
+)
+const AiExperimentVariantsCard = lazyWidget('AiExperimentVariantsCard', () =>
+  import('./components/ai-experiment-cards.component').then(
+    (m) => m.AiExperimentVariantsCard,
+  ),
+)
+const AiExplainAutomation = lazyWidget('AiExplainAutomation', () =>
+  import('./components/ai-explain-automation.component').then(
+    (m) => m.AiExplainAutomation,
+  ),
+)
+const AiExplainRunFailure = lazyWidget('AiExplainRunFailure', () =>
+  import('./components/ai-explain-automation.component').then(
+    (m) => m.AiExplainRunFailure,
+  ),
+)
+const AiCreateCampaignButton = lazyWidget('AiCreateCampaignButton', () =>
+  import('./components/ai-campaign-create.component').then((m) => m.default),
+)
+const AiMarketingInsightButton = lazyWidget('AiMarketingInsightButton', () =>
+  import('./components/ai-marketing-insight.component').then((m) => m.default),
+)
+const AiCreateOverlayButton = lazyWidget('AiCreateOverlayButton', () =>
+  import('./components/ai-overlay-cards.component').then(
+    (m) => m.AiCreateOverlayButton,
+  ),
+)
+const AiOverlayEditorCard = lazyWidget('AiOverlayEditorCard', () =>
+  import('./components/ai-overlay-cards.component').then(
+    (m) => m.AiOverlayEditorCard,
+  ),
+)
+const AiProductCopyCard = lazyWidget('AiProductCopyCard', () =>
+  import('./components/ai-product-copy-card.component').then((m) => m.default),
+)
+const AiProductImportOption = lazyWidget('AiProductImportOption', () =>
+  import('./components/ai-product-import-option.component').then(
+    (m) => m.default,
+  ),
+)
+const AiProductsHubCard = lazyWidget('AiProductsHubCard', () =>
+  import('./components/ai-products-hub-card.component').then((m) => m.default),
+)
+const AiCreateProductsButton = lazyWidget('AiCreateProductsButton', () =>
+  import('./components/ai-products-create-button.component').then(
+    (m) => m.default,
+  ),
+)
+const AiJobsPage = lazyWidget(
+  'AiJobsPage',
+  () => import('./components/ai-jobs-page.component').then((m) => m.default),
+  PAGE_LOADING,
+)
 
 /**
  * The Aglyn AI plugin's console half (AGL-2939): the assistant dock, the
