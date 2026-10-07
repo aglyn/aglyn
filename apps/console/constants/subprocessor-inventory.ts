@@ -717,6 +717,12 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       "The Android emulator's alias for the developer machine's own loopback, allowed beside `localhost` and `127.0.0.1` in the mobile app's WebView origin list (`libs/mobile/webview/src/lib/console-webview.tsx`) so a development build can open a console served from the same machine. A private address, never a third party.",
     dataReceived: 'Nothing leaves for a third party. It reaches only a server on the developer machine running the emulator.',
   },
+  'schemas.android.com': {
+    disposition: 'no-request',
+    reason:
+      "The Android resource namespace URI (`xmlns:android`) in the vector drawables and adaptive icon `tools/scripts/lib/native-brand.mjs` generates for the native Android app (AGL-3651). An identifier inside the XML the build compiles.",
+    dataReceived: 'Nothing. No request is made.',
+  },
   'ns.adobe.com': {
     disposition: 'no-request',
     reason:
