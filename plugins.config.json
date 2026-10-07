@@ -2231,6 +2231,7 @@
       "mobile": {
         "$comment": "AGL-3620: the sample mobile registration. The site's rules as a native list (a split view on tablets), a dashboard count, a quick action, and the console's Redirects page opening natively from a link or a notification.",
         "ios": { "module": "AglynRedirectsPlugin", "register": "registerRedirectsNative" },
+        "android": { "package": "com.aglyn.plugins.redirects", "register": "registerRedirectsNative" },
         "contributes": {
           "screens": ["redirects.list"],
           "widgets": ["redirects.summary"],

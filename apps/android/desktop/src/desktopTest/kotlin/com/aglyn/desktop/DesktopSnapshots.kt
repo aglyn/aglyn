@@ -6,7 +6,7 @@ import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.use
 import com.aglyn.pluginhost.NativeApp
-import com.aglyn.plugins.manifest.NativePlugins
+import com.aglyn.plugins.manifest.NativePluginManifest
 import com.aglyn.shell.AglynShell
 import com.aglyn.shell.DesktopShell
 import com.aglyn.shell.PosShell
@@ -31,7 +31,7 @@ fun main() = runBlocking {
   val dir = File(System.getProperty("aglyn.snapshotDir") ?: "build/snapshots").apply { mkdirs() }
   val env = DesktopShell.envFromSystem()
 
-  val aglyn = DesktopShell.services(NativeApp.AGLYN, env, NativePlugins.entries)
+  val aglyn = DesktopShell.services(NativeApp.AGLYN, env, NativePluginManifest.entries)
   aglyn.auth.signInWithEmail(aglyn.debugSignIn!!.first, aglyn.debugSignIn!!.second)
   val navigator = ShellNavigator()
   for (dark in listOf(false, true)) {
@@ -47,7 +47,7 @@ fun main() = runBlocking {
   aglyn.auth.signOut()
   shoot(dir, "aglyn-desktop-sign-in", false) { AglynShell(aglyn, ShellNavigator(), dark = it) }
 
-  val pos = DesktopShell.services(NativeApp.POS, env, NativePlugins.entries)
+  val pos = DesktopShell.services(NativeApp.POS, env, NativePluginManifest.entries)
   shoot(dir, "pos-desktop-sign-in", false) { PosShell(pos, dark = it) }
   pos.auth.signInWithEmail(pos.debugSignIn!!.first, pos.debugSignIn!!.second)
   shoot(dir, "pos-desktop-register", false) { PosShell(pos, dark = it) }

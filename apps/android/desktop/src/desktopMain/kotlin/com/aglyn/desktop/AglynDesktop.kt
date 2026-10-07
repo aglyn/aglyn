@@ -4,7 +4,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.window.application
 import com.aglyn.pluginhost.NativeApp
-import com.aglyn.plugins.manifest.NativePlugins
+import com.aglyn.plugins.manifest.NativePluginManifest
 import com.aglyn.shell.AglynShell
 import com.aglyn.shell.DesktopShell
 import com.aglyn.shell.Route
@@ -12,7 +12,7 @@ import com.aglyn.shell.ShellNavigator
 
 /** "Aglyn" on the desktop. */
 fun main() {
-  val services = DesktopShell.services(NativeApp.AGLYN, DesktopShell.envFromSystem(), NativePlugins.entries)
+  val services = DesktopShell.services(NativeApp.AGLYN, DesktopShell.envFromSystem(), NativePluginManifest.entries)
   val autoSignIn = System.getProperty("aglyn.autoSignIn") == "true"
   application {
     val navigator = remember { ShellNavigator() }

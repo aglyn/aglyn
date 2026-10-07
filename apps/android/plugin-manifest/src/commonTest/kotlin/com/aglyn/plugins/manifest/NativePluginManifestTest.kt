@@ -10,11 +10,11 @@ import kotlin.test.assertEquals
  * reports a declared one that never registered, so a red here names the
  * plugin and the id before an app ever starts without it.
  */
-class NativePluginsTest {
+class NativePluginManifestTest {
   @Test
   fun loadsEveryPluginWithNoFailures() {
-    val result = NativePluginRegistry().load(NativePlugins.entries)
+    val result = NativePluginRegistry().load(NativePluginManifest.entries)
     assertEquals(emptyList(), result.failed)
-    assertEquals(NativePlugins.entries.map { it.id }, result.loaded)
+    assertEquals(NativePluginManifest.entries.map { it.id }, result.loaded)
   }
 }

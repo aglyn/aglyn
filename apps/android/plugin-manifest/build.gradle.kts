@@ -1,5 +1,5 @@
-// The native plugin manifest: depends on every plugin module the properties
-// files name, and lists each plugin's declaration and registrar.
+// The native plugin manifest: depends on every plugin module the generated
+// properties file names, and lists each plugin's declaration and registrar.
 import java.util.Properties
 
 plugins {
@@ -8,10 +8,7 @@ plugins {
 }
 
 val pluginIds: List<String> = Properties().apply {
-  for (name in listOf("native-plugins.properties", "native-plugins.generated.properties")) {
-    val source = rootProject.file(name)
-    if (source.isFile) source.inputStream().use { load(it) }
-  }
+  rootProject.file("native-plugins.generated.properties").inputStream().use { load(it) }
 }.stringPropertyNames().sorted()
 
 kotlin {
