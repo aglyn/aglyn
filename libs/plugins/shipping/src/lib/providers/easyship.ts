@@ -310,7 +310,7 @@ export function createEasyshipProvider(options: EasyshipProviderOptions = {}): S
     },
 
     async registerTracker() {
-      throw unsupported('follow parcels labelled elsewhere')
+      throw unsupported('follow parcels labeled elsewhere')
     },
 
     async validateAddress() {

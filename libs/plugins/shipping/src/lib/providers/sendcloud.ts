@@ -187,7 +187,7 @@ export function createSendcloudProvider(options: SendcloudProviderOptions = {}):
         await call<unknown>(account, '/user/auth/metadata'),
       )
       if (!body?.user_id && !body?.integration_id) {
-        throw new ShippingProviderError('Sendcloud did not recognise those keys', 401, 'sendcloud')
+        throw new ShippingProviderError('Sendcloud did not recognize those keys', 401, 'sendcloud')
       }
       return {
         accountName: body.integration_id ? `Sendcloud integration ${body.integration_id}` : `Sendcloud user ${body.user_id}`,
@@ -314,7 +314,7 @@ export function createSendcloudProvider(options: SendcloudProviderOptions = {}):
     },
 
     async registerTracker() {
-      throw unsupported('follow parcels labelled elsewhere')
+      throw unsupported('follow parcels labeled elsewhere')
     },
 
     async validateAddress() {
