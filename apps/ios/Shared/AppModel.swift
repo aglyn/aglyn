@@ -104,6 +104,7 @@ final class AppModel {
       firestore: reader,
       api: api,
       writer: ReaderMergeWriter(reader),
+      staff: auth?.staff,
       navigate: { [weak navigation] screen, params in navigation?.push(.screen(screen, params)) },
       openBesigner: { [weak navigation] path in navigation?.push(.besigner(path)) })
   }

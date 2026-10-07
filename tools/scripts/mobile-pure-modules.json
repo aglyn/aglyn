@@ -34,6 +34,10 @@
       "why": "Reached by the Commerce app's product writes: the site-wide outbox document shape and keys."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/staff-role-gate.ts",
+      "why": "The staff role gate the native staff section replays (AGL-3667): a pure verdict over a role string and a role list."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/stripe-deployment-mode.ts",
       "why": "Reached by the commerce model: test or live mode from a plain value, no Stripe SDK."
     },

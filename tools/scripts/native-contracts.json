@@ -1858,6 +1858,53 @@
           "text"
         ]
       ]
+    },
+    "resolveStaffRoleGate": {
+      "module": "libs/aglyn/src/lib/app-utils/staff-role-gate.ts",
+      "args": [
+        [
+          null,
+          [
+            "super"
+          ]
+        ],
+        [
+          "super",
+          [
+            "super"
+          ]
+        ],
+        [
+          "support",
+          [
+            "super"
+          ]
+        ],
+        [
+          "billing",
+          [
+            "super",
+            "billing"
+          ]
+        ],
+        [
+          "support",
+          [
+            "super",
+            "billing"
+          ]
+        ],
+        [
+          "",
+          [
+            "super"
+          ]
+        ],
+        [
+          "super",
+          []
+        ]
+      ]
     }
   }
 }

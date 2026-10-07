@@ -30,7 +30,12 @@ struct PluginScreenView: View {
 
   var body: some View {
     if let screen = model.registry.screen(screenID), let context = model.context(for: navigation) {
-      if screen.requiresSite && context.hostID == nil {
+      if !screen.admits(context.staff) {
+        AglynEmptyState(
+          "Not available", systemImage: "lock",
+          message: "This page is for Aglyn staff whose role includes it.")
+        .navigationTitle(screen.title)
+      } else if screen.requiresSite && context.hostID == nil {
         AglynEmptyState(
           "Pick a site", systemImage: "globe",
           message: "\(screen.title) shows one site at a time."

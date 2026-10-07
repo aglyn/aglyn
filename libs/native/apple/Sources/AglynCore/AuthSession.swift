@@ -104,6 +104,9 @@ public func signInErrorMessage(_ error: Error) -> String {
 @Observable
 public final class AuthSession {
   public private(set) var user: AglynUser?
+  /// The signed-in person's Aglyn staff standing (`staff` and `staffRole`
+  /// claims), nil for everyone else. For display only; the routes decide.
+  public private(set) var staff: StaffStanding?
   /// False until it is known whether someone is signed in.
   public private(set) var ready = false
   public let transport: AuthTransport
@@ -120,6 +123,7 @@ public final class AuthSession {
       Task { @MainActor in
         self.user = await rest.restore()
         self.ready = true
+        await self.refreshStanding()
       }
       return
     }
@@ -129,6 +133,7 @@ public final class AuthSession {
           AglynUser(uid: $0.uid, email: $0.email, displayName: $0.displayName)
         }
         self?.ready = true
+        Task { await self?.refreshStanding() }
       }
     }
   }
@@ -149,6 +154,7 @@ public final class AuthSession {
     let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
     if let rest {
       user = try await rest.signIn(email: trimmed, password: password)
+      await refreshStanding()
       return
     }
     _ = try await Auth.auth().signIn(withEmail: trimmed, password: password)
@@ -171,12 +177,22 @@ public final class AuthSession {
 
   public func signOut() async {
     for task in beforeSignOut { await task() }
+    staff = nil
     if let rest {
       await rest.signOut()
       user = nil
       return
     }
     try? Auth.auth().signOut()
+  }
+
+  /// Reads the staff standing from the current ID token's claims.
+  public func refreshStanding() async {
+    guard user != nil, let token = try? await idToken(forceRefresh: false) else {
+      staff = nil
+      return
+    }
+    staff = idTokenClaims(token).flatMap(StaffStanding.from(claims:))
   }
 
   /// The current ID token; nil when signed out.
