@@ -2757,7 +2757,10 @@ sees a record, and every insight a person reads is traced to the numbers it cite
   value and weighted value through `pipelineTotals`, at most 1,000 open deals on `status` +
   `updatedAt`) and `crm.closed` (won and lost in the window on `status` + `closedAtMs`, at most
   1,000 of each) (`libs/plugins/crm/src/lib/server/deal-figures.ts`), each scoped to a site's
-  shared deals by `scopedToHost` when a site is named; every query is served by an index the
+  shared deals by `scopedToHost` when a site is named, and the marketing plugin's
+  `marketing.overlays` (`libs/plugins/marketing/src/lib/server/overlay-figures.ts`: each bar and
+  popup's lifetime `stats` counters — views, clicks, click rate, dismissals — and its status, at
+  most 100 overlays, no window, the copy never read); every query is served by an index the
   file already carries. The surfaces widen with them: `analytics` (also a site's dashboard)
   offers `automations` and `crm` too, `crm-reports` offers `crm`, and three surfaces join —
   `automations` (a site's Automation page), `bookings` (its Bookings page) and `workspace` (the

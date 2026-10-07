@@ -24,6 +24,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { emailEventsHandler } from './server/email-events'
 import { registerMarketingFigureReaders } from './server/marketing-figures'
+import { registerOverlayFigureReader } from './server/overlay-figures'
 import { registerListSendTimeFacts } from './server/list-send-time-facts'
 import { marketingSitePageEnricher } from './server/site-page-enricher'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
@@ -142,6 +143,8 @@ export function registerMarketingConsoleApi(): void {
   // Campaign and A/B testing results as figure tables (AGL-2915), for the AI
   // plugin's insights to read by id; the console runs insight jobs.
   registerMarketingFigureReaders(() => firebaseAdmin.app().firestore())
+  // Announcement bars and popups as a figure table (AGL-3603), likewise.
+  registerOverlayFigureReader(() => firebaseAdmin.app().firestore())
   // When a list reads its mail, from its sends on the site (AGL-3080): the
   // AI plugin's campaign drafts suggest a send time through it.
   registerListSendTimeFacts(() => firebaseAdmin.app().firestore())
