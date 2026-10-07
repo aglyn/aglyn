@@ -202,6 +202,18 @@ nothing on the web reaches it (`check:mobile-isolation`).
 | `mobile-webview` | `@aglyn/mobile-webview` | `libs/mobile/webview` | `scope:mobile` `type:ui` | `.` — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/mobile-webview --publish`, then `trust:packages --set`); the authenticated console WebView and its origin- and nonce-checked bridge |
 | `mobile-plugin-host` | `@aglyn/mobile-plugin-host` | `libs/mobile/plugin-host` | `scope:mobile` `type:util` | `.` — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/mobile-plugin-host --publish`, then `trust:packages --set`); the `registerMobile…` registrars, the registry, the manifest loader and deep-link resolution |
 
+### Native (Kotlin)
+
+The Kotlin Multiplatform foundation of the native Android and JVM desktop apps
+(AGL-3652, AGL-3653). Kotlin and Gradle, built by `apps/android`'s Gradle root;
+not npm packages, and no web toolchain reads it. Native code never imports web
+or server code: it shares only generated files (tokens, contracts, the plugin
+manifest) with TypeScript.
+
+| project | npm name | root | tags | entry points |
+| -- | -- | -- | -- | -- |
+| `native-kotlin` | none (Gradle modules, not npm) | `libs/native/kotlin` | `scope:mobile` `type:feature` | Gradle modules `core` (config, auth and Firestore seams, console API client, workspace store), `ui` (Material 3 theme from the generated tokens, the shared component kit, adaptive layouts), `plugin-host` (registrar, registry, deep links), `webview` (the authenticated console view), `shell` (the Aglyn and Aglyn POS shells), `contracts` (generated), `hardware` (POS peripherals) |
+
 ### Apps and deploy units
 
 Not packages today. The console becomes one (and the staff console, which
@@ -214,6 +226,7 @@ would need from `apps/console` has moved into libs — see the rules below.
 | `tenant` | `apps/tenant` | `scope:app` `scope:tenant` | The shell that serves published sites on the tenant runtime. |
 | `docs` | `apps/docs` | `scope:app` `scope:public` | The documentation site; standalone, not a package. |
 | `mobile` | `apps/mobile` | `scope:app` `scope:mobile` `type:app` | The Aglyn app for iOS and Android, phone and tablet (Expo); standalone install, not a package. |
+| `android` | `apps/android` | `scope:app` `scope:mobile` `type:app` | Aglyn (`com.aglyn.app`) and Aglyn POS (`com.aglyn.pos`) for Android, and both on the JVM desktop (Windows); the Gradle root for every Kotlin module; not a package. |
 | `cloud-functions` | `cloud/functions` | `scope:app` | Cloud Functions; a deploy unit, not a package. |
 | `console-e2e` | `apps/console-e2e` | `scope:app` `scope:e2e` | End-to-end suites; not a package. |
 | `tenant-e2e` | `apps/tenant-e2e` | `scope:app` `scope:e2e` | End-to-end suites; not a package. |

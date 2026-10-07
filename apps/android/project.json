@@ -1,0 +1,28 @@
+{
+  "name": "android",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": [
+    "scope:app",
+    "scope:mobile",
+    "type:app"
+  ],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "apps/android",
+        "command": "./gradlew :app:assembleDebug"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "apps/android",
+        "command": "./gradlew allTests testAndroidHostTest"
+      }
+    }
+  }
+}
