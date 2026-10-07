@@ -53,6 +53,7 @@ Each capability has its own page, next to the thing it builds:
 | A designed email | **Emails → Templates → Create with AI** | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md) |
 | A campaign | **Marketing → Campaigns → Create with AI**, or **Also draft a campaign** on an email | [Generate an email](../marketing-and-automation/email-campaigns/generate-with-ai.md) |
 | Variants for an A/B test, and its result in words | **Marketing → Experiments** | [A/B tests by AI](ab-tests-with-ai.md) |
+| Announcement bar and popup copy, or a new overlay | **Marketing → Overlays** | [Marketing with AI](marketing-with-ai.md#write-overlay-copy) |
 | What your analytics mean | **Analytics → Insights** | [Insights](../marketing-and-automation/analytics/insights.md) |
 | A change to the page you have open | The Assist panel, in the Besigner | [Edits in the Besigner](../getting-started/aglyn-assist.md#edits-in-the-besigner) |
 

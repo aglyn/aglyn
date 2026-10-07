@@ -122,6 +122,10 @@ const SITE_ZONES: readonly string[] = [
   // about is that site's.
   'experimentVariants',
   'experimentResult',
+  // The overlays list's two zones (AGL-3603), hosted by the marketing plugin
+  // on a site's Overlays section and declared by it, so plain ids again.
+  'hostOverlays',
+  'overlayEditor',
 ]
 
 /** Zones drawn on the WORKSPACE's pages, where no site's switch reaches. */

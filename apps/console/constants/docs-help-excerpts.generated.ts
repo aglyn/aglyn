@@ -138,6 +138,7 @@ export const DOCS_HELP_EXCERPTS = {
   manageAccount: 'Your personal account — email, sign-in methods, avatar, name, and password.',
   manifestAndEnvs: 'The plugin manifest schema, the marketplace listing/version documents, the trust state machine, and every PLUGIN_* environment variable.',
   marketingOverlays: 'Site-wide announcement bars and promotional popups with triggers, scheduling, and email capture.',
+  marketingWithAi: 'Use Aglyn AI on your site\'s Marketing page: write announcement bar and popup copy, create a switched-off overlay or a draft campaign from a brief, and ask what your conversions and campaign figures mean.',
   media: 'Organize images, video, and files in folders, transform them, and serve them fast over a CDN.',
   megaMenuWithInteractions: 'Add a SaaS-style mega menu to your nav bar, fill it with columns of links, and make it open on hover — entirely in the Besigner, on any plan.',
   members: 'Let visitors sign up on your site, design an account page with the Customer account block, gate pages to members, and manage members from the console Users page.',

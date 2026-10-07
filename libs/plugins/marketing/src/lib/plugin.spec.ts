@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { pluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
+import { pluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerMarketingConsole } from './plugin'
 
@@ -152,4 +153,20 @@ describe('marketing plugin', () => {
       '/acme/marketing/campaigns',
     )
   })
+})
+
+describe('the zones its marketing pages host for other plugins (AGL-3603)', () => {
+  it.each(['hostOverlays', 'overlayEditor'])(
+    'declares `%s` under the id widgets register for, owned here and laid out bare',
+    (id) => {
+      registerMarketingConsole()
+      const zone = pluginZone(id)
+      // A control in a row of buttons, or a section among a dialog's fields:
+      // the row or the dialog spaces it, so a wrapper would add a gap.
+      expect(`${zone?.pluginId} ${zone?.layout} ${zone?.surface}`).toBe(`${BUNDLE_ID} bare console`)
+      // The shell's catalog does not name it: the plugin that draws the page
+      // says what the zone is.
+      expect(Object.values(Aglyn.CONSOLE_WIDGET_SLOTS)).not.toContain(id)
+    },
+  )
 })
