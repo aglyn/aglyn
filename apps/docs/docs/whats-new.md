@@ -29,7 +29,20 @@ for the how-to.
   that sells online.
 -->
 
-## October 2026 — Pirate Ship and shipping spreadsheets (newest)
+## October 2026 — running the register (newest)
+
+- **[Running the register](commerce-and-bookings/commerce/pos-operations.md)** — the
+  point of sale now runs a whole trading day. Open a **shift** with a starting float,
+  record cash paid in, paid out and dropped to the safe, and close with a count: the
+  **X and Z reports** show sales by tender, tips, refunds, discounts and tax, and the
+  drawer's expected cash against what you counted. Staff switch in with their own
+  **PIN** on a shared tablet, and every sale records who rang it. Look **customers** up
+  by name, email or phone and attach them to the sale. Take **returns and exchanges** at
+  the register by scanning the receipt's barcode: the money goes back the way it was
+  paid, and the items go back in stock. Receipts print on an **80 mm** roll, with a
+  gift receipt option.
+
+## October 2026 — Pirate Ship and shipping spreadsheets
 
 - **[Use Pirate Ship with Aglyn](commerce-and-bookings/commerce/use-pirate-ship.md)** —
   **Export for shipping** on the Orders card writes the orders still to ship as a
