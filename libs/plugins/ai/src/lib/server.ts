@@ -49,7 +49,7 @@ import { POST as createAiSiteBatch } from './server/ai-jobs-batch'
 import { GET as listAiJobs, POST as createAiJob } from './server/ai-jobs-route'
 import { POST as resumeAiJob } from './server/ai-jobs-resume'
 import { POST as aiGenerateComponent } from './server/ai-generate-component'
-import { GET as aiMediaImageVerdict, POST as createAiMediaImages } from './server/ai-media-image'
+import { POST as createAiMediaImages } from './server/ai-media-image'
 import { POST as applyAiSeoAudit } from './server/ai-seo-apply'
 import { POST as assistChat } from './server/assist-chat'
 import { POST as assistEditApplied } from './server/assist-edit-applied'
@@ -217,12 +217,10 @@ export function registerAiConsoleApi(): void {
   // second entry point of the component job, from the besigner's Attributes
   // panel. It proposes, and the person's Apply writes.
   registerPluginApiRoute('ai/generate/component', { web: aiGenerateComponent })
-  // Pictures from a description, in Media (AGL-3602): the button's verdict on
-  // GET, and on POST the pictures, stored through the media upload route.
-  registerPluginApiRoute('ai/media/images', {
-    web: (request) =>
-      request.method === 'GET' ? aiMediaImageVerdict(request) : createAiMediaImages(request),
-  })
+  // Pictures from a description, in Media (AGL-3602): photos and SVG
+  // illustrations, stored through the media upload route. POST only — the
+  // button draws from the shell's gates and asks nothing until it is used.
+  registerPluginApiRoute('ai/media/images', { web: createAiMediaImages })
   registerPluginApiRoute('ai/billing/credits', { web: billingCredits })
   registerPluginApiRoute('ai/billing/overage', { web: billingOverage })
   registerPluginApiRoute('ai/usage', { web: aiUsage })

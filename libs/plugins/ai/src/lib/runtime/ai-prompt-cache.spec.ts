@@ -212,6 +212,13 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     caches: false,
     why: "a record's, an email's and an import's rules are far under the fast tier's minimum; the prompts are kept short instead",
   },
+  'server/ai-media-svg.ts': {
+    // An illustration in Media (AGL-3602) runs on the fast tier, the row
+    // `copy.element` is served from.
+    step: 'copy.element',
+    caches: false,
+    why: 'one short instruction block and the doctrine, about 2,100 tokens, under the fast tier’s minimum; the prompt is kept short instead',
+  },
   'server/ai-generate-component.ts': {
     step: 'job.component',
     caches: false,
