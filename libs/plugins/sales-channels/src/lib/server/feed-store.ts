@@ -19,7 +19,6 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import {
   feedDocId,
-  SALES_CHANNELS_COLLECTION,
   SALES_CHANNELS_SETTINGS_DOC,
 } from '../constants/bundle-common'
 import { SALES_CHANNEL_IDS, type SalesChannelId } from '../model/channels'
@@ -71,7 +70,9 @@ export const isDocumentId = (value: unknown): value is string =>
   !/^__.*__$/.test(value)
 
 export function channelsCollection(hostId: string) {
-  return firestore().collection('hosts').doc(hostId).collection(SALES_CHANNELS_COLLECTION)
+  // Spelled out, not `SALES_CHANNELS_COLLECTION`: the host-collection sweeps
+  // find a site's subcollections by this literal shape.
+  return firestore().collection('hosts').doc(hostId).collection('salesChannels')
 }
 
 /** A new feed token: unguessable, URL-safe, and a valid file name. */

@@ -407,6 +407,21 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "The receipt the Aglyn app prints from an order's detail screen (AGL-3621) through the phone's own print service. The marker is its `<style>`, literal CSS whose one interpolation is PRINTED_RECEIPT_COLUMNS, the print layout's column count. Every receipt line is escaped and the page carries no image. A native app screen, never a tenant page.",
   },
+  'libs/plugins/sales-channels/src/lib/model/feed-columns.ts': {
+    markers: 9,
+    guard: 'projection',
+    why: "The shopping-channel feeds' image_link and additional_image_link columns (AGL-3637), written into an XML, CSV or TSV file a channel's fetcher reads, never into a page a visitor's browser loads. Every URL is the catalog's: core.product-catalog's offers, whose photos commerce resolves in absoluteImage (libs/plugins/commerce/src/lib/server/product-catalog.ts), which keeps an absolute http(s) URL, joins a site-relative path to the store's origin and drops anything else.",
+  },
+  'libs/plugins/sales-channels/src/lib/server/connect/google-merchant.ts': {
+    markers: 2,
+    guard: 'off-tenant',
+    why: "imageLink and additionalImageLinks in a Merchant API productInputs:insert body (AGL-3637), sent from the console's sync route to Google, never rendered. The URLs are the feed row's, from resolveOffer over the same catalog offers.",
+  },
+  'libs/plugins/sales-channels/src/lib/server/connect/meta-catalog.ts': {
+    markers: 3,
+    guard: 'off-tenant',
+    why: "image_link and additional_image_link in a Meta items_batch request (AGL-3637), sent from the console's sync route to Graph, never rendered. The URLs are the feed row's, from resolveOffer over the same catalog offers.",
+  },
   'libs/plugins/shipping/src/lib/model/printables.ts': {
     markers: 2,
     guard: 'off-tenant',
@@ -431,11 +446,6 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     markers: 1,
     guard: 'media-ref',
     why: 'Wishlist tile through siteRelativeMediaSrc (9a517e5ec). Resolution only; no scheme refusal.',
-  },
-  'libs/plugins/commerce/src/lib/server/feed.ts': {
-    markers: 1,
-    guard: 'raw',
-    why: 'g:image_link in the Google Merchant feed takes product.mediaUrls[0] with escapeXml and nothing else. Google fetches it, so a relative stored value is also simply broken there.',
   },
   'libs/plugins/commerce/src/lib/server/site-page-resolver.ts': {
     markers: 2,
@@ -652,7 +662,6 @@ const RAW_SINK_FILES = [
   'apps/tenant/app/[host]/[scheme]/[[...slug]]/page.tsx',
   'libs/aglyn/src/lib/app-utils/content-authors.ts',
   'libs/plugins/commerce/src/lib/components/product-detail.tsx',
-  'libs/plugins/commerce/src/lib/server/feed.ts',
   'libs/plugins/commerce/src/lib/server/site-page-resolver.ts',
 ]
 

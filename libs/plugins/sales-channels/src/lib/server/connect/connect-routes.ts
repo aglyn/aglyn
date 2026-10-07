@@ -17,7 +17,7 @@
 
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { PluginApiRequestSubject } from '@aglyn/aglyn/server'
-import { firebaseAdmin, getOrgForHost, logHostActivity } from '@aglyn/tenant-data-admin'
+import { getOrgForHost, logHostActivity } from '@aglyn/tenant-data-admin'
 import { SALES_CHANNELS_ENTITLEMENT } from '../../constants/bundle-common'
 import { firestore } from '../feed-store'
 import { channelsGate, readJsonBody, routeError, routeJson } from '../route-gate'
@@ -92,6 +92,9 @@ export async function connectStartRoute(request: Request): Promise<Response> {
   if (picked instanceof Response) return picked
   const actor = await channelsGate(request, { role: 'admin', body })
   if (actor instanceof Response) return actor
+  // The grant is the merchant's own Google or Meta account, so the member who
+  // connects is one of the site's admins; staff support does not connect one.
+  if (!isSiteAdmin(actor.host, actor.uid)) return routeError(403, 'Only a site admin can connect a channel.')
   const origin = consoleOriginFor(request.url)
   const redirectUri = connectRedirectUri(request.url)
   if (!origin || !redirectUri) return routeError(503, 'This console has no address to come back to.')
@@ -132,7 +135,13 @@ export function connectCallbackSubject(request: Request): PluginApiRequestSubjec
 
 const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
 
-/** Whether the member who started the connect may still finish it: admin, and a plan that sells. */
+/** Whether `uid` holds the site's admin role. */
+function isSiteAdmin(host: Record<string, unknown>, uid: string): boolean {
+  const roles = (host['memberRoles'] ?? {}) as Record<string, unknown>
+  return (ROLE_RANK[String(roles[uid] ?? '')] ?? 0) >= ROLE_RANK['admin']
+}
+
+/** Whether the member who started the connect may still finish it: a site admin, on a plan that sells. */
 async function mayStillConnect(hostId: string, uid: string): Promise<boolean> {
   const [hostSnapshot, resolved] = await Promise.all([
     firestore().collection('hosts').doc(hostId).get(),
@@ -140,14 +149,7 @@ async function mayStillConnect(hostId: string, uid: string): Promise<boolean> {
   ])
   if (!hostSnapshot.exists || !resolved) return false
   if (!checkEntitlement(resolved.org as never, SALES_CHANNELS_ENTITLEMENT)) return false
-  const roles = (hostSnapshot.data()?.['memberRoles'] ?? {}) as Record<string, unknown>
-  if ((ROLE_RANK[String(roles[uid] ?? '')] ?? 0) >= ROLE_RANK['admin']) return true
-  try {
-    const user = await firebaseAdmin.app().auth().getUser(uid)
-    return user.customClaims?.['staff'] === true
-  } catch {
-    return false
-  }
+  return isSiteAdmin(hostSnapshot.data() ?? {}, uid)
 }
 
 const plain = (status: number, text: string) =>

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import { createHash, createHmac, randomBytes } from 'node:crypto'
 import { consumeOnce } from '@aglyn/tenant-data-admin/server/consume-once'
 import { tokenSigningSecret } from '@aglyn/tenant-data-admin/server/media-signing'
@@ -64,8 +65,6 @@ const RETURN_TO_MAX_CHARS = 512
 
 export const CONNECT_CALLBACK_PATH = `/api/${SALES_CHANNELS_API_ROUTES.connectCallback}`
 
-/** The production console, which an unset `NEXT_PUBLIC_CONSOLE_URL` means. */
-export const DEFAULT_CONSOLE_ORIGIN = 'https://app.aglyn.com'
 
 export interface ConnectStateClaims {
   hostId: string
@@ -226,7 +225,7 @@ const stripTrailingSlash = (value: string) => value.replace(/\/+$/, '')
 
 /** The canonical console origin, or `null` when it is set to something that is not http(s). */
 export function canonicalConsoleOrigin(): string | null {
-  const raw = stripTrailingSlash(String(process.env['NEXT_PUBLIC_CONSOLE_URL'] ?? '').trim()) || DEFAULT_CONSOLE_ORIGIN
+  const raw = stripTrailingSlash(platformConsoleOrigin())
   try {
     const url = new URL(raw)
     return url.protocol === 'https:' || url.protocol === 'http:' ? url.origin : null
