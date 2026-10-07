@@ -179,6 +179,13 @@ const HAND_ROLLED = new Map([
       'an ordinary line item and sets no `automatic_tax` by a stated decision.',
   ],
   [
+    'libs/plugins/bookings/src/lib/server/in-person-payment.ts',
+    'A booking paid at the counter on the POS card reader is the same service ' +
+      'sale as the entry above: the amount staff typed plus the ' +
+      'merchant-configured service rate, no `automatic_tax`, and the fee a ' +
+      'paid booking carries online, set at creation and kept at capture.',
+  ],
+  [
     'libs/plugins/marketplace/src/lib/server/checkout.ts',
     'The marketplace found this same trap first (AGL-1544) and closed it with ' +
       'a FIXED `transfer_data[amount]` and no application fee. Verified below ' +

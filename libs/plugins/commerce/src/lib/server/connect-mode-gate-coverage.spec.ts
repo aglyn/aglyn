@@ -61,6 +61,8 @@ const DOORS = [
   // The register's card tenders (AGL-3607): reader, typed card and QR link.
   'commerce/src/lib/server/pos-terminal.ts',
   'bookings/src/lib/server.ts',
+  // A booking paid at the counter on the POS card reader (AGL-3654).
+  'bookings/src/lib/server/in-person-payment.ts',
   'marketplace/src/lib/server/checkout.ts',
   // Not a charge, but the same claim one step earlier: publishing a PAID
   // listing tells a seller they are set up to sell (AGL-2471).
