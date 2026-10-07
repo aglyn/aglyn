@@ -29,8 +29,9 @@ import { orderReceipt, queueRegisterPrint } from './printers'
  * queue (AGL-3619) rather than a second one:
  *
  *   a completed sale    its receipt, when the site always prints or the
- *                       customer chose print, and a drawer kick when cash
- *                       was taken
+ *                       customer chose print, a kitchen ticket on the
+ *                       printers that print them, and a drawer kick when
+ *                       cash was taken
  *   a cash event        paid in, paid out, a safe drop or a cash refund
  *                       opens the drawer
  *   an X or Z report    printed on the register's receipt printer
@@ -94,6 +95,14 @@ export function posSalePrintPlan(
   return { receipt, drawer }
 }
 
+/**
+ * True when the customer chose a printed receipt: it then prints on the
+ * register's first printer even when none is set to print every sale.
+ */
+function customerAskedForPrint(order: { receiptRequest?: { channel?: string } | null }): boolean {
+  return order.receiptRequest?.channel === 'print'
+}
+
 async function readOrder(deps: PosPrintDeps, hostId: string, orderId: string) {
   const snapshot = await deps
     .firestore()
@@ -128,11 +137,16 @@ export async function printPosSale(
     if (!order || order.channel !== 'pos' || !order.registerId) return { jobIds: [] }
     const settings = await deps.registerSettings(event.hostId)
     const plan = posSalePrintPlan(order, settings.receiptDefault)
-    if (!plan.receipt && !plan.drawer) return { jobIds: [] }
+    // The kitchen ticket prints whatever the customer chose for their own
+    // receipt (AGL-3619): it is an order to make, not paper for the customer,
+    // and only printers set to print kitchen tickets receive it.
+    const receipt = await saleReceipt(deps, event.hostId, event.orderId, order)
     return await deps.queue({
       hostId: event.hostId,
       registerId: order.registerId,
-      ...(plan.receipt ? { receipt: await saleReceipt(deps, event.hostId, event.orderId, order) } : {}),
+      ...(plan.receipt ? { receipt } : {}),
+      ...(customerAskedForPrint(order) ? { receiptChoice: 'print' as const } : {}),
+      kitchenTicket: receipt,
       openDrawer: plan.drawer,
       orderId: event.orderId,
       reason: SALE_RECEIPT_REASON,
@@ -162,6 +176,8 @@ export async function printPosSaleReceipt(
       hostId,
       registerId: order.registerId,
       receipt: await saleReceipt(deps, hostId, orderId, order),
+      // Asked for by name, so it prints even when no printer auto-prints.
+      receiptChoice: 'print',
       orderId,
       reason: SALE_RECEIPT_REASON,
       idempotencyKey: orderId,

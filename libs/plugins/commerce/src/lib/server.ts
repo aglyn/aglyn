@@ -96,8 +96,6 @@ import { orderAnalyticsHandler } from './server/order-analytics'
 import { checkoutStatusHandler } from './server/checkout-status'
 import { posOrderHandler } from './server/pos-order'
 import { printersHandler } from './server/printers'
-import { onPosSaleCompleted } from './server/pos-sale'
-import { printCompletedSale } from './server/sale-printing'
 import { posPaymentHandler } from './server/pos-payment'
 import { posReadersHandler } from './server/pos-readers'
 import { posDisplayHandler } from './server/pos-display'
@@ -311,9 +309,6 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('membership/wishlist', membershipWishlistHandler)
 }
 
-/** One sale-printing subscription per process (AGL-3619). */
-let salePrintingSubscribed = false
-
 /**
  * Registers the commerce plugin's console-side API routes (AGL-396):
  * merchant/staff operations (Connect onboarding, refunds, draft & POS
@@ -403,13 +398,6 @@ export function registerCommerceConsoleApi(): void {
   // and the route asks the plan before it hands over a job. Loaded with the
   // first poll, so a console that has no printers never imports them.
   registerPluginApiRoute('commerce/printers', printersHandler)
-  // Every completed register sale prints its receipt and kitchen ticket and
-  // kicks the drawer on cash (AGL-3619). Subscribed once per process; a
-  // second subscription would still print once (jobs are keyed by order).
-  if (!salePrintingSubscribed) {
-    salePrintingSubscribed = true
-    onPosSaleCompleted((event) => printCompletedSale(event).then(() => undefined))
-  }
   registerPluginApiRoute(
     'commerce/cloudprnt/:hostId/:printerId/:secret',
     {

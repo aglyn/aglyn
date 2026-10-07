@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import type { PluginApiHandler, PluginApiRequest } from '@aglyn/aglyn/server'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { resolveSiteTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -376,7 +377,7 @@ export const printersHandler: PluginApiHandler = async (req, res) => {
         if (!duplicate.empty) {
           return res.status(409).json({ error: 'That printer is already added to this site.' })
         }
-        const ref = printers.doc()
+        const ref = printers.doc(createResourceUid())
         const printer: PosPrinter = {
           name: settings.patch.name!,
           brand,

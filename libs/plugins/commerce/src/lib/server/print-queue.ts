@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import {
   PRINT_JOB_CLAIM_TIMEOUT_MS,
   PRINT_JOB_DELIVER_WITHIN_MS,
@@ -103,7 +104,7 @@ export async function enqueuePrintJob(
   nowMs: number = Date.now(),
 ): Promise<{ jobId: string; created: boolean }> {
   const collection = printJobsRef(firestore, hostId)
-  const ref = input.jobId ? collection.doc(input.jobId) : collection.doc()
+  const ref = input.jobId ? collection.doc(input.jobId) : collection.doc(createResourceUid())
   const job: PrintJob = {
     printerId,
     ...(input.registerId ? { registerId: input.registerId } : {}),

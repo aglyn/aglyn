@@ -125,12 +125,31 @@ describe('printing a completed sale', () => {
         hostId: 'shop',
         registerId: 'front',
         receipt: { orderNumber: '12', orderId: 'o1', cashierName: 'Cal Cashier' },
+        kitchenTicket: { orderNumber: '12', orderId: 'o1', cashierName: 'Cal Cashier' },
         openDrawer: true,
         orderId: 'o1',
         reason: 'sale',
         idempotencyKey: 'o1',
       },
     ])
+  })
+
+  it('prints on the first printer when the customer chose a printed receipt', async () => {
+    receiptDefault = 'ask'
+    memory.seed('hosts/shop/orders/o1', { ...cardSale, receiptRequest: { channel: 'print' } })
+    await printPosSale({ hostId: 'shop', orderId: 'o1' }, deps)
+    expect(queued[0]!['receipt']).toEqual({ orderNumber: '12', orderId: 'o1', cashierName: 'Cal Cashier' })
+    expect(queued[0]!['receiptChoice']).toBe('print')
+  })
+
+  it('still sends the kitchen its ticket when the customer wants no receipt', async () => {
+    memory.seed('hosts/shop/orders/o1', { ...cardSale, receiptRequest: { channel: 'email' } })
+    await printPosSale({ hostId: 'shop', orderId: 'o1' }, deps)
+    expect(queued).toHaveLength(1)
+    expect(queued[0]).not.toHaveProperty('receipt')
+    expect(queued[0]).not.toHaveProperty('receiptChoice')
+    expect(queued[0]!['kitchenTicket']).toEqual({ orderNumber: '12', orderId: 'o1', cashierName: 'Cal Cashier' })
+    expect(queued[0]!['openDrawer']).toBe(false)
   })
 
   it('opens the drawer without a receipt when the site prints none', async () => {
@@ -142,14 +161,17 @@ describe('printing a completed sale', () => {
     expect(queued[0]!['openDrawer']).toBe(true)
   })
 
-  it('queues nothing for a card sale on "ask", an online order, or a missing one', async () => {
+  it('queues only the kitchen ticket for a card sale on "ask", and nothing for an online or missing order', async () => {
     receiptDefault = 'ask'
     memory.seed('hosts/shop/orders/o1', cardSale)
     memory.seed('hosts/shop/orders/web', { ...cashSale, channel: 'online' })
     await printPosSale({ hostId: 'shop', orderId: 'o1' }, deps)
     await printPosSale({ hostId: 'shop', orderId: 'web' }, deps)
     await printPosSale({ hostId: 'shop', orderId: 'gone' }, deps)
-    expect(queued).toEqual([])
+    expect(queued).toHaveLength(1)
+    expect(queued[0]).not.toHaveProperty('receipt')
+    expect(queued[0]!['kitchenTicket']).toBeDefined()
+    expect(queued[0]!['openDrawer']).toBe(false)
   })
 
   it('never throws at the sale that caused it', async () => {
@@ -169,6 +191,7 @@ describe('printing a completed sale', () => {
       hostId: 'shop',
       registerId: 'front',
       receipt: { orderNumber: '12', orderId: 'o1', cashierName: 'Cal Cashier' },
+      receiptChoice: 'print',
       orderId: 'o1',
       reason: 'sale',
       idempotencyKey: 'o1',

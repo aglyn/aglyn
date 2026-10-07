@@ -75,6 +75,7 @@ const JOB_LABELS: Record<CommerceModel.PrintJobKind, string> = {
   kitchen: 'Kitchen ticket',
   drawer: 'Open drawer',
   test: 'Test print',
+  report: 'Shift report',
 }
 
 /** "just now", "3 min ago", "2 h ago". */
