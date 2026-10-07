@@ -326,8 +326,8 @@ export interface StoredPodShipment {
   refusal: string | null
   deliveredAtMs: number | null
   deliveredRecorded: boolean
-  /** The store's lines it carried, once written. */
-  lineIndexes?: number[]
+  /** Units per line of the store's order it carried, once written. */
+  lines?: Array<{ lineIndex: number; quantity: number }>
 }
 
 export interface StoredPodOrder {

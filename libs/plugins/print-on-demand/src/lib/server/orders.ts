@@ -16,12 +16,17 @@
  */
 
 import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import {
+  heldQuantitiesByLine,
+  pluginFulfillmentHolds,
+  type PluginFulfillmentHold,
+} from '@aglyn/aglyn/plugin-manager/plugin-fulfillment-providers'
 import { pluginShipmentRecords } from '@aglyn/aglyn/plugin-manager/plugin-shipment-records'
 import { notifyHostManagers } from '@aglyn/tenant-data-admin'
 import { getLockdownVerdict } from '@aglyn/tenant-data-admin/server/lockdown'
 import type { SecretBoxKeyring } from '@aglyn/shared-util-tools/secret-box'
 import { createHash } from 'node:crypto'
-import { POD_COLLECTIONS } from '../constants/bundle-common'
+import { POD_COLLECTIONS, POD_PLUGIN_ID } from '../constants/bundle-common'
 import { POD_PROVIDER_LABELS, type PodOrderStatus, type PodProviderId } from '../model/print-on-demand'
 import { PodProviderError } from '../providers/http'
 import type { PodRecipient, PodSourceOrder } from '../providers/types'
@@ -191,11 +196,15 @@ export async function onOrderPaid(envelope: PluginDomainEventEnvelope<{ order?: 
   )
   if (links.size === 0) return
   const connected = new Map(connections.map((connection) => [connection.provider, connection]))
+  // Units another fulfiller already holds are not sent a second time.
+  const elsewhere = heldQuantitiesByLine(
+    (await pluginFulfillmentHolds(hostId, order.id, { exceptPluginId: POD_PLUGIN_ID })).holds,
+  )
   const parts = new Map<PodProviderId, StoredPodOrderLine[]>()
   lines.forEach((line, lineIndex) => {
     const found = links.get(String(line?.productId ?? ''))
     if (!found || !connected.has(found.link.provider)) return
-    const quantity = Math.floor(Number(line?.quantity) || 0)
+    const quantity = Math.floor(Number(line?.quantity) || 0) - (elsewhere.get(lineIndex) ?? 0)
     if (quantity <= 0) return
     const variant =
       found.link.variants.find((entry) => entry.variantId === String(line?.variantId ?? '')) ??
@@ -396,12 +405,14 @@ export async function sendPodOrder(
   if (!record) return fail('The order no longer exists.', false)
   const recipient = recipientOf(record)
   if (typeof recipient === 'string') return fail(recipient, false)
+  // Paid in test mode, by the event's word or the order's own: a draft, never made.
+  const testMode = order.testMode || record.testMode === true
 
   try {
     const credentials = openCredentials(connection, keyring)
     const provider = podProviderFor(order.provider)
     const existing = await provider.findOrder(credentials, order.externalId)
-    const confirm = !order.testMode && connection.submitMode === 'automatic'
+    const confirm = !testMode && connection.submitMode === 'automatic'
     const source =
       existing ??
       (await provider.createOrder(credentials, {
@@ -422,6 +433,7 @@ export async function sendPodOrder(
     const after = { ...order, ...sourcePatch(order, source) } as StoredPodOrder
     await release(id, {
       ...sourcePatch(order, source),
+      testMode,
       attempts,
       lastError: null,
       ...nextPoll(after.status, order.createdAtMs, now),
@@ -437,20 +449,41 @@ export async function sendPodOrder(
 
 export type PodRefreshOutcome = 'refreshed' | 'unsent' | 'failed' | 'skipped'
 
-/** Lines a shipment carried, when the service does not say: what it reports done and nothing shipped yet. */
+/** Units of each of the part's lines no parcel written onto the order has carried. */
+export function unshippedPodLines(
+  order: Pick<StoredPodOrder, 'lines'>,
+  shipments: readonly StoredPodShipment[],
+): Map<number, number> {
+  const left = new Map(order.lines.map((line) => [line.lineIndex, line.quantity]))
+  for (const shipment of shipments) {
+    if (!shipment.recorded) continue
+    for (const line of shipment.lines ?? []) {
+      left.set(line.lineIndex, Math.max(0, (left.get(line.lineIndex) ?? 0) - line.quantity))
+    }
+  }
+  return left
+}
+
+/**
+ * The lines a parcel carried, when the service does not say which: the
+ * part's lines the service reports done and no parcel carried yet, or —
+ * once the whole part has shipped — everything still left. `null` when it
+ * cannot yet be told; the parcel waits rather than being written onto the
+ * merchant's own lines.
+ */
 function inferredLines(
   order: StoredPodOrder,
   shipments: readonly StoredPodShipment[],
   source: PodSourceOrder,
 ): Array<{ lineIndex: number; quantity: number }> | null {
-  const shipped = new Set(shipments.filter((entry) => entry.recorded).flatMap((entry) => entry.lineIndexes ?? []))
+  const left = unshippedPodLines(order, shipments)
+  const remaining = order.lines
+    .map((line) => ({ lineIndex: line.lineIndex, quantity: left.get(line.lineIndex) ?? 0, variant: line.sourceVariantId }))
+    .filter((line) => line.quantity > 0)
   const done = new Set(source.fulfilledVariantIds)
-  const candidates = order.lines.filter((line) => !shipped.has(line.lineIndex) && done.has(line.sourceVariantId))
-  if (candidates.length) return candidates.map((line) => ({ lineIndex: line.lineIndex, quantity: line.quantity }))
-  if (source.shipments.length === 1 && source.status === 'shipped') {
-    return order.lines.map((line) => ({ lineIndex: line.lineIndex, quantity: line.quantity }))
-  }
-  return null
+  const reported = remaining.filter((line) => done.has(line.variant))
+  const chosen = reported.length ? reported : source.status === 'shipped' ? remaining : []
+  return chosen.length ? chosen.map(({ lineIndex, quantity }) => ({ lineIndex, quantity })) : null
 }
 
 /**
@@ -501,12 +534,14 @@ export async function refreshPodOrder(
       shipments.push(stored)
     }
     stored.deliveredAtMs = parcel.deliveredAtMs ?? stored.deliveredAtMs
-    if (!stored.recorded && records) {
-      const lines = parcel.lines ?? inferredLines(order, shipments, source)
+    // A parcel is written with the lines it carried, never without: a write
+    // naming no lines would ship the merchant's own lines too.
+    const lines = stored.recorded ? null : (parcel.lines ?? inferredLines(order, shipments, source))
+    if (!stored.recorded && records && lines) {
       const outcome = await records.recordShipment({
         hostId: order.hostId,
         recordId: order.orderId,
-        ...(lines ? { lines } : {}),
+        lines,
         carrier: parcel.carrier,
         trackingNumber: parcel.trackingNumber,
         ...(parcel.trackingUrl ? { trackingUrl: parcel.trackingUrl } : {}),
@@ -515,7 +550,7 @@ export async function refreshPodOrder(
       if (outcome.outcome === 'recorded' || outcome.outcome === 'already') {
         stored.recorded = true
         stored.refusal = null
-        if (lines) stored.lineIndexes = lines.map((line) => line.lineIndex)
+        stored.lines = lines
       } else {
         stored.refusal =
           outcome.outcome === 'blocked'
@@ -713,4 +748,37 @@ export async function runPodOrderTick(context: { nowMs: number; deadlineMs: numb
     if (outcome === 'refreshed') counts['refreshed'] += 1
   }
   return counts
+}
+
+/* ------------------------------------------------------------------ holds */
+
+/** The statuses in which a service holds what it has not shipped. */
+const HOLDING: readonly PodOrderStatus[] = ['queued', 'draft', 'submitted', 'on_hold', 'in_production', 'partially_shipped']
+
+/**
+ * What one service holds of one order (AGL-3641), for core's
+ * `core.fulfillment-providers`: each of its lines' units no parcel has yet
+ * carried, so a label bought for the rest of the order leaves them off.
+ * `pending` until the service has the order, `accepted` after. A canceled,
+ * failed or fully shipped part holds nothing.
+ */
+export async function podFulfillmentHolds(
+  hostId: string,
+  recordId: string,
+  provider: PodProviderId,
+): Promise<PluginFulfillmentHold[]> {
+  if (!isDocumentId(hostId) || !isDocumentId(recordId)) return []
+  const order = readStoredPodOrder((await podOrderRef(podOrderId(hostId, recordId, provider)).get()).data())
+  if (!order || !HOLDING.includes(order.status)) return []
+  const left = unshippedPodLines(order, order.shipments)
+  return order.lines
+    .map((line) => ({
+      providerId: provider,
+      providerLabel: POD_PROVIDER_LABELS[provider],
+      lineIndex: line.lineIndex,
+      quantity: left.get(line.lineIndex) ?? 0,
+      state: order.sourceOrderId && order.status !== 'queued' ? ('accepted' as const) : ('pending' as const),
+      ...(order.sourceOrderId ? { reference: order.sourceOrderId } : {}),
+    }))
+    .filter((hold) => hold.quantity > 0)
 }

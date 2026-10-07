@@ -26,6 +26,12 @@ import {
   type PluginTrackingUpdate,
 } from '@aglyn/aglyn/plugin-manager/plugin-shipment-records'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import {
+  listPluginFulfillmentProviders,
+  pluginFulfillmentHolds,
+  registerPluginFulfillmentProvider,
+} from '@aglyn/aglyn/plugin-manager/plugin-fulfillment-providers'
+import { registerPrintOnDemandServerDeclarations } from '../declarations.server'
 import { createHmac, randomBytes } from 'node:crypto'
 import { POD_API_ROUTES } from '../constants/api-routes'
 import type { ProviderFetch } from '../providers/http'
@@ -38,6 +44,7 @@ import {
   onOrderPaid,
   onOrderRefunded,
   podExternalId,
+  podFulfillmentHolds,
   refreshPodOrder,
   runPodOrderTick,
   sendPodOrder,
@@ -299,7 +306,7 @@ const service: ProviderFetch = async (url, init = {}) => {
   }
   calls.push(call)
   const answer = override?.(call) ?? healthy(call)
-  return new Response(answer.raw ?? (answer.body === undefined ? '' : JSON.stringify(answer.body)), {
+  return new Response((answer.raw ?? (answer.body === undefined ? '' : JSON.stringify(answer.body))) as BodyInit, {
     status: answer.status,
     headers: answer.headers ?? {},
   })
@@ -930,6 +937,49 @@ describe('orders', () => {
     expect(part()).toMatchObject({ status: 'submitted', work: 'cancel' })
     await runPodOrderTick({ nowMs: Date.now() + 1_000, deadlineMs: Date.now() + 60_000 })
     expect(part()).toMatchObject({ status: 'canceled', work: null })
+  })
+
+  it('leaves a draft for an order the store’s own record says was paid in test mode', async () => {
+    orderRecord = { ...orderRecord, testMode: true }
+    await onOrderPaid(paidEnvelope() as never)
+    expect(part()).toMatchObject({ status: 'draft', testMode: true })
+    expect(serviceCalls().find((call) => call.path === '/orders')?.search).toBe('?confirm=false')
+  })
+
+  it('holds the units it has not shipped, for a label bought for the rest of the order', async () => {
+    registerPrintOnDemandServerDeclarations()
+    expect(listPluginFulfillmentProviders().map((entry) => entry.id).sort()).toEqual(['printful', 'printify'])
+    await onOrderPaid(paidEnvelope() as never)
+    expect(await podFulfillmentHolds(HOST, ORDER_ID, 'printful')).toEqual([
+      { providerId: 'printful', providerLabel: 'Printful', lineIndex: 0, quantity: 2, state: 'accepted', reference: '701' },
+      { providerId: 'printful', providerLabel: 'Printful', lineIndex: 2, quantity: 1, state: 'accepted', reference: '701' },
+    ])
+    const order = printfulOrders.get('701') as FakeOrder
+    order.status = 'partial'
+    order.shipments = [{ id: 555, carrier: 'USPS', tracking_number: '1', items: [{ item_id: 1000, quantity: 2 }] }]
+    await refreshPodOrder(PART())
+    const seen = await pluginFulfillmentHolds(HOST, ORDER_ID)
+    expect(seen.unanswered).toEqual([])
+    expect(seen.holds.map((hold) => [hold.providerId, hold.lineIndex, hold.quantity])).toEqual([['printful', 2, 1]])
+    // Too far along to cancel, so the service still holds what it is making.
+    await onOrderCancelled({ ...paidEnvelope(), event: 'order.cancelled' } as never)
+    expect((await podFulfillmentHolds(HOST, ORDER_ID, 'printful')).map((hold) => hold.lineIndex)).toEqual([2])
+    // A canceled part holds nothing.
+    db.docs.set(`podOrders/${PART()}`, { ...(db.docs.get(`podOrders/${PART()}`) as object), status: 'canceled' })
+    expect(await podFulfillmentHolds(HOST, ORDER_ID, 'printful')).toEqual([])
+  })
+
+  it('sends none of a line another fulfiller already holds', async () => {
+    registerPluginFulfillmentProvider(
+      {
+        id: 'shipbob',
+        label: 'ShipBob',
+        holds: async () => [{ providerId: 'shipbob', providerLabel: 'ShipBob', lineIndex: 0, quantity: 2, state: 'accepted' }],
+      },
+      { pluginId: 'fulfillment-network' },
+    )
+    await onOrderPaid(paidEnvelope() as never)
+    expect(part()?.lines.map((line) => [line.lineIndex, line.quantity])).toEqual([[2, 1]])
   })
 
   it('lists the site’s sent orders newest first', async () => {

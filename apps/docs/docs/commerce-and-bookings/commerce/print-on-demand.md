@@ -99,7 +99,8 @@ difference, before your own shipping charge and payment fees.
 
 When an order is paid, its lines for imported products are sent to the service
 right away. An order with products from both services is sent to each, and
-lines for your own products stay with you to ship as usual.
+lines for your own products stay with you to ship as usual: a shipping label
+you buy for the order leaves off the items a service is making.
 
 The order's **Print on demand** section shows where it stands at the service:
 
