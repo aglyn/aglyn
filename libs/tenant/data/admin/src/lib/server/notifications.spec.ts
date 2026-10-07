@@ -161,6 +161,14 @@ function fakeFirestore(): any {
   }
 }
 
+const mockPushed: Array<{ uids: readonly string[]; type: string }> = []
+jest.mock('./push-delivery', () => ({
+  deliverPush: async (uids: readonly string[], payload: { type: string }) => {
+    mockPushed.push({ uids, type: payload.type })
+    return { sent: uids.length, pruned: 0, failed: 0 }
+  },
+}))
+
 import {
   notifyHostManagers,
   notifyOrgAdmins,
@@ -674,5 +682,62 @@ describe('notifyOrgAdmins for a caller that sends its own email (AGL-3431)', () 
     ])
     expect(written[0].data).toMatchObject({ orgId: 'org-1', title: USAGE.title })
     expect(sends).toHaveLength(0)
+  })
+})
+
+describe('the mobile push channel (AGL-3620)', () => {
+  const ORDER = {
+    type: 'content.order' as const,
+    title: 'New order',
+    body: 'Order #1001 was placed.',
+    link: '/org/hosts/site/orders',
+    orgId: 'org-1',
+    hostId: 'host-1',
+  }
+
+  beforeEach(() => {
+    written.length = 0
+    userDocs.clear()
+    mockPushed.length = 0
+    emailConfigured = false
+    process.env['MOBILE_PUSH_ENABLED'] = '1'
+  })
+
+  afterAll(() => {
+    delete process.env['MOBILE_PUSH_ENABLED']
+  })
+
+  it('pushes what the feed shows to somebody who never answered for push', async () => {
+    await notifyUsers(['uid-a'], ORDER)
+    expect(mockPushed).toEqual([{ uids: ['uid-a'], type: 'content.order' }])
+  })
+
+  it('follows a feed mute when push itself was never answered', async () => {
+    userDocs.set('uid-a', {
+      notificationSettings: { account: { content: { console: false } } },
+    })
+    await notifyUsers(['uid-a'], ORDER)
+    expect(mockPushed).toHaveLength(0)
+  })
+
+  it('honours a per-type push answer over the feed', async () => {
+    userDocs.set('uid-a', {
+      notificationSettings: { accountTypes: { 'content.order': { push: false } } },
+    })
+    userDocs.set('uid-b', {
+      notificationSettings: {
+        account: { content: { console: false } },
+        accountTypes: { 'content.order': { push: true } },
+      },
+    })
+    await notifyUsers(['uid-a', 'uid-b'], ORDER)
+    expect(mockPushed).toEqual([{ uids: ['uid-b'], type: 'content.order' }])
+  })
+
+  it('never loads delivery while the deployment has push switched off', async () => {
+    delete process.env['MOBILE_PUSH_ENABLED']
+    await notifyUsers(['uid-a'], ORDER)
+    expect(mockPushed).toHaveLength(0)
+    expect(written).toHaveLength(1)
   })
 })

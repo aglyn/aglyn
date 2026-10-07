@@ -29,6 +29,7 @@ export type RootStackParams = {
   Console: { path: string }
   Switcher: undefined
   Settings: undefined
+  NotificationSettings: undefined
   Notifications: undefined
 }
 

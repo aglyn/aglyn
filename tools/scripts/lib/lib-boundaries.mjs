@@ -174,10 +174,13 @@ export const DEP_CONSTRAINTS = Object.freeze([
   },
   {
     // `libs/mobile/*` and the mobile apps (AGL-3620): React Native, on the
-    // mobile foundation and generic shared code only. Plugins reach the apps
-    // through the generated mobile manifest, dynamically, never statically.
+    // mobile foundation, shared code and the core's PURE modules. Which core
+    // files is `check:mobile-isolation`'s (its proven-pure allowlist), since a
+    // project edge cannot tell a pure module from the rest of the core.
+    // Plugins reach the apps through the generated mobile manifest,
+    // dynamically, never statically.
     sourceTag: 'scope:mobile',
-    onlyDependOnLibsWithTags: ['scope:mobile', 'scope:shared'],
+    onlyDependOnLibsWithTags: ['scope:mobile', 'scope:shared', 'scope:core'],
   },
   {
     sourceTag: 'scope:cli',

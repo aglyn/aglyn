@@ -435,6 +435,9 @@ jobs:
       # React Native bundle. A palette change stales them, and the console is
       # not the mobile lib's project.
       - run: npm run generate:mobile-theme-tokens:check
+      # And the notification catalog the app's push settings list (AGL-3620):
+      # a new notification type or category stales it.
+      - run: npm run generate:mobile-notification-catalog:check
       # Fourth of the same shape (AGL-2905): the element palette a model
       # composes from is generated from the plugin bundles, and goes stale
       # when a bundle gains a component or a schema changes an attribute.

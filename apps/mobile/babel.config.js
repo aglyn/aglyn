@@ -27,6 +27,6 @@ module.exports = function babelConfig(api) {
     // Under jest a lazy `import()` (a plugin's screens, the mobile manifest's
     // entries) becomes a `require`: jest runs CommonJS, and Metro, which
     // splits on `import()`, never reads this branch.
-    plugins: test ? ['@babel/plugin-transform-dynamic-import', '@babel/plugin-transform-modules-commonjs'] : [],
+    plugins: test ? ['@babel/plugin-transform-dynamic-import'] : [],
   }
 }

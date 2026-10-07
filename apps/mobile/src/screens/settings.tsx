@@ -20,6 +20,9 @@
  */
 
 import { Card, ListRow, Screen, useSchemePreference, type SchemePreference } from '@aglyn/mobile-ui'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import type { RootStackParams } from '../shell/navigation-ref'
 
 const SCHEMES: { value: SchemePreference; label: string; icon: string }[] = [
   { value: 'system', label: 'Match device', icon: 'phone-portrait-outline' },
@@ -29,8 +32,17 @@ const SCHEMES: { value: SchemePreference; label: string; icon: string }[] = [
 
 export function SettingsScreen() {
   const { preference, setPreference } = useSchemePreference()
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParams>>()
   return (
     <Screen>
+      <Card title="Notifications">
+        <ListRow
+          icon="notifications-outline"
+          title="Push notifications"
+          subtitle="Choose what this phone is notified about"
+          onPress={() => navigation.navigate('NotificationSettings')}
+        />
+      </Card>
       <Card title="Appearance">
         {SCHEMES.map((scheme) => (
           <ListRow

@@ -31,6 +31,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text as NativeText,
   TextInput,
   View,
@@ -199,6 +200,44 @@ export function ListRow({
       </View>
       {trailing ?? (onPress ? <Icon name="chevron-forward" size={18} /> : null)}
     </Pressable>
+  )
+}
+
+/** A setting that is on or off: a `ListRow` whose trailing control is a themed switch. */
+export function SwitchRow({
+  title,
+  subtitle,
+  icon,
+  value,
+  onValueChange,
+  disabled,
+  testID,
+}: {
+  title: string
+  subtitle?: string
+  icon?: string
+  value: boolean
+  onValueChange: (next: boolean) => void
+  disabled?: boolean
+  testID?: string
+}) {
+  const theme = useMobileTheme()
+  return (
+    <ListRow
+      title={title}
+      subtitle={subtitle}
+      icon={icon}
+      trailing={
+        <Switch
+          testID={testID}
+          accessibilityLabel={title}
+          value={value}
+          disabled={disabled}
+          onValueChange={onValueChange}
+          trackColor={{ true: theme.colors.primary.main, false: theme.colors.divider }}
+        />
+      }
+    />
   )
 }
 

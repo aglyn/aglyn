@@ -18,19 +18,22 @@
 /**
  * The Aglyn app's Expo config (AGL-3620).
  *
- * Environment (all optional in development, where the app runs against the
- * local Firebase emulators and a local console):
+ * Environment, read at bundle time (`EXPO_PUBLIC_*` are inlined by Metro and
+ * read by src/config.ts through `readMobileConfig`); README.md has the full
+ * table and what each production value comes from:
  *
- *   EXPO_PUBLIC_CONSOLE_ORIGIN     the console, e.g. https://console.aglyn.com
- *   EXPO_PUBLIC_FIREBASE_API_KEY   the Firebase web config the console uses
+ *   EXPO_PUBLIC_CONSOLE_URL            the console origin (default https://app.aglyn.com)
+ *   EXPO_PUBLIC_FIREBASE_API_KEY       the Firebase config of the app registered in Firebase
  *   EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN
  *   EXPO_PUBLIC_FIREBASE_PROJECT_ID
  *   EXPO_PUBLIC_FIREBASE_APP_ID
  *   EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET
  *   EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
- *   EXPO_PUBLIC_USE_EMULATORS      "1" to talk to the emulators (default in development)
- *   EXPO_PUBLIC_EMULATOR_HOST      default 127.0.0.1 (the iOS Simulator shares the Mac's loopback)
- *   EAS_PROJECT_ID                 the EAS project, once Zach has created it (push in production)
+ *   EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST   host:port, local stack only
+ *   EXPO_PUBLIC_FIRESTORE_EMULATOR_HOST       host:port, local stack only
+ *   EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID / EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID   Google sign-in, hidden until set
+ *   EXPO_PUBLIC_BRAND_NAME             the product name (default Aglyn)
+ *   EAS_PROJECT_ID                     the EAS project; push registration is inert until it is set
  */
 
 import { readFileSync } from 'node:fs'

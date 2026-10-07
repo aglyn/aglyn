@@ -4173,6 +4173,25 @@ service cloud.firestore {
       match /transferPrefs/{resourceKey} {
         allow read, write: if isSignedIn() && request.auth.uid == userId;
       }
+
+      // The mobile apps' push devices (AGL-3620): one row per install,
+      // written by the app for its signed-in owner, read by the server's
+      // push fan-out. Owner only, and only the registry's own fields, so a
+      // row can never carry anything but an Expo token and where it lives.
+      match /devices/{deviceId} {
+        allow read, delete: if isSignedIn() && request.auth.uid == userId;
+        allow create, update: if isSignedIn() && request.auth.uid == userId &&
+          request.resource.data.keys().hasOnly(
+            ['token', 'platform', 'app', 'appVersion', 'lastSeen', 'createdAt']) &&
+          request.resource.data.token is string &&
+          request.resource.data.token.matches('^(ExponentPushToken|ExpoPushToken)\\[[A-Za-z0-9_-]{8,128}\\]$') &&
+          request.resource.data.platform in ['ios', 'android'] &&
+          request.resource.data.app in ['aglyn', 'aglyn-pos'] &&
+          (!('appVersion' in request.resource.data) ||
+            (request.resource.data.appVersion is string &&
+              request.resource.data.appVersion.size() <= 32)) &&
+          request.resource.data.lastSeen == request.time;
+      }
     }
 
     // WebAuthn machinery (AGL-662): server-only, both of them. Challenges

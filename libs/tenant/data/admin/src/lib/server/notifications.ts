@@ -27,6 +27,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { operatorAlertForNotificationType } from '@aglyn/aglyn/plugin-manager/operator-alerts'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import { notificationPushEnabled } from '@aglyn/aglyn/app-utils/notification-push'
 import { FieldValue } from 'firebase-admin/firestore'
 import { withoutMailWithheldAccounts } from './account-mail'
 import { findUserByUidAcrossPools, listStaffUidsAcrossPools } from './auth-pools'
@@ -287,6 +288,7 @@ export async function notifyUsers(
     const batch = db.batch()
     let count = 0
     const mailTo: string[] = []
+    const pushTo: string[] = []
     for (const userDoc of userDocs) {
       const settings = userDoc.get(NOTIFICATION_SETTINGS_FIELD) as
         | NotificationSettings
@@ -315,6 +317,10 @@ export async function notifyUsers(
         )
         count += 1
       }
+      // The mobile push channel (AGL-3620); unanswered, it follows the feed.
+      if (notificationPushEnabled(settings, payload.type, scope, legacy)) {
+        pushTo.push(userDoc.id)
+      }
       if (
         notificationChannelEnabled(settings, 'email', payload.type, scope, legacy) &&
         !options.skipEmailFor?.includes(userDoc.id)
@@ -323,6 +329,15 @@ export async function notifyUsers(
       }
     }
     if (count > 0) await batch.commit()
+    /*
+     * The push after the commit for the same reason as the email below, and
+     * loaded only when somebody is to be pushed and the deployment has push
+     * switched on, so a request that pushes nobody never loads it.
+     */
+    if (pushTo.length && process.env['MOBILE_PUSH_ENABLED']?.trim() === '1') {
+      const { deliverPush } = await import('./push-delivery')
+      await deliverPush(pushTo, payload, { db })
+    }
     /*
      * THE EMAIL AFTER THE COMMIT, and not inside its `try`.
      *

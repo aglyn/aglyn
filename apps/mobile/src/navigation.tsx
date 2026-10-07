@@ -48,6 +48,7 @@ import { HomeScreen } from './screens/home'
 import { MoreScreen } from './screens/more'
 import { NotificationsScreen } from './screens/notifications'
 import { PluginScreenHost, PluginScreenRoute } from './screens/plugin-screen'
+import { NotificationSettingsScreen } from './screens/notification-settings'
 import { SettingsScreen } from './screens/settings'
 import { SwitcherScreen } from './screens/switcher'
 import { navigationRef, type RootStackParams } from './shell/navigation-ref'
@@ -155,6 +156,11 @@ export function AppNavigation() {
         <Stack.Screen name="Console" component={ConsoleScreen} options={{ title: 'Console' }} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+        <Stack.Screen
+          name="NotificationSettings"
+          component={NotificationSettingsScreen}
+          options={{ title: 'Push notifications' }}
+        />
         <Stack.Screen
           name="Switcher"
           component={SwitcherScreen}

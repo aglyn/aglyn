@@ -6720,6 +6720,52 @@ describe('remembered export choices are their owner’s alone (AGL-3525)', () =>
 })
 
 /**
+ * The mobile apps' push devices (AGL-3620): `users/{uid}/devices/{id}` holds
+ * one install's Expo push token. The app writes it for its signed-in owner;
+ * the server fan-out reads it on the Admin SDK. Nobody else reads a token, and
+ * a row carries nothing but the registry's own fields.
+ */
+describe('push devices are their owner’s alone, in the registry’s shape (AGL-3620)', () => {
+  const DEVICE = () => ({
+    token: 'ExponentPushToken[abcdefgh1234]',
+    platform: 'ios',
+    app: 'aglyn',
+    appVersion: '1.0.0',
+    lastSeen: serverTimestamp(),
+    createdAt: serverTimestamp(),
+  })
+  const device = (db, uid = OWNER) => doc(db, 'users', uid, 'devices', 'install-1')
+
+  it('lets the owner register, refresh, read and remove a device', async () => {
+    await mustAllow('the owner registering a device', setDoc(device(authed(OWNER)), DEVICE()))
+    await mustAllow(
+      'the owner refreshing it',
+      setDoc(device(authed(OWNER)), { ...DEVICE(), appVersion: '1.0.1' }),
+    )
+    await mustAllow('the owner reading it', getDoc(device(authed(OWNER))))
+    await mustAllow('the owner removing it on sign-out', deleteDoc(device(authed(OWNER))))
+  })
+
+  it('refuses anything but an Expo token, a known platform and app, and the server clock', async () => {
+    await mustDeny('a token that is not an Expo token', setDoc(device(authed(OWNER)), { ...DEVICE(), token: 'abc' }))
+    await mustDeny('an unknown platform', setDoc(device(authed(OWNER)), { ...DEVICE(), platform: 'web' }))
+    await mustDeny('an unknown app', setDoc(device(authed(OWNER)), { ...DEVICE(), app: 'other' }))
+    await mustDeny('a field outside the registry', setDoc(device(authed(OWNER)), { ...DEVICE(), admin: true }))
+    await mustDeny('a client-chosen lastSeen', setDoc(device(authed(OWNER)), { ...DEVICE(), lastSeen: 1 }))
+  })
+
+  it('lets nobody else read, write or remove one', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(device(context.firestore()), { ...DEVICE() })
+    })
+    await mustDeny('another member reading a token', getDoc(device(authed(OUTSIDER))))
+    await mustDeny('another member overwriting it', setDoc(device(authed(OUTSIDER), OWNER), DEVICE()))
+    await mustDeny('another member removing it', deleteDoc(device(authed(OUTSIDER), OWNER)))
+    await mustDeny('a visitor reading it', getDoc(device(anon())))
+  })
+})
+
+/**
  * The AGL-1501 lockdown surface (AGL-1507), live in ruleset 0370ace4.
  *
  * `lockdowns/{id}` holds the platform and per-user panic records. Reads are

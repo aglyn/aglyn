@@ -137,6 +137,7 @@ const REPO_WIDE = new Set([
   'generate:plugin-manifests:check',
   'generate:realm-host-exports:check',
   'generate:mobile-theme-tokens:check',
+  'generate:mobile-notification-catalog:check',
   'sync:next-tsconfigs:check',
   'check:ai-palette',
   // Sweeps every tree that is not a plugin for a plugin's domain: a

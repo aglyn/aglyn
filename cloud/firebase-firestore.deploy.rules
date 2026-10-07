@@ -4173,6 +4173,25 @@ allow read, write: if false;
 match /transferPrefs/{resourceKey} {
 allow read, write: if isSignedIn() && request.auth.uid == userId;
 }
+
+
+
+
+
+match /devices/{deviceId} {
+allow read, delete: if isSignedIn() && request.auth.uid == userId;
+allow create, update: if isSignedIn() && request.auth.uid == userId &&
+request.resource.data.keys().hasOnly(
+['token', 'platform', 'app', 'appVersion', 'lastSeen', 'createdAt']) &&
+request.resource.data.token is string &&
+request.resource.data.token.matches('^(ExponentPushToken|ExpoPushToken)\\[[A-Za-z0-9_-]{8,128}\\]$') &&
+request.resource.data.platform in ['ios', 'android'] &&
+request.resource.data.app in ['aglyn', 'aglyn-pos'] &&
+(!('appVersion' in request.resource.data) ||
+(request.resource.data.appVersion is string &&
+request.resource.data.appVersion.size() <= 32)) &&
+request.resource.data.lastSeen == request.time;
+}
 }
 
 

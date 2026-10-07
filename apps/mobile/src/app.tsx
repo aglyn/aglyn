@@ -40,6 +40,7 @@ import { AppNavigation } from './navigation'
 import { MOBILE_PLUGIN_MANIFEST } from './plugins.mobile.generated'
 import { SignInScreen } from './screens/sign-in'
 import { PluginContextProvider } from './shell/plugin-context'
+import { usePushNotifications } from './shell/push'
 
 configureFromEnv()
 
@@ -65,6 +66,11 @@ function Themed({ children }: { children: ReactNode }) {
   )
 }
 
+function PushNotifications({ uid }: { uid: string }) {
+  usePushNotifications(uid)
+  return null
+}
+
 function Gate() {
   const { user, ready } = useMobileAuth()
   const theme = useMobileTheme()
@@ -83,6 +89,7 @@ function Gate() {
     <MobileQueryProvider uid={user.uid} buster={APP_VERSION}>
       <WorkspaceProvider>
         <PluginContextProvider>
+          <PushNotifications uid={user.uid} />
           <AppNavigation />
         </PluginContextProvider>
       </WorkspaceProvider>

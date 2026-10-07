@@ -46,7 +46,7 @@ hold and the new axis sits beside them.
 | `scope:tenant` | `tenant`, `renderer`, `core`, `shared` | The runtime that serves a published site, and the tenant app shell. Plugins reach it only through the loader manifests. |
 | `scope:console` | everything above, plugins only dynamically | The console app. |
 | `scope:plugin` | `tenant`, `renderer`, `besigner`, `core`, `shared`, and `mobile` from its `src/mobile` entry only | A feature plugin. Never another plugin; never the designer UI. Its domain lives here and nowhere else — what it imports from the layers below it is generic, never its own model wearing a lower layer's tag. Its native screens live in `src/mobile`, reached only through its `./mobile` export (AGL-3620). |
-| `scope:mobile` | `mobile`, `shared` | The native apps and their foundation (React Native). Plugins reach the apps only through the generated mobile manifest. `check:mobile-isolation` holds the file level both ways: no web file imports mobile code, and mobile code reaches only mobile code and the proven-pure modules in `tools/scripts/mobile-pure-modules.json`. |
+| `scope:mobile` | `mobile`, `shared`, and `core`'s proven-pure modules only | The native apps and their foundation (React Native). Plugins reach the apps only through the generated mobile manifest. `check:mobile-isolation` holds the file level both ways: no web file imports mobile code, and mobile code reaches only mobile code and the proven-pure modules in `tools/scripts/mobile-pure-modules.json`. |
 | `scope:cli` | `cli`, `core`, `shared` | The command-line client. |
 
 The `type:` axis is the same rule the `scope:data|ui|util|feature` tags
