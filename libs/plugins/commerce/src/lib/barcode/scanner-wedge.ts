@@ -102,7 +102,7 @@ export function useScannerWedge(onScan: (code: string) => void, enabled = true):
     const listener = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return detector.reset()
       if (typingIntoField(event.target)) return detector.reset()
-      const code = detector.push(event.key, event.timeStamp || Date.now())
+      const code = detector.push(event.key, Date.now())
       if (code) {
         // The Enter must not also press the focused button.
         event.preventDefault()

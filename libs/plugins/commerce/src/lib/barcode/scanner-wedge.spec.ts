@@ -62,6 +62,9 @@ describe('keyboard-mode scanners (AGL-3619)', () => {
   })
 
   it('hands a scan made with focus on a button to the register, and leaves fields alone', () => {
+    // A scanner's pace, whatever the test machine's: 5 ms a key.
+    let clock = 0
+    const now = jest.spyOn(Date, 'now').mockImplementation(() => (clock += 5))
     const onScan = jest.fn()
     const { unmount } = renderHook(() => useScannerWedge(onScan))
     const button = document.createElement('button')
@@ -79,5 +82,6 @@ describe('keyboard-mode scanners (AGL-3619)', () => {
     unmount()
     type(button, [...'0123456789012', 'Enter'])
     expect(onScan).toHaveBeenCalledTimes(1)
+    now.mockRestore()
   })
 })

@@ -207,7 +207,11 @@ describe('the till asks the products query (AGL-3321)', () => {
     render(<PosConsolePage hostId="host-1" {...({} as any)} />)
     expect(screen.queryByText(/Zebra Latte/)).toBeNull()
     const button = screen.getAllByRole('button')[0]
+    // A scanner's pace, whatever the test machine's: 5 ms a key.
+    let clock = Date.now()
+    const now = jest.spyOn(Date, 'now').mockImplementation(() => (clock += 5))
     for (const key of [...'0123456789012', 'Enter']) fireEvent.keyDown(button, { key })
+    now.mockRestore()
     // Past the grid's window, so on screen only once it is in the basket.
     expect(await screen.findByText(/1× Zebra Latte/)).toBeTruthy()
   })
