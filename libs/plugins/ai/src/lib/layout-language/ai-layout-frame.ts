@@ -97,6 +97,11 @@ function headerLook(band: AiLayoutBand): {
   }
 }
 
+/** A line that reads as a copyright notice: "© 2026 …", "Copyright …", "All rights reserved." */
+export function aiLayoutIsCopyright(text: unknown): boolean {
+  return typeof text === 'string' && /^\s*(?:©|\(c\)|copyright\b)|all rights reserved/i.test(text)
+}
+
 /** What a footer leaves out: a picture slot, and the page sections a footer is no place for. */
 const FOOTER_LEAVES_OUT: ReadonlySet<AiLayoutBlock['kind']> = new Set([
   'image',
@@ -411,7 +416,16 @@ function compileFooter(
     to: `page:${entry.id}`,
   }))
   let linksPages = false
-  const blocks = (footer?.blocks ?? []).flatMap((block): AiLayoutBlock[] => {
+  const blocks = (footer?.blocks ?? []).flatMap((given): AiLayoutBlock[] => {
+    // The bottom bar carries the frame's one copyright line; a line of the
+    // answer's own that reads as one would print it twice.
+    if (aiLayoutIsCopyright(given.text)) {
+      page.settled.push({ at: 'footer', what: 'a copyright line; the footer writes its own' })
+      return []
+    }
+    const notice = (item: { title: string; text: string }) => aiLayoutIsCopyright(item.title) || aiLayoutIsCopyright(item.text)
+    const block = given.items?.some(notice) ? { ...given, items: given.items.filter((item) => !notice(item)) } : given
+    if (block !== given) page.settled.push({ at: 'footer', what: 'a copyright line in a list; the footer writes its own' })
     if (FOOTER_LEAVES_OUT.has(block.kind)) {
       page.settled.push({
         at: 'footer',

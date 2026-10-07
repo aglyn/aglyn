@@ -728,6 +728,36 @@ describe('the frame', () => {
     })
   })
 
+  it('prints one copyright line, the bottom bar\'s, whatever the answer adds', () => {
+    const block = (kind: string, text: string) => ({ kind, col: 0, text })
+    const { compiled, report } = frame({
+      header: { band: 'plain', blocks: [] },
+      footer: {
+        band: 'soft',
+        cols: [2, 1],
+        blocks: [
+          block('text', 'Gentle grooming for Austin dogs.'),
+          block('note', '© Hillside Dog Grooming. All rights reserved.'),
+          block('text', 'Copyright 2026 Hillside Dog Grooming'),
+          {
+            kind: 'list',
+            col: 1,
+            items: [
+              { title: 'Services', text: '', to: `page:${SERVICES}` },
+              { title: 'All rights reserved', text: '' },
+            ],
+          },
+        ],
+      },
+    })
+    expect(report.violations).toEqual([])
+    const texts = Object.values(compiled.tree.nodes)
+      .map((node) => node.props?.['children'] ?? node.props?.['primary'])
+      .filter((text): text is string => typeof text === 'string')
+    expect(texts.filter((text) => /©|copyright|all rights reserved/i.test(text))).toEqual(['© Hillside Dog Grooming'])
+    expect(texts).toContain('Gentle grooming for Austin dogs.')
+  })
+
   it.each([
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
   ])('compiles random frame %i with no violation', (seed) => {
