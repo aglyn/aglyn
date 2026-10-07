@@ -137,3 +137,24 @@ class DeepLinksTest {
     assertEquals("/x", scopedConsolePath("x", ConsoleScope.ABSOLUTE, null, null))
   }
 }
+
+class ConsoleScreenTest {
+  @Test
+  fun registersADeclaredScreenTheConsoleServes() {
+    val registry = NativePluginRegistry()
+    registry.registrarFor("a").consoleScreen("a.orders", "Orders", "/commerce/orders")
+    val screen = registry.screen("a.orders")!!
+    assertEquals("/commerce/orders", screen.consolePath)
+    assertEquals(ConsoleScope.SITE, screen.consoleScope)
+    assertTrue(screen.requiresSite)
+    assertEquals("/acme/hosts/shop/commerce/orders", scopedConsolePath(screen.consolePath!!, screen.consoleScope, "acme", "shop"))
+  }
+
+  @Test
+  fun refusesAConsoleScreenThatIsNotAConsolePath() {
+    val error = assertFailsWith<IllegalArgumentException> {
+      NativePluginRegistry().registrarFor("a").consoleScreen("a.orders", "Orders", "commerce/orders")
+    }
+    assertTrue(error.message!!.contains("starts with /"))
+  }
+}

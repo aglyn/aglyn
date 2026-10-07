@@ -3,6 +3,8 @@ package com.aglyn.pluginhost
 import androidx.compose.runtime.Composable
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.FirestoreReader
+import com.aglyn.hardware.NoPeripherals
+import com.aglyn.hardware.Peripherals
 
 /** Route parameters, as navigation and deep links carry them. */
 typealias NativeParams = Map<String, String>
@@ -42,6 +44,12 @@ interface NativePluginContext {
   val firestore: FirestoreReader
   val api: ConsoleApiClient
 
+  /**
+   * The device's register peripherals: printers, its own card reader and a
+   * HID scanner. The POS shell binds them; elsewhere there are none.
+   */
+  val peripherals: Peripherals get() = NoPeripherals
+
   /** Opens a registered screen by id. */
   fun navigate(screenId: String, params: NativeParams = emptyMap())
 
@@ -76,6 +84,12 @@ class NativeScreen(
   val icon: String? = null,
   val layout: ScreenLayout = ScreenLayout.SINGLE,
   val placement: PosPlacement? = null,
+  /**
+   * A declared screen the console still serves on this platform: the shell
+   * shows this console page (under [consoleScope]) in place of [content].
+   */
+  val consolePath: String? = null,
+  val consoleScope: ConsoleScope = ConsoleScope.SITE,
   val content: @Composable (context: NativePluginContext, params: NativeParams) -> Unit,
 ) : Contribution
 

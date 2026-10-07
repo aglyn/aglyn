@@ -142,7 +142,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     ) { padding ->
       Box(Modifier.padding(padding).fillMaxSize()) {
         when (route) {
-          is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, workspace.site != null)
+          is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, workspace.site != null) { navigator.back() }
           is Route.Console -> services.console(route.path) { navigator.back() }
           Route.Switcher -> SwitcherScreen(services.workspace, workspace) { navigator.back() }
           null -> when {
@@ -154,7 +154,9 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
             ) { navigator.select(ShellNavigator.HOME) }
             navigator.top == ShellNavigator.SETTINGS -> SettingsScreen(services)
             navigator.top.startsWith("screen:") ->
-              PluginScreenHost(services, context, navigator.top.removePrefix("screen:"), emptyMap(), workspace.site != null)
+              PluginScreenHost(services, context, navigator.top.removePrefix("screen:"), emptyMap(), workspace.site != null) {
+                navigator.select(ShellNavigator.HOME)
+              }
             else -> HomeScreen(services, context, workspace, widthClass, navigator)
           }
         }

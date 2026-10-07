@@ -20,6 +20,7 @@ kotlin {
   sourceSets {
     commonMain.dependencies {
       api(project(":native-core"))
+      api(project(":native-hardware"))
       api(libs.compose.runtime)
     }
     commonTest.dependencies {

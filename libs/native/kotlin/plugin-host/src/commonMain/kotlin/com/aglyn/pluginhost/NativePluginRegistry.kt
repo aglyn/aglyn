@@ -24,7 +24,25 @@ class NativePluginRegistrar internal constructor(
     layout: ScreenLayout = ScreenLayout.SINGLE,
     placement: PosPlacement? = null,
     content: @Composable (context: NativePluginContext, params: NativeParams) -> Unit,
-  ) = add(NativeScreen(pluginId, id, title, requiresSite, apps, icon, layout, placement, content))
+  ) = add(NativeScreen(pluginId, id, title, requiresSite, apps, icon, layout, placement, content = content))
+
+  /**
+   * A declared screen whose native version has not landed on this platform:
+   * the shell opens [path] in the console view, exactly as an unmatched link
+   * would, so a declared id never leads to a blank page.
+   */
+  fun consoleScreen(
+    id: String,
+    title: String,
+    path: String,
+    scope: ConsoleScope = ConsoleScope.SITE,
+    requiresSite: Boolean = scope == ConsoleScope.SITE,
+    apps: Set<NativeApp> = setOf(NativeApp.AGLYN),
+    icon: String? = null,
+  ) {
+    require(path.startsWith("/")) { "console screen \"$id\" path \"$path\" is a console path and starts with /" }
+    add(NativeScreen(pluginId, id, title, requiresSite, apps, icon, consolePath = path, consoleScope = scope) { _, _ -> })
+  }
 
   fun tab(id: String, title: String, icon: String, screen: String, order: Int, apps: Set<NativeApp> = setOf(NativeApp.AGLYN)) =
     add(NativeTab(pluginId, id, title, icon, screen, order, apps))

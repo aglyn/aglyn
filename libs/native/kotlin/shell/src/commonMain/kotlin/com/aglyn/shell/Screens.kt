@@ -145,11 +145,15 @@ internal fun PluginScreenHost(
   screenId: String,
   params: NativeParams,
   hasSite: Boolean,
+  onExit: () -> Unit = {},
 ) {
   val screen = services.registry.screen(screenId)
+  val consolePath = screen?.consolePath
   when {
     screen == null -> EmptyState("This page is not available", body = "Update the app to open it.", icon = AglynIcons.named("error"))
     screen.requiresSite && !hasSite -> EmptyState("Pick a site first", body = "This page shows one site's data.", icon = AglynIcons.named("public"))
+    consolePath != null ->
+      services.console(com.aglyn.pluginhost.scopedConsolePath(consolePath, screen.consoleScope, context.orgSlug, context.hostSlug), onExit)
     else -> screen.content(context, params)
   }
 }
