@@ -518,3 +518,190 @@ export function provePureModules({ pure, read, aliases, exists }) {
 export function formatFailures(failures) {
   return failures.map((failure) => `  [${failure.direction}] ${failure.file}: ${failure.specifier} — ${failure.why}`).join('\n')
 }
+
+/* ---------------------------------------------------------------------------
+ * The native walk (docs/mobile/native-architecture.md §9)
+ *
+ * The Swift and Kotlin apps are their own toolchains, so their isolation is
+ * held at the file level, both ways:
+ *
+ *  - WEB → NATIVE. No TS/JS file imports, requires or `new URL()`s a path in
+ *    a native tree, no tsconfig `include`/`files`/`paths`/`references` entry
+ *    reaches into one, and no `@aglyn/*` alias resolves into one.
+ *  - NATIVE → WEB. No Swift, Kotlin, Gradle, Xcode or config file in a
+ *    native tree names a relative path that leaves the native trees (a
+ *    `sourceSets` dir, a `path:` dependency, an include into `apps/console`
+ *    or a plugin's web source), and none names `firebase-admin`, a service
+ *    account or a Stripe secret key. A symlink in a native tree points into
+ *    the native trees.
+ *  - MISPLACED. A `.swift`, `.kt` or `.kts` file lives in a native tree.
+ *
+ * The only sanctioned crossings are the generated files (§3, §5–§7): their
+ * generators READ the pure TypeScript modules and WRITE into the native
+ * trees, and nothing in either side imports the other.
+ * ------------------------------------------------------------------------- */
+
+/** Trees that hold native code: the apps, the native libs, and each plugin's `src/ios` and `src/android`. */
+export const NATIVE_ROOTS = ['apps/ios/', 'apps/android/', 'libs/native/']
+export const PLUGIN_NATIVE = /^libs\/plugins\/[^/]+\/src\/(ios|android)(\/|$)/
+
+export function isNativePath(path) {
+  const p = path.endsWith('/') ? path : `${path}/`
+  return NATIVE_ROOTS.some((root) => p.startsWith(root)) || PLUGIN_NATIVE.test(path)
+}
+
+const NATIVE_SOURCE = /\.(swift|kt|kts)$/
+/** Text files in a native tree that can name a path or a secret. Binaries (images, fonts) are skipped. */
+const NATIVE_TEXT =
+  /\.(swift|kt|kts|gradle|properties|toml|xcconfig|plist|pbxproj|xcscheme|xcworkspacedata|entitlements|json|xml|yml|yaml|pro|cfg|sh)$/
+
+/** Web or server trees a native file may never point into. */
+export function nativeForbiddenReason(path) {
+  if (/^apps\/(console|tenant|docs)(\/|$)/.test(path)) return 'a web app'
+  if (/^libs\/(aglyn|tenant|besigner|shared|mobile)(\/|$)/.test(path)) return 'web or server code'
+  if (/^libs\/plugins\/[^/]+\/src(\/|$)/.test(path) && !PLUGIN_NATIVE.test(path)) return "a plugin's web or server source"
+  return 'a path outside the native trees'
+}
+
+const SECRETS = [
+  [/firebase-admin/, 'names firebase-admin, which is server-only'],
+  [/\bsk_(live|test)_[A-Za-z0-9]{8,}/, 'holds a Stripe secret key'],
+  [/"type"\s*:\s*"service_account"|service[-_]?account[^/\s"']*\.json/i, 'names a service account'],
+]
+
+const resolveFrom = (from, relative) => posix.normalize(posix.join(posix.dirname(from), relative))
+
+/** The relative paths a native file names: `../x`, `./x`, in quotes or bare after `=`/`(`. */
+export function relativePathsIn(source) {
+  const found = new Set()
+  for (const match of source.matchAll(/(?:^|[\s"'=(:,])((?:\.\.?\/)+[^\s"'(),;]*)/gm)) found.add(match[1])
+  return [...found]
+}
+
+function stripJsonComments(text) {
+  const { code } = scanSource(text)
+  return code.replace(/,(\s*[}\]])/g, '$1')
+}
+
+/** A tsconfig entry's directory part: the static prefix before its first glob. */
+const staticPrefix = (entry) => entry.split(/[*?{[]/)[0].replace(/\/[^/]*$/, (tail) => (tail.includes('.') ? '' : tail))
+
+/**
+ * Web → native over TS/JS sources and tsconfigs. `aliases` is the
+ * `aliasTable` of tsconfig.base.json.
+ */
+export function evaluateWebToNative({ files, read, aliases }) {
+  const failures = []
+  for (const [alias, target] of [...aliases.exact, ...aliases.prefix]) {
+    if (isNativePath(target)) {
+      failures.push({ direction: 'web→native', file: 'tsconfig.base.json', specifier: alias, why: `maps into ${target}` })
+    }
+  }
+  for (const file of files) {
+    if (isNativePath(file) || file.split('/').includes('node_modules')) continue
+    if (/(^|\/)tsconfig[^/]*\.json$/.test(file)) {
+      let config
+      try {
+        config = JSON.parse(stripJsonComments(read(file)))
+      } catch {
+        continue
+      }
+      const entries = [
+        ...(config.include ?? []),
+        ...(config.files ?? []),
+        ...(config.references ?? []).map((ref) => ref?.path).filter(Boolean),
+        ...Object.values(config.compilerOptions?.paths ?? {}).flat(),
+      ]
+      for (const entry of entries) {
+        const target = resolveFrom(file, staticPrefix(String(entry)) || '.')
+        if (isNativePath(target)) {
+          failures.push({ direction: 'web→native', file, specifier: String(entry), why: `reaches into ${target}` })
+        }
+      }
+      continue
+    }
+    if (!isCodeFile(file)) continue
+    let source
+    try {
+      source = read(file)
+    } catch {
+      continue
+    }
+    const { code, bare } = scanSource(source)
+    const specifiers = importSpecifiers(source)
+    for (const match of bare.matchAll(/\bnew\s+URL\s*\(\s*(['"`])/g)) {
+      const quote = match.index + match[0].length - 1
+      const close = code.indexOf(code[quote], quote + 1)
+      if (close > quote) specifiers.push(code.slice(quote + 1, close))
+    }
+    for (const specifier of specifiers) {
+      let target = null
+      if (specifier.startsWith('.')) target = resolveFrom(file, specifier)
+      else if (specifier.startsWith('@aglyn/')) {
+        const exact = aliases.exact.get(specifier)
+        const prefix = aliases.prefix.find(([from]) => specifier.startsWith(from))
+        target = exact ?? (prefix ? prefix[1] + specifier.slice(prefix[0].length) : null)
+      } else if (/^(apps|libs)\//.test(specifier)) target = posix.normalize(specifier)
+      if (target && isNativePath(target)) {
+        failures.push({ direction: 'web→native', file, specifier, why: `reaches native code ${target}` })
+      }
+    }
+  }
+  return failures
+}
+
+/**
+ * Native → web, misplaced native sources and native symlinks. `readLink(path)`
+ * returns a symlink's target, or null for a regular file.
+ */
+export function evaluateNativeToWeb({ files, read, readLink = () => null }) {
+  const failures = []
+  for (const file of files) {
+    if (file.split('/').includes('node_modules')) continue
+    const native = isNativePath(file)
+    if (!native) {
+      if (NATIVE_SOURCE.test(file)) {
+        failures.push({
+          direction: 'misplaced',
+          file,
+          specifier: posix.extname(file),
+          why: 'native source belongs in apps/ios, apps/android, libs/native or a plugin\'s src/ios|src/android',
+        })
+      }
+      continue
+    }
+    const link = readLink(file)
+    if (link !== null) {
+      const target = resolveFrom(file, link)
+      if (!isNativePath(target)) {
+        failures.push({ direction: 'native→web', file, specifier: link, why: `is a symlink into ${nativeForbiddenReason(target)} (${target})` })
+      }
+      continue
+    }
+    if (!NATIVE_TEXT.test(file) && !/(^|\/)(Package\.swift|gradlew|Podfile|Cartfile)$/.test(file)) continue
+    let source
+    try {
+      source = read(file)
+    } catch {
+      continue
+    }
+    // A JSON file's `$schema` (Nx's project.json) is editor metadata, never a build input.
+    if (file.endsWith('.json')) source = source.replace(/"\$schema"\s*:\s*"[^"]*"/g, '')
+    // Xcode writes a project's paths relative to the folder holding the .xcodeproj.
+    const bundle = /^(.*?)\/[^/]+\.(xcodeproj|xcworkspace)\//.exec(file)
+    const base = bundle ? `${bundle[1]}/project` : file
+    for (const relative of relativePathsIn(source)) {
+      const target = resolveFrom(base, relative)
+      if (target.startsWith('..')) {
+        failures.push({ direction: 'native→web', file, specifier: relative, why: 'leaves the repository' })
+      } else if (!isNativePath(target)) {
+        failures.push({ direction: 'native→web', file, specifier: relative, why: `points into ${nativeForbiddenReason(target)} (${target})` })
+      }
+    }
+    for (const [pattern, why] of SECRETS) {
+      const hit = pattern.exec(source)
+      if (hit) failures.push({ direction: 'native→web', file, specifier: hit[0].slice(0, 24), why })
+    }
+  }
+  return failures
+}

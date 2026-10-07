@@ -579,6 +579,17 @@ native walk. It fails when any of these holds:
 - **misplaced native source:** a `.swift`, `.kt` or `.kts` file outside
   `apps/ios`, `apps/android`, `libs/native` and `libs/plugins/*/src/{ios,android}`.
 
+As built (`evaluateWebToNative` and `evaluateNativeToWeb`):
+
+- A native file's relative path is resolved from its own folder. A path in
+  an `.xcodeproj` or `.xcworkspace` resolves from the folder that holds the
+  project, as Xcode does.
+- A JSON `$schema` (Nx's `project.json`) is editor metadata and is not read.
+- A symlink in a native tree must point into the native trees, as the
+  manifest's `Plugins/` links do.
+- Images and fonts are not read. Licenses and READMEs (`.txt`, `.md`) are
+  prose, not build input, and are not read either.
+
 With React Native gone, the guard's TypeScript rules for `libs/mobile` and
 plugin `src/mobile` go with it. `mobile-pure-modules.json` stays: it is now
 the list of pure modules the native generators (§5) may read.

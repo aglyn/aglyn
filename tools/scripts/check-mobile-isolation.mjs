@@ -31,7 +31,10 @@
  *  - mobile → web: everything the mobile apps bundle reaches only mobile
  *    code, mobile and platform-neutral packages, and the workspace modules
  *    on tools/scripts/mobile-pure-modules.json, each of which must itself
- *    prove pure.
+ *    prove pure;
+ *  - the Swift and Kotlin trees, at the file level: no web file or tsconfig
+ *    reaches them, none of their files points outside them or names a
+ *    server credential, and no native source lives anywhere else.
  *
  * The file list comes from git (tracked and not-yet-tracked, ignored files
  * excluded), never a filesystem walk, so a build output or a nested
@@ -39,14 +42,16 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, readlinkSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
   aliasTable,
   evaluateMobileToWeb,
+  evaluateNativeToWeb,
   evaluateWebToMobile,
+  evaluateWebToNative,
   formatFailures,
   provePureModules,
 } from './lib/mobile-isolation.mjs'
@@ -61,7 +66,13 @@ const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--
 })
   .split('\0')
   .filter(Boolean)
-  .filter((file) => existsSync(join(root, file)))
+  .filter((file) => {
+    try {
+      return lstatSync(join(root, file)).isSymbolicLink() || existsSync(join(root, file))
+    } catch {
+      return false
+    }
+  })
 
 const read = (path) => readFileSync(join(root, path), 'utf8')
 const exists = (path) => {
@@ -77,7 +88,17 @@ const pure = JSON.parse(read(ALLOWLIST)).modules.map((entry) => entry.path)
 const web = evaluateWebToMobile({ files, read, aliases, exists })
 const mobile = evaluateMobileToWeb({ files, read, aliases, exists, pure })
 const proof = provePureModules({ pure, read, aliases, exists })
-const failures = [...web, ...mobile.failures, ...proof]
+const readLink = (path) => {
+  try {
+    return lstatSync(join(root, path)).isSymbolicLink() ? readlinkSync(join(root, path)) : null
+  } catch {
+    return null
+  }
+}
+// The Swift and Kotlin apps (docs/mobile/native-architecture.md §9), held at the file level.
+const webNative = evaluateWebToNative({ files, read, aliases })
+const nativeWeb = evaluateNativeToWeb({ files, read, readLink })
+const failures = [...web, ...mobile.failures, ...proof, ...webNative, ...nativeWeb]
 
 if (failures.length) {
   console.error(
@@ -95,7 +116,8 @@ if (failures.length) {
 const unused = pure.filter((path) => !mobile.reachedPure.includes(path))
 console.log(
   `check-mobile-isolation: ok. ${web.length} web→mobile edges, ${mobile.failures.length} mobile→web edges; ` +
-    `${pure.length} proven-pure module(s), ${mobile.reachedPure.length} reached by mobile code` +
+    `${pure.length} proven-pure module(s), ${mobile.reachedPure.length} reached by mobile code; ` +
+    `native trees: 0 web→native, 0 native→web, 0 misplaced` +
     (unused.length ? ` (listed but unreached: ${unused.join(', ')})` : '') +
     '.',
 )
