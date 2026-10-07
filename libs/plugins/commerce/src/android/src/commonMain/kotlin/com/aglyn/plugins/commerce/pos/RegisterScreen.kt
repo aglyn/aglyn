@@ -5,6 +5,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -206,8 +207,13 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit) {
     }
   }
 
+  // The register holds the keyboard when no field does, so a keyboard-wedge
+  // scanner's burst and the shortcuts reach it from anywhere in the window.
+  val registerFocus = remember { FocusRequester() }
+  LaunchedEffect(Unit) { runCatching { registerFocus.requestFocus() } }
+
   val checkout = model.checkout
-  Box(Modifier.fillMaxSize().then(keys).testTag("pos-register")) {
+  Box(Modifier.fillMaxSize().then(keys).focusRequester(registerFocus).focusable().testTag("pos-register")) {
     if (wide) {
       Row(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {

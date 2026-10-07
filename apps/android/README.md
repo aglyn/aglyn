@@ -65,6 +65,7 @@ Every setting can be overridden with `-Paglyn.<name>=…` or `AGLYN_<NAME>`:
 ./gradlew :desktop:run -Paglyn.desktopApp=pos       # Aglyn POS
 # another stack: -Paglyn.jvmArgs="-Daglyn.firebaseProjectId=demo-aglyn-native -Daglyn.authEmulatorHost=127.0.0.1:9299 -Daglyn.firestoreEmulatorHost=127.0.0.1:8289 -Daglyn.autoSignIn=true"
 ./gradlew :desktop:snapshots -Paglyn.snapshotDir=/tmp/shots   # offscreen PNGs of every screen
+./gradlew :desktop:posSnapshots -Paglyn.snapshotDir=/tmp/shots # the register driven through a sale, offscreen
 ./gradlew :desktop:packageMsi                       # on Windows
 ```
 
@@ -75,6 +76,14 @@ now: the refresh token moves to the OS credential store (Windows Credential
 Manager) when that dependency is approved. The console opens in the system
 browser, and desktop has no push in v1. Menus: Go (⌘/Ctrl 1–3, ⌘/Ctrl ,),
 Workspace (⌘/Ctrl K switches site) and Account (⌘/Ctrl ⇧Q signs out).
+
+The desktop register takes cards on smart readers only. A keyboard-wedge
+barcode scanner works anywhere in the window (a fast burst of keys ended by
+Enter or Tab is a scan, not typing). A network receipt printer is named with
+`-Daglyn.receiptPrinter=host[:port]` (raw TCP, 9100 by default): receipts
+print as ESC/POS and a cash sale kicks the drawer. Register shortcuts:
+⌘/Ctrl F search, ⌘/Ctrl Enter or F12 charge, ⌘/Ctrl + and − the last line's
+quantity, ⌘/Ctrl H hold the basket, Esc closes the item sheet.
 
 Release builds take no emulator host and default the console to
 `https://app.aglyn.com`; `AglynConfig.problems()` logs anything missing.

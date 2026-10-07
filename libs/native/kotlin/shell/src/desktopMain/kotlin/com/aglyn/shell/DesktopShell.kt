@@ -28,6 +28,24 @@ object DesktopShell {
    * The build values, from `-Daglyn.<name>=…` or `AGLYN_<NAME>`, defaulting
    * to the local emulator stack the README describes.
    */
+  /**
+   * The register's peripherals on a desktop: a keyboard-wedge barcode
+   * scanner always (it types into the window), and a network receipt
+   * printer when `-Daglyn.receiptPrinter=host[:port]` names one (raw TCP,
+   * 9100 by default). Desktop takes cards on smart readers only, so there is
+   * no card collector.
+   */
+  fun posPeripherals(): com.aglyn.hardware.Peripherals {
+    val printer = (System.getProperty("aglyn.receiptPrinter") ?: System.getenv("AGLYN_RECEIPT_PRINTER"))
+      ?.trim()?.ifEmpty { null }
+      ?.let { address ->
+        val host = address.substringBeforeLast(':', address)
+        val port = address.substringAfterLast(':', "").toIntOrNull() ?: com.aglyn.hardware.NetworkReceiptPrinter.DEFAULT_PORT
+        com.aglyn.hardware.NetworkReceiptPrinter("Receipt printer", host, port)
+      }
+    return com.aglyn.hardware.StaticPeripherals(printers = listOfNotNull(printer), hidScanner = com.aglyn.hardware.HidBurstDetector())
+  }
+
   fun envFromSystem(): AglynEnv {
     fun read(name: String, fallback: String?): String? =
       System.getProperty("aglyn.$name")
@@ -44,7 +62,12 @@ object DesktopShell {
     )
   }
 
-  fun services(app: NativeApp, env: AglynEnv, manifest: List<NativePluginManifestEntry>): ShellServices {
+  fun services(
+    app: NativeApp,
+    env: AglynEnv,
+    manifest: List<NativePluginManifestEntry>,
+    peripherals: com.aglyn.hardware.Peripherals = com.aglyn.hardware.NoPeripherals,
+  ): ShellServices {
     val config = AglynConfig.read(env, if (app == NativeApp.POS) AglynAppId.POS else AglynAppId.AGLYN)
     config.problems().forEach { System.err.println("Aglyn: $it") }
     val http = defaultHttpClient()
@@ -73,6 +96,7 @@ object DesktopShell {
       registry = registry,
       console = { path, onExit -> ConsoleView(config.consoleOrigin, path, auth, config.brandName, onExit) },
       debugSignIn = debugSignIn,
+      peripherals = peripherals,
     )
   }
 }

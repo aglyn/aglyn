@@ -26,6 +26,11 @@ kotlin {
         implementation(libs.kotlinx.coroutines.swing)
       }
     }
+    named("desktopTest") {
+      dependencies {
+        implementation(libs.compose.ui.test)
+      }
+    }
   }
 }
 
@@ -62,6 +67,17 @@ tasks.register<JavaExec>("snapshots") {
   dependsOn(test.compileTaskProvider)
   classpath = files(test.output.allOutputs, test.runtimeDependencyFiles)
   mainClass.set("com.aglyn.desktop.DesktopSnapshotsKt")
+  jvmArgs((findProperty("aglyn.jvmArgs") as String?)?.split(' ')?.filter { it.isNotBlank() } ?: emptyList<String>())
+  (findProperty("aglyn.snapshotDir") as String?)?.let { systemProperty("aglyn.snapshotDir", it) }
+}
+
+// The register's screens on the desktop, driven like a cashier would (a
+// development tool; see PosSnapshots.kt).
+tasks.register<JavaExec>("posSnapshots") {
+  val test = kotlin.jvm("desktop").compilations.getByName("test")
+  dependsOn(test.compileTaskProvider)
+  classpath = files(test.output.allOutputs, test.runtimeDependencyFiles)
+  mainClass.set("com.aglyn.desktop.PosSnapshotsKt")
   jvmArgs((findProperty("aglyn.jvmArgs") as String?)?.split(' ')?.filter { it.isNotBlank() } ?: emptyList<String>())
   (findProperty("aglyn.snapshotDir") as String?)?.let { systemProperty("aglyn.snapshotDir", it) }
 }
