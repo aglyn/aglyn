@@ -16,22 +16,17 @@
  */
 
 import { createHash } from 'crypto'
-import {
-  firebaseAdmin,
-  meterHostEmail,
-  renderHostEmailWithTokens,
-  hostSendingIdentity,
-  getOrgForHost,
-} from '@aglyn/tenant-data-admin'
-import * as Aglyn from '@aglyn/aglyn/server'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
-import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import * as CommerceModel from '../model'
 import { alertLowStockCrossing } from './low-stock'
 import { decrementVariantStock } from './reserve-stock'
 import { releasePromotionHold, settlePromotionSlot } from './promotion-hold'
 import { offlineFeeMonthKey } from './pos-fee-month'
 import { resetPosDisplay } from './pos-display'
+import { notifyOrderBuyer } from './order-notifications'
+import { raiseOrderEvent } from './order-events'
+import { ORDER_PAID_EVENT } from '../model/order-events'
 
 /*==========================================
  * AN OPEN REGISTER SALE (AGL-3607).
@@ -478,20 +473,26 @@ export async function completePosSale(
     })
   }
 
-  if (receiptEmail) {
-    const sent = await sendPosReceiptEmail(hostId, order, receiptEmail).catch(
-      (error: unknown) => {
-        console.error('[pos-sale] receipt send failed', error)
-        return false
-      },
-    )
-    if (!sent) {
+  // The receipt and the paid event, through the same doors every sale uses
+  // (AGL-3610, AGL-3611): the buyer-notification door claims each message
+  // per channel, so a second completion path can never mail twice, and it
+  // texts the receipt when the customer chose a text and a provider is on.
+  if (receipt?.channel === 'email' || receipt?.channel === 'sms' || contactEmail) {
+    const sent = await notifyOrderBuyer({ hostId, orderId: order.$id }, 'receipt', {
+      ...(contactEmail ? { email: contactEmail } : {}),
+    })
+    const failed =
+      sent.outcome === 'handled' && sent.channels.some((channel) => channel.outcome === 'failed')
+    if (failed && receipt && receipt.channel !== 'none' && receipt.channel !== 'print') {
       notes.push({
         event: 'receipt-unsent',
-        detail: `The email receipt to ${receiptEmail} could not be sent.`,
+        detail: `The ${receipt.channel === 'sms' ? 'text' : 'email'} receipt could not be sent.`,
       })
     }
   }
+  await raiseOrderEvent(ORDER_PAID_EVENT, { hostId, orderId: order.$id, key: 'paid' }).catch(
+    (error: unknown) => console.error('[pos-sale] order.paid event failed', error),
+  )
 
   if (notes.length) {
     await firestore
@@ -515,81 +516,6 @@ export async function completePosSale(
       console.error('[pos-sale] display reset failed', error),
     )
   }
-}
-
-/**
- * The register's email receipt, through the store's own `order-receipt`
- * template (AGL-771) and the same send path the online receipt uses.
- * Resolves false when nothing was sent.
- */
-export async function sendPosReceiptEmail(
-  hostId: string,
-  order: PosLiftedOrder,
-  to: string,
-): Promise<boolean> {
-  if (!isEmailConfigured()) return false
-  const firestore = firebaseAdmin.app().firestore()
-  const settings = await firestore
-    .collection('hosts')
-    .doc(hostId)
-    .collection('settings')
-    .doc('store')
-    .get()
-    .catch(() => null)
-  const receiptFooter = String(settings?.get('receiptFooter') ?? '')
-  const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`
-  const totals = order.totals
-  const linesText = (order.lineItems ?? [])
-    .map(
-      (line) =>
-        `${line.quantity}× ${line.name}${line.variantLabel ? ` (${line.variantLabel})` : ''}` +
-        ` — ${dollars(line.unitAmountCents * line.quantity)}`,
-    )
-    .join('\n')
-  const payments = CommerceModel.orderPayments(order).filter(
-    (payment) => payment.status === 'succeeded',
-  )
-  const paymentText = payments.map((payment) => CommerceModel.describeOrderPayment(payment)).join('\n')
-  const summary = [
-    linesText,
-    [
-      Number(totals?.discountCents ?? 0) > 0 ? `Discount: -${dollars(Number(totals?.discountCents))}` : '',
-      Number(totals?.taxCents ?? 0) > 0 ? `Tax: ${dollars(Number(totals?.taxCents))}` : '',
-      Number(totals?.tipCents ?? 0) > 0 ? `Tip: ${dollars(Number(totals?.tipCents))}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n'),
-    paymentText,
-  ]
-    .filter(Boolean)
-    .join('\n\n')
-  const totalWithTip = Number(totals?.totalCents ?? 0) + Number(totals?.tipCents ?? 0)
-  const orderLabel = CommerceModel.formatOrderNumber(order, order.$id)
-  const designed = await renderHostEmailWithTokens(firestore, hostId, 'order-receipt', {
-    'order.summary': summary,
-    'order.total': dollars(totalWithTip),
-    'order.ref': orderLabel,
-    'store.receiptFooter': receiptFooter,
-  })
-  const ownerOrg = await getOrgForHost(hostId).catch(() => null)
-  const brand = Aglyn.resolveBrandingProfile(ownerOrg?.org as never)
-  await sendEmail({
-    to,
-    subject: designed?.subject ?? 'Receipt for your purchase',
-    text:
-      designed?.text ||
-      `Thanks for your purchase!\n\n${summary}\n\nTotal: ${dollars(totalWithTip)}\n` +
-        `Order ${orderLabel}` +
-        (receiptFooter ? `\n\n${receiptFooter}` : ''),
-    ...(designed?.html ? { html: designed.html } : {}),
-    fromName: brand.fromName,
-    sendingIdentity: await hostSendingIdentity(hostId),
-    audience: 'tenant',
-    context: 'order-receipt',
-    owedFor: 'order',
-  })
-  await meterHostEmail(hostId)
-  return true
 }
 
 /**

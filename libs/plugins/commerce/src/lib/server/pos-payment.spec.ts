@@ -35,6 +35,19 @@ const mockDecrement = jest.fn(async (options: any) => ({
 const mockContacts: any[] = []
 const mockSaleCompleted: any[] = []
 
+const mockNotified: any[] = []
+const mockRaised: any[] = []
+jest.mock('./order-notifications', () => ({
+  notifyOrderBuyer: async (ref: any, event: string, options: any) => {
+    mockNotified.push({ ref, event, options })
+    return { outcome: 'handled', channels: [] }
+  },
+}))
+jest.mock('./order-events', () => ({
+  raiseOrderEvent: async (_event: unknown, payload: any) => {
+    mockRaised.push(payload)
+  },
+}))
 jest.mock('./reserve-stock', () => ({
   decrementVariantStock: (options: any) => mockDecrement(options),
 }))
@@ -263,6 +276,8 @@ beforeEach(() => {
   mockDecrement.mockClear()
   mockContacts.length = 0
   mockSaleCompleted.length = 0
+  mockNotified.length = 0
+  mockRaised.length = 0
   seedSale()
 })
 
@@ -396,6 +411,7 @@ describe('card readers', () => {
     expect(stripeCalls.filter((call) => call.path.endsWith('/capture'))).toHaveLength(1)
     expect(mockDecrement).toHaveBeenCalledTimes(1)
     expect(mockSaleCompleted).toEqual(['sale-1'])
+    expect(mockRaised).toEqual([{ hostId: 'host-1', orderId: 'sale-1', key: 'paid' }])
     expect(sale().timeline.filter((entry: any) => entry.event === 'paid')).toHaveLength(1)
   })
 
@@ -452,6 +468,23 @@ describe('voiding an open sale', () => {
   it('refuses to void a paid sale', async () => {
     await act({ action: 'cash', tenderedCents: 10_000 }, 'paid')
     expect((await act({ action: 'void' })).status).toBe(409)
+  })
+})
+
+describe('receipts', () => {
+  it('sends the receipt the customer chose through the buyer-notification door, once', async () => {
+    await act({ action: 'receipt', channel: 'email', to: 'Ann@Example.com', marketingOptIn: true })
+    expect(sale().receiptRequest).toMatchObject({ channel: 'email', to: 'ann@example.com', marketingOptIn: true })
+    expect(mockNotified).toHaveLength(0)
+    await act({ action: 'cash', tenderedCents: 10_000 }, 'paid')
+    expect(mockNotified).toEqual([
+      { ref: { hostId: 'host-1', orderId: 'sale-1' }, event: 'receipt', options: { email: 'ann@example.com' } },
+    ])
+    expect(mockContacts[0]).toMatchObject({ marketingConsent: true, identity: { email: 'ann@example.com' } })
+  })
+
+  it('refuses a text receipt when no SMS provider is on', async () => {
+    expect((await act({ action: 'receipt', channel: 'sms', to: '+1 555 010 0199' })).status).toBe(409)
   })
 })
 

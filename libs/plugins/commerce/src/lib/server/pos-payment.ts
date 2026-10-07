@@ -22,6 +22,8 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
+import { pluginSmsAvailable } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
+import { notifyOrderBuyer } from './order-notifications'
 import * as CommerceModel from '../model'
 import { posRegisterSettings } from '../plugin-config'
 import {
@@ -37,7 +39,6 @@ import {
   posSaleSummary,
   readPosSale,
   releasePosSaleDiscount,
-  sendPosReceiptEmail,
   type PosLiftedOrder,
   type PosPaymentOutcome,
 } from './pos-sale'
@@ -119,8 +120,8 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
         terminal: { available: posTerminalAvailable(), testMode: posStripeTestMode() },
         readers,
         publishableKey: String(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? ''),
-        // Text receipts need an SMS provider this store does not have yet.
-        smsReceipts: false,
+        // A text receipt is offered only when an SMS provider is on (AGL-3610).
+        smsReceipts: pluginSmsAvailable(),
       })
     }
     if (!orderId) return res.status(400).json({ error: 'Missing orderId' })
@@ -720,7 +721,7 @@ async function recordReceiptChoice(
       error: channel === 'email' ? 'Enter a valid email address.' : 'Enter a valid phone number.',
     }
   }
-  if (channel === 'sms') {
+  if (channel === 'sms' && !pluginSmsAvailable()) {
     return { ok: false, status: 409, error: 'Text receipts are not set up for this store.' }
   }
   const marketingOptIn = channel === 'email' && body['marketingOptIn'] === true
@@ -750,28 +751,40 @@ async function recordReceiptChoice(
               ...CommerceModel.orderListFields({ ...fresh, customerEmail: to }, orderId),
             }
           : {}),
+        // The receipt door texts `customerPhone` (AGL-3610).
+        ...(channel === 'sms' ? { customerPhone: to } : {}),
       },
       { merge: true },
     )
     return { ...fresh, receiptRequest } as PosLiftedOrder
   })
   if (!order) return { ok: false, status: 404, error: 'Unknown sale' }
-  if (order.status === 'paid' && channel === 'email') {
-    const sent = await sendPosReceiptEmail(staff.hostId, order, to).catch(() => false)
-    await recordCapturedContact({
-      orgId: '',
-      hostId: staff.hostId,
-      identity: { email: to },
-      surface: 'relationship',
-      lifecycleFloor: 'customer',
-      ...(marketingOptIn ? { marketingConsent: true } : {}),
-      interaction: {
-        source: 'order',
-        refId: orderId,
-        summary: `In-store purchase ($${(Number(order.totals?.totalCents ?? 0) / 100).toFixed(2)})`,
-      },
-    }).catch((error: unknown) => console.error('[pos-payment] contact capture failed', error))
-    if (!sent) return { ok: false, status: 502, error: 'The receipt could not be sent.' }
+  if (order.status === 'paid' && (channel === 'email' || channel === 'sms')) {
+    // Chosen after the sale completed: sent now, through the same door.
+    const sent = await notifyOrderBuyer({ hostId: staff.hostId, orderId }, 'receipt', {
+      ...(channel === 'email' ? { email: to } : {}),
+    })
+    if (channel === 'email') {
+      await recordCapturedContact({
+        orgId: '',
+        hostId: staff.hostId,
+        identity: { email: to },
+        surface: 'relationship',
+        lifecycleFloor: 'customer',
+        ...(marketingOptIn ? { marketingConsent: true } : {}),
+        interaction: {
+          source: 'order',
+          refId: orderId,
+          summary: `In-store purchase ($${(Number(order.totals?.totalCents ?? 0) / 100).toFixed(2)})`,
+        },
+      }).catch((error: unknown) => console.error('[pos-payment] contact capture failed', error))
+    }
+    if (sent.outcome === 'handled' && sent.channels.some((entry) => entry.outcome === 'failed')) {
+      return { ok: false, status: 502, error: 'The receipt could not be sent.' }
+    }
+    if (sent.outcome === 'disabled') {
+      return { ok: false, status: 409, error: 'Receipts are switched off in the store settings.' }
+    }
   }
   return { ok: true, order, payment: null, completed: false, changed: true }
 }
