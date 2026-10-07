@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import Foundation
+import Observation
 
 /*
  * THIS DEVICE'S CARD READER.
@@ -122,10 +123,14 @@ public protocol CardReaderSessionSource: Sendable {
   func session(hostID: String) async throws -> CardReaderSession
 }
 
-/// This device's own card reader.
+/// This device's own card reader. Implementations are `@Observable`, so a
+/// view that reads `state` follows it.
 @MainActor
 public protocol CardCollector: AnyObject {
   var state: CardCollectorState { get }
+  /// What the reader asks the cashier to read out right now ("Insert the
+  /// card."), while a payment is in progress.
+  var prompt: String? { get }
   /// The readers this device can offer, for the readers screen.
   var kinds: [CardCollectorKind] { get }
   /// Connects for one site; `sessions` mints the connection tokens.
@@ -138,18 +143,23 @@ public protocol CardCollector: AnyObject {
   func cancel() async
 }
 
+extension CardCollector {
+  public var prompt: String? { nil }
+}
+
 /// A reader for tests, demos and training: no card, no SDK. It validates the
 /// request like a real reader, waits, and answers (by default, collects the
 /// amount it was asked for).
 @MainActor
-public final class SimulatedCardCollector: CardCollector, ObservableObject {
+@Observable
+public final class SimulatedCardCollector: CardCollector {
   public static let label = "Simulated reader"
 
-  @Published public private(set) var state: CardCollectorState = .disconnected
+  public private(set) var state: CardCollectorState = .disconnected
   public let kinds: [CardCollectorKind] = [.simulated]
-  private let delay: Duration
-  private let answer: @Sendable (CardCollectRequest) -> CardCollectOutcome
-  private var canceled = false
+  @ObservationIgnored private let delay: Duration
+  @ObservationIgnored private let answer: @Sendable (CardCollectRequest) -> CardCollectOutcome
+  @ObservationIgnored private var canceled = false
 
   public init(
     delay: Duration = .milliseconds(1200),

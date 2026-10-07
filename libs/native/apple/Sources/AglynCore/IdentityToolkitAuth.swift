@@ -129,7 +129,7 @@ public actor IdentityToolkitAuth {
     emulatorHost: String?,
     transport: HTTPTransport = URLSession.shared,
     store: AuthCredentialStore,
-    now: @escaping @Sendable () -> Date = Date.init
+    now: @escaping @Sendable () -> Date = { Date() }
   ) {
     self.apiKey = apiKey
     identityBase = emulatorHost.map { "http://\($0)/identitytoolkit.googleapis.com" }

@@ -26,7 +26,12 @@ final class DeepLinkTests: XCTestCase {
   }
 
   func testOpensEveryOtherConsolePathInTheWebViewAndRefusesWhatIsNotAConsoleLink() {
-    XCTAssertEqual(DeepLinks.resolve("/acme/hosts/shop/besigner", routes: routes), .console("/acme/hosts/shop/besigner"))
+    XCTAssertEqual(DeepLinks.resolve("/acme/hosts/shop/besigner", routes: routes), .besigner("/acme/hosts/shop/besigner"))
+    XCTAssertEqual(
+      DeepLinks.resolve("/acme/hosts/shop/screens/s1/versions/v1/besigner?x=1", routes: routes),
+      .besigner("/acme/hosts/shop/screens/s1/versions/v1/besigner?x=1"))
+    // A console page with no native screen is a gap, never a web page.
+    XCTAssertEqual(DeepLinks.resolve("/acme/hosts/shop/media", routes: routes), .unavailable("/acme/hosts/shop/media"))
     XCTAssertNil(DeepLinks.resolve("//evil.example/x", routes: routes))
     XCTAssertNil(DeepLinks.resolve("javascript:alert(1)", routes: routes))
     XCTAssertNil(DeepLinks.consolePath(of: ""))
@@ -45,5 +50,15 @@ final class DeepLinkTests: XCTestCase {
     XCTAssertEqual(
       DeepLinks.resolve("/acme/hosts/shop/redirects/a?id=b&orgSlug=z", routes: routes),
       .screen("r.detail", ["id": "a", "orgSlug": "acme", "hostSlug": "shop"]))
+  }
+
+  func testOnlyBesignerPathsAreBesigner() {
+    XCTAssertTrue(DeepLinks.isBesignerPath("/acme/hosts/shop/layouts/l1/versions/v2/besigner"))
+    XCTAssertTrue(DeepLinks.isBesignerPath("/admin/emails/welcome/versions/v1/besigner?tab=2"))
+    XCTAssertFalse(DeepLinks.isBesignerPath("/acme/hosts/shop/besigner-help"))
+    XCTAssertFalse(DeepLinks.isBesignerPath("/acme/hosts/shop/media"))
+    XCTAssertFalse(DeepLinks.isBesignerPath("/besigner/../media"))
+    XCTAssertFalse(DeepLinks.isBesignerPath("//evil.example/besigner"))
+    XCTAssertFalse(DeepLinks.isBesignerPath("besigner"))
   }
 }

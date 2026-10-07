@@ -64,12 +64,12 @@ final class RegistryTests: XCTestCase {
   }
 
   func testHoldsAQuickActionToExactlyOneTarget() {
-    for (screen, path) in [(nil, nil), ("a.list", "/a")] as [(String?, String?)] {
+    for (screen, path) in [(nil, nil), ("a.list", "/x/hosts/y/besigner")] as [(String?, String?)] {
       let registry = NativePluginRegistry()
       let result = NativePluginLoader.load(
         [
           entry(contributes: ["quickActions": ["a.go"]], register: {
-            $0.quickAction("a.go", title: "Go", icon: "plus", order: 1, screen: screen, consolePath: path)
+            $0.quickAction("a.go", title: "Go", icon: "plus", order: 1, screen: screen, besignerPath: path)
           })
         ], into: registry)
       XCTAssertTrue(result.failed.first?.error.contains("exactly one") == true)
@@ -94,11 +94,49 @@ final class RegistryTests: XCTestCase {
             $0.screen("a.list", title: "A") { _, _ in EmptyView() }
             $0.screen("a.register", title: "Register", apps: [.pos], placement: .register) { _, _ in EmptyView() }
             $0.quickAction("a.two", title: "Two", icon: "x", order: 2, screen: "a.list")
-            $0.quickAction("a.one", title: "One", icon: "x", order: 1, consolePath: "/a")
+            $0.quickAction("a.one", title: "One", icon: "x", order: 1, besignerPath: "/screens/s1/versions/v1/besigner")
           })
       ], into: registry)
     XCTAssertEqual(registry.quickActions(for: .aglyn).map(\.id), ["a.one", "a.two"])
     XCTAssertEqual(registry.screens(for: .pos, placement: .register).map(\.id), ["a.register"])
     XCTAssertEqual(registry.screens(for: .aglyn).map(\.id), ["a.list"])
   }
+}
+
+@MainActor
+final class BesignerOnlyTests: XCTestCase {
+  func testAQuickActionOpensOnlyABesignerPage() {
+    let registry = NativePluginRegistry()
+    let registrar = NativePluginRegistrar(
+      pluginID: "shop", declared: NativeContributionDeclaration(quickActions: ["shop.media"]), registry: registry)
+    registrar.quickAction("shop.media", title: "Media", icon: "photo", order: 1, besignerPath: "/media")
+    XCTAssertEqual(registrar.errors.count, 1)
+    XCTAssertTrue(registry.quickActions(for: .aglyn).isEmpty)
+  }
+
+  func testTheContextOpensOnlyBesignerPathsUnderTheSite() {
+    var opened: [String] = []
+    let context = NativePluginContext(
+      uid: "u", orgID: "o", hostID: "h", orgSlug: "acme", hostSlug: "shop", firestore: NullReader(),
+      api: ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "t" }),
+      navigate: { _, _ in }, openBesigner: { opened.append($0) })
+    XCTAssertTrue(context.openBesigner("/screens/s1/versions/v1/besigner"))
+    XCTAssertFalse(context.openBesigner("/products/orders"))
+    XCTAssertEqual(opened, ["/acme/hosts/shop/screens/s1/versions/v1/besigner"])
+  }
+}
+
+private final class NullReader: FirestoreReader, @unchecked Sendable {
+  @MainActor
+  func listen(_ query: FirestoreQuery, _ onChange: @escaping @MainActor (Result<[FirestoreDocument], Error>) -> Void)
+    -> FirestoreListening
+  { NoListener() }
+
+  @MainActor
+  func listenDocument(_ path: [String], _ onChange: @escaping @MainActor (Result<FirestoreDocument?, Error>) -> Void)
+    -> FirestoreListening
+  { NoListener() }
+
+  func setDocument(_ path: [String], _ fields: [String: Any], merge: Bool) async throws {}
+  func deleteDocument(_ path: [String]) async throws {}
 }

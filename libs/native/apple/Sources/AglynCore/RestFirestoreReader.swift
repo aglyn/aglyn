@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import Foundation
 
 /// `FirestoreReader` over Firestore REST v1, with the member's own ID token
@@ -46,7 +47,7 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
     _ query: FirestoreQuery,
     _ onChange: @escaping @MainActor (Result<[FirestoreDocument], Error>) -> Void
   ) -> FirestoreListening {
-    let body = Self.runQueryBody(query)
+    let body = runQueryBody(query)
     let url = runQueryURL(query)
     return poll(onChange) { [self] in try await runQuery(url: url, body: body) }
   }
@@ -158,14 +159,9 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
       data: fields.compactMapValues { Self.decodeValue($0) })
   }
 
-  static func runQueryBody(_ query: FirestoreQuery) -> [String: Any] {
+  func runQueryBody(_ query: FirestoreQuery) -> [String: Any] {
     var structured: [String: Any] = ["from": [["collectionId": query.collection.last ?? ""]]]
-    let filters: [[String: Any]] = query.equals.map { field, value in
-      if value is NSNull {
-        return ["unaryFilter": ["op": "IS_NULL", "field": ["fieldPath": field]]]
-      }
-      return ["fieldFilter": ["field": ["fieldPath": field], "op": "EQUAL", "value": encodeValue(value)]]
-    }
+    let filters = query.allFilters.map { fieldFilter($0, collection: query.collection) }
     if filters.count == 1 {
       structured["where"] = filters[0]
     } else if filters.count > 1 {
@@ -173,11 +169,39 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
     }
     if !query.order.isEmpty {
       structured["orderBy"] = query.order.map {
-        ["field": ["fieldPath": $0.field], "direction": $0.descending ? "DESCENDING" : "ASCENDING"]
+        ["field": ["fieldPath": Self.restFieldPath($0.field)], "direction": $0.descending ? "DESCENDING" : "ASCENDING"]
       }
     }
     if let limit = query.limit { structured["limit"] = limit }
     return ["structuredQuery": structured]
+  }
+
+  /// A dotted plan path as REST spells a field path.
+  static func restFieldPath(_ path: String) -> String {
+    path == "__name__" ? path : path.split(separator: ".").map { quote(String($0)) }.joined(separator: ".")
+  }
+
+  private static let restOps: [ListQueryOp: String] = [
+    .equal: "EQUAL", .notEqual: "NOT_EQUAL", .lessThan: "LESS_THAN", .lessThanOrEqual: "LESS_THAN_OR_EQUAL",
+    .greaterThan: "GREATER_THAN", .greaterThanOrEqual: "GREATER_THAN_OR_EQUAL", .arrayContains: "ARRAY_CONTAINS",
+    .arrayContainsAny: "ARRAY_CONTAINS_ANY", .in: "IN",
+  ]
+
+  /// One filter as a REST `Filter`: a null equality is a unary filter, and a
+  /// document-id filter compares references.
+  func fieldFilter(_ constraint: ListQueryConstraint, collection: [String]) -> [String: Any] {
+    let field = ["fieldPath": Self.restFieldPath(constraint.path)]
+    if constraint.value is NSNull, constraint.op == .equal || constraint.op == .notEqual {
+      return ["unaryFilter": ["op": constraint.op == .equal ? "IS_NULL" : "IS_NOT_NULL", "field": field]]
+    }
+    var value = Self.encodeValue(constraint.value)
+    if constraint.isDocumentID {
+      let reference = { (id: Any) -> [String: Any] in [
+        "referenceValue": "\(self.databasePath)/\(collection.joined(separator: "/"))/\(id)"
+      ] }
+      value = (constraint.value as? [Any]).map { ["arrayValue": ["values": $0.map(reference)]] } ?? reference(constraint.value)
+    }
+    return ["fieldFilter": ["field": field, "op": Self.restOps[constraint.op] ?? "EQUAL", "value": value]]
   }
 
   private static let timestampFormatter: ISO8601DateFormatter = {

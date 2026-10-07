@@ -41,5 +41,6 @@ let package = Package(
     .testTarget(name: "AglynContractsTests", dependencies: ["AglynContracts"]),
     .testTarget(name: "AglynCoreTests", dependencies: ["AglynCore", "AglynContracts"]),
     .testTarget(name: "AglynPluginHostTests", dependencies: ["AglynPluginHost", "AglynWebView"]),
+    .testTarget(name: "AglynHardwareTests", dependencies: ["AglynHardware"]),
   ]
 )

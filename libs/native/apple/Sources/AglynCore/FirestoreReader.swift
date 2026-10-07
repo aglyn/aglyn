@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import Foundation
 
 /// One Firestore document as the app reads it: its id and its fields.
@@ -34,17 +35,25 @@ public struct FirestoreQuery: @unchecked Sendable {
 
   public var collection: [String]
   public var equals: [(field: String, value: Any)]
+  /// Filters beyond equality, as a list-query plan makes them.
+  public var filters: [ListQueryConstraint]
   public var order: [Order]
   public var limit: Int?
 
   public init(
-    _ collection: [String], equals: [(field: String, value: Any)] = [], order: [Order] = [],
-    limit: Int? = nil
+    _ collection: [String], equals: [(field: String, value: Any)] = [], filters: [ListQueryConstraint] = [],
+    order: [Order] = [], limit: Int? = nil
   ) {
     self.collection = collection
     self.equals = equals
+    self.filters = filters
     self.order = order
     self.limit = limit
+  }
+
+  /// Every filter, equality ones first.
+  public var allFilters: [ListQueryConstraint] {
+    equals.map { ListQueryConstraint(path: $0.field, op: .equal, value: $0.value) } + filters
   }
 
   public var path: String { collection.joined(separator: "/") }

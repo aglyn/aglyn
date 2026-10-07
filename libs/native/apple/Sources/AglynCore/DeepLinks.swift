@@ -14,18 +14,22 @@ public protocol DeepLinkRoute {
   var screen: String { get }
 }
 
-/// Where a link goes: a registered screen, or the console WebView.
+/// Where a link goes: a registered screen, the Besigner (the only web
+/// content the apps show, in their own web view), or nowhere yet: a console
+/// page the app has no native screen for. That is a gap to build; it never
+/// opens the console page instead.
 public enum LinkTarget: Equatable, Sendable {
   case screen(String, NativeParams)
-  case console(String)
+  case besigner(String)
+  case unavailable(String)
 }
 
 /// Turns a console URL or path into where the app should go.
 ///
 /// Every link the app meets is a console link: a universal link to the
 /// console's own domain, an `aglyn://` link, or a notification's `link`. A
-/// plugin that answers a path natively registers a deep link for it; anything
-/// else opens in the authenticated console WebView, so no link is a dead end.
+/// plugin that answers a path natively registers a deep link for it. A
+/// Besigner path opens the Besigner in the app's web view; nothing else does.
 public enum DeepLinks {
   /// The console's own top-level sections, which are not workspaces and are matched whole.
   public static let consoleTopLevel: Set<String> = [
@@ -50,6 +54,17 @@ public enum DeepLinks {
         rest: "/" + segments.dropFirst(3).joined(separator: "/"))
     }
     return Scope(orgSlug: first, rest: "/" + segments.dropFirst().joined(separator: "/"))
+  }
+
+  /// Whether `path` is a Besigner page: its last segment (before any query)
+  /// is `besigner`, as every editor route in the console is
+  /// (`…/screens/:id/versions/:versionId/besigner`, layouts, components,
+  /// templates, emails, records).
+  public static func isBesignerPath(_ path: String) -> Bool {
+    guard path.hasPrefix("/"), !path.hasPrefix("//") else { return false }
+    let bare = path.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
+    let segments = bare.split(separator: "/", omittingEmptySubsequences: true)
+    return segments.count >= 2 && segments.last == "besigner" && !segments.contains("..")
   }
 
   /// The path part of a console URL, an `aglyn://` URL, or a bare path.
@@ -132,6 +147,6 @@ public enum DeepLinks {
       merged.merge(params) { _, new in new }
       return .screen(route.screen, merged)
     }
-    return .console(full)
+    return isBesignerPath(path) ? .besigner(full) : .unavailable(full)
   }
 }

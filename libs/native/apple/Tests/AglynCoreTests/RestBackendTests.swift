@@ -176,7 +176,7 @@ final class RestFirestoreReaderTests: XCTestCase {
     XCTAssertEqual(
       reader.runQueryURL(query),
       "http://127.0.0.1:8389/v1/projects/demo/databases/(default)/documents/users/u1:runQuery")
-    let body = RestFirestoreReader.runQueryBody(query)["structuredQuery"] as? [String: Any]
+    let body = reader.runQueryBody(query)["structuredQuery"] as? [String: Any]
     XCTAssertEqual((body?["from"] as? [[String: Any]])?.first?["collectionId"] as? String, "orgs")
     XCTAssertEqual(body?["limit"] as? Int, 20)
     let filters = ((body?["where"] as? [String: Any])?["compositeFilter"] as? [String: Any])?["filters"] as? [[String: Any]]
@@ -185,6 +185,26 @@ final class RestFirestoreReaderTests: XCTestCase {
     XCTAssertEqual((second?["value"] as? [String: Any])?["booleanValue"] as? Bool, false)
     let order = (body?["orderBy"] as? [[String: Any]])?.first
     XCTAssertEqual(order?["direction"] as? String, "DESCENDING")
+  }
+
+  func testAPlanFilterTravelsAsItsRESTOperator() {
+    let reader = self.reader(RecordingTransport([]))
+    let query = FirestoreQuery(
+      ["hosts", "h1", "products"],
+      filters: [
+        ListQueryConstraint(path: "categoryIds", op: .arrayContains, value: "c1"),
+        ListQueryConstraint(path: "__name__", op: .in, value: ["p1", "p2"]),
+      ],
+      order: [.init("nameLower")])
+    let body = reader.runQueryBody(query)["structuredQuery"] as? [String: Any]
+    let filters = ((body?["where"] as? [String: Any])?["compositeFilter"] as? [String: Any])?["filters"] as? [[String: Any]]
+    let array = filters?[0]["fieldFilter"] as? [String: Any]
+    XCTAssertEqual(array?["op"] as? String, "ARRAY_CONTAINS")
+    let ids = filters?[1]["fieldFilter"] as? [String: Any]
+    XCTAssertEqual(ids?["op"] as? String, "IN")
+    let values = ((ids?["value"] as? [String: Any])?["arrayValue"] as? [String: Any])?["values"] as? [[String: Any]]
+    XCTAssertEqual(
+      values?.first?["referenceValue"] as? String, "projects/demo/databases/(default)/documents/hosts/h1/products/p1")
   }
 
   func testATopLevelCollectionQueriesTheDatabaseRoot() {

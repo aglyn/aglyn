@@ -21,8 +21,8 @@ public enum WidgetSize: String, Sendable {
   case full
 }
 
-/// How a console path is scoped when a plugin opens it.
-public enum ConsolePathScope: Sendable {
+/// How a Besigner path is scoped when a plugin opens it.
+public enum BesignerScope: Sendable {
   /// Prefixed with the picked site: `/{org}/hosts/{site}{path}`.
   case site
   /// Prefixed with the picked workspace: `/{org}{path}`.
@@ -33,7 +33,8 @@ public enum ConsolePathScope: Sendable {
 
 /// What a plugin's screen, widget or action is given: the picked workspace
 /// and site, the Firestore reader under the console's own rules, the console
-/// API client, and navigation. `hostID` is nil until a site is picked; a
+/// API client, navigation, and the Besigner (the only web content the apps
+/// show; every other console area is a native screen). `hostID` is nil until a site is picked; a
 /// contribution that needs one says `requiresSite`.
 public struct NativePluginContext {
   public let uid: String
@@ -45,13 +46,13 @@ public struct NativePluginContext {
   public let firestore: FirestoreReader
   public let api: ConsoleAPIClient
   private let navigateAction: @MainActor (String, NativeParams) -> Void
-  private let openConsoleAction: @MainActor (String, ConsolePathScope) -> Void
+  private let openBesignerAction: @MainActor (String) -> Void
 
   public init(
     uid: String, orgID: String?, hostID: String?, orgSlug: String?, hostSlug: String?,
     firestore: FirestoreReader, api: ConsoleAPIClient,
     navigate: @escaping @MainActor (String, NativeParams) -> Void,
-    openConsolePath: @escaping @MainActor (String, ConsolePathScope) -> Void
+    openBesigner: @escaping @MainActor (String) -> Void
   ) {
     self.uid = uid
     self.orgID = orgID
@@ -61,7 +62,7 @@ public struct NativePluginContext {
     self.firestore = firestore
     self.api = api
     self.navigateAction = navigate
-    self.openConsoleAction = openConsolePath
+    self.openBesignerAction = openBesigner
   }
 
   /// Opens a registered screen by id.
@@ -69,13 +70,19 @@ public struct NativePluginContext {
     navigateAction(screenID, params)
   }
 
-  /// Opens a console path in the authenticated WebView (the long tail).
-  @MainActor public func openConsolePath(_ path: String, scope: ConsolePathScope = .absolute) {
-    openConsoleAction(path, scope)
+  /// Opens a Besigner page in the app's authenticated web view. Only a
+  /// Besigner path opens (`DeepLinks.isBesignerPath`); anything else is
+  /// refused, because console areas are native screens. Returns whether it opened.
+  @MainActor @discardableResult
+  public func openBesigner(_ path: String, scope: BesignerScope = .site) -> Bool {
+    let scoped = besignerPath(path, scope: scope)
+    guard DeepLinks.isBesignerPath(scoped) else { return false }
+    openBesignerAction(scoped)
+    return true
   }
 
-  /// The console path for a plugin's own page under the picked scope.
-  public func scopedConsolePath(_ path: String, scope: ConsolePathScope) -> String {
+  /// A Besigner path under the picked scope.
+  public func besignerPath(_ path: String, scope: BesignerScope) -> String {
     let rest = path.hasPrefix("/") ? path : "/\(path)"
     switch scope {
     case .absolute: return rest
@@ -136,8 +143,8 @@ public struct NativeQuickAction: Identifiable {
   /// Opens this screen...
   public let screen: String?
   public let params: NativeParams
-  /// ...or this console path in the WebView. Exactly one of the two.
-  public let consolePath: String?
+  /// ...or this Besigner page (site-scoped). Exactly one of the two.
+  public let besignerPath: String?
   public let apps: Set<AglynAppKind>
 }
 
