@@ -11,6 +11,8 @@ coroutines = "1.11.0"
 serialization = "1.11.0"
 ktor = "3.6.0"
 jna = "5.19.1"
+# Microsoft Edge WebView2 SDK (NuGet Microsoft.Web.WebView2): WebView2Loader.dll for the Windows Besigner.
+webview2 = "1.0.4258.31"
 grpc = "1.62.2"
 protobuf = "3.25.5"
 firestore-protos = "3.21.0"
@@ -44,6 +46,7 @@ ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "kto
 ktor-client-java = { module = "io.ktor:ktor-client-java", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+webview2-sdk = { module = "nuget.microsoft:microsoft.web.webview2", version.ref = "webview2" }
 grpc-okhttp = { module = "io.grpc:grpc-okhttp", version.ref = "grpc" }
 grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
 grpc-protobuf-lite = { module = "io.grpc:grpc-protobuf-lite", version.ref = "grpc" }
