@@ -923,7 +923,8 @@
             "reservation-widget",
             "product-reviews",
             "related-products",
-            "return-request"
+            "return-request",
+            "order-status"
           ]
         },
         "console": {
