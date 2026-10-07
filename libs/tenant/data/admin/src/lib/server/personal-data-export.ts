@@ -228,6 +228,20 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Each paid order as recorded with the merchant’s tax service, and the refunds reversed against it (AGL-3631): the sale sent (lines, ship-to address, the customer code, which is the shopper’s email), its status and last error. The merchant’s own tax record and a shopper’s address, so disclosed to the ORG only.',
   },
   {
+    collection: 'marketingPlatformConnections',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'EXISTENCE ONLY for the credential — each site’s connection to the merchant’s own Mailchimp, Klaviyo, Omnisend or Attentive account (AGL-3639): provider, status, account name, the chosen list and tag, the sync switches, cursors and run timing. The sealed access and refresh tokens and the id of the key that sealed them carry `token` in their names and are redacted (see redactSecrets); the document id is the site id and the provider.',
+  },
+  {
+    collection: 'marketingPlatformEvents',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Commerce events still owed to a connected marketing platform (AGL-3639): checkout started, order paid, fulfilled, refunded or cancelled, with the shopper’s email, the order, its items and value, and the tracking number. A SHOPPER’s data held for the merchant as controller, so disclosed to the ORG only, for the reason `supplierDeliveries` gives; a row is deleted once delivered.',
+  },
+  {
     collection: 'ssoDomains',
     keyedBy: 'field',
     subjects: ['org'],
@@ -1013,9 +1027,10 @@ export async function exportOrgData(
   // Where each short tracking link the org's sequences sent points (AGL-3297).
   data['outreachLinks'] = await readByField(db, 'outreachLinks', 'orgId', orgId)
 
-  // Shipping (AGL-3612) and tax services (AGL-3631): top-level and keyed by
-  // `orgId`, the bound their `orgKeyedCollections` erasure sweeps by. The
-  // sealed tax-service credential is withheld by `redactSecrets` on its name.
+  // Shipping (AGL-3612), tax services (AGL-3631) and marketing platforms
+  // (AGL-3639): top-level and keyed by `orgId`, the bound their
+  // `orgKeyedCollections` erasure sweeps by. The sealed credentials are
+  // withheld by `redactSecrets` on their names.
   for (const collection of [
     'shippingTrackers',
     'shippingQuoteCache',
@@ -1023,6 +1038,8 @@ export async function exportOrgData(
     'taxEngineProductCodes',
     'taxEngineExemptions',
     'taxEngineTransactions',
+    'marketingPlatformConnections',
+    'marketingPlatformEvents',
   ]) {
     data[collection] = await readByField(db, collection, 'orgId', orgId)
   }
