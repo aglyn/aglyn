@@ -31,7 +31,7 @@ import {
   plainValue,
   swiftContractsContent,
 } from './native-contracts.mjs'
-import { listQueryCases } from './native-list-query-cases.mjs'
+import { functionCases, listQueryCases } from './native-list-query-cases.mjs'
 
 const ts = createRequire(import.meta.url)('typescript')
 
@@ -191,4 +191,23 @@ test('planner cases cover every operator, sort and refusal shape, with dates on 
   }
   assert.deepEqual(cases[0].plan.filters[0].value, { $date: '2026-03-14T00:00:00.000Z' })
   assert.deepEqual(cases[0].request.base, [{ path: 'deleted', op: '==', value: null }])
+})
+
+test('function cases: listed inputs and every combination, with plain results', () => {
+  const module = { add: (a, b) => a + b, label: (o) => `#${o.n}`, set: () => new Set([1]) }
+  const load = () => module
+  const out = functionCases(
+    { label: { module: 'm.ts', args: [[{ n: 7 }]] }, add: { module: 'm.ts', argsProduct: [[1, 2], [10]] } },
+    load,
+    plainValue,
+  )
+  assert.deepEqual(Object.keys(out), ['add', 'label'])
+  assert.deepEqual(out.add.cases, [
+    { args: [1, 10], result: 11 },
+    { args: [2, 10], result: 12 },
+  ])
+  assert.deepEqual(out.label.cases, [{ args: [{ n: 7 }], result: '#7' }])
+  assert.throws(() => functionCases({ set: { module: 'm.ts', args: [[]] } }, load, plainValue), /set case 0: Set is not plain JSON/)
+  assert.throws(() => functionCases({ nope: { module: 'm.ts', args: [[]] } }, load, plainValue), /exports no function nope/)
+  assert.throws(() => functionCases({ add: { module: 'm.ts' } }, load, plainValue), /lists no inputs/)
 })

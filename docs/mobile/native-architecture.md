@@ -403,6 +403,14 @@ must not hand-copy them. `tools/scripts/generate-native-contracts.mjs`
   `tokens`), and one case per field operator, sort, search and refusal
   shape. Each case carries the request and the plan; a date is
   `{ "$date": ISO }`.
+- `function-cases.generated.json` (`functionCases` in the config) holds the
+  console's own answers from the pure formatters and rules the screens show:
+  `formatOrderNumber`, `formatOrderMoney`, `formatReceiptMoney`,
+  `formatReceiptTime`, `orderChannelLabel`, `canTransitionOrder` (every
+  status pair), `orderRefundState`, `orderRefundSummary`, `orderNetCents`,
+  `orderPaidCents` and `apportionCents`. Each platform ports them once, in its
+  shared kit, and replays every case, so a native screen formats a number,
+  amount or time exactly as the console does.
 
 ## 6. Notification catalog
 

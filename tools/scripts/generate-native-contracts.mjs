@@ -45,11 +45,18 @@ import {
   SWIFT_CONTRACTS_FILE,
   swiftContractsContent,
 } from './lib/native-contracts.mjs'
-import { listQueryCases, listQueryCasesContent, NORMALIZER_SAMPLES } from './lib/native-list-query-cases.mjs'
+import {
+  functionCases,
+  functionCasesContent,
+  listQueryCases,
+  listQueryCasesContent,
+  NORMALIZER_SAMPLES,
+} from './lib/native-list-query-cases.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const CONFIG = 'tools/scripts/native-contracts.json'
 const PURE = 'tools/scripts/mobile-pure-modules.json'
+const FUNCTION_CASES_FILE = 'libs/native/contracts/function-cases.generated.json'
 const PLANNER = 'libs/shared/util/tools/src/lib/list-query/list-query-plan.ts'
 const FILTER = 'libs/shared/util/tools/src/lib/list-query/list-filter.ts'
 const NAME_SEARCH = 'libs/aglyn/src/lib/app-utils/name-search.ts'
@@ -136,11 +143,19 @@ async function main() {
     tokens: nameSearch.nameSearchTokens(input),
   }))
 
+  const modules = {}
+  for (const { module } of Object.values(config.functionCases ?? {})) {
+    if (!pure.has(module)) throw new Error(`functionCases names ${module}, which is not on ${PURE}`)
+    modules[module] = await load(module)
+  }
+  const functions = functionCases(config.functionCases ?? {}, (module) => modules[module], plainValue)
+
   const outputs = [
     { file: CONTRACTS_JSON_FILE, content: contractsJsonContent(values) },
     { file: SWIFT_CONTRACTS_FILE, content: swiftContractsContent(model) },
     { file: KOTLIN_CONTRACTS_FILE, content: kotlinContractsContent(model) },
     { file: LIST_QUERY_CASES_FILE, content: listQueryCasesContent({ cases, normalizers }) },
+    { file: FUNCTION_CASES_FILE, content: functionCasesContent(functions) },
   ]
 
   if (process.argv.includes('--check')) {

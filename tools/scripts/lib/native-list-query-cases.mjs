@@ -128,3 +128,41 @@ export function listQueryCasesContent({ cases, normalizers }) {
     2,
   )}\n`
 }
+
+/**
+ * Pure functions' cases for the native ports: each named export, run over
+ * the inputs native-contracts.json lists, with what it returned. `args` is a
+ * list of argument lists; `argsProduct` is one list per parameter, and every
+ * combination is a case. A result must be plain JSON.
+ */
+export function functionCases(functions, load, plainValue) {
+  const out = {}
+  for (const name of Object.keys(functions).sort()) {
+    const { module, args = [], argsProduct } = functions[name]
+    const fn = load(module)[name]
+    if (typeof fn !== 'function') throw new Error(`functionCases.${name}: ${module} exports no function ${name}`)
+    const inputs = [...args]
+    if (argsProduct) {
+      const product = argsProduct.reduce((acc, list) => acc.flatMap((prefix) => list.map((value) => [...prefix, value])), [[]])
+      inputs.push(...product)
+    }
+    if (!inputs.length) throw new Error(`functionCases.${name} lists no inputs`)
+    out[name] = {
+      module,
+      cases: inputs.map((input, i) => ({ args: input, result: plainValue(fn(...structuredClone(input)), `${name} case ${i}`) })),
+    }
+  }
+  return out
+}
+
+export function functionCasesContent(functions) {
+  return `${JSON.stringify(
+    {
+      '//': [GENERATED_BY, 'Each function: the pure module it comes from, and every case as its arguments and what it returned.'],
+      timeZone: 'UTC',
+      functions,
+    },
+    null,
+    2,
+  )}\n`
+}
