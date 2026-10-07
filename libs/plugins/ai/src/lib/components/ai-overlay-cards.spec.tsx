@@ -167,7 +167,7 @@ describe('the job each door asks for', () => {
 
 describe('whether either door is here at all', () => {
   it('draws both at once and asks nothing of a server until one is used (AGL-3601)', () => {
-    routes()
+    routes({})
     render(<AiOverlayEditorCard {...editorProps()} />)
     render(<AiCreateOverlayButton hostId="host-1" limits={LIMITS} triggers={TRIGGERS} createOverlayDraft={jest.fn()} />)
     expect(screen.getByRole('button', { name: 'Create with AI' })).toBeTruthy()
@@ -175,7 +175,7 @@ describe('whether either door is here at all', () => {
   })
 
   it('opens the AI add-on from Create with AI on a plan without it, and creates nothing', () => {
-    routes()
+    routes({})
     render(
       <AiCreateOverlayButton
         hostId="host-1"
