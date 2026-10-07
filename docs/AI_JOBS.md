@@ -2467,9 +2467,21 @@ published, and goes one step further — the server writes no document at all.
   is cached.
 - **The proposal.** The model is offered one strict tool,
   `propose_canvas_edit` (`src/lib/server/assist-edit.ts`), whose ops are
-  `insertSubtree`, `updateProps`, `updateSx`, `move`, `remove`, `rename` and,
-  on a screen, `setSeo` — its field list is `SCREEN_SEO_TEXT_FIELDS`, the one
-  the Screen Properties form saves. The edit protocol and the doctrine's
+  `insertSubtree`, `updateProps`, `updateSx`, `move`, `remove`, `rename`,
+  `addInteraction` and, on a screen, `setSeo` — its field list is
+  `SCREEN_SEO_TEXT_FIELDS`, the one the Screen Properties form saves.
+  `addInteraction` (AGL-3603) adds one interaction to a described element in
+  the shape the element stores it (`NodeInteraction`): an event from
+  `ASSIST_EDIT_INTERACTION_EVENTS` (the element-scoped site events) and steps
+  from `ASSIST_EDIT_INTERACTION_STEPS` (basic presentational client steps —
+  no script, HTML, attribute, overlay, analytics or server step). Every
+  element a step acts on must be one the outline described, and its selector
+  is derived from that id, never taken from the model; the whole interaction
+  passes `validateInteraction`. On apply it is upserted beside the element's
+  own interactions (an id already in use is re-minted), a full element
+  (`NODE_MAX_INTERACTIONS`) is refused, and a target that has gone refuses
+  the whole apply. The selected element's own interactions ride the outline
+  as name, event and step kinds, so Assist can explain them. The edit protocol and the doctrine's
   palette catalog for the document's surface (`aiDoctrineCatalog`) ride one
   cached block per document kind; the outline rides a volatile one. The reply
   streams, so the tool call is held to the doctrine as a streamed answer

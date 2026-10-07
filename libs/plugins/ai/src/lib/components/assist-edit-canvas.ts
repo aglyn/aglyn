@@ -25,6 +25,11 @@ import {
   reusableComponentDefinitionFrom,
 } from '@aglyn/aglyn/app-utils/compose-reusable-components'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
+import {
+  NODE_MAX_INTERACTIONS,
+  upsertNodeInteraction,
+  type NodeInteraction,
+} from '@aglyn/aglyn/app-utils/node-interactions'
 import type {
   ReusableComponentProp,
   ReusableComponentPropValue,
@@ -42,6 +47,7 @@ import {
   type AssistEditCanvasContext,
   type AssistEditCanvasNode,
   type AssistEditInsertOp,
+  type AssistEditInteractionSummary,
   type AssistEditOp,
   type AssistEditProposal,
   type AssistEditComponentProp,
@@ -71,6 +77,8 @@ export interface AssistEditCanvasNodeLike {
   name?: string
   props?: unknown
   sx?: unknown
+  /** The element's own interactions (AGL-3603), as the canvas holds them. */
+  interactions?: unknown
 }
 
 /**
@@ -349,6 +357,7 @@ export function describeAssistEditCanvas(
       ...(sx ? { sx } : {}),
       ...(isBrief ? { brief: true } : {}),
       ...(model ? { like: model } : {}),
+      ...(isSelected ? summarizeInteractions(node.interactions) : {}),
     }
   })
   return {
@@ -356,6 +365,27 @@ export function describeAssistEditCanvas(
     total: countElements(canvas),
     nodes,
   }
+}
+
+/**
+ * The selected element's interactions as the outline carries them
+ * (AGL-3603): name, event and the kinds of its steps — never a selector.
+ */
+function summarizeInteractions(raw: unknown): { interactions?: AssistEditInteractionSummary[] } {
+  if (!Array.isArray(raw) || !raw.length) return {}
+  const interactions = raw
+    .filter(isRecord)
+    .slice(0, NODE_MAX_INTERACTIONS)
+    .map((entry) => ({
+      name: String(entry['name'] ?? ''),
+      event: String(isRecord(entry['trigger']) ? (entry['trigger']['event'] ?? '') : ''),
+      steps: (Array.isArray(entry['steps']) ? entry['steps'] : [])
+        .filter(isRecord)
+        .map((step) => String(step['type'] ?? '')),
+      enabled: entry['enabled'] !== false,
+    }))
+    .filter((entry) => entry.event)
+  return interactions.length ? { interactions } : {}
 }
 
 /** Why a proposal cannot land on the open editor as it stands. */
@@ -484,6 +514,23 @@ export function checkAssistEdit(
         }
         break
       }
+      case 'addInteraction': {
+        const node = canvas.getNode(op.nodeId)
+        if (!node || node.componentId !== op.componentId) return STALE
+        if (Array.isArray(node.interactions) && node.interactions.length >= NODE_MAX_INTERACTIONS) {
+          return {
+            ok: false,
+            reason: 'refused',
+            message: `That element already does ${NODE_MAX_INTERACTIONS} things, the most one can. Remove one in Interactions first.`,
+          }
+        }
+        // Every element a step acts on is still there, as it was.
+        for (const target of op.targets) {
+          const live = canvas.getNode(target.nodeId)
+          if (!live || live.componentId !== target.componentId) return STALE
+        }
+        break
+      }
       default: {
         const node = canvas.getNode(op.nodeId)
         if (!node || node.componentId !== op.componentId) return STALE
@@ -568,6 +615,18 @@ function applyOne(canvas: AssistEditCanvas, op: AssistEditOp): void {
     case 'rename':
       canvas.updateNodeFields(live(canvas, op.nodeId), { name: op.name })
       return
+    case 'addInteraction': {
+      // Added beside what the element does already, never in place of it:
+      // an id the element already uses is re-minted, so nothing is replaced.
+      const node = live(canvas, op.nodeId)
+      const current = (Array.isArray(node.interactions) ? node.interactions : []) as NodeInteraction[]
+      let id = op.interaction.id
+      while (current.some((entry) => entry.id === id)) id = `${op.interaction.id}${current.length}x`
+      canvas.updateNodeFields(node, {
+        interactions: upsertNodeInteraction(current, { ...op.interaction, id }),
+      })
+      return
+    }
     case 'insertSubtree':
       canvas.addNodeFromNested(nestSubtree(op), live(canvas, op.parentId), op.index ?? NaN)
       return
