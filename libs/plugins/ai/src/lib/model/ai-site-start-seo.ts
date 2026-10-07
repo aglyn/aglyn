@@ -152,6 +152,51 @@ export function aiSiteSeoTitle(input: { name?: string; subject: string; city?: s
 }
 
 /**
+ * Where a phrase may be cut without leaving half a thought (AGL-3596): before
+ * a relative clause, or before a "with" or "for" phrase, or at a semicolon or
+ * dash. A bare comma is not one — "a calm, gentle groom" cut at its comma
+ * ends on an adjective — and neither is "and", which joins a list.
+ */
+const PHRASE_BOUNDARY = /\s+(?:that|which|who|whose|where|while|because|with|for|offering|providing|serving)\b|[;(—–]|\s-\s/gi
+
+/** A phrase and its shorter forms, longest first: itself, then cut before each boundary, back to front. */
+function phraseForms(text: string): string[] {
+  const forms = [text]
+  const cuts = [...text.matchAll(PHRASE_BOUNDARY)].map((match) => match.index ?? -1).filter((at) => at > 0)
+  for (const at of cuts.reverse()) {
+    const form = withoutDangling(text.slice(0, at).trim())
+    if (form && !forms.includes(form)) forms.push(form)
+  }
+  return forms
+}
+
+/**
+ * The site's search description (AGL-3596): what the site is, then who it is
+ * for, composed WITHIN the description cap at phrase boundaries rather than
+ * cut at it. Cut at 155 characters, "…for dog owners in Hillside and nearby
+ * towns who want a calm, gentle" went out as a site's description. So the
+ * longest whole composition that fits wins: all of both; the audience without
+ * its trailing clauses; what the site is alone; then what the site is, cut
+ * back the same way. Only when not even the subject fits is it clipped at a
+ * word, never on a dangling one.
+ */
+export function aiSiteSeoDescription(input: { name: string; subject: string; about: string; audience: string }): string {
+  const max = AI_SITE_SEO_LIMITS.description
+  const lead = (what: string) => (input.name ? `${input.name} is ${what}` : asSubject(what))
+  const abouts = phraseForms(withoutDangling(input.about.replace(/[.!?]+$/, '')))
+  const audiences = input.audience ? phraseForms(withoutDangling(input.audience.replace(/[.!?]+$/, ''))) : []
+  for (const about of abouts) {
+    for (const audience of audiences) {
+      const text = sentence(`${lead(about)}, for ${audience}`)
+      if (text.length <= max) return text
+    }
+    const text = sentence(lead(about))
+    if (text.length <= max) return text
+  }
+  return clip(sentence(lead(abouts[abouts.length - 1] || input.subject)), max)
+}
+
+/**
  * The leading article dropped and the first letter raised: "a neighborhood
  * dog groomer" is how a person answers the question and is not how a title
  * starts. Anything the person already capitalized is left alone, so a name
@@ -194,11 +239,8 @@ export function aiSiteSeoProposal(input: AiSiteSeoInput): AiSiteSeoProposal | nu
   const name = (input.siteName ?? '').replace(/\s+/g, ' ').trim()
   const audience = (input.audience ?? '').replace(/\s+/g, ' ').trim()
   const title = aiSiteSeoTitle({ name, subject, city: input.city })
-  const described = name ? `${name} is ${input.about?.trim()}` : subject
-  const description = clip(
-    sentence(audience ? `${described}, for ${audience}` : described),
-    AI_SITE_SEO_LIMITS.description,
-  )
+  const about = (input.about ?? '').replace(/\s+/g, ' ').trim()
+  const description = aiSiteSeoDescription({ name, subject, about, audience })
   return {
     kind: AI_SITE_SEO_PROPOSAL_KIND,
     values: {

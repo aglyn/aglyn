@@ -21,6 +21,9 @@ import { firebaseAdmin, notifyHostManagers } from '@aglyn/tenant-data-admin'
 import { escapeHtml } from '../utils/escape-html'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { tokenSigningSecret } from './download'
+import { notifyOrderBuyer } from './order-notifications'
+import { ORDER_FULFILLED_EVENT } from '../model/order-events'
+import { fulfillmentEventView, stageOrderEvent } from './order-events'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 
 /**
@@ -266,9 +269,27 @@ export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
             body: { error: `Order is already ${order.status}` } as any,
           }
         }
+        // The units still open on the supplier's lines (AGL-3611): the
+        // merchant may already have shipped part of one from the console.
+        const remainingByLine = new Map(
+          CommerceModel.orderLineFulfillmentStates(order).map((state) => [
+            state.lineItemId,
+            state.remainingQuantity,
+          ]),
+        )
+        const shippedLines = myLines
+          .map((index) => ({ lineItemId: index, quantity: remainingByLine.get(index) ?? 0 }))
+          .filter((entry) => entry.quantity > 0)
         const fulfillment: CommerceModel.OrderFulfillment = {
           id: `supplier-${Date.now().toString(36)}`,
-          lineItemIds: myLines,
+          lineItemIds: shippedLines.map((entry) => entry.lineItemId),
+          lines: shippedLines,
+          ...(carrier && trackingNumber
+            ? (() => {
+                const trackingUrl = CommerceModel.trackingUrlFor(carrier, trackingNumber)
+                return trackingUrl ? { trackingUrl } : {}
+              })()
+            : {}),
           ...(carrier ? { carrier } : {}),
           ...(trackingNumber ? { trackingNumber } : {}),
           atMs: Date.now(),
@@ -276,9 +297,7 @@ export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
         const remaining = (order.lineItems ?? []).filter(
           (_line, index) => !coveredAfter.has(index),
         ).length
-        transaction.set(
-          orderRef,
-          {
+        const shipped = {
             status: nextStatus,
             fulfillments: [...(order.fulfillments ?? []), fulfillment],
             timeline: CommerceModel.appendOrderEvent(
@@ -294,9 +313,9 @@ export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
                   ? `. ${remaining} line${remaining === 1 ? '' : 's'} still to ship.`
                   : ''),
             ),
-          },
-          { merge: true },
-        )
+          }
+        transaction.set(orderRef, shipped, { merge: true })
+        stageOrderEvent(transaction, ORDER_FULFILLED_EVENT, { hostId, orderId, key: fulfillment.id, order: { ...orderSnapshot.data(), ...shipped }, extra: { fulfillment: fulfillmentEventView(order, fulfillment) } })
         return {
           status: 200,
           body: { ok: true, lineItemIds: myLines, orderStatus: nextStatus } as any,
@@ -304,6 +323,7 @@ export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
           nextStatus,
           remaining,
           supplierId: postingSupplier,
+          fulfillmentId: fulfillment.id,
         }
       })
     if (outcome.status !== 200) {
@@ -346,6 +366,8 @@ export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
           : ''),
       link: `/${hostId}/products`,
     })
+    // …and the buyer hears their parcel is on its way (AGL-3610).
+    await notifyOrderBuyer({ hostId, orderId }, 'shipped', { fulfillmentId: (outcome as any).fulfillmentId })
     return res.status(200).json(outcome.body)
   } catch (error) {
     console.error(error)

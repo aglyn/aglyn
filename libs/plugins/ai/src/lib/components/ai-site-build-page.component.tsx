@@ -51,8 +51,10 @@ import {
   aiSiteBuildRows,
   type AiSiteBuildRowState,
 } from '../model/ai-site-build-progress'
-import { aiSiteStarterFallbackOffered } from '../model/ai-job-failure-copy'
-import type { AiJobSummary } from '../model/ai-jobs.types'
+import { aiJobRefundCopy, aiSiteStarterFallbackOffered } from '../model/ai-job-failure-copy'
+import { aiSiteStartAnswersFromInputs } from '../model/ai-site-start'
+import { AiSiteStartCard } from './ai-site-start-card.component'
+import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
 import { followAiJobEvents } from './ai-job-events'
 import { aiSiteBuildDoneLinks } from './ai-job-links'
 import { resumeAiJobRequest } from './ai-job-requests'
@@ -101,7 +103,11 @@ export function useAiJobById(
   const [job, setJob] = useState<AiJobByIdState>(null)
   const [attempt, setAttempt] = useState(0)
   const status = job && typeof job === 'object' ? job.status : null
-  const moving = status === null || status === 'queued' || status === 'running'
+  // Followed until the job ENDS (AGL-3596), not until it first stops: a guided
+  // start parks on its plan for the instant it takes to confirm it, and a page
+  // that stopped following there showed that park — the plan's 13 credits and
+  // "the plan is ready" — after the job had built, spent and failed.
+  const moving = status === null || !AI_JOB_TERMINAL_STATUSES.includes(status)
   useEffect(() => {
     if (!orgId || !jobId || !moving) return undefined
     const controller = new AbortController()
@@ -187,6 +193,8 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
   const { data: user } = useUser()
   const jobId = segments?.[0] ? decodeURIComponent(String(segments[0])) : null
   const orgSlug = (basePath ?? '').split('/')[1] ?? ''
+  // `/{orgSlug}/hosts/{subdomain}/ai-jobs`: the site's subdomain, which a console URL names it by.
+  const hostSubdomain = (basePath ?? '').split('/')[3] || null
   const site = useAiJobSite(hostId)
   const orgId = site.status === 'ready' ? site.orgId : null
   const siteName = site.status === 'ready' ? site.name : undefined
@@ -194,6 +202,11 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
   const [job, setJob, retry] = useAiJobById(user, orgId, jobId)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  // A failed guided start's Try again reopens its questions, filled in (AGL-3596);
+  // `?retry=1` — what the AI jobs drawer links — opens them on arrival.
+  const [retrying, setRetrying] = useState(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('retry') === '1',
+  )
   const tryAgain = useCallback(async () => {
     if (!orgId || !job || typeof job !== 'object') return
     setBusy(true)
@@ -267,6 +280,13 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
   const liveUrl = sitePublish && sitePublish.published.length > 0 ? sitePublish.liveUrl : null
   const retryRefusal = ready.review?.retryRefusal
   const canRetry = phase === 'stopped' && ready.review?.reason === 'doctrine'
+  // A guided start that ended without building its site starts over from its
+  // own answers, as a fresh job: the questions reopen filled in.
+  const restartAnswers =
+    ready.kind === 'site' && (phase === 'failed' || phase === 'canceled')
+      ? aiSiteStartAnswersFromInputs(ready.siteInputs)
+      : null
+  const refund = phase === 'failed' || phase === 'stopped' || phase === 'canceled' ? aiJobRefundCopy(ready) : null
 
   return (
     <Frame siteName={siteName} heading={copy.heading} lede={copy.lede}>
@@ -292,11 +312,24 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
           </Stack>
         </Box>
       </Card>
-      {credits && (
+      {refund && (ready.refundedCredits ?? 0) > 0 ? (
+        <Alert severity="info">{refund}</Alert>
+      ) : credits ? (
         <Typography variant="body2" color="text.secondary">
           {credits}
         </Typography>
-      )}
+      ) : null}
+      {retrying && restartAnswers && hostId ? (
+        <AiSiteStartCard
+          hostId={hostId}
+          orgId={orgId ?? undefined}
+          orgSlug={orgSlug}
+          host={hostSubdomain}
+          initialAnswers={restartAnswers}
+          startBlank={() => setRetrying(false)}
+          leave={() => setRetrying(false)}
+        />
+      ) : null}
       {sitePublish && sitePublish.drafts.length > 0 && (
         // The pages the publish left as drafts, each with its plain reason;
         // Edit your pages is where they are fixed and published.
@@ -350,6 +383,11 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
             </Typography>
           )}
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: { sm: 'center' } }}>
+            {restartAnswers && hostId && (
+              <Button variant="contained" onClick={() => setRetrying(true)}>
+                {'Try again'}
+              </Button>
+            )}
             {canRetry && (
               <Button
                 variant="contained"

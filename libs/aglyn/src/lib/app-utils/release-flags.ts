@@ -88,22 +88,23 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'extra sites, POS registers, Event Calendar (AGL-524..531).',
     defaultEnabled: true,
   },
+  // Released to every workspace 2026-10-06 (AGL-3606). Storefront-only since
+  // the console's plan checkout stopped rendering Stripe Checkout at all. Still
+  // the surface's kill switch, globally or per org: off, both storefront
+  // checkout routes return the hosted redirect again.
   {
     key: 'release_native_checkout',
     label: 'In-page checkout',
     description:
-      'Pay without leaving the page, instead of a redirect to ' +
-      'checkout.stripe.com. TWO surfaces: the console plan checkout uses ' +
-      'embedded Checkout (AGL-1132), and a merchant storefront uses the ' +
-      'Payment Element on the merchant\u2019s own domain (AGL-1944) \u2014 ' +
-      'which is the half that costs conversions, since leaving the store ' +
-      'mid-purchase is where carts get abandoned. Both keep the webhook as ' +
-      'the only thing that fulfils. OFF by default: the redirect is the ' +
-      'proven path, and neither surface can be verified without putting a ' +
-      'real card through it. Also gated on a publishable key being set, ' +
-      'per surface \u2014 so flipping this alone degrades to the redirect ' +
-      'rather than to a dead button.',
-    defaultEnabled: false,
+      'Storefront shoppers pay on the merchant\u2019s own site: the Payment ' +
+      'Element, email, shipping address and method, and a live total with ' +
+      'tax open in place under the Buy or Checkout button, styled with the ' +
+      'site theme, instead of a redirect to checkout.stripe.com (AGL-1944). ' +
+      'Released to every workspace 2026-10-06 (AGL-3606). The webhook is ' +
+      'still the only thing that fulfils. Also gated on ' +
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, so a deployment without one keeps ' +
+      'the redirect; turning this off returns every storefront to the redirect.',
+    defaultEnabled: true,
   },
   // Released to every site 2026-09-16 (AGL-3041). Still the whole surface's
   // kill switch, globally or for one org by override: off, the tenant slot

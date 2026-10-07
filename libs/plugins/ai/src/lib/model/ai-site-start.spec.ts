@@ -23,6 +23,8 @@
  */
 
 import { STARTER_TEMPLATES } from '@aglyn/aglyn/app-utils/starter-templates'
+import * as start from './ai-site-start'
+import * as copy from './ai-job-failure-copy'
 import {
   AI_SITE_INPUT_MAX_CHARS,
   AI_SITE_PAGES,
@@ -196,5 +198,59 @@ describe('where the contact form’s submissions go', () => {
   it('reaches the door as an input it admits', () => {
     const parsed = parseAiSiteJobInputs(aiSiteStartInputs(answered({ submissions: 'lead' })))
     expect(typeof parsed === 'string' ? parsed : parsed.submissions).toBe('lead')
+  })
+})
+
+describe('a failed start reopens on its own answers (AGL-3596)', () => {
+  it('reads the job’s inputs back into the questions, and back again into the same inputs', () => {
+    const answers = {
+      siteType: 'dog grooming salon',
+      audience: 'dog owners in Hillside',
+      example: 'business',
+      pages: 2,
+      submissions: 'lead' as const,
+      welcomeEmail: false,
+    }
+    const inputs = start.aiSiteStartInputs(answers)
+    expect(start.aiSiteStartAnswersFromInputs({ ...inputs, autoConfirm: true, originJobId: 'x' }, { freeTaste: true })).toEqual(answers)
+    // Only the site's answers travel on the summary.
+    expect(start.aiSiteStartInputsOf({ ...inputs, autoConfirm: true, batchId: 'b' })).toEqual(inputs)
+  })
+
+  it('holds what it reads to the questions and the workspace’s band', () => {
+    expect(start.aiSiteStartAnswersFromInputs({ businessType: '' })).toBeNull()
+    expect(start.aiSiteStartAnswersFromInputs({ businessType: 'a cafe', pages: 6, starter: 'gone', submissions: 'nowhere' }, { freeTaste: true })).toEqual({
+      siteType: 'a cafe',
+      audience: '',
+      example: null,
+      pages: 2,
+      submissions: 'inbox',
+      welcomeEmail: false,
+    })
+  })
+
+  it('offers the starter on a failed start whose only output is its listing proposal', () => {
+    const failed = {
+      kind: 'site' as const,
+      status: 'failed' as const,
+      hostId: 'host-1',
+      review: null,
+      outputs: [{ resource: 'seo', id: 'site:listing', hostId: 'host-1', label: 'Listing' }],
+    }
+    expect(copy.aiSiteStarterFallbackOffered(failed as never)).toBe(true)
+    expect(
+      copy.aiSiteStarterFallbackOffered({ ...failed, outputs: [...failed.outputs, { resource: 'layout', id: 'l', hostId: 'host-1', label: 'L' }] } as never),
+    ).toBe(false)
+  })
+
+  it('says what became of the credits from the job’s record alone', () => {
+    expect(copy.aiJobRefundCopy({ status: 'failed', creditsSpent: 102, refundedCredits: 102 })).toBe(
+      'This one’s on us — you weren’t charged. The 102 credits it used are back in your AI credits.',
+    )
+    expect(copy.aiJobRefundCopy({ status: 'failed', creditsSpent: 40, refundedCredits: 1 })).toBe(
+      'This one’s on us — you weren’t charged for the part that failed. The 1 credit it used is back in your AI credits.',
+    )
+    expect(copy.aiJobRefundCopy({ status: 'canceled', creditsSpent: 13 })).toBe('You paid for what was spent up to then.')
+    expect(copy.aiJobRefundCopy({ status: 'failed', creditsSpent: 13 })).toBeNull()
   })
 })

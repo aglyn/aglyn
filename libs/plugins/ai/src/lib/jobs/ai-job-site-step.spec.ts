@@ -394,6 +394,16 @@ describe('the job each unit is built under', () => {
     expect(derived.brief).toContain('Build the layout “Site frame”')
   })
 
+  it('hands the layout unit the pages it is built before, by the ids their drafts are written under (AGL-3596)', () => {
+    const derived = aiSiteUnitJob(siteJob({ plan }), units[0], built)
+    expect(derived.inputs['sitePages']).toEqual(
+      plan.screens.filter((screen) => screen.nav).map((screen) => ({ id: screen.id, label: screen.title, slug: screen.slug })),
+    )
+    // Only the layout is told: a page or a form unit is not.
+    expect(aiSiteUnitJob(siteJob({ plan }), units[1], built).inputs['sitePages']).toBeUndefined()
+    expect(aiSiteUnitJob(siteJob({ plan }), units[2], built).inputs['sitePages']).toBeUndefined()
+  })
+
   it('hands a page unit one screen, no creations, and the ids the scaffold built', () => {
     const derived = aiSiteUnitJob(siteJob({ plan }), units[2], built)
     expect(derived.kind).toBe('page')

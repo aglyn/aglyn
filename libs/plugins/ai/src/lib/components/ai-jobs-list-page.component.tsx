@@ -18,6 +18,7 @@
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn'
 import type { ConsolePluginPageProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import { aiJobRefundCopy } from '../model/ai-job-failure-copy'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { authorizedFetch, type MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -214,6 +215,7 @@ export function AiJobsListPage({ hostId, basePath }: ConsolePluginPageProps) {
               {state.jobs.map((job, index) => {
                 const phase = aiJobPhase(job)
                 const credits = aiJobNetCredits(job)
+                const refund = aiJobRefundCopy(job)
                 const brief =
                   job.brief.length > BRIEF_PREVIEW_CHARS ? `${job.brief.slice(0, BRIEF_PREVIEW_CHARS)}…` : job.brief
                 const created = new Date(job.createdAt)
@@ -239,6 +241,12 @@ export function AiJobsListPage({ hostId, basePath }: ConsolePluginPageProps) {
                     <Typography variant="body2" sx={{ mt: 0.75, wordBreak: 'break-word' }}>
                       {brief}
                     </Typography>
+                    {/* What became of its credits, from the job's recorded give-back (AGL-3596). */}
+                    {refund ? (
+                      <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+                        {refund}
+                      </Typography>
+                    ) : null}
                   </ListItemButton>
                 )
               })}

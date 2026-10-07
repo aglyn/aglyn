@@ -323,14 +323,26 @@ describe('fulfilling a paid order', () => {
     const result = await post({ carrier: 'UPS', trackingNumber: '1Z999' })
 
     expect(result.status).toBe(200)
-    expect(result.body).toEqual({ ok: true })
+    expect(result.body).toEqual({
+      ok: true,
+      status: 'fulfilled',
+      fulfillment: storedOrder().fulfillments[0],
+    })
     expect(storedOrder().status).toBe('fulfilled')
     expect(storedOrder().fulfillments).toEqual([
       {
         id: expect.any(String),
         lineItemIds: [0, 1],
+        lines: [
+          { lineItemId: 0, quantity: 3 },
+          { lineItemId: 1, quantity: 2 },
+        ],
         carrier: 'UPS',
         trackingNumber: '1Z999',
+        // Derived from the carrier (AGL-3611): UPS is a known tracker.
+        trackingUrl: 'https://www.ups.com/track?tracknum=1Z999',
+        status: 'active',
+        notify: true,
         atMs: expect.any(Number),
       },
     ])
@@ -350,6 +362,12 @@ describe('fulfilling a paid order', () => {
     expect(fulfillment).toEqual({
       id: expect.any(String),
       lineItemIds: [0, 1],
+      lines: [
+        { lineItemId: 0, quantity: 3 },
+        { lineItemId: 1, quantity: 2 },
+      ],
+      status: 'active',
+      notify: true,
       atMs: expect.any(Number),
     })
     expect(storedOrder().timeline[1]).toEqual({
@@ -371,13 +389,17 @@ describe('fulfilling a paid order', () => {
     expect(result.status).toBe(200)
     expect(storedOrder().status).toBe('fulfilled')
     // Appended, not replaced — a whole-array write would erase the first
-    // shipment's tracking.
+    // shipment's tracking. It covers only what was LEFT (AGL-3611): the
+    // legacy first shipment named line 0, so every Tee unit is already out.
     expect(storedOrder().fulfillments).toEqual([
       { id: 'f-1', lineItemIds: [0], atMs: 5 },
       {
         id: expect.any(String),
-        lineItemIds: [0, 1],
+        lineItemIds: [1],
+        lines: [{ lineItemId: 1, quantity: 2 }],
         trackingNumber: 'TN-2',
+        status: 'active',
+        notify: true,
         atMs: expect.any(Number),
       },
     ])
@@ -431,7 +453,7 @@ describe('marking delivered', () => {
     const result = await post({ to: 'delivered' })
 
     expect(result.status).toBe(200)
-    expect(result.body).toEqual({ ok: true })
+    expect(result.body).toEqual({ ok: true, status: 'delivered' })
     expect(storedOrder().status).toBe('delivered')
     expect(storedOrder().timeline[2]).toEqual({
       atMs: expect.any(Number),
@@ -713,7 +735,11 @@ describe('recordOrderShipment is the shared, PRE-AUTHORIZED transaction (AGL-246
       carrier: 'UPS',
       trackingNumber: '1Z999',
     })
-    expect(outcome).toEqual({ outcome: 'recorded' })
+    expect(outcome).toEqual({
+      outcome: 'recorded',
+      status: 'fulfilled',
+      fulfillment: storedOrder().fulfillments[0],
+    })
     expect(storedOrder().status).toBe('fulfilled')
     expect(storedOrder().fulfillments).toHaveLength(1)
     expect(storedOrder().fulfillments[0]).toMatchObject({
@@ -794,5 +820,292 @@ describe('the /v1 orders resource is WIRED, not merely written (AGL-2461, AGL-30
     expect(
       readFileSync(join(__dirname, 'fulfill-order.ts'), 'utf8'),
     ).toContain('export async function recordOrderShipment(')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Quantity-level fulfillment (AGL-3611)
+// ---------------------------------------------------------------------------
+
+describe('partial fulfillment by quantity (AGL-3611)', () => {
+  it('ships some units of one line and leaves the order partially fulfilled', async () => {
+    seedHost()
+    seedOrder()
+
+    const result = await post({
+      lineItems: [{ lineItemId: 0, quantity: 2 }],
+      carrier: 'USPS',
+      trackingNumber: '9400 1000',
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.status).toBe('partially_fulfilled')
+    expect(storedOrder().status).toBe('partially_fulfilled')
+    expect(storedOrder().fulfillments[0]).toMatchObject({
+      lineItemIds: [0],
+      lines: [{ lineItemId: 0, quantity: 2 }],
+      carrier: 'USPS',
+      trackingNumber: '9400 1000',
+      trackingUrl: 'https://tools.usps.com/go/TrackConfirmAction?tLabels=94001000',
+    })
+    expect(storedOrder().timeline.at(-1)).toEqual({
+      atMs: expect.any(Number),
+      event: 'partially_fulfilled',
+      detail: '2× Tee — USPS 9400 1000',
+    })
+  })
+
+  it('closes the order once the last shippable unit goes out', async () => {
+    seedHost()
+    seedOrder()
+    await post({ lineItems: [{ lineItemId: 0, quantity: 2 }] })
+    await post({ lineItems: [{ lineItemId: 1, quantity: 2 }] })
+    expect(storedOrder().status).toBe('partially_fulfilled')
+
+    const last = await post({ lineItems: [{ lineItemId: 0, quantity: 1 }] })
+
+    expect(last.status).toBe(200)
+    expect(storedOrder().status).toBe('fulfilled')
+    expect(storedOrder().fulfillments).toHaveLength(3)
+  })
+
+  it('refuses over-fulfillment with a 409 and writes nothing', async () => {
+    // RED CHECK: drop the remaining-quantity comparison in
+    // `resolveFulfillmentLines` and this records 4 Tees on a 3-Tee order.
+    seedHost()
+    seedOrder()
+    await post({ lineItems: [{ lineItemId: 0, quantity: 2 }] })
+    const before = JSON.stringify(storedOrder())
+
+    const result = await post({ lineItems: [{ lineItemId: 0, quantity: 2 }] })
+
+    expect(result.status).toBe(409)
+    expect(result.body.error).toBe('Line 0 has only 1 left to fulfill, not 2')
+    expect(JSON.stringify(storedOrder())).toBe(before)
+  })
+
+  it('sums a line named twice before checking, so it cannot slip past the count', async () => {
+    seedHost()
+    seedOrder()
+
+    const result = await post({
+      lineItems: [
+        { lineItemId: 1, quantity: 2 },
+        { lineItemId: 1, quantity: 1 },
+      ],
+    })
+
+    expect(result.status).toBe(409)
+    expect(storedOrder().fulfillments).toBeUndefined()
+  })
+
+  it('refuses an unknown line or a fractional quantity with a 400', async () => {
+    seedHost()
+    seedOrder()
+    expect((await post({ lineItems: [{ lineItemId: 7, quantity: 1 }] })).status).toBe(400)
+    expect((await post({ lineItems: [{ lineItemId: 0, quantity: 1.5 }] })).status).toBe(400)
+    expect((await post({ lineItems: [{ lineItemId: 0, quantity: 0 }] })).status).toBe(400)
+    expect(storedOrder().fulfillments).toBeUndefined()
+  })
+
+  it('two racing shipments of the last units: one lands, one is refused', async () => {
+    // The transaction double serializes bodies, as Firestore's retry does:
+    // the second reads the first's write and finds nothing left.
+    seedHost()
+    seedOrder()
+    const [a, b] = await Promise.all([
+      post({ lineItems: [{ lineItemId: 1, quantity: 2 }] }),
+      post({ lineItems: [{ lineItemId: 1, quantity: 2 }] }),
+    ])
+    expect([a.status, b.status].sort()).toEqual([200, 409])
+    expect(storedOrder().fulfillments).toHaveLength(1)
+  })
+
+  it('a keyed retry of a partial shipment answers `already` and writes once', async () => {
+    seedHost()
+    seedOrder()
+    const first = await post({ lineItems: [{ lineItemId: 0, quantity: 1 }] }, { 'idempotency-key': 'k-1' })
+    const retry = await post({ lineItems: [{ lineItemId: 0, quantity: 1 }] }, { 'idempotency-key': 'k-1' })
+
+    expect(first.body.fulfillment.id).toBe(retry.body.fulfillment.id)
+    expect(retry.body.already).toBe(true)
+    expect(storedOrder().fulfillments).toHaveLength(1)
+  })
+
+  it('a digital line never holds the order open', async () => {
+    seedHost()
+    seedOrder({
+      lineItems: [
+        { productId: 'p-1', name: 'Mug', quantity: 1, unitAmountCents: 1000, productType: 'physical' },
+        { productId: 'p-2', name: 'E-book', quantity: 1, unitAmountCents: 500, productType: 'digital' },
+      ],
+    })
+
+    await post({ lineItems: [{ lineItemId: 0, quantity: 1 }] })
+
+    expect(storedOrder().status).toBe('fulfilled')
+  })
+
+  it('keeps an explicit https tracking link and drops a non-https one', async () => {
+    seedHost()
+    seedOrder()
+    await post({
+      lineItems: [{ lineItemId: 0, quantity: 1 }],
+      carrier: 'Local courier',
+      trackingNumber: 'LC-1',
+      trackingUrl: 'https://courier.example/t/LC-1',
+    })
+    await post({
+      lineItems: [{ lineItemId: 0, quantity: 1 }],
+      carrier: 'Local courier',
+      trackingNumber: 'LC-2',
+      trackingUrl: 'javascript:alert(1)',
+    })
+    const [first, second] = storedOrder().fulfillments
+    expect(first.trackingUrl).toBe('https://courier.example/t/LC-1')
+    expect(second.trackingUrl).toBeUndefined()
+  })
+
+  it('records notify:false when the merchant unticks "notify customer"', async () => {
+    seedHost()
+    seedOrder()
+    await post({ lineItems: [{ lineItemId: 0, quantity: 1 }], notify: false })
+    expect(storedOrder().fulfillments[0].notify).toBe(false)
+  })
+})
+
+describe('editing and canceling one fulfillment (AGL-3611)', () => {
+  it('corrects the tracking and re-derives the link, with no status move', async () => {
+    seedHost()
+    seedOrder()
+    await post({ lineItems: [{ lineItemId: 0, quantity: 3 }], carrier: 'UPS', trackingNumber: 'WRONG' })
+    const id = storedOrder().fulfillments[0].id
+
+    const result = await post({
+      action: 'update-tracking',
+      fulfillmentId: id,
+      carrier: 'FedEx',
+      trackingNumber: '7777',
+    })
+
+    expect(result.status).toBe(200)
+    expect(storedOrder().status).toBe('partially_fulfilled')
+    expect(storedOrder().fulfillments[0]).toMatchObject({
+      carrier: 'FedEx',
+      trackingNumber: '7777',
+      trackingUrl: 'https://www.fedex.com/fedextrack/?trknbr=7777',
+      updatedAtMs: expect.any(Number),
+    })
+    expect(storedOrder().timeline.at(-1)).toMatchObject({ event: 'tracking-updated', detail: 'FedEx 7777' })
+  })
+
+  it('cancels a fulfillment: its units go back and the status steps back', async () => {
+    seedHost()
+    seedOrder()
+    await post({ carrier: 'UPS', trackingNumber: '1Z' })
+    expect(storedOrder().status).toBe('fulfilled')
+    const id = storedOrder().fulfillments[0].id
+
+    const result = await post({ action: 'cancel-fulfillment', fulfillmentId: id })
+
+    expect(result.status).toBe(200)
+    expect(result.body.status).toBe('paid')
+    expect(storedOrder().status).toBe('paid')
+    expect(storedOrder().fulfillments[0]).toMatchObject({ status: 'cancelled', cancelledAtMs: expect.any(Number) })
+    // And the units can be shipped again.
+    expect((await post({ lineItems: [{ lineItemId: 1, quantity: 2 }] })).status).toBe(200)
+    expect(storedOrder().status).toBe('partially_fulfilled')
+  })
+
+  it('cancelling one of two shipments leaves the order partially fulfilled', async () => {
+    seedHost()
+    seedOrder()
+    await post({ lineItems: [{ lineItemId: 0, quantity: 3 }] })
+    await post({ lineItems: [{ lineItemId: 1, quantity: 2 }] })
+    const second = storedOrder().fulfillments[1].id
+
+    await post({ action: 'cancel-fulfillment', fulfillmentId: second })
+
+    expect(storedOrder().status).toBe('partially_fulfilled')
+  })
+
+  it('a second cancel is `already`, and a delivered order is locked', async () => {
+    seedHost()
+    seedOrder()
+    await post({ lineItems: [{ lineItemId: 0, quantity: 1 }] })
+    const id = storedOrder().fulfillments[0].id
+    await post({ action: 'cancel-fulfillment', fulfillmentId: id })
+    expect((await post({ action: 'cancel-fulfillment', fulfillmentId: id })).body.already).toBe(true)
+
+    docs.set(`hosts/${HOST}/orders/${ORDER}`, {
+      ...storedOrder(),
+      status: 'delivered',
+      fulfillments: [{ id: 'f-d', lineItemIds: [0, 1], atMs: 1 }],
+    })
+    const locked = await post({ action: 'cancel-fulfillment', fulfillmentId: 'f-d' })
+    expect(locked.status).toBe(409)
+    expect(storedOrder().status).toBe('delivered')
+  })
+
+  it('404s a fulfillment that is not on the order, and 400s a missing id', async () => {
+    seedHost()
+    seedOrder()
+    expect((await post({ action: 'update-tracking', fulfillmentId: 'nope' })).status).toBe(404)
+    expect((await post({ action: 'cancel-fulfillment' })).status).toBe(400)
+    expect((await post({ action: 'refund-everything' })).status).toBe(400)
+  })
+
+  it('refuses a viewer on the edit and cancel actions too', async () => {
+    seedHost({ 'admin-1': 'viewer' })
+    seedOrder({ fulfillments: [{ id: 'f-1', lineItemIds: [0], atMs: 1 }], status: 'partially_fulfilled' })
+    expect((await post({ action: 'cancel-fulfillment', fulfillmentId: 'f-1' })).status).toBe(403)
+    expect(storedOrder().fulfillments[0].status).toBeUndefined()
+  })
+})
+
+describe('order events ride the shipment write (AGL-3611)', () => {
+  const outbox = () =>
+    [...docs.entries()]
+      .filter(([path]) => path.startsWith('pluginEventOutbox/'))
+      .map(([, value]) => value)
+
+  it('stages one order.fulfilled per shipment, with the order as it now stands', async () => {
+    seedHost()
+    seedOrder()
+    await post({ lineItems: [{ lineItemId: 0, quantity: 2 }], carrier: 'UPS', trackingNumber: '1Z' })
+
+    expect(outbox()).toHaveLength(1)
+    const [event] = outbox()
+    expect(event).toMatchObject({
+      status: 'pending',
+      event: 'order.fulfilled',
+      pluginId: 'commerce',
+      hostId: HOST,
+      attempts: 0,
+    })
+    expect(event.payload.order).toMatchObject({ id: ORDER, object: 'order', status: 'partially_fulfilled' })
+    expect(event.payload.fulfillment).toMatchObject({
+      lines: [{ lineItemId: 0, quantity: 2 }],
+      carrier: 'UPS',
+      trackingNumber: '1Z',
+      trackingUrl: 'https://www.ups.com/track?tracknum=1Z',
+    })
+  })
+
+  it('a keyed retry stages nothing more, and a refused shipment stages nothing', async () => {
+    seedHost()
+    seedOrder()
+    await post({ lineItems: [{ lineItemId: 0, quantity: 1 }] }, { 'idempotency-key': 'k' })
+    await post({ lineItems: [{ lineItemId: 0, quantity: 1 }] }, { 'idempotency-key': 'k' })
+    await post({ lineItems: [{ lineItemId: 0, quantity: 9 }] })
+    expect(outbox()).toHaveLength(1)
+  })
+
+  it('stages order.delivered when the order is marked delivered', async () => {
+    seedHost()
+    seedOrder({ status: 'fulfilled' })
+    await post({ to: 'delivered' })
+    expect(outbox().map((event) => event.event)).toEqual(['order.delivered'])
+    expect(outbox()[0].payload.order.status).toBe('delivered')
   })
 })

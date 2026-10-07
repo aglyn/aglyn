@@ -88,6 +88,11 @@ export const WEBHOOK_EVENTS = [
   // canceled automatically. charge.dispute.created, above, now files one too.
   'radar.early_fraud_warning.created',
   'review.opened',
+  // Register card readers (AGL-3607): a Stripe Terminal reader finished or
+  // failed a payment. libs/plugins/commerce/src/lib/server/pos-terminal.ts
+  // captures the authorized charge with its final fee, or records the decline.
+  'terminal.reader.action_succeeded',
+  'terminal.reader.action_failed',
 ]
 
 /**

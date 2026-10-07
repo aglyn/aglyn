@@ -24,6 +24,7 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_OPERATOR_ALERTS } from './constants/operator-alerts'
+import { registerCommerceEventTriggers } from './server/order-event-triggers'
 
 /**
  * The commerce plugin's server declarations: the light registrations core
@@ -36,6 +37,8 @@ import { COMMERCE_OPERATOR_ALERTS } from './constants/operator-alerts'
  */
 export function registerCommerceServerDeclarations(): void {
   registerOperatorAlerts(COMMERCE_OPERATOR_ALERTS, { pluginId: BUNDLE_ID })
+  // Its order and return events (AGL-3611), and each as a workflow trigger.
+  registerCommerceEventTriggers()
   // Products and categories, as another plugin reads them (AGL-3080). The
   // readers and the Admin SDK arrive with the first read, not with the boot.
   registerPluginRecordIndex('product', lazyIndex('productRecordIndex'), { pluginId: BUNDLE_ID })

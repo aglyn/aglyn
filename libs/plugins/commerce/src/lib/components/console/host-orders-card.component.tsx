@@ -89,6 +89,7 @@ import {
   ordersCustomerClause,
 } from '../../constants/orders-list-query'
 import CommerceStatTile from './commerce-stat-tile.component'
+import { bulkFulfillOrders, BULK_FULFILLABLE_STATUSES, describeBulkFulfill } from './bulk-fulfill'
 import OrderDetailDialog, {
   DISPUTE_COLOR,
 } from './order-detail-dialog.component'
@@ -258,6 +259,9 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   })
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // Rows ticked for a bulk act (AGL-3611); the row click still opens one.
+  const [checkedIds, setCheckedIds] = useState<string[]>([])
+  const [bulkBusy, setBulkBusy] = useState(false)
   /*
    * An order named in the URL opens in its dialog on arrival (AGL-2622). A
    * contact's timeline names the order that made the person a customer,
@@ -520,6 +524,35 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
       setDraft((prev) => (prev ? { ...prev, busy: false } : prev))
     }
   }, [draft, user, hostId, enqueueSnackbar])
+
+  /*
+   * Bulk "Mark as fulfilled" (AGL-3611): one route call per ticked order, so
+   * each gets its own transition check. Only paid and partially fulfilled
+   * rows count; the button says how many.
+   */
+  const checkedOrders = useMemo(
+    () => orderRows.filter((row: any) => checkedIds.includes(String(row.$id))),
+    [orderRows, checkedIds],
+  )
+  const fulfillableCount = checkedOrders.filter((row: any) =>
+    BULK_FULFILLABLE_STATUSES.includes(String(row.status)),
+  ).length
+  const handleBulkFulfill = useCallback(async () => {
+    if (!checkedOrders.length) return
+    setBulkBusy(true)
+    try {
+      const batchKey =
+        globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const result = await bulkFulfillOrders(user, hostId, checkedOrders as any[], batchKey)
+      enqueueSnackbar(describeBulkFulfill(result), {
+        variant: result.unknown.length ? 'error' : result.refused.length ? 'warning' : 'success',
+        allowDuplicate: true,
+      })
+      if (!result.unknown.length) setCheckedIds([])
+    } finally {
+      setBulkBusy(false)
+    }
+  }, [checkedOrders, user, hostId, enqueueSnackbar])
 
   const selectedOrder =
     loadedOrders.find((order: any) => order.$id === selectedId) ??
@@ -837,6 +870,16 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
             spacing={1}
             sx={{ alignItems: 'center', justifyContent: 'flex-end' }}
           >
+            {checkedIds.length ? (
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={bulkBusy || fulfillableCount === 0}
+                onClick={handleBulkFulfill}
+              >
+                {`Mark as fulfilled (${fulfillableCount})`}
+              </Button>
+            ) : null}
             {/* Only for whom the route takes it (AGL-3554). */}
             {transfer?.can('export', { resource: COMMERCE_ORDERS_TRANSFER, scope: 'host', hostId }) ? (
               <Button size="small" onClick={openExport}>
@@ -865,6 +908,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
             rows={orderRows}
             columns={columns}
             onOpen={(id) => setSelectedId(id)}
+            selectable={{ selected: checkedIds, onChange: setCheckedIds }}
             loading={listStatus === 'loading'}
             /*
              * The grid must NOT also filter, search or sort: the query
