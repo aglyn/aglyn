@@ -17,6 +17,7 @@
 
 'use client'
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -205,7 +206,7 @@ const StaffOrgAiConversations = ({ orgId }: { orgId: string }) => {
       help={pluginDocsHelp('aiMonitoring', {
         anchor: '#ai-conversations',
         excerpt:
-          'What this organization asked Aglyn AI and what it answered: Assist chat questions and answers, and each AI job’s brief and result. Each page staff read is recorded in the audit log, without the text.',
+          `What this organization asked ${PLATFORM_BRAND_NAME} AI and what it answered: Assist chat questions and answers, and each AI job’s brief and result. Each page staff read is recorded in the audit log, without the text.`,
       })}
       HeaderProps={{
         action:
@@ -231,7 +232,7 @@ const StaffOrgAiConversations = ({ orgId }: { orgId: string }) => {
     >
       {kind === null ? (
         <Typography variant="body2" color="text.secondary">
-          {'What people in this organization typed to Aglyn AI, and what it answered. Opening it is recorded in the audit log.'}
+          {`What people in this organization typed to ${PLATFORM_BRAND_NAME} AI, and what it answered. Opening it is recorded in the audit log.`}
         </Typography>
       ) : (
         <Stack spacing={2} divider={<Divider flexItem />}>
