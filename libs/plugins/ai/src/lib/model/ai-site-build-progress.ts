@@ -122,6 +122,9 @@ export function aiSiteBuildRows(
           label,
           state: row.state,
           detail: row.detail,
+          ...(row.state === 'active'
+            ? { startedAt: row.startedAt ?? null, hint: ledger?.op === 'page' ? AI_SITE_PAGE_HINT : AI_SITE_ITEM_HINT }
+            : {}),
           ...(screen?.sections.length ? { sections: screen.sections.map((section) => section.name) } : {}),
           ...(finished && ledger ? { credits: net } : {}),
         }
@@ -200,6 +203,13 @@ export function aiSiteBuildRows(
 /** What the planning row says while it runs. */
 export const AI_SITE_PLAN_HINT =
   'Reading your answers and choosing your pages, what each one says, and the forms and layout they need. This usually takes under a minute.'
+
+/** What the page being written says while it is the active row (AGL-3596). */
+export const AI_SITE_PAGE_HINT =
+  'Writing this page’s sections from your plan. It is done once every section is in.'
+
+/** What any other part being built says while it is the active row. */
+export const AI_SITE_ITEM_HINT = 'Building this now. The next step starts when it is done.'
 
 /** The plan's page an item builds: by its title, else by its place among the pages. */
 function aiPlanScreenFor(

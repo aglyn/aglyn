@@ -2820,6 +2820,9 @@ describe('a guided site start settles page by page, as a build does (AGL-3616)',
     expect(job.orchestration).toEqual({ creditsSpent: 6, settled: 'charged' })
     // Only what was built goes live.
     expect(published).toEqual([['About', 'Services', 'Contact']])
+    // Each item records when it settled, in the write that records its pass,
+    // so the next item's row counts from there (AGL-3596).
+    expect(job.items?.every((row) => row.settledAt === NOW.toISOString())).toBe(true)
   })
 
   it('Try again builds only the failed page', async () => {
@@ -2831,6 +2834,7 @@ describe('a guided site start settles page by page, as a build does (AGL-3616)',
     const job = (await getAiJob(firestore, ORG, first.$id)) as AiJob
     expect(job.status).toBe('done')
     expect(job.items?.find((row) => row.slot === 'p0')).toMatchObject({ status: 'succeeded', attempt: 2 })
+    expect(retried.job.items?.find((row) => row.slot === 'p0')?.settledAt).toBeNull()
   })
 
   it('a site that built no page fails, every credit given back, and is started over from its answers', async () => {

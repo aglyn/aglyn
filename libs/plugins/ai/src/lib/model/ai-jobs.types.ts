@@ -478,6 +478,12 @@ export interface AiJobItemLedger {
   degradedBy?: string[]
   /** Customer-safe: what the person should know about this item. */
   note?: string | null
+  /**
+   * When this attempt settled, as an ISO string (AGL-3596): the moment the
+   * next item started, which is what its progress row counts from. Absent
+   * while the item is open, and on a ledger written before it was kept.
+   */
+  settledAt?: string | null
 }
 
 /** Whether a build's own planning was charged or given back (AGL-3616). */

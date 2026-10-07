@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AiJobItemLedger, AiJobSummary } from './ai-jobs.types'
+import { AI_JOB_PLAN_STEP, type AiJobItemLedger, type AiJobSummary } from './ai-jobs.types'
 
 /**
  * What a `build` job shows of each item (AGL-3616), wherever it is shown —
@@ -35,6 +35,8 @@ export interface AiBuildItemRow {
   state: AiBuildItemRowState
   /** What the person should know: the failure, the note, what was given back. */
   detail: string | null
+  /** When the active item started, for the elapsed time beside it; absent on every other row. */
+  startedAt?: string | null
 }
 
 const OP_NOUNS: Readonly<Record<string, string>> = {
@@ -87,8 +89,47 @@ const STATES: Readonly<Record<AiJobItemLedger['status'], AiBuildItemRowState>> =
   skipped: 'skipped',
 }
 
-/** One row an item, in the order the build planned them. */
-export function aiBuildItemRows(job: Pick<AiJobSummary, 'items'>): AiBuildItemRow[] {
+/**
+ * The item the build is on (AGL-3596): the one its ledger marks running, else
+ * — while the job moves — the first still pending, which is the one its runner
+ * builds next. The runner settles an item in the write that records its pass,
+ * so the item it is writing reads `pending` until it is done; read as such,
+ * every row waited and the build looked stalled. `null` when the job is not
+ * moving or nothing is left.
+ */
+export function aiBuildActiveSlot(
+  job: Pick<AiJobSummary, 'items'> & Partial<Pick<AiJobSummary, 'status'>>,
+): string | null {
+  const items = job.items ?? []
+  const running = items.find((row) => row.status === 'running')
+  if (running) return running.slot
+  if (job.status !== 'queued' && job.status !== 'running') return null
+  return items.find((row) => row.status === 'pending')?.slot ?? null
+}
+
+/**
+ * When the active item started: when the last item before it settled, which
+ * the ledger records, else when the build step started — the first item's
+ * start, and the best a ledger written before settling was recorded has.
+ */
+export function aiBuildActiveStartedAt(
+  job: Pick<AiJobSummary, 'items'> & Partial<Pick<AiJobSummary, 'steps'>>,
+): string | null {
+  let latest: { at: number; iso: string } | null = null
+  for (const row of job.items ?? []) {
+    const at = row.settledAt ? Date.parse(row.settledAt) : NaN
+    if (Number.isFinite(at) && (!latest || at > latest.at)) latest = { at, iso: row.settledAt as string }
+  }
+  if (latest) return latest.iso
+  const step = (job.steps ?? []).find((one) => one.name !== AI_JOB_PLAN_STEP && one.startedAt)
+  return step?.startedAt ?? null
+}
+
+/** One row an item, in the order the build planned them; the item it is on is the active one. */
+export function aiBuildItemRows(
+  job: Pick<AiJobSummary, 'items'> & Partial<Pick<AiJobSummary, 'status' | 'steps'>>,
+): AiBuildItemRow[] {
+  const active = aiBuildActiveSlot(job)
   return (job.items ?? []).map((row) => {
     const parts: string[] = []
     if (row.status === 'failed' && row.failure?.message) parts.push(row.failure.message)
@@ -98,8 +139,9 @@ export function aiBuildItemRows(job: Pick<AiJobSummary, 'items'>): AiBuildItemRo
     return {
       slot: row.slot,
       label: `${aiBuildOpNoun(row.op)}: ${row.label}`,
-      state: STATES[row.status] ?? 'waiting',
+      state: row.slot === active ? 'active' : (STATES[row.status] ?? 'waiting'),
       detail: parts.length ? parts.join(' ') : null,
+      ...(row.slot === active ? { startedAt: aiBuildActiveStartedAt(job) } : {}),
     }
   })
 }

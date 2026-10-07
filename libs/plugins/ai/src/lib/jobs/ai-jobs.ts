@@ -922,6 +922,7 @@ export function aiApplyJobItemRecord(
   ledger: readonly AiJobItemLedger[],
   record: AiJobItemRecord,
   credits: number,
+  now?: Date,
 ): AiJobItemLedger[] {
   return ledger.map((row) =>
     row.slot !== record.slot
@@ -936,6 +937,8 @@ export function aiApplyJobItemRecord(
           ...(record.failure !== undefined ? { failure: record.failure } : {}),
           ...(record.note !== undefined ? { note: record.note } : {}),
           ...(record.degradedBy?.length ? { degradedBy: record.degradedBy } : {}),
+          // When it settled, so the next item's row counts from there (AGL-3596).
+          ...(now && record.status !== 'running' && record.status !== 'pending' ? { settledAt: now.toISOString() } : {}),
           outputs: [...(row.outputs ?? []), ...(record.outputs ?? []).filter((id) => !(row.outputs ?? []).includes(id))],
         },
   )
@@ -1053,7 +1056,7 @@ export async function recordStep(
     // A build's item ledger moves with its spend, in this one write (AGL-3616).
     const ledger = input.items ?? job.items ?? null
     const items =
-      ledger && input.item ? aiApplyJobItemRecord(ledger, input.item, input.creditsSpent) : input.items ? ledger : null
+      ledger && input.item ? aiApplyJobItemRecord(ledger, input.item, input.creditsSpent, now) : input.items ? ledger : null
     const settled = input.status !== 'pending'
     const ownsLease = job.lease?.owner === owner
     const parksForReview = Boolean(input.review) && !isAiJobTerminal(job.status)
