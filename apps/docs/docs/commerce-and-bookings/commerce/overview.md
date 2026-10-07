@@ -417,6 +417,53 @@ switch; including commerce is your plan's. See
 
 ![A draft order refusing to create a payment link with a message that selling is not enabled, on a plan without commerce](/img/commerce/selling-not-enabled.png)
 
+## Payment methods
+
+**Settings → Payment methods** chooses what shoppers may pay with besides a
+card. Cards are always on. Every other method is on unless you turn it off,
+except stablecoins, which you turn on. Stripe shows a method only on orders it
+suits: the right currency, an amount inside its limits, and a shopper in a
+country it serves.
+
+| Method | What the shopper needs | Limits |
+| --- | --- | --- |
+| Apple Pay | Safari on a Mac, iPhone or iPad with a card in Apple Wallet | Same as cards |
+| Google Pay | Chrome or an Android device with a card in Google Pay | Same as cards |
+| Link | A card or bank saved with Link | Same as cards |
+| Klarna | A US shopper paying in USD | From $10 |
+| Afterpay | A US shopper paying in USD | $1 to $4,000, one-time purchases only |
+| Affirm | A US shopper paying in USD | $50 to $30,000, one-time purchases only |
+| Cash App Pay | A US shopper with Cash App | USD only |
+| Amazon Pay | An Amazon account with a saved card | USD only |
+| Stablecoins | A crypto wallet holding USDC or another supported stablecoin | USD only, up to $10,000 |
+
+The card only lists the methods the platform offers. A method missing from
+your card is not available for storefronts yet. Anyone who manages the store
+can read the card; only a site admin can change it.
+
+**What each chip means.** Buy-now-pay-later, Cash App Pay, Amazon Pay and
+stablecoins also need Stripe to enable them on your payout account. Saving the
+card asks Stripe for that. **Stripe is reviewing** means it is still checking,
+and **Stripe needs more details** means Stripe wants more information. The
+organization owner presses **Finish in Stripe** on that method to give it.
+A method Stripe has not enabled on your account may not be offered to shoppers.
+
+**Apple Pay needs your domain registered with Stripe.** Aglyn registers your
+custom domain when you connect it, and your aglyn.app address on its first
+in-page checkout. The **Wallet domains** list on the card shows each one.
+Disconnecting a domain removes its registration.
+
+**Where the choices apply.** Your choices apply to the in-page checkout, to
+cart and Buy now checkouts, to payment links from draft orders, and to
+reservation deposits. On Stripe's own hosted page, which draft-order payment
+links use, Apple Pay and Google Pay follow the shopper's device and cannot be
+turned off.
+
+**Stablecoins.** You are paid in USD. Refunds go back to the shopper's wallet as
+stablecoins, and these payments cannot be disputed.
+
+Turning a method on or off never changes your fees.
+
 ## Shipping & taxes
 
 - **Shipping zones** own countries ('*' = rest of world); rates are flat,

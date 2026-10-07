@@ -50,6 +50,8 @@ import {
   consentGroupSiteHold,
 } from '@aglyn/aglyn/app-utils/consent-groups'
 import { listPluginOrgCollections } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
+import { runPluginEventHandlers } from '@aglyn/aglyn/plugin-manager/plugin-events'
+import { releasedHostNames } from './host-released-names'
 import { readOrgBilling } from './org-billing'
 import {
   disposeHostSendingDomain,
@@ -352,6 +354,19 @@ export async function eraseHost(
 
   // The host document tree (screens/layouts/versions/counters/products/…).
   await firestore.recursiveDelete(hostRef)
+
+  // The site's names no longer serve it (AGL-3629): plugins undo what they
+  // registered for each — commerce's Stripe payment method domains. Raised
+  // after the delete, so a plugin checking whether ANOTHER site still serves
+  // the name cannot find this one.
+  for (const domain of releasedHostNames(hostSnapshot.data())) {
+    await runPluginEventHandlers('host.domain.released', {
+      orgId: orgId ?? null,
+      hostId,
+      domain,
+      reason: 'site-deleted',
+    })
+  }
 
   // Never throws, and never leaves the slot unaccounted for: whatever the
   // vendors refuse is recorded on the label claim for the reaper to finish.

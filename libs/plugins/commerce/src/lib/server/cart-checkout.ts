@@ -48,6 +48,7 @@ import {
   readCheckoutSessionPayload,
   resolveNativeCheckoutMode,
 } from './native-checkout'
+import { ensureCheckoutDomain } from './payment-method-domains'
 
 /**
  * Cart checkout (AGL-293): the whole cart in one Stripe Checkout
@@ -990,9 +991,10 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // The site's own page, never a header's say-so (AGL-3363): a caller
     // writes `Referer` and `Host`, and this URL is where Stripe sends the
     // payer — and what the receipt's download links are built from.
+    const returnSite = await readSiteReturnHost(hostRef)
     const backUrl = siteReturnUrl({
       candidates: [String(req.headers.referer ?? ''), `https://${req.headers.host}`],
-      site: await readSiteReturnHost(hostRef),
+      site: returnSite,
       requestHost: String(req.headers.host ?? ''),
     })
     const separator = backUrl.includes('?') ? '&' : '?'
@@ -1079,6 +1081,19 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       ),
     )
 
+    // The payment methods the merchant switched off (AGL-3629): exclusions
+    // only, on the hosted page and the in-page one alike.
+    const paymentMethodControls =
+      CommerceModel.resolveStorefrontPaymentMethodControls(
+        CommerceModel.normalizeStorefrontPaymentMethodSettings(
+          storeSettings.get('paymentMethods'),
+        ),
+      )
+    CommerceModel.appendStorefrontPaymentMethodParams(
+      params,
+      paymentMethodControls,
+    )
+
     // The Payment Element (AGL-1944), LAST and touching nothing above it. Every
     // figure the shopper is charged — line prices, the discount coupon, the tax
     // construction, the shipping rates, the fee — was decided before this line
@@ -1094,6 +1109,13 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         `${backUrl}${separator}order=success&session_id={CHECKOUT_SESSION_ID}`,
       )
     }
+    // Apple Pay shows on a registered domain only (AGL-3629): registered
+    // beside the session create, inside a budget, never failing the sale.
+    const domainRegistration = nativeMode.native
+      ? ensureCheckoutDomain({ pageUrl: backUrl, site: returnSite, hostId }).catch(
+          () => null,
+        )
+      : Promise.resolve(null)
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',
       {
@@ -1122,8 +1144,13 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // so it moves with the mode (AGL-1944) — otherwise every successful native
     // session reads as a Stripe failure: a 502 at the shopper, a released claim,
     // and a real Checkout Session left open on the merchant's account.
+    await domainRegistration
     const payload = response.ok
-      ? readCheckoutSessionPayload(session, nativeMode)
+      ? readCheckoutSessionPayload(
+          session,
+          nativeMode,
+          paymentMethodControls.wallets,
+        )
       : null
     if (!payload) {
       console.error('Stripe cart checkout error', session.error)

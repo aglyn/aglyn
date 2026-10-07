@@ -34,6 +34,7 @@ import OrderWebhooksCard from './console/order-webhooks-card.component'
 import PaymentsSettingsCard from './console/payments-settings-card.component'
 import PosShiftHistoryCard from './console/pos-ops/pos-shift-history-card.component'
 import PosStaffPinsCard from './console/pos-ops/pos-staff-pins-card.component'
+import PaymentMethodsCard from './console/payment-methods-card.component'
 import ProductsHubCard from './console/products-hub-card.component'
 import RecoveryQueueCard from './console/recovery-queue-card.component'
 import RegistersCard from './console/registers-card.component'
@@ -150,6 +151,12 @@ function sectionBody(
             {
               size: { xs: 12 },
               children: <PaymentsSettingsCard hostId={hostId} />,
+            },
+            // What shoppers may pay with (AGL-3629), beside the account the
+            // money lands in.
+            {
+              size: { xs: 12 },
+              children: <PaymentMethodsCard hostId={hostId} />,
             },
             {
               size: { xs: 12 },

@@ -91,9 +91,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   syncHostProjectionForMembers: (...args: unknown[]) => mockSyncHostProjection(...args),
 }))
 
+const mockRunPluginEventHandlers = jest.fn(async (..._args: unknown[]) => ({
+  handled: 1,
+  failed: [] as string[],
+}))
+
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   TENANT_APEX: 'aglyn.app',
+  // CAPTURED (AGL-3629): plugins hear about a released domain.
+  runPluginEventHandlers: (...args: unknown[]) => mockRunPluginEventHandlers(...args),
   screenRoutePathToUrl: (path: string) => path,
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
@@ -234,6 +241,26 @@ describe('the platform subdomain serves again once the domain is gone (AGL-1273)
     await expect(response.json()).resolves.toMatchObject({ alreadyClear: true })
     expect(mockDetachProjectDomain).not.toHaveBeenCalled()
     expect(mockAttachProjectDomain).not.toHaveBeenCalled()
+  })
+
+  it('tells plugins the domain was released (AGL-3629)', async () => {
+    expect((await post()).status).toBe(200)
+    expect(mockRunPluginEventHandlers).toHaveBeenCalledWith('host.domain.released', {
+      orgId: 'org-1',
+      hostId: 'host-1',
+      domain: 'shop.example.com',
+      reason: 'detached',
+    })
+  })
+
+  it('tells plugins nothing when the provider kept the domain (AGL-3629)', async () => {
+    mockDetachProjectDomain.mockResolvedValue({
+      outcome: 'failed',
+      domain: 'shop.example.com',
+      detail: '500',
+    })
+    expect((await post()).status).toBe(502)
+    expect(mockRunPluginEventHandlers).not.toHaveBeenCalled()
   })
 
   it('refuses a non-admin before releasing anything', async () => {

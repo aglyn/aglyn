@@ -167,6 +167,8 @@ function CartLines(props: {
   const [nativeCheckout, setNativeCheckout] = useState<{
     clientSecret: string
     publishableKey: string
+    /** The wallets the merchant hid (AGL-3629). */
+    wallets?: CommerceModel.StorefrontCheckoutWallets
   } | null>(null)
   /**
    * In-progress quantity edits, keyed by line, as the raw field text
@@ -301,6 +303,7 @@ function CartLines(props: {
         setNativeCheckout({
           clientSecret: String(payload.clientSecret),
           publishableKey: String(payload.publishableKey),
+          wallets: CommerceModel.readStorefrontCheckoutWallets(payload.wallets),
         })
         setStatus('idle')
         return
@@ -587,6 +590,7 @@ function CartLines(props: {
           <StorefrontPaymentElement
             clientSecret={nativeCheckout.clientSecret}
             publishableKey={nativeCheckout.publishableKey}
+            wallets={nativeCheckout.wallets}
             payLabel={checkoutLabel || 'Pay now'}
             defaultEmail={email}
             // An expired or unloadable session is replaced, never replayed:

@@ -245,6 +245,37 @@ registerPluginJob({
 })
 
 /**
+ * Stripe payment method domains for every connected custom domain (AGL-3629).
+ *
+ * The backfill for domains connected before registration existed, and the
+ * repair for a connect whose event was lost, in one daily pass. A domain
+ * already registered costs a document read and no Stripe call, so the beat is
+ * cheap; a day's delay costs only the Apple Pay button on a domain connected
+ * while Stripe was unreachable, and the first in-page checkout there registers
+ * it anyway.
+ */
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'payment-method-domains',
+  intervalMinutes: 24 * 60,
+  description:
+    'Register connected custom domains with Stripe so Apple Pay, Google Pay ' +
+    'and Link show on them (AGL-3629).',
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
+    if (!process.env.STRIPE_SECRET_KEY) return
+    const { reconcileCustomDomains } = await import('./server/payment-method-domains')
+    const result = await reconcileCustomDomains(gate)
+    if (result.registered || result.failed) {
+      console.info(
+        `commerce: payment method domains — ${result.registered} registered, ` +
+          `${result.failed} failed across ${result.hosts} sites`,
+      )
+    }
+  },
+})
+
+/**
  * A visitor's payment door: it opens a Stripe Checkout Session for whoever
  * calls it, so the dispatcher holds it to the card-testing counters
  * (AGL-3363). Declared here, beside the registration, so the door cannot
@@ -382,6 +413,13 @@ export function registerCommerceConsoleApi(): void {
   // The merchant's own storefront sales tax, by who owes it (AGL-2440): the
   // same rows and classifier the operator's return reads, fenced to one site.
   registerPluginApiRoute('commerce/tax-summary', { web: taxSummaryHandler })
+  // The payment methods card (AGL-3629): toggles, the platform's offer, the
+  // payout account's capabilities and the site's wallet domains. Loaded with
+  // the first request, so a console that never opens Settings never imports it.
+  registerPluginApiRoute('commerce/payment-methods', {
+    web: async (request) =>
+      (await import('./server/payment-methods')).paymentMethodsHandler(request),
+  })
   // A smart collection's rules changed or it was deleted: re-stamp which
   // products it holds (AGL-3321), the membership the storefront queries.
   registerPluginApiRoute('commerce/collection-membership', collectionMembershipHandler)

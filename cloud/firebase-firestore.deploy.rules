@@ -4571,6 +4571,18 @@ allow write: if false;
 
 
 
+match /paymentMethodDomains/{domainKey} {
+allow read: if isStaff();
+allow write: if false;
+}
+
+
+
+
+
+
+
+
 
 
 

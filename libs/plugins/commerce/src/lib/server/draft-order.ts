@@ -737,6 +737,17 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       )
       CommerceModel.appendCheckoutShippingParams(params, shippingOptions)
     }
+    // The payment methods the merchant switched off reach the payment link
+    // too (AGL-3629). A hosted Stripe page shows Apple Pay and Google Pay by
+    // device and cannot hide them per merchant; everything else follows.
+    CommerceModel.appendStorefrontPaymentMethodParams(
+      params,
+      CommerceModel.resolveStorefrontPaymentMethodControls(
+        CommerceModel.normalizeStorefrontPaymentMethodSettings(
+          storeSettings.get('paymentMethods'),
+        ),
+      ),
+    )
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',
       {

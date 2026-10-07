@@ -567,3 +567,36 @@ describe('draft-order shipping options (AGL-1792)', () => {
     expect(body?.get('line_items[0][price_data][unit_amount]')).toBe('3000')
   })
 })
+
+describe('draft-order payment links honor the merchant’s payment methods (AGL-3629)', () => {
+  const realFetch = global.fetch
+  const realKey = process.env.STRIPE_SECRET_KEY
+  beforeAll(() => {
+    global.fetch = fetchMock as unknown as typeof fetch
+    process.env.STRIPE_SECRET_KEY = 'sk_test_fake_never_used'
+  })
+  afterAll(() => {
+    global.fetch = realFetch
+    process.env.STRIPE_SECRET_KEY = realKey as string
+  })
+
+  const excluded = (body: URLSearchParams | null) =>
+    [...(body?.keys() ?? [])]
+      .filter((key) => key.startsWith('excluded_payment_method_types['))
+      .map((key) => body?.get(key))
+
+  it('excludes the methods switched off, and crypto until it is chosen', async () => {
+    const { result, body } = await runDraft({
+      settings: { paymentMethods: { klarna: false, link: false } },
+    })
+    expect(result.status).toBe(200)
+    expect(excluded(body)).toEqual(['klarna', 'crypto'])
+    expect(body?.get('wallet_options[link][display]')).toBe('never')
+  })
+
+  it('sends only the crypto exclusion for a store on the defaults', async () => {
+    const { body } = await runDraft()
+    expect(excluded(body)).toEqual(['crypto'])
+    expect(body?.get('wallet_options[link][display]')).toBeNull()
+  })
+})

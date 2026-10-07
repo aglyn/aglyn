@@ -219,6 +219,8 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const [nativeCheckout, setNativeCheckout] = useState<{
       clientSecret: string
       publishableKey: string
+      /** The wallets the merchant hid (AGL-3629). */
+      wallets?: CommerceModel.StorefrontCheckoutWallets
     } | null>(null)
 
     const slug = slugProp || slugFromLocation()
@@ -400,6 +402,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
           setNativeCheckout({
             clientSecret: String(payload.clientSecret),
             publishableKey: String(payload.publishableKey),
+            wallets: CommerceModel.readStorefrontCheckoutWallets(payload.wallets),
           })
           setStatus('idle')
           return
@@ -765,6 +768,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               <StorefrontPaymentElement
                 clientSecret={nativeCheckout.clientSecret}
                 publishableKey={nativeCheckout.publishableKey}
+                wallets={nativeCheckout.wallets}
                 payLabel={buyLabel || (subscribing ? 'Subscribe' : 'Pay now')}
                 // An expired or unloadable session is replaced, never
                 // replayed: the old attempt key would hand back the dead one.

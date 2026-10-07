@@ -6786,6 +6786,54 @@ describe('push devices are their owner’s alone, in the registry’s shape (AGL
  * could choose its own id, and manufacture a groundswell of reports against a
  * competitor's site. The queue's entire value is that a human believes it.
  */
+describe('payment method domains are staff-read, server-written (AGL-3629)', () => {
+  const key = 'live~shop.example.com'
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'paymentMethodDomains', key), {
+        domain: 'shop.example.com', mode: 'live', stripeId: 'pmd_1',
+        enabled: true, hostId: HOST, checkedAtMs: 1,
+      })
+    })
+  })
+
+  it('staff read a registration; nobody else does', async () => {
+    await mustAllow(
+      'staff reading a payment method domain',
+      getDoc(doc(authed(STAFF, { staff: true }), 'paymentMethodDomains', key)),
+    )
+    for (const uid of [OWNER, EDITOR, VIEWER, OUTSIDER]) {
+      await mustDeny(
+        `${uid} reading a payment method domain`,
+        getDoc(doc(authed(uid), 'paymentMethodDomains', key)),
+      )
+    }
+  })
+
+  it('nobody writes — the site owner and staff included', async () => {
+    for (const [label, db] of [
+      ['an anonymous visitor', env.unauthenticatedContext().firestore()],
+      ['the site owner', authed(OWNER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]) {
+      await mustDeny(
+        `${label} marking a domain registered`,
+        setDoc(doc(db, 'paymentMethodDomains', 'live~other.example.com'), {
+          domain: 'other.example.com', enabled: true, stripeId: 'pmd_forged',
+        }),
+      )
+      await mustDeny(
+        `${label} changing a registration`,
+        updateDoc(doc(db, 'paymentMethodDomains', key), { enabled: false }),
+      )
+      await mustDeny(
+        `${label} deleting a registration`,
+        deleteDoc(doc(db, 'paymentMethodDomains', key)),
+      )
+    }
+  })
+})
+
 describe('the abuse-report queue is staff-read, nobody-write (AGL-1964)', () => {
   beforeEach(async () => {
     await env.withSecurityRulesDisabled(async (context) => {

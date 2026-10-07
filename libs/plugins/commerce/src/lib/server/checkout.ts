@@ -42,6 +42,7 @@ import {
   readCheckoutSessionPayload,
   resolveNativeCheckoutMode,
 } from './native-checkout'
+import { ensureCheckoutDomain } from './payment-method-domains'
 
 /**
  * Commerce Starter checkout (AGL-90): a site visitor buys a product. The
@@ -1103,6 +1104,20 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           : shippingPlan.options,
       )
     }
+    // The payment methods the merchant switched off (AGL-3629). Exclusions
+    // only: what stays on is whatever the platform's configuration offers for
+    // this order, so a store on the defaults sends what it always sent, bar
+    // the crypto opt-in. Works on the hosted page as well as the in-page one.
+    const paymentMethodControls =
+      CommerceModel.resolveStorefrontPaymentMethodControls(
+        CommerceModel.normalizeStorefrontPaymentMethodSettings(
+          storeSettings.get('paymentMethods'),
+        ),
+      )
+    CommerceModel.appendStorefrontPaymentMethodParams(
+      params,
+      paymentMethodControls,
+    )
     // The Payment Element (AGL-1944), and the LAST thing done to the params on
     // purpose. Everything above — price, coupon, tax, shipping, the Connect
     // destination, the fee, every metadata key the webhook reads — is computed
@@ -1123,6 +1138,16 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         `${backUrl}${separator}order=success&session_id={CHECKOUT_SESSION_ID}`,
       )
     }
+    // Apple Pay shows on a registered domain only (AGL-3629). Started beside
+    // the session create rather than before it, inside a fixed budget, and
+    // never throws: a sale does not wait on, or fail for, a registration.
+    const domainRegistration = nativeMode.native
+      ? ensureCheckoutDomain({
+          pageUrl: backUrl,
+          site: hostSnapshot.data?.() as SiteReturnHost | undefined,
+          hostId,
+        }).catch(() => null)
+      : Promise.resolve(null)
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',
       {
@@ -1152,8 +1177,13 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // `!session.url` was the liveness check, and a `ui_mode` session HAS no
     // url — so the check moves with the mode rather than staying behind and
     // reading every successful native session as a Stripe failure (AGL-1944).
+    await domainRegistration
     const payload = response.ok
-      ? readCheckoutSessionPayload(session, nativeMode)
+      ? readCheckoutSessionPayload(
+          session,
+          nativeMode,
+          paymentMethodControls.wallets,
+        )
       : null
     if (!payload) {
       console.error('Stripe checkout error', session.error)

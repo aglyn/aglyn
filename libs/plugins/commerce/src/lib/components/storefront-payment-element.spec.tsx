@@ -51,6 +51,8 @@ let checkoutState: any
 
 /** The provider's options as last mounted — where the appearance rides. */
 let providerOptions: any
+/** The Payment Element's options as last mounted — where `wallets` rides. */
+let paymentElementOptions: any
 /** The Shipping Address Element's `onChange`, so a test can type an address. */
 let shippingAddressOnChange: ((event: any) => void) | undefined
 
@@ -60,7 +62,10 @@ jest.mock('@stripe/react-stripe-js/checkout', () => ({
     providerOptions = options
     return children
   },
-  PaymentElement: () => <div data-testid="stripe-payment-element" />,
+  PaymentElement: ({ options }: any) => {
+    paymentElementOptions = options
+    return <div data-testid="stripe-payment-element" />
+  },
   ShippingAddressElement: ({ onChange }: any) => {
     shippingAddressOnChange = onChange
     return <div data-testid="stripe-shipping-address-element" />
@@ -136,6 +141,7 @@ beforeEach(() => {
   updateShippingAddressMock.mockReset()
   updateShippingAddressMock.mockResolvedValue({ type: 'success' })
   providerOptions = undefined
+  paymentElementOptions = undefined
   shippingAddressOnChange = undefined
   loadStripeMock.mockClear()
   __resetStripePromises()
@@ -574,5 +580,19 @@ describe('the form wears the site theme (AGL-3606)', () => {
       },
     ])
     expect(providerOptions.clientSecret).toBe('cs_test_1_secret_abc')
+  })
+})
+
+describe('the wallets the merchant hid (AGL-3629)', () => {
+  it('passes nothing when the merchant hid nothing, so every wallet the device supports shows', () => {
+    mount()
+    expect(paymentElementOptions).toBeUndefined()
+  })
+
+  it('hands the Payment Element the wallets option the checkout answered with', () => {
+    mount({ wallets: { applePay: 'never', googlePay: 'auto', link: 'never' } })
+    expect(paymentElementOptions).toEqual({
+      wallets: { applePay: 'never', googlePay: 'auto', link: 'never' },
+    })
   })
 })

@@ -4564,6 +4564,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Stripe payment method domains the platform registered for storefronts
+    // (AGL-3629), keyed `{live|test}~{domain}`: a cache of what Stripe said,
+    // so a checkout costs one read instead of a Stripe round trip. Written by
+    // the commerce server only. A client write could mark a domain registered
+    // that is not — the checkout would then skip the registration and Apple
+    // Pay would silently vanish from that store — so no client writes, staff
+    // included; staff may read it to answer "why is there no Apple Pay here".
+    match /paymentMethodDomains/{domainKey} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
     /**
      * §512(g) counter-notices (AGL-1983). Same posture as `abuseReports`
      * above, and for sharper versions of the same reasons.

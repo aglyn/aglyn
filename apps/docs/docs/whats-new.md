@@ -10,6 +10,16 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
+## October 2026 — wallets and pay later on your own domain (newest)
+
+- **[Payment methods](commerce-and-bookings/commerce/overview.md#payment-methods)** —
+  Apple Pay, Google Pay and Link now show on your own domain, because Aglyn registers
+  it with Stripe when you connect it. A new **Payment methods** card in commerce
+  settings turns Klarna, Afterpay, Affirm, Cash App Pay, Amazon Pay and the wallets
+  on or off, shows what each needs and its limits, and asks Stripe to enable them on
+  your payout account. Stablecoin payments can be turned on when the platform offers
+  them.
+
 <!--
   AGL-3614 — Accounting is built and release-flagged OFF (`release_accounting`) until a
   deployment has its Intuit or Xero app credentials. This entry is held unpublished, like
@@ -29,7 +39,7 @@ for the how-to.
   that sells online.
 -->
 
-## October 2026 — the register takes every payment (newest)
+## October 2026 — the register takes every payment
 
 - **[Split payments](commerce-and-bookings/commerce/pos-and-reservations.md#taking-payment)** —
   **Charge** opens the sale and the register takes as many payments as it needs: type

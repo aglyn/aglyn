@@ -18,6 +18,7 @@
 // The seam from its own module, not the plugin-manager barrel: boot needs the
 // registry and nothing else, and the barrel reaches the client contexts.
 import { registerOperatorAlerts } from '@aglyn/aglyn/plugin-manager/operator-alerts'
+import { registerPluginEventHandler } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import {
   registerPluginRecordIndex,
   type PluginRecordIndex,
@@ -54,6 +55,21 @@ export function registerCommerceServerDeclarations(): void {
   // lines and the address, write a shipment, record tracking. The module and
   // the Admin SDK load with the first call.
   registerPluginShipmentRecords(lazyShipmentRecords, { pluginId: BUNDLE_ID })
+  // A site's domains as Stripe payment method domains (AGL-3629), so Apple
+  // Pay and the other wallets show on the merchant's own domain. The Stripe
+  // calls arrive with the first event, not with the boot.
+  registerPluginEventHandler(
+    'host.domain.attached',
+    async (payload) =>
+      (await import('./server/payment-method-domains')).onHostDomainAttached(payload),
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginEventHandler(
+    'host.domain.released',
+    async (payload) =>
+      (await import('./server/payment-method-domains')).onHostDomainReleased(payload),
+    { pluginId: BUNDLE_ID },
+  )
 }
 
 const loadShipmentRecords = async () =>

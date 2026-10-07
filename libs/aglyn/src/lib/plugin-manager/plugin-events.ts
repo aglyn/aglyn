@@ -156,6 +156,32 @@ export interface PluginEventPayloads {
       firstOfType: boolean
     }>
   }
+  /**
+   * A custom domain was connected to a site and the hosting provider accepted
+   * it (AGL-3629). Raised once the claim is written, so `domain` is the site's
+   * `cname` and no other site's. The site may still be awaiting a certificate
+   * or a DNS change; a plugin that needs the domain registered somewhere — a
+   * payment provider, a search console — does that now rather than waiting
+   * for traffic.
+   */
+  'host.domain.attached': {
+    orgId: string | null
+    hostId: string
+    domain: string
+  }
+  /**
+   * A domain stopped serving a site (AGL-3629): its custom domain was
+   * disconnected, or the site was deleted — which releases its platform
+   * subdomain too, raised as a second event with that name. A plugin undoes
+   * whatever it registered for the name, and must check the name is not
+   * still served by ANOTHER site first (a `www.` twin, a reused subdomain).
+   */
+  'host.domain.released': {
+    orgId: string | null
+    hostId: string
+    domain: string
+    reason: 'detached' | 'site-deleted'
+  }
   /** One permission key moved on a subject of the org. */
   'org.permissions.changed': {
     orgId: string
