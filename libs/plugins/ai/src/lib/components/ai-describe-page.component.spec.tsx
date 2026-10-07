@@ -82,34 +82,23 @@ afterEach(() => {
   for (const [url] of mockFetch.mock.calls) expect(String(url)).toMatch(/^\/api\/ai\/jobs/)
 })
 
-describe('whether the button is here at all', () => {
-  it.each([
-    ['the route is not registered for this deployment', 404],
-    ['the member may not generate', 403],
-  ])('stays absent when %s', async (_why, status) => {
-    mockFetch.mockResolvedValue(json({ error: 'No' }, status))
-    const { container } = render(<AiDescribePageButton {...zoneProps()} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
+describe('the button is drawn at once (AGL-3601)', () => {
+  it('draws on the first render and asks nothing of a server to do it', () => {
+    render(<AiDescribePageButton {...zoneProps()} />)
+    expect(screen.getByRole('button', { name: 'Create with AI' })).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it('stays absent while the probe is still out, and asks the route only once', async () => {
-    mockFetch.mockReturnValue(new Promise(() => undefined))
-    const { container, rerender } = render(<AiDescribePageButton {...zoneProps()} />)
-    rerender(<AiDescribePageButton {...zoneProps()} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
-    expect(container.textContent).toBe('')
-  })
-
-  it('asks nothing while the page has not resolved its org', async () => {
-    render(<AiDescribePageButton {...zoneProps({ orgId: undefined })} />)
-    await waitFor(() => expect(mockFetch).not.toHaveBeenCalled())
+  it('opens the brief on click, still asking nothing until it is sent', () => {
+    render(<AiDescribePageButton {...zoneProps()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })
 
 describe('the brief it sends', () => {
   it('starts a page job for this site with the page type the member pressed', async () => {
-    mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
     render(<AiDescribePageButton {...zoneProps()} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
@@ -122,7 +111,7 @@ describe('the brief it sends', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Plan the page' }))
 
     await screen.findByText(/The page is being planned/)
-    const [url, init] = mockFetch.mock.calls[1]
+    const [url, init] = mockFetch.mock.calls[0]
     expect(url).toBe('/api/ai/jobs')
     expect(JSON.parse(init.body)).toEqual({
       orgId: 'org-1',
@@ -137,7 +126,6 @@ describe('the brief it sends', () => {
   })
 
   it('sends no page type when the member pressed none, and none once it is pressed off', async () => {
-    mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
     render(<AiDescribePageButton {...zoneProps()} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
@@ -151,11 +139,10 @@ describe('the brief it sends', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Plan the page' }))
 
     await screen.findByText(/The page is being planned/)
-    expect(JSON.parse(mockFetch.mock.calls[1][1].body).inputs).toEqual({})
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body).inputs).toEqual({})
   })
 
   it('says why the route refused, and leaves the brief to try again', async () => {
-    mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
     render(<AiDescribePageButton {...zoneProps()} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
@@ -172,12 +159,11 @@ describe('the brief it sends', () => {
   })
 
   it('will not send an empty brief', async () => {
-    mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
     render(<AiDescribePageButton {...zoneProps()} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
     fireEvent.change(screen.getByLabelText('What is the page for?'), { target: { value: '   ' } })
     expect(screen.getByRole('button', { name: 'Plan the page' }).hasAttribute('disabled')).toBe(true)
-    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })

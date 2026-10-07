@@ -311,7 +311,7 @@ export function useSlotWidgets(slots: readonly string[]): {
    * nothing to send anyone to and no widget is mounted that way.
    */
   const orgSlug = useOrgSlug()
-  const { isStaff, flags } = useReleaseFlags()
+  const { ready: flagsReady, isStaff, flags } = useReleaseFlags()
   const addonStoreVisible =
     isStaff || (flags?.release_addon_store?.released ?? false)
   const upgrade =
@@ -349,8 +349,21 @@ export function useSlotWidgets(slots: readonly string[]): {
           entitlement === 'blocked' &&
           upgrade !== undefined &&
           entitlementPurchasable([extension.featureFlag, widget.featureFlag], org)
+        // A widget behind a release flag (AGL-3601) is withheld until the
+        // flags settle and absent while its flag is off: the same verdict
+        // `useReleaseFlag(...).visible` gives a page, from the flags every
+        // page already loaded.
+        const release =
+          staff || !widget.releaseFlag
+            ? ('on' as const)
+            : !flagsReady
+              ? ('pending' as const)
+              : isStaff || flags?.[widget.releaseFlag]?.released === true
+                ? ('on' as const)
+                : ('off' as const)
         return {
           staff,
+          release,
           entitlement: upsell ? ('entitled' as const) : entitlement,
           // The extension's requirement AND the widget's own, exactly as a nav
           // item composes with its extension's: a card cannot escape its
@@ -388,7 +401,9 @@ export function useSlotWidgets(slots: readonly string[]): {
     widgets: resolved
       .filter(
         (entry) =>
-          entry.entitlement === 'entitled' && entry.permission === 'granted',
+          entry.entitlement === 'entitled' &&
+          entry.permission === 'granted' &&
+          entry.release === 'on',
       )
       .map((entry) => entry.widget),
     /**
@@ -407,7 +422,11 @@ export function useSlotWidgets(slots: readonly string[]): {
       pluginsLoaded &&
       (orgReady ||
         (slots.length > 0 && slots.every((slot) => isConsoleStaffWidgetSlot(slot)))) &&
-      resolved.every((entry) => entry.staff || entry.permission !== 'pending'),
+      resolved.every(
+        (entry) =>
+          entry.staff ||
+          (entry.permission !== 'pending' && entry.release !== 'pending'),
+      ),
   }
 }
 

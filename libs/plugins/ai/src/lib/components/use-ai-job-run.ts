@@ -40,34 +40,8 @@ import { publishAiJob } from './ai-jobs-store'
  * control stops following, and the job carries on in AI jobs.
  */
 
-/**
- * Whether the jobs route serves a workspace: still asking, yes, or no — and
- * `upsell` for the one no that a purchase would turn into a yes: the route is
- * live and the member is in the workspace, and only its plan lacks
- * `aiGenerative` (AGL-3601). Every control but a "Create with AI" entry reads
- * that as no.
- */
-export type AiJobsVerdict = 'checking' | 'ready' | 'hidden' | 'upsell'
-
-/**
- * The jobs route's answer to a probe, as a verdict. A 404 is the release flag
- * off (or a deployment without the route), so the feature does not exist
- * here; a 403 is `upsell` only when the gate names the plan
- * (`reason: 'entitlement'`), and any other refusal hides the control.
- */
-export async function aiJobsProbeVerdict(response: {
-  status: number
-  json?: () => Promise<unknown>
-}): Promise<Exclude<AiJobsVerdict, 'checking'>> {
-  if (response.status === 404) return 'hidden'
-  if (response.status !== 403) return 'ready'
-  try {
-    const body = (await response.json?.()) as { reason?: unknown } | null
-    return body?.reason === 'entitlement' ? 'upsell' : 'hidden'
-  } catch {
-    return 'hidden'
-  }
-}
+/** Whether the jobs route serves a workspace: still asking, yes, or no. */
+export type AiJobsVerdict = 'checking' | 'ready' | 'hidden'
 
 /**
  * One answer per member and workspace, however many controls ask. The
@@ -90,10 +64,11 @@ function askJobsRoute(
   const known = verdicts.get(key)
   if (known) return known
   const answer = authorizedFetch(user, `/api/ai/jobs?orgId=${encodeURIComponent(orgId)}&limit=1`)
-    // The release flag off (404) and a member without generation (403): the
-    // feature is not this workspace's, so the control is absent. A plan
-    // without it is `upsell`, which only an entry that sells it draws.
-    .then(aiJobsProbeVerdict)
+    // The release flag off (404) and a plan or member without generation
+    // (403): the feature is not this workspace's, so the control is absent.
+    .then((response): Exclude<AiJobsVerdict, 'checking'> =>
+      response.status === 404 || response.status === 403 ? 'hidden' : 'ready',
+    )
     .catch((): Exclude<AiJobsVerdict, 'checking'> => {
       // A request that never arrived is no answer, so the next control asks again.
       verdicts.delete(key)
