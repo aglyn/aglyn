@@ -887,6 +887,16 @@ service cloud.firestore {
       match /shippingAddressChecks/{checkId} {
         allow read, write: if false;
       }
+      // The workspace's OWN Easyship, Sendcloud or ShipperHQ account
+      // (AGL-3632): the merchant's API credentials, sealed under
+      // SHIPPING_TOKEN_KEY, and the account's name. Server-written and
+      // server-read by the shipping routes. Deny every client, the owner and
+      // staff included: one that could read it could carry off a sealed
+      // credential, and one that could write it could point the workspace's
+      // labels at an account it holds.
+      match /shippingConnections/{kind} {
+        allow read, write: if false;
+      }
 
       // Outreach (AGL-2974): the mailboxes reps connect, the sequences they
       // send and each prospect's enrollment in one. Read through

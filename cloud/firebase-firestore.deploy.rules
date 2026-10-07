@@ -894,6 +894,16 @@ allow read, write: if false;
 
 
 
+match /shippingConnections/{kind} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
 
 
 

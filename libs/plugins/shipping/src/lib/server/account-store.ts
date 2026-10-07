@@ -74,6 +74,9 @@ export async function openShippingAccount(
   orgId: string,
   config: ShippingConfig,
 ): Promise<ProviderAccount | null> {
+  // The merchant's own account (AGL-3632) is already open: nothing of the
+  // platform's is kept for it.
+  if (config.ownAccount) return config.ownAccount
   const snapshot = await shippingAccountRef(orgId, config).get()
   const stored = snapshot.data() as StoredShippingAccount | undefined
   if (!stored || stored.status !== 'active' || !stored.sealedAccountId) return null
@@ -103,6 +106,7 @@ export async function ensureShippingAccount(
   config: ShippingConfig,
   owner: { name: string; email: string; company: string; uid?: string },
 ): Promise<ProviderAccount> {
+  if (config.ownAccount) return config.ownAccount
   const existing = await openShippingAccount(orgId, config)
   if (existing) return existing
   const ref = shippingAccountRef(orgId, config)

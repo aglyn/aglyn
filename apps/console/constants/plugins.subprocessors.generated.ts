@@ -215,6 +215,26 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         dataReceived: "For each workspace that uses carrier rates or labels: the workspace’s name and the email of the member who first used them, to open the workspace’s account at the provider; the site’s ship-from address; for a rate at checkout, the shopper’s delivery address and the parcel’s weight, size and value; for a label, the customer’s name, delivery address, phone number and email from the order, the parcel’s weight and size, and, for a parcel crossing a border, each item’s description, quantity, value, weight, tariff code and country of origin; tracking numbers to follow; and, for a carrier account the merchant connects, its account number and the account holder’s name, email, phone and billing address. No card or bank details, and no password.",
       },
     ],
+    hosts: [
+      {
+        host: "public-api.easyship.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Easyship API (2024-09) of the merchant’s own Easyship account, connected on the store’s Settings (`libs/plugins/shipping/src/lib/providers/easyship.ts`): rates and draft shipments, label purchase, cancellation, and the label file. Reached only while `SHIPPING_OWN_ACCOUNT_PROVIDERS` names `easyship`.",
+        dataReceived: "For each rate and label the merchant asks for on their own account: the site’s ship-from address; the customer’s name, delivery address, phone number and email from the order; the parcel’s weight, size and value; for a parcel crossing a border, each item’s description, quantity, value, weight, tariff code and country of origin; and the order’s reference. The merchant’s own API credentials authenticate each call. No card or bank details.",
+      },
+      {
+        host: "panel.sendcloud.sc",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Sendcloud API v3 of the merchant’s own Sendcloud integration, connected on the store’s Settings (`libs/plugins/shipping/src/lib/providers/sendcloud.ts`): shipping options with quotes, shipment announcement, cancellation, tracking and the label file. Reached only while `SHIPPING_OWN_ACCOUNT_PROVIDERS` names `sendcloud`.",
+        dataReceived: "For each rate and label the merchant asks for on their own account: the site’s ship-from address; the customer’s name, delivery address, phone number and email from the order; the parcel’s weight, size and value; for a parcel crossing a border, each item’s description, quantity, value, weight, tariff code and country of origin; and the order’s reference. The merchant’s own API credentials authenticate each call. No card or bank details.",
+      },
+      {
+        host: "api.shipperhq.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The ShipperHQ Rates API of the merchant’s own ShipperHQ website, connected on the store’s Settings (`libs/plugins/shipping/src/lib/providers/shipperhq.ts`): a token from the website’s API key and authentication code, and a shipping quote for each checkout that asks for carrier rates. Reached only while `SHIPPING_OWN_ACCOUNT_PROVIDERS` names `shipperhq`.",
+        dataReceived: "For each checkout quote: the shopper’s destination country, state, city, street and postal code, and each parcel’s weight and share of the cart’s value. No name, email, phone or payment details. The merchant’s own API key and authentication code authenticate.",
+      },
+    ],
   },
   {
     pluginId: 'tax-engines',

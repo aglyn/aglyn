@@ -13553,6 +13553,8 @@ describe('shipping records are the server’s alone (AGL-3612)', () => {
     ['shippingHostSettings', HOST],
     ['shippingLabels', 'lbl_1'],
     ['shippingAddressChecks', `${HOST}__order-1`],
+    // The merchant's own Easyship, Sendcloud or ShipperHQ credentials (AGL-3632).
+    ['shippingConnections', 'easyship'],
   ]
   const TOP_DOCS = [
     ['shippingTrackers', 'trk_1'],

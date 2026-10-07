@@ -23,36 +23,39 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Button,
+  Checkbox,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   MenuItem,
   Stack,
   Switch,
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { SHIPPING_API_ROUTES } from '../constants/api-routes'
-import type { ConnectableCarrier, ProviderCarrierAccount } from '../providers/types'
+import type { ConnectableCarrier, ConnectableCarrierForm, ProviderCarrierAccount } from '../providers/types'
 import { AddressFields } from './address-fields.component'
 import { useShippingAvailability, useShippingFetch } from './shipping-api'
 import type { ShippingSettingsWidgetProps } from './shipping-settings-card.component'
 
-const CARRIERS: Array<{ id: ConnectableCarrier; label: string }> = [
-  { id: 'ups', label: 'UPS' },
-  { id: 'fedex', label: 'FedEx' },
-]
 
 /**
  * CARRIER ACCOUNTS (AGL-3612): the carriers labels and rates come from. By
  * default the provider's own discounted accounts; a merchant with a
- * negotiated UPS or FedEx account connects it here, and labels on it are
- * billed to them by the carrier. UPS asks the merchant to sign in at UPS,
- * which this card sends them to. Workspace-wide: every site of the
- * workspace ships with the same accounts.
+ * negotiated account connects it here, and labels on it are billed to them
+ * by the carrier. Which carriers, and what each asks for, is the provider's
+ * answer (AGL-3632): Shippo's UPS and FedEx take the account holder and
+ * billing address, UPS then asking the merchant to sign in at UPS, which
+ * this card sends them to; EasyPost names each carrier's own credential
+ * fields (DHL Express, Canada Post and the rest). Workspace-wide: every site
+ * of the workspace ships with the same accounts. Draws nothing while the
+ * workspace ships through its own Easyship or Sendcloud account, whose
+ * carriers are chosen there.
  */
 export function CarrierAccountsCard(props: ShippingSettingsWidgetProps) {
   const { hostId } = props
@@ -61,6 +64,9 @@ export function CarrierAccountsCard(props: ShippingSettingsWidgetProps) {
   const { enqueueSnackbar } = useSnackbar()
   const [accounts, setAccounts] = useState<ProviderCarrierAccount[] | null>(null)
   const [canConnect, setCanConnect] = useState(false)
+  const [canToggle, setCanToggle] = useState(false)
+  const [connectable, setConnectable] = useState<ConnectableCarrierForm[]>([])
+  const [credentials, setCredentials] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [connecting, setConnecting] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -76,21 +82,35 @@ export function CarrierAccountsCard(props: ShippingSettingsWidgetProps) {
 
   const load = useCallback(async () => {
     try {
-      const answer = await request<{ accounts: ProviderCarrierAccount[]; canConnect: boolean }>(
-        SHIPPING_API_ROUTES.carrierAccounts,
-        { query: { hostId } },
-      )
+      const answer = await request<{
+        accounts: ProviderCarrierAccount[]
+        canConnect: boolean
+        canToggle?: boolean
+        connectable?: ConnectableCarrierForm[]
+      }>(SHIPPING_API_ROUTES.carrierAccounts, { query: { hostId } })
       setAccounts(answer.accounts)
       setCanConnect(answer.canConnect)
+      setCanToggle(answer.canToggle !== false)
+      setConnectable(answer.connectable ?? [])
       setError(null)
     } catch (cause) {
       setError((cause as Error).message)
     }
   }, [hostId, request])
 
+  const ready = availability.available && !availability.ownAccount
   useEffect(() => {
-    if (availability.available) void load()
-  }, [availability.available, load])
+    if (ready) void load()
+  }, [ready, load])
+
+  const chosen = connectable.find((one) => one.carrier === form.carrier) ?? connectable[0]
+  const credentialsFlow = chosen?.flow === 'credentials'
+  const openConnect = () => {
+    const first = connectable[0]
+    if (first) setForm((current) => ({ ...current, carrier: first.carrier }))
+    setCredentials({})
+    setConnecting(true)
+  }
 
   const handleActive = async (account: ProviderCarrierAccount, active: boolean) => {
     try {
@@ -107,14 +127,16 @@ export function CarrierAccountsCard(props: ShippingSettingsWidgetProps) {
     setBusy(true)
     try {
       const answer = await request<{ authorizeUrl?: string }>(SHIPPING_API_ROUTES.carrierAccountsConnect, {
-        body: {
-          hostId,
-          carrier: form.carrier,
-          accountNumber: form.accountNumber,
-          contact: { name: form.name, company: form.company, email: form.email, phone: form.phone },
-          address: form.address,
-          returnTo: typeof window === 'undefined' ? '' : window.location.href,
-        },
+        body: credentialsFlow
+          ? { hostId, carrier: chosen?.carrier, credentials }
+          : {
+              hostId,
+              carrier: chosen?.carrier ?? form.carrier,
+              accountNumber: form.accountNumber,
+              contact: { name: form.name, company: form.company, email: form.email, phone: form.phone },
+              address: form.address,
+              returnTo: typeof window === 'undefined' ? '' : window.location.href,
+            },
       })
       setConnecting(false)
       if (answer.authorizeUrl) {
@@ -130,7 +152,7 @@ export function CarrierAccountsCard(props: ShippingSettingsWidgetProps) {
     }
   }
 
-  if (!availability.available) return null
+  if (!ready) return null
 
   return (
     <CardDisplay
@@ -140,11 +162,11 @@ export function CarrierAccountsCard(props: ShippingSettingsWidgetProps) {
         anchor: '#carrier-accounts',
         title: 'Carrier accounts',
         excerpt:
-          'The carrier accounts your labels and checkout rates come from. Connect your own UPS or FedEx account to ship on its rates; labels on it are billed to you by the carrier.',
+          'The carrier accounts your labels and checkout rates come from. Connect a carrier account of your own to ship on its rates; labels on it are billed to you by the carrier.',
       })}
       HeaderProps={
         canConnect
-          ? { action: <Button onClick={() => setConnecting(true)}>{'Connect your own account'}</Button> }
+          ? { action: <Button onClick={openConnect}>{'Connect your own account'}</Button> }
           : undefined
       }
       contentGutterX
@@ -154,11 +176,13 @@ export function CarrierAccountsCard(props: ShippingSettingsWidgetProps) {
       <Stack spacing={1}>
         {(accounts ?? []).map((account) => (
           <Stack key={account.id} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <Switch
-              checked={account.active}
-              onChange={(event) => handleActive(account, event.target.checked)}
-              slotProps={{ input: { 'aria-label': `Use ${account.carrierName}` } }}
-            />
+            {canToggle ? (
+              <Switch
+                checked={account.active}
+                onChange={(event) => handleActive(account, event.target.checked)}
+                slotProps={{ input: { 'aria-label': `Use ${account.carrierName}` } }}
+              />
+            ) : null}
             <Typography sx={{ flex: 1 }}>
               {account.carrierName}
               {account.accountNumber ? ` · ${account.accountNumber}` : ''}
@@ -186,38 +210,80 @@ export function CarrierAccountsCard(props: ShippingSettingsWidgetProps) {
             <TextField
               select
               label="Carrier"
-              value={form.carrier}
-              onChange={(event) => setForm({ ...form, carrier: event.target.value as ConnectableCarrier })}
+              value={chosen?.carrier ?? ''}
+              onChange={(event) => {
+                setForm({ ...form, carrier: event.target.value as ConnectableCarrier })
+                setCredentials({})
+              }}
             >
-              {CARRIERS.map((carrier) => (
-                <MenuItem key={carrier.id} value={carrier.id}>
+              {connectable.map((carrier) => (
+                <MenuItem key={carrier.carrier} value={carrier.carrier}>
                   {carrier.label}
                 </MenuItem>
               ))}
             </TextField>
-            <TextField
-              label="Account number"
-              value={form.accountNumber}
-              onChange={(event) => setForm({ ...form, accountNumber: event.target.value })}
-            />
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-              <TextField label="Account holder" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} sx={{ flex: 1 }} />
-              <TextField label="Company" value={form.company} onChange={(event) => setForm({ ...form, company: event.target.value })} sx={{ flex: 1 }} />
-            </Stack>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-              <TextField label="Email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} sx={{ flex: 1 }} />
-              <TextField label="Phone" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} sx={{ flex: 1 }} />
-            </Stack>
-            <Typography variant="subtitle2">{'Billing address on the account'}</Typography>
-            <AddressFields value={form.address} onChange={(address) => setForm({ ...form, address })} withName={false} />
-            {form.carrier === 'ups' ? (
-              <Alert severity="info">{'UPS asks you to sign in at ups.com to finish connecting.'}</Alert>
-            ) : null}
+            {credentialsFlow ? (
+              <Fragment>
+                {chosen.fields.map((field) =>
+                  field.checkbox ? (
+                    <FormControlLabel
+                      key={field.key}
+                      control={
+                        <Checkbox
+                          checked={credentials[field.key] === 'true'}
+                          onChange={(event) =>
+                            setCredentials({ ...credentials, [field.key]: event.target.checked ? 'true' : '' })
+                          }
+                        />
+                      }
+                      label={field.label}
+                    />
+                  ) : (
+                    <TextField
+                      key={field.key}
+                      label={field.label}
+                      type={field.secret ? 'password' : 'text'}
+                      autoComplete="off"
+                      value={credentials[field.key] ?? ''}
+                      onChange={(event) => setCredentials({ ...credentials, [field.key]: event.target.value })}
+                    />
+                  ),
+                )}
+                <Typography variant="caption" color="text.secondary">
+                  {'Sent to the carrier platform to connect the account; not kept here.'}
+                </Typography>
+              </Fragment>
+            ) : (
+              <Fragment>
+                <TextField
+                  label="Account number"
+                  value={form.accountNumber}
+                  onChange={(event) => setForm({ ...form, accountNumber: event.target.value })}
+                />
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                  <TextField label="Account holder" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} sx={{ flex: 1 }} />
+                  <TextField label="Company" value={form.company} onChange={(event) => setForm({ ...form, company: event.target.value })} sx={{ flex: 1 }} />
+                </Stack>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                  <TextField label="Email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} sx={{ flex: 1 }} />
+                  <TextField label="Phone" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} sx={{ flex: 1 }} />
+                </Stack>
+                <Typography variant="subtitle2">{'Billing address on the account'}</Typography>
+                <AddressFields value={form.address} onChange={(address) => setForm({ ...form, address })} withName={false} />
+                {chosen?.carrier === 'ups' ? (
+                  <Alert severity="info">{'UPS asks you to sign in at ups.com to finish connecting.'}</Alert>
+                ) : null}
+              </Fragment>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConnecting(false)}>{'Cancel'}</Button>
-          <Button variant="contained" disabled={busy || !form.accountNumber} onClick={handleConnect}>
+          <Button
+            variant="contained"
+            disabled={busy || !chosen || (credentialsFlow ? !Object.values(credentials).some((value) => value.trim()) : !form.accountNumber)}
+            onClick={handleConnect}
+          >
             {busy ? 'Connecting…' : 'Connect'}
           </Button>
         </DialogActions>
