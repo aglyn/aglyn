@@ -25,7 +25,8 @@ import { SHIPPING_COLLECTIONS } from '../constants/bundle-common'
 import { TRACKING_PROGRESS } from '../model/tracking-status'
 import type { ShippingProviderId } from '../providers/types'
 import { openShippingAccount } from './account-store'
-import { readShippingConfig } from './config'
+import { isShippingSurfaceConfigured } from './config'
+import { resolveOrgShippingConfig } from './own-accounts'
 import { orgRef, shippingDb } from './db'
 import { resolveShippingSite } from './site-context'
 
@@ -78,7 +79,8 @@ export function providerCarrierToken(providerId: ShippingProviderId, carrier: st
   }
   const row = table[key]
   if (!row) return null
-  return providerId === 'shippo' ? row[0] : row[1]
+  if (providerId === 'shippo') return row[0]
+  return providerId === 'easypost' ? row[1] : null
 }
 
 /**
@@ -87,12 +89,15 @@ export function providerCarrierToken(providerId: ShippingProviderId, carrier: st
  */
 export async function onShipmentAnnounced(announcement: PluginShipmentAnnouncement): Promise<void> {
   if (announcement.labelRef || !announcement.trackingNumber || !announcement.carrier) return
-  const configured = readShippingConfig()
-  if (!configured.configured) return
-  const carrier = providerCarrierToken(configured.config.providerId, announcement.carrier)
-  if (!carrier) return
+  if (!isShippingSurfaceConfigured()) return
   const site = await resolveShippingSite(announcement.hostId)
   if (!site) return
+  const configured = await resolveOrgShippingConfig(site.orgId)
+  // The merchant's own Easyship or Sendcloud account (AGL-3632) follows only
+  // the parcels it labelled, and reports them by its own webhook.
+  if (!configured.configured || configured.config.ownAccount) return
+  const carrier = providerCarrierToken(configured.config.providerId, announcement.carrier)
+  if (!carrier) return
   const account = await openShippingAccount(site.orgId, configured.config).catch(() => null)
   if (!account) return
   const ref = shippingDb()
@@ -127,6 +132,11 @@ export type TrackingEventOutcome = 'recorded' | 'ignored' | 'stale' | 'unknown_p
  */
 export async function applyTrackingEvent(event: {
   providerId: ShippingProviderId
+  /**
+   * The workspace a per-workspace webhook spoke for (AGL-3632): a parcel of
+   * another workspace's is not this one's to move.
+   */
+  orgId?: string
   trackingNumber: string
   status: PluginTrackingStatus
   detail?: string
@@ -138,7 +148,9 @@ export async function applyTrackingEvent(event: {
   const outcome = await shippingDb().runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref)
     const tracker = snapshot.data() as StoredTracker | undefined
-    if (!tracker) return { result: 'unknown_parcel' as const }
+    if (!tracker || (event.orgId !== undefined && tracker.orgId !== event.orgId)) {
+      return { result: 'unknown_parcel' as const }
+    }
     if (tracker.lastEventAtMs && event.atMs < tracker.lastEventAtMs) return { result: 'stale' as const }
     if (tracker.status && TRACKING_PROGRESS[event.status] < TRACKING_PROGRESS[tracker.status]) {
       return { result: 'stale' as const }

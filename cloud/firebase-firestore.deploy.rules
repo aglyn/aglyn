@@ -894,6 +894,16 @@ allow read, write: if false;
 
 
 
+match /shippingConnections/{kind} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
 
 
 
@@ -2318,6 +2328,18 @@ allow read, write: if false;
 
 
 match /commerceShipStationConnections/{hostId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+match /commerceShippingEasyConnections/{hostId}/{document=**} {
 allow read, write: if false;
 }
 

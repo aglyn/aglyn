@@ -21,8 +21,9 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { isEmailVerified, isImpersonationSession } from '@aglyn/tenant-data-admin/server/firebase-admin'
-import { readShippingConfig, SHIPPING_NOT_CONFIGURED_MESSAGE, type ShippingConfig } from './config'
+import { isShippingSurfaceConfigured, SHIPPING_NOT_CONFIGURED_MESSAGE, type ShippingConfig } from './config'
 import { isDocumentId } from './db'
+import { resolveOrgShippingConfig } from './own-accounts'
 import type { ShippingActor } from './labels'
 import { resolveShippingSite } from './site-context'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
@@ -34,6 +35,7 @@ import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refus
  * cannot know is the member:
  *
  *   404  the deployment is not configured — the surface does not exist
+ *   409  the workspace has no platform to ship through yet (AGL-3632)
  *   401  no bearer token, or one the verifier refused
  *   403  unverified address (impersonation exempt)
  *   400  no site named
@@ -68,12 +70,36 @@ export interface ShippingGateResult {
   body: Record<string, unknown>
 }
 
+export type ShippingMemberGateResult = Omit<ShippingGateResult, 'config'>
+
+/**
+ * The gate for a route that needs a shipping platform: the member's, then
+ * the platform the WORKSPACE ships through — its own Easyship or Sendcloud
+ * account when it connected one (AGL-3632), the deployment's provider
+ * otherwise. A workspace with neither is told to connect one (409).
+ */
 export async function shippingGate(
   request: Request,
   options: { role: ShippingRole; orgPermission?: string },
 ): Promise<ShippingGateResult | Response> {
-  const configured = readShippingConfig()
-  if (!configured.configured) return shippingError(404, SHIPPING_NOT_CONFIGURED_MESSAGE)
+  const member = await shippingMemberGate(request, options)
+  if (member instanceof Response) return member
+  const resolved = await resolveOrgShippingConfig(member.actor.orgId)
+  if (!resolved.configured) {
+    return shippingError(409, 'Connect a shipping account for this workspace first.')
+  }
+  return { ...member, config: resolved.config }
+}
+
+/**
+ * The member half alone, for a route that works without a platform: the
+ * merchant's own-account connections are made before there is one.
+ */
+export async function shippingMemberGate(
+  request: Request,
+  options: { role: ShippingRole; orgPermission?: string },
+): Promise<ShippingMemberGateResult | Response> {
+  if (!isShippingSurfaceConfigured()) return shippingError(404, SHIPPING_NOT_CONFIGURED_MESSAGE)
   const authorization = request.headers.get('authorization') ?? ''
   if (!authorization.startsWith('Bearer ')) return shippingError(401, 'Unauthenticated')
   let decoded
@@ -111,7 +137,6 @@ export async function shippingGate(
       email: String(decoded.email ?? ''),
       name: String(decoded['name'] ?? decoded.email ?? 'Merchant'),
     },
-    config: configured.config,
     body,
   }
 }

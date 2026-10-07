@@ -502,7 +502,20 @@ export function registerCommerceConsoleApi(): void {
     },
     { machine: true },
   )
-  // The ShipStation card's connect, show, new password and disconnect.
+  // ShippingEasy's shipment callback (AGL-3633): ShippingEasy's servers post
+  // each label bought for an order this store sent them, signed with the
+  // merchant's own API secret, so it is a MACHINE's route like ShipStation's
+  // above and asks the same gates once the signature proves the site.
+  registerPluginApiRoute(
+    'commerce/shippingeasy/:hostId',
+    {
+      web: async (request, context) =>
+        (await import('./server/shippingeasy')).shippingEasyRoute(request, context),
+    },
+    { machine: true },
+  )
+  // The ShipStation and ShippingEasy cards' connect, show, new password,
+  // send open orders and disconnect.
   registerPluginApiRoute('commerce/shipping-connectors', async (req, res) =>
     (await import('./server/shipping-connectors')).shippingConnectorsHandler(req, res),
   )

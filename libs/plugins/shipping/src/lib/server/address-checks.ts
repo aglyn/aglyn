@@ -22,7 +22,8 @@ import type {
 import { SHIPPING_COLLECTIONS } from '../constants/bundle-common'
 import { isCompleteAddress, normalizeShippingAddress } from '../model/shipping-settings'
 import { openShippingAccount } from './account-store'
-import { readShippingConfig } from './config'
+import { isShippingSurfaceConfigured } from './config'
+import { resolveOrgShippingConfig } from './own-accounts'
 import { isDocumentId, orgRef } from './db'
 import { resolveShippingSite } from './site-context'
 
@@ -141,10 +142,13 @@ export async function checkPaidOrderAddress(envelope: PaidOrderEnvelope): Promis
   if (!isDocumentId(recordId) || !isDocumentId(envelope.hostId) || !address || !isCompleteAddress(address)) {
     return 'not-shipped'
   }
-  const configured = readShippingConfig()
-  if (!configured.configured) return 'not-available'
+  if (!isShippingSurfaceConfigured()) return 'not-available'
   const site = await resolveShippingSite(envelope.hostId)
   if (!site) return 'not-available'
+  const configured = await resolveOrgShippingConfig(site.orgId)
+  // The merchant's own Easyship or Sendcloud account (AGL-3632) checks no
+  // addresses here: Easyship bills each check, Sendcloud has none.
+  if (!configured.configured || configured.config.ownAccount) return 'not-available'
   if (await readAddressCheck(site.orgId, envelope.hostId, recordId)) return 'already'
   const account = await openShippingAccount(site.orgId, configured.config).catch(() => null)
   if (!account) return 'not-available'

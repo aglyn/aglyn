@@ -151,6 +151,8 @@ const PLUGIN_TOPICS = {
   commerceEndToEnd: '/guides/commerce-end-to-end',
   // The ShipStation card under the store's Settings (AGL-3613).
   shipStation: '/commerce-and-bookings/commerce/use-shipstation',
+  // The ShippingEasy card under the store's Settings (AGL-3633).
+  shippingEasy: '/commerce-and-bookings/commerce/use-shippingeasy',
   companies: '/content-and-data/crm/companies',
   consoleTour: '/getting-started/console-tour',
   contactActivities: '/content-and-data/crm/activities',

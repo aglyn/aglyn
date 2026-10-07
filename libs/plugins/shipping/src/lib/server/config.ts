@@ -22,7 +22,8 @@ import {
 import { createEasypostProvider } from '../providers/easypost'
 import type { ProviderFetch } from '../providers/http'
 import { createShippoProvider } from '../providers/shippo'
-import type { ShippingProvider, ShippingProviderId } from '../providers/types'
+import type { ProviderAccount, ShippingProvider, ShippingProviderId } from '../providers/types'
+import { OWN_ACCOUNT_KINDS, type OwnAccountKind } from '../model/own-accounts'
 
 /**
  * THE ONE MODULE THAT READS SHIPPING'S CREDENTIALS FROM THE ENVIRONMENT
@@ -56,6 +57,7 @@ export const SHIPPING_ENV = {
   shippoWebhookToken: 'SHIPPO_WEBHOOK_TOKEN',
   shippoWebhookHmac: 'SHIPPO_WEBHOOK_HMAC_SECRET',
   easypostWebhookSecret: 'EASYPOST_WEBHOOK_SECRET',
+  ownAccountProviders: 'SHIPPING_OWN_ACCOUNT_PROVIDERS',
 } as const
 
 export interface ShippingConfig {
@@ -64,6 +66,13 @@ export interface ShippingConfig {
   keyring: SecretBoxKeyring
   /** Whether the provider credential is a test one: labels cost nothing. */
   testMode: boolean
+  /**
+   * Set when the workspace ships on an account of its OWN (AGL-3632): the
+   * merchant's Easyship or Sendcloud credentials, opened. Labels are billed
+   * to the merchant by that platform, so nothing is recovered here, and no
+   * account is ever opened for the workspace.
+   */
+  ownAccount?: ProviderAccount
 }
 
 export type ShippingConfigResult =
@@ -138,6 +147,51 @@ export function readShippoWebhookSecrets(): { token: string; hmacSecret: string 
 /** EasyPost's webhook secret. */
 export function readEasypostWebhookSecret(): string {
   return env(SHIPPING_ENV.easypostWebhookSecret)
+}
+
+/** The deployment's sealing key, or `null` when it is unset or unusable. */
+export function readShippingKeyring(): SecretBoxKeyring | null {
+  const tokenKey = env(SHIPPING_ENV.tokenKey)
+  if (!tokenKey) return null
+  try {
+    return parseSecretBoxKeyring(tokenKey)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The merchant-account services this deployment offers (AGL-3632): the ones
+ * `SHIPPING_OWN_ACCOUNT_PROVIDERS` names (`easyship,sendcloud,shipperhq`),
+ * and none without the sealing key their credentials are kept under.
+ *
+ * Aglyn holds no account with any of them — each merchant brings their own
+ * — but every adapter is switched on by name, one at a time, once it has
+ * been tried against the vendor's live API with a real merchant account
+ * (the runbook on AGL-3632). Unnamed, a service shows nowhere.
+ */
+export function readOwnAccountKinds(): OwnAccountKind[] {
+  if (!readShippingKeyring()) return []
+  const named = new Set(
+    env(SHIPPING_ENV.ownAccountProviders)
+      .toLowerCase()
+      .split(/[\s,]+/)
+      .filter(Boolean),
+  )
+  return OWN_ACCOUNT_KINDS.filter((kind) => named.has(kind))
+}
+
+/** The `fetch` a provider built outside this module calls: the test seam's, or the global. */
+export function shippingFetch(): ProviderFetch {
+  return fetchOverride ?? ((input, init) => fetch(input, init))
+}
+
+/**
+ * Whether ANY shipping surface exists on this deployment: a platform
+ * provider, or a merchant-account service a workspace could connect.
+ */
+export function isShippingSurfaceConfigured(): boolean {
+  return readShippingConfig().configured || readOwnAccountKinds().length > 0
 }
 
 /** The sentence every route answers for an unconfigured deployment. */

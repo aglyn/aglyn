@@ -13553,6 +13553,8 @@ describe('shipping records are the server’s alone (AGL-3612)', () => {
     ['shippingHostSettings', HOST],
     ['shippingLabels', 'lbl_1'],
     ['shippingAddressChecks', `${HOST}__order-1`],
+    // The merchant's own Easyship, Sendcloud or ShipperHQ credentials (AGL-3632).
+    ['shippingConnections', 'easyship'],
   ]
   const TOP_DOCS = [
     ['shippingTrackers', 'trk_1'],
@@ -13782,5 +13784,58 @@ describe('sales channel feeds and connections are server-only (AGL-3637)', () =>
       await mustDeny(`a ${role} rewriting a feed token`, updateDoc(feedDoc(db), { token: 'x' }))
       await mustDeny(`a ${role} deleting a connection`, deleteDoc(connectionDoc(db)))
     }
+  })
+})
+
+describe('ShippingEasy keys and order records are server-only (AGL-3633)', () => {
+  const connection = (db) => doc(db, 'commerceShippingEasyConnections', HOST)
+  const record = (db) => doc(db, 'commerceShippingEasyConnections', HOST, 'orders', 'order-1')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(connection(context.firestore()), {
+        hostId: HOST,
+        apiKey: 'f9a7c8b6d5e4f3a2b1c0d9e8f7a6b5c4',
+        sealedApiSecret: 'sb1.tss1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        secretKeyId: 'tss1',
+        storeApiKey: 'c71dc6da574eea04e2c926906bcb4eec',
+        createdAtMs: 1,
+        createdBy: OWNER,
+      })
+      await setDoc(record(context.firestore()), { orderId: 'order-1', externalId: '1001', state: 'sent', updatedAtMs: 1 })
+    })
+  })
+
+  it('no client reads a site’s keys or what was sent: not its admin, not staff, not a stranger', async () => {
+    await mustDeny('the site owner reading the ShippingEasy connection', getDoc(connection(authed(OWNER))))
+    await mustDeny('a site editor reading the ShippingEasy connection', getDoc(connection(authed(EDITOR))))
+    await mustDeny('staff reading the ShippingEasy connection', getDoc(connection(authed(STAFF, { staff: true }))))
+    await mustDeny('a visitor reading the ShippingEasy connection', getDoc(connection(anon())))
+    await mustDeny('the site owner reading an order record', getDoc(record(authed(OWNER))))
+    await mustDeny(
+      'the site owner listing the order records',
+      getDocs(collection(authed(OWNER), 'commerceShippingEasyConnections', HOST, 'orders')),
+    )
+    await mustDeny(
+      'the site owner listing ShippingEasy connections',
+      getDocs(collection(authed(OWNER), 'commerceShippingEasyConnections')),
+    )
+  })
+
+  it('no client writes one: the console connects and disconnects on the Admin SDK', async () => {
+    await mustDeny(
+      'the site owner replacing the sealed secret',
+      setDoc(connection(authed(OWNER)), { hostId: HOST, apiKey: 'mine', sealedApiSecret: 'x' }),
+    )
+    await mustDeny(
+      'staff replacing the store key',
+      updateDoc(connection(authed(STAFF, { staff: true })), { storeApiKey: 'x' }),
+    )
+    await mustDeny('the site owner disconnecting from the browser', deleteDoc(connection(authed(OWNER))))
+    await mustDeny('the site owner marking an order sent', setDoc(record(authed(OWNER)), { state: 'sent' }))
+    await mustDeny(
+      'a stranger minting a connection for another site',
+      setDoc(doc(authed('uid-stranger'), 'commerceShippingEasyConnections', 'other-host'), { apiKey: 'x' }),
+    )
   })
 })

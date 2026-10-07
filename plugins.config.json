@@ -2735,7 +2735,7 @@
       ],
       "catalog": {
         "order": 20,
-        "$comment": "Carrier rates at checkout, labels, tracking and address checks for the commerce plugin's orders (AGL-3612), through core's shipping-rate and shipment-record seams; it never imports commerce. No `requires` edge: a workspace cannot switch it off, so an edge to commerce would refuse every set that switches commerce off; instead it runs only on a site where commerce is on (site-context.ts). On for every workspace like AI, off for a site only when that site says so, and no release flag: every surface hides itself until the deployment names a provider (SHIPPO_API_TOKEN or EASYPOST_API_KEY, with SHIPPING_TOKEN_KEY).",
+        "$comment": "Carrier rates at checkout, labels, tracking and address checks for the commerce plugin's orders (AGL-3612), through core's shipping-rate and shipment-record seams; it never imports commerce. No `requires` edge: a workspace cannot switch it off, so an edge to commerce would refuse every set that switches commerce off; instead it runs only on a site where commerce is on (site-context.ts). On for every workspace like AI, off for a site only when that site says so, and no release flag: every surface hides itself until the deployment names a provider (SHIPPO_API_TOKEN or EASYPOST_API_KEY, with SHIPPING_TOKEN_KEY), or offers a merchant's own Easyship, Sendcloud or ShipperHQ account (SHIPPING_OWN_ACCOUNT_PROVIDERS with SHIPPING_TOKEN_KEY, AGL-3632).",
         "label": "Shipping",
         "alwaysOnForWorkspace": true,
         "description": "Carrier rates at checkout, shipping labels and tracking for physical orders, where the platform has connected a carrier provider.",

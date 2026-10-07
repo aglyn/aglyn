@@ -37,7 +37,18 @@ import type { PluginTrackingStatus } from '@aglyn/aglyn/plugin-manager/plugin-sh
  * sides of this contract; an adapter converts at its own edge.
  */
 
-export type ShippingProviderId = 'shippo' | 'easypost'
+/** A carrier platform the PLATFORM holds an account with, one child per workspace. */
+export type PlatformProviderId = 'shippo' | 'easypost'
+
+/**
+ * A carrier platform the MERCHANT holds the account with (AGL-3632): the
+ * workspace connects its own Easyship or Sendcloud API credentials, labels
+ * are billed to it by that platform, and nothing passes through Aglyn's
+ * books. See `server/own-accounts.ts`.
+ */
+export type OwnAccountProviderId = 'easyship' | 'sendcloud'
+
+export type ShippingProviderId = PlatformProviderId | OwnAccountProviderId
 
 /** How a label is printed. */
 export type LabelFormat = 'pdf_4x6' | 'pdf_letter' | 'zpl'
@@ -54,8 +65,10 @@ export interface ProviderAccount {
   providerId: ShippingProviderId
   /** Shippo: the managed account's object id. EasyPost: the child user's id. */
   accountId: string
-  /** EasyPost: the child user's production key. Shippo: absent. */
+  /** EasyPost: the child user's production key. Easyship, Sendcloud: the merchant's own key. Shippo: absent. */
   apiKey?: string
+  /** Sendcloud: the merchant's API secret, the other half of its Basic credential. */
+  apiSecret?: string
 }
 
 /** A customs line, for a parcel that crosses a border. */
@@ -123,7 +136,14 @@ export interface ProviderLabel {
   shipmentId: string
   trackingNumber: string
   trackingUrl?: string
+  /**
+   * A public `https` address of the label file. Empty when the provider only
+   * serves it to an authenticated caller; then `documentRef` names it for
+   * {@link ShippingProvider.labelDocument}, and the plugin serves it itself.
+   */
   labelUrl: string
+  /** The provider's handle on the label file, when `labelUrl` is empty. */
+  documentRef?: string
   commercialInvoiceUrl?: string
   carrier: string
   serviceKey: string
@@ -157,12 +177,48 @@ export interface ProviderCarrierAccount {
   authorization: 'connected' | 'pending' | 'disconnected'
 }
 
-/** The carriers a merchant may connect an account of their own for. */
-export type ConnectableCarrier = 'ups' | 'fedex'
+/**
+ * The carriers a merchant may connect an account of their own for with the
+ * account-holder form: an account number, a contact and a billing address.
+ */
+export type ContactFormCarrier = 'ups' | 'fedex'
+
+/**
+ * A carrier a merchant may connect: one of the contact-form carriers, or a
+ * provider's own carrier type (EasyPost's `DhlExpressAccount`) connected
+ * with the credential fields the provider names for it.
+ */
+export type ConnectableCarrier = string
+
+/** One credential a provider asks for to connect a carrier account. */
+export interface CarrierCredentialField {
+  key: string
+  label: string
+  /** Typed as a password, and never echoed back. */
+  secret: boolean
+  /** A yes-or-no field. */
+  checkbox?: boolean
+}
+
+/** A carrier the merchant can connect on this provider, and how. */
+export interface ConnectableCarrierForm {
+  carrier: ConnectableCarrier
+  label: string
+  /**
+   * `contact`: account number, account holder and billing address (Shippo's
+   * UPS and FedEx). `credentials`: the provider's own fields for the carrier.
+   */
+  flow: 'contact' | 'credentials'
+  fields: CarrierCredentialField[]
+}
 
 export interface ConnectCarrierInput {
   carrier: ConnectableCarrier
   accountNumber: string
+  /** The `credentials` flow's values, keyed as the form's fields. */
+  credentials?: Record<string, string>
+  /** A name the merchant reads the account by. */
+  description?: string
   /** The account holder, as the carrier knows them. */
   contact: {
     name: string
@@ -198,6 +254,11 @@ export interface ShippingProvider {
       insuranceCents?: number
       /** Ours, for the provider's records and its webhooks. */
       reference: string
+      /**
+       * What was quoted, for a provider whose rates are not tied to a
+       * shipment it keeps (Sendcloud): the label is announced from this.
+       */
+      shipment?: Omit<ProviderShipmentInput, 'signal'>
     },
   ): Promise<ProviderLabel>
   voidLabel(
@@ -218,6 +279,8 @@ export interface ShippingProvider {
     address: PluginShippingAddress,
   ): Promise<PluginShippingAddressCheck>
   listCarrierAccounts(account: ProviderAccount): Promise<ProviderCarrierAccount[]>
+  /** The carriers a merchant can connect an account of their own for, and how; absent is Shippo's two. */
+  connectableCarriers?(account: ProviderAccount): Promise<ConnectableCarrierForm[]>
   /** Connects a carrier account of the merchant's own; absent where the provider cannot. */
   connectCarrierAccount?(
     account: ProviderAccount,
@@ -228,6 +291,16 @@ export interface ShippingProvider {
     carrierAccountId: string,
     active: boolean,
   ): Promise<void>
+  /**
+   * Checks a merchant's own credentials (AGL-3632) and names the account they
+   * open, before they are kept. Only an own-account provider has it.
+   */
+  verifyCredentials?(account: ProviderAccount): Promise<{ accountName: string }>
+  /** The label file a label's `documentRef` names, for a provider that serves it only to its caller. */
+  labelDocument?(
+    account: ProviderAccount,
+    input: { documentRef: string; shipmentId: string },
+  ): Promise<{ contentType: string; body: Uint8Array }>
 }
 
 /** A provider refused, or could not be reached. `status` is HTTP's, 0 for a network failure. */
@@ -235,7 +308,8 @@ export class ShippingProviderError extends Error {
   constructor(
     message: string,
     readonly status: number,
-    readonly providerId: ShippingProviderId,
+    /** The platform, or `shipperhq` for the checkout rate-rules service (AGL-3632). */
+    readonly providerId: ShippingProviderId | 'shipperhq',
     /** The provider's own words, safe to show a merchant. */
     readonly detail?: string,
   ) {
