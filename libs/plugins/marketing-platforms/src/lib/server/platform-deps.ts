@@ -24,6 +24,7 @@ import {
   isEmailVerified,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { getLockdownVerdict, lockdownRefusal } from '@aglyn/tenant-data-admin/server/lockdown'
 import { logOrgActivity } from '@aglyn/tenant-data-admin/server/organizations'
 import {
@@ -110,7 +111,8 @@ export async function marketingPlatformsGate(
   let decoded
   try {
     decoded = await firebaseAdmin.app().auth().verifyIdToken(authorization.slice('Bearer '.length))
-  } catch {
+  } catch (error) {
+    if (!isRefusedIdToken(error)) throw error
     return fail(401, 'Unauthenticated')
   }
   if (!isEmailVerified(decoded) && !isImpersonationSession(decoded)) {
