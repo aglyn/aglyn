@@ -17,7 +17,7 @@
 
 'use client'
 
-import { canManageOrg } from '@aglyn/aglyn'
+import { canManageOrg, defaultMediaScopeOf } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { MenuItem, Skeleton, Stack, TextField } from '@mui/material'
@@ -27,36 +27,82 @@ import useCurrentOrg from '../../hooks/use-current-org'
 import { useOrgScope } from '../../hooks/use-org-scope'
 import useOrgSettingsRequest from '../../hooks/use-org-settings-request'
 
+/** Which of the two defaults a card sets (AGL-3662). */
+export type OrgDefaultSharingKind = 'media' | 'data'
+
 /**
- * What a NEW dataset or upload starts out shared with (AGL-1048).
+ * Everything that differs between the two cards. They were one card and one
+ * field, `defaultResourceScope`, until AGL-3662 split media out: an org can
+ * want its photos on every site and its datasets on one.
+ */
+const SHARING_KINDS = {
+  media: {
+    header: 'Default sharing for new media',
+    label: 'New files and folders are shared with',
+    action: 'set-default-media-scope',
+    field: 'defaultMediaScope',
+    help: docsHelp('media', {
+      anchor: '#who-an-asset-is-shared-with',
+      excerpt:
+        'Sets what a NEW upload or folder is shared with. Existing ' +
+        'ones keep the sharing they already have.',
+    }),
+    helperText:
+      'Only affects files and folders added from now on. Added from the ' +
+      'organization Media page there is no site to limit them to, so ' +
+      'those stay shared with all sites either way.',
+  },
+  data: {
+    header: 'Default sharing for new datasets',
+    label: 'New datasets are shared with',
+    action: 'set-default-resource-scope',
+    field: 'defaultResourceScope',
+    help: docsHelp('datasets', {
+      anchor: '#who-a-dataset-is-shared-with',
+      excerpt:
+        'Sets what a NEW dataset is shared with. Existing ones keep the ' +
+        'sharing they already have.',
+    }),
+    helperText:
+      'Only affects datasets created from now on, on a site’s Data page. ' +
+      'Created here there is no site to limit them to, so those stay ' +
+      'shared with all sites either way.',
+  },
+} as const
+
+/**
+ * What a NEW dataset, or a new upload or folder, starts out shared with
+ * (AGL-1048) — one card per kind, each on the page where those things are
+ * created: media on the organization Media page, datasets on the
+ * organization Data page.
  *
  * Changes nothing that already exists — narrowing a whole library from a
  * toggle would break live pages with no confirmation, which is exactly what
  * the per-resource "Shared with" flow prevents.
  *
- * ## Why this lives on the media page and not in organization settings
+ * ## Why this is not in organization settings
  *
  * It was a card inside `org-profile-card.component.tsx`, so it rendered under
  * Settings → Profile beside the logo and the contact email. It is not
  * organization identity: it is the default `visibleTo` that
  * `defaultScopeForNewResource` stamps on the next upload, folder or dataset,
  * and the place someone reasons about that is the library those things land
- * in. The organization Data page would hide it from exactly the orgs that
- * still need it — that page refuses without the `dataStore` entitlement, and
- * media uploads are not entitlement-gated.
+ * in.
  *
  * ## Why the value comes from the org document
  *
- * `defaultResourceScope` is stored on `orgs/{orgId}`, and the membership
- * reverse-index entry behind `useOrgScope().currentOrg` does not carry it —
+ * Both fields are stored on `orgs/{orgId}`, and the membership reverse-index
+ * entry behind `useOrgScope().currentOrg` does not carry them —
  * `UserOrgMembership` has `role`, `orgName`, `slug` and `orgWide`, and
  * nothing else. Reading it from there answered `undefined` on every render,
  * so the control displayed "All sites" for an org actually stored as `host`:
- * it reported the default rather than the setting. This reads the same field
- * the media library reads when it stamps a new folder, so the control and the
- * behavior cannot disagree.
+ * it reported the default rather than the setting. This reads the same value
+ * the creators read when they stamp a new resource — `defaultMediaScopeOf`
+ * for media, which falls back to the dataset field while media is unset — so
+ * the control and the behavior cannot disagree.
  */
-export function OrgDefaultSharingCard() {
+export function OrgDefaultSharingCard(props: { kind: OrgDefaultSharingKind }) {
+  const kind = SHARING_KINDS[props.kind]
   const { currentOrg } = useOrgScope()
   const { org, ready: orgReady } = useCurrentOrg()
   const { enqueueSnackbar } = useSnackbar()
@@ -64,14 +110,15 @@ export function OrgDefaultSharingCard() {
   const canManage = canManageOrg(currentOrg?.role)
   const [busy, setBusy] = useState(false)
 
-  const scope = String((org as any)?.defaultResourceScope ?? 'org')
+  const stored =
+    props.kind === 'media'
+      ? defaultMediaScopeOf(org as any)
+      : (org as any)?.defaultResourceScope
+  const scope = String(stored ?? 'org')
   const handleChange = async (value: string) => {
     setBusy(true)
     try {
-      await settingsRequest({
-        action: 'set-default-resource-scope',
-        defaultResourceScope: value,
-      })
+      await settingsRequest({ action: kind.action, [kind.field]: value })
       enqueueSnackbar('Default sharing updated', {
         variant: 'success',
         persist: false,
@@ -87,13 +134,8 @@ export function OrgDefaultSharingCard() {
 
   return (
     <CardDisplay
-      header={'Default sharing for new data and media'}
-      help={docsHelp('media', {
-        anchor: '#who-an-asset-is-shared-with',
-        excerpt:
-          'Sets what a NEW dataset or upload is shared with. Existing ' +
-          'ones keep the sharing they already have.',
-      })}
+      header={kind.header}
+      help={kind.help}
       contentGutterX
       contentGutterY
       sx={{ mb: 3 }}
@@ -109,15 +151,11 @@ export function OrgDefaultSharingCard() {
           <TextField
             select
             size="small"
-            label="New datasets and files are shared with"
+            label={kind.label}
             value={scope}
             disabled={!canManage || busy}
             onChange={(event) => void handleChange(event.target.value)}
-            helperText={
-              'Only affects things created from now on. Created from ' +
-              'an organization page there is no site to limit them to, ' +
-              'so those stay shared with all sites either way.'
-            }
+            helperText={kind.helperText}
           >
             <MenuItem value="org">{'All sites'}</MenuItem>
             <MenuItem value="host">

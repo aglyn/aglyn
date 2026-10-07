@@ -39,7 +39,7 @@ it in the console's model builder. You *can* send one on write (see
 
 A dataset created over the API is shared with **the whole organization**, so every
 site can bind to it. That is not configurable here. In the console, the workspace's
-**Default sharing for new data and media** can start a dataset on one site, but only
+**Default sharing for new datasets** can start a dataset on one site, but only
 when it is created on that site's **Data** page. An API key is an organization
 credential with no site in context, so the setting has no site to narrow to. If you
 need a dataset scoped to one site, create it here and narrow its sharing in the

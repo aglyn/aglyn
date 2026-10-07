@@ -171,8 +171,9 @@ dataset decides which sites can see it:
 - **Selected sites…** — pick the sites that share it, up to 30.
 
 Where a new dataset starts depends on where you create it and on your workspace's
-**Default sharing for new data and media**, the setting at the top of the workspace
-[**Media** page](../media/overview.md#who-an-asset-is-shared-with):
+**Default sharing for new datasets**, the setting at the top of the organization
+**Data** page (new media files have a default of their own, on the workspace
+[**Media** page](../media/overview.md#who-an-asset-is-shared-with)):
 
 - **Created on a site's Data page** — it follows that setting. Set to **All sites**, the
   dataset starts on **All sites**. Set to **Only the site they were created in**, it

@@ -177,17 +177,28 @@ export interface AglynOrganization extends AglynDocument {
   suspended?: boolean
   erasureRequestedAt?: ITimestamp | null
   /**
-   * Scope applied to newly created datasets and media when nobody chooses
-   * (AGL-1048). `'org'` — the default and today's behavior — shares them
-   * with every site. `'host'` starts them private to the site they were
-   * created in, which is what an agency running client sites wants: safe
-   * by default rather than safe by discipline.
+   * Scope applied to newly created datasets when nobody chooses (AGL-1048). `'org'` — the default
+   * and today's behavior — shares them with every site. `'host'` starts them
+   * private to the site they were created in, which is what an agency
+   * running client sites wants: safe by default rather than safe by
+   * discipline.
    *
    * Only meaningful when there IS a site in context. Created from the org
-   * Media or Data page there is no host to scope to, so those stay `'org'`
-   * either way.
+   * Data page there is no host to scope to, so those stay `'org'` either way.
+   *
+   * New media follows `defaultMediaScope` and new CRM records
+   * `crm.defaultRecordScope` instead; each falls back to this only while it
+   * is unset, because this one field decided all three before AGL-3662.
    */
   defaultResourceScope?: 'org' | 'host'
+  /**
+   * The same choice for new uploads and media folders (AGL-3662), set
+   * separately from datasets: an org can keep its rate card on one site
+   * while every site shares its photos. Unset reads `defaultResourceScope`
+   * — see `defaultMediaScopeOf` — which is what every org stored before the
+   * two were split.
+   */
+  defaultMediaScope?: 'org' | 'host'
   /** The CRM's organization-wide settings (AGL-2613) — see `OrgCrmSettings`. */
   crm?: OrgCrmSettings
   /** The plan staff asked the workspace to move to (AGL-3466). */

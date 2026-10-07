@@ -153,7 +153,7 @@ export async function leadReadTokensForHost(
 
 /**
  * The `visibleTo` a capture on this site stamps: the consent group's sites,
- * or `['org']` where the org set `defaultResourceScope`.
+ * or `['org']` where the org's CRM default (`crmDefaultScopeOf`) is `'org'`.
  *
  * Widened by the capture, never by the lookup — a site that has never
  * captured this person gains nothing by finding them, which is what keeps an
