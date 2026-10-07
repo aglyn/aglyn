@@ -10,8 +10,16 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — faster fonts on every site (newest)
+## October 2026 — a font picker, your own fonts, and faster fonts on every site (newest)
 
+- **[Font picker](building-sites/theme-builder/edit-your-theme.md#fonts)** — browse every
+  Google font in the theme editor, with search, style filters, previews in your own
+  site's words, pairing suggestions for headings and body text, and the download size
+  each choice adds to your pages.
+- **[Upload your own font](building-sites/theme-builder/edit-your-theme.md#upload-your-own-font)** —
+  add WOFF2, WOFF, TTF or OTF files to your media library from the theme editor. Each
+  file's license is checked, it is converted and trimmed for the web, and uploading the
+  same weight again replaces it.
 - **[Fonts load the way your text uses them](building-sites/theme-builder/edit-your-theme.md#set-colors-and-fonts)** —
   your published site now loads each font at the weights its headings and body text
   use, from your own address, as the smallest set of files. Text that shows before a
