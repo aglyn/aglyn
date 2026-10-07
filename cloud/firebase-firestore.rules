@@ -2304,6 +2304,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // The POS customer display (AGL-3608): pairing codes, display tokens and
+    // each register's display state, all stored by hash or by site+register
+    // and read and written only by /api/commerce/pos-display on the Admin
+    // SDK. A display state can hold the email or phone a customer typed for
+    // their receipt, so not even a signed-in site member reads it here; the
+    // cashier reads it through the same route, behind the register's gate.
+    match /posDisplayPairings/{codeHash} {
+      allow read, write: if false;
+    }
+    match /posDisplayTokens/{tokenHash} {
+      allow read, write: if false;
+    }
+    match /posDisplayStates/{stateId} {
+      allow read, write: if false;
+    }
+
     // Platform-wide operator settings written through audited staff routes
     // (AGL-2021). Today: `taxFiling`, which holds the jurisdiction this
     // deployment files in and the registration identifiers it files under.
@@ -3464,6 +3480,7 @@ service cloud.firestore {
               'authors', 'carts', 'memberPosts', 'pluginSettings',
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
+              'terminal', 'terminalReaders',
               'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
@@ -3537,6 +3554,12 @@ service cloud.firestore {
         //    one schedules mail to an address and time of the forger's choosing,
         //    a rewrite moves `nextStepIndex` or pushes `resumeAtMs` out, and a
         //    delete silently cancels a sequence. READ stays, like `checkouts`.
+        //  - `terminal` and `terminalReaders` (AGL-3607): the site's Stripe
+        //    Terminal Location and card readers. A reader document is what
+        //    makes a reader THIS site's, and `/api/commerce/pos-readers`
+        //    checks it before any payment is sent to a reader, so a forged
+        //    one would let a site drive a reader it does not own. READ stays,
+        //    for the settings card and the register's reader picker.
         //  - `stockHolds` (AGL-2356): the release index for the units a live
         //    checkout reserved, written in the same transaction as the holds.
         //    A delete strands stock until the TTL; a forgery releases holds it
@@ -3591,6 +3614,7 @@ service cloud.firestore {
               'checkouts',
               'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
+              'terminal', 'terminalReaders',
               'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
@@ -3643,6 +3667,7 @@ service cloud.firestore {
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
+              'terminal', 'terminalReaders',
               'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',

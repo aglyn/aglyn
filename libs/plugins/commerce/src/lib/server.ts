@@ -91,6 +91,9 @@ import { orderAnalyticsHandler } from './server/order-analytics'
 import { checkoutStatusHandler } from './server/checkout-status'
 import { posOrderHandler } from './server/pos-order'
 import { printersHandler } from './server/printers'
+import { posPaymentHandler } from './server/pos-payment'
+import { posReadersHandler } from './server/pos-readers'
+import { posDisplayHandler } from './server/pos-display'
 import {
   processAbandonedHandler,
   scanAbandonedCheckouts,
@@ -386,6 +389,13 @@ export function registerCommerceConsoleApi(): void {
     },
     { machine: true },
   )
+  // The register's tenders against an open sale, its Stripe Terminal card
+  // readers, and the paired customer display (AGL-3607, AGL-3608). The
+  // display's `pair`/`poll`/`respond` take a display token and no console
+  // session; every other action is gated like a sale.
+  registerPluginApiRoute('commerce/pos-payment', posPaymentHandler)
+  registerPluginApiRoute('commerce/pos-readers', posReadersHandler)
+  registerPluginApiRoute('commerce/pos-display', posDisplayHandler)
   registerPluginApiRoute('commerce/process-abandoned', processAbandonedHandler)
   registerPluginApiRoute('commerce/process-restock', processRestockHandler)
   registerPluginApiRoute('commerce/refund', refundHandler)

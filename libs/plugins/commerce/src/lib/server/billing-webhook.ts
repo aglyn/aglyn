@@ -80,6 +80,8 @@ import { enqueueSupplierDelivery } from './supplier-outbox'
 import { notifyOrderBuyer, onlineReceiptExtras } from './order-notifications'
 import { ORDER_PAID_EVENT } from '../model/order-events'
 import { raiseOrderEvent } from './order-events'
+import { handlePosStripeEvent } from './pos-terminal'
+import { notifyPosSaleCompleted } from './pos-sale'
 
 /**
  * Assigns unassigned license keys for a digital product (AGL-308):
@@ -415,7 +417,20 @@ async function findOrderForDispute(
   // different facts at the point they happen, and only one of them is ours to
   // fix.
   if (!matches) return { kind: 'unresolved', reason: 'missing-index' }
-  if (matches.empty) return { kind: 'not-ours' }
+  if (matches.empty) {
+    // A register sale paid with SEVERAL cards keeps every charge in
+    // `paymentIntentIds` and none in `paymentIntentId` (AGL-3607).
+    const split = await firebaseAdmin
+      .app()
+      .firestore()
+      .collectionGroup('orders')
+      .where('paymentIntentIds', 'array-contains', paymentIntentId)
+      .limit(2)
+      .get()
+      .catch(() => null)
+    if (split?.docs.length === 1) return { kind: 'order', snapshot: split.docs[0] }
+    return { kind: 'not-ours' }
+  }
   if (matches.docs.length > 1) {
     console.error(
       'Dispute matched more than one order; reversing none',
@@ -2122,6 +2137,13 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   if (await paymentProvider().applyAccountEvent('profiles', { type, object, event })) {
     return
   }
+
+  // THE REGISTER'S CARD PAYMENTS (AGL-3607): Terminal reader actions, register
+  // PaymentIntents and register QR pages. Each names one payment on an open
+  // sale and is settled by re-reading Stripe in `pos-terminal.ts`; every other
+  // event falls through untouched.
+  const posPayment = await handlePosStripeEvent({ type, object })
+  if (posPayment) return { claimed: true, hostId: posPayment.hostId }
 
   // A DEAD SESSION GIVES ITS RESERVATIONS BACK (AGL-2453).
   //
@@ -4363,6 +4385,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
         if (flipped) {
           const order = paidOrder as unknown as CommerceModel.HostOrder
+          // A legacy register QR sale is a register sale completing (AGL-3607).
+          if (order.channel === 'pos') {
+            await notifyPosSaleCompleted({
+              hostId: String(hostId),
+              orderId: String(orderId),
+              order: { ...order, status: 'paid' },
+            })
+          }
           // Discounts engine redemptions (AGL-305), for this branch's BOTH
           // tenants: a console draft order and a POS card sale, which carry the
           // same `commerce-draft` metadata type. The cart branch has settled

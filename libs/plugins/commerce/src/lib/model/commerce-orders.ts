@@ -29,6 +29,7 @@ import type { PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import type { ProductType } from './commerce'
 import type { StorefrontTaxMode } from './commerce-tax-decision'
 import { lineRequiresShipping, orderLineFulfillmentStates } from './order-fulfillment'
+import type { OrderPayment } from './commerce-pos'
 
 export type OrderStatus =
   | 'pending'
@@ -77,6 +78,12 @@ export interface OrderTotals {
   totalCents: number
   /** Aglyn platform fee (Connect application fee, AGL-278/307). */
   feeCents: number
+  /**
+   * Gratuity taken at the register (AGL-3607), on top of `totalCents` and
+   * never inside it: a tip is the merchant's, not a sale, so it stays out of
+   * revenue figures and out of the platform's take.
+   */
+  tipCents?: number
 }
 
 export interface OrderAddress {
@@ -296,6 +303,20 @@ export interface HostOrder {
    * erases the restock.
    */
   locationId?: string
+  /**
+   * The register a POS sale was rung on, and the console user who rang it
+   * (AGL-472, AGL-3607).
+   */
+  registerId?: string
+  cashierId?: string
+  /**
+   * Every payment toward a register sale (AGL-3607): one per tender, until
+   * the balance due is zero. Read through `orderPayments`, which infers one
+   * payment for an order written before the ledger existed.
+   */
+  payments?: OrderPayment[]
+  /** How the customer asked for their receipt at the register (AGL-3608). */
+  receiptRequest?: { channel: 'email' | 'sms' | 'print' | 'none'; to?: string; atMs: number }
   /**
    * The register discount that was applied, and the member who applied it
    * (AGL-2161). Present only on a POS order that carries a discount.
@@ -1562,7 +1583,12 @@ export function orderNetCents(order: Partial<HostOrder>): number {
       (order as { amountCents?: number }).amountCents ??
       0,
   )
-  return gross - Number((order as { refundedCents?: number }).refundedCents ?? 0)
+  const refunded = Number((order as { refundedCents?: number }).refundedCents ?? 0)
+  // A register tip sits outside `totalCents` (AGL-3607), so a refund that
+  // handed the tip back too must not take the tip out of the SALE's revenue a
+  // second time: what comes off is capped at what the sale itself was.
+  const tipCents = Number(order.totals?.tipCents ?? 0)
+  return gross - (tipCents > 0 ? Math.min(refunded, gross) : refunded)
 }
 
 /** Milliseconds an order was created at, across every writer's field shape. */

@@ -424,7 +424,7 @@ your dashboard stays green, and the state it drives simply never moves — a
 refund that never revokes an entitlement looks exactly like a healthy
 integration.
 
-Subscribe your platform endpoint to **all fifteen**:
+Subscribe your platform endpoint to **all nineteen**:
 
 ```
 customer.subscription.created
@@ -442,9 +442,19 @@ charge.dispute.closed
 customer.updated
 payment_method.attached
 payment_method.detached
+radar.early_fraud_warning.created
+review.opened
+terminal.reader.action_succeeded
+terminal.reader.action_failed
 ```
 
-The last five serve usage a plugin bills on its own one-off invoices. Without
+`radar.early_fraud_warning.created` and `review.opened` raise fraud signals to
+staff. The two `terminal.reader` events complete a card-reader payment at the
+point-of-sale register; without them a reader payment still completes while the
+register screen is open, because the register checks the reader itself.
+
+`invoice.voided`, `invoice.marked_uncollectible` and the three customer and
+payment-method events serve usage a plugin bills on its own one-off invoices. Without
 `invoice.voided` and `invoice.marked_uncollectible` an unpaid usage invoice
 never ends, so the pause it set on further usage never lifts. Without the
 three customer events nothing notices that the workspace's default payment
