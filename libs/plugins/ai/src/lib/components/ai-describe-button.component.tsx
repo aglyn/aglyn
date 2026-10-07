@@ -22,6 +22,7 @@ import type {
   ConsoleHostLayoutsZoneProps,
   ConsoleHostScreensZoneProps,
   ConsoleHostTemplatesZoneProps,
+  ConsoleWidgetEntitlementProps,
 } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { mdiCreation } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -30,6 +31,8 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { Button } from '@mui/material'
 import { useEffect, useRef, useState } from 'react'
 import { AiBriefDialog, type AiBriefKind } from './ai-brief-dialog.component'
+import { AiUpsellButton } from './ai-upsell-dialog.component'
+import { aiJobsProbeVerdict, type AiJobsVerdict } from './use-ai-job-run'
 
 /**
  * "Create with AI" (AGL-2907, AGL-3043, AGL-3051): a job from a brief, beside the
@@ -39,9 +42,9 @@ import { AiBriefDialog, type AiBriefKind } from './ai-brief-dialog.component'
  * zone. The Assist panel's AI jobs opens the same dialog for a page.
  */
 
-type Verdict = 'checking' | 'ready' | 'hidden'
-
-export interface AiDescribeButtonProps extends ConsoleHostScreensZoneProps {
+export interface AiDescribeButtonProps
+  extends ConsoleHostScreensZoneProps,
+    ConsoleWidgetEntitlementProps {
   /** The job the brief starts: what the page the button sits on lists. */
   kind: AiBriefKind
 }
@@ -52,15 +55,27 @@ export interface AiDescribeButtonProps extends ConsoleHostScreensZoneProps {
  * before mounting it, and the release flag is the route's to decide, so a 404
  * or a 403 there is this control staying absent. A lockdown is the start
  * door's to say, in the dialog, in its own words.
+ *
+ * On a plan that could buy the AI add-on and has not (AGL-3601) the shell
+ * mounts it with `entitled={false}` and an `upgrade` link, and the route
+ * answers that the plan is what is missing: the same button then opens the
+ * add-on's dialog instead of the brief. Anything else — the release flag off,
+ * a member refused — still leaves it absent.
  */
-export function AiDescribeButton({ kind, hostId, orgId }: AiDescribeButtonProps) {
+export function AiDescribeButton({
+  kind,
+  hostId,
+  orgId,
+  entitled,
+  upgrade,
+}: AiDescribeButtonProps) {
   const { data: user } = useUser()
   // Held in a ref so the probe keys on WHO is signed in, never on the
   // identity of the object that says so.
   const userRef = useRef(user)
   userRef.current = user
   const uid = user?.uid ?? null
-  const [verdict, setVerdict] = useState<Verdict>('checking')
+  const [verdict, setVerdict] = useState<AiJobsVerdict>('checking')
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
@@ -72,9 +87,8 @@ export function AiDescribeButton({ kind, hostId, orgId }: AiDescribeButtonProps)
           userRef.current,
           `/api/ai/jobs?orgId=${encodeURIComponent(orgId)}&limit=1`,
         )
-        if (active) {
-          setVerdict(response.status === 404 || response.status === 403 ? 'hidden' : 'ready')
-        }
+        const answer = await aiJobsProbeVerdict(response)
+        if (active) setVerdict(answer)
       } catch {
         if (active) setVerdict('hidden')
       }
@@ -84,6 +98,9 @@ export function AiDescribeButton({ kind, hostId, orgId }: AiDescribeButtonProps)
     }
   }, [orgId, uid])
 
+  if (verdict === 'upsell' && entitled === false && upgrade) {
+    return <AiUpsellButton kind={kind} upgrade={upgrade} />
+  }
   if (verdict !== 'ready') return null
   return (
     <>

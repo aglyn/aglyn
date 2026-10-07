@@ -400,6 +400,19 @@ export interface AnalyticsEventParams {
    * sentence and says nothing a rate could use.
    */
   ai_job_failed: { kind: string }
+  /**
+   * Custom: no GA4 equivalent. A "Create with AI" entry was opened on a plan
+   * that could buy the AI add-on and has not (AGL-3601), so it showed the
+   * add-on instead of a brief. `kind` is the closed set of what the entry
+   * makes (`page`, `template`, `layout`, `form`, `component`, `workflow`);
+   * `can_manage` is whether the reader could buy it themselves.
+   */
+  ai_upsell_shown: { kind: string; can_manage: boolean }
+  /**
+   * Custom: no GA4 equivalent. The reader followed that dialog to Billing's
+   * add-ons — the numerator against `ai_upsell_shown`.
+   */
+  ai_upsell_clicked: { kind: string }
 
   // --- Retention (AGL-1859/AGL-1863: the leave path, measurable) -----------
   /**
@@ -959,6 +972,8 @@ const TAXONOMY_EVENT_NAMES: Record<AnalyticsEventName, true> = {
   assistant_proposal_confirmed: true,
   ai_job_completed: true,
   ai_job_failed: true,
+  ai_upsell_shown: true,
+  ai_upsell_clicked: true,
   churn_survey_submitted: true,
   downsell_accepted: true,
   winback_discount_accepted: true,

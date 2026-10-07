@@ -370,12 +370,16 @@ export function registerAiConsole(): void {
       // A page from a brief (AGL-2907): "Create with AI" beside Templates and
       // Create New Screen. Gated as the other generative widgets are, and it
       // asks the jobs route about the release flag before it shows anything.
+      // On a plan that could buy the AI add-on and has not, each "Create with
+      // AI" entry here is mounted anyway (`showWhenNotEntitled`) and opens
+      // the add-on's dialog instead of the brief (AGL-3601).
       {
         slot: 'hostScreens',
         widgetId: 'ai-describe-page',
         title: 'Describe a page',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
         Component: AiDescribePageButton,
       },
       // The same entry for a page template, a layout and a form (AGL-3043),
@@ -388,6 +392,7 @@ export function registerAiConsole(): void {
         title: 'Describe a page template',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
         Component: AiDescribeTemplateButton,
       },
       {
@@ -396,6 +401,7 @@ export function registerAiConsole(): void {
         title: 'Describe a layout',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
         Component: AiDescribeLayoutButton,
       },
       {
@@ -404,6 +410,7 @@ export function registerAiConsole(): void {
         title: 'Describe a form',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
         Component: AiDescribeFormButton,
       },
       // And a reusable component from a brief (AGL-3051), beside Templates
@@ -415,6 +422,7 @@ export function registerAiConsole(): void {
         title: 'Describe a reusable component',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
         Component: AiDescribeComponentButton,
       },
       // Automations by AI (AGL-2919), in the zones the workflows plugin hosts
@@ -429,6 +437,7 @@ export function registerAiConsole(): void {
         title: 'Describe an automation',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
         Component: AiDescribeAutomationButton,
       },
       {
