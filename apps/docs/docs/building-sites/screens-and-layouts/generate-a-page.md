@@ -18,7 +18,7 @@ workspace.
 
 ## Describe the page
 
-Open **Pages** for the site and choose **Describe it**, beside **Templates** and **Create
+Open **Pages** for the site and choose **Create with AI**, beside **Templates** and **Create
 New Page**. You can also start one from **AI jobs** in the Assist panel, with **Describe a
 page**.
 

@@ -1626,7 +1626,7 @@ which fails a listing's job and becomes an audit unit's note.
 `page` (AGL-2907) builds one screen from a brief, as an unpublished draft. It
 is a planned kind: the plan step runs first, and once a member confirms the
 plan the generation runner builds the layout, forms and components the plan
-creates, then its one screen (AGL-3031). A member starts one from "Describe it"
+creates, then its one screen (AGL-3031). A member starts one from "Create with AI"
 on a site's Screens page (the `hostScreens` widget zone) or from AI jobs in the
 Assist panel.
 
@@ -2612,7 +2612,7 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
 - **Where a member starts one.** Three widgets the AI plugin registers in the
   zones the workflows plugin hosts on the Automation page
   (`src/lib/components/ai-describe-automation.component.tsx` and
-  `ai-explain-automation.component.tsx`): Describe it beside Add action and
+  `ai-explain-automation.component.tsx`): Create with AI beside Add action and
   Recipes (`hostAutomations`), whose dialog follows the job and opens the draft
   in the Actions editor; Explain it at the top of the editor of a saved action
   or workflow (`automationEditor`); and Why did this fail? on each failed run

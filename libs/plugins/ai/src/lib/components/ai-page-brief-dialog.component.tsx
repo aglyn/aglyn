@@ -21,7 +21,7 @@ import { AiBriefDialog, type AiBriefDialogProps } from './ai-brief-dialog.compon
 
 /**
  * "Describe a page" (AGL-2907): the brief dialog both page entry points open,
- * the Screens page's "Describe it" and the Assist panel's AI jobs.
+ * the Screens page's "Create with AI" and the Assist panel's AI jobs.
  *
  * It is the shared brief dialog for a `page` job (AGL-3043): one text box and
  * an optional page type. The job plans first; the dialog then follows it and

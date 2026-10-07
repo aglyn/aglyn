@@ -367,7 +367,7 @@ export function registerAiConsole(): void {
         permission: 'ai.generate',
         Component: AiSeoAuditCard,
       },
-      // A page from a brief (AGL-2907): "Describe it" beside Templates and
+      // A page from a brief (AGL-2907): "Create with AI" beside Templates and
       // Create New Screen. Gated as the other generative widgets are, and it
       // asks the jobs route about the release flag before it shows anything.
       {
@@ -418,7 +418,7 @@ export function registerAiConsole(): void {
         Component: AiDescribeComponentButton,
       },
       // Automations by AI (AGL-2919), in the zones the workflows plugin hosts
-      // on its Automation page: "Describe it" beside Add action and Recipes,
+      // on its Automation page: "Create with AI" beside Add action and Recipes,
       // "Explain it" in the editor of a saved automation, and "Why did this
       // fail?" on a failed run. Gated as the other generative widgets are;
       // each asks the jobs route about the release flag before it shows

@@ -327,8 +327,10 @@ contents of.
 
 - **In console** is on for every category. Switching it off stops that
   category appearing in the feed and in the bell.
-- **Email** is **off for every category**. Switch one on and you also get a
-  message in your inbox when one of those notifications arrives. This does not
+- **Email** is **on for your site's transactions** — **Form submission**,
+  **New booking** and **New order** — and **off for everything else**. Switch a
+  category or a single notification on and you also get a message in your inbox
+  when one arrives; switch it off and you don't. This does not
   touch the mail Aglyn already sends you — invites, verification, receipts,
   password resets and dunning are separate, and are not affected by anything on
   this page.
@@ -342,7 +344,9 @@ is why they appear here and not under **One workspace or one site**.
 Open a category with the arrow beside its name and it lists the individual
 notifications inside it, each with its own **In console** and **Email**
 switches. A switch here shows what would actually happen: its own answer if you
-have given one, otherwise its category's.
+have given one, otherwise its category's if you have set that, otherwise its
+default — which is why **Form submission** reads on under a **Content** row
+whose email is off.
 
 Set one and the row is marked **Set**, with **Follow category** beside it to
 put it back. This is how you stop hearing about one thing without silencing its

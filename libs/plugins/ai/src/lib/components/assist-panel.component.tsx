@@ -30,8 +30,8 @@ import {
 } from '@aglyn/aglyn/plugin-manager/editor-sessions'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import {
-  mdiChatQuestionOutline,
   mdiChevronDown,
+  mdiCreation,
   mdiChevronUp,
   mdiClose,
   mdiOpenInNew,
@@ -582,8 +582,13 @@ export function AssistPanelComponent(props: AssistDockProps) {
   // the panel again later does not re-highlight a job asked for before.
   const openRequest = useAiJobsOpenRequest()
   const [jobsFocus, setJobsFocus] = useState<AiJobsOpenRequest | null>(null)
+  // The request outlives the panel: it is module state, and a page in
+  // another layout mounts a fresh panel. Only a request made after this
+  // panel mounted opens it — one already answered never reopens it.
+  const answeredSeq = useRef(openRequest.seq)
   useEffect(() => {
-    if (openRequest.seq === 0) return
+    if (openRequest.seq <= answeredSeq.current) return
+    answeredSeq.current = openRequest.seq
     setJobsFocus(openRequest)
     setOpen(true)
     // A new `seq` is a new request; the object is read as it stands.
@@ -940,7 +945,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
               overlap="circular"
               data-ai-jobs-badge={jobsActivity?.state ?? undefined}
             >
-              <MdiIcon path={mdiChatQuestionOutline.path} fontSize="medium" />
+              <MdiIcon path={mdiCreation.path} fontSize="medium" />
             </Badge>
           </Fab>
         </Tooltip>
@@ -970,7 +975,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
             {/* Same reason as the launcher: this one sits beside an `h6`
                 title in a plain Stack, so `inherit` gave it the 16px body
                 size against a 20px heading. */}
-            <MdiIcon path={mdiChatQuestionOutline.path} fontSize="medium" />
+            <MdiIcon path={mdiCreation.path} fontSize="medium" />
             <Typography variant="h6" sx={{ flexGrow: 1 }}>
               {`${branding.productName} Assist`}
             </Typography>

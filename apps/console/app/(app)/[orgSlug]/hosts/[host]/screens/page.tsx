@@ -1574,6 +1574,13 @@ function Screens(props) {
               renderRowActions={renderRowActions}
               emptyAction={
                 <Stack direction="row" spacing={1}>
+                  {/* The plugin ways to start a page (AGL-2907) belong where
+                      a blank site first looks, not only in the header. */}
+                  <PluginWidgetSlot
+                    slot="hostScreens"
+                    hostId={hostId}
+                    orgId={org?.$id}
+                  />
                   <Button
                     size="small"
                     variant="contained"

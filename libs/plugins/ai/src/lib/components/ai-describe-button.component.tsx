@@ -23,6 +23,8 @@ import type {
   ConsoleHostScreensZoneProps,
   ConsoleHostTemplatesZoneProps,
 } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import { mdiCreation } from '@aglyn/shared-data-mdi'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { Button } from '@mui/material'
@@ -30,7 +32,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AiBriefDialog, type AiBriefKind } from './ai-brief-dialog.component'
 
 /**
- * "Describe it" (AGL-2907, AGL-3043, AGL-3051): a job from a brief, beside the
+ * "Create with AI" (AGL-2907, AGL-3043, AGL-3051): a job from a brief, beside the
  * create actions of the page that lists what the job makes — a page on
  * Screens, a page template on Templates, a layout on Layouts, a form on Forms
  * and a reusable component on Components — each mounted through that page's
@@ -85,8 +87,13 @@ export function AiDescribeButton({ kind, hostId, orgId }: AiDescribeButtonProps)
   if (verdict !== 'ready') return null
   return (
     <>
-      <Button size="small" variant="outlined" onClick={() => setOpen(true)}>
-        {'Describe it'}
+      <Button
+        size="small"
+        variant="outlined"
+        startIcon={<MdiIcon path={mdiCreation.path} />}
+        onClick={() => setOpen(true)}
+      >
+        {'Create with AI'}
       </Button>
       <AiBriefDialog
         kind={kind}

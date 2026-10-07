@@ -128,7 +128,7 @@ or menu component, the layout places it rather than building another. The layout
 [the building rules](../../ai/how-aglyn-ai-builds.md), so it carries no page title of its own
 and takes its colors and type from your theme.
 
-Open **Layouts** for the site and choose **Describe it**, beside **Templates** and **Create New
+Open **Layouts** for the site and choose **Create with AI**, beside **Templates** and **Create New
 Layout**. Write what the header, navigation and footer should hold, then choose **Plan the
 layout**. The window shows the plan when it is ready, with **Confirm plan**; **Open AI jobs**
 follows the job in the Assist panel instead.

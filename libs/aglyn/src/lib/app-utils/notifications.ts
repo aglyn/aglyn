@@ -856,7 +856,9 @@ export const NOTIFICATION_SETTINGS_FIELD = 'notificationSettings'
 /**
  * What a category does when nobody has said otherwise.
  *
- * Console on, email OFF, everywhere. Email defaults off because the inbox is
+ * Console on, email OFF, for every category — a site's own transactions are
+ * the exception, by type, in {@link NOTIFICATION_TYPE_CHANNEL_DEFAULTS}.
+ * Email defaults off because the inbox is
  * not ours to fill: the product already sends transactional mail nobody opted
  * into — welcome, verification, invites, dunning, usage alerts — and every one
  * of those leaves on the same domain a customer's password reset depends on.
@@ -889,6 +891,36 @@ export const NOTIFICATION_CHANNEL_DEFAULTS = inCategoryOrder(
   CORE_CHANNEL_DEFAULTS,
   (declaration) => ({ ...declaration.defaults }),
 )
+
+/**
+ * The types whose default differs from their category's: a site's own
+ * transactions — a form submitted, a booking made, an order placed — email
+ * the people who run it unless they said otherwise.
+ *
+ * Below every stored answer, the category's included, so a person who
+ * switched content email off keeps it off; above the category default, so
+ * everyone who never answered (every account, new or old) is emailed.
+ * These are the events a site exists to produce, and an owner who hears
+ * about them only by opening the console misses the customer.
+ */
+export const NOTIFICATION_TYPE_CHANNEL_DEFAULTS: Partial<
+  Record<AglynNotificationType, Partial<Record<NotificationChannel, boolean>>>
+> = {
+  'content.formSubmission': { email: true },
+  'content.booking': { email: true },
+  'content.order': { email: true },
+}
+
+/** What a type does on a channel when nobody has answered for it or its category. */
+export function notificationTypeChannelDefault(
+  type: AglynNotificationType | string,
+  channel: NotificationChannel,
+): boolean {
+  const own = NOTIFICATION_TYPE_CHANNEL_DEFAULTS[type as AglynNotificationType]?.[channel]
+  return typeof own === 'boolean'
+    ? own
+    : NOTIFICATION_CHANNEL_DEFAULTS[notificationCategory(type)][channel]
+}
 
 /**
  * The types that send their OWN email and must never be mailed again by the
@@ -1007,7 +1039,7 @@ export function notificationChannelEnabled(
   }
   if (channel === 'console' && notificationMuted(legacyPrefs, type))
     return false
-  return NOTIFICATION_CHANNEL_DEFAULTS[category][channel]
+  return notificationTypeChannelDefault(type, channel)
 }
 
 /**
