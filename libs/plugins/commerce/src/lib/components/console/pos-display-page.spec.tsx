@@ -156,6 +156,23 @@ describe('the customer display (AGL-3608)', () => {
     expect(polls()[0].url).toContain('branding=true')
   })
 
+  it('shows no tax figure for a basket the register has not priced yet', async () => {
+    paired({
+      mode: 'cart',
+      cart: {
+        lines: [{ name: 'Croissant', quantity: 2, amountCents: 750 }],
+        itemsCents: 750,
+        discountCents: 0,
+        taxCents: 0,
+        totalCents: 750,
+      },
+    })
+    render(<PosDisplayPage pluginId="commerce" path="/pos-display" />)
+    expect(await screen.findByText('2 × Croissant')).toBeTruthy()
+    expect(screen.queryByText('Tax')).toBeNull()
+    expect(screen.getByText('Any tax is added when you pay.')).toBeTruthy()
+  })
+
   it('shows a tip beside the sale total and the total with it, in the store currency', async () => {
     paired({
       mode: 'cart',

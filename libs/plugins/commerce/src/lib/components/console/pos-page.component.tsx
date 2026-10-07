@@ -70,7 +70,7 @@ import { POS_QUICK_KEYS, POS_TOUCH_PX, PosProductGrid } from './pos/pos-product-
 import { PosItemDialog, posItemNeedsChoice, type PosItemChoice } from './pos/pos-item-dialog.component'
 import { PosReceiptPanel } from './pos/pos-receipt-panel.component'
 import { PosTenderPanel } from './pos/pos-tender-panel.component'
-import { usePosDisplay } from './pos/use-pos-display'
+import { posDisplayTipCents, usePosDisplay } from './pos/use-pos-display'
 
 /** The till sells active products only; every read of the catalog asks it. */
 const SELLABLE: ListFilterRequest = { field: 'status', op: 'equals', value: 'active' }
@@ -535,6 +535,12 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
   // True at first, so a register that opens empty clears whatever a previous
   // session left on the screen.
   const displayShowsBasket = useRef(true)
+  // The tip picked for the payment about to be taken; the ledger has it only
+  // once that payment is recorded. Gone with the sale.
+  const [pendingTipCents, setPendingTipCents] = useState(0)
+  useEffect(() => {
+    if (!sale || sale.status === 'paid') setPendingTipCents(0)
+  }, [sale])
   useEffect(() => {
     if (sale?.status === 'paid') displayShowsBasket.current = false
   }, [sale?.status])
@@ -562,14 +568,20 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
                 discountCents,
                 taxCents: sale ? Math.max(0, sale.totalCents - estimateCents) : 0,
                 totalCents: sale ? sale.totalCents : estimateCents,
-                ...(sale ? { paidCents: sale.paidCents, dueCents: sale.dueCents, tipCents: sale.tipCents } : {}),
+                ...(sale
+                  ? {
+                      paidCents: sale.paidCents,
+                      dueCents: sale.dueCents,
+                      tipCents: posDisplayTipCents(sale, pendingTipCents),
+                    }
+                  : {}),
               },
             }
           : { mode: 'idle' },
       )
     }, 400)
     return () => clearTimeout(timer)
-  }, [display, mirrored, sale, itemsCents, discountCents, estimateCents])
+  }, [display, mirrored, sale, itemsCents, discountCents, estimateCents, pendingTipCents])
 
   const registerPicker = !planReady ? (
     <Typography variant="body2" color="text.secondary">
@@ -601,6 +613,30 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
       {usableRegisters[0]?.name}
     </Typography>
   )
+
+  /**
+   * On a narrow screen the register's bar owns the bottom edge, so it moves
+   * the console's floating launchers clear of itself through the shell's
+   * `--aglyn-dock-inset-bottom` seam; a launcher left in the corner sat on
+   * top of Charge.
+   */
+  const bottomBarRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const node = bottomBarRef.current
+    if (wide || !node) return undefined
+    const root = document.documentElement
+    const property = '--aglyn-dock-inset-bottom'
+    const publish = () => {
+      root.style.setProperty(property, `${Math.round(node.getBoundingClientRect().height) + 20}px`)
+    }
+    publish()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(publish)
+    observer?.observe(node)
+    return () => {
+      observer?.disconnect()
+      root.style.removeProperty(property)
+    }
+  }, [wide])
 
   const registerPanel = (
     <Stack spacing={1.5} sx={{ minHeight: 0, flex: 1 }}>
@@ -699,6 +735,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
               setSale(null)
               setSaleLines([])
             }}
+            onTipChange={setPendingTipCents}
             notify={notify}
           />
         )
@@ -775,6 +812,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
       {!wide ? (
         <>
           <Box
+            ref={bottomBarRef}
             sx={{
               position: 'fixed',
               left: 0,

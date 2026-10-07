@@ -66,6 +66,9 @@ export function PosDisplayCartView({
   currency?: string
 }) {
   const tipCents = cart.tipCents ?? 0
+  // The register prices tax when the cashier charges; until then the basket
+  // has no tax figure, and a "Tax $0.00" row would be a promise.
+  const priced = cart.dueCents != null
   return (
     <Stack spacing={2} sx={{ width: '100%' }}>
       <List aria-label="Items" sx={{ overflowY: 'auto' }}>
@@ -100,7 +103,7 @@ export function PosDisplayCartView({
         {cart.discountCents > 0 ? (
           <TotalRow label="Discount" cents={cart.discountCents} currency={currency} negative />
         ) : null}
-        <TotalRow label="Tax" cents={cart.taxCents} currency={currency} />
+        {priced ? <TotalRow label="Tax" cents={cart.taxCents} currency={currency} /> : null}
         <Divider />
         {tipCents > 0 ? (
           <>
@@ -115,6 +118,11 @@ export function PosDisplayCartView({
           </>
         ) : (
           <TotalRow label="Total" cents={cart.totalCents} currency={currency} strong />
+        )}
+        {priced ? null : (
+          <Typography variant="body1" color="text.secondary">
+            Any tax is added when you pay.
+          </Typography>
         )}
         {cart.paidCents ? (
           <TotalRow label="Paid" cents={cart.paidCents} currency={currency} />

@@ -85,6 +85,8 @@ export interface PosTenderPanelProps {
   onSale: (sale: PosSaleSummary) => void
   /** The sale is voided: the basket is the cashier's again. */
   onVoided: () => void
+  /** The tip chosen for the next payment, before it is taken. */
+  onTipChange?: (tipCents: number) => void
   notify: (message: string, variant: 'success' | 'error' | 'warning' | 'info') => void
 }
 
@@ -108,6 +110,10 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
   const [readerId, setReaderId] = useState('')
   const inFlight = useRef(false)
   const { confirm } = useConfirmationContext()
+  const { onTipChange } = props
+  useEffect(() => {
+    onTipChange?.(tipCents)
+  }, [onTipChange, tipCents])
 
   const readers = (context?.readers ?? []).filter(
     (reader) => !reader.registerId || reader.registerId === props.registerId,

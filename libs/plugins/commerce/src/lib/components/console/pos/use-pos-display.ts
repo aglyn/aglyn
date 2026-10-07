@@ -22,6 +22,22 @@ import { newAttemptKey, posDisplayCall } from './pos-api'
 
 type User = Parameters<typeof posDisplayCall>[0]
 
+/**
+ * The tip the customer screen shows beside the sale (AGL-3608): the tips
+ * already on its payments, plus one chosen for the payment about to be taken
+ * (on the display or by the cashier), which the ledger does not hold until
+ * that payment is recorded. Without the second part the screen read the
+ * sale's total right after the customer added a tip, short by that tip.
+ */
+export function posDisplayTipCents(
+  sale: { status: string; tipCents: number } | null | undefined,
+  pendingTipCents: number,
+): number {
+  if (!sale) return 0
+  const pending = sale.status === 'paid' ? 0 : Math.max(0, Math.round(pendingTipCents) || 0)
+  return Math.max(0, sale.tipCents) + pending
+}
+
 /** How long the register waits for the customer to answer a prompt. */
 export const POS_DISPLAY_ANSWER_TIMEOUT_MS = 3 * 60 * 1000
 
