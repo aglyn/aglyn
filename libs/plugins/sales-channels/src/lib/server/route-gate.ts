@@ -18,6 +18,7 @@
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { isEmailVerified, isImpersonationSession } from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { SALES_CHANNELS_ENTITLEMENT } from '../constants/bundle-common'
 import { firestore, isDocumentId } from './feed-store'
 
@@ -72,8 +73,12 @@ export async function channelsGate(
   let decoded
   try {
     decoded = await firebaseAdmin.app().auth().verifyIdToken(authorization.slice('Bearer '.length))
-  } catch {
-    return routeError(401, 'Unauthenticated')
+  } catch (error) {
+    // Only a token the verifier refused is the caller's fault; a certificate
+    // fetch that failed is ours, and must not read as a bad sign-in.
+    if (isRefusedIdToken(error)) return routeError(401, 'Unauthenticated')
+    console.error('sales-channels: the sign-in could not be checked', error)
+    return routeError(503, 'The sign-in could not be checked. Try again.')
   }
   if (!isEmailVerified(decoded) && !isImpersonationSession(decoded)) {
     return routeError(403, 'Verify your email address first')

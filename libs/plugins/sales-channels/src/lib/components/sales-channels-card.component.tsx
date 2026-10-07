@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -109,7 +110,7 @@ export function SalesChannelsCard(props: SalesChannelsCardProps) {
 
   if (error && !state) {
     return (
-      <CardDisplay header="Sales channels" contentGutterX contentGutterY>
+      <CardDisplay header="Sales channels" help={pluginDocsHelp('salesChannels')} contentGutterX contentGutterY>
         <Alert severity="error">{error}</Alert>
       </CardDisplay>
     )
@@ -119,6 +120,7 @@ export function SalesChannelsCard(props: SalesChannelsCardProps) {
   return (
     <CardDisplay
       header="Sales channels"
+      help={pluginDocsHelp('salesChannels', { anchor: '#turn-on-a-channel' })}
       subheader="List your products on Google, YouTube, Facebook, Instagram, TikTok, Pinterest, Snapchat and Microsoft Shopping. Each channel reads its own product feed on a schedule, so changes reach it without another upload."
       HeaderProps={{
         action: (
@@ -230,6 +232,7 @@ function DefaultsCard(props: {
     <CardDisplay
       variant="outlined"
       header="Defaults for every feed"
+      help={pluginDocsHelp('salesChannels', { anchor: '#brand-barcode-and-category' })}
       subheader="Used for a product that leaves a field blank. Set a product's own brand, barcode and category in the product editor."
       HeaderProps={{
         action: (
@@ -342,6 +345,7 @@ function ChannelCard(props: {
     <CardDisplay
       variant="outlined"
       header={channel.label}
+      help={pluginDocsHelp('salesChannels', { anchor: '#turn-on-a-channel' })}
       subheader={channel.reach}
       HeaderProps={{
         action: (

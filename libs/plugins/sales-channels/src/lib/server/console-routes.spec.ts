@@ -65,7 +65,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       auth: () => ({
         verifyIdToken: async (token: string) => {
           const decoded = TOKENS[token]
-          if (!decoded) throw new Error('auth/argument-error')
+          if (!decoded) throw Object.assign(new Error('Decoding Firebase ID token failed'), { code: 'auth/argument-error' })
           return decoded
         },
       }),
@@ -134,6 +134,23 @@ describe('the gate', () => {
     ['an outsider', 'tok-outsider', 403],
   ])('refuses %s', async (_label, token, status) => {
     expect((await get(stateRoute, token)).status).toBe(status)
+  })
+
+  it('answers 503, not 401, when the sign-in cannot be checked', async () => {
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const outage = Object.assign(new Error('Error fetching public keys for Google certs'), {
+      code: 'auth/argument-error',
+    })
+    const { firebaseAdmin } = jest.requireMock('@aglyn/tenant-data-admin') as {
+      firebaseAdmin: { app: () => { auth: () => { verifyIdToken: (token: string) => Promise<unknown> } } }
+    }
+    const spy = jest.spyOn(firebaseAdmin, 'app').mockReturnValueOnce({
+      firestore: () => db,
+      auth: () => ({ verifyIdToken: async () => Promise.reject(outage) }),
+    } as never)
+    expect((await get(stateRoute, 'tok-admin')).status).toBe(503)
+    spy.mockRestore()
+    errors.mockRestore()
   })
 
   it('refuses a missing or unknown site', async () => {

@@ -65,7 +65,7 @@ const firebaseAdminFake = {
     auth: () => ({
       verifyIdToken: async (token: string) => {
         const decoded = TOKENS[token]
-        if (!decoded) throw new Error('auth/argument-error')
+        if (!decoded) throw Object.assign(new Error('Decoding Firebase ID token failed'), { code: 'auth/argument-error' })
         return decoded
       },
       getUser: async (uid: string) => ({ uid, customClaims: {} }),

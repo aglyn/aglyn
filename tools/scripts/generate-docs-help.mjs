@@ -219,6 +219,7 @@ const PLUGIN_TOPICS = {
   sandboxSecurity: '/developers/plugins/reference/sandbox-security',
   publisherHandbook: '/developers/plugins/publishing/publisher-handbook',
   redirects: '/building-sites/redirects/overview',
+  salesChannels: '/commerce-and-bookings/commerce/sales-channels',
   sequences: '/content-and-data/crm/sequences',
   webhooks: '/marketing-and-automation/workflows-and-actions/webhooks',
 }
