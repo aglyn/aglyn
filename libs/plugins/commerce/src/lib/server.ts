@@ -97,6 +97,7 @@ import { posOrderHandler } from './server/pos-order'
 import { printersHandler } from './server/printers'
 import { posPaymentHandler } from './server/pos-payment'
 import { posReadersHandler } from './server/pos-readers'
+import { posTerminalConnectionTokenHandler } from './server/pos-terminal-connection-token'
 import { posDisplayHandler } from './server/pos-display'
 import { registerPosOpsRoutes } from './server/pos-ops-routes'
 import {
@@ -469,6 +470,10 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/pos-display', posDisplayHandler)
   // Shifts, staff PINs, the customer lookup and returns (AGL-3609).
   registerPosOpsRoutes()
+  // The native Aglyn POS app's Stripe Terminal SDK: a connection token scoped
+  // to the site's Location, and the Location itself (AGL-3618). Gated like a
+  // sale.
+  registerPluginApiRoute('commerce/pos-terminal-connection-token', posTerminalConnectionTokenHandler)
   registerPluginApiRoute('commerce/process-abandoned', processAbandonedHandler)
   registerPluginApiRoute('commerce/process-restock', processRestockHandler)
   registerPluginApiRoute('commerce/refund', refundHandler)
