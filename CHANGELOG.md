@@ -16,10 +16,14 @@ content on the marketing site and is written separately.
 ### Added
 
 - **acquisition:** a paid signup names its Google Ads campaign ([AGL-3590](https://linear.app/aglyn/issue/AGL-3590))
+- **ai:** a new site starts with a choice — the starter site or AI — and Plan my site opens a Building your site page with no approval step ([AGL-3594](https://linear.app/aglyn/issue/AGL-3594))
+- **ai:** AI jobs are findable from every dialog, the top bar, the Assist button and notifications ([AGL-3593](https://linear.app/aglyn/issue/AGL-3593))
+- **ai:** staff give back AI credits from the org and user pages, audited ([AGL-3595](https://linear.app/aglyn/issue/AGL-3595))
 
 ### Fixed
 
 - **ai:** a Free account may plan its site at once — no account-age hold ([AGL-3591](https://linear.app/aglyn/issue/AGL-3591))
+- **ai:** a guided site start fits the Free plan (2 pages), plans cheaply, explains a failure plainly and refunds failures on our side ([AGL-3594](https://linear.app/aglyn/issue/AGL-3594))
 - **console:** an account switch sticks with other console tabs open ([AGL-3592](https://linear.app/aglyn/issue/AGL-3592))
 - **console:** the Versions help says what a version is, not that each publish makes one ([AGL-3589](https://linear.app/aglyn/issue/AGL-3589))
 
