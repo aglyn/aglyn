@@ -81,6 +81,7 @@ import {
   LIVE_AI_CREDENTIALS,
   LOCAL_CRON_SECRET,
   listeningPids,
+  readProcess,
   serverEnvironment,
   serversHoldNoCredential,
 } from '../scripts/lib/emulated-env.mjs'
@@ -181,7 +182,7 @@ const started = []
 /** The command that runs again on what `--keep` left up. */
 let reuseHint = ''
 
-function startProcess(name, command, args, { cwd, env, onStop }) {
+function startProcess(name, command, args, { cwd, env, onStop, ports }) {
   const logFile = join(outDir, `${name}.log`)
   const out = createWriteStream(logFile)
   const child = spawn(command, args, {
@@ -192,12 +193,31 @@ function startProcess(name, command, args, { cwd, env, onStop }) {
   })
   child.stdout.pipe(out)
   child.stderr.pipe(out)
-  started.push({ name, child, onStop })
+  started.push({ name, child, onStop, ports })
   log(`started ${name} (pid ${child.pid}), log ${logFile}`)
   return child
 }
 
-function stopStarted() {
+/** Resolves once the child has exited, or after `ms`. */
+function exited(child, ms) {
+  if (child.exitCode !== null || child.signalCode !== null)
+    return Promise.resolve()
+  return new Promise((done) => {
+    const timer = setTimeout(done, ms)
+    child.once('exit', () => {
+      clearTimeout(timer)
+      done()
+    })
+  })
+}
+
+/**
+ * Stops what this run started: SIGINT to each process group, SIGKILL to one
+ * still up after 30 s, then any emulator JVM still holding one of this run's
+ * ports — firebase-tools starts each in a process group of its own, and one
+ * outlived its launcher on a loaded machine.
+ */
+async function stopStarted() {
   if (keep) {
     if (started.length)
       log(
@@ -206,17 +226,34 @@ function stopStarted() {
       )
     return
   }
-  for (const { name, child, onStop } of started.reverse()) {
+  for (const { name, child, onStop, ports = [] } of started.reverse()) {
     if (child.exitCode === null) {
       try {
         process.kill(-child.pid, 'SIGINT')
+        await exited(child, 30_000)
+        if (child.exitCode === null && child.signalCode === null) {
+          process.kill(-child.pid, 'SIGKILL')
+        }
         log(`stopped ${name}`)
       } catch {
         // Already gone.
       }
     }
+    for (const port of ports) {
+      for (const pid of listeningPids(port) ?? []) {
+        if (
+          /\.cache\/firebase\/emulators|firebase-tools/.test(
+            readProcess(pid)?.command ?? '',
+          )
+        ) {
+          process.kill(pid, 'SIGKILL')
+          log(`stopped a stray emulator on port ${port} (pid ${pid})`)
+        }
+      }
+    }
     onStop?.()
   }
+  started.length = 0
 }
 
 function isListening(hostPort, timeoutMs = 700) {
@@ -303,6 +340,7 @@ async function ensureEmulators() {
       env: process.env,
       // The private config is this run's; the emulators read it at start.
       onStop: () => rmSync(config, { force: true }),
+      ports: Object.values(hosts).map((host) => Number(host.split(':').pop())),
     },
   )
   await waitUntil(
@@ -1181,8 +1219,7 @@ const writeSummary = () => {
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
     writeSummary()
-    stopStarted()
-    process.exit(130)
+    void stopStarted().finally(() => process.exit(130))
   })
 }
 
@@ -1238,7 +1275,7 @@ try {
 } finally {
   writeSummary()
   log(`summary: ${join(outDir, 'summary.md')}`)
-  stopStarted()
+  await stopStarted()
 }
 // Admin SDK handles keep the loop alive; the summary is written.
 process.exit(exitCode)
