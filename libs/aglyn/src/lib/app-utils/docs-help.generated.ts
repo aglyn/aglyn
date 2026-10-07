@@ -277,6 +277,11 @@ export const PLUGIN_DOCS = {
     title: 'Marketing Overlays',
     excerpt: 'Site-wide announcement bars and promotional popups with triggers, scheduling, and email capture.',
   },
+  marketplaces: {
+    path: '/commerce-and-bookings/commerce/marketplaces',
+    title: 'Marketplaces (Amazon, eBay, Etsy, TikTok Shop, Walmart, Faire)',
+    excerpt: 'Keep your Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire listings in step with your store\'s stock, bring their orders in as your orders, and send tracking back. Rolling out.',
+  },
   membersOnly: {
     path: '/workspace-and-billing/teams-and-roles/members-only',
     title: 'Members-only areas',
@@ -431,6 +436,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#declining-an-invite', '#an-ordinary-invitation-never-changes-who-owns-the-workspace', '#owner-handoff', '#aglyn-staff', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#ai-actions', '#ai-usage', '#ai-allotment', '#tips', '#related'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#contributes--where-the-plugin-loads', '#config--settings-without-writing-a-settings-screen', '#listing--version-documents', '#review--trust-lifecycle', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#with-ai', '#variables-in-copy', '#engagement-stats', '#across-your-sites', '#related'],
+  marketplaces: ['#connect-a-marketplace', '#listings', '#orders', '#activity'],
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],
   ordersAndReturns: ['#fulfillment', '#invoices', '#returns', '#buyer-requests', '#run-a-return', '#order-webhooks', '#what-your-endpoint-receives', '#check-the-signature', '#answer-quickly-and-retries', '#related'],
   orgAutomations: ['#what-an-org-automation-is', '#create-one', '#triggers', '#steps', '#pause-it-on-one-site', '#waiting-switching-off-and-deleting', '#every-sites-own-automations', '#related'],

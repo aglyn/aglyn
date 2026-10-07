@@ -1,0 +1,30 @@
+{
+  "name": "plugins-marketplaces",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/plugins/marketplaces/src",
+  "projectType": "library",
+  "tags": ["aglyn:addons", "scope:plugin", "type:feature"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/plugins/marketplaces",
+        "main": "libs/plugins/marketplaces/src/index.ts",
+        "tsConfig": "libs/plugins/marketplaces/tsconfig.lib.json",
+        "assets": ["libs/plugins/marketplaces/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/marketplaces"],
+      "options": {
+        "jestConfig": "libs/plugins/marketplaces/jest.config.ts"
+      }
+    }
+  }
+}

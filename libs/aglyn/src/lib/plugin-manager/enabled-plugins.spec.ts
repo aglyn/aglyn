@@ -196,6 +196,7 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
     // Tracking and protection (AGL-3635) and Fulfillment networks (AGL-3634)
     // as well: sold with commerce, each hidden until the deployment can seal
     // a merchant's own vendor account.
+    // Marketplaces (AGL-3638) the same way.
     expect(WORKSPACE_LOCKED).toEqual([
       'forms',
       'ai',
@@ -207,6 +208,7 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
       'marketing-platforms',
       'post-purchase',
       'fulfillment-networks',
+      'marketplaces',
     ])
   })
 

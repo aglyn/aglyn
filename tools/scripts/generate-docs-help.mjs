@@ -189,6 +189,10 @@ const PLUGIN_TOPICS = {
   // order dialog's Tracking and protection section (AGL-3635). Unlisted until
   // the deployment offers a service; see PLUGIN_UNLISTED_TOPICS.
   postPurchase: '/commerce-and-bookings/commerce/tracking-and-protection',
+  // The Marketplaces cards under the store's Settings and the order dialog's
+  // section (AGL-3638). Unlisted until the deployment offers a marketplace;
+  // see PLUGIN_UNLISTED_TOPICS.
+  marketplaces: '/commerce-and-bookings/commerce/marketplaces',
   events: '/content-and-data/events/overview',
   forms: '/content-and-data/forms/overview',
   funnels: '/marketing-and-automation/analytics/funnels',
@@ -266,6 +270,10 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // POST_PURCHASE_VENDORS and POST_PURCHASE_TOKEN_KEY, the gate the guide
   // waits on (AGL-3635).
   'postPurchase',
+  // The Marketplaces cards draw nothing until the console holds
+  // MARKETPLACES_TOKEN_KEY and a marketplace's app, the gate the guide waits
+  // on (AGL-3638).
+  'marketplaces',
 ])
 
 // ── Docs parsing ──────────────────────────────────────────────────────────

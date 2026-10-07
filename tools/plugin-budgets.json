@@ -114,5 +114,9 @@
   "fulfillment-networks": {
     "baseline": 5611,
     "budget": 7168
+  },
+  "marketplaces": {
+    "baseline": 7708,
+    "budget": 10240
   }
 }

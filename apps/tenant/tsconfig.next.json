@@ -164,6 +164,12 @@
       "@aglyn/plugins-fulfillment-networks/*": [
         "../../libs/plugins/fulfillment-networks/src/lib/*"
       ],
+      "@aglyn/plugins-marketplaces": [
+        "../../libs/plugins/marketplaces/src/index.ts"
+      ],
+      "@aglyn/plugins-marketplaces/*": [
+        "../../libs/plugins/marketplaces/src/lib/*"
+      ],
       "@aglyn/plugins-crm": [
         "../../libs/plugins/crm/src/index.ts"
       ],

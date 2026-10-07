@@ -13927,3 +13927,50 @@ describe('fulfillment network records are the server’s alone (AGL-3634)', () =
     }
   })
 })
+
+describe('marketplace records are the server’s alone (AGL-3638)', () => {
+  // A connection holds the merchant's sealed marketplace grant and what each
+  // listing was last sent; an imported order's record says which shipments
+  // to confirm to the marketplace. All written and read by the marketplaces
+  // plugin's routes, event intake and job through the Admin SDK.
+  const DOCS = [
+    ['marketplaceConnections', `${HOST}_ebay`],
+    ['marketplaceConnections', `${HOST}_ebay`, 'log', 'entry-1'],
+    ['marketplaceConnections', `${HOST}_ebay`, 'listingState', 'c00'],
+    ['marketplaceOrders', `${HOST}_ebay_0123456789abcdef01234567`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), {
+          orgId: ORG,
+          hostId: HOST,
+          sealedAccessToken: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
