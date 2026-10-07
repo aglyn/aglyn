@@ -155,6 +155,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "AGL-3571. `PLATFORM_RENDER_PAGES`, the real client pages the render monitor renders on Aglyn's own console and nowhere else: `resolveRenderMonitorPages` applies the list only when `VERCEL_PROJECT_ID` is Aglyn's console project id, and only together with Aglyn's tenant render origin, which answers solely to Aglyn's automation bypass. On any other install — another Vercel project, a container with no `VERCEL_PROJECT_ID` — the list is never read; an operator names their own pages with `RENDER_MONITOR_PAGES` and `RENDER_MONITOR_RENDER_ORIGIN`. Spec: render-monitor.spec.ts, \"renders Aglyn's client pages on Aglyn's own console only\".",
   },
   {
+    file: 'libs/aglyn/src/lib/app-utils/mobile-push.ts',
+    count: 1,
+    reason:
+      "AGL-3651. `com.aglyn.app` in `MOBILE_APP_BUNDLES`, the native app's bundle id, which is the APNs topic its pushes are addressed to. A bundle identifier, not a host: nothing resolves or fetches it, and a self-hosted build that ships its own app under its own bundle id changes it with the app.",
+  },
+  {
     file: 'apps/console/constants/subprocessor-inventory.ts',
     count: 3,
     reason:
