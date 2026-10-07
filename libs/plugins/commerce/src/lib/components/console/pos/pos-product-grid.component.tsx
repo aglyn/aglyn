@@ -49,6 +49,8 @@ export interface PosProductGridProps {
   onSearch: (value: string) => void
   /** Enter in the search box: a barcode wedge finishing a scan. */
   onSearchEnter: () => void
+  /** The camera scanner's button (AGL-3619), at the end of the search box. */
+  scanAdornment?: ReactNode
   categories: PosGridCategory[]
   /** `''` for all, {@link POS_QUICK_KEYS}, or a category id. */
   categoryId: string
@@ -107,21 +109,27 @@ export function PosProductGrid(props: PosProductGridProps) {
         autoFocus
         slotProps={{
           htmlInput: { 'aria-label': 'Search or scan barcode', enterKeyHint: 'search' },
-          input: props.search
-            ? {
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      aria-label="Clear search"
-                      onClick={() => props.onSearch('')}
-                      sx={{ width: POS_TOUCH_PX, height: POS_TOUCH_PX }}
-                    >
-                      {'✕'}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }
-            : undefined,
+          input:
+            props.search || props.scanAdornment
+              ? {
+                  endAdornment: (
+                    <>
+                      {props.search ? (
+                        <InputAdornment position="end">
+                          <IconButton
+                            aria-label="Clear search"
+                            onClick={() => props.onSearch('')}
+                            sx={{ width: POS_TOUCH_PX, height: POS_TOUCH_PX }}
+                          >
+                            {'✕'}
+                          </IconButton>
+                        </InputAdornment>
+                      ) : null}
+                      {props.scanAdornment}
+                    </>
+                  ),
+                }
+              : undefined,
         }}
       />
       {props.toolbar}

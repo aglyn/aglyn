@@ -66,6 +66,8 @@ import {
   type PosSaleSummary,
 } from './pos/pos-api'
 import { PosCartPanel, type RegisterLine } from './pos/pos-cart-panel.component'
+import { ScanAdornment } from '../../barcode/scan-button.component'
+import { useScannerWedge } from '../../barcode/scanner-wedge'
 import {
   PosCustomerLookup,
   PosLastReceipt,
@@ -467,8 +469,8 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
    * The barcode wedge: a LOOKUP against the whole catalog (AGL-2501),
    * barcode first, and a miss says so.
    */
-  const handleSearchEnter = useCallback(async () => {
-    const needle = search.trim().toLowerCase()
+  const lookupCode = useCallback(async (scanned: string) => {
+    const needle = scanned.trim().toLowerCase()
     if (!needle || sale) return
     const lookup = async (field: 'barcodes' | 'skus') => {
       const found = await getDocs(
@@ -487,7 +489,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
       console.error(error)
       return void notify('Could not reach the catalog — try again', 'warning')
     }
-    if (!hit) return void notify(`No product matches “${search.trim()}”`, 'warning')
+    if (!hit) return void notify(`No product matches “${scanned.trim()}”`, 'warning')
     const product = { ...CommerceModel.liftLegacyProduct(hit.data() as any), $id: hit.id }
     const variant =
       product.variants.find(
@@ -498,7 +500,15 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     // for them, with that variant already picked.
     tapProduct(product, variant)
     setSearch('')
-  }, [search, sale, firestore, hostId, tapProduct, notify])
+  }, [sale, firestore, hostId, tapProduct, notify])
+  const handleSearchEnter = useCallback(() => lookupCode(search), [lookupCode, search])
+  // A scanner fired while focus is on a product or a button (AGL-3619), and
+  // the camera; neither while a sale is taking payment or an item is open.
+  useScannerWedge((code) => void lookupCode(code), !sale && !itemSheet)
+  const scanAdornment = useMemo(
+    () => <ScanAdornment label="Scan a barcode with the camera" onScan={(code) => void lookupCode(code)} />,
+    [lookupCode],
+  )
 
   /** Prices the basket on the server and opens the sale for payment. */
   // A ref, not `opening`: two taps inside one React batch both read the
@@ -829,6 +839,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
             search={search}
             onSearch={setSearch}
             onSearchEnter={() => void handleSearchEnter()}
+            scanAdornment={scanAdornment}
             categories={(categoryDocs ?? []).map((category: any) => ({
               $id: category.$id,
               name: String(category.name ?? 'Category'),

@@ -121,6 +121,13 @@ function mockAnswer(asked: Asked): Row[] {
 
 // The register's operations (AGL-3609) have specs of their own; this one
 // reads the page around them.
+// The register panel renders beside the grid on a wide screen and in a
+// bottom sheet below that (AGL-3607); the basket a scan fills is read in the
+// panel, so the page is drawn wide here, where the panel is on screen.
+jest.mock('@mui/material', () => ({
+  ...jest.requireActual('@mui/material'),
+  useMediaQuery: () => true,
+}))
 jest.mock('./pos-ops/register-ops', () => ({
   PosOperationsBar: () => null,
   PosCustomerLookup: () => null,
