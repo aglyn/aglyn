@@ -37,7 +37,13 @@ import type {
 } from '../layout-language/ai-layout-links'
 import { aiLayoutStoredTree } from '../layout-language/ai-layout-store'
 import { AI_STEP_TIERS } from '../providers/catalog'
-import type { AiGenerationCheck } from '../runtime/ai-doctrine'
+import {
+  runValidatedGeneration,
+  type AiGenerationCheck,
+  type AiGenerationSpend,
+  type AiValidatedGeneration,
+} from '../runtime/ai-doctrine'
+import type { AiUsage } from '../providers/contract'
 import {
   validateAiDoctrineTree,
   type AiDoctrineTreeContext,
@@ -45,7 +51,7 @@ import {
 } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
-import { aiJobStepBudget } from './ai-job-budget'
+import { aiGenerationWorstCaseOnTierMs, aiJobStepBudget } from './ai-job-budget'
 import { aiJobBriefLine, aiPlanReferenceLines } from './ai-job-generation'
 import { aiLayoutSitePages } from './ai-job-layout-site-pages'
 
@@ -88,9 +94,17 @@ export const AI_JOB_PAGE_LANGUAGE_TOKENS = 3_000
  * re-ask at `AI_JOB_PAGE_LANGUAGE_TOKENS` on the tier the page step is served
  * from, with the step's reads and writes.
  */
+/** The most the follow-up asking only for the sections an answer left out may run to. */
+export const AI_JOB_PAGE_LANGUAGE_FOLLOW_UP_TOKENS = 1_500
+
 export const AI_JOB_PAGE_LANGUAGE_BUDGET = aiJobStepBudget({
   tier: AI_STEP_TIERS['job.page'],
   maxTokens: AI_JOB_PAGE_LANGUAGE_TOKENS,
+  // The follow-up for sections an answer left out is one more generation.
+  ownReadsMs: aiGenerationWorstCaseOnTierMs({
+    tier: AI_STEP_TIERS['job.page'],
+    maxTokens: AI_JOB_PAGE_LANGUAGE_FOLLOW_UP_TOKENS,
+  }),
 })
 
 /** The doctrine scope the language doors are told: values the compiler checks itself. */
@@ -233,6 +247,36 @@ export interface AiLayoutPageCheckInput {
   targets: AiLayoutTargets
   context: AiDoctrineTreeContext
   reusableComponents: boolean
+  /**
+   * What earlier answers gave, by plan index, shared between the page's
+   * generations: a follow-up asking only for missing sections fills the rest.
+   */
+  kept?: Array<AiLayoutSection | null>
+  /** The plan indices this answer's sections fill, in order; absent, every section. */
+  only?: readonly number[]
+}
+
+/**
+ * The follow-up turn for the sections a page's answer left out (AGL-3660):
+ * the page as before, told which sections it already has, and asked for only
+ * the missing ones, in order — the one part of a page asked for again.
+ */
+export function aiLayoutMissingSectionsPrompt(input: {
+  base: string
+  screen: AiBuildPlanScreen
+  missing: readonly number[]
+}): string {
+  const names = input.missing.map((index) => `${index + 1}. "${input.screen.sections[index].name}"`)
+  return [
+    input.base,
+    '',
+    `The other sections of this page are already designed. Design ONLY these, in this order, one entry in sections each: ${names.join('; ')}. Give each at least one block.`,
+  ].join('\n')
+}
+
+/** The plan indices a page still lacks, after the answers so far. */
+export function aiLayoutMissingSections(kept: ReadonlyArray<AiLayoutSection | null>): number[] {
+  return kept.flatMap((section, index) => (section ? [] : [index]))
 }
 
 /** The violation a planned section the answer gave nothing usable for is named by. */
@@ -247,13 +291,14 @@ export const AI_LAYOUT_SECTION_MISSING_CODE = 'layout-section-missing'
 export function aiLayoutPageCheck(
   input: AiLayoutPageCheckInput,
 ): AiGenerationCheck<AiLayoutPageBuilt> {
-  const kept: Array<AiLayoutSection | null> = input.screen.sections.map(
-    () => null,
-  )
+  const kept: Array<AiLayoutSection | null> = input.kept ?? input.screen.sections.map(() => null)
+  const fills = input.only ?? input.screen.sections.map((_, index) => index)
   return (answer) => {
-    const reading = aiReadLayoutPage(answer, input.screen.sections.length)
-    reading.sections.forEach((section, index) => {
-      if (section && !kept[index]) kept[index] = section
+    const reading = aiReadLayoutPage(answer, fills.length)
+    reading.sections.forEach((section, position) => {
+      // A section the answer gives is taken as given; one it leaves out keeps
+      // what an earlier answer gave, so a re-ask may send only what was missing.
+      if (section) kept[fills[position]] = section
     })
     const missing = kept.flatMap((section, index) => (section ? [] : [index]))
     if (missing.length) {
@@ -325,4 +370,94 @@ export function aiLayoutPageCheck(
       violations,
     }
   }
+}
+
+export interface AiLayoutPageRunInput {
+  job: Pick<AiJob, 'brief' | 'inputs' | '$id'>
+  plan: AiJobPlan
+  screen: AiBuildPlanScreen
+  sectionIds: readonly string[]
+  targets: AiLayoutTargets
+  context: AiDoctrineTreeContext
+  reusableComponents: boolean
+  inventory: AiSiteInventory | null
+  model: string
+  signal?: AbortSignal
+  /** Wraps the check, for an eval that records each answer it reads. */
+  observe?: (check: AiGenerationCheck<AiLayoutPageBuilt>) => AiGenerationCheck<AiLayoutPageBuilt>
+}
+
+/** Two generations' spend as one: every call is billed. */
+function spentTogether(first: AiGenerationSpend, second: AiGenerationSpend): AiGenerationSpend {
+  const usage: AiUsage = {
+    inputTokens: first.usage.inputTokens + second.usage.inputTokens,
+    outputTokens: first.usage.outputTokens + second.usage.outputTokens,
+    cacheReadTokens: first.usage.cacheReadTokens + second.usage.cacheReadTokens,
+    cacheWriteTokens: first.usage.cacheWriteTokens + second.usage.cacheWriteTokens,
+  }
+  return {
+    attempts: first.attempts + second.attempts,
+    usage,
+    estCostUsd: Math.round((first.estCostUsd + second.estCostUsd) * 1_000_000) / 1_000_000,
+    model: second.model,
+    stopReason: second.stopReason,
+    effort: second.effort,
+  }
+}
+
+/**
+ * A whole page in the layout language: one answer for every section, and,
+ * where that answer and its re-ask still left a section out, one follow-up
+ * asking for only those (AGL-3660). The sections that read are kept between
+ * them, so the page is compiled whole once every section is designed.
+ */
+export async function aiRunLayoutPage(input: AiLayoutPageRunInput): Promise<AiValidatedGeneration<AiLayoutPageBuilt>> {
+  const kept: Array<AiLayoutSection | null> = input.screen.sections.map(() => null)
+  const observe = input.observe ?? ((check) => check)
+  const base = aiLayoutPagePrompt({
+    job: input.job,
+    plan: input.plan,
+    screen: input.screen,
+    targets: input.targets,
+    reusableComponents: input.reusableComponents,
+  })
+  const ask = (content: string, maxTokens: number, only?: readonly number[]) =>
+    runValidatedGeneration<AiLayoutPageBuilt>(AI_LAYOUT_PAGE_KIND, {
+      step: 'job.page',
+      model: input.model,
+      instructions: AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS,
+      inventory: input.inventory,
+      messages: [{ role: 'user', content }],
+      tool: AI_LAYOUT_PAGE_TOOL,
+      maxTokens,
+      cutOff: { noun: 'page', smaller: 'Write shorter copy, and fewer items in each group.' },
+      thinking: 'off',
+      check: observe(
+        aiLayoutPageCheck({
+          screen: input.screen,
+          sectionIds: input.sectionIds,
+          targets: input.targets,
+          context: input.context,
+          reusableComponents: input.reusableComponents,
+          kept,
+          ...(only ? { only } : {}),
+        }),
+      ),
+      ...(input.signal ? { signal: input.signal } : {}),
+    })
+  const first = await ask(base, AI_JOB_PAGE_LANGUAGE_BUDGET.maxTokens(input.model))
+  const missing = aiLayoutMissingSections(kept)
+  if (
+    first.status !== 'needs_input' ||
+    !missing.length ||
+    !first.violations.every((violation) => violation.code === AI_LAYOUT_SECTION_MISSING_CODE)
+  ) {
+    return first
+  }
+  const second = await ask(
+    aiLayoutMissingSectionsPrompt({ base, screen: input.screen, missing }),
+    Math.min(AI_JOB_PAGE_LANGUAGE_FOLLOW_UP_TOKENS, AI_JOB_PAGE_LANGUAGE_BUDGET.maxTokens(input.model)),
+    missing,
+  )
+  return { ...second, ...spentTogether(first, second) }
 }

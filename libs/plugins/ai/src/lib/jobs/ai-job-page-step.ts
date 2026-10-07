@@ -88,16 +88,11 @@ import {
 } from './ai-job-page-sections'
 import { aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { AI_PLAN_ITEMS_MIN, aiPlanCopiedPageViolations } from './ai-job-plan-conformance'
-import { AI_LAYOUT_PAGE_TOOL } from '../layout-language/ai-layout-language'
 import {
   AI_JOB_PAGE_LANGUAGE_BUDGET,
-  AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS,
-  AI_LAYOUT_PAGE_KIND,
   aiJobUsesLayoutLanguage,
-  aiLayoutPageCheck,
-  aiLayoutPagePrompt,
   aiLayoutPageTargets,
-  type AiLayoutPageBuilt,
+  aiRunLayoutPage,
 } from './ai-job-page-language'
 import {
   aiCreationUnit,
@@ -718,17 +713,16 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     if (language) {
       // ── The whole page in one answer, in the layout language ──
       const targets = aiLayoutPageTargets({ job, inventory, own: [screen.id, draftId] })
-      const result = await runValidatedGeneration<AiLayoutPageBuilt>(AI_LAYOUT_PAGE_KIND, {
-        step: 'job.page',
-        model,
-        instructions: AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS,
+      const result = await aiRunLayoutPage({
+        job,
+        plan,
+        screen,
+        sectionIds,
+        targets,
+        context,
+        reusableComponents,
         inventory,
-        messages: [{ role: 'user', content: aiLayoutPagePrompt({ job, plan, screen, targets, reusableComponents }) }],
-        tool: AI_LAYOUT_PAGE_TOOL,
-        maxTokens: AI_JOB_PAGE_LANGUAGE_BUDGET.maxTokens(model),
-        cutOff: { noun: 'page', smaller: 'Write shorter copy, and fewer items in each group.' },
-        thinking: 'off',
-        check: aiLayoutPageCheck({ screen, sectionIds, targets, context, reusableComponents }),
+        model,
         ...(signal ? { signal } : {}),
       })
       const spent = aiGenerationSpent(result)

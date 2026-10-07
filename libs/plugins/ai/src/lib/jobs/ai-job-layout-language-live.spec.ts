@@ -67,7 +67,7 @@ jest.mock('../runtime/ai-runtime', () => {
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
-import { AI_LAYOUT_FRAME_TOOL, AI_LAYOUT_PAGE_TOOL } from '../layout-language/ai-layout-language'
+import { AI_LAYOUT_FRAME_TOOL } from '../layout-language/ai-layout-language'
 import type { AiBuildPlanScreen } from '../model/ai-build-plan'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
@@ -89,15 +89,11 @@ import {
 } from './ai-job-layout-language'
 import { aiLayoutChecks } from './ai-job-layout-step'
 import {
-  AI_JOB_PAGE_LANGUAGE_BUDGET,
-  AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS,
   AI_LAYOUT_FORM_PAGE_INPUT,
   AI_LAYOUT_LANGUAGE_INPUT,
-  AI_LAYOUT_PAGE_KIND,
-  aiLayoutPageCheck,
   aiLayoutPagePrompt,
   aiLayoutPageTargets,
-  type AiLayoutPageBuilt,
+  aiRunLayoutPage,
 } from './ai-job-page-language'
 import { aiPageCheckContext, aiPageLinkablePages, aiPageSectionNodeId } from './ai-job-page-sections'
 
@@ -257,7 +253,7 @@ interface Result {
 }
 
 function record(name: string, prompt: string, before: number, result: { status: string; estCostUsd: number; attempts: number } & Record<string, unknown>): Result {
-  const calls = mockCalls.slice(before).filter((call) => call.prompt === prompt)
+  const calls = mockCalls.slice(before).filter((call) => call.prompt.startsWith(prompt))
   return {
     name,
     status: result.status,
@@ -303,17 +299,29 @@ async function buildPage(brief: Brief, index: number): Promise<Result> {
   const prompt = aiLayoutPagePrompt({ job: unit, plan: unit.plan as AiJobPlan, screen, targets, reusableComponents })
   const model = MODEL ?? aiModelForStep('job.page')
   const before = mockCalls.length
-  const result = await runValidatedGeneration<AiLayoutPageBuilt>(AI_LAYOUT_PAGE_KIND, {
-    step: 'job.page',
-    model,
-    instructions: AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS,
+  let attempt = 0
+  // The page step's own pass: one answer, its re-ask, and a follow-up for a section left out.
+  const result = await aiRunLayoutPage({
+    job: unit,
+    plan: unit.plan as AiJobPlan,
+    screen,
+    sectionIds,
+    targets,
+    context,
+    reusableComponents,
     inventory: site,
-    messages: [{ role: 'user', content: prompt }],
-    tool: AI_LAYOUT_PAGE_TOOL,
-    maxTokens: AI_JOB_PAGE_LANGUAGE_BUDGET.maxTokens(model),
-    cutOff: { noun: 'page', smaller: 'Write shorter copy, and fewer items in each group.' },
-    thinking: 'off',
-    check: aiLayoutPageCheck({ screen, sectionIds, targets, context, reusableComponents }),
+    model,
+    observe: (check) => (answer) => {
+      attempt += 1
+      const checked = check(answer)
+      if (OUT && checked.violations.length) {
+        writeFileSync(
+          join(OUT, `${brief.key}-${page.title.toLowerCase()}.refused-${attempt}.json`),
+          JSON.stringify({ answer, violations: checked.violations }, null, 1),
+        )
+      }
+      return checked
+    },
   })
   if (OUT && result.status === 'needs_input') {
     writeFileSync(join(OUT, `${brief.key}-${page.title.toLowerCase()}.refused.json`), JSON.stringify(result.answer, null, 1))

@@ -306,6 +306,19 @@ function compileSection(
   let filled = columns
     .map((column, position) => ({ column, weight: cols?.[position] ?? 1 }))
     .filter((entry) => entry.column.length)
+  // A row whose columns each hold only one kind of group — a card a column —
+  // is that group, laid out by the compiler rather than column by column.
+  const groups = filled.flatMap((entry) => entry.column)
+  if (
+    filled.length >= 2 &&
+    groups.every(
+      (block) => isItemGroup(block) && block.kind === groups[0].kind && block.to === groups[0].to,
+    )
+  ) {
+    head.push({ ...groups[0], col: undefined, items: groups.flatMap((block) => block.items ?? []) })
+    page.settled.push({ at, what: `a ${groups[0].kind} group split over ${filled.length} columns drawn as one` })
+    filled = []
+  }
   // A row whose columns all say the same kind of thing, three or more across,
   // is a group of cards: one design, the words the columns gave.
   if (filled.length >= 3 && sameShape(filled.map((entry) => entry.column))) {
@@ -459,6 +472,11 @@ export function bandSx(band: AiLayoutBand): Record<string, unknown> | null {
   if (band === 'brand')
     return { bgcolor: 'primary.main', color: 'primary.contrastText' }
   return null
+}
+
+/** A group whose items sit side by side. */
+function isItemGroup(block: AiLayoutBlock): boolean {
+  return block.kind === 'cards' || block.kind === 'steps' || block.kind === 'stats' || block.kind === 'quotes'
 }
 
 /** Whether a block spans more than a reading column: a row of several items. */
@@ -1136,7 +1154,8 @@ function layOut(
   role: string,
 ): string {
   const tree = scope.page.tree
-  if (perRow <= 1 || items.length <= 1) {
+  if (items.length === 1) return items[0]
+  if (perRow <= 1) {
     return tree.add('muiStack', { spacing }, null, items, role)
   }
   const size = itemSize(perRow)
