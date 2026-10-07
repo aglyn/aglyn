@@ -31,7 +31,10 @@ import {
  * The app's Terminal SDK asks for a connection token whenever it needs one.
  * `commerce/pos-terminal-connection-token` mints it for ONE site, scoped to
  * the site's Terminal Location, after the same gate as a sale (`managePos`,
- * a site role that may sell, the `pos` entitlement). Commerce provides it as
+ * a site role that may sell, the `pos` entitlement). There is no merchant
+ * account to connect on behalf of: card-present payments settle on the
+ * platform account (ToS §10.7, AGL-3607), and the server's own intent route
+ * is the only place a payment's account is chosen. Commerce provides it as
  * the foundation's card-reader backend, so the app never names this plugin.
  *=========================================*/
 
@@ -63,12 +66,10 @@ export function readReaderSession(body: unknown): MobileCardReaderSession {
   if (!secret.startsWith('pst_') || !locationId.startsWith('tml_')) {
     throw new Error('Card readers are not set up for this store yet.')
   }
-  const onBehalfOf = record['onBehalfOf']
   const name = record['merchantDisplayName']
   return {
     secret,
     locationId,
-    onBehalfOf: typeof onBehalfOf === 'string' && onBehalfOf.startsWith('acct_') ? onBehalfOf : null,
     merchantDisplayName: typeof name === 'string' && name ? name.slice(0, 100) : 'Store',
     testMode: record['testMode'] === true,
   }

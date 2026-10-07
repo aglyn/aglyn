@@ -35,8 +35,6 @@ export interface MobileCardReaderSession {
   readonly secret: string
   /** The site's registered location, which every reader connects under. */
   readonly locationId: string
-  /** The merchant account a phone's own reader (Tap to Pay) charges for. */
-  readonly onBehalfOf: string | null
   /** The name the customer sees on the phone's payment sheet. */
   readonly merchantDisplayName: string
   /** Test-mode keys: simulated readers and test cards only. */

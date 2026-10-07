@@ -15,70 +15,73 @@
  * limitations under the License.
  */
 
-import type { ConsoleApiClient } from '@aglyn/mobile-core'
+import {
+  type MobileApiClient,
+  MOBILE_CARD_READER_BACKEND,
+  type MobileCardReaderBackend,
+  registerMobileService,
+  resetMobileServices,
+} from '@aglyn/mobile-plugin-host'
 import {
   batteryLabel,
   createTokenProvider,
   isSupportedBluetoothReader,
-  parseTerminalContext,
   readerName,
   registerTerminalLocation,
   setTerminalHost,
-  terminalAddressProblem,
-  terminalContext,
-  TerminalSetupError,
+  terminalSession,
 } from './context'
 import { updateIsDue } from './use-pos-terminal'
 
 jest.mock('@stripe/stripe-terminal-react-native', () => ({}))
 
-const GOOD = { secret: 'pst_test_abc', locationId: 'tml_123', onBehalfOf: 'acct_1', merchantDisplayName: 'Shop', testMode: true }
+const SESSION = { secret: 'pst_test_abc', locationId: 'tml_123', merchantDisplayName: 'Shop', testMode: true }
+const api = { request: jest.fn() } as unknown as MobileApiClient
 
-function fakeApi(body: unknown) {
-  const request = jest.fn(async () => body)
-  return { api: { request } as unknown as ConsoleApiClient, request }
+function provide(backend: Partial<MobileCardReaderBackend>) {
+  const full: MobileCardReaderBackend = {
+    session: jest.fn(async () => SESSION),
+    registerLocation: jest.fn(async () => undefined),
+    ...backend,
+  }
+  registerMobileService(MOBILE_CARD_READER_BACKEND, full, { pluginId: 'shop' })
+  return full
 }
 
-describe('parseTerminalContext', () => {
-  it('reads the route answer', () => {
-    expect(parseTerminalContext(GOOD)).toEqual(GOOD)
-  })
-
-  it('drops an onBehalfOf that is not an account and caps the name', () => {
-    expect(parseTerminalContext({ ...GOOD, onBehalfOf: 'evil', merchantDisplayName: 'x'.repeat(200) })).toMatchObject({
-      onBehalfOf: null,
-      merchantDisplayName: 'x'.repeat(100),
-    })
-  })
-
-  it('refuses an answer without a token and a location', () => {
-    expect(() => parseTerminalContext({ secret: 'pst_x' })).toThrow(/not set up/)
-    expect(() => parseTerminalContext({ ...GOOD, secret: 'sk_live_x' })).toThrow()
-  })
+afterEach(() => {
+  setTerminalHost(null)
+  resetMobileServices()
 })
 
 describe('createTokenProvider', () => {
-  afterEach(() => setTerminalHost(null))
-
-  it('asks for a token for the current site only', async () => {
-    const { api, request } = fakeApi(GOOD)
+  it('asks the card-reader backend for the current site only', async () => {
+    const backend = provide({})
     const provider = createTokenProvider(api)
     await expect(provider()).rejects.toThrow(/store/)
     setTerminalHost('host-1')
     await expect(provider()).resolves.toBe('pst_test_abc')
-    expect(request).toHaveBeenCalledWith('/api/commerce/pos-terminal-connection-token', {
-      method: 'POST',
-      body: { hostId: 'host-1' },
-    })
-    expect(terminalContext()).toEqual(GOOD)
+    expect(backend.session).toHaveBeenCalledWith(api, 'host-1')
+    expect(terminalSession()).toEqual(SESSION)
   })
 
-  it('forgets the old site context when the site changes', async () => {
-    const { api } = fakeApi(GOOD)
+  it('forgets the old site session when the site changes', async () => {
+    provide({})
     setTerminalHost('host-1')
     await createTokenProvider(api)()
     setTerminalHost('host-2')
-    expect(terminalContext()).toBeNull()
+    expect(terminalSession()).toBeNull()
+  })
+
+  it('says so when no plugin provides the backend', async () => {
+    setTerminalHost('host-1')
+    await expect(createTokenProvider(api)()).rejects.toThrow(/not available/)
+  })
+
+  it('registers the Location through the backend', async () => {
+    const backend = provide({})
+    const address = { line1: '1 Main', city: 'Austin', postalCode: '78701', country: 'US' }
+    await registerTerminalLocation(api, 'host-1', address)
+    expect(backend.registerLocation).toHaveBeenCalledWith(api, 'host-1', address)
   })
 })
 
@@ -98,49 +101,5 @@ describe('readers', () => {
     expect(updateIsDue(undefined)).toBe(false)
     expect(updateIsDue('2026-01-01T00:00:00Z', Date.parse('2026-02-01'))).toBe(true)
     expect(updateIsDue('2026-03-01T00:00:00Z', Date.parse('2026-02-01'))).toBe(false)
-  })
-})
-
-describe('setup', () => {
-  function refusing(status: number, body: unknown) {
-    const request = jest.fn(async () => {
-      throw Object.assign(new Error('refused'), { status, body })
-    })
-    return { request } as unknown as ConsoleApiClient
-  }
-
-  it('turns the route’s 409 code into a setup error the panel acts on', async () => {
-    setTerminalHost('host-1')
-    const provider = createTokenProvider(
-      refusing(409, { error: 'Add the store address card readers are used at.', code: 'location-required' }),
-    )
-    const caught = await provider().catch((error: unknown) => error)
-    expect(caught).toBeInstanceOf(TerminalSetupError)
-    expect(caught).toMatchObject({ code: 'location-required', message: 'Add the store address card readers are used at.' })
-  })
-
-  it('passes any other failure through unchanged', async () => {
-    setTerminalHost('host-1')
-    const caught = await createTokenProvider(refusing(403, { error: 'Not permitted' }))().catch((error: unknown) => error)
-    expect(caught).not.toBeInstanceOf(TerminalSetupError)
-    expect(caught).toMatchObject({ status: 403 })
-    const unknownCode = await createTokenProvider(refusing(409, { code: 'something-else' }))().catch((error: unknown) => error)
-    expect(unknownCode).not.toBeInstanceOf(TerminalSetupError)
-  })
-
-  it('checks an address before sending it, and uppercases the country', async () => {
-    expect(terminalAddressProblem({ line1: '1 Main', city: 'Austin', postalCode: '78701', country: 'USA' })).toMatch(/two-letter/)
-    expect(terminalAddressProblem({ line1: '', city: 'Austin', postalCode: '78701', country: 'US' })).toMatch(/street/)
-    const { api, request } = fakeApi({ locationId: 'tml_9' })
-    await expect(
-      registerTerminalLocation(api, 'host-1', { line1: '1 Main', city: 'Austin', postalCode: '78701', country: 'us' }),
-    ).resolves.toBe('tml_9')
-    expect(request).toHaveBeenCalledWith('/api/commerce/pos-terminal-connection-token', {
-      method: 'POST',
-      body: { hostId: 'host-1', action: 'location', address: { line1: '1 Main', city: 'Austin', postalCode: '78701', country: 'US' } },
-    })
-    await expect(
-      registerTerminalLocation(fakeApi({}).api, 'host-1', { line1: '1 Main', city: 'Austin', postalCode: '78701', country: 'US' }),
-    ).rejects.toThrow(/could not be saved/)
   })
 })

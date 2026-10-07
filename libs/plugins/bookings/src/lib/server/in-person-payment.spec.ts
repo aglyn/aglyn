@@ -265,7 +265,6 @@ describe('start', () => {
       currency: 'usd',
       'payment_method_types[]': 'card_present',
       capture_method: 'manual',
-      on_behalf_of: 'acct_merchant',
       'transfer_data[destination]': 'acct_merchant',
       'metadata[type]': 'booking-in-person',
       'metadata[hostId]': 'host-1',
@@ -273,6 +272,8 @@ describe('start', () => {
       'metadata[taxCents]': '400',
     })
     expect(created.params.get('application_fee_amount') ?? '0').toBe(String(fee))
+    // Platform settlement (ToS §10.7): never on behalf of the merchant.
+    expect(created.params.has('on_behalf_of')).toBe(false)
     expect(created.key).toMatch(/^booking-in-person:[0-9a-f]{40}$/)
     expect(docs.get(BOOKING)?.['inPersonPayment']).toMatchObject({
       paymentIntentId: 'pi_test1abcdef',

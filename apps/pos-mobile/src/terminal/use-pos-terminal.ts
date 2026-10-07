@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import type { ConsoleApiClient } from '@aglyn/mobile-core'
+import {
+  type MobileApiClient,
+  type MobileCardReaderAddress,
+  type MobileCardReaderSession,
+  type MobileCardReaderSetupCode,
+  MobileCardReaderSetupError,
+} from '@aglyn/mobile-plugin-host'
 import {
   requestNeededAndroidPermissions,
   useStripeTerminal,
@@ -25,15 +31,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform } from 'react-native'
 import { collectCardPayment, readCollectRequest, type CollectOutcome } from './collect'
 import {
-  fetchTerminalContext,
+  fetchTerminalSession,
   isSupportedBluetoothReader,
   readerName,
   registerTerminalLocation,
-  terminalContext,
-  TerminalSetupError,
-  type TerminalAddress,
-  type TerminalContext,
-  type TerminalSetupCode,
+  terminalSession,
 } from './context'
 
 /*==========================================
@@ -63,7 +65,7 @@ export interface ReaderStatus {
   busy: boolean
 }
 
-export function usePosTerminal(input: { api: ConsoleApiClient; hostId: string | null }) {
+export function usePosTerminal(input: { api: MobileApiClient; hostId: string | null }) {
   const [discovered, setDiscovered] = useState<Reader.Type[]>([])
   const [discovering, setDiscovering] = useState<ReaderKind | null>(null)
   const [connection, setConnection] = useState<Reader.ConnectionStatus>('notConnected')
@@ -73,9 +75,9 @@ export function usePosTerminal(input: { api: ConsoleApiClient; hostId: string | 
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [context, setContext] = useState<TerminalContext | null>(terminalContext())
+  const [context, setContext] = useState<MobileCardReaderSession | null>(terminalSession())
   /** What the store must set up before a reader can connect, if anything. */
-  const [setup, setSetup] = useState<TerminalSetupCode | null>(null)
+  const [setup, setSetup] = useState<MobileCardReaderSetupCode | null>(null)
   const [loadingContext, setLoadingContext] = useState(false)
   const collecting = useRef(false)
 
@@ -113,11 +115,11 @@ export function usePosTerminal(input: { api: ConsoleApiClient; hostId: string | 
   // A different site: the SDK's cached token belongs to the old one, and so
   // does the connected reader's Location.
   const loadContext = useCallback(
-    async (isActive: () => boolean = () => true): Promise<TerminalContext | null> => {
+    async (isActive: () => boolean = () => true): Promise<MobileCardReaderSession | null> => {
       if (!input.hostId) return null
       setLoadingContext(true)
       try {
-        const next = await fetchTerminalContext(input.api, input.hostId)
+        const next = await fetchTerminalSession(input.api, input.hostId)
         if (isActive()) {
           setContext(next)
           setSetup(null)
@@ -125,7 +127,7 @@ export function usePosTerminal(input: { api: ConsoleApiClient; hostId: string | 
         return next
       } catch (caught) {
         if (!isActive()) return null
-        if (caught instanceof TerminalSetupError) {
+        if (caught instanceof MobileCardReaderSetupError) {
           setSetup(caught.code)
         } else {
           setError(caught instanceof Error ? caught.message : 'Card readers are not available.')
@@ -156,7 +158,7 @@ export function usePosTerminal(input: { api: ConsoleApiClient; hostId: string | 
 
   /** Saves the store address as the Location, then fetches a token under it. */
   const registerLocation = useCallback(
-    async (address: TerminalAddress): Promise<boolean> => {
+    async (address: MobileCardReaderAddress): Promise<boolean> => {
       if (!input.hostId) return false
       setError(null)
       try {
@@ -230,7 +232,9 @@ export function usePosTerminal(input: { api: ConsoleApiClient; hostId: string | 
                 discoveryMethod: 'tapToPay',
                 reader,
                 locationId: current.locationId,
-                ...(current.onBehalfOf ? { onBehalfOf: current.onBehalfOf } : {}),
+                // No `onBehalfOf`: card-present payments settle on the
+                // platform account (ToS §10.7, AGL-3607), so the reader
+                // connects for the platform and the intent says the rest.
                 merchantDisplayName: current.merchantDisplayName,
                 // The merchant accepts Apple's Tap to Pay terms on first use,
                 // on this screen, with their Apple ID.

@@ -29,5 +29,8 @@ export default {
     ],
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
+  // The register in Aglyn POS is React Native; apps/pos-mobile's jest runs
+  // its specs (AGL-3618).
+  testPathIgnorePatterns: ['/node_modules/', '/src/mobile/pos/'],
   coverageDirectory: '../../../coverage/libs/plugins/commerce',
 }

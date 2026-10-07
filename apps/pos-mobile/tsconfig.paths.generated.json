@@ -93,6 +93,9 @@
       "@aglyn/plugins-bookings": [
         "../../libs/plugins/bookings/src/index.ts"
       ],
+      "@aglyn/plugins-bookings/mobile": [
+        "../../libs/plugins/bookings/src/mobile/index.ts"
+      ],
       "@aglyn/plugins-bookings/*": [
         "../../libs/plugins/bookings/src/lib/*"
       ],
@@ -140,6 +143,9 @@
       ],
       "@aglyn/plugins-commerce": [
         "../../libs/plugins/commerce/src/index.ts"
+      ],
+      "@aglyn/plugins-commerce/mobile": [
+        "../../libs/plugins/commerce/src/mobile/index.ts"
       ],
       "@aglyn/plugins-commerce/*": [
         "../../libs/plugins/commerce/src/lib/*"

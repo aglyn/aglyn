@@ -39,8 +39,8 @@ import {
  * PaymentIntents it collects are the server's own (`card-present-sdk`).
  *
  * Actions:
- * - `token` (the default): the secret, the Location id, the merchant's
- *   account and display name, and test mode; or a 409 whose `code` names
+ * - `token` (the default): the secret, the Location id, the store's
+ *   display name, and test mode; or a 409 whose `code` names
  *   what is missing: `terminal-unavailable`, `merchant-not-ready`,
  *   `location-required`.
  * - `status`: the same readiness as booleans, minting nothing.
@@ -100,8 +100,8 @@ async function mintToken(staff: PosStaff, res: Res) {
   }
   // A reader that connects for a store that cannot take card payments would
   // only fail at the first sale, in front of a customer.
-  const onBehalfOf = await posMerchantAccount(staff.hostId, staff.org)
-  if (!onBehalfOf) {
+  const merchant = await posMerchantAccount(staff.hostId, staff.org)
+  if (!merchant) {
     return res.status(409).json({
       error: 'Finish setting up payments in the console before taking cards.',
       code: 'merchant-not-ready',
@@ -120,7 +120,8 @@ async function mintToken(staff: PosStaff, res: Res) {
   return res.status(200).json({
     secret: token.secret,
     locationId: token.locationId,
-    onBehalfOf,
+    // No `onBehalfOf`: card-present payments settle on the platform account
+    // (ToS §10.7, AGL-3607), so a reader connects with none.
     merchantDisplayName: await hostName(staff.hostId),
     testMode: posStripeTestMode(),
   })

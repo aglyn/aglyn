@@ -16,7 +16,7 @@
  */
 
 import type { MobileScreenProps } from '@aglyn/mobile-plugin-host'
-import { Button, EmptyState, ListRow, Notice, Screen, Sheet, Skeleton, Text, useLayout, useMobileTheme } from '@aglyn/mobile-ui'
+import { Button, EmptyState, ListRow, Notice, Screen, Skeleton, Text, useLayout, useMobileTheme } from '@aglyn/mobile-ui'
 import { useQuery } from '@tanstack/react-query'
 import type { Firestore } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -33,12 +33,13 @@ import {
   cartSubtotalCents,
   EMPTY_CART,
   type PosCart,
+  type PosCartPick,
   readStoredCart,
 } from './cart'
 import { CartPanel } from './cart-panel'
 import {
   findItemByCode,
-  itemNeedsVariantPick,
+  itemNeedsSheet,
   pickOf,
   type PosItem,
   posKeys,
@@ -47,15 +48,7 @@ import {
 } from './catalog'
 import { CatalogPanel } from './catalog-panel'
 import { Checkout } from './checkout'
-import {
-  hasQuickKey,
-  quickKeyItemsQuery,
-  quickKeysStorageKey,
-  quickKeyTiles,
-  readStoredQuickKeys,
-  toggleQuickKey,
-  type PosQuickKey,
-} from './quick-keys'
+import { ItemSheet } from './item-sheet'
 import {
   cartStorageKey,
   type PendingSale,
@@ -173,10 +166,11 @@ function Register(props: {
   const reader = context.cardReader ?? null
 
   const [cart, setCart] = useStoredState<PosCart>(cartStorageKey(hostId, register.id), readStoredCart, EMPTY_CART)
-  const [quickKeys, setQuickKeys] = useStoredState<PosQuickKey[]>(
-    quickKeysStorageKey(hostId, register.id),
-    readStoredQuickKeys,
-    [],
+  // The grid reopens on the view it was left on (quick keys or everything).
+  const [quickKeys, setQuickKeys] = useStoredState<boolean>(
+    `aglyn.pos.grid-view.${hostId}.${register.id}`,
+    (raw) => raw === true,
+    true,
   )
   const [pending, setPending, pendingReady] = useStoredState<PendingSale | null>(
     pendingSaleKey(hostId, register.id),
@@ -186,8 +180,7 @@ function Register(props: {
   const [opened, setOpened] = useState<PosOpenedSale | null>(null)
   const [charging, setCharging] = useState(false)
   const [cartOpen, setCartOpen] = useState(false)
-  const [variantItem, setVariantItem] = useState<PosItem | null>(null)
-  const [pinItem, setPinItem] = useState<PosItem | null>(null)
+  const [sheetItem, setSheetItem] = useState<PosItem | null>(null)
   const [toast, setToast] = useState<Toast>(null)
   /** One open-sale attempt per basket: a retry after a lost answer finds the same sale. */
   const openAttempt = useRef<{ cart: string; key: string } | null>(null)
@@ -201,8 +194,11 @@ function Register(props: {
   const store = useQuery(storeSettingsQuery({ firestore, hostId } as CommerceMobileContext))
   const currency = store.data?.currency ?? 'USD'
   const money = useCallback((cents: number) => formatOrderMoney(cents, currency), [currency])
-  const quickItems = useQuery(quickKeyItemsQuery(firestore, hostId, quickKeys))
-  const tiles = useMemo(() => quickKeyTiles(quickKeys, quickItems.data ?? {}), [quickKeys, quickItems.data])
+  const inCart = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const line of cart.lines) counts[line.productId] = (counts[line.productId] ?? 0) + line.quantity
+    return counts
+  }, [cart.lines])
 
   useEffect(() => {
     if (!toast) return
@@ -237,13 +233,13 @@ function Register(props: {
   }, [context.api, hostId, online, opened, pending, pendingReady, setCart, setPending])
 
   const addVariant = useCallback(
-    (item: PosItem, variant: PosVariant) => {
-      const pick = pickOf(item, variant)
+    (item: PosItem, variant: PosVariant, quantity = 1, chosen?: PosCartPick) => {
+      const pick = chosen ?? pickOf(item, variant)
       if ('problem' in pick) {
         setToast({ tone: 'error', message: pick.problem })
         return
       }
-      setCart((current) => cartAdd(current, pick))
+      setCart((current) => cartAdd(current, pick, quantity))
       if (variantSoldOut(variant)) {
         setToast({ tone: 'warning', message: `${item.name} shows none in stock. The sale can go ahead.` })
       }
@@ -253,7 +249,7 @@ function Register(props: {
 
   const onPick = useCallback(
     (item: PosItem) => {
-      if (itemNeedsVariantPick(item)) setVariantItem(item)
+      if (itemNeedsSheet(item)) setSheetItem(item)
       else if (item.variants[0]) addVariant(item, item.variants[0])
     },
     [addVariant],
@@ -263,7 +259,10 @@ function Register(props: {
     async (code: string) => {
       try {
         const found = await findItemByCode(firestore, hostId, code)
-        if (found.kind === 'found') {
+        if (found.kind === 'found' && found.item.modifierGroups.some((group) => group.min > 0)) {
+          // A scanned item with a required choice still needs the choice.
+          setSheetItem(found.item)
+        } else if (found.kind === 'found') {
           addVariant(found.item, found.variant)
           setToast({ tone: 'success', message: `Added ${found.item.name}${found.variant.label ? `, ${found.variant.label}` : ''}` })
         } else {
@@ -445,10 +444,10 @@ function Register(props: {
               hostId={hostId}
               columns={columns}
               money={money}
-              quickKeys={tiles}
+              quickKeys={quickKeys}
+              onQuickKeys={setQuickKeys}
+              inCart={inCart}
               onPick={onPick}
-              onQuickKey={(tile) => addVariant(tile.item, tile.variant)}
-              onLongPress={setPinItem}
               onScan={scan}
               onSubmitCode={(code) => void onCode(code)}
             />
@@ -462,10 +461,10 @@ function Register(props: {
             hostId={hostId}
             columns={columns}
             money={money}
-            quickKeys={tiles}
+            quickKeys={quickKeys}
+            onQuickKeys={setQuickKeys}
+            inCart={inCart}
             onPick={onPick}
-            onQuickKey={(tile) => addVariant(tile.item, tile.variant)}
-            onLongPress={setPinItem}
             onScan={scan}
             onSubmitCode={(code) => void onCode(code)}
           />
@@ -512,47 +511,15 @@ function Register(props: {
         </View>
       )}
 
-      <Sheet visible={Boolean(variantItem)} onClose={() => setVariantItem(null)} title={variantItem?.name ?? ''}>
-        {(variantItem?.variants ?? []).map((variant) => (
-          <ListRow
-            key={variant.id}
-            testID={`variant-${variant.id}`}
-            title={variant.label ?? 'Standard'}
-            subtitle={[
-              variant.unitCents === null ? 'No price' : money(variant.unitCents),
-              variant.inventory !== null ? `${variant.inventory} in stock` : null,
-              variant.sku ? `SKU ${variant.sku}` : null,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-            onPress={() => {
-              if (variantItem) addVariant(variantItem, variant)
-              setVariantItem(null)
-            }}
-          />
-        ))}
-      </Sheet>
-
-      <Sheet visible={Boolean(pinItem)} onClose={() => setPinItem(null)} title={pinItem ? `Quick keys · ${pinItem.name}` : ''}>
-        {(pinItem?.variants ?? []).map((variant) => {
-          const key = { productId: pinItem!.id, variantId: variant.id === 'default' ? null : variant.id }
-          const pinned = hasQuickKey(quickKeys, key)
-          return (
-            <ListRow
-              key={variant.id}
-              title={variant.label ?? pinItem!.name}
-              subtitle={pinned ? 'Pinned. Tap to unpin.' : 'Tap to pin as a quick key.'}
-              icon={pinned ? 'star' : 'star-outline'}
-              onPress={() => {
-                const next = toggleQuickKey(quickKeys, key)
-                if (next.problem) setToast({ tone: 'warning', message: next.problem })
-                else setQuickKeys(next.keys)
-                setPinItem(null)
-              }}
-            />
-          )
-        })}
-      </Sheet>
+      <ItemSheet
+        item={sheetItem}
+        money={money}
+        onClose={() => setSheetItem(null)}
+        onAdd={(pick, quantity, variant) => {
+          if (sheetItem) addVariant(sheetItem, variant, quantity, pick)
+          setSheetItem(null)
+        }}
+      />
     </SafeAreaView>
   )
 }

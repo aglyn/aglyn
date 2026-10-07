@@ -28,7 +28,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import NetInfo from '@react-native-community/netinfo'
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
-import { onlineManager, QueryClient } from '@tanstack/react-query'
+import { defaultShouldDehydrateQuery, onlineManager, type Query, QueryClient } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { useEffect, useMemo, type ReactNode } from 'react'
 import { ConsoleApiError } from './api-client'
@@ -54,6 +54,24 @@ export function createMobileQueryClient(): QueryClient {
       mutations: { retry: false, networkMode: 'online' },
     },
   })
+}
+
+/**
+ * Whether a query's answer goes into the persisted cache (AGL-3618). Not when
+ * the query says `meta: { persist: false }`, and not when its data cannot be
+ * written as JSON: a list page that carries a Firestore cursor (a document
+ * snapshot, which refers back to its Firestore) would otherwise make every
+ * write of the WHOLE cache throw, and nothing would persist at all.
+ */
+export function shouldPersistQuery(query: Query): boolean {
+  if (query.meta?.['persist'] === false) return false
+  if (!defaultShouldDehydrateQuery(query)) return false
+  try {
+    JSON.stringify(query.state.data)
+    return true
+  } catch {
+    return false
+  }
 }
 
 let wiredOnline = false
@@ -92,7 +110,12 @@ export function MobileQueryProvider({
   return (
     <PersistQueryClientProvider
       client={client}
-      persistOptions={{ persister, maxAge: OFFLINE_CACHE_MAX_AGE_MS, buster }}
+      persistOptions={{
+        persister,
+        maxAge: OFFLINE_CACHE_MAX_AGE_MS,
+        buster,
+        dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
+      }}
     >
       {children}
     </PersistQueryClientProvider>

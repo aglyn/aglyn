@@ -29,5 +29,7 @@ export default {
     ],
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
+  // The ./mobile entry is React Native; apps/pos-mobile's jest runs its specs (AGL-3618).
+  testPathIgnorePatterns: ['/node_modules/', '/src/mobile/'],
   coverageDirectory: '../../../coverage/libs/plugins/bookings',
 }

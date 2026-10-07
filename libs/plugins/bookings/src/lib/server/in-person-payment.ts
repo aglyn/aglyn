@@ -39,7 +39,8 @@ import {
  *
  * - `start` prices the charge (the amount staff typed, plus the merchant's
  *   own service tax), and creates a card-present PaymentIntent: a
- *   DESTINATION charge `on_behalf_of` the merchant, with the take and
+ *   DESTINATION charge to the merchant, settled on the platform account
+ *   with no `on_behalf_of` (ToS §10.7, as the register's), with the take and
  *   Stripe's card cost as `application_fee_amount` — exactly the fee a paid
  *   booking already carries online (`resolveTransactionFeeCents`, `service`).
  *   Returns the intent's client secret for the app's Terminal SDK.
@@ -267,7 +268,9 @@ async function start(
       currency: 'usd',
       'payment_method_types[]': 'card_present',
       capture_method: 'manual',
-      on_behalf_of: destination,
+      // Settled on the platform account with no `on_behalf_of`, like every
+      // register card payment (ToS §10.7, AGL-3607); the merchant is paid by
+      // the destination transfer.
       'transfer_data[destination]': destination,
       ...(feeCents > 0 ? { application_fee_amount: feeCents } : {}),
       description: `Booking: ${String(booking['serviceName'] ?? 'appointment').slice(0, 80)}`,

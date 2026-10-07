@@ -1,0 +1,98 @@
+{
+  "light": {
+    "primary": {
+      "main": "#00b0ff",
+      "dark": "#0077ad",
+      "contrastText": "#FFFFFF"
+    },
+    "secondary": {
+      "main": "#e040fb",
+      "dark": "#9d2db0",
+      "contrastText": "#FFFFFF"
+    },
+    "tertiary": {
+      "main": "#404C5C",
+      "contrastText": "#FFFFFF"
+    },
+    "info": {
+      "main": "#1878cd",
+      "contrastText": "#FFFFFF"
+    },
+    "error": {
+      "main": "#e32c27",
+      "contrastText": "#FFFFFF"
+    },
+    "success": {
+      "main": "#4CAF50",
+      "contrastText": "#000000DE"
+    },
+    "warning": {
+      "main": "#FFAB40",
+      "contrastText": "#000000DE"
+    },
+    "background": {
+      "default": "#F5F5F5",
+      "paper": "#FFFFFF"
+    },
+    "tint": {
+      "primary": "#E6F5FF",
+      "secondary": "#FBE6FE",
+      "tertiary": "#EEF0F2"
+    },
+    "text": {
+      "primary": "rgba(0, 0, 0, 0.87)",
+      "secondary": "rgba(0, 0, 0, 0.6)",
+      "disabled": "rgba(0, 0, 0, 0.38)"
+    },
+    "divider": "rgba(0, 0, 0, 0.12)",
+    "inputOutline": "rgba(0, 0, 0, 0.23)"
+  },
+  "dark": {
+    "primary": {
+      "main": "#00b0ff",
+      "dark": "#4dc8ff",
+      "contrastText": "#FFFFFF"
+    },
+    "secondary": {
+      "main": "#e040fb",
+      "dark": "#e979fc",
+      "contrastText": "#FFFFFF"
+    },
+    "tertiary": {
+      "main": "#7C8CA3",
+      "contrastText": "#000000DE"
+    },
+    "info": {
+      "main": "#1878cd",
+      "contrastText": "#FFFFFF"
+    },
+    "error": {
+      "main": "#e32c27",
+      "contrastText": "#FFFFFF"
+    },
+    "success": {
+      "main": "#4CAF50",
+      "contrastText": "#000000DE"
+    },
+    "warning": {
+      "main": "#FFAB40",
+      "contrastText": "#000000DE"
+    },
+    "background": {
+      "default": "#161c21",
+      "paper": "#2a3440"
+    },
+    "tint": {
+      "primary": "#193d55",
+      "secondary": "#571e61",
+      "tertiary": "#333b44"
+    },
+    "text": {
+      "primary": "#fff",
+      "secondary": "rgba(255, 255, 255, 0.7)",
+      "disabled": "rgba(255, 255, 255, 0.5)"
+    },
+    "divider": "rgba(255, 255, 255, 0.12)",
+    "inputOutline": "rgba(255, 255, 255, 0.23)"
+  }
+}

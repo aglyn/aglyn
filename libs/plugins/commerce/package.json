@@ -18,6 +18,10 @@
       "types": "./src/index.d.ts",
       "default": "./src/index.js"
     },
+    "./mobile": {
+      "types": "./src/mobile/index.d.ts",
+      "default": "./src/mobile/index.js"
+    },
     "./*": {
       "types": "./src/lib/*.d.ts",
       "default": "./src/lib/*.js"

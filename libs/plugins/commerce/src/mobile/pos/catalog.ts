@@ -33,6 +33,13 @@ import {
   variantHasPrice,
 } from '../../lib/model/commerce'
 import { type ListCursor, type ListPage, planList, readListPage } from '../data/list-page'
+import {
+  lineLabelWithModifiers,
+  type ModifierSelection,
+  productModifierGroups,
+  type ProductModifierGroup,
+  resolveLineModifiers,
+} from '../../lib/model/product-modifiers'
 import { productsListRequest } from '../data/products'
 import { scannedProductCode } from '../data/scanned-codes'
 import type { PosCartPick } from './cart'
@@ -47,7 +54,9 @@ import type { PosCartPick } from './cart'
  * tile is one more predicate on that same query (`categoryIds` contains),
  * served by the hub's `(categoryIds, nameLower)` composite; the planner
  * refuses a category and a search word together, since Firestore takes one
- * array clause, so the grid offers one or the other.
+ * array clause, so the grid offers one or the other. Quick keys are the
+ * products the merchant marked `posQuickKey` in the product editor (AGL-3607),
+ * the same set the console register shows, on the composite declared for it.
  *
  * Reads go through the Firebase JS SDK under the console's own rules; the
  * prices shown here are a preview the server re-prices when the sale opens.
@@ -76,6 +85,8 @@ export interface PosItem {
   imageUrl: string | null
   variants: PosVariant[]
   categoryIds: string[]
+  /** Choices added at the register ("Oat milk"), priced by the server. */
+  modifierGroups: ProductModifierGroup[]
   /** Lowest and highest priced variant, for the tile. */
   fromCents: number | null
   toCents: number | null
@@ -108,27 +119,42 @@ export function posItemFrom(id: string, data: DocumentData): PosItem {
     imageUrl: product.mediaUrls?.[0] ?? product.imageUrl ?? null,
     variants,
     categoryIds: [...(product.categoryIds ?? [])],
+    modifierGroups: productModifierGroups(product),
     fromCents: prices.length ? Math.min(...prices) : null,
     toCents: prices.length ? Math.max(...prices) : null,
   }
 }
 
-/** A product with options asks which one; a product with one variant goes straight in. */
-export function itemNeedsVariantPick(item: PosItem): boolean {
-  return item.variants.length > 1
+/**
+ * A product with options or modifiers opens the item sheet; one with a
+ * single variant and nothing to choose goes straight into the basket.
+ */
+export function itemNeedsSheet(item: PosItem): boolean {
+  return item.variants.length > 1 || item.modifierGroups.length > 0
 }
 
-/** What one variant puts in the basket, or why it cannot be sold yet. */
-export function pickOf(item: PosItem, variant: PosVariant): PosCartPick | { problem: string } {
+/**
+ * What one variant, with its modifier choices, puts in the basket, or why it
+ * cannot be sold yet. The modifiers are checked and previewed with the same
+ * resolver the server prices them with.
+ */
+export function pickOf(
+  item: PosItem,
+  variant: PosVariant,
+  modifiers: readonly ModifierSelection[] = [],
+): PosCartPick | { problem: string } {
   if (variant.unitCents === null) return { problem: `Set a price for ${item.name} before selling it.` }
+  const resolved = resolveLineModifiers({ name: item.name, modifierGroups: item.modifierGroups }, modifiers)
+  if (!resolved.ok) return { problem: resolved.error ?? `Choose the options for ${item.name}.` }
   return {
     productId: item.id,
     // A product without options has one `default` variant, which the server
     // rings up when no `variantId` is sent.
     variantId: variant.id === 'default' ? null : variant.id,
     name: item.name,
-    variantLabel: variant.label,
-    unitCents: variant.unitCents,
+    variantLabel: lineLabelWithModifiers(variant.label ?? undefined, resolved.modifiers) || null,
+    modifiers: resolved.modifiers.map((entry) => ({ groupId: entry.groupId, optionId: entry.optionId })),
+    unitCents: variant.unitCents + resolved.extraCents,
   }
 }
 
@@ -142,24 +168,42 @@ export interface PosGridArgs {
   search?: string
   /** A category tile: every product filed under it. */
   categoryId?: string | null
+  /** The merchant's quick keys only. */
+  quickKeys?: boolean
 }
 
-/** The grid's plan: the products hub's query, narrowed to what the till may sell. */
+/**
+ * The grid's plan: the products hub's query, narrowed to what the till may
+ * sell. A typed word searches the whole catalog, past any category or the
+ * quick keys: a cashier who types is looking for something else.
+ */
 export function posGridPlan(args: PosGridArgs) {
   const search = args.search?.trim() ?? ''
   const request = productsListRequest({ filter: 'active', search })
-  const category: ListQueryFilter[] =
-    args.categoryId && !search ? [{ path: 'categoryIds', op: 'array-contains', value: args.categoryId }] : []
-  return planList(PRODUCT_LIST_QUERY, { ...request, base: [...request.base, ...category] })
+  const narrowed: ListQueryFilter[] = search
+    ? []
+    : args.quickKeys
+      ? [{ path: 'posQuickKey', op: '==', value: true }]
+      : args.categoryId
+        ? [{ path: 'categoryIds', op: 'array-contains', value: args.categoryId }]
+        : []
+  return planList(PRODUCT_LIST_QUERY, { ...request, base: [...request.base, ...narrowed] })
 }
 
 export const posKeys = {
   all: (hostId: string) => ['commerce', hostId, 'pos'] as const,
   grid: (hostId: string, args: PosGridArgs) =>
-    ['commerce', hostId, 'pos', 'grid', args.search?.trim() ?? '', args.categoryId ?? ''] as const,
+    [
+      'commerce',
+      hostId,
+      'pos',
+      'grid',
+      args.search?.trim() ?? '',
+      args.categoryId ?? '',
+      args.quickKeys ? 'quick' : '',
+    ] as const,
   categories: (hostId: string) => ['commerce', hostId, 'pos', 'categories'] as const,
   context: (hostId: string) => ['commerce', hostId, 'pos', 'context'] as const,
-  items: (hostId: string, ids: readonly string[]) => ['commerce', hostId, 'pos', 'items', ...ids] as const,
 }
 
 const productsPath = (hostId: string) => `hosts/${hostId}/products`

@@ -175,13 +175,12 @@ describe('the gate', () => {
 })
 
 describe('token', () => {
-  it('mints a token scoped to this site’s Location, with the merchant to show', async () => {
+  it('mints a token scoped to this site’s Location, with no on-behalf-of account', async () => {
     const result = await call({})
     expect(result.status).toBe(200)
     expect(result.body).toEqual({
       secret: 'pst_test_tml_ours',
       locationId: 'tml_ours',
-      onBehalfOf: 'acct_merchant',
       merchantDisplayName: 'Corner Cafe',
       testMode: true,
     })

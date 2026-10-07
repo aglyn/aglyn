@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { type ModifierSelection, modifierSelectionKey } from '../../lib/model/product-modifiers'
+
 /*==========================================
  * THE REGISTER'S BASKET (AGL-3618).
  *
@@ -24,9 +26,10 @@
  *
  * The basket's figures are a PREVIEW. The sale is priced by the server when
  * it opens (`commerce/pos-order`, `payment: 'open'`): it re-reads every
- * product, applies the discount ceiling and the store's tax, and the total it
- * answers is the one the customer pays. The basket sends only what was
- * picked (product, variant, quantity), never a price.
+ * product, prices each modifier from the product (AGL-3607), applies the
+ * discount ceiling and the store's tax, and the total it answers is the one
+ * the customer pays. The basket sends only what was picked (product,
+ * variant, modifier ids, quantity), never a price.
  *=========================================*/
 
 /** The most of one line the server rings up (`pos-order.ts` clamps to 1..99). */
@@ -35,15 +38,17 @@ export const POS_LINE_MAX_QUANTITY = 99
 export const POS_CART_MAX_LINES = 100
 
 export interface PosCartLine {
-  /** `productId` and `variantId`: one line per variant. */
+  /** Product, variant and modifier choices: the same item with the same choices is one line. */
   key: string
   productId: string
   /** Null for a product's only (default) variant. */
   variantId: string | null
   name: string
-  /** "Large / Blue", or null for a product without options. */
+  /** "Large / Oat milk, Extra shot": the variant, then the modifiers; null for neither. */
   variantLabel: string | null
-  /** The price the grid showed, for the preview only. */
+  /** The modifier options picked, by id; the server prices them. */
+  modifiers: ModifierSelection[]
+  /** One unit as the grid priced it, modifiers included: the preview only. */
   unitCents: number
   quantity: number
 }
@@ -58,8 +63,12 @@ export interface PosCart {
 
 export const EMPTY_CART: PosCart = { lines: [], discountPct: 0, customerEmail: '' }
 
-export function cartLineKey(productId: string, variantId: string | null): string {
-  return `${productId}:${variantId ?? ''}`
+export function cartLineKey(
+  productId: string,
+  variantId: string | null,
+  modifiers: readonly ModifierSelection[] = [],
+): string {
+  return `${productId}:${variantId ?? ''}:${modifierSelectionKey(modifiers)}`
 }
 
 export interface PosCartPick {
@@ -67,6 +76,7 @@ export interface PosCartPick {
   variantId: string | null
   name: string
   variantLabel: string | null
+  modifiers?: ModifierSelection[]
   unitCents: number
 }
 
@@ -75,7 +85,8 @@ const clampQuantity = (quantity: number) =>
 
 /** Adds `quantity` of a pick: the same variant again grows its line. */
 export function cartAdd(cart: PosCart, pick: PosCartPick, quantity = 1): PosCart {
-  const key = cartLineKey(pick.productId, pick.variantId)
+  const modifiers = (pick.modifiers ?? []).map((entry) => ({ groupId: entry.groupId, optionId: entry.optionId }))
+  const key = cartLineKey(pick.productId, pick.variantId, modifiers)
   const existing = cart.lines.find((line) => line.key === key)
   if (existing) return cartSetQuantity(cart, key, existing.quantity + quantity)
   if (cart.lines.length >= POS_CART_MAX_LINES) return cart
@@ -91,6 +102,7 @@ export function cartAdd(cart: PosCart, pick: PosCartPick, quantity = 1): PosCart
         variantId: pick.variantId,
         name: pick.name,
         variantLabel: pick.variantLabel,
+        modifiers,
         unitCents: Math.max(0, Math.round(pick.unitCents)),
         quantity: added,
       },
@@ -140,10 +152,16 @@ export function cartDiscountCents(cart: PosCart): number {
 }
 
 /** What `commerce/pos-order` takes for `lines`: picks and counts, never prices. */
-export function cartSaleLines(cart: PosCart): Array<{ productId: string; variantId?: string; quantity: number }> {
+export function cartSaleLines(cart: PosCart): Array<{
+  productId: string
+  variantId?: string
+  modifiers?: ModifierSelection[]
+  quantity: number
+}> {
   return cart.lines.map((line) => ({
     productId: line.productId,
     ...(line.variantId ? { variantId: line.variantId } : {}),
+    ...(line.modifiers.length ? { modifiers: line.modifiers } : {}),
     quantity: line.quantity,
   }))
 }
@@ -162,6 +180,9 @@ export function readStoredCart(raw: unknown): PosCart {
         variantId: typeof line.variantId === 'string' && line.variantId ? line.variantId : null,
         name: typeof line.name === 'string' ? line.name : 'Item',
         variantLabel: typeof line.variantLabel === 'string' ? line.variantLabel : null,
+        modifiers: (Array.isArray(line.modifiers) ? line.modifiers : []).filter(
+          (entry) => typeof entry?.groupId === 'string' && typeof entry?.optionId === 'string',
+        ),
         unitCents: Number(line.unitCents) || 0,
       },
       Number(line.quantity) || 0,

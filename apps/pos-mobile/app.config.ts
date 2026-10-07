@@ -96,6 +96,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     'expo-web-browser',
+    [
+      'expo-camera',
+      {
+        cameraPermission: 'Aglyn POS uses the camera to scan item barcodes at the register.',
+        microphonePermission: false,
+        recordAudioAndroid: false,
+      },
+    ],
   ],
   extra: {
     tapToPayEntitlement,

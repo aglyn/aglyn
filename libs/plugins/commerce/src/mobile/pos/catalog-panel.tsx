@@ -29,16 +29,16 @@ import {
   type PosVariant,
   variantSoldOut,
 } from './catalog'
-import { type PosQuickKeyTile } from './quick-keys'
 
 /*==========================================
  * THE ITEM GRID (AGL-3618).
  *
  * Built for speed at a counter, the way Square's and Shopify's tills are:
- * quick keys first (one tap rings the item up), then category tiles, then
- * every sellable product as a tile, with a search field and a camera scan
- * above. A tap on a single-variant product adds it; a product with options
- * asks which one. A long press pins it as a quick key.
+ * the merchant's quick keys (one tap rings the item up), category tiles,
+ * then every sellable product as a tile, with a search field and a camera
+ * scan above. A tap on a plain product adds it; a product with options or
+ * modifiers opens its item sheet. The device reopens on the view it was
+ * left on.
  *=========================================*/
 
 export interface CatalogPanelProps {
@@ -46,10 +46,12 @@ export interface CatalogPanelProps {
   hostId: string
   columns: number
   money: (cents: number) => string
-  quickKeys: PosQuickKeyTile[]
+  /** The view the grid opened on last: quick keys, or everything. */
+  quickKeys: boolean
+  onQuickKeys: (on: boolean) => void
+  /** How many of each product the basket holds, for the tile's badge. */
+  inCart: Readonly<Record<string, number>>
   onPick: (item: PosItem) => void
-  onQuickKey: (tile: PosQuickKeyTile) => void
-  onLongPress: (item: PosItem) => void
   /** Present when the app can scan with the camera. */
   onScan?: () => void
   /** A typed code followed by return: the keyboard-wedge scanner's path. */
@@ -77,11 +79,15 @@ export function CatalogPanel(props: CatalogPanelProps) {
 
   const categories = useQuery(posCategoriesQuery(props.firestore, props.hostId))
   const level = useMemo(
-    () => (search ? [] : categoryLevel(categories.data ?? [], category?.id ?? null)),
-    [categories.data, category, search],
+    () => (search || (props.quickKeys && !category) ? [] : categoryLevel(categories.data ?? [], category?.id ?? null)),
+    [categories.data, category, search, props.quickKeys],
   )
   const grid = useInfiniteQuery(
-    posGridQuery(props.firestore, props.hostId, { search, categoryId: search ? null : category?.id ?? null }),
+    posGridQuery(props.firestore, props.hostId, {
+      search,
+      categoryId: category?.id ?? null,
+      quickKeys: props.quickKeys && !category,
+    }),
   )
   const items = useMemo(() => grid.data?.pages.flatMap((page) => page.rows) ?? [], [grid.data])
   const refused = grid.data?.pages[0]?.plan.refused ?? []
@@ -100,50 +106,31 @@ export function CatalogPanel(props: CatalogPanelProps) {
 
   const header = (
     <View style={{ gap: theme.space(1), paddingBottom: theme.space(1) }}>
-      {props.quickKeys.length ? (
-        <View style={{ gap: theme.space(0.5) }}>
-          <Text variant="caption" tone="secondary">
-            Quick keys
-          </Text>
-          <View style={styles.wrap}>
-            {props.quickKeys.map((entry) => (
-              <Pressable
-                key={`${entry.key.productId}:${entry.key.variantId ?? ''}`}
-                testID={`quick-key-${entry.key.productId}`}
-                accessibilityRole="button"
-                accessibilityLabel={`Add ${entry.item.name}${entry.variant.label ? `, ${entry.variant.label}` : ''}`}
-                onPress={() => props.onQuickKey(entry)}
-                style={({ pressed }) => ({
-                  width: `${100 / Math.max(3, props.columns)}%`,
-                  padding: theme.space(0.5),
-                  opacity: pressed ? 0.7 : 1,
-                })}
-              >
-                <View
-                  style={{
-                    minHeight: 64,
-                    borderRadius: theme.radius,
-                    padding: theme.space(1),
-                    backgroundColor: theme.colors.primary.main,
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <Text variant="label" numberOfLines={2} style={{ color: theme.colors.primary.contrastText }}>
-                    {entry.item.name}
-                    {entry.variant.label ? ` · ${entry.variant.label}` : ''}
-                  </Text>
-                  <Text variant="caption" style={{ color: theme.colors.primary.contrastText }}>
-                    {entry.variant.unitCents === null ? 'No price' : props.money(entry.variant.unitCents)}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      ) : null}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: theme.space(1) }}>
+        <Button
+          testID="grid-quick-keys"
+          title="Quick keys"
+          icon="flash-outline"
+          variant={props.quickKeys && !path.length ? 'contained' : 'outlined'}
+          onPress={() => {
+            setPath([])
+            props.onQuickKeys(true)
+          }}
+        />
+        <Button
+          testID="grid-all"
+          title="All items"
+          icon="grid-outline"
+          variant={!props.quickKeys && !path.length ? 'contained' : 'outlined'}
+          onPress={() => {
+            setPath([])
+            props.onQuickKeys(false)
+          }}
+        />
+      </ScrollView>
       {path.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: theme.space(1) }}>
-          <Button title="All items" variant="text" icon="arrow-back" onPress={() => setPath([])} />
+          <Button title="Back" variant="text" icon="arrow-back" onPress={() => setPath(path.slice(0, -1))} />
           {path.map((entry, index) => (
             <Button
               key={entry.id}
@@ -161,7 +148,10 @@ export function CatalogPanel(props: CatalogPanelProps) {
               key={entry.id}
               accessibilityRole="button"
               accessibilityLabel={`Category ${entry.name}`}
-              onPress={() => setPath([...path, entry])}
+              onPress={() => {
+                props.onQuickKeys(false)
+                setPath([...path, entry])
+              }}
               style={({ pressed }) => ({
                 width: `${100 / props.columns}%`,
                 padding: theme.space(0.5),
@@ -287,8 +277,25 @@ export function CatalogPanel(props: CatalogPanelProps) {
           ) : (
             <EmptyState
               icon="pricetags-outline"
-              title={search ? `Nothing matches “${search}”` : 'No items to sell'}
-              body={search ? undefined : 'Active products in the store show here.'}
+              title={
+                search
+                  ? `Nothing matches “${search}”`
+                  : props.quickKeys && !category
+                    ? 'No quick keys yet'
+                    : 'No items to sell'
+              }
+              body={
+                search
+                  ? undefined
+                  : props.quickKeys && !category
+                    ? 'Turn on “Quick key at the register” for a product in the console’s product editor, or open All items.'
+                    : 'Active products in the store show here.'
+              }
+              action={
+                props.quickKeys && !category && !search ? (
+                  <Button title="All items" variant="outlined" onPress={() => props.onQuickKeys(false)} />
+                ) : undefined
+              }
             />
           )
         }
@@ -299,9 +306,8 @@ export function CatalogPanel(props: CatalogPanelProps) {
               testID={`pos-item-${item.id}`}
               accessibilityRole="button"
               accessibilityLabel={`${item.name}, ${priceLabel(item, props.money)}${soldOut ? ', sold out' : ''}`}
-              accessibilityHint="Adds it to the sale. Press and hold to pin it as a quick key."
+              accessibilityHint={item.variants.length > 1 || item.modifierGroups.length ? 'Opens its options.' : 'Adds it to the sale.'}
               onPress={() => props.onPick(item)}
-              onLongPress={() => props.onLongPress(item)}
               style={({ pressed }) => [tile, { opacity: pressed ? 0.7 : 1 }]}
             >
               {item.imageUrl ? (
@@ -319,7 +325,21 @@ export function CatalogPanel(props: CatalogPanelProps) {
                 <Text variant="caption" tone="secondary">
                   {priceLabel(item, props.money)}
                 </Text>
-                {soldOut ? (
+                {props.inCart[item.id] ? (
+                  <View
+                    style={{
+                      minWidth: 22,
+                      paddingHorizontal: 6,
+                      borderRadius: 11,
+                      backgroundColor: theme.colors.primary.main,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text variant="caption" style={{ color: theme.colors.primary.contrastText }}>
+                      {props.inCart[item.id]}
+                    </Text>
+                  </View>
+                ) : soldOut ? (
                   <Text variant="caption" tone="error">
                     Sold out
                   </Text>

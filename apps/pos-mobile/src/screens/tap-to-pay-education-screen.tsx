@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { Button, Card, Label, Screen, useMobileTheme } from '@aglyn/mobile-ui'
+import { Button, Card, Screen, Text, useMobileTheme } from '@aglyn/mobile-ui'
 import { Platform, View } from 'react-native'
 import { canShowAppleHowToTap, showAppleHowToTap } from '../../modules/tap-to-pay-education'
 
@@ -75,18 +75,18 @@ export async function presentHowToTap(): Promise<'apple' | 'fallback'> {
 export function TapToPayEducationScreen(props: { onDone: () => void }) {
   const theme = useMobileTheme()
   return (
-    <Screen testID="tap-to-pay-education">
-      <View style={{ gap: theme.spacing(2) }}>
-        <Label variant="headline">How to take a payment with {TAP_TO_PAY_NAME}</Label>
+    <Screen>
+      <View style={{ gap: theme.space(2) }}>
+        <Text variant="title">How to take a payment with {TAP_TO_PAY_NAME}</Text>
         {EDUCATION_STEPS.map((step, index) => (
           <Card key={step.title}>
-            <Label variant="subtitle" bold>
+            <Text variant="heading">
               {`${index + 1}. ${step.title}`}
-            </Label>
-            <Label tone="secondary">{step.body}</Label>
+            </Text>
+            <Text tone="secondary">{step.body}</Text>
           </Card>
         ))}
-        <Button label="Got it" onPress={props.onDone} testID="tap-to-pay-education-done" />
+        <Button title="Got it" onPress={props.onDone} testID="tap-to-pay-education-done" />
       </View>
     </Screen>
   )

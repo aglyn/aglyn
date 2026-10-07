@@ -45,6 +45,7 @@ module.exports = {
     path.join(repoRoot, 'libs/plugins/commerce/src/mobile/pos'),
     path.join(repoRoot, 'libs/plugins/bookings/src/mobile'),
   ],
+  setupFiles: ['<rootDir>/jest.setup.js'],
   testMatch: ['**/*.spec.ts', '**/*.spec.tsx'],
   testPathIgnorePatterns: ['/node_modules/'],
   moduleDirectories: ['node_modules', appModules],

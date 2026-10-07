@@ -7,6 +7,9 @@
 import { takeBookingPayment, type BookingsApi, type BookingsCardReader } from './in-person-payment-client'
 import { centsFromText, counterBookingFrom, formatUsd } from './today-bookings'
 
+// The counter list's pure helpers are under test here, not its Firestore read.
+jest.mock('firebase/firestore', () => ({}))
+
 function harness(options: {
   settle?: { status: string; amountCents?: number }
   collect?: Awaited<ReturnType<BookingsCardReader['collect']>> | Error

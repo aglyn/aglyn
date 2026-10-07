@@ -16,5 +16,6 @@
     "**/*.d.ts",
     "src/lib/plan-entitlements.ts",
     "jest.config.ts"
-  ]
+  ],
+  "exclude": ["src/mobile/pos/**"]
 }
