@@ -67,6 +67,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => ({}),
   useUser: () => ({ data: mockUser }),
+}))
+jest.mock('../hooks/use-host', () => ({
+  __esModule: true,
   useHost: () => ({ doc: { data: mockHost, status: mockHostStatus } }),
 }))
 jest.mock('next/navigation', () => ({

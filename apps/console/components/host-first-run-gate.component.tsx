@@ -17,10 +17,11 @@
 
 'use client'
 
-import { useHost, useUser } from '@aglyn/tenant-feature-instance'
+import { useUser } from '@aglyn/tenant-feature-instance'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useRef, useState } from 'react'
 import useCurrentOrg from '../hooks/use-current-org'
+import { useHost } from '../hooks/use-host'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import { hostIsBlankSite, requestStarterSite } from '../utils/host-first-run'
 import { useHostId, useHostSubdomain } from './host-id-provider'
