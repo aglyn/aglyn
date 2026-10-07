@@ -444,19 +444,26 @@ function aiRepeatFrameOrSection(tree: AiDoctrineTree): (visit: Visit) => boolean
     if (node.componentId === 'muiGrid' && node.props?.['container'] === true) return true
     if (node.componentId === 'muiList') return true
     const children = childrenOf(id)
+    // A Stack of like blocks — cards, rows, panels — and never of lines of text.
+    const kinds = new Set(children.map((child) => tree.nodes[child].componentId))
     return (
       node.componentId === 'muiStack' &&
       children.length >= 2 &&
-      new Set(children.map((child) => tree.nodes[child].componentId)).size === 1
+      kinds.size === 1 &&
+      children.every((child) => (tree.nodes[child].nodes ?? []).length > 0)
     )
   }
+  const parentOf = new Map<string, string>()
+  for (const [id, node] of Object.entries(tree.nodes)) for (const child of node?.nodes ?? []) parentOf.set(child, id)
   const exempt = (id: string): boolean => {
     const known = memo.get(id)
     if (known !== undefined) return known
     const node = tree.nodes[id]
     const children = childrenOf(id)
+    const parent = parentOf.get(id)
     const result =
-      holdsOutline(id) ||
+      // An item of a frame is an item, whatever heading it carries.
+      (holdsOutline(id) && !(parent !== undefined && itemFrame(parent))) ||
       itemFrame(id) ||
       (!!node && REPEAT_FRAMES.has(node.componentId) && children.length > 0 && children.every(exempt))
     memo.set(id, result)

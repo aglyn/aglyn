@@ -171,7 +171,7 @@ export interface AiLayoutFrameDoc {
 const ITEM_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['title', 'text'],
+  required: ['title', 'text', 'to', 'icon'],
   properties: {
     title: { type: 'string' },
     text: { type: 'string' },
@@ -183,13 +183,13 @@ const ITEM_SCHEMA = {
 const BLOCK_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['kind'],
+  required: ['kind', 'col', 'text', 'to', 'style', 'icon', 'items'],
   properties: {
     kind: { type: 'string', enum: [...AI_LAYOUT_BLOCK_KINDS] },
     col: { type: 'integer' },
     text: { type: 'string' },
     to: { type: 'string' },
-    style: { type: 'string', enum: [...AI_LAYOUT_STYLES] },
+    style: { type: 'string', enum: [...AI_LAYOUT_STYLES, 'none'] },
     icon: { type: 'string' },
     items: { type: 'array', items: ITEM_SCHEMA },
   },
@@ -198,7 +198,7 @@ const BLOCK_SCHEMA = {
 const SECTION_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['blocks'],
+  required: ['band', 'cols', 'align', 'blocks'],
   properties: {
     band: { type: 'string', enum: [...AI_LAYOUT_BANDS] },
     cols: { type: 'array', items: { type: 'integer' } },
@@ -245,9 +245,10 @@ export const AI_LAYOUT_LANGUAGE_TEXT = [
   '',
   'A page is a list of sections, one for each section the plan names, in that order. A section has:',
   '- band: plain (the page background), soft (a light band), brand (the brand color) or dark (always dark). Vary the bands down a page so neighboring sections read apart; keep brand and dark to one or two sections a page.',
-  '- cols: optional relative column widths for a row, such as [1, 1] for halves, [7, 5] for a wide and a narrow column, or [1, 1, 1]; at most 4. Leave it out for one column.',
+  '- cols: relative column widths for a row, such as [1, 1] for halves, [7, 5] for a wide and a narrow column, or [1, 1, 1]; at most 4. [] for one column.',
   '- align: start or center.',
-  '- blocks: what the section shows, top to bottom. A block with "col" goes in that column of the row (0 is the first); a block without one spans the whole section, above the row when it comes first and below it when it comes last.',
+  '- blocks: what the section shows, top to bottom. A block with col 0 or more goes in that column of the row (0 is the first); a block with col -1 spans the whole section, above the row when it comes first and below it when it comes last.',
+  'Every field is always written: a block that does not use one writes "" (text, to, icon), "none" (style), -1 (col) or [] (items); an item that does not use one writes "".',
   '',
   'Block kinds:',
   "- eyebrow: a short label above a heading. heading: a heading; the first heading of the page's first section is the page's title, and the first heading of every other section is that section's heading. lede: the larger sentence under a heading. text: a paragraph. note: small print.",
