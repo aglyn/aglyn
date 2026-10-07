@@ -42,7 +42,7 @@ import {
   aiJobPlanCreationsRefusal,
   aiPlanCreationsRunMinimumMs,
 } from './ai-job-plan-creations'
-import { aiJobDraftId } from './ai-job-draft-ids'
+import { aiJobDraftId, aiOriginJobId } from './ai-job-draft-ids'
 import {
   aiDraftAdmissionRefusal,
   aiDraftAllowanceRefusal,
@@ -377,6 +377,7 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
       org,
       name,
       nodes: result.value.nodes,
+      aiJobId: aiOriginJobId(job),
       now,
     })
     if (draft.ok === false) {

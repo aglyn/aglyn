@@ -39,6 +39,7 @@ import {
   type AiJobOutput,
   type AiJobPlan,
   type AiJobReview,
+  type AiJobSitePublish,
   type AiJobStatus,
   type AiJobStep,
   type AiJobStepTokens,
@@ -672,6 +673,7 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
           staged: job.applied.staged ?? [],
         }
       : null,
+    ...(job.sitePublish ? { sitePublish: job.sitePublish } : {}),
   }
 }
 
@@ -835,6 +837,8 @@ export interface RecordStepInput {
   continued?: boolean
   /** What the run cost in tokens and time (AGL-2937), added to the step's totals. */
   tokens?: AiJobStepTokenRun
+  /** What a guided site start put live (AGL-3596), kept on the job. */
+  sitePublish?: AiJobSitePublish
 }
 
 /** One run of a step's runner, as the machine measured it (AGL-2937). */
@@ -975,6 +979,7 @@ export async function recordStep(
       // A plan the step produced is kept whatever the job's status is by
       // now, for the reason its credits are.
       ...(input.plan ? { plan: input.plan } : {}),
+      ...(input.sitePublish ? { sitePublish: input.sitePublish } : {}),
       // A doctrine or limit review's sentence is the job's customer-safe
       // error, as a meter park's is; a plan waiting to be confirmed is not an
       // error.
@@ -1775,6 +1780,7 @@ export async function runAiJobStep(
       outputs: outcome.outputs,
       ...(outcome.plan ? { plan: outcome.plan } : {}),
       ...(review ? { review } : {}),
+      ...(outcome.sitePublish ? { sitePublish: outcome.sitePublish } : {}),
     },
     now,
   )

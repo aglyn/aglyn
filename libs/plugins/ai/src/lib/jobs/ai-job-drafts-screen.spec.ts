@@ -377,6 +377,42 @@ describe('aiDraftScreenSlug', () => {
   })
 })
 
+describe('a guided start’s home over the starter (AGL-3596)', () => {
+  /** A site born with the starter: its placeholder Home at `/`, untouched. */
+  function seedStarterSite() {
+    mockOwners.set('host-1', 'org-1')
+    mockDocs.set('hosts/host-1', { subdomain: 'acme', screens: { 'scr-starter': '/' }, defaultHomeScreenId: 'scr-starter' })
+    mockDocs.set('hosts/host-1/screens/scr-starter', { displayName: 'Home', slug: '/', versionId: 'v-starter', publishedAt: NOW })
+  }
+
+  it('is named "Home" at `/`, the page its publish replaces, never "Home 2" at a copy’s address', async () => {
+    seedStarterSite()
+    const draft = await writeAiDraft(firestore, screenInput({ id: 'drft-home', name: 'Home', slug: '/' }))
+    if (draft.ok === false) throw new Error(draft.error)
+    expect(draft.name).toBe('Home')
+    expect(mockDocs.get('hosts/host-1/screens/drft-home')).toMatchObject({ displayName: 'Home', slug: '/' })
+    // Still a draft: the starter answers `/` until the publish.
+    expect(routingMap()).toEqual({ 'scr-starter': '/' })
+  })
+
+  it('is numbered beside a home page the owner published themselves', async () => {
+    seedStarterSite()
+    mockDocs.set('hosts/host-1', { subdomain: 'acme', screens: { 'scr-starter': '/' } })
+    const draft = await writeAiDraft(firestore, screenInput({ id: 'drft-home', name: 'Home', slug: '/' }))
+    if (draft.ok === false) throw new Error(draft.error)
+    expect(draft.name).toBe('Home 2')
+    expect(mockDocs.get('hosts/host-1/screens/drft-home')?.['slug']).toBe('home')
+  })
+
+  it('stamps the page and its first version with the job the member started', async () => {
+    seedLiveSite()
+    await writeAiDraft(firestore, screenInput({ aiJobId: 'job-site-1' }))
+    const screen = mockDocs.get('hosts/host-1/screens/job-page')
+    expect(screen?.['aiJobId']).toBe('job-site-1')
+    expect(mockDocs.get(`hosts/host-1/screens/job-page/versions/${screen?.['versionId']}`)?.['aiJobId']).toBe('job-site-1')
+  })
+})
+
 describe('a later pass, and the listing', () => {
   it('adds to the version as it is stored now, stamps it, and changes nothing a second time', async () => {
     seedLiveSite()

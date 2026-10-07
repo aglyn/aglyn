@@ -47,7 +47,10 @@ import {
 } from '../model/ai-site-start-seo'
 import { aiModelForStep } from '../providers/routing'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
-import { aiRecordedJobDraftId } from './ai-job-draft-ids'
+import { aiOriginJobId, aiRecordedJobDraftId } from './ai-job-draft-ids'
+import { readAiDraftNodes } from './ai-job-drafts'
+import { aiPageSectionNodeId } from './ai-job-page-sections'
+import { aiJobPublishesSite, aiPublishGuidedSite } from './ai-site-publish'
 import { aiConfirmedPlan, aiUnspentOutcome } from './ai-job-generation'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
@@ -342,6 +345,12 @@ export function aiSiteBuiltRefs(
 
 type BuiltRefs = ReturnType<typeof aiSiteBuiltRefs>
 
+/** The layout the scaffold built, when it built one. */
+function aiSiteBuiltLayoutId(built: BuiltRefs): string | null {
+  for (const entry of built.values()) if (entry.kind === 'layout') return entry.id
+  return null
+}
+
 /** A plan reference as the unit's own job reads it: an id the site now has, or nothing. */
 export function aiSiteResolvedRef(ref: string | null, built: BuiltRefs): string | null {
   if (!ref) return null
@@ -490,9 +499,15 @@ export function aiSiteUnitJob(
     unitPlan.screens = [
       {
         ...screen,
-        layout: aiSiteResolvedRef(screen.layout, built),
+        // A page the plan named no layout for renders inside the one the
+        // scaffold built (AGL-3596); the page step falls back to the site's.
+        layout: aiSiteResolvedRef(screen.layout, built) ?? aiSiteBuiltLayoutId(built),
         template: aiSiteResolvedRef(screen.template, built),
-        duplicateOf: aiSiteResolvedRef(screen.duplicateOf, built),
+        // A scaffold GENERATES every page from its plan (AGL-3596). A page
+        // copied from one the site has is not built: a plan that named the
+        // starter home page as its home's start produced the starter again,
+        // byte for byte, reported as written. A page job keeps rule 15.
+        duplicateOf: job.kind === 'site' ? null : aiSiteResolvedRef(screen.duplicateOf, built),
         // A dataset the plan creates and the site has not built yet keeps its
         // name, which the page's draft still binds by (AGL-3475).
         record: screen.record
@@ -516,6 +531,9 @@ export function aiSiteUnitJob(
   if (unit.kind === 'email') {
     brief.push(...aiSiteEmailBriefLines(job.inputs))
   }
+  // The job the member started travels with every unit, so what the unit
+  // writes names it (AGL-3596).
+  const unitInputs = { ...job.inputs, originJobId: aiOriginJobId(job) }
   return {
     ...job,
     $id: aiSiteUnitJobId(job, unit),
@@ -523,15 +541,16 @@ export function aiSiteUnitJob(
     steps: [],
     outputs: [],
     plan: unitPlan,
-    // A theme change on a site with no theme of its own is a new palette.
-    ...(unit.kind === 'theme'
-      ? { inputs: { ...job.inputs, mode: 'create' } }
-      : {}),
-    // The email step reads the kind off the inputs it is handed, so a job the
-    // scaffold composed says which kind it is exactly as a member's own does.
-    ...(unit.kind === 'email'
-      ? { inputs: { ...job.inputs, emailType: AI_SITE_EMAIL_TYPE } }
-      : {}),
+    inputs:
+      // A theme change on a site with no theme of its own is a new palette.
+      unit.kind === 'theme'
+        ? { ...unitInputs, mode: 'create' }
+        : // The email step reads the kind off the inputs it is handed, so a
+          // job the scaffold composed says which kind it is exactly as a
+          // member's own does.
+          unit.kind === 'email'
+          ? { ...unitInputs, emailType: AI_SITE_EMAIL_TYPE }
+          : unitInputs,
     brief: brief.join('\n').slice(0, AI_JOB_BRIEF_MAX_CHARS),
   }
 }
@@ -633,12 +652,58 @@ export async function aiRunJobUnit(
 export interface AiJobSiteStepDeps {
   /** The runner registry; specs hand in a fake for a kind they drive. */
   runnerFor?: typeof aiJobStepRunnerFor
+  /** The draft reader a built page is checked through; specs hand in a fake. */
+  readNodes?: typeof readAiDraftNodes
+  /** The guided start's publish; specs hand in a fake. */
+  publish?: typeof aiPublishGuidedSite
+}
+
+/** A page the scaffold reported built that holds none of its plan's sections. */
+export const AI_SITE_PAGE_NOT_WRITTEN_COPY =
+  'A page of this site was not written from its plan. Try the site brief again.'
+
+/**
+ * Whether a page unit's draft holds every section its plan named, under the
+ * ids the page step writes them by (AGL-3596). A page counts as written only
+ * then: a run that reported a page and wrote none of its sections — a copy of
+ * a page the site already had, byte for byte — is not a page the job built,
+ * and is never reported done.
+ */
+export async function aiSitePageWritten(
+  firestore: FirebaseFirestore.Firestore,
+  input: { hostId: string; unitJobId: string; screen: AiBuildPlanScreen; draftId: string },
+  readNodes: typeof readAiDraftNodes = readAiDraftNodes,
+): Promise<boolean> {
+  if (!input.screen.sections.length) return false
+  const stored = await readNodes(firestore, { kind: 'screen', hostId: input.hostId, id: input.draftId })
+  if (!stored) return false
+  return input.screen.sections.every((_, index) => aiPageSectionNodeId(input.unitJobId, index) in stored.nodes)
 }
 
 export function createAiJobSiteStep(
   deps: AiJobSiteStepDeps = {},
 ): AiJobStepRunner {
   const runnerFor = deps.runnerFor ?? aiJobStepRunnerFor
+  const readNodes = deps.readNodes ?? readAiDraftNodes
+  const publish = deps.publish ?? aiPublishGuidedSite
+  /** A guided start's last pass puts what it built on the site, once (AGL-3596). */
+  const published = async (
+    context: AiJobStepContext,
+    outcome: AiJobStepOutcome,
+  ): Promise<AiJobStepOutcome> => {
+    const { job } = context
+    if (!aiJobPublishesSite(job) || job.sitePublish || !job.hostId) return outcome
+    const sitePublish = await publish(context.firestore, {
+      job,
+      outputs: [...(job.outputs ?? []), ...outcome.outputs],
+      now: context.now,
+    }).catch((error: unknown) => {
+      // The site is built either way; the pages stay drafts and say so.
+      console.error('ai site publish threw', { orgId: job.orgId, jobId: job.$id, error })
+      return null
+    })
+    return sitePublish ? { ...outcome, sitePublish } : outcome
+  }
   return async (context): Promise<AiJobStepOutcome> => {
     const { job } = context
     // The scaffold asks no model of its own. What it names where it spends
@@ -664,7 +729,7 @@ export function createAiJobSiteStep(
     }).filter((unit) => runnerFor(unit.jobKind))
     const outputs = job.outputs ?? []
     const pending = aiSitePendingUnits(units, outputs)
-    if (!pending.length) return aiUnspentOutcome(model)
+    if (!pending.length) return published(context, aiUnspentOutcome(model))
     const unit = pending[0]
     const runner = runnerFor(unit.jobKind)
     if (!runner) return aiUnspentOutcome(model)
@@ -682,8 +747,29 @@ export function createAiJobSiteStep(
       ...pass.outcome,
       outputs: [...aiSiteSeoOutputs(job), ...pass.outcome.outputs],
     }
+    // A page counts as built only when its plan's sections are in it
+    // (AGL-3596): otherwise the pass fails, which is our failure and gives
+    // the job's credits back, and the page it reported is not reported.
+    if (pass.built && unit.kind === 'page' && unit.screen && job.hostId) {
+      const page = pass.outcome.outputs.find((output) => output.resource === 'screen')
+      const written =
+        page !== undefined &&
+        (await aiSitePageWritten(
+          context.firestore,
+          { hostId: job.hostId, unitJobId: aiSiteUnitJobId(job, unit), screen: unit.screen, draftId: page.id },
+          readNodes,
+        ))
+      if (!written) {
+        return {
+          ...outcome,
+          outputs: outcome.outputs.filter((output) => output.resource !== 'screen'),
+          failure: AI_SITE_PAGE_NOT_WRITTEN_COPY,
+        }
+      }
+    }
     // A built unit continues the scaffold while units remain after it.
-    return pass.built && pending.length > 1 ? { ...outcome, continue: true } : outcome
+    if (pass.built && pending.length > 1) return { ...outcome, continue: true }
+    return pass.built ? published(context, outcome) : outcome
   }
 }
 

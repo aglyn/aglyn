@@ -122,3 +122,13 @@ export function aiPlanWithDraftIds<T extends AiBuildPlan>(kind: AiJobKind, plan:
     screens: units.screens ? plan.screens.map((screen) => ({ ...screen, id: createResourceUid() })) : plan.screens,
   }
 }
+
+/**
+ * The job the member started, whichever unit is running (AGL-3596): a unit's
+ * derived job carries it as `inputs.originJobId`, and a job a member started
+ * is its own. What a draft is stamped with as `aiJobId`.
+ */
+export function aiOriginJobId(job: Pick<AiJob, '$id' | 'inputs'>): string {
+  const origin = job.inputs?.['originJobId']
+  return typeof origin === 'string' && origin ? origin : job.$id
+}

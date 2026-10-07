@@ -21,6 +21,7 @@ import type {
   AiJobOutput,
   AiJobPlan,
   AiJobReview,
+  AiJobSitePublish,
 } from '../model/ai-jobs.types'
 import { AI_STEP_TIERS, type AiStepKind } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
@@ -121,6 +122,12 @@ export interface AiJobStepOutcome {
    * a bounded number of times a day.
    */
   uncredited?: boolean
+  /**
+   * What a guided site start put live on its last pass (AGL-3596), kept on
+   * the job by the machine in the write that records the pass: a step never
+   * writes the job document itself.
+   */
+  sitePublish?: AiJobSitePublish
 }
 
 export interface AiJobStepContext {
