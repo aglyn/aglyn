@@ -17,6 +17,7 @@
 
 'use client'
 
+import { pluginDocsHelp, type PluginDocsAnchor } from '@aglyn/aglyn/app-utils/docs-help'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
@@ -57,6 +58,26 @@ export interface AccountingConnectionSectionProps {
   api?: AccountingApi
   /** Test seam: sends the browser to the consent screen. */
   navigate?: (url: string) => void
+}
+
+/** A heading both ledger guides carry, so either can be opened at it. */
+export type AccountingDocsAnchor = PluginDocsAnchor<'connectQuickbooksOnline'> &
+  PluginDocsAnchor<'connectXero'>
+
+/**
+ * The help affordance for an Accounting card: the guide for the ledger the
+ * workspace is connected to, at one of the headings the two guides share.
+ * With no connection yet the QuickBooks Online guide stands in, since the two
+ * walk through the same steps.
+ */
+export function accountingDocsHelp(
+  provider: AccountingProviderId | null | undefined,
+  anchor: AccountingDocsAnchor,
+  excerpt: string,
+): { title: string; excerpt: string; href: string } {
+  return provider === 'xero'
+    ? pluginDocsHelp('connectXero', { anchor, excerpt })
+    : pluginDocsHelp('connectQuickbooksOnline', { anchor, excerpt })
 }
 
 /** The connect buttons' names, spelled once for the specs. */
@@ -216,6 +237,11 @@ export function AccountingConnectionSection(props: AccountingConnectionSectionPr
         {noticeAlert}
         <CardDisplay
           header="Connect your books"
+          help={accountingDocsHelp(
+            available.length === 1 ? available[0] : null,
+            '#connect',
+            'Connect your accounting software, and paid orders, refunds, fees and payouts are posted to your books, to the accounts you choose.',
+          )}
           contentGutterX
           contentGutterY
           HeaderProps={{
@@ -245,6 +271,11 @@ export function AccountingConnectionSection(props: AccountingConnectionSectionPr
       {noticeAlert}
       <CardDisplay
         header={connection.tenantName ? `${label} — ${connection.tenantName}` : label}
+        help={accountingDocsHelp(
+          connection.provider,
+          '#disconnect',
+          `The ledger this workspace posts to. Disconnecting stops posting; what was already posted stays in ${label}.`,
+        )}
         contentGutterX
         contentGutterY
         HeaderProps={{
@@ -324,6 +355,11 @@ function TenantPicker(props: { connection: AccountingConnectionView; api: Accoun
   return (
     <CardDisplay
       header="Choose a Xero organization"
+      help={accountingDocsHelp(
+        'xero',
+        '#connect',
+        'Your Xero login reaches more than one organization. Choose the one this workspace posts to.',
+      )}
       contentGutterX
       contentGutterY
       HeaderProps={{
@@ -403,6 +439,11 @@ function MappingCard(props: {
   return (
     <CardDisplay
       header="Accounts and tax"
+      help={accountingDocsHelp(
+        connection.provider,
+        '#choose-your-accounts',
+        'The accounts and tax codes sales, refunds, fees and payouts are posted to, how sales are posted, and the start date. Nothing is posted until the accounts are chosen.',
+      )}
       contentGutterX
       contentGutterY
       HeaderProps={{

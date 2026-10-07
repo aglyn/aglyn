@@ -18,7 +18,9 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import ScrollTable from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
   Alert,
   Button,
@@ -33,9 +35,10 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { formatMoney } from '../model/accounting-money'
-import type { AccountingSyncItemView, AccountingSyncStatus } from '../model/accounting.types'
+import type { AccountingProviderId, AccountingSyncItemView, AccountingSyncStatus } from '../model/accounting.types'
+import { accountingDocsHelp } from './accounting-connection-section'
 import { useAccountingApi, type AccountingApi } from './use-accounting-api'
 
 export interface AccountingActivitySectionProps {
@@ -62,6 +65,10 @@ type Load =
  * The Sync activity section of the Accounting page (AGL-3614): everything
  * posted, waiting or skipped, newest first, and the items that need a person
  * with the reason and a Retry button each.
+ *
+ * The log route answers in batches behind a `before` cursor, so the footer
+ * pages a SLICE of the batches read so far and reads the next batch when a
+ * page is turned past them — the way the CRM activity list widens its window.
  */
 export function AccountingActivitySection(props: AccountingActivitySectionProps) {
   const routesApi = useAccountingApi(props.orgId)
@@ -70,9 +77,28 @@ export function AccountingActivitySection(props: AccountingActivitySectionProps)
   const [load, setLoad] = useState<Load>({ status: 'loading' })
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ severity: 'success' | 'error'; text: string } | null>(null)
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const reading = useRef(false)
+  // Only which guide the help opens depends on it, so a failed read leaves
+  // the default guide in place.
+  const [provider, setProvider] = useState<AccountingProviderId | null>(null)
+
+  useEffect(() => {
+    let live = true
+    Promise.resolve(api.status())
+      .then((status) => {
+        if (live) setProvider(status?.connection?.provider ?? null)
+      })
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [api])
 
   const read = useCallback(
     async (before: number | null = null) => {
+      reading.current = true
       try {
         const page = await api.log({ filter, before })
         setLoad((current) => ({
@@ -82,6 +108,8 @@ export function AccountingActivitySection(props: AccountingActivitySectionProps)
         }))
       } catch (error) {
         setLoad({ status: 'error', message: error instanceof Error ? error.message : String(error) })
+      } finally {
+        reading.current = false
       }
     },
     [api, filter],
@@ -89,8 +117,18 @@ export function AccountingActivitySection(props: AccountingActivitySectionProps)
 
   useEffect(() => {
     setLoad({ status: 'loading' })
+    setPage(0)
     void read()
   }, [read])
+
+  // A page past the batches read so far reads the next batch.
+  const loadedCount = load.status === 'ready' ? load.items.length : 0
+  const nextBefore = load.status === 'ready' ? load.nextBefore : null
+  useEffect(() => {
+    if (nextBefore && !reading.current && (page + 1) * pageSize > loadedCount) {
+      void read(nextBefore)
+    }
+  }, [loadedCount, nextBefore, page, pageSize, read])
 
   const retry = async (input: { itemId: string } | { all: true }) => {
     setBusy(true)
@@ -110,10 +148,17 @@ export function AccountingActivitySection(props: AccountingActivitySectionProps)
   }
 
   const attentionCount = load.status === 'ready' && filter === 'attention' ? load.items.length : 0
+  const pageItems =
+    load.status === 'ready' ? load.items.slice(page * pageSize, (page + 1) * pageSize) : []
 
   return (
     <CardDisplay
       header="Sync activity"
+      help={accountingDocsHelp(
+        provider,
+        '#when-something-does-not-post',
+        'Everything posted, waiting or skipped. Needs attention lists what your books refused, with the reason; fix the cause, then retry.',
+      )}
       contentGutterX
       contentGutterY
       HeaderProps={{
@@ -171,7 +216,7 @@ export function AccountingActivitySection(props: AccountingActivitySectionProps)
                 </TableRow>
               </TableHead>
               <TableBody>
-                {load.items.map((item) => (
+                {pageItems.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>
                       <Typography variant="body2">{item.label}</Typography>
@@ -198,11 +243,17 @@ export function AccountingActivitySection(props: AccountingActivitySectionProps)
                 ))}
               </TableBody>
             </ScrollTable>
-            {load.nextBefore ? (
-              <Button sx={{ alignSelf: 'center' }} onClick={() => void read(load.nextBefore)}>
-                Show more
-              </Button>
-            ) : null}
+            <ListPagination
+              page={page}
+              pageSize={pageSize}
+              rowCount={pageItems.length}
+              hasMore={load.items.length > (page + 1) * pageSize || Boolean(load.nextBefore)}
+              onPageChange={setPage}
+              onPageSizeChange={(next) => {
+                setPageSize(next)
+                setPage(0)
+              }}
+            />
           </>
         )}
       </Stack>

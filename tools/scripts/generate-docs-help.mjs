@@ -192,6 +192,14 @@ const PLUGIN_TOPICS = {
   // (AGL-2978, AGL-2980).
   plugins: '/developers/plugins/overview',
   pos: '/commerce-and-bookings/commerce/pos-and-reservations',
+  // The Accounting page's connection and activity cards (AGL-3614). Both
+  // guides are unlisted while `release_accounting` is off; see
+  // PLUGIN_UNLISTED_TOPICS.
+  connectQuickbooksOnline: '/commerce-and-bookings/commerce/connect-quickbooks-online',
+  connectXero: '/commerce-and-bookings/commerce/connect-xero',
+  // The Shipping labels and Carrier accounts cards under the store's
+  // Settings (AGL-3612).
+  shipping: '/commerce-and-bookings/commerce/shipping',
   // Shifts, staff PINs and register returns (AGL-3609).
   posOperations: '/commerce-and-bookings/commerce/pos-operations',
   posHardware: '/commerce-and-bookings/commerce/pos-hardware',
@@ -215,6 +223,18 @@ const PLUGIN_TOPICS = {
   webhooks: '/marketing-and-automation/workflows-and-actions/webhooks',
 }
 
+// The PLUGIN_TOPICS keys allowed to name an `unlisted: true` page. Such a page
+// documents a feature its release flag still hides, so it stays out of the
+// console registry, the besigner subset and every listing. A plugin card may
+// still link it when the card itself renders only behind that same flag: the
+// reader who can see the card is the reader the page was written for.
+const PLUGIN_UNLISTED_TOPICS = new Set([
+  // Accounting's console page is gated by `release_accounting`, the flag the
+  // two guides wait on (AGL-3614).
+  'connectQuickbooksOnline',
+  'connectXero',
+])
+
 // ── Docs parsing ──────────────────────────────────────────────────────────
 
 /** Docusaurus/github-slugger heading slug: lowercase, drop punctuation, then
@@ -237,8 +257,9 @@ function readDocPage(absPath) {
   const fm = source.match(/^---\n([\s\S]*?)\n---/)
   if (!fm) return null
   // An `unlisted` page is kept out of every listing until the feature it
-  // describes is available (AGL-3614); no console help may open it.
-  if (/^unlisted:\s*true\s*$/m.test(fm[1])) return null
+  // describes is available (AGL-3614). It is read all the same so that a
+  // PLUGIN_TOPICS entry can name it: see `unlistedOk` in emitPlugins.
+  const unlisted = /^unlisted:\s*true\s*$/m.test(fm[1])
   const title = stripQuotes(fm[1].match(/^title:\s*(.+)$/m)?.[1])
   const excerpt = stripQuotes(fm[1].match(/^description:\s*(.+)$/m)?.[1])
   if (!title || !excerpt) return null
@@ -255,7 +276,7 @@ function readDocPage(absPath) {
       anchors.push(`#${slug}`)
     }
   }
-  return { title, excerpt, anchors }
+  return { title, excerpt, anchors, unlisted }
 }
 
 /** Walk apps/docs/docs → Map<urlPath, {title, excerpt, anchors}>. */
@@ -276,6 +297,11 @@ function collectDocs() {
   }
   walk(DOCS_ROOT)
   return pages
+}
+
+/** The listed pages: every registry but the plugin subset reads only these. */
+function listedDocs(pages) {
+  return new Map([...pages].filter(([, page]) => !page.unlisted))
 }
 
 // ── Key derivation ──────────────────────────────────────────────────────────
@@ -496,6 +522,11 @@ function emitPlugins(pages) {
         `PLUGIN_TOPICS.${key} points at ${path}, which no longer exists under apps/docs/docs. Update tools/scripts/generate-docs-help.mjs.`,
       )
     }
+    if (pages.get(path).unlisted && !PLUGIN_UNLISTED_TOPICS.has(key)) {
+      throw new Error(
+        `PLUGIN_TOPICS.${key} points at ${path}, which is \`unlisted: true\`. Only a topic in PLUGIN_UNLISTED_TOPICS may, and only when every surface linking it is behind the same release flag as the page.`,
+      )
+    }
   }
 
   const topics = entries
@@ -549,13 +580,14 @@ export type PluginDocsAnchor<K extends PluginDocsKey> =
 
 // ── Main ──────────────────────────────────────────────────────────────────
 
-const pages = collectDocs()
+const allPages = collectDocs()
+const pages = listedDocs(allPages)
 const pathToKey = assignKeys(pages)
 const outputs = [
   [CONSOLE_OUT, emitConsole(pages, pathToKey)],
   [CONSOLE_EXCERPTS_OUT, emitConsoleExcerpts(pages, pathToKey)],
   [BESIGNER_OUT, emitBesigner(pages)],
-  [PLUGIN_OUT, emitPlugins(pages)],
+  [PLUGIN_OUT, emitPlugins(allPages)],
 ]
 
 const check = process.argv.includes('--check')

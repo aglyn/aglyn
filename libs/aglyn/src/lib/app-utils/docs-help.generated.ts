@@ -142,6 +142,16 @@ export const PLUGIN_DOCS = {
     title: 'Companies',
     excerpt: 'Group your contacts under the businesses they belong to — one record per company, with its domain, owner, type, industry, addresses, parent company and the people who work there.',
   },
+  connectQuickbooksOnline: {
+    path: '/commerce-and-bookings/commerce/connect-quickbooks-online',
+    title: 'Connect QuickBooks Online',
+    excerpt: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to QuickBooks Online, mapped to the accounts you choose. Rolling out.',
+  },
+  connectXero: {
+    path: '/commerce-and-bookings/commerce/connect-xero',
+    title: 'Connect Xero',
+    excerpt: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to Xero, mapped to the accounts you choose. Rolling out.',
+  },
   consoleTour: {
     path: '/getting-started/console-tour',
     title: 'The console tour',
@@ -285,7 +295,7 @@ export const PLUGIN_DOCS = {
   posHardware: {
     path: '/commerce-and-bookings/commerce/pos-hardware',
     title: 'POS hardware',
-    excerpt: 'Card readers, a customer display tablet, receipt and kitchen printers that print from any device with no driver, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels on a label printer.',
+    excerpt: 'Card readers, a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels.',
   },
   posOperations: {
     path: '/commerce-and-bookings/commerce/pos-operations',
@@ -316,6 +326,11 @@ export const PLUGIN_DOCS = {
     path: '/content-and-data/crm/sequences',
     title: 'Sequences',
     excerpt: 'One-to-one email sequences a rep sends to a person from their own connected mailbox, kept with the CRM. Rolling out.',
+  },
+  shipping: {
+    path: '/commerce-and-bookings/commerce/shipping',
+    title: 'Shipping',
+    excerpt: 'Shipping zones and rates, local pickup, and the postal address each inventory location ships from.',
   },
   shipStation: {
     path: '/commerce-and-bookings/commerce/use-shipstation',
@@ -359,6 +374,8 @@ export const PLUGIN_DOCS_ANCHORS = {
   commerce: ['#products-hub', '#inventory', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#payment-methods', '#shipping--taxes', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#dropshipping', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#related'],
   companies: ['#the-companies-list', '#create-a-company', '#the-lists-behind-the-choices', '#a-companys-page', '#contacts-at-a-company', '#linked-on-capture', '#import', '#export', '#deleting-a-company', '#who-can-see-a-company', '#files', '#related'],
+  connectQuickbooksOnline: ['#before-you-start', '#connect', '#choose-your-accounts', '#what-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
+  connectXero: ['#before-you-start', '#connect', '#choose-your-accounts', '#what-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
   consoleTour: ['#the-app-bar', '#in-context-help', '#filter-and-search', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#the-notifications-feed', '#notification-levels', '#notification-settings', '#one-kind-at-a-time', '#workspace-and-site-overrides', '#daily-digests', '#alerts-on-this-device'],
   contactActivities: ['#four-kinds-of-history', '#reading-the-timeline', '#campaign-email', '#logging-an-activity', '#meeting-from-a-booking', '#click-to-call', '#sending-an-email', '#delivery-states', '#captured-email', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
   contactFields: ['#define-a-field', '#fields-per-record', '#where-values-show', '#save-a-form-field', '#picklist-values', '#task-picklists', '#over-the-api', '#retire-restore-delete', '#export-fields', '#recompute-next-activity', '#related'],
@@ -394,6 +411,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   redirects: ['#manage-redirects', '#sending-visitors-to-another-site', '#import-and-export', '#columns', '#how-a-row-finds-an-existing-rule', '#conflicts-the-dry-run-and-undo', '#metrics', '#match-modes-v2', '#related'],
   sandboxSecurity: ['#a-separate-origin', '#per-manifest-network-policy', '#when-you-cant-declare-the-origin', '#pinned-immutable-artifacts', '#what-this-means-when-you-build', '#related'],
   sequences: ['#what-it-is-for', '#sent-from-your-own-mailbox', '#where-it-lives', '#self-hosted', '#connect-a-mailbox', '#send-as', '#daily-cap', '#mailbox-status', '#auto-pause', '#mailbox-actions', '#link-domains', '#compliance-settings', '#allowed-countries', '#do-not-contact-domains', '#import-export-do-not-contact', '#sequences', '#build-a-sequence', '#count-opens', '#send-a-test', '#sequence-status', '#enroll', '#start-at-step', '#mail-gateways', '#cold-contacts', '#enrollments', '#person-history', '#curate', '#sending', '#what-stops-a-sequence', '#unsubscribe', '#related'],
+  shipping: ['#zones-and-rates', '#where-parcels-ship-from'],
   shipStation: ['#connect', '#what-imports', '#ship', '#manage', '#troubleshooting', '#related'],
   staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#support-queue', '#plugin-reviews', '#organizations-admin', '#filter-the-directory', '#organization-detail', '#staff-org-email', '#free-workspace-limit', '#first-party-hosts', '#entitlement-editor', '#plan-comps', '#build-for-a-client', '#sites-admin', '#filter-the-site-list', '#site-detail', '#site-ownership', '#site-transfer', '#site-content', '#staff-automations', '#emails-sent', '#users-admin', '#acquisition', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#refunds', '#impersonation', '#system-emails', '#platform-send-rate', '#platform-suppressions', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#operator-alerts', '#ai-monitoring', '#sales-tax-return', '#audit-log', '#coupons', '#discount-floors', '#existing-coupons', '#contact-suppressions', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
   webhooks: ['#outbound-webhooks', '#inbound-webhooks', '#tips', '#related'],
