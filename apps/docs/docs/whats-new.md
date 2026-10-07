@@ -10,6 +10,25 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
+<!--
+  AGL-3614 — Accounting is built and release-flagged OFF (`release_accounting`) until a
+  deployment has its Intuit or Xero app credentials. This entry is held unpublished, like
+  the two guides it links (`unlisted: true`): when the flag is switched on, remove this
+  comment's markers, move "(newest)" here from the heading below, and delete
+  `unlisted: true` from commerce-and-bookings/commerce/connect-quickbooks-online.md and
+  connect-xero.md.
+
+## October 2026 — accounting sync
+
+- **Accounting** — connect [QuickBooks Online](commerce-and-bookings/commerce/connect-quickbooks-online.md)
+  or [Xero](commerce-and-bookings/commerce/connect-xero.md) and every paid order, refund,
+  Aglyn fee and Stripe payout is posted to your books as it happens, to the accounts you
+  choose: a sales receipt (or invoice and payment) per order, or one summary journal a
+  day. Set a start date to bring in earlier sales; anything the ledger refuses waits
+  under **Needs attention** with its reason and a Retry button. Included with every plan
+  that sells online.
+-->
+
 ## October 2026 — Pirate Ship and shipping spreadsheets (newest)
 
 - **[Use Pirate Ship with Aglyn](commerce-and-bookings/commerce/use-pirate-ship.md)** —

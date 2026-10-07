@@ -55,6 +55,8 @@
       "@aglyn/tenant-data-admin/*": ["./libs/tenant/data/admin/src/lib/*"],
       "@aglyn/tenant-runtime": ["./libs/tenant/runtime/src/index.ts"],
       "@aglyn/tenant-runtime/*": ["./libs/tenant/runtime/src/lib/*"],
+      "@aglyn/plugins-accounting": ["./libs/plugins/accounting/src/index.ts"],
+      "@aglyn/plugins-accounting/*": ["./libs/plugins/accounting/src/lib/*"],
       "@aglyn/plugins-email": ["./libs/plugins/email/src/index.ts"],
       "@aglyn/plugins-email/*": ["./libs/plugins/email/src/lib/*"],
       "@aglyn/plugins-ai": ["./libs/plugins/ai/src/index.ts"],

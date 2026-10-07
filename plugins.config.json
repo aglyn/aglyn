@@ -1419,6 +1419,46 @@
       }
     },
     {
+      "id": "accounting",
+      "package": "@aglyn/plugins-accounting",
+      "register": {
+        "console": "registerAccountingConsole",
+        "consoleApi": "registerAccountingConsoleApi",
+        "serverDeclarations": "registerAccountingServerDeclarations",
+        "consoleServerDeclarations": "registerAccountingConsoleServerDeclarations",
+        "subprocessors": "accountingSubprocessors"
+      },
+      "apiPrefixes": [
+        "accounting"
+      ],
+      "activityMutationPaths": [
+        "libs/plugins/accounting/src/lib/server/accounting-routes.ts"
+      ],
+      "catalog": {
+        "order": 18,
+        "$comment": "AGL-3614. Posts commerce sales, refunds, fees and payouts to QuickBooks Online or Xero. Sold with commerce: the extension's entitlement is `features.commerce`, so no plan and no add-on of its own.",
+        "label": "Accounting",
+        "description": "Sales, refunds, fees and payouts posted to QuickBooks Online or Xero.",
+        "releaseFlag": "release_accounting",
+        "releaseFlagDefinition": {
+          "$comment": "OFF by default and the release gate for an env-gated feature: switch it on only for a deployment whose console has an Intuit or Xero app's credentials and the accounting token key (the variables are named in libs/plugins/accounting/README.md). The docs guard holds the Connect QuickBooks Online and Connect Xero guides unclaimed while it is off.",
+          "label": "Accounting",
+          "description": "QuickBooks Online and Xero sync for commerce: sales receipts or a daily summary journal, refunds, platform fees and Stripe payouts, with a mapping page and a sync log (AGL-3614). OFF by default; needs the deployment's Intuit or Xero app credentials and the accounting token key on the console.",
+          "defaultEnabled": false,
+          "navTabId": "nav-tab-org-accounting"
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "shell": true,
+          "orgRoutes": [
+            "/accounting"
+          ]
+        }
+      }
+    },
+    {
       "id": "data",
       "package": "@aglyn/plugins-data",
       "register": {

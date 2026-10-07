@@ -70,6 +70,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-outreach'),
   },
   {
+    id: 'accounting',
+    apiPrefixes: ["accounting"],
+    register: {"console":"registerAccountingConsole"},
+    contributes: {"console":{"shell":true,"orgRoutes":["/accounting"]}},
+    load: () => import('@aglyn/plugins-accounting'),
+  },
+  {
     id: 'data',
     register: {"console":"registerDataConsole"},
     contributes: {"console":{"shell":true,"routes":["/data"],"slots":["besignerPageProperties","entityPickers","hostScreenRow","orgData","transferResources"]}},
