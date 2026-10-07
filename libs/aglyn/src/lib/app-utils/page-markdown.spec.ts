@@ -116,6 +116,21 @@ describe('buildPageMarkdown', () => {
     expect(buildPageMarkdown({ nodes })).toBe('## Plans\n\nStart free.\n')
   })
 
+  it('reads the elements a Typography holds after its own text (AGL-3672)', () => {
+    const nodes = page(
+      {
+        a: {
+          componentId: 'muiTypography',
+          props: { component: 'h2', children: 'Plans' },
+          nodes: ['b'],
+        },
+        b: { componentId: 'muiTypography', props: { children: 'for every team' } },
+      },
+      ['a'],
+    )
+    expect(buildPageMarkdown({ nodes })).toBe('## Plans\n\nfor every team\n')
+  })
+
   it('starts at the content region, so site chrome never reaches the output', () => {
     const nodes: PageMarkdownNodes = {
       '_@_': { componentId: 'div', nodes: ['bar', 'slot'] },

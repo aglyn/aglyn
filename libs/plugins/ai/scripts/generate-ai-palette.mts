@@ -585,7 +585,7 @@ function buildCatalog(
 }
 
 async function main(): Promise<void> {
-  const { schemaAcceptsChildren } = await load(
+  const { schemaAcceptsChildren, isLeafFlagEnabled } = await load(
     'libs/aglyn/src/lib/app-utils/child-contract.ts',
   )
   const { AI_TEXT_LIMITS } = await load(
@@ -650,7 +650,12 @@ async function main(): Promise<void> {
         category: String(schema.category ?? ''),
         displayName: String(schema.displayName ?? id),
         summary: firstSentence(schema.description),
-        acceptsChildren: schemaAcceptsChildren(schema),
+        // Text the editor lets an author nest into (AGL-3672) stays a leaf
+        // to the model: its pages are composed from blocks, and a heading
+        // that may hold elements is one more place for a plan to put them.
+        acceptsChildren:
+          schemaAcceptsChildren(schema) &&
+          !isLeafFlagEnabled(schema.flags?.textEditable),
         ...(schema.restrictChildren
           ? { restrictChildren: schema.restrictChildren }
           : {}),
