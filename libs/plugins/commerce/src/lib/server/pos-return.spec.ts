@@ -380,3 +380,74 @@ describe('when Stripe says no', () => {
     expect(h.stripeCalls).toHaveLength(0)
   })
 })
+
+describe("the store's returns list (AGL-3611's returns)", () => {
+  const storeReturns = () =>
+    [...h.memory.docs.keys()]
+      .filter((path) => /^hosts\/shop\/returns\/[^/]+$/.test(path))
+      .map((path) => ({ id: path.split('/').pop()!, ...h.memory.read(path)! }))
+
+  it('lists a register return beside the online ones, already refunded, under the register record id', async () => {
+    const outcome = await ret({ lines: [{ index: 0, quantity: 2 }], reasonCode: 'damaged', reason: 'Chipped' })
+    expect(outcome.status).toBe(200)
+    const [entry] = storeReturns()
+    expect(entry).toMatchObject({
+      id: outcome.body['returnId'],
+      orderId: 'o1',
+      orderNumber: '#1001',
+      status: 'refunded',
+      requestedBy: 'merchant',
+      source: 'register',
+      registerId: 'front',
+      merchantNote: 'Chipped',
+      refundCents: outcome.body['refundedCents'],
+      lines: [{ lineItemId: 0, quantity: 2, reason: 'damaged' }],
+      restock: { lines: [{ lineItemId: 0, quantity: 2 }] },
+    })
+    expect(h.memory.read(`hosts/shop/registers/front/returns/${outcome.body['returnId']}`)).toBeTruthy()
+    expect(effects[0]).toMatchObject({ returnId: outcome.body['returnId'], storeReturn: { status: 'refunded' } })
+  })
+
+  it("files an unknown reason as Other", async () => {
+    await ret({ lines: [{ index: 1, quantity: 1 }], reasonCode: 'because' })
+    expect(storeReturns()[0]!['lines']).toEqual([{ lineItemId: 1, quantity: 1, reason: 'other' }])
+  })
+
+  it('never takes back units an online return already holds, and lists them as held', async () => {
+    h.memory.seed('hosts/shop/returns/rma-1', {
+      orderId: 'o1',
+      status: 'approved',
+      requestedBy: 'buyer',
+      lines: [{ lineItemId: 0, quantity: 2, reason: 'size_or_fit' }],
+    })
+    h.memory.seed('hosts/shop/returns/rma-2', {
+      orderId: 'o1',
+      status: 'declined',
+      requestedBy: 'buyer',
+      lines: [{ lineItemId: 1, quantity: 1, reason: 'other' }],
+    })
+    const [summary] = (
+      await handlePosReturn(deps, h.request('cashier', { hostId: 'shop', action: 'find', text: '1001' }))
+    ).body['orders'] as Array<Record<string, any>>
+    expect(summary!['lines'].map((line: any) => [line.name, line.held])).toEqual([
+      ['Mug', 2],
+      ['Tee', 0],
+    ])
+    const refused = await ret({ lines: [{ index: 0, quantity: 2 }] })
+    expect(refused.status).toBe(400)
+    expect(refused.body['error']).toMatch(/Only 1 of "Mug"/)
+    expect(h.stripeCalls).toHaveLength(0)
+    expect((await ret({ lines: [{ index: 0, quantity: 1 }] })).status).toBe(200)
+    expect(order()['returnedQuantities']).toEqual({ '0': 1 })
+    const last = await ret({ lines: [{ index: 0, quantity: 1 }] })
+    expect(last.body['error']).toMatch(/already in a return/)
+    // The declined online return holds nothing.
+    expect((await ret({ lines: [{ index: 1, quantity: 1 }] })).status).toBe(200)
+  })
+
+  it("does not count the register's own returns twice", async () => {
+    expect((await ret({ lines: [{ index: 0, quantity: 2 }] })).status).toBe(200)
+    expect((await ret({ lines: [{ index: 0, quantity: 1 }] })).status).toBe(200)
+    expect(order()['returnedQuantities']).toEqual({ '0': 3 })
+  })
+})

@@ -30,6 +30,7 @@ import {
   List,
   ListItemButton,
   ListItemText,
+  MenuItem,
   Stack,
   Switch,
   TextField,
@@ -38,6 +39,7 @@ import {
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useMemo, useRef, useState } from 'react'
 import { posMoney, type PosTenderMethod } from '../../../model/commerce-pos-ops'
+import { RETURN_REASON_LABELS, RETURN_REASONS, type ReturnReason } from '../../../model/commerce-returns'
 import { callPosOps, newPosAttemptKey, parsePosDollars } from './pos-ops-api'
 import { PosPinPad, type PosStaffAssertion } from './pos-pin-pad.component'
 
@@ -58,6 +60,8 @@ interface ReturnOrder {
     variantLabel: string | null
     quantity: number
     returned: number
+    /** Units an online return holds or already took. */
+    held?: number
     valueCents: number
   }>
   tenders: Array<{
@@ -111,6 +115,7 @@ export function PosReturnDialog(props: PosReturnDialogProps) {
   const [picked, setPicked] = useState<Record<number, number>>({})
   const [restock, setRestock] = useState(true)
   const [reason, setReason] = useState('')
+  const [reasonCode, setReasonCode] = useState<ReturnReason>('no_longer_needed')
   const [splitByHand, setSplitByHand] = useState(false)
   const [split, setSplit] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
@@ -126,6 +131,7 @@ export function PosReturnDialog(props: PosReturnDialogProps) {
     setPicked({})
     setRestock(true)
     setReason('')
+    setReasonCode('no_longer_needed')
     setSplitByHand(false)
     setSplit({})
     setError('')
@@ -198,6 +204,7 @@ export function PosReturnDialog(props: PosReturnDialogProps) {
         orderId: order.id,
         lines: picks,
         restock,
+        reasonCode,
         ...(reason.trim() ? { reason: reason.trim() } : {}),
         ...(tenders ? { tenders } : {}),
         ...(cashierAssertion ? { cashierAssertion } : {}),
@@ -262,7 +269,7 @@ export function PosReturnDialog(props: PosReturnDialogProps) {
               <Alert severity="warning">{`This order is ${order.status} and cannot be returned.`}</Alert>
             ) : null}
             {order.lines.map((line) => {
-              const left = line.quantity - line.returned
+              const left = Math.max(0, line.quantity - line.returned - (line.held ?? 0))
               const quantity = picked[line.index] ?? 0
               return (
                 <Stack key={line.index} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
@@ -272,7 +279,11 @@ export function PosReturnDialog(props: PosReturnDialogProps) {
                       {line.variantLabel ? ` (${line.variantLabel})` : ''}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {left > 0 ? `${left} of ${line.quantity} can be returned` : 'Already returned'}
+                      {left > 0
+                        ? `${left} of ${line.quantity} can be returned`
+                        : line.held
+                          ? 'In an online return'
+                          : 'Already returned'}
                     </Typography>
                   </Stack>
                   <IconButton
@@ -300,8 +311,21 @@ export function PosReturnDialog(props: PosReturnDialogProps) {
               label="Put the items back in stock at this register's location"
             />
             <TextField
+              select
               size="small"
-              label="Reason (optional)"
+              label="Reason"
+              value={reasonCode}
+              onChange={(event) => setReasonCode(event.target.value as ReturnReason)}
+            >
+              {RETURN_REASONS.map((code) => (
+                <MenuItem key={code} value={code}>
+                  {RETURN_REASON_LABELS[code]}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              size="small"
+              label="Note (optional)"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
             />

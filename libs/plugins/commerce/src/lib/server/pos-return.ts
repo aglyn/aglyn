@@ -16,6 +16,7 @@
  */
 
 import { claimAttempt, type PluginApiHandler, type PluginApiRequest } from '@aglyn/aglyn/server'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
 import { recordPluginPersonRefund } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
@@ -35,6 +36,8 @@ import {
   type PosReturnPick,
   type PosReturnSource,
 } from '../model/commerce-pos-ops'
+import { ORDER_REFUNDED_EVENT, RETURN_REFUNDED_EVENT } from '../model/order-events'
+import { raiseOrderEvent } from './order-events'
 import { applyGiftCardRiskToOrder } from './gift-card-risk'
 import { notifyOrderBuyer } from './order-notifications'
 import { decidePosRefundAuthority } from './pos-refund-authority'
@@ -83,12 +86,20 @@ import { createStripeRefund } from './stripe-refund'
 export interface PosReturnSideEffects {
   hostId: string
   orderId: string
+  /** The return's id, the same under the register and in the store's returns. */
+  returnId: string
+  /** The return as the store's returns list holds it, for the return event. */
+  storeReturn: CommerceModel.HostReturn
+  /** The Stripe refunds the return made, if any, for the refund event. */
+  refundIds: string[]
   email: string | null | undefined
   refundCents: number
   closedTheOrder: boolean
   returnedProductIds: string[]
   fullyRefunded: boolean
   lineIndexes: number[]
+  /** The lines this return finished taking back in full. */
+  fullLineIndexes: number[]
 }
 
 export interface PosReturnDeps extends PosOpsDeps {
@@ -140,6 +151,39 @@ export function defaultPosReturnDeps(): PosReturnDeps {
           closedTheOrder: input.closedTheOrder,
         }),
       )
+      // The same events a refund from the order dialog and a refunded online
+      // return raise, so accounting and the merchant's webhooks hear a
+      // register return too (AGL-3611's events).
+      await settle('refund event', () =>
+        raiseOrderEvent(ORDER_REFUNDED_EVENT, {
+          hostId: input.hostId,
+          orderId: input.orderId,
+          key: `pos-return:${input.returnId}`,
+          extra: {
+            refund: {
+              id: input.refundIds[0] ?? null,
+              amountCents: input.refundCents,
+              lineItemIds: input.fullLineIndexes,
+              full: input.fullyRefunded,
+            },
+          },
+        }),
+      )
+      await settle('return event', () =>
+        raiseOrderEvent(RETURN_REFUNDED_EVENT, {
+          hostId: input.hostId,
+          orderId: input.orderId,
+          key: `return-refunded:${input.returnId}`,
+          extra: {
+            return: {
+              id: input.returnId,
+              status: input.storeReturn.status,
+              lines: input.storeReturn.lines.map((line) => ({ ...line })),
+              refundCents: input.storeReturn.refundCents ?? null,
+            },
+          },
+        }),
+      )
       await settle('buyer notice', () =>
         notifyOrderBuyer({ hostId: input.hostId, orderId: input.orderId }, 'refunded', {
           refundId: '',
@@ -163,7 +207,7 @@ const RETURNABLE: ReadonlySet<string> = new Set([
 ])
 
 /** One order as the return dialog lists it. */
-function returnSummary(id: string, raw: Record<string, any>) {
+function returnSummary(id: string, raw: Record<string, any>, held: readonly number[] = []) {
   const order = CommerceModel.liftLegacyOrder(raw as any) as unknown as PosReturnSource &
     Record<string, any>
   const values = posReturnLineValues(order)
@@ -186,6 +230,8 @@ function returnSummary(id: string, raw: Record<string, any>) {
       variantLabel: line?.variantLabel ?? null,
       quantity: Math.max(1, Math.round(Number(line?.quantity ?? 1))),
       returned: returned[index] ?? 0,
+      // Units an online return holds or already took (AGL-3611).
+      held: held[index] ?? 0,
       valueCents: values[index] ?? 0,
     })),
     tenders: posRefundableByTender(order).map((tender) => ({
@@ -258,7 +304,17 @@ export async function handlePosReturn(deps: PosReturnDeps, req: PluginApiRequest
 
   if (action === 'find') {
     const found = await findOrders(staff.hostRef, body['text'])
-    return { status: 200, body: { orders: found.map((entry) => returnSummary(entry.id, entry.data)) } }
+    const held = await Promise.all(
+      found.map(async (entry) =>
+        unitsHeldByOnlineReturns(
+          (await staff.hostRef.collection('returns').where('orderId', '==', entry.id).get()).docs,
+        ),
+      ),
+    )
+    return {
+      status: 200,
+      body: { orders: found.map((entry, at) => returnSummary(entry.id, entry.data, held[at])) },
+    }
   }
   if (action !== 'refund') return { status: 400, body: { error: 'Unknown action' } }
 
@@ -275,8 +331,14 @@ export async function handlePosReturn(deps: PosReturnDeps, req: PluginApiRequest
   const requestedSplit = parseSplit(body['tenders'])
   const restock = body['restock'] !== false
   const reason = String(body['reason'] ?? '').trim().slice(0, 200)
+  const reasonCode: CommerceModel.ReturnReason = CommerceModel.RETURN_REASONS.includes(
+    body['reasonCode'] as CommerceModel.ReturnReason,
+  )
+    ? (body['reasonCode'] as CommerceModel.ReturnReason)
+    : 'other'
   const firestore = deps.firestore()
   const orderRef = staff.hostRef.collection('orders').doc(orderId)
+  const storeReturns = staff.hostRef.collection('returns').where('orderId', '==', orderId)
 
   // 1. Every refusal that needs no money to move.
   const snapshot = await orderRef.get()
@@ -296,7 +358,7 @@ export async function handlePosReturn(deps: PosReturnDeps, req: PluginApiRequest
       },
     }
   }
-  const plan = planPosReturn(order, picks)
+  const plan = planPosReturn(order, picks, unitsHeldByOnlineReturns((await storeReturns.get()).docs))
   if ('error' in plan) return { status: 400, body: { error: plan.error } }
   const split = splitPosRefund(order, plan.refundCents, requestedSplit)
   if ('error' in split) return { status: 400, body: { error: split.error } }
@@ -344,6 +406,7 @@ export async function handlePosReturn(deps: PosReturnDeps, req: PluginApiRequest
   type Reserved = {
     refundCents: number
     lineCents: number[]
+    completedLines: number[]
     allocations: PosRefundAllocation[]
     prior: { refundedCents: number; returnedQuantities: Record<string, number>; posPaymentRefunds: Record<string, number> }
   }
@@ -356,7 +419,11 @@ export async function handlePosReturn(deps: PosReturnDeps, req: PluginApiRequest
       if (!RETURNABLE.has(String(fresh['status']))) {
         throw new ReturnRefusal(409, `Orders in "${fresh['status']}" cannot be returned.`)
       }
-      const freshPlan = planPosReturn(fresh, picks)
+      const freshPlan = planPosReturn(
+        fresh,
+        picks,
+        unitsHeldByOnlineReturns((await transaction.get(storeReturns)).docs),
+      )
       if ('error' in freshPlan) throw new ReturnRefusal(409, freshPlan.error)
       const freshSplit = splitPosRefund(fresh, freshPlan.refundCents, requestedSplit)
       if ('error' in freshSplit) throw new ReturnRefusal(409, freshSplit.error)
@@ -377,6 +444,7 @@ export async function handlePosReturn(deps: PosReturnDeps, req: PluginApiRequest
       return {
         refundCents: freshPlan.refundCents,
         lineCents: freshPlan.lineCents,
+        completedLines: freshPlan.completedLines,
         allocations: freshSplit.allocations,
         prior,
       }
@@ -450,7 +518,11 @@ export async function handlePosReturn(deps: PosReturnDeps, req: PluginApiRequest
     .filter((result) => result.status === 'refunded' && result.allocation.method === 'cash')
     .reduce((sum, result) => sum + result.allocation.amountCents, 0)
   const now = deps.now()
-  const returnRef = register.ref.collection('returns').doc()
+  // One id names the return under the register (its tenders and shift) and
+  // in the store's returns list beside the online ones (AGL-3611).
+  const returnId = createResourceUid()
+  const returnRef = register.ref.collection('returns').doc(returnId)
+  const storeReturnRef = staff.hostRef.collection('returns').doc(returnId)
   const orderLabel = CommerceModel.formatOrderNumber(order as any, orderId)
   const lines = picks.map((pick, at) => ({
     index: pick.index,
@@ -463,6 +535,7 @@ export async function handlePosReturn(deps: PosReturnDeps, req: PluginApiRequest
   let closedTheOrder = false
   let fullyRefunded = false
   let shiftIdForReturn: string | null = null
+  let storeReturn: CommerceModel.HostReturn | null = null
   await firestore.runTransaction(async (transaction) => {
     const freshRegister = await transaction.get(register.ref)
     const shiftId = String(freshRegister.get('openShiftId') ?? '') || null
@@ -545,6 +618,41 @@ export async function handlePosReturn(deps: PosReturnDeps, req: PluginApiRequest
       atMs: now,
     }
     transaction.create(returnRef, record)
+    const restockedLines = picks.map((pick) => ({ lineItemId: pick.index, quantity: pick.quantity }))
+    const registerLocationId = register.data['locationId'] ? String(register.data['locationId']) : undefined
+    storeReturn = {
+      orderId,
+      orderNumber: orderLabel,
+      customerEmail: (order['customerEmail'] as string | undefined) ?? null,
+      customerName: (order['customerName'] as string | undefined) ?? null,
+      lines: picks.map((pick) => ({ lineItemId: pick.index, quantity: pick.quantity, reason: reasonCode })),
+      status: 'refunded',
+      requestedBy: 'merchant',
+      source: 'register',
+      registerId,
+      ...(reason ? { merchantNote: reason } : {}),
+      ...(restock
+        ? {
+            restock: {
+              lines: restockedLines,
+              ...(registerLocationId ? { locationId: registerLocationId } : {}),
+              atMs: now,
+            },
+          }
+        : {}),
+      refundedAtMs: now,
+      refundCents: refundedCents,
+      timeline: [
+        {
+          atMs: now,
+          event: 'refunded',
+          detail: `At the register${failed.length ? `; ${posMoney(failed.reduce((sum, result) => sum + result.allocation.amountCents, 0))} still owed` : ''}`,
+        },
+      ],
+      createdAtMs: now,
+      updatedAtMs: now,
+    }
+    transaction.create(storeReturnRef, storeReturn)
     if (shiftOpen && shiftRef && cashCents > 0) {
       const event: PosCashEvent = {
         id: returnRef.id,
@@ -622,9 +730,34 @@ export async function handlePosReturn(deps: PosReturnDeps, req: PluginApiRequest
         ),
       ],
       lineIndexes: picks.map((pick) => pick.index),
+      fullLineIndexes: reserved.completedLines,
+      returnId,
+      storeReturn: storeReturn as unknown as CommerceModel.HostReturn,
+      refundIds: results.flatMap((result) => (result.refundId ? [result.refundId] : [])),
     })
   }
   return { status: 200, body: payload }
+}
+
+/**
+ * Units per order line that the store's OTHER returns — the online returns
+ * flow (AGL-3611) — hold or already took back. The register's own returns are
+ * left out: `returnedQuantities` on the order already counts them.
+ */
+export function unitsHeldByOnlineReturns(
+  docs: ReadonlyArray<{ data(): FirebaseFirestore.DocumentData | undefined }>,
+): number[] {
+  const held: number[] = []
+  for (const doc of docs) {
+    const entry = (doc.data() ?? {}) as CommerceModel.HostReturn
+    if (entry.source === 'register' || !CommerceModel.returnHoldsUnits(entry)) continue
+    for (const line of entry.lines ?? []) {
+      const index = Number(line?.lineItemId)
+      if (!Number.isInteger(index) || index < 0) continue
+      held[index] = (held[index] ?? 0) + Math.max(0, Math.floor(Number(line?.quantity) || 0))
+    }
+  }
+  return held
 }
 
 /** Whether a member is a workspace admin and this site's admin, asked now. */
@@ -747,7 +880,7 @@ async function restockReturn(
         updatedAtMs: now,
       })
       for (const row of rows) {
-        transaction.create(hostRef.collection('inventoryAdjustments').doc(), {
+        transaction.create(hostRef.collection('inventoryAdjustments').doc(createResourceUid()), {
           productId,
           variantId: row.variantId,
           delta: row.quantity,

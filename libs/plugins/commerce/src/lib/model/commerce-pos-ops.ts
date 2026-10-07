@@ -540,8 +540,17 @@ export type PosReturnPlan =
  * whole would have, and the rounding never strands or invents a cent. The
  * sum is capped at what is left to refund on the order — a refund given
  * from the order dialog already took its share.
+ *
+ * `heldElsewhere` is, per line, the units an online return (the returns
+ * flow) already holds or took back. They cap what the register may take, but
+ * they are not written into `returnedQuantities`, which counts only what the
+ * register itself took.
  */
-export function planPosReturn(order: PosReturnSource, picks: readonly PosReturnPick[]): PosReturnPlan {
+export function planPosReturn(
+  order: PosReturnSource,
+  picks: readonly PosReturnPick[],
+  heldElsewhere: readonly number[] = [],
+): PosReturnPlan {
   const lines = order.lineItems ?? []
   if (!picks.length) return { ok: false, error: 'Pick at least one item to return.' }
   const values = posReturnLineValues(order)
@@ -564,14 +573,17 @@ export function planPosReturn(order: PosReturnSource, picks: readonly PosReturnP
     }
     const total = Math.max(1, Math.round(Number(lines[index]?.quantity ?? 1)))
     const already = returned[index] ?? 0
-    if (already + quantity > total) {
-      const left = total - already
+    const held = Math.max(0, Math.round(Number(heldElsewhere[index] ?? 0)))
+    if (already + held + quantity > total) {
+      const left = Math.max(0, total - already - held)
       return {
         ok: false,
         error:
           left > 0
             ? `Only ${left} of "${lines[index]?.name ?? 'that item'}" can still be returned.`
-            : `"${lines[index]?.name ?? 'That item'}" has already been returned.`,
+            : held > 0
+              ? `"${lines[index]?.name ?? 'That item'}" is already in a return. Finish it under Returns.`
+              : `"${lines[index]?.name ?? 'That item'}" has already been returned.`,
       }
     }
     const value = values[index] ?? 0

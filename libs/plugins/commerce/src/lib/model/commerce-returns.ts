@@ -129,6 +129,13 @@ export interface HostReturn {
   status: ReturnStatus
   /** Who opened it: the buyer, or the merchant on their behalf. */
   requestedBy: 'buyer' | 'merchant'
+  /**
+   * `register` for a return taken and refunded at a POS register (AGL-3609):
+   * it is created already `refunded`, and the register's own record under
+   * `registers/{registerId}/returns` holds the tenders it went back to.
+   */
+  source?: 'register'
+  registerId?: string
   customerNote?: string
   merchantNote?: string
   returnLabel?: ReturnLabel
@@ -198,7 +205,7 @@ export function returnIsOpen(entry: Pick<HostReturn, 'status'>): boolean {
 }
 
 /** Whether a return is still holding units, or took them: anything not declined. */
-function returnHoldsUnits(entry: Pick<HostReturn, 'status' | 'refundedAtMs'>): boolean {
+export function returnHoldsUnits(entry: Pick<HostReturn, 'status' | 'refundedAtMs'>): boolean {
   if (entry.status === 'declined') return false
   // A return closed without a refund gave its units back to the order.
   if (entry.status === 'closed') return Boolean(entry.refundedAtMs)

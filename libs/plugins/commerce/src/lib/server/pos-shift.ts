@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import type { PluginApiHandler, PluginApiRequest } from '@aglyn/aglyn/server'
 import {
   computePosShiftReport,
@@ -151,7 +152,7 @@ export async function handlePosShift(
     case 'open': {
       const float = cents(body['openingFloatCents'] ?? 0)
       if (float == null) return { status: 400, body: { error: 'Enter the starting cash as an amount.' } }
-      const shiftRef = shifts.doc()
+      const shiftRef = shifts.doc(createResourceUid())
       const now = deps.now()
       const openedByName = await deps.memberName(cashierId)
       return await firestore.runTransaction(async (transaction) => {
@@ -196,7 +197,7 @@ export async function handlePosShift(
       if (!reason && type !== 'drop') {
         return { status: 400, body: { error: 'Say what the cash was for.' } }
       }
-      const eventId = posOpsCleanId(body['eventId']) || shifts.doc().id
+      const eventId = posOpsCleanId(body['eventId']) || createResourceUid()
       const recorded: Outcome = await firestore.runTransaction(async (transaction) => {
         const fresh = await transaction.get(register.ref)
         const shiftId = String(fresh.get('openShiftId') ?? '')
