@@ -155,6 +155,9 @@ export const DraggableDroppable = observer(
     const { onPickMedia } = useContext(MediaPickerContext)
     const instanceEditRef = useRef({ definitions, formDesigns, onPickMedia })
     instanceEditRef.current = { definitions, formDesigns, onPickMedia }
+    // Same reason: the touch listener below reads the live dnd-kit handlers.
+    const listenersRef = useRef(draggable.listeners)
+    listenersRef.current = draggable.listeners
 
     useEffect(() => {
       Besigner.refs.set(node.$id, ref)
@@ -175,6 +178,12 @@ export const DraggableDroppable = observer(
 
     useEffect(() => {
       const el = ref.current
+      /**
+       * Whether this element was already selected when the latest press on
+       * it began. Read by the touch drag below, and reset by it, because the
+       * press that selects an element must not also pick it up.
+       */
+      let selectedAtPress = false
       if (el) {
         el.addEventListener('mouseover', handleMouseOver)
         el.addEventListener('pointerover', handleMouseOver)
@@ -182,6 +191,7 @@ export const DraggableDroppable = observer(
         el.addEventListener('pointerdown', handleMouseDown)
         el.addEventListener('dblclick', handleDoubleClick)
         el.addEventListener('contextmenu', handleContextMenu)
+        el.addEventListener('touchstart', handleTouchStart)
 
         return () => {
           el.removeEventListener('mouseover', handleMouseOver)
@@ -190,7 +200,32 @@ export const DraggableDroppable = observer(
           el.removeEventListener('pointerdown', handleMouseDown)
           el.removeEventListener('dblclick', handleDoubleClick)
           el.removeEventListener('contextmenu', handleContextMenu)
+          el.removeEventListener('touchstart', handleTouchStart)
         }
+      }
+      /**
+       * Press and hold a selected element to drag it on a touch screen.
+       *
+       * The element itself has never been a drag source: a mouse drags it by
+       * the grip in its toolbar, and on a mouse that costs nothing, because a
+       * press on the body selects it and the page stays put. A finger pressing
+       * the body scrolls the page instead, which is what an author trying to
+       * move the element saw. Handing the press to dnd-kit's TouchSensor
+       * keeps a swipe a scroll — the sensor waits for a still hold before it
+       * takes over — and makes a hold a drag.
+       *
+       * Native, like its neighbours: the canvas is a closed shadow root, so a
+       * React `onTouchStart` would never fire. The sensor reads only
+       * `nativeEvent`, and marks it, so an ancestor that is also selected
+       * cannot claim the same touch.
+       */
+      function handleTouchStart(e: TouchEvent) {
+        const selected = selectedAtPress
+        selectedAtPress = false
+        if (!selected || isInlineEditWithin(el) || Besigner.pick.isPicking()) {
+          return
+        }
+        listenersRef.current?.onTouchStart?.({ nativeEvent: e } as any)
       }
       /**
        * Right-click opens this element's ⋮ menu (AGL-1405).
@@ -251,6 +286,9 @@ export const DraggableDroppable = observer(
         if (isInlineEditWithin(el)) {
           e.stopPropagation()
           return
+        }
+        if (e.type === 'pointerdown') {
+          selectedAtPress = Besigner.focus.isNodeSelected(node)
         }
         e.preventDefault()
         e.stopPropagation()
