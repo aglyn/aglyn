@@ -129,6 +129,7 @@ changes, because every rule is by tag.
 | `plugins-mui` | `@aglyn/plugins-mui` | `libs/plugins/mui` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-outreach` | `@aglyn/plugins-outreach` | `libs/plugins/outreach` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-redirects` | `@aglyn/plugins-redirects` | `libs/plugins/redirects` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
+| `plugins-sms` | `@aglyn/plugins-sms` | `libs/plugins/sms` | `scope:plugin` `type:feature` | no — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/plugins-sms --publish`, then `trust:packages --set`); text messages behind core's `core.messaging.sms` contract, Twilio adapter | `.`, `./*` |
 | `plugins-themes` | `@aglyn/plugins-themes` | `libs/plugins/themes` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-video-delivery` | `@aglyn/plugins-video-delivery` | `libs/plugins/video-delivery` | `scope:plugin` `type:feature` | yes — library video served from Cloudflare R2 through a Worker, behind core's `core.media-delivery` contract | `.`, `./*` |
 | `plugins-workflows` | `@aglyn/plugins-workflows` | `libs/plugins/workflows` | `scope:plugin` `type:feature` | yes — the Automation section and the automation engine | `.`, `./*` |

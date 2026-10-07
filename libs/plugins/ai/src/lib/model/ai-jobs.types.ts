@@ -558,4 +558,11 @@ export interface AiJobSummary {
   } | null
   /** What a guided site start put live (AGL-3596); absent on every other job. */
   sitePublish?: AiJobSitePublish | null
+  /**
+   * A site job's answers (AGL-3596): the guided start's questions as the person
+   * answered them, so a failed start's Try again reopens them filled in. The
+   * scalar site inputs only, never anything else a job's inputs carry; absent
+   * on every other kind.
+   */
+  siteInputs?: Record<string, unknown> | null
 }

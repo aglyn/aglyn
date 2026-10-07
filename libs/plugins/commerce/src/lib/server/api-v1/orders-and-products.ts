@@ -30,6 +30,7 @@ import {
 } from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import { BUNDLE_ID } from '../../constants/bundle-common'
 import { type OrderFulfilmentTarget, recordOrderShipment } from '../fulfill-order'
+import { orderViewFromData } from './order-view'
 
 /**
  * A site's orders and products on the customer REST API,
@@ -81,76 +82,7 @@ function hostRef(ctx: ApiV1Context, hostId: string) {
  * pre-channel order, not an unknown one.
  */
 function orderView(doc: FirebaseFirestore.DocumentSnapshot) {
-  const data = doc.data() ?? {}
-  const totals = (data.totals ?? {}) as Record<string, unknown>
-  const legacyTotal = Number(data.amountCents ?? NaN)
-  const totalCents = Number.isFinite(Number(totals.totalCents))
-    ? Number(totals.totalCents)
-    : Number.isFinite(legacyTotal)
-      ? legacyTotal
-      : null
-  const legacyFee = Number(data.feeCents ?? NaN)
-  return {
-    id: doc.id,
-    object: 'order',
-    number: typeof data.number === 'number' ? data.number : null,
-    status: (data.status as string) ?? null,
-    channel: (data.channel as string) ?? 'online',
-    currency: 'usd',
-    customerEmail: data.customerEmail ?? null,
-    customerName: data.customerName ?? null,
-    lineItems: serialize(data.lineItems ?? []),
-    totals: {
-      itemsCents: Number(totals.itemsCents ?? 0),
-      shippingCents: Number(totals.shippingCents ?? 0),
-      taxCents: Number(totals.taxCents ?? 0),
-      discountCents: Number(totals.discountCents ?? 0),
-      totalCents,
-      // The Connect application fee. NOT subtracted from `totalCents` — it is
-      // Aglyn's cut of a total the shopper already paid in full, so a client
-      // that nets it out of revenue would understate what it collected.
-      feeCents: Number.isFinite(Number(totals.feeCents))
-        ? Number(totals.feeCents)
-        : Number.isFinite(legacyFee)
-          ? legacyFee
-          : 0,
-    },
-    // Money already handed back, for any reason. A chargeback lands here too,
-    // so `refundedCents > 0` does not by itself mean the merchant chose it.
-    refundedCents: Number(data.refundedCents ?? 0),
-    disputed: Boolean(data.dispute),
-    shippingAddress: serialize(data.shippingAddress) ?? null,
-    couponCode: data.couponCode ?? null,
-    // Shipment records — the half of fulfilment an integration can use
-    // without a write (AGL-2460). `status` says an order is `fulfilled`; it
-    // does not say which carrier took it or under what tracking number, so a
-    // 3PL or accounting reconcile could see THAT an order shipped and never
-    // WHICH shipment it was. The console's order dialog shows both, and an
-    // order that has been shipped twice (a split shipment) is indistinguish-
-    // able from one shipped once when only the status is published.
-    //
-    // `atMs` is a number of milliseconds, not a Firestore Timestamp, so
-    // `serialize` passes it through untouched. It is republished as `at` in
-    // ISO 8601 to match `created` and every other time this API emits: one
-    // object publishing two time formats is a bug an integrator finds late,
-    // in their own timezone conversion, and blames on their own code.
-    fulfillments: (Array.isArray(data.fulfillments) ? data.fulfillments : []).map(
-      (entry: Record<string, unknown>) => {
-        const atMs = Number((entry ?? {}).atMs)
-        return {
-          id: (entry ?? {}).id ?? null,
-          lineItemIds: Array.isArray((entry ?? {}).lineItemIds)
-            ? (entry as { lineItemIds: unknown[] }).lineItemIds
-            : [],
-          carrier: (entry ?? {}).carrier ?? null,
-          trackingNumber: (entry ?? {}).trackingNumber ?? null,
-          trackingUrl: (entry ?? {}).trackingUrl ?? null,
-          at: Number.isFinite(atMs) ? new Date(atMs).toISOString() : null,
-        }
-      },
-    ),
-    created: serialize(data.createdAt) ?? null,
-  }
+  return orderViewFromData(doc.id, doc.data() ?? {})
 }
 
 export async function handleOrders(
@@ -215,6 +147,9 @@ export async function handleOrders(
  * against the same source the handler branches on.
  */
 const ORDER_WRITE_TARGETS: OrderFulfilmentTarget[] = ['fulfilled', 'delivered']
+
+/** The keys a PATCH may carry (AGL-3611 added the last three). */
+const ORDER_WRITABLE_KEYS = ['status', 'carrier', 'trackingNumber', 'trackingUrl', 'lineItems', 'notify']
 
 /**
  * Transitions that exist in the commerce model and are DELIBERATELY not
@@ -285,9 +220,7 @@ async function updateOrder(
   orderId: string,
 ): Promise<Response> {
   const body = await readJsonBody(request)
-  const unknown = Object.keys(body).filter(
-    (key) => key !== 'status' && key !== 'carrier' && key !== 'trackingNumber',
-  )
+  const unknown = Object.keys(body).filter((key) => !ORDER_WRITABLE_KEYS.includes(key))
   if (unknown.length > 0) {
     // Named, not dropped — the `updateFormSubmission` / `updateContact` rule.
     // A silently ignored `trackingUrl` here reads as "we recorded your
@@ -295,7 +228,7 @@ async function updateOrder(
     // caller is a warehouse system that will never look again.
     return ApiErrors.badRequest({
       message:
-        'Only `status`, `carrier` and `trackingNumber` can be set on an order',
+        'Only `status`, `carrier`, `trackingNumber`, `trackingUrl`, `lineItems` and `notify` can be set on an order',
       code: 'validation_failed',
       fields: Object.fromEntries(
         unknown.map((key) => [key, 'Not writable on an order']),
@@ -328,6 +261,29 @@ async function updateOrder(
   // used to stuff an order document through a door the console keeps narrow.
   const carrier = String(body.carrier ?? '').slice(0, 40)
   const trackingNumber = String(body.trackingNumber ?? '').slice(0, 60)
+  // Partial shipments (AGL-3611): `lineItems: [{ lineItemId, quantity }]`.
+  // Absent keeps the old meaning, everything still to ship.
+  let lineItems: Array<{ lineItemId: number; quantity: number }> | undefined
+  if (body.lineItems !== undefined) {
+    if (status !== 'fulfilled' || !Array.isArray(body.lineItems) || body.lineItems.length === 0) {
+      return ApiErrors.badRequest({
+        message: 'Order failed validation',
+        code: 'validation_failed',
+        fields: {
+          lineItems:
+            status !== 'fulfilled'
+              ? 'Only a `fulfilled` update names line items'
+              : 'Must be a non-empty array of { lineItemId, quantity }',
+        },
+        headers: ctx.headers,
+      })
+    }
+    lineItems = (body.lineItems as unknown[]).slice(0, 500).map((entry) => ({
+      lineItemId: Number((entry as Record<string, unknown>)?.lineItemId),
+      quantity: Number((entry as Record<string, unknown>)?.quantity),
+    }))
+  }
+  const idempotencyKey = request.headers.get('idempotency-key') ?? undefined
 
   // Gate 4: this plugin, on for this site.
   const hostSnap = await hostRef(ctx, hostId).get()
@@ -344,7 +300,25 @@ async function updateOrder(
     to: status as OrderFulfilmentTarget,
     carrier,
     trackingNumber,
+    ...(lineItems ? { lineItems } : {}),
+    ...(typeof body.trackingUrl === 'string' ? { trackingUrl: body.trackingUrl } : {}),
+    ...(body.notify === false ? { notify: false } : {}),
+    ...(idempotencyKey ? { idempotencyKey } : {}),
   })
+  if (outcome.outcome === 'invalid_lines') {
+    return outcome.problem.problem === 'over_fulfilled'
+      ? ApiErrors.conflict({
+          message: outcome.message,
+          code: 'over_fulfilled',
+          headers: ctx.headers,
+        })
+      : ApiErrors.badRequest({
+          message: 'Order failed validation',
+          code: 'validation_failed',
+          fields: { lineItems: outcome.message },
+          headers: ctx.headers,
+        })
+  }
   if (outcome.outcome === 'no_such_order') {
     return ApiErrors.notFound({
       message: 'No such order',

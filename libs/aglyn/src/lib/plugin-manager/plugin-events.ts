@@ -25,6 +25,10 @@
  * billing-webhook hooks are the precedent for one vendor's events; this is
  * the same shape for the platform's own.
  *
+ * Events a PLUGIN raises for other plugins — an order paid, a return
+ * refunded — are `plugin-domain-events.ts` (AGL-3611): declared by the plugin,
+ * delivered through an outbox, at least once.
+ *
  * Handlers run sequentially and are ISOLATED: a plugin that throws is
  * logged and the next one runs, because these are consequences of a write
  * that has already happened — an activity row, a notification — and a

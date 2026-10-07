@@ -836,6 +836,12 @@ export interface AiTreeGenerationInput extends AiGenerationInputBase {
   otherPages?: readonly AiDoctrineTree[]
   /** Checks the door adds to the doctrine's own, run on a tree the doctrine admitted. */
   extend?: (tree: AiValidatedTree, answer: Record<string, unknown>) => AiDoctrineViolation[]
+  /**
+   * What the platform writes into the answer before it is checked (AGL-3596):
+   * the parsed node map in, the node map the doctrine holds and the door keeps
+   * out. The completed tree is the one checked, so no rule is relaxed for it.
+   */
+  complete?: (tree: unknown) => unknown
 }
 
 export interface AiPlanGenerationInput extends AiGenerationInputBase {
@@ -956,8 +962,10 @@ function checkFor(kind: string, input: object): AiGenerationCheck<unknown> {
   }
   if (isAiOutputKind(kind)) {
     const tree = input as AiTreeGenerationInput
+    const doctrine = aiDoctrineTreeCheck(kind, aiDoctrineTreeContext(tree.inventory, tree.context), tree.otherPages)
+    const complete = tree.complete
     return withExtension(
-      aiDoctrineTreeCheck(kind, aiDoctrineTreeContext(tree.inventory, tree.context), tree.otherPages),
+      complete ? (answer) => doctrine({ tree: complete(aiAnswerTree(answer)) }) : doctrine,
       tree.extend,
     ) as AiGenerationCheck<unknown>
   }

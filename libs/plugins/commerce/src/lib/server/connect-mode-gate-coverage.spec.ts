@@ -58,6 +58,8 @@ const DOORS = [
   'commerce/src/lib/server/reserve.ts',
   'commerce/src/lib/server/draft-order.ts',
   'commerce/src/lib/server/pos-order.ts',
+  // The register's card tenders (AGL-3607): reader, typed card and QR link.
+  'commerce/src/lib/server/pos-terminal.ts',
   'bookings/src/lib/server.ts',
   'marketplace/src/lib/server/checkout.ts',
   // Not a charge, but the same claim one step earlier: publishing a PAID

@@ -79,15 +79,26 @@ import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin'
  * reaches a param built here is Clover's switch of new subscriptions to
  * FLEXIBLE billing mode — so a subscription session pins
  * `billing_mode[type]=classic` below, and the subscription it creates bills
- * exactly as the hosted path's does. The measurement below was taken at
- * basil; re-take it in test mode before `release_native_checkout` is turned
- * on anywhere.
+ * exactly as the hosted path's does.
  *
- * Same probe, same params (line items, a manual tax line,
- * `shipping_address_collection`, a `fixed_amount` shipping option, Connect
- * `transfer_data[destination]` and `application_fee_amount`), hosted vs custom:
- * `amount_total` **6212 in both**. That is the tax-and-shipping parity claim,
- * measured rather than assumed.
+ * ### Parity, measured (re-taken at dahlia 2026-10-06, AGL-3606)
+ *
+ * `tools/scripts/measure-native-checkout-parity.mjs` sends the same params
+ * twice against Stripe TEST mode on a test connected account — once as the
+ * hosted path does, once rewritten by `applyNativeCheckoutParams` with the
+ * dahlia pin — and compares `amount_total` and `total_details`:
+ *
+ *   - manual tax line + `fixed_amount` shipping + `application_fee_amount`:
+ *     **6212 in both** (the basil figure, unchanged);
+ *   - Stripe Tax (`automatic_tax`) + shipping + fixed `transfer_data[amount]`:
+ *     **5799 in both**;
+ *   - Stripe Tax, no shipping: **5000 in both**;
+ *   - manual tax, no shipping, application fee: **5413 in both**.
+ *
+ * Stripe Tax's own amount is 0 in both before an address exists and is then
+ * computed by Stripe from the address on the SAME session object either way;
+ * the in-page form shows it live from `session.total`. Re-run the script after
+ * any change to the pinned version.
  *
  * ## What this module deliberately does NOT do
  *
@@ -126,12 +137,12 @@ export interface NativeCheckoutMode {
  * dead Buy button on every storefront at once. Requiring the key here means the
  * worst case of a premature flag flip is the redirect we already ship.
  *
- * That is not hypothetical for the storefront. Measured on 2026-08-18 through
- * the Vercel REST API (`vercel env ls` cannot see team-shared vars):
- * `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` exists as a project-level var on
- * `aglyn-console` and is set NOWHERE on `aglyn-tenant`, which is the project
- * that serves storefronts. So today this resolves to `native: false` in
- * production however the flag is set, and the shopper keeps the redirect.
+ * The key is set on `aglyn-tenant`, the Vercel project that serves
+ * storefronts, for production, preview and development (added 2026-08-23,
+ * which superseded a 2026-08-18 measurement that found it only on
+ * `aglyn-console`). Since the release on 2026-10-06 (AGL-3606) the flag is on
+ * by default, so every storefront deployment with the key opens the in-page
+ * form, and one without it keeps the redirect.
  *
  * The org — never the host — is the rollout bucket, per AGL-1656: a hostId and
  * an orgId hash to different buckets, so bucketing on the host could land a

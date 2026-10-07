@@ -34,6 +34,7 @@ import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
 import { registerCommerceRecordLists } from './model/commerce-record-lists'
 import { registerCommerceRecordRoutes } from './model/commerce-record-routes'
 import { registerCommerceZones } from './components/console/product-zones'
+import { registerCommerceOrderZones } from './components/console/order-zones'
 import { registerCommerceTransferUi } from './transfer/register-transfer-ui'
 import { COMMERCE_SEARCH_SOURCES } from './model/commerce-search-sources'
 import { COMMERCE_CONFIG_SCHEMA } from './plugin-config'
@@ -58,6 +59,9 @@ export function registerCommerceConsole(): void {
   // The zones its product editor, products hub and CSV import dialog host,
   // with the props each hands a widget (AGL-2916, AGL-3080).
   registerCommerceZones()
+  // …and the order dialog's two (AGL-3611), where a shipping plugin's widget
+  // buys a label and records the shipment through the dialog's own route.
+  registerCommerceOrderZones()
   // Its import and export resources' names and the products wizard's own
   // step (AGL-3531); the server halves register from the console's server
   // declarations.
