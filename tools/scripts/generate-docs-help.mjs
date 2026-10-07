@@ -231,6 +231,9 @@ function readDocPage(absPath) {
   const source = readFileSync(absPath, 'utf8')
   const fm = source.match(/^---\n([\s\S]*?)\n---/)
   if (!fm) return null
+  // An `unlisted` page is kept out of every listing until the feature it
+  // describes is available (AGL-3614); no console help may open it.
+  if (/^unlisted:\s*true\s*$/m.test(fm[1])) return null
   const title = stripQuotes(fm[1].match(/^title:\s*(.+)$/m)?.[1])
   const excerpt = stripQuotes(fm[1].match(/^description:\s*(.+)$/m)?.[1])
   if (!title || !excerpt) return null

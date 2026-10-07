@@ -174,6 +174,12 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     "description": "Workflows, actions, webhooks, and run logs.",
     "releaseFlag": "release_workflows"
   },
+  {
+    "id": "accounting",
+    "label": "Accounting",
+    "description": "Sales, refunds, fees and payouts posted to QuickBooks Online or Xero.",
+    "releaseFlag": "release_accounting"
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -196,6 +202,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "marketing": "elements",
   "redirects": "routes",
   "workflows": "routes",
+  "accounting": "console-only",
 }
 
 /**

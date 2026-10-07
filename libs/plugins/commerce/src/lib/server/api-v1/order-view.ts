@@ -61,6 +61,11 @@ export function orderViewFromData(id: string, data: Record<string, any>) {
     // Money already handed back, for any reason. A chargeback lands here too,
     // so `refundedCents > 0` does not by itself mean the merchant chose it.
     refundedCents: Number(data.refundedCents ?? 0),
+    // Who the tax was charged under (AGL-3614): `stripe-automatic` tax is
+    // Aglyn's to remit as marketplace facilitator and never reaches the
+    // merchant's account, which a ledger posting the sale has to know. An
+    // order from before the regime was recorded says `null`, never a guess.
+    taxMode: typeof data.taxMode === 'string' && data.taxMode ? data.taxMode : null,
     disputed: Boolean(data.dispute),
     shippingAddress: serialize(data.shippingAddress) ?? null,
     couponCode: data.couponCode ?? null,

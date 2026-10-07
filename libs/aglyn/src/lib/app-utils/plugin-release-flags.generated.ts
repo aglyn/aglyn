@@ -25,6 +25,7 @@ export type PluginReleaseFlagKey =
   | 'release_marketing'
   | 'release_redirects'
   | 'release_workflows'
+  | 'release_accounting'
 
 export const PLUGIN_RELEASE_FLAGS: readonly PluginReleaseFlagDefinition[] = [
   {
@@ -121,5 +122,12 @@ export const PLUGIN_RELEASE_FLAGS: readonly PluginReleaseFlagDefinition[] = [
     "description": "Workflows, actions, webhooks and their run history.",
     "defaultEnabled": true,
     "navTabId": "nav-tab-workflows"
+  },
+  {
+    "key": "release_accounting",
+    "label": "Accounting",
+    "description": "QuickBooks Online and Xero sync for commerce: sales receipts or a daily summary journal, refunds, platform fees and Stripe payouts, with a mapping page and a sync log (AGL-3614). OFF by default; needs the deployment's Intuit or Xero app credentials and the accounting token key on the console.",
+    "defaultEnabled": false,
+    "navTabId": "nav-tab-org-accounting"
   }
 ]

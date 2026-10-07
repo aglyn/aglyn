@@ -98,6 +98,7 @@ export const ORDERS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
     totals: objectOf('Money totals, in the smallest unit of `currency`.'),
     refundedCents: int('Amount refunded so far.'),
     disputed: bool('Whether a chargeback is open.'),
+    taxMode: nullable(str('The tax regime: `stripe-automatic` (Stripe Tax, collected and remitted by the platform as marketplace facilitator), `manual` (your own rate) or `none`. `null` on an order from before it was recorded.')),
     shippingAddress: ADDRESS(),
     couponCode: nullable(str('Coupon applied.')),
     fulfillments: { type: 'array', description: 'Shipments and deliveries.', items: { type: 'object', additionalProperties: true } },

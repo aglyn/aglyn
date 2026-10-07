@@ -168,6 +168,9 @@ function readDocSections(absPath, urlPath) {
   const source = readFileSync(absPath, 'utf8')
   const fm = source.match(/^---\n([\s\S]*?)\n---/)
   if (!fm) return []
+  // An `unlisted` page is one the docs keep out of every listing until the
+  // feature it describes is available (AGL-3614): Assist must not cite it.
+  if (/^unlisted:\s*true\s*$/m.test(fm[1])) return []
   const title = stripQuotes(fm[1].match(/^title:\s*(.+)$/m)?.[1])
   if (!title) return []
   const body = source.slice(fm[0].length)

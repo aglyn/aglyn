@@ -936,6 +936,15 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Accounting (AGL-3614): `accountingConnections` (the sealed grant to
+      // the business's QuickBooks or Xero books), `accountingSyncItems` (the
+      // sync log and the order snapshots each posting was made from) and
+      // `accountingOAuthStates` (a connect's single-use pending record) are
+      // DELIBERATELY not matched here. The org block has no catch-all, so
+      // every client, staff included, is refused all three; the accounting
+      // plugin's console routes read and write them with the Admin SDK.
+      // `cloud/rules-accounting.spec.mjs` holds the refusal.
+
       /**
        * Per-user AI usage (AGL-2928): one document per person per month,
        * keyed by their uid, carrying credits, request and refusal counts

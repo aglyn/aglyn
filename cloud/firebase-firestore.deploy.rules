@@ -952,6 +952,15 @@ allow write: if false;
 
 
 
+
+
+
+
+
+
+
+
+
 match /aiUsageByUser/{subjectUid}/months/{month} {
 allow read: if isStaff() ||
 (isOrgMember() && subjectUid == request.auth.uid) ||
