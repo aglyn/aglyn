@@ -146,6 +146,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-ai'),
   },
   {
+    id: 'fonts',
+    apiPrefixes: ["fonts"],
+    register: {"console":"registerFontsConsole"},
+    contributes: {"console":{"slots":["themeEditorFonts"]}},
+    load: () => import('@aglyn/plugins-fonts/console'),
+  },
+  {
     id: 'theme-presets',
     register: {"console":"registerThemesConsole"},
     contributes: {"console":{"slots":["hostThemePresets"]}},

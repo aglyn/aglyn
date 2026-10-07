@@ -27,8 +27,20 @@
   },
   "dependencies": {
     "@aglyn/aglyn": "1.0.0-beta.230",
+    "@aglyn/shared-data-mdi": "1.0.0-beta.230",
     "@aglyn/shared-data-types": "1.0.0-beta.230",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.230",
+    "@aglyn/shared-ui-theme": "1.0.0-beta.230",
+    "@aglyn/shared-util-http": "1.0.0-beta.230",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.230",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.230",
+    "@aglyn/tenant-runtime": "1.0.0-beta.230",
     "@swc/helpers": "0.5.23"
+  },
+  "peerDependencies": {
+    "@mui/material": "^9.3.1",
+    "firebase": "^12.18.0",
+    "react": "^19.2.8"
   },
   "sideEffects": false,
   "description": "Fonts for Aglyn sites: the Google Fonts catalog and metrics a published page loads its theme fonts by, the theme editor font picker, and an installer for a site's own font files."

@@ -220,6 +220,12 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "keeps": "The connections and everything already synced are kept, and an unsubscribe already read back stays on the site’s list."
     }
   },
+  {
+    "id": "fonts",
+    "label": "Fonts",
+    "alwaysOn": true,
+    "description": "Upload your own fonts and pick from the Google Fonts catalog for your site's theme."
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -247,6 +253,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "tax-engines": "console-only",
   "sales-channels": "routes",
   "marketing-platforms": "console-only",
+  "fonts": "console-only",
 }
 
 /**

@@ -2641,12 +2641,33 @@
     },
     {
       "id": "fonts",
-      "$comment": "AGL-3656: the platform's fonts. serverDeclarations registers the Google Fonts catalog (families, weights, italics and the metrics of each regular face) as core's theme font catalog, which a published page loads its theme fonts by: only the faces a family offers, and a local fallback sized to the family's metrics. Infrastructure, like sms: no catalog entry and no switch, because a published page's fonts are part of its theme.",
+      "$comment": "AGL-3656: the platform's fonts. serverDeclarations registers the Google Fonts catalog (families, weights, italics and the metrics of each regular face) as core's theme font catalog, which a published page loads its theme fonts by: only the faces a family offers, and a local fallback sized to the family's metrics. console fills the theme editor's themeEditorFonts zone with the font picker (the whole Google Fonts catalog, previews in the site's own words, pairings), and consoleApi serves /api/fonts/cost, what a theme's fonts cost a visitor, worked out as the published page loads them. Always on, with no switch: a published page's fonts are part of its theme.",
       "package": "@aglyn/plugins-fonts",
       "register": {
+        "console": "registerFontsConsole",
+        "consoleApi": "registerFontsConsoleApi",
         "serverDeclarations": "registerFontsServerDeclarations"
       },
-      "contributes": {}
+      "modules": {
+        "console": "console"
+      },
+      "apiPrefixes": [
+        "fonts"
+      ],
+      "catalog": {
+        "order": 24,
+        "label": "Fonts",
+        "alwaysOn": true,
+        "description": "Upload your own fonts and pick from the Google Fonts catalog for your site's theme.",
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "themeEditorFonts"
+          ]
+        }
+      }
     },
     {
       "id": "theme-presets",

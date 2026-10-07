@@ -18,6 +18,21 @@ Fonts for Aglyn sites (AGL-3656).
   font's family, style, weight, variation axes, OS/2 `fsType` license and metrics, with no
   dependencies, so the catalog generator, the server and the browser all read a font one way.
 
+- **The font picker.** `console` (`src/lib/console.ts`) fills the theme editor's
+  `themeEditorFonts` zone with `FontPicker` (`src/lib/picker/`): the site's body and heading
+  fonts in its own words, and a browser of the whole catalog — search, category chips, most
+  popular first, the styles to load, a cost badge and pairing suggestions. A choice is an edit
+  to the editor's draft, written with `writeThemeFonts` from `@aglyn/shared-ui-theme`; the
+  editor's Save keeps it. The catalog JSON loads the first time the browser opens. Previews ask
+  Google's CSS2 API for only the letters a card draws (`&text=`), when the card scrolls into
+  view, and register each under a name of its own (`Font Preview …`) so a preview never stands
+  in for the canvas's own font. Console only: nothing a published page loads imports the picker.
+- **The cost badge.** `consoleApi` serves `POST /api/fonts/cost`, which answers what a theme's
+  fonts cost a visitor — the Latin files its text styles and italics use, their bytes and how
+  many — from core's loader (`themeFontDeliveryCost` in `@aglyn/tenant-runtime/self-hosted-fonts`),
+  so the figure is chosen exactly as the published page chooses its files. A signed-in member of
+  the site only; it reads nothing of the site but its membership.
+
 ## How a published page loads its fonts
 
 1. The loader works out the faces the theme draws with: the weights its fonts list, every text
