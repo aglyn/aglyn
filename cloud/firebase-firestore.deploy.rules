@@ -2429,6 +2429,26 @@ allow read, write: if false;
 
 
 
+
+
+
+
+
+
+
+
+match /fulfillmentNetworkConnections/{connectionId} {
+allow read, write: if false;
+match /log/{entryId} {
+allow read, write: if false;
+}
+}
+match /fulfillmentNetworkOrders/{handOffId} {
+allow read, write: if false;
+}
+
+
+
 match /apiIdempotency/{keyHash} {
 allow read, write: if false;
 }

@@ -2427,6 +2427,26 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Fulfillment networks (AGL-3634): a site's connection to the merchant's
+    // OWN ShipBob or Amazon Multi-Channel Fulfillment account — its grant
+    // sealed, its webhook token's hash, its settings, stock count and log —
+    // and each paid order's hand-off to a network. Written and read by the
+    // fulfillment-networks plugin's server half through the Admin SDK only.
+    // Deny ALL client access, staff and the owner included: a client that
+    // could read a connection could carry off a sealed grant, and one that
+    // could write a hand-off could mark units held or shipped that were not,
+    // which a label buyer and the stock count both act on. Org erasure
+    // destroys both by the `orgId` field.
+    match /fulfillmentNetworkConnections/{connectionId} {
+      allow read, write: if false;
+      match /log/{entryId} {
+        allow read, write: if false;
+      }
+    }
+    match /fulfillmentNetworkOrders/{handOffId} {
+      allow read, write: if false;
+    }
+
     // REST API idempotency records (AGL-618): dedupe POSTs by Idempotency-Key.
     // Written and read by the Admin SDK only.
     match /apiIdempotency/{keyHash} {

@@ -356,6 +356,96 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'fulfillment-networks',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "api.shipbob.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The ShipBob API of the account a site's admin connects in the store's settings, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/shipbob.ts` with the merchant's own grant, to send the orders the merchant routes to it and read their shipments and stock back.",
+        dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent.",
+      },
+      {
+        host: "sandbox-api.shipbob.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The ShipBob sandbox API of the account a site's admin connects in the store's settings, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/shipbob.ts` with the merchant's own grant, to send the orders the merchant routes to it and read their shipments and stock back. Used only by a deployment pointed at the sandbox, where nothing real ships.",
+        dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent.",
+      },
+      {
+        host: "auth.shipbob.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. ShipBob's OAuth token endpoint, for a deployment that registered the ShipBob app: the code exchange when a merchant connects their own account, and each refresh (`libs/plugins/fulfillment-networks/src/lib/server/oauth.ts`). Its consent page is on the same host and is opened by the merchant's browser.",
+        dataReceived: "The deployment's OAuth client credentials, and the authorization code or refresh token the network itself issued — credentials, never orders.",
+      },
+      {
+        host: "authstage.shipbob.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. ShipBob sandbox's OAuth token endpoint, for a deployment that registered the ShipBob sandbox app: the code exchange when a merchant connects their own account, and each refresh (`libs/plugins/fulfillment-networks/src/lib/server/oauth.ts`). Its consent page is on the same host and is opened by the merchant's browser.",
+        dataReceived: "The deployment's OAuth client credentials, and the authorization code or refresh token the network itself issued — credentials, never orders.",
+      },
+      {
+        host: "sellingpartnerapi-na.amazon.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Amazon Selling Partner (North America) API of the account a site's admin connects in the store's settings, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/amazon-mcf.ts` with the merchant's own grant, to send the orders the merchant routes to it and read their shipments and stock back.",
+        dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent.",
+      },
+      {
+        host: "sellingpartnerapi-eu.amazon.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Amazon Selling Partner (Europe) API of the account a site's admin connects in the store's settings, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/amazon-mcf.ts` with the merchant's own grant, to send the orders the merchant routes to it and read their shipments and stock back.",
+        dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent.",
+      },
+      {
+        host: "sellingpartnerapi-fe.amazon.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Amazon Selling Partner (Far East) API of the account a site's admin connects in the store's settings, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/amazon-mcf.ts` with the merchant's own grant, to send the orders the merchant routes to it and read their shipments and stock back.",
+        dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent.",
+      },
+      {
+        host: "sandbox.sellingpartnerapi-na.amazon.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Amazon Selling Partner (North America) sandbox API of the account a site's admin connects in the store's settings, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/amazon-mcf.ts` with the merchant's own grant, to send the orders the merchant routes to it and read their shipments and stock back. Used only by a deployment pointed at the sandbox, where nothing real ships.",
+        dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent.",
+      },
+      {
+        host: "sandbox.sellingpartnerapi-eu.amazon.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Amazon Selling Partner (Europe) sandbox API of the account a site's admin connects in the store's settings, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/amazon-mcf.ts` with the merchant's own grant, to send the orders the merchant routes to it and read their shipments and stock back. Used only by a deployment pointed at the sandbox, where nothing real ships.",
+        dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent.",
+      },
+      {
+        host: "sandbox.sellingpartnerapi-fe.amazon.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Amazon Selling Partner (Far East) sandbox API of the account a site's admin connects in the store's settings, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/amazon-mcf.ts` with the merchant's own grant, to send the orders the merchant routes to it and read their shipments and stock back. Used only by a deployment pointed at the sandbox, where nothing real ships.",
+        dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent.",
+      },
+      {
+        host: "api.amazon.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. Login with Amazon's OAuth token endpoint, for a deployment that registered the Login with Amazon app: the code exchange when a merchant connects their own account, and each refresh (`libs/plugins/fulfillment-networks/src/lib/server/oauth.ts`).",
+        dataReceived: "The deployment's OAuth client credentials, and the authorization code or refresh token the network itself issued — credentials, never orders.",
+      },
+      {
+        host: "sellercentral.amazon.com",
+        disposition: "no-request",
+        reason: "Amazon Seller Central's app consent page, built by `networkAuthorizeUrl` in `libs/plugins/fulfillment-networks/src/lib/server/oauth.ts` and opened by the merchant's own browser to connect their own seller account. No server of ours requests it.",
+        dataReceived: "Nothing from our servers. The browser carries the app id, the redirect address and a single-use state.",
+      },
+      {
+        host: "sellercentral-europe.amazon.com",
+        disposition: "no-request",
+        reason: "Amazon Seller Central's app consent page, built by `networkAuthorizeUrl` in `libs/plugins/fulfillment-networks/src/lib/server/oauth.ts` and opened by the merchant's own browser to connect their own seller account. No server of ours requests it.",
+        dataReceived: "Nothing from our servers. The browser carries the app id, the redirect address and a single-use state.",
+      },
+      {
+        host: "sellercentral.amazon.co.jp",
+        disposition: "no-request",
+        reason: "Amazon Seller Central's app consent page, built by `networkAuthorizeUrl` in `libs/plugins/fulfillment-networks/src/lib/server/oauth.ts` and opened by the merchant's own browser to connect their own seller account. No server of ours requests it.",
+        dataReceived: "Nothing from our servers. The browser carries the app id, the redirect address and a single-use state.",
+      },
+    ],
+  },
+  {
     pluginId: 'sales-channels',
     subprocessors: [],
     hosts: [
