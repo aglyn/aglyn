@@ -259,7 +259,7 @@
     "check:plugin-domain-in-core": "node tools/scripts/check-plugin-domain-in-core.mjs",
     "test:plugin-domain-in-core": "node tools/scripts/check-plugin-domain-in-core.mjs --fixture",
     "check:mobile-isolation": "node tools/scripts/check-mobile-isolation.mjs",
-    "test:mobile-isolation": "node --test tools/scripts/lib/mobile-isolation.test.mjs tools/scripts/lib/mobile-manifest.test.mjs",
+    "test:mobile-isolation": "node --test tools/scripts/lib/mobile-isolation.test.mjs tools/scripts/lib/mobile-manifest.test.mjs tools/scripts/lib/native-manifest.test.mjs",
     "test:ai-eval": "jest -c libs/plugins/ai/jest.config.ts libs/plugins/ai/src/lib/runtime/ai-eval.spec.ts",
     "eval:ai-live": "node tools/ai-eval/record-live.mjs",
     "sync:next-tsconfigs": "node tools/scripts/sync-next-tsconfigs.mjs",

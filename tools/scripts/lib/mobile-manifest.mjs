@@ -24,6 +24,7 @@
  * lives and where `check-mobile-isolation` holds every import it makes.
  */
 export const MOBILE_CONTRIBUTION_KINDS = ['screens', 'tabs', 'widgets', 'quickActions', 'deepLinks']
+const MOBILE_BLOCK_KEYS = ['register', 'contributes', 'ios', 'android']
 const MOBILE_ID = /^[a-z][a-z0-9-]*\.[a-zA-Z0-9.-]+$/
 
 export function mobileManifestRows(plugins) {
@@ -34,7 +35,8 @@ export function mobileManifestRows(plugins) {
     if (declared === undefined) continue
     const where = `plugins.config.json: "${plugin.id}" mobile`
     const { $comment: _note, ...block } = declared ?? {}
-    const unknown = Object.keys(block).filter((key) => key !== 'register' && key !== 'contributes')
+    // `ios` and `android` name the native registrars; ./native-manifest.mjs validates them.
+    const unknown = Object.keys(block).filter((key) => !MOBILE_BLOCK_KEYS.includes(key))
     if (unknown.length) throw new Error(`${where}: ${unknown.join(', ')} is not a mobile field`)
     if (typeof block.register !== 'string' || !/^register[A-Za-z0-9]+$/.test(block.register)) {
       throw new Error(`${where}: "register" names the registrar its ./mobile entry exports`)

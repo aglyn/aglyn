@@ -221,19 +221,34 @@ and goes with it.
 validated in `tools/scripts/lib/native-manifest.mjs`, which has its own tests)
 writes the following files:
 
-- `apps/ios/PluginManifest/Package.swift`: depends on each plugin's
-  `src/ios` package by relative path, and on `AglynKit`.
+- `apps/ios/PluginManifest/Package.swift`: depends on `AglynKit`
+  (`libs/native/apple`) and on each plugin's `src/ios` package, which it
+  reaches through a generated symlink, `Plugins/Aglyn<P>Plugin` → the plugin's
+  `src/ios`. SwiftPM names a path dependency by its last directory, so every
+  `src/ios` would be the same package `ios`, and a second native plugin would
+  collide with the first. The link gives each a distinct name, and SwiftPM
+  resolves it, so the plugin's own relative dependencies still hold. For the
+  same reason a product of `AglynKit` is named by the package `apple`:
+  `.product(name: "AglynPluginHost", package: "apple")`, in the manifest and
+  in every plugin's `Package.swift`.
 - `apps/ios/PluginManifest/Sources/AglynPluginManifest/PluginManifest.generated.swift`:
   `NativePluginManifest.entries`, holding id, declared contributions and the
-  registrar function.
-- `apps/android/native-plugins.generated.properties`: `plugin-<id>` =
+  registrar function: `NativePluginManifestEntry(id:contributes:register:)`
+  from `AglynPluginHost`, with `contributes: [String: [String]]` keyed by
+  kind (`"screens"`, `"widgets"`, …) and `register:
+  (NativePluginRegistrar) -> Void`.
+- `apps/android/native-plugins.generated.properties`: `<id>` =
   `../../libs/plugins/<id>/src/android`. `settings.gradle.kts` includes these,
   and `plugin-manifest/build.gradle.kts` depends on them.
-- `apps/android/plugin-manifest/src/commonMain/kotlin/com/aglyn/plugins/manifest/PluginManifest.generated.kt`.
+- `apps/android/plugin-manifest/src/commonMain/kotlin/com/aglyn/plugins/manifest/PluginManifest.generated.kt`:
+  `object NativePluginManifest { val entries: List<NativePluginManifestEntry> }`,
+  with `com.aglyn.pluginhost.NativePluginManifestEntry(id, contributes:
+  Map<String, List<String>>, register: (NativePluginRegistrar) -> Unit)`.
 
 Validation fails the generator in these cases:
 
-- a `native` block without a `mobile` block;
+- an `ios` or `android` key outside a plugin's `mobile` block, or one in a
+  `mobile` block that declares no contributions;
 - an unknown key;
 - a module or package that does not match its plugin;
 - a `src/ios/Package.swift` or `src/android/build.gradle.kts` that does not

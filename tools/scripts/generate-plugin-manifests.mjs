@@ -50,11 +50,28 @@
  * scoped: the invalidating input is a root-level plugins.config.json that is
  * no app's source, and the outputs land in two different apps at once.
  */
-import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { mobileManifestContent, mobileManifestRows } from './lib/mobile-manifest.mjs'
+import {
+  IOS_MANIFEST_PLUGINS_DIR,
+  nativeManifestOutputs,
+  nativeManifestRows,
+  swiftPluginLinks,
+} from './lib/native-manifest.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const config = JSON.parse(readFileSync(join(ROOT, 'plugins.config.json'), 'utf8'))
@@ -3701,6 +3718,14 @@ function consoleRedirectRows() {
  */
 const MOBILE_MANIFEST = 'apps/mobile/src/plugins.mobile.generated.ts'
 
+/**
+ * The native plugin manifest (docs/mobile/native-architecture.md §3): the
+ * Swift package and Kotlin module the native app shells load plugins through.
+ * Built and validated in ./lib/native-manifest.mjs, which has its own tests;
+ * a plugin may name its registrar only once its native package exists.
+ */
+const NATIVE_ROWS = nativeManifestRows(config.plugins, { exists: (path) => existsSync(join(ROOT, path)) })
+
 const check = process.argv.includes('--check')
 const drifted = []
 
@@ -3741,11 +3766,13 @@ const ALL = [
   },
   { file: REDIRECTS_MANIFEST, content: `${JSON.stringify(consoleRedirectRows(), null, 2)}\n` },
   { file: MOBILE_MANIFEST, content: mobileManifestContent(mobileManifestRows(config.plugins)) },
+  ...nativeManifestOutputs(NATIVE_ROWS),
 ]
 
 for (const { file, content, describe = describeDrift } of ALL) {
 
   if (!check) {
+    mkdirSync(dirname(join(ROOT, file)), { recursive: true })
     writeFileSync(join(ROOT, file), content)
     console.log(`wrote ${file}`)
     continue
@@ -3768,6 +3795,48 @@ for (const { file, content, describe = describeDrift } of ALL) {
   )
 }
 
+/**
+ * The Swift manifest package reaches each plugin package through a symlink
+ * (see `swiftPluginLinks`). Every entry of the links directory is generated:
+ * a link that is missing, points elsewhere or names no native plugin drifts.
+ */
+const NATIVE_LINKS = swiftPluginLinks(NATIVE_ROWS)
+const linksDir = join(ROOT, IOS_MANIFEST_PLUGINS_DIR)
+const readLink = (path) => {
+  try {
+    return lstatSync(path).isSymbolicLink() ? readlinkSync(path) : '(not a symlink)'
+  } catch {
+    return null
+  }
+}
+const strayLinks = existsSync(linksDir)
+  ? readdirSync(linksDir)
+      .map((name) => `${IOS_MANIFEST_PLUGINS_DIR}/${name}`)
+      .filter((file) => !NATIVE_LINKS.some((link) => link.file === file))
+  : []
+for (const file of strayLinks) {
+  if (check) drifted.push(`${file}\n  names no plugin whose mobile block declares ios`)
+  else {
+    rmSync(join(ROOT, file), { force: true })
+    console.log(`removed ${file}`)
+  }
+}
+for (const { file, target } of NATIVE_LINKS) {
+  const actual = readLink(join(ROOT, file))
+  if (actual === target) {
+    console.log(`ok ${file}`)
+    continue
+  }
+  if (check) {
+    drifted.push(`${file}\n  ${actual === null ? 'the symlink does not exist' : `points to ${actual}`}; expected -> ${target}`)
+    continue
+  }
+  mkdirSync(linksDir, { recursive: true })
+  rmSync(join(ROOT, file), { force: true })
+  symlinkSync(target, join(ROOT, file))
+  console.log(`linked ${file} -> ${target}`)
+}
+
 if (check && drifted.length) {
   console.error(
     `\n${drifted.length} plugin manifest(s) no longer match plugins.config.json and the entries it names:\n\n` +
@@ -3779,4 +3848,4 @@ if (check && drifted.length) {
   process.exit(1)
 }
 
-if (check) console.log(`\n${ALL.length} plugin manifests in sync`)
+if (check) console.log(`\n${ALL.length + NATIVE_LINKS.length} plugin manifests in sync`)
