@@ -2353,8 +2353,12 @@ allow read, write: if false;
 
 
 
-match /commerceShippingEasyConnections/{hostId}/{document=**} {
+match /commerceShippingEasyConnections/{hostId} {
 allow read, write: if false;
+
+match /orders/{orderId} {
+allow read, write: if false;
+}
 }
 
 
