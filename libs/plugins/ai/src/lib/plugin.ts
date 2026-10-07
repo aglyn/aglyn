@@ -469,15 +469,17 @@ export function registerAiConsole(): void {
         title: 'Describe an email',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiDescribeEmailButton,
       },
       // Automations by AI (AGL-2919), in the zones the workflows plugin hosts
       // on its Automation page: "Create with AI" beside Add action and Recipes,
       // "Explain it" in the editor of a saved automation, and "Why did this
-      // fail?" on a failed run. Gated as the other generative widgets are;
-      // the two explain controls ask the jobs route about the release flag
-      // before they show anything, "Create with AI" is held behind it by the
-      // shell (AGL-3601), and none of them changes an automation.
+      // fail?" on a failed run. Gated as the other generative widgets are,
+      // the release flag included, by the shell alone (AGL-3601): none asks
+      // the jobs route anything until it is used, and none of them changes an
+      // automation.
       {
         slot: 'hostAutomations',
         widgetId: 'ai-describe-automation',
@@ -494,6 +496,7 @@ export function registerAiConsole(): void {
         title: 'Explain this automation',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        releaseFlag: 'release_ai_generative',
         Component: AiExplainAutomation,
       },
       // "Change with AI" and "Fix with AI" in a saved action's editor
@@ -505,6 +508,7 @@ export function registerAiConsole(): void {
         title: 'Change this automation with AI',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        releaseFlag: 'release_ai_generative',
         Component: AiReviseAutomation,
       },
       // "Create with AI" on the workspace's Org automations (AGL-3603): one
@@ -516,6 +520,8 @@ export function registerAiConsole(): void {
         title: 'Describe an org automation',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiDescribeOrgAutomationButton,
       },
       // "Ask AI about these numbers" (AGL-3603): a tile on a site's
@@ -528,6 +534,8 @@ export function registerAiConsole(): void {
         title: 'Ask AI about these numbers',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiInsightHostCard,
       },
       {
@@ -536,6 +544,8 @@ export function registerAiConsole(): void {
         title: 'Ask AI about these numbers',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiInsightOrgCard,
       },
       // Logic by AI (AGL-3603), in the zones the logic plugin hosts on its
@@ -549,6 +559,8 @@ export function registerAiConsole(): void {
         title: 'Describe a function or variable',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiLogicCreateButton,
       },
       {
@@ -557,6 +569,7 @@ export function registerAiConsole(): void {
         title: 'This function with AI',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        releaseFlag: 'release_ai_generative',
         Component: AiLogicFunctionTools,
       },
       {
@@ -565,6 +578,7 @@ export function registerAiConsole(): void {
         title: 'Fix this reference with AI',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        releaseFlag: 'release_ai_generative',
         Component: AiLogicFixReference,
       },
       {
@@ -573,6 +587,7 @@ export function registerAiConsole(): void {
         title: 'Why did this run fail?',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        releaseFlag: 'release_ai_generative',
         Component: AiExplainRunFailure,
       },
       // CRM by AI (AGL-2917): a record's summary and next step on its page,
@@ -649,8 +664,9 @@ export function registerAiConsole(): void {
       // Commerce by AI (AGL-2916): product copy in the product editor, the
       // catalog, categories and discounts on the products hub, and copy for
       // an import as it lands. The commerce plugin hosts the zones and makes
-      // every write; each card asks the jobs route about the release flag
-      // before it shows anything.
+      // every write. The shell holds the release flag; the products hub card
+      // reads its recent proposals before it draws its own controls, but
+      // offers the "Create with AI" door's brief from the moment it mounts.
       {
         slot: 'productEditor',
         widgetId: 'ai-product-copy',
@@ -665,6 +681,7 @@ export function registerAiConsole(): void {
         title: 'Build your catalog with AI',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        releaseFlag: 'release_ai_generative',
         Component: AiProductsHubCard,
       },
       // "Create with AI" beside Add product and in the empty catalog
@@ -676,6 +693,8 @@ export function registerAiConsole(): void {
         title: 'Propose products',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiCreateProductsButton,
       },
       {
@@ -690,8 +709,8 @@ export function registerAiConsole(): void {
       // editor, and one test's result read in plain words below its figures.
       // The A/B testing card hosts both zones, so they are drawn only where
       // that card is and only on a site with A/B testing; the shell holds the
-      // plan band and `ai.generate`, and each card asks the jobs route about
-      // the release flag before it shows anything. Neither writes: the
+      // plan band, `ai.generate` and the release flag, and neither card asks
+      // the jobs route anything until it is used (AGL-3601). Neither writes: the
       // experiment editor's Save is the only write, and an explanation has
       // nothing to apply.
       {
@@ -700,6 +719,7 @@ export function registerAiConsole(): void {
         title: 'Write variants with AI',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        releaseFlag: 'release_ai_generative',
         Component: AiExperimentVariantsCard,
       },
       {
@@ -708,6 +728,7 @@ export function registerAiConsole(): void {
         title: 'Explain this result with AI',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        releaseFlag: 'release_ai_generative',
         Component: AiExperimentResultCard,
       },
       // Overlays by AI (AGL-3603), in the zones the marketing plugin's
@@ -721,6 +742,8 @@ export function registerAiConsole(): void {
         title: 'Create an overlay with AI',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiCreateOverlayButton,
       },
       {
@@ -729,6 +752,7 @@ export function registerAiConsole(): void {
         title: 'Write overlay copy with AI',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        releaseFlag: 'release_ai_generative',
         Component: AiOverlayEditorCard,
       },
       // A campaign from a brief (AGL-3603), beside Create campaign on the
@@ -742,6 +766,8 @@ export function registerAiConsole(): void {
         title: 'Create a campaign with AI',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiCreateCampaignButton,
       },
       // The figures in words (AGL-3603), in the header of the Conversions
@@ -754,6 +780,8 @@ export function registerAiConsole(): void {
         title: 'Ask AI about these numbers',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiMarketingInsightButton,
       },
     ],

@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 
+import type { ConsoleWidgetEntitlementProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { mdiCreation } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -44,7 +45,8 @@ import type {
   ConsoleLogicFunctionEditorZoneProps,
   ConsoleLogicReferenceIssueZoneProps,
 } from './ai-logic-zones'
-import { aiJobProblem, useAiJobRun, useAiJobsVerdict, type AiJobRun } from './use-ai-job-run'
+import { aiJobProblem, useAiJobRun, type AiJobRun } from './use-ai-job-run'
+import { AiUpsellButton } from './ai-upsell-dialog.component'
 
 /**
  * Logic by AI (AGL-3603), in the zones the logic plugin hosts on its
@@ -145,11 +147,17 @@ function RunState({ run, running, failed, done }: { run: AiJobRun; running: stri
 }
 
 /** "Create with AI" in the Functions or the Variables card's header. */
-export function AiLogicCreateButton({ hostId, orgId, kind, propose }: ConsoleHostLogicZoneProps) {
+export function AiLogicCreateButton({
+  hostId,
+  orgId,
+  kind,
+  propose,
+  entitled,
+  upgrade,
+}: ConsoleHostLogicZoneProps & ConsoleWidgetEntitlementProps) {
   const copy = AI_LOGIC_COPY
   const help = pluginDocsHelp('aiLogic')
   const { data: user } = useUser()
-  const verdict = useAiJobsVerdict(user, orgId)
   const run = useAiJobRun(user, copy.failed)
   const { reset } = run
   const [open, setOpen] = useState(false)
@@ -161,7 +169,9 @@ export function AiLogicCreateButton({ hostId, orgId, kind, propose }: ConsoleHos
     setNotOpened(false)
   }, [open, reset])
 
-  if (verdict !== 'ready') return null
+  // Drawn from the shell's gates alone (AGL-3601); a plan without the add-on
+  // gets the add-on's dialog, and nothing asks a server until it is used.
+  if (entitled === false) return upgrade ? <AiUpsellButton kind="logic" upgrade={upgrade} /> : null
   const ready = proposalOf(run.job)
   const asking = !run.job || Boolean(run.notice)
   const close = () => setOpen(false)
@@ -240,13 +250,11 @@ export function AiLogicFunctionTools({ hostId, orgId, target, propose }: Console
   const copy = AI_LOGIC_COPY
   const help = pluginDocsHelp('aiLogic', { anchor: '#change' })
   const { data: user } = useUser()
-  const verdict = useAiJobsVerdict(user, orgId)
   const explain = useAiJobRun(user, copy.explainFailed)
   const change = useAiJobRun(user, copy.failed)
   const [brief, setBrief] = useState('')
   const [notOpened, setNotOpened] = useState(false)
 
-  if (verdict !== 'ready') return null
   const explanation =
     explain.job?.status === 'done' ? explain.job.outputs.find((one) => one.resource === 'text')?.text ?? null : null
   const ready = proposalOf(change.job)
@@ -358,11 +366,10 @@ export function AiLogicFunctionTools({ hostId, orgId, target, propose }: Console
 export function AiLogicFixReference({ hostId, orgId, issue }: ConsoleLogicReferenceIssueZoneProps) {
   const copy = AI_LOGIC_COPY
   const { data: user } = useUser()
-  const verdict = useAiJobsVerdict(user, orgId)
   const run = useAiJobRun(user, copy.referenceFailed)
   const [open, setOpen] = useState(false)
 
-  if (verdict !== 'ready' || issue.source !== 'action') return null
+  if (issue.source !== 'action') return null
   const drafted = run.job?.status === 'done' ? run.job.outputs.find((one) => one.resource === 'workflow') : undefined
 
   const ask = () => {

@@ -17,14 +17,14 @@
 
 /**
  * "Change with AI" and "Fix with AI" in a saved action's editor (AGL-3603),
- * mounted through the `automationEditor` zone's props: absent on a workflow
- * and while the jobs route says the feature is not this workspace's; each
+ * mounted through the `automationEditor` zone's props: absent on a workflow,
+ * and asking nothing of a server until it is used (AGL-3601); each
  * sends a `workflow` job in `revise` mode naming the action, and offers the
  * changed copy the job wrote through `openAction` — writing nothing itself.
  */
 
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 
 if (typeof globalThis.TextDecoder === 'undefined') {
   globalThis.TextDecoder = require('util').TextDecoder
@@ -48,7 +48,6 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 
 import type { ConsoleAutomationTarget } from './ai-automation-zones'
 import { AI_AUTOMATION_REVISE_COPY, AiReviseAutomation } from './ai-revise-automation.component'
-import { forgetAiJobsVerdicts } from './use-ai-job-run'
 
 const COPY = AI_AUTOMATION_REVISE_COPY
 const TARGET: ConsoleAutomationTarget = { type: 'action', id: 'act-1', name: 'Welcome a new lead' }
@@ -124,7 +123,6 @@ const created = () =>
 
 beforeEach(() => {
   mockFetch.mockReset()
-  forgetAiJobsVerdicts()
 })
 
 afterEach(() => {
@@ -133,19 +131,16 @@ afterEach(() => {
 })
 
 describe('Change with AI', () => {
-  it('stays absent when the feature is not this workspace’s, and on a workflow', async () => {
-    mockFetch.mockResolvedValue(json({ error: 'Not found' }, 404))
-    const { container, unmount } = render(<AiReviseAutomation hostId="host-1" orgId="org-1" target={TARGET} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
-    unmount()
-    forgetAiJobsVerdicts()
+  it('draws at once on an action, asking nothing of a server until it is used (AGL-3601), and nothing on a workflow', () => {
     routes()
+    const { unmount } = render(<AiReviseAutomation hostId="host-1" orgId="org-1" target={TARGET} />)
+    expect(screen.getByRole('button', { name: AI_AUTOMATION_REVISE_COPY.change })).toBeTruthy()
+    unmount()
     const workflow = render(
       <AiReviseAutomation hostId="host-1" orgId="org-1" target={{ ...TARGET, type: 'workflow' }} />,
     )
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
     expect(workflow.container.textContent).toBe('')
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('sends the change as a revise job of the action, and opens the copy it drafted', async () => {

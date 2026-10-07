@@ -19,8 +19,8 @@
  * The two overlay doors (AGL-3603), mounted through the zones the marketing
  * plugin's overlays list hosts.
  *
- * What it proves: neither door is drawn where the jobs route says the
- * workspace has no generation; "Write with AI" sends the copy as it stands
+ * What it proves: both doors draw from the shell's gates alone and ask
+ * nothing until used (AGL-3601); "Write with AI" sends the copy as it stands
  * and fills the editor only when asked; "Create with AI" hands the copy to the
  * list's own create path and writes nothing itself.
  */
@@ -55,7 +55,7 @@ import {
   aiOverlayJobInputs,
   type AiOverlayEditorCardProps,
 } from './ai-overlay-cards.component'
-import { forgetAiJobsVerdicts } from './use-ai-job-run'
+import { AI_UPSELL_COPY } from './ai-upsell-dialog.component'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -101,7 +101,7 @@ function job(proposal: Record<string, unknown> = PROPOSAL) {
   }
 }
 
-/** The jobs route's verdict, then the create door; nothing else is reached. */
+/** The jobs route's create and events doors; nothing else is reached. */
 function routes(answers: { verdict?: () => unknown; create?: () => unknown }) {
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (init?.method === 'POST' && url === '/api/ai/jobs') {
@@ -141,7 +141,6 @@ const editorProps = (patch: Partial<AiOverlayEditorCardProps> = {}): AiOverlayEd
 
 beforeEach(() => {
   jest.clearAllMocks()
-  forgetAiJobsVerdicts()
 })
 
 describe('the job each door asks for', () => {
@@ -167,19 +166,30 @@ describe('the job each door asks for', () => {
 })
 
 describe('whether either door is here at all', () => {
-  it('stays absent while the jobs route refuses the workspace', async () => {
-    routes({ verdict: () => json({ error: 'Not found' }, 404) })
-    const editor = render(<AiOverlayEditorCard {...editorProps()} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(editor.container.textContent).toBe('')
+  it('draws both at once and asks nothing of a server until one is used (AGL-3601)', () => {
+    routes()
+    render(<AiOverlayEditorCard {...editorProps()} />)
+    render(<AiCreateOverlayButton hostId="host-1" limits={LIMITS} triggers={TRIGGERS} createOverlayDraft={jest.fn()} />)
+    expect(screen.getByRole('button', { name: 'Create with AI' })).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
 
-    forgetAiJobsVerdicts()
-    const button = render(
-      <AiCreateOverlayButton hostId="host-1" limits={LIMITS} triggers={TRIGGERS} createOverlayDraft={jest.fn()} />,
+  it('opens the AI add-on from Create with AI on a plan without it, and creates nothing', () => {
+    routes()
+    render(
+      <AiCreateOverlayButton
+        hostId="host-1"
+        limits={LIMITS}
+        triggers={TRIGGERS}
+        createOverlayDraft={jest.fn()}
+        entitled={false}
+        upgrade={{ billingHref: '/acme/billing#addons', canManageBilling: true }}
+      />,
     )
-    await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThan(1))
-    expect(button.container.textContent).toBe('')
+    fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+    expect(screen.getByText(AI_UPSELL_COPY.overlay.title)).toBeTruthy()
     expect(created()).toBeNull()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })
 

@@ -76,6 +76,22 @@ const ENTRIES: ReadonlyArray<{ zone: string; widgetId: string; kind: AiUpsellKin
   { zone: 'hostForms', widgetId: 'ai-describe-form', kind: 'form' },
   { zone: 'hostComponents', widgetId: 'ai-describe-component', kind: 'component' },
   { zone: 'hostAutomations', widgetId: 'ai-describe-automation', kind: 'workflow' },
+  { zone: 'hostEmailTemplates', widgetId: 'ai-describe-email', kind: 'email' },
+]
+
+/**
+ * The other Create with AI and Ask AI entries (AGL-3596, AGL-3603), each
+ * drawing the same upsell from its own component, covered in its own spec.
+ */
+const OTHER_ENTRIES: ReadonlyArray<{ zone: string; widgetId: string; kind: AiUpsellKind }> = [
+  { zone: 'hostCampaigns', widgetId: 'ai-create-campaign', kind: 'campaign' },
+  { zone: 'productsCreate', widgetId: 'ai-products-create', kind: 'product' },
+  { zone: 'orgAutomations', widgetId: 'ai-describe-org-automation', kind: 'workflow' },
+  { zone: 'hostLogic', widgetId: 'ai-describe-logic', kind: 'logic' },
+  { zone: 'hostOverlays', widgetId: 'ai-create-overlay', kind: 'overlay' },
+  { zone: 'hostDashboard', widgetId: 'ai-insight-ask', kind: 'insight' },
+  { zone: 'orgDashboard', widgetId: 'ai-insight-ask', kind: 'insight' },
+  { zone: 'marketingInsights', widgetId: 'ai-marketing-insight', kind: 'insight' },
 ]
 
 function widgetFor(zone: string, widgetId: string): ComponentType<Record<string, unknown>> {
@@ -98,7 +114,7 @@ beforeEach(() => {
 })
 
 describe('every Create with AI entry opts in, and only those', () => {
-  it.each(ENTRIES)('$widgetId on $zone declares showWhenNotEntitled', ({ zone, widgetId }) => {
+  it.each([...ENTRIES, ...OTHER_ENTRIES])('$widgetId on $zone declares showWhenNotEntitled', ({ zone, widgetId }) => {
     const [entry] = listConsoleWidgets(zone, [AI_PLUGIN_ID]).filter(
       ({ widget }) => widget.widgetId === widgetId,
     )
@@ -113,7 +129,7 @@ describe('every Create with AI entry opts in, and only those', () => {
   })
 
   it('leaves every other AI widget to the plain gate', () => {
-    const ids = new Set(ENTRIES.map((entry) => entry.widgetId))
+    const ids = new Set([...ENTRIES, ...OTHER_ENTRIES].map((entry) => entry.widgetId))
     const zones = ['hostTheme', 'seoFields', 'hostSeo', 'automationEditor', 'automationRun', 'consoleTopBar']
     for (const zone of zones) {
       for (const { widget } of listConsoleWidgets(zone, [AI_PLUGIN_ID])) {

@@ -28,7 +28,7 @@
  * assert on the WHOLE rendered card, not on one string.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 
 if (typeof globalThis.TextDecoder === 'undefined') {
   globalThis.TextDecoder = require('util').TextDecoder
@@ -61,7 +61,6 @@ import {
   type AiExperimentVariantsCardProps,
   type AiExperimentZoneVariant,
 } from './ai-experiment-cards.component'
-import { forgetAiJobsVerdicts } from './use-ai-job-run'
 
 /**
  * Words that make a claim about which variant is better. The same family the
@@ -170,7 +169,7 @@ const VARIANTS_ANSWER = {
   ],
 }
 
-/** The jobs route, then the create door; no card reaches any other route. */
+/** The jobs route's doors; no card reaches any other route. */
 function routes(answers: { verdict?: () => unknown; create?: () => unknown }) {
   mockFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (init?.method === 'POST' && url === '/api/ai/jobs') {
@@ -205,31 +204,15 @@ const variantsProps = (
 
 beforeEach(() => {
   jest.clearAllMocks()
-  forgetAiJobsVerdicts()
 })
 
 describe('whether either card is here at all', () => {
-  it('stays absent while the release flag is off, and asks nothing else', async () => {
-    routes({ verdict: () => json({ error: 'Not found' }, 404) })
-    const result = render(<AiExperimentResultCard hostId="host-1" experimentId="exp-1" test="Hero copy" />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(result.container.textContent).toBe('')
-
-    forgetAiJobsVerdicts()
-    const variants = render(<AiExperimentVariantsCard {...variantsProps()} />)
-    await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThan(1))
-    expect(variants.container.textContent).toBe('')
-    // Nothing was started: the door is not merely hidden, it is unreachable.
-    expect(mockFetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
-  })
-
-  it('stays absent for a workspace whose plan does not carry generation', async () => {
-    routes({ verdict: () => json({ error: 'Forbidden' }, 403) })
-    const { container } = render(
-      <AiExperimentResultCard hostId="host-1" experimentId="exp-1" test="Hero copy" />,
-    )
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
+  it('draws both at once from the shell’s gates, and asks nothing until one is used (AGL-3601)', () => {
+    routes({})
+    render(<AiExperimentResultCard hostId="host-1" experimentId="exp-1" test="Hero copy" />)
+    render(<AiExperimentVariantsCard {...variantsProps()} />)
+    expect(screen.getByRole('button', { name: 'Explain this result' })).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })
 

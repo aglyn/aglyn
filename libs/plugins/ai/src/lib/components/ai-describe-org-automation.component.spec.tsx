@@ -17,8 +17,8 @@
 
 /**
  * "Create with AI" on the workspace's Org automations (AGL-3603), mounted
- * through the `orgAutomations` zone's props: absent while the jobs route says
- * the feature is not this workspace's; the description is a `workflow` draft
+ * through the `orgAutomations` zone's props: drawn from the shell's gates
+ * alone, asking nothing until it is used (AGL-3601); the description is a `workflow` draft
  * job with no site, carrying the vocabulary the zone handed over; and the
  * proposal opens through the zone's `propose`, which writes nothing.
  */
@@ -47,7 +47,7 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 
 import type { ConsoleOrgAutomationsZoneProps } from './ai-automation-zones'
 import AiDescribeOrgAutomationButton, { AI_ORG_AUTOMATION_COPY } from './ai-describe-org-automation.component'
-import { forgetAiJobsVerdicts } from './use-ai-job-run'
+import { AI_UPSELL_COPY } from './ai-upsell-dialog.component'
 
 const copy = AI_ORG_AUTOMATION_COPY
 
@@ -131,16 +131,24 @@ function routes(answers: { probe?: unknown; events?: unknown } = {}) {
 
 beforeEach(() => {
   mockFetch.mockReset()
-  forgetAiJobsVerdicts()
   propose = jest.fn(() => true)
 })
 
 describe('Create with AI on Org automations', () => {
-  it('stays absent when the feature is not this workspace’s', async () => {
-    routes({ probe: json({ error: 'Not found' }, 404) })
-    const { container } = render(<AiDescribeOrgAutomationButton {...zoneProps()} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
+  it('draws at once and asks nothing of a server until it is used (AGL-3601)', () => {
+    routes()
+    render(<AiDescribeOrgAutomationButton {...zoneProps()} />)
+    expect(screen.getByRole('button', { name: copy.create })).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('opens the AI add-on on a plan without it, and asks nothing', () => {
+    routes()
+    render(<AiDescribeOrgAutomationButton {...zoneProps()} entitled={false} upgrade={{ billingHref: '/acme/billing#addons', canManageBilling: true }} />)
+    fireEvent.click(screen.getByRole('button', { name: copy.create }))
+    expect(screen.getByText(AI_UPSELL_COPY.workflow.title)).toBeTruthy()
+    expect(screen.queryByLabelText(copy.label)).toBeNull()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('asks for a workspace draft with no site and the zone’s vocabulary, and opens the proposal unsaved', async () => {

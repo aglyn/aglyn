@@ -17,8 +17,8 @@
 
 /**
  * "Ask AI about these numbers" (AGL-3603), in the zone a marketing report
- * hosts: drawn only where the figures are one site's and the jobs route
- * serves the workspace, and it opens the insight dialog on the Marketing
+ * hosts: drawn only where the figures are one site's, from the shell's gates
+ * alone and asking nothing until it is used (AGL-3601), and it opens the insight dialog on the Marketing
  * surface with a question about what the report shows.
  */
 
@@ -47,13 +47,12 @@ jest.mock('./ai-insight-dialog.component', () => ({
 }))
 
 import { AiMarketingInsightButton, aiMarketingInsightQuestion } from './ai-marketing-insight.component'
-import { forgetAiJobsVerdicts } from './use-ai-job-run'
+import { AI_UPSELL_COPY } from './ai-upsell-dialog.component'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
 beforeEach(() => {
   jest.clearAllMocks()
-  forgetAiJobsVerdicts()
 })
 
 describe('Ask AI about these numbers', () => {
@@ -81,10 +80,25 @@ describe('Ask AI about these numbers', () => {
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it('stays absent while the jobs route refuses the workspace', async () => {
-    mockFetch.mockResolvedValue(json({ error: 'Not found' }, 404))
-    const { container } = render(<AiMarketingInsightButton hostId="host-1" subject="conversions" campaign={null} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
+  it('draws at once and asks nothing of a server until it is used (AGL-3601)', () => {
+    render(<AiMarketingInsightButton hostId="host-1" subject="conversions" campaign={null} />)
+    expect(screen.getByRole('button', { name: 'Ask AI about these numbers' })).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('opens the AI add-on on a plan without it, and asks nothing', () => {
+    render(
+      <AiMarketingInsightButton
+        hostId="host-1"
+        subject="conversions"
+        campaign={null}
+        entitled={false}
+        upgrade={{ billingHref: '/acme/billing#addons', canManageBilling: true }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Ask AI about these numbers' }))
+    expect(screen.getByText(AI_UPSELL_COPY.insight.does)).toBeTruthy()
+    expect(screen.queryByText('insight dialog')).toBeNull()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })

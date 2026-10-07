@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 
+import type { ConsoleWidgetEntitlementProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { mdiCreation } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -44,7 +45,8 @@ import {
 } from '../model/ai-workflow-job'
 import type { ConsoleOrgAutomationsZoneProps } from './ai-automation-zones'
 import { openAiJobs } from './ai-jobs-store'
-import { aiJobProblem, useAiJobRun, useAiJobsVerdict } from './use-ai-job-run'
+import { AiUpsellButton } from './ai-upsell-dialog.component'
+import { aiJobProblem, useAiJobRun } from './use-ai-job-run'
 
 /**
  * "Create with AI" on the workspace's Org automations (AGL-3603), in that
@@ -84,11 +86,17 @@ function proposalOf(job: AiJobSummary | null): { automation: AiOrgAutomationProp
   return automation && output ? { automation, label: output.label, note: output.note ?? null } : null
 }
 
-export function AiDescribeOrgAutomationButton({ orgId, triggers, steps, propose }: ConsoleOrgAutomationsZoneProps) {
+export function AiDescribeOrgAutomationButton({
+  orgId,
+  triggers,
+  steps,
+  propose,
+  entitled,
+  upgrade,
+}: ConsoleOrgAutomationsZoneProps & ConsoleWidgetEntitlementProps) {
   const copy = AI_ORG_AUTOMATION_COPY
   const help = pluginDocsHelp('aiAutomations', { anchor: '#org-automations' })
   const { data: user } = useUser()
-  const verdict = useAiJobsVerdict(user, orgId)
   const run = useAiJobRun(user, copy.failed)
   const { job, starting, running, notice, reset } = run
   const [open, setOpen] = useState(false)
@@ -102,7 +110,9 @@ export function AiDescribeOrgAutomationButton({ orgId, triggers, steps, propose 
     setNotOpened(false)
   }, [open, reset])
 
-  if (verdict !== 'ready') return null
+  // Drawn from the shell's gates alone (AGL-3601): nothing asks a server
+  // until it is used, and a plan without the add-on gets the add-on's dialog.
+  if (entitled === false) return upgrade ? <AiUpsellButton kind="workflow" upgrade={upgrade} /> : null
   const ready = proposalOf(job)
   const problem = aiJobProblem(job, copy.failed) ?? (job?.status === 'done' && !ready ? copy.failed : null)
   const asking = !job || Boolean(notice)

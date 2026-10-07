@@ -16,6 +16,7 @@
  */
 'use client'
 
+import type { ConsoleWidgetEntitlementProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { mdiCreation } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -49,7 +50,8 @@ import {
   type AiOverlayKind,
   type AiOverlayTriggerRule,
 } from '../model/ai-overlay-copy'
-import { aiJobProblem, useAiJobRun, useAiJobsVerdict } from './use-ai-job-run'
+import { AiUpsellButton } from './ai-upsell-dialog.component'
+import { aiJobProblem, useAiJobRun } from './use-ai-job-run'
 
 /**
  * Overlays by AI in the console (AGL-3603): two widgets in the zones the
@@ -113,7 +115,7 @@ export interface AiOverlayEditorCardProps extends OverlayRules {
 }
 
 /** What the `hostOverlays` zone hands this widget. */
-export interface AiCreateOverlayButtonProps extends OverlayRules {
+export interface AiCreateOverlayButtonProps extends OverlayRules, ConsoleWidgetEntitlementProps {
   hostId: string
   createOverlayDraft: (
     kind: AiOverlayKind,
@@ -255,7 +257,6 @@ export function AiOverlayEditorCard(props: AiOverlayEditorCardProps) {
   const { hostId, kind, copy, proposeValues, limits, triggers } = props
   const orgId = useHostOrgId(hostId) ?? undefined
   const { data: user } = useUser()
-  const verdict = useAiJobsVerdict(user, orgId)
   const run = useAiJobRun(user, WRITE_FAILED_COPY)
   const [brief, setBrief] = useState('')
   const [applied, setApplied] = useState<string | null>(null)
@@ -264,7 +265,6 @@ export function AiOverlayEditorCard(props: AiOverlayEditorCardProps) {
     aiJobProblem(run.job, WRITE_FAILED_COPY) ??
     (run.job?.status === 'done' && !proposal ? WRITE_FAILED_COPY : null)
 
-  if (verdict !== 'ready') return null
 
   const busy = run.starting || run.running
   const current = aiOverlayCurrentCopy(kind, copy)
@@ -371,7 +371,6 @@ export function AiCreateOverlayButton(props: AiCreateOverlayButtonProps) {
   const { hostId, createOverlayDraft, limits, triggers } = props
   const orgId = useHostOrgId(hostId) ?? undefined
   const { data: user } = useUser()
-  const verdict = useAiJobsVerdict(user, orgId)
   const run = useAiJobRun(user, WRITE_FAILED_COPY)
   const [open, setOpen] = useState(false)
   const [kind, setKind] = useState<AiOverlayKind>('popup')
@@ -407,7 +406,11 @@ export function AiCreateOverlayButton(props: AiCreateOverlayButtonProps) {
       .finally(() => setSaving(false))
   }, [proposal, run, createOverlayDraft])
 
-  if (verdict !== 'ready') return null
+  // Drawn from the shell's gates alone (AGL-3601): nothing asks a server until
+  // it is used, and a plan without the add-on gets the add-on's dialog.
+  if (props.entitled === false) {
+    return props.upgrade ? <AiUpsellButton kind="overlay" upgrade={props.upgrade} /> : null
+  }
 
   const busy = run.starting || run.running || saving
   const help = overlayHelp('#create-an-overlay', 'Writes a new announcement bar or popup from a brief and saves it switched off, so no visitor sees it until you turn it on.')

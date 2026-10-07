@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 
+import type { ConsoleWidgetEntitlementProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import type { ConsolePluginOrgMount } from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { mdiCreation } from '@aglyn/shared-data-mdi'
@@ -25,7 +26,7 @@ import { useConsoleHostRoute, useHostOrgId, useUser } from '@aglyn/tenant-featur
 import { Button, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 import { AiInsightDialog } from './ai-insight-dialog.component'
-import { useAiJobsVerdict } from './use-ai-job-run'
+import { AiUpsellDialog } from './ai-upsell-dialog.component'
 
 /**
  * "Ask AI about these numbers" (AGL-3603): a tile on a site's dashboard and
@@ -33,8 +34,9 @@ import { useAiJobsVerdict } from './use-ai-job-run'
  * sites page (`orgDashboard`), opening the insight dialog the Assist panel
  * opens. A question becomes an `insight` job — the figures read by code
  * through the readers the surface offers, every insight traced to the rows
- * it cites — charged as that job is. Hidden until the jobs route says the
- * feature is this workspace's.
+ * it cites — charged as that job is. Drawn from the shell's gates alone
+ * (AGL-3601): nothing asks a server until a question is asked, and on a plan
+ * without the AI add-on the same tile opens the add-on's dialog.
  */
 
 export const AI_INSIGHT_CARD_COPY = {
@@ -46,7 +48,6 @@ export const AI_INSIGHT_CARD_COPY = {
 
 function InsightTile(props: {
   text: string
-  orgId: string | null
   onAsk: () => void
 }) {
   const help = pluginDocsHelp('aiInsights')
@@ -60,7 +61,6 @@ function InsightTile(props: {
           size="small"
           variant="outlined"
           startIcon={<MdiIcon path={mdiCreation.path} />}
-          disabled={!props.orgId}
           onClick={props.onAsk}
         >
           {AI_INSIGHT_CARD_COPY.action}
@@ -70,17 +70,33 @@ function InsightTile(props: {
   )
 }
 
+/** The tile on a plan without the AI add-on: the same tile, opening the add-on's dialog. */
+function InsightUpsellTile({ text, upgrade }: { text: string; upgrade: ConsoleWidgetEntitlementProps['upgrade'] }) {
+  const [open, setOpen] = useState(false)
+  if (!upgrade) return null
+  return (
+    <>
+      <InsightTile text={text} onAsk={() => setOpen(true)} />
+      <AiUpsellDialog kind="insight" open={open} onClose={() => setOpen(false)} upgrade={upgrade} />
+    </>
+  )
+}
+
 /** On a site's dashboard and its Analytics page. */
-export function AiInsightHostCard({ hostId }: { hostId: string }) {
+export function AiInsightHostCard({
+  hostId,
+  entitled,
+  upgrade,
+}: { hostId: string } & ConsoleWidgetEntitlementProps) {
   const { data: user } = useUser()
   const orgId = useHostOrgId(hostId)
   const route = useConsoleHostRoute(hostId)
-  const verdict = useAiJobsVerdict(user, orgId ?? undefined)
   const [open, setOpen] = useState(false)
-  if (verdict !== 'ready' || !orgId) return null
+  if (entitled === false) return <InsightUpsellTile text={AI_INSIGHT_CARD_COPY.site} upgrade={upgrade} />
+  if (!orgId) return null
   return (
     <>
-      <InsightTile text={AI_INSIGHT_CARD_COPY.site} orgId={orgId} onAsk={() => setOpen(true)} />
+      <InsightTile text={AI_INSIGHT_CARD_COPY.site} onAsk={() => setOpen(true)} />
       {open ? (
         <AiInsightDialog
           open
@@ -99,15 +115,19 @@ export function AiInsightHostCard({ hostId }: { hostId: string }) {
 }
 
 /** On the workspace's sites page, totaling the organization rather than one site. */
-export function AiInsightOrgCard({ orgMount }: { orgMount?: ConsolePluginOrgMount | null }) {
+export function AiInsightOrgCard({
+  orgMount,
+  entitled,
+  upgrade,
+}: { orgMount?: ConsolePluginOrgMount | null } & ConsoleWidgetEntitlementProps) {
   const { data: user } = useUser()
   const orgId = orgMount?.orgId ?? null
-  const verdict = useAiJobsVerdict(user, orgId ?? undefined)
   const [open, setOpen] = useState(false)
-  if (verdict !== 'ready' || !orgId) return null
+  if (entitled === false) return <InsightUpsellTile text={AI_INSIGHT_CARD_COPY.workspace} upgrade={upgrade} />
+  if (!orgId) return null
   return (
     <>
-      <InsightTile text={AI_INSIGHT_CARD_COPY.workspace} orgId={orgId} onAsk={() => setOpen(true)} />
+      <InsightTile text={AI_INSIGHT_CARD_COPY.workspace} onAsk={() => setOpen(true)} />
       {open ? (
         <AiInsightDialog
           open

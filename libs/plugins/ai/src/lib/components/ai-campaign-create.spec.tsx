@@ -26,7 +26,7 @@
  * changed under the dialog is answered with the design-only path.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 
 if (typeof globalThis.TextDecoder === 'undefined') {
   globalThis.TextDecoder = require('util').TextDecoder
@@ -65,7 +65,7 @@ import {
   aiCampaignJobInputs,
   aiCampaignJobKind,
 } from './ai-campaign-create.component'
-import { forgetAiJobsVerdicts } from './use-ai-job-run'
+import { AI_UPSELL_COPY } from './ai-upsell-dialog.component'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -111,7 +111,6 @@ async function ask(brief = 'Announce the autumn menu') {
 
 beforeEach(() => {
   jest.clearAllMocks()
-  forgetAiJobsVerdicts()
   mockOrg = { plan: 'business', billingStatus: 'active' }
 })
 
@@ -134,11 +133,28 @@ describe('which job it starts', () => {
 })
 
 describe('the door', () => {
-  it('stays absent while the jobs route refuses the workspace', async () => {
-    routes(() => json({}), () => json({ error: 'Not found' }, 404))
-    const { container } = render(<AiCreateCampaignButton hostId="host-1" orgId="org-1" sites={[]} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
+  it('draws at once and asks nothing of a server until it is used (AGL-3601)', () => {
+    routes(() => json({}))
+    render(<AiCreateCampaignButton hostId="host-1" orgId="org-1" sites={[]} />)
+    expect(screen.getByRole('button', { name: 'Create with AI' })).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('opens the AI add-on on a plan without it, and asks nothing', () => {
+    routes(() => json({}))
+    render(
+      <AiCreateCampaignButton
+        hostId="host-1"
+        orgId="org-1"
+        sites={[]}
+        entitled={false}
+        upgrade={{ billingHref: '/acme/billing#addons', canManageBilling: true }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+    expect(screen.getByText(AI_UPSELL_COPY.campaign.title)).toBeTruthy()
+    expect(screen.queryByLabelText('What is the campaign for?')).toBeNull()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('starts a campaign job for the site, and follows it', async () => {
@@ -203,7 +219,7 @@ describe('the door', () => {
   it('draws nothing on an organization hub with no site to place a campaign on', async () => {
     routes(() => json({}))
     const { container } = render(<AiCreateCampaignButton hostId={null} orgId="org-1" sites={[]} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
     expect(container.textContent).toBe('')
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })

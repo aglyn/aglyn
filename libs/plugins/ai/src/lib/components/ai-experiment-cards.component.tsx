@@ -50,7 +50,7 @@ import {
   type AiExperimentVariantsProposalView,
 } from '../model/ai-experiment-proposal'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import { aiJobProblem, useAiJobRun, useAiJobsVerdict } from './use-ai-job-run'
+import { aiJobProblem, useAiJobRun } from './use-ai-job-run'
 
 /**
  * A/B tests by AI in the console (AGL-2914): the two doors a person reaches
@@ -209,7 +209,6 @@ export function AiExperimentVariantsCard(props: AiExperimentVariantsCardProps) {
   // plugin's zone resolves it.
   const orgId = useHostOrgId(hostId) ?? undefined
   const { data: user } = useUser()
-  const verdict = useAiJobsVerdict(user, orgId)
   const run = useAiJobRun(user, VARIANTS_FAILED_COPY)
   const prefill = useMemo(
     () => aiExperimentSubjectFrom(target, variants),
@@ -235,7 +234,6 @@ export function AiExperimentVariantsCard(props: AiExperimentVariantsCardProps) {
     aiJobProblem(run.job, VARIANTS_FAILED_COPY) ??
     (run.job?.status === 'done' && !proposal ? VARIANTS_FAILED_COPY : null)
 
-  if (verdict !== 'ready') return null
 
   const busy = run.starting || run.running
   const noun = TARGET_NOUN[target]
@@ -571,7 +569,6 @@ export function AiExperimentResultCard(props: AiExperimentResultCardProps) {
   const { hostId, test } = props
   const orgId = useHostOrgId(hostId) ?? undefined
   const { data: user } = useUser()
-  const verdict = useAiJobsVerdict(user, orgId)
   const run = useAiJobRun(user, EXPLAIN_FAILED_COPY)
   const explanation = useMemo(
     () => readAiExperimentExplanation(proposalOf(run.job)),
@@ -581,7 +578,6 @@ export function AiExperimentResultCard(props: AiExperimentResultCardProps) {
     aiJobProblem(run.job, EXPLAIN_FAILED_COPY) ??
     (run.job?.status === 'done' && !explanation ? EXPLAIN_FAILED_COPY : null)
 
-  if (verdict !== 'ready') return null
 
   const busy = run.starting || run.running
   const resultHelp = pluginDocsHelp('aiExperiments', {

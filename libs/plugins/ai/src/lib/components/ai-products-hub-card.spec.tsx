@@ -83,6 +83,7 @@ jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => ({
 import type { ConsoleProductsHubZoneProps } from './ai-product-zones'
 import AiProductsHubCard from './ai-products-hub-card.component'
 import AiCreateProductsButton from './ai-products-create-button.component'
+import { AI_UPSELL_COPY } from './ai-upsell-dialog.component'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -386,17 +387,49 @@ describe('Create with AI beside Add product', () => {
     })
   })
 
-  it.each([403, 404])('stays absent when the jobs route answers %s, as the card does', async (status) => {
-    mockFetch.mockImplementation(async () => json({ error: 'no' }, status))
+  it('draws as soon as the card is on the page, before the card has read anything (AGL-3601)', () => {
+    // The card's list of recent proposals never answers: the door does not wait on it.
+    mockFetch.mockImplementation(() => new Promise(() => undefined))
     render(
       <>
         <AiCreateProductsButton hostId="host-1" orgId={undefined} />
         <AiProductsHubCard {...props()} />
       </>,
     )
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(screen.queryByRole('button', { name: 'Create with AI' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+    expect(screen.getByLabelText('What does the store sell?')).toBeTruthy()
+  })
+
+  it.each([403, 404])(
+    'still opens the brief when the list read answers %s, and the start door says why it refuses',
+    async (status) => {
+      mockFetch.mockImplementation(async () => json({ error: 'AI is switched off for this site.' }, status))
+      render(
+        <>
+          <AiCreateProductsButton hostId="host-1" orgId={undefined} />
+          <AiProductsHubCard {...props()} />
+        </>,
+      )
+      await waitFor(() => expect(mockFetch).toHaveBeenCalled())
+      fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+      fireEvent.change(screen.getByLabelText('What does the store sell?'), { target: { value: 'A candle studio' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Propose products' }))
+      expect(await screen.findByText('AI is switched off for this site.')).toBeTruthy()
+    },
+  )
+
+  it('opens the AI add-on on a plan without it, with no card and no request', () => {
+    render(
+      <AiCreateProductsButton
+        hostId="host-1"
+        orgId={undefined}
+        entitled={false}
+        upgrade={{ billingHref: '/acme/billing#addons', canManageBilling: true }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+    expect(screen.getByText(AI_UPSELL_COPY.product.title)).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('stays absent with no card on the page, and for another site’s card', async () => {

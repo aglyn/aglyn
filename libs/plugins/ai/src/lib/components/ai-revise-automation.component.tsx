@@ -34,7 +34,7 @@ import {
 import { useState } from 'react'
 import { openAiJobs } from './ai-jobs-store'
 import type { ConsoleAutomationEditorZoneProps } from './ai-automation-zones'
-import { aiJobProblem, useAiJobRun, useAiJobsVerdict } from './use-ai-job-run'
+import { aiJobProblem, useAiJobRun } from './use-ai-job-run'
 
 /**
  * "Fix with AI" and "Change with AI" in the editor of a saved ACTION
@@ -70,12 +70,11 @@ export function AiReviseAutomation({ hostId, orgId, target, openAction }: Consol
   const copy = AI_AUTOMATION_REVISE_COPY
   const help = pluginDocsHelp('aiAutomations', { anchor: '#change' })
   const { data: user } = useUser()
-  const verdict = useAiJobsVerdict(user, orgId)
   const run = useAiJobRun(user, copy.failed)
   const [brief, setBrief] = useState('')
   const [notListed, setNotListed] = useState(false)
 
-  if (verdict !== 'ready' || target.type !== 'action') return null
+  if (target.type !== 'action') return null
   const { job } = run
   const busy = run.starting || run.running
   const draft = job?.status === 'done' ? job.outputs.find((output) => output.resource === 'workflow') : undefined

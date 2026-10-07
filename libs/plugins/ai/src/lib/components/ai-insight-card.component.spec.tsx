@@ -16,13 +16,14 @@
  */
 
 /**
- * "Ask AI about these numbers" (AGL-3603): absent until the jobs route says
- * the feature is this workspace's; on a site it opens the insight dialog on
+ * "Ask AI about these numbers" (AGL-3603): drawn from the shell's gates alone,
+ * asking nothing of a server until a question is asked (AGL-3601), and the
+ * add-on's dialog on a plan without it; on a site it opens the insight dialog on
  * the Analytics surface for that site, and on the workspace's sites page on
  * the workspace surface with no site.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 
 const mockFetch = jest.fn()
 const mockDialog = jest.fn()
@@ -46,22 +47,34 @@ jest.mock('./ai-insight-dialog.component', () => ({
 }))
 
 import { AI_INSIGHT_CARD_COPY, AiInsightHostCard, AiInsightOrgCard } from './ai-insight-card.component'
-import { forgetAiJobsVerdicts } from './use-ai-job-run'
+import { AI_UPSELL_COPY } from './ai-upsell-dialog.component'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
 beforeEach(() => {
   mockFetch.mockReset()
   mockDialog.mockReset()
-  forgetAiJobsVerdicts()
 })
 
 describe('Ask AI about these numbers', () => {
-  it('stays absent when the feature is not this workspace’s', async () => {
-    mockFetch.mockResolvedValue(json({ error: 'Not found' }, 404))
-    const { container } = render(<AiInsightHostCard hostId="host-1" />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
+  it('draws at once and asks nothing of a server until it is used', () => {
+    render(<AiInsightHostCard hostId="host-1" />)
+    expect(screen.getByRole('button', { name: AI_INSIGHT_CARD_COPY.action })).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('opens the AI add-on on a plan without it, and asks nothing', () => {
+    render(
+      <AiInsightOrgCard
+        orgMount={{ orgId: 'org-1', orgSlug: 'acme' } as never}
+        entitled={false}
+        upgrade={{ billingHref: '/acme/billing#addons', canManageBilling: true }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: AI_INSIGHT_CARD_COPY.action }))
+    expect(screen.getByText(AI_UPSELL_COPY.insight.does)).toBeTruthy()
+    expect(mockDialog).not.toHaveBeenCalled()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('asks about one site on its Analytics surface', async () => {

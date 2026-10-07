@@ -16,6 +16,7 @@
  */
 'use client'
 
+import type { ConsoleWidgetEntitlementProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -40,7 +41,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import { AiJobFollow } from './ai-job-follow.component'
 import { publishAiJob } from './ai-jobs-store'
-import { useAiJobsVerdict } from './use-ai-job-run'
+import { AiUpsellButton } from './ai-upsell-dialog.component'
 
 /**
  * "Create with AI" on the Campaigns section (AGL-3603), in the zone the
@@ -67,7 +68,7 @@ export interface AiCampaignSite {
 }
 
 /** What the `hostCampaigns` zone hands this widget. */
-export interface AiCreateCampaignButtonProps {
+export interface AiCreateCampaignButtonProps extends ConsoleWidgetEntitlementProps {
   hostId: string | null
   orgId: string | null
   sites: readonly AiCampaignSite[]
@@ -137,7 +138,6 @@ export function AiCreateCampaignButton(props: AiCreateCampaignButtonProps) {
   const site = hostId ?? siteId
   const siteOrgId = useHostOrgId(site || undefined) ?? undefined
   const orgId = props.orgId ?? siteOrgId
-  const verdict = useAiJobsVerdict(user, orgId)
   const { org, ready } = useOrgPlan(site || undefined)
   const [refusedPlan, setRefusedPlan] = useState(false)
   const kind: AiCampaignJobKind = refusedPlan ? 'email' : aiCampaignJobKind(org)
@@ -202,7 +202,12 @@ export function AiCreateCampaignButton(props: AiCreateCampaignButtonProps) {
     }
   }, [orgId, site, kind, brief, name])
 
-  if (verdict !== 'ready' || (!hostId && !sites.length)) return null
+  if (!hostId && !sites.length) return null
+  // Drawn from the shell's gates alone (AGL-3601): nothing asks a server until
+  // it is used, and a plan without the add-on gets the add-on's dialog.
+  if (props.entitled === false) {
+    return props.upgrade ? <AiUpsellButton kind="campaign" upgrade={props.upgrade} /> : null
+  }
 
   const help = pluginDocsHelp('aiMarketing', {
     anchor: '#create-a-campaign',

@@ -42,11 +42,26 @@ import type { AiBriefKind } from './ai-brief-dialog.component'
  * opens this instead of the brief, so the reader sees where the add-on is used.
  */
 
-/** What a "Create with AI" entry makes: the brief kinds, and an automation. */
-export type AiUpsellKind = AiBriefKind | 'workflow'
+/**
+ * What a "Create with AI" or "Ask AI" entry makes: the brief kinds, an
+ * automation, products, a function or variable, an overlay, and an answer
+ * about the figures on a page.
+ */
+export type AiUpsellKind = AiBriefKind | 'workflow' | 'product' | 'logic' | 'overlay' | 'insight'
+
+/** What one entry's dialog says. */
+export interface AiUpsellCopy {
+  title: string
+  does: string
+  /** The entry's own label, which the button reads and the offer names; "Create with AI" when absent. */
+  label?: string
+}
+
+/** The label every "Create with AI" entry reads. */
+export const AI_UPSELL_CREATE_LABEL = 'Create with AI'
 
 /** What the dialog says one entry would do here. */
-export const AI_UPSELL_COPY: Readonly<Record<AiUpsellKind, { title: string; does: string }>> = {
+export const AI_UPSELL_COPY: Readonly<Record<AiUpsellKind, AiUpsellCopy>> = {
   page: {
     title: 'Create a page with AI',
     does:
@@ -87,15 +102,63 @@ export const AI_UPSELL_COPY: Readonly<Record<AiUpsellKind, { title: string; does
       'Describe what should happen, and when, and AI drafts the automation from the ' +
       'triggers and steps your plan includes. It is saved switched off for you to review.',
   },
+  email: {
+    title: 'Create an email with AI',
+    does:
+      'Describe the email you need and AI plans a design from the email blocks, with three ' +
+      'subject lines and three preheaders to choose between. You confirm the plan, and the ' +
+      'design is built as a draft that is sent to nobody.',
+  },
+  campaign: {
+    title: 'Create a campaign with AI',
+    does:
+      'Describe what the campaign is for and AI writes its email design and a draft campaign ' +
+      'that would send it. Nothing is sent or scheduled, and the campaign is aimed at nobody ' +
+      'until you pick its lists.',
+  },
+  product: {
+    title: 'Create products with AI',
+    does:
+      'Describe what the store sells and AI proposes up to twelve products. You review them ' +
+      'before any is created, and each is created as a draft that is not on your storefront ' +
+      'until you price it and activate it.',
+  },
+  logic: {
+    title: 'Create a function or variable with AI',
+    does:
+      'Describe what it should work out or hold and AI drafts the function or variable. It ' +
+      'opens unsaved in the editor for you to check and save.',
+  },
+  overlay: {
+    title: 'Create an overlay with AI',
+    does:
+      'Describe the announcement bar or popup you want and AI writes its copy within the ' +
+      'overlay’s limits. It is saved switched off, for you to check and turn on.',
+  },
+  insight: {
+    title: 'Ask AI about these numbers',
+    label: 'Ask a question',
+    does:
+      'Ask a question about the figures on this page and AI answers from them, every answer ' +
+      'traced to the figures it is built from. It reads; it changes nothing.',
+  },
 }
 
-/** The sentence that says where the feature comes from, and who can add it. */
-export function aiUpsellOffer(canManageBilling: boolean): string {
+/** The label an entry's button reads. */
+export function aiUpsellLabel(kind: AiUpsellKind): string {
+  return AI_UPSELL_COPY[kind].label ?? AI_UPSELL_CREATE_LABEL
+}
+
+/**
+ * The sentence that says where the feature comes from, and who can add it.
+ * `feature` is what the entry is called: "Create with AI" unless it is an ask.
+ */
+export function aiUpsellOffer(canManageBilling: boolean, feature = AI_UPSELL_CREATE_LABEL): string {
   const addon = aiAddonName()
   return canManageBilling
-    ? `Create with AI comes with the ${addon} add-on, which you can add to this ` +
+    ? `${feature} comes with the ${addon} add-on, which you can add to this ` +
         'workspace from Billing.'
-    : `Create with AI comes with the ${addon} add-on. Ask a workspace owner or admin ` +
+    : `${feature} comes with the ${addon} add-on. Ask a workspace owner or admin ` +
         'to add it from Billing.'
 }
 
@@ -122,7 +185,7 @@ export function AiUpsellDialog({ kind, open, onClose, upgrade }: AiUpsellDialogP
         <Stack spacing={2}>
           <Typography variant="body2">{copy.does}</Typography>
           <Typography variant="body2" color="text.secondary">
-            {aiUpsellOffer(canManageBilling)}
+            {aiUpsellOffer(canManageBilling, kind === 'insight' ? copy.title : AI_UPSELL_CREATE_LABEL)}
           </Typography>
         </Stack>
       </DialogContent>
@@ -144,14 +207,19 @@ export function AiUpsellDialog({ kind, open, onClose, upgrade }: AiUpsellDialogP
 
 /**
  * The entry itself on a plan without the add-on: the same button, label and
- * icon as the entitled entry, opening {@link AiUpsellDialog}.
+ * icon as the entitled entry, opening {@link AiUpsellDialog}. Every entry that
+ * draws it renders from the shell's client-side gates alone and asks the
+ * server nothing until it is used (AGL-3601).
  */
 export function AiUpsellButton({
   kind,
   upgrade,
+  label,
 }: {
   kind: AiUpsellKind
   upgrade: ConsoleWidgetUpgrade
+  /** The entitled entry's own label, when it is not the kind's. */
+  label?: string
 }): ReactNode {
   const [open, setOpen] = useState(false)
   return (
@@ -162,7 +230,7 @@ export function AiUpsellButton({
         startIcon={<MdiIcon path={mdiCreation.path} />}
         onClick={() => setOpen(true)}
       >
-        {'Create with AI'}
+        {label ?? aiUpsellLabel(kind)}
       </Button>
       <AiUpsellDialog kind={kind} open={open} onClose={() => setOpen(false)} upgrade={upgrade} />
     </>

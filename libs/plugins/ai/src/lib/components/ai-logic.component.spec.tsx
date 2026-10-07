@@ -17,8 +17,8 @@
 
 /**
  * Logic by AI's widgets (AGL-3603), mounted through the logic plugin's zones'
- * props: each is absent while the jobs route says the feature is not this
- * workspace's; each sends a job and puts what it proposed in front of the
+ * props: each is drawn from the shell's gates alone and asks nothing until
+ * it is used (AGL-3601); each sends a job and puts what it proposed in front of the
  * editor only through `propose`, when the person asks — writing nothing.
  */
 
@@ -47,7 +47,7 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 }))
 
 import { AI_LOGIC_COPY, AiLogicCreateButton, AiLogicFixReference, AiLogicFunctionTools } from './ai-logic.component'
-import { forgetAiJobsVerdicts } from './use-ai-job-run'
+import { AI_UPSELL_COPY } from './ai-upsell-dialog.component'
 
 const COPY = AI_LOGIC_COPY
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
@@ -128,7 +128,6 @@ const created = () =>
 
 beforeEach(() => {
   mockFetch.mockReset()
-  forgetAiJobsVerdicts()
 })
 
 afterEach(() => {
@@ -137,11 +136,26 @@ afterEach(() => {
 })
 
 describe('Create with AI on the Functions card', () => {
-  it('stays absent when the feature is not this workspace’s', async () => {
-    mockFetch.mockResolvedValue(json({ error: 'Not found' }, 404))
-    const { container } = render(<AiLogicCreateButton hostId="host-1" orgId="org-1" kind="function" propose={jest.fn()} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
+  it('draws at once and asks nothing of a server until it is used (AGL-3601)', () => {
+    render(<AiLogicCreateButton hostId="host-1" orgId="org-1" kind="function" propose={jest.fn()} />)
+    expect(screen.getByRole('button', { name: COPY.create })).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('opens the AI add-on on a plan without it, and asks nothing', () => {
+    render(
+      <AiLogicCreateButton
+        hostId="host-1"
+        orgId="org-1"
+        kind="function"
+        propose={jest.fn()}
+        entitled={false}
+        upgrade={{ billingHref: '/acme/billing#addons', canManageBilling: true }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: COPY.create }))
+    expect(screen.getByText(AI_UPSELL_COPY.logic.title)).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('sends a logic job for a function, and opens what it proposed in the editor only when asked', async () => {
@@ -220,8 +234,8 @@ describe('Fix with AI on a broken reference', () => {
     const { container, unmount } = render(
       <AiLogicFixReference hostId="host-1" orgId="org-1" issue={{ ...ISSUE, source: 'variable' }} />,
     )
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
     expect(container.textContent).toBe('')
+    expect(mockFetch).not.toHaveBeenCalled()
     unmount()
     render(<AiLogicFixReference hostId="host-1" orgId="org-1" issue={ISSUE} />)
     fireEvent.click(await screen.findByRole('button', { name: COPY.referenceFix }))

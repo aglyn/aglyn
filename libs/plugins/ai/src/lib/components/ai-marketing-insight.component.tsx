@@ -16,13 +16,14 @@
  */
 'use client'
 
+import type { ConsoleWidgetEntitlementProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { mdiCreation } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useConsoleHostRoute, useHostOrgId, useUser } from '@aglyn/tenant-feature-instance'
 import { Button } from '@mui/material'
 import { useState } from 'react'
 import { AiInsightDialog } from './ai-insight-dialog.component'
-import { useAiJobsVerdict } from './use-ai-job-run'
+import { AiUpsellButton } from './ai-upsell-dialog.component'
 
 /**
  * "Ask AI about these numbers" (AGL-3603), in the header of the marketing
@@ -40,11 +41,14 @@ import { useAiJobsVerdict } from './use-ai-job-run'
  */
 
 /** What the `marketingInsights` zone hands this widget. */
-export interface AiMarketingInsightButtonProps {
+export interface AiMarketingInsightButtonProps extends ConsoleWidgetEntitlementProps {
   hostId: string | null
   subject: 'conversions' | 'campaign'
   campaign: string | null
 }
+
+/** What the button reads. */
+export const AI_MARKETING_INSIGHT_LABEL = 'Ask AI about these numbers'
 
 /** The question the dialog opens on, from what the report is about. */
 export function aiMarketingInsightQuestion(
@@ -61,12 +65,19 @@ export function AiMarketingInsightButton(props: AiMarketingInsightButtonProps) {
   const { hostId, subject, campaign } = props
   const { data: user } = useUser()
   const orgId = useHostOrgId(hostId ?? undefined) ?? undefined
-  const verdict = useAiJobsVerdict(user, orgId)
   const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
   const [open, setOpen] = useState(false)
 
   // The figures are one site's: with no site there is nothing to read.
-  if (!hostId || !orgId || verdict !== 'ready') return null
+  if (!hostId) return null
+  // Drawn from the shell's gates alone (AGL-3601): nothing asks a server until
+  // it is used, and a plan without the add-on gets the add-on's dialog.
+  if (props.entitled === false) {
+    return props.upgrade ? (
+      <AiUpsellButton kind="insight" label={AI_MARKETING_INSIGHT_LABEL} upgrade={props.upgrade} />
+    ) : null
+  }
+  if (!orgId) return null
 
   return (
     <>
@@ -76,7 +87,7 @@ export function AiMarketingInsightButton(props: AiMarketingInsightButtonProps) {
         startIcon={<MdiIcon path={mdiCreation.path} />}
         onClick={() => setOpen(true)}
       >
-        {'Ask AI about these numbers'}
+        {AI_MARKETING_INSIGHT_LABEL}
       </Button>
       <AiInsightDialog
         open={open}

@@ -17,11 +17,13 @@
  * limitations under the License.
  */
 
+import type { ConsoleWidgetEntitlementProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { mdiCreation } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Button } from '@mui/material'
 import { useCallback, useSyncExternalStore } from 'react'
 import type { ConsoleProductsCreateZoneProps } from './ai-product-zones'
+import { AiUpsellButton } from './ai-upsell-dialog.component'
 
 /**
  * "Create with AI" for products (AGL-3596), beside Add product and in the
@@ -32,9 +34,11 @@ import type { ConsoleProductsCreateZoneProps } from './ai-product-zones'
  * is reviewed in its table and written through the hub's own writes, which
  * only the `productsHub` zone hands a widget. So this button is a door to
  * that brief, not a second flow: the card registers an opener for its site
- * once the jobs route has answered that AI is this workspace's (its verdict
- * probe), and the button shows only while one is registered — never where
- * the card could not take the brief, or would not show the proposal.
+ * as it mounts, and the button shows only while one is registered — never
+ * where the card could not take the brief, or would not show the proposal.
+ * Both are drawn from the shell's gates alone (AGL-3601), so nothing asks a
+ * server until the brief is sent; on a plan without the AI add-on the button
+ * opens the add-on's dialog instead.
  */
 
 type Opener = () => void
@@ -81,8 +85,13 @@ export function useAiProductsBriefAvailable(hostId: string): boolean {
   return useSyncExternalStore(subscribe, read, () => false)
 }
 
-export function AiCreateProductsButton({ hostId }: ConsoleProductsCreateZoneProps) {
+export function AiCreateProductsButton({
+  hostId,
+  entitled,
+  upgrade,
+}: ConsoleProductsCreateZoneProps & ConsoleWidgetEntitlementProps) {
   const available = useAiProductsBriefAvailable(hostId)
+  if (entitled === false) return upgrade ? <AiUpsellButton kind="product" upgrade={upgrade} /> : null
   if (!available) return null
   return (
     <Button

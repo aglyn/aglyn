@@ -149,11 +149,14 @@ export function AiProductsHubCard(props: ConsoleProductsHubZoneProps) {
   }, [verdict, lastImport, startBulk])
 
   // "Create with AI" beside Add product (AGL-3596) opens this card's
-  // Propose products brief, offered once the jobs route has said AI is here.
-  useEffect(() => {
-    if (verdict !== 'ready') return
-    return registerAiProductsBriefOpener(hostId, () => setBrief({ kind: 'catalog', text: '' }))
-  }, [verdict, hostId])
+  // Propose products brief. Offered from the moment the card is on the page,
+  // so the door draws from the shell's gates alone (AGL-3601) rather than
+  // after this card's list of recent proposals is read; the start door
+  // decides when the brief is sent, and says why in the dialog if it refuses.
+  useEffect(
+    () => registerAiProductsBriefOpener(hostId, () => setBrief({ kind: 'catalog', text: '' })),
+    [hostId],
+  )
 
   const heldNames = useMemo(() => new Set(products.map((product) => nameKey(product.name))), [products])
   const pickerRows = useMemo(
@@ -174,8 +177,6 @@ export function AiProductsHubCard(props: ConsoleProductsHubZoneProps) {
     ],
     [],
   )
-
-  if (verdict !== 'ready') return null
 
   const latest = (target: string) => jobs.find((job) => targetOf(job, started) === target) ?? null
   const bulkJob = latest('bulk')
@@ -201,6 +202,52 @@ export function AiProductsHubCard(props: ConsoleProductsHubZoneProps) {
       setBusy(false)
     }
   }
+
+  const briefDialog = (
+    <Dialog open={Boolean(brief)} onClose={busy ? undefined : () => setBrief(null)} fullWidth maxWidth="sm">
+      <DialogTitle>{copy?.title}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <TextField
+            label={copy?.label}
+            placeholder={copy?.placeholder}
+            multiline
+            minRows={4}
+            value={brief?.text ?? ''}
+            onChange={(event) =>
+              setBrief((current) => (current ? { ...current, text: event.target.value.slice(0, BRIEF_MAX_CHARS) } : current))
+            }
+            helperText={`${(brief?.text.length ?? 0).toLocaleString('en-US')} / ${BRIEF_MAX_CHARS.toLocaleString('en-US')}`}
+            disabled={busy}
+            autoFocus
+          />
+          <Typography variant="body2" color="text.secondary">
+            {copy?.next}
+          </Typography>
+          {brief?.kind === 'catalog' ? (
+            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+              <Chip size="small" color="warning" variant="outlined" label="Prices stay empty" />
+              <Chip size="small" color="warning" variant="outlined" label="Photos are yours to add" />
+            </Stack>
+          ) : null}
+          {notice ? <Alert severity="warning">{notice}</Alert> : null}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setBrief(null)} disabled={busy}>
+          {'Cancel'}
+        </Button>
+        <Button variant="contained" disabled={busy || !orgId || !brief?.text.trim()} onClick={() => void submitBrief()}>
+          {copy?.submit}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+
+  // Until the card's list of recent proposals is read — or where the jobs
+  // route will not list them — it draws nothing but a brief the products door
+  // opened, whose start door says any refusal in the dialog.
+  if (verdict !== 'ready') return briefDialog
 
   const submitPicked = async () => {
     setBusy(true)
@@ -297,44 +344,7 @@ export function AiProductsHubCard(props: ConsoleProductsHubZoneProps) {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={Boolean(brief)} onClose={busy ? undefined : () => setBrief(null)} fullWidth maxWidth="sm">
-        <DialogTitle>{copy?.title}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            <TextField
-              label={copy?.label}
-              placeholder={copy?.placeholder}
-              multiline
-              minRows={4}
-              value={brief?.text ?? ''}
-              onChange={(event) =>
-                setBrief((current) => (current ? { ...current, text: event.target.value.slice(0, BRIEF_MAX_CHARS) } : current))
-              }
-              helperText={`${(brief?.text.length ?? 0).toLocaleString('en-US')} / ${BRIEF_MAX_CHARS.toLocaleString('en-US')}`}
-              disabled={busy}
-              autoFocus
-            />
-            <Typography variant="body2" color="text.secondary">
-              {copy?.next}
-            </Typography>
-            {brief?.kind === 'catalog' ? (
-              <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                <Chip size="small" color="warning" variant="outlined" label="Prices stay empty" />
-                <Chip size="small" color="warning" variant="outlined" label="Photos are yours to add" />
-              </Stack>
-            ) : null}
-            {notice ? <Alert severity="warning">{notice}</Alert> : null}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setBrief(null)} disabled={busy}>
-            {'Cancel'}
-          </Button>
-          <Button variant="contained" disabled={busy || !orgId || !brief?.text.trim()} onClick={() => void submitBrief()}>
-            {copy?.submit}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {briefDialog}
     </Box>
   )
 }
