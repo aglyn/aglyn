@@ -195,6 +195,11 @@ jest.mock('../../hooks/use-release-flags', () => ({
   useReleaseFlag: () => mockReleaseFlag,
 }))
 
+// The plugin zone beside Upload media (AGL-3602) draws registered widgets,
+// which this suite registers none of; `plugin-widget-slot-zones.spec.tsx`
+// renders it.
+jest.mock('../plugin-widget-slot.component', () => ({ __esModule: true, default: () => null }))
+
 jest.mock('../../hooks/use-org-scope', () => ({
   __esModule: true,
   useOrgSlug: () => 'aglyn-org',

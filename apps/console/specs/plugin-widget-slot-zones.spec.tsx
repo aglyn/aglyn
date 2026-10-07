@@ -48,6 +48,8 @@ let lastWidgetProps: Record<string, unknown> | undefined
 /** The SEO zones' proposal doors (AGL-2910), passed through by identity. */
 const mockProposeValues = jest.fn()
 const mockProposeDraft = jest.fn()
+/** The media library's way to show what a widget added (AGL-3602), by identity. */
+const mockMediaCreated = jest.fn()
 /** The first-run zone's way back to the blank path (AGL-2918), by identity. */
 const mockStartBlank = jest.fn()
 /** The template gallery's doors (AGL-3080), passed through by identity. */
@@ -394,6 +396,19 @@ Object.assign(MOUNTS, {
     file: 'apps/console/app/(app)/admin/overview/page.tsx',
     how: 'slot',
     props: {},
+  },
+  // AGL-3602: beside Upload media in the media library, and in its empty
+  // state — another way to add a file, which hands back what it added.
+  mediaLibrary: {
+    file: 'apps/console/components/media/media-library.component.tsx',
+    how: 'slot',
+    props: {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      library: 'host',
+      folderId: null,
+      onCreated: mockMediaCreated,
+    },
   },
 })
 
