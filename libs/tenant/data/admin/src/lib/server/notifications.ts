@@ -34,7 +34,7 @@ import { findUserByUidAcrossPools, listStaffUidsAcrossPools } from './auth-pools
 import { filterSuppressedEmails } from './email-suppression'
 import { meterOrgEmail, meterPlatformEmail } from './email-metering'
 import firebaseAdmin from './firebase-admin'
-import { expoPushRelayEnabled, mobilePushEnabled } from './mobile-push-switch'
+import { mobilePushEnabled, mobilePushSenders } from './mobile-push-switch'
 import { listOrgMembers } from './organizations'
 import {
   loadSystemEmail,
@@ -331,14 +331,19 @@ export async function notifyUsers(
     }
     if (count > 0) await batch.commit()
     /*
-     * The push after the commit for the same reason as the email below, and
-     * loaded only when somebody is to be pushed, the deployment has not
-     * pulled the kill switch and it has opted in to the Expo relay, so a
-     * request that pushes nobody never loads it.
+     * The push after the commit for the same reason as the email below:
+     * every registered transport is handed the recipients whose preferences
+     * say push, unless the deployment has pulled the kill switch. A failing
+     * transport is logged and never stops the email or another transport.
      */
-    if (pushTo.length && mobilePushEnabled() && expoPushRelayEnabled()) {
-      const { deliverPush } = await import('./push-delivery')
-      await deliverPush(pushTo, payload, { db })
+    if (pushTo.length && mobilePushEnabled()) {
+      for (const send of mobilePushSenders()) {
+        try {
+          await send(pushTo, payload, { db })
+        } catch (error) {
+          console.error('push delivery failed', error)
+        }
+      }
     }
     /*
      * THE EMAIL AFTER THE COMMIT, and not inside its `try`.

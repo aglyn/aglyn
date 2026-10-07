@@ -162,13 +162,8 @@ function fakeFirestore(): any {
 }
 
 const mockPushed: Array<{ uids: readonly string[]; type: string }> = []
-jest.mock('./push-delivery', () => ({
-  deliverPush: async (uids: readonly string[], payload: { type: string }) => {
-    mockPushed.push({ uids, type: payload.type })
-    return { sent: uids.length, pruned: 0, failed: 0 }
-  },
-}))
 
+import { registerMobilePushSender } from './mobile-push-switch'
 import {
   notifyHostManagers,
   notifyOrgAdmins,
@@ -701,12 +696,18 @@ describe('the mobile push channel (AGL-3620)', () => {
     mockPushed.length = 0
     emailConfigured = false
     delete process.env['MOBILE_PUSH_ENABLED']
-    process.env['EXPO_PUSH_RELAY'] = '1'
+  })
+
+  let unregister: () => void = () => undefined
+  beforeAll(() => {
+    unregister = registerMobilePushSender(async (uids, payload) => {
+      mockPushed.push({ uids, type: payload.type })
+    })
   })
 
   afterAll(() => {
+    unregister()
     delete process.env['MOBILE_PUSH_ENABLED']
-    delete process.env['EXPO_PUSH_RELAY']
   })
 
   it('pushes what the feed shows to somebody who never answered for push', async () => {
@@ -736,14 +737,35 @@ describe('the mobile push channel (AGL-3620)', () => {
     expect(mockPushed).toEqual([{ uids: ['uid-b'], type: 'content.order' }])
   })
 
-  it('never loads the Expo relay for a deployment that has not opted in', async () => {
-    delete process.env['EXPO_PUSH_RELAY']
-    await notifyUsers(['uid-a'], ORDER)
-    expect(mockPushed).toHaveLength(0)
-    expect(written).toHaveLength(1)
+  it('pushes nothing, and still writes the feed, with no transport registered', async () => {
+    unregister()
+    try {
+      await notifyUsers(['uid-a'], ORDER)
+      expect(mockPushed).toHaveLength(0)
+      expect(written).toHaveLength(1)
+    } finally {
+      unregister = registerMobilePushSender(async (uids, payload) => {
+        mockPushed.push({ uids, type: payload.type })
+      })
+    }
   })
 
-  it('never loads delivery while the deployment has pulled the kill switch', async () => {
+  it('a failing transport stops neither the feed nor another transport', async () => {
+    const off = registerMobilePushSender(async () => {
+      throw new Error('transport down')
+    })
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      await notifyUsers(['uid-a'], ORDER)
+      expect(mockPushed).toEqual([{ uids: ['uid-a'], type: 'content.order' }])
+      expect(written).toHaveLength(1)
+    } finally {
+      off()
+      errors.mockRestore()
+    }
+  })
+
+  it('pushes nothing while the deployment has pulled the kill switch', async () => {
     process.env['MOBILE_PUSH_ENABLED'] = '0'
     await notifyUsers(['uid-a'], ORDER)
     expect(mockPushed).toHaveLength(0)

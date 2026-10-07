@@ -15,26 +15,51 @@
  * limitations under the License.
  */
 
+import type { AglynNotification } from '@aglyn/aglyn/server'
+import type { Firestore } from 'firebase-admin/firestore'
+
 /**
  * Whether this deployment sends mobile push (AGL-3648).
  *
  * On unless `MOBILE_PUSH_ENABLED=0`: the variable is a kill switch, not an
  * opt-in, and it governs every push sender. Kept apart from the senders so
- * `notifyUsers` can ask before it loads one, and every caller reads the same
+ * `notifyUsers` can ask before it calls one, and every caller reads the same
  * answer.
  */
 export function mobilePushEnabled(env: Record<string, string | undefined> = process.env): boolean {
   return (env['MOBILE_PUSH_ENABLED'] ?? '').trim() !== '0'
 }
 
+/** The notification a push sender is handed, as the fan-out wrote it. */
+export type MobilePushPayload = Omit<AglynNotification, '$id' | 'createdAt' | 'readAt'>
+
 /**
- * Whether the Expo Push API relay may carry this deployment's push.
- *
- * Off unless `EXPO_PUSH_RELAY=1`. The Aglyn apps receive push from Apple Push
- * Notification service and Firebase Cloud Messaging directly, and Expo is not
- * on the Subprocessors list, so the relay sends only for an operator who opts
- * in and names Expo on their own list.
+ * A push transport (APNs, FCM): sends one notification to the registered
+ * devices (`users/{uid}/devices`) of `uids`. Must not throw on a delivery
+ * failure; the console notification is the record and a push is a courtesy.
  */
-export function expoPushRelayEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return (env['EXPO_PUSH_RELAY'] ?? '').trim() === '1'
+export type MobilePushSender = (
+  uids: readonly string[],
+  payload: MobilePushPayload,
+  context: { db: Firestore },
+) => Promise<void>
+
+const senders = new Set<MobilePushSender>()
+
+/**
+ * Adds a push transport to the fan-out. `notifyUsers` hands every registered
+ * sender the recipients whose preferences say push, after the feed entries
+ * are committed and only while the kill switch is up. With none registered,
+ * nothing is pushed. Returns the unregister function.
+ */
+export function registerMobilePushSender(sender: MobilePushSender): () => void {
+  senders.add(sender)
+  return () => {
+    senders.delete(sender)
+  }
+}
+
+/** The registered push transports, in registration order. */
+export function mobilePushSenders(): MobilePushSender[] {
+  return [...senders]
 }

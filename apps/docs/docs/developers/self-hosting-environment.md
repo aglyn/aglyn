@@ -894,11 +894,9 @@ means building and shipping the app again. None of them is a secret.
 | `EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` | Development | Build, app | `host:port` of a local Auth emulator. Never set in a store build. |
 | `EXPO_PUBLIC_FIRESTORE_EMULATOR_HOST` | Development | Build, app | `host:port` of a local Firestore emulator. Never set in a store build. |
 | `EAS_PROJECT_ID` | Feature | Build, app | Your EAS project id. Without it the app registers no push token, so no device receives a push. |
-| `MOBILE_PUSH_ENABLED` | Optional | Runtime, console and tenant | The kill switch for every push sender. `0` stops every push and no delivery code is loaded; anything else, or unset, leaves push on. |
-| `EXPO_PUSH_RELAY` | Optional | Runtime, console and tenant | `1` sends push to registered devices through the Expo Push API. Off otherwise. Expo is not one of Aglyn's subprocessors, so name it on your own list before you turn it on. |
-| `EXPO_ACCESS_TOKEN` | Optional | Runtime, console and tenant | Sent as the bearer token when Expo's enhanced push security is on for your project. |
+| `MOBILE_PUSH_ENABLED` | Optional | Runtime, console and tenant | The kill switch for every push sender. `0` stops every push; anything else, or unset, leaves push on. |
 
-Push is on by default, and a person with no registered device is never sent one. A push carries the notification's title and body, with the device push token, to Apple Push Notification service for an iPhone or iPad and to Firebase Cloud Messaging for an Android device; the Expo relay, when you turn it on, adds Expo in between. If you run your own build of the app, those are your vendors, and your own subprocessor list names them.
+A person with no registered device is never sent a push. A push carries the notification's title and body, with the device push token, to Apple Push Notification service for an iPhone or iPad and to Firebase Cloud Messaging for an Android device. If you run your own build of the app, those are your vendors, and your own subprocessor list names them.
 
 ---
 

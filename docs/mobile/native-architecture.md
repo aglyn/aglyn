@@ -430,10 +430,12 @@ An APNs row also carries `apnsEnvironment` (`sandbox`/`production`) and
 `app`. Rules tests cover each transport.
 
 Server side, all of it server-only, in `libs/tenant/data/admin/src/lib/server/`
-next to `push-delivery.ts`:
+next to `mobile-push-switch.ts`:
 
-- `push-delivery.ts` groups a user's devices by transport. The Expo sender
-  (`exp.host`) is deleted.
+- `mobile-push-switch.ts` holds the fan-out's hook point: `notifyUsers` hands
+  every sender registered with `registerMobilePushSender` the recipients whose
+  preferences say push. The Expo sender (`exp.host`) is already deleted
+  (AGL-3651), so none is registered until the two below.
 - `push-apns.ts` sends over HTTP/2 (`node:http2`) to
   `api.push.apple.com` / `api.sandbox.push.apple.com`, with an ES256 provider
   JWT signed by `node:crypto` from `APNS_KEY_P8`, `APNS_KEY_ID` and

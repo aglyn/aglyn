@@ -53,19 +53,19 @@ Regenerate the derived files after these changes:
 ## Push notifications
 
 - Each install registers `users/{uid}/devices/{installId}` with an Expo push token. Only the owner can read or write it, and the rules accept only the registry's own fields. Signing out removes the row.
-- `notifyUsers` sends every notification the person's preferences allow to their devices through the Expo Push API. A type that has no push answer follows the console feed. The push code is server-only and loaded lazily, so published sites never load it.
+- `notifyUsers` hands every notification the person's preferences allow to the registered push transports (`registerMobilePushSender` in `libs/tenant/data/admin/src/lib/server/mobile-push-switch.ts`). No transport is registered yet, so nothing is pushed until the APNs and FCM senders land. A type that has no push answer follows the console feed.
 - Each type has its own switch under Settings → Push notifications, stored at `notificationSettings.accountTypes.{type}.push`.
 - Tapping a push opens its link natively when a plugin registered a deep link for it. Otherwise the link opens in the console WebView.
-- Push is on by default. `MOBILE_PUSH_ENABLED=0` on the server is the kill switch: no push is sent and no delivery code is loaded. The Expo Push API relay sends only where the server also sets `EXPO_PUSH_RELAY=1`, because Expo is not on the Subprocessors list. Registration on the phone does nothing until the app is built with `EAS_PROJECT_ID`.
+- `MOBILE_PUSH_ENABLED=0` on the server is the kill switch: no transport is called. Registration on the phone does nothing until the app is built with `EAS_PROJECT_ID`.
 
 ## What Zach owes before release
 
 1. **Apple Developer:** register an App ID for `com.aglyn.app` with the Push Notifications and Associated Domains capabilities. Register `com.aglyn.pos` too, for AGL-3618.
-2. **Expo / EAS:** create the Expo account and the EAS project `aglyn` (`eas.json` has the `development`, `preview` and `production` build profiles). Set `EAS_PROJECT_ID` for builds, and run `eas credentials` to upload the APNs key (`.p8`, Key ID, Team ID) and the FCM v1 service-account JSON. You can optionally turn on Expo's enhanced push security and set `EXPO_ACCESS_TOKEN` on the server.
+2. **Expo / EAS:** create the Expo account and the EAS project `aglyn` (`eas.json` has the `development`, `preview` and `production` build profiles). Set `EAS_PROJECT_ID` for builds, and run `eas credentials` to upload the APNs key (`.p8`, Key ID, Team ID) and the FCM v1 service-account JSON.
 3. **Firebase:** add an iOS app (`com.aglyn.app`) and an Android app (`com.aglyn.app`) to the production project. Their Firebase config goes into the `EXPO_PUBLIC_FIREBASE_*` build variables. The `GoogleService-Info.plist` and `google-services.json` files stay out of git.
 4. **Google sign-in (optional):** create the iOS and web OAuth client ids, and set `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` and `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`. Until both are set, the button stays hidden.
 5. **Google Play Console:** create the app "Aglyn" with package `com.aglyn.app`, and complete its store listing, content rating and data-safety form.
 6. **App Store Connect:** create the app record, its store listing, its privacy labels and a TestFlight group.
-7. **Legal:** done (AGL-3648). The Subprocessors list names Apple (APNs) and Google (FCM) for push: a notification's title and body and the device push token. Expo is not on it, so the Expo relay stays off in production (`EXPO_PUSH_RELAY` unset).
+7. **Legal:** done (AGL-3648). The Subprocessors list names Apple (APNs) and Google (FCM) for push: a notification's title and body and the device push token. Expo is not on it, and the server has no Expo sender.
 8. **Universal links:** set `EXPO_PUBLIC_CONSOLE_URL` to the production console, which adds `applinks:` for it, and serve `apple-app-site-association` and `assetlinks.json` from the console origin.
 9. **npm:** hand-publish `@aglyn/mobile-core`, `-ui`, `-webview` and `-plugin-host` once (`npm run publish:packages -- --only <name> --publish`), then run `npm run trust:packages -- --set`. Until then they stay `private`.
