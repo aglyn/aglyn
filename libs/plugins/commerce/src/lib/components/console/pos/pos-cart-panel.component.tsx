@@ -16,8 +16,8 @@
  */
 'use client'
 
-import { Box, Button, IconButton, Stack, TextField, Typography } from '@mui/material'
-import type { StockShortfall } from '../../../model'
+import { Box, Button, ButtonBase, IconButton, Stack, TextField, Typography } from '@mui/material'
+import type { ModifierSelection, StockShortfall } from '../../../model'
 import { POS_TOUCH_PX } from './pos-product-grid.component'
 import { usd } from './pos-api'
 
@@ -26,8 +26,11 @@ export interface RegisterLine {
   variantId?: string
   name: string
   variantLabel?: string
+  /** Per unit, modifiers included: the register's estimate until the server prices it. */
   unitAmountCents: number
   quantity: number
+  /** The modifier options picked (AGL-3607); the server prices them. */
+  modifiers?: ModifierSelection[]
 }
 
 export interface PosCartPanelProps {
@@ -35,6 +38,8 @@ export interface PosCartPanelProps {
   shortfalls: Array<Pick<StockShortfall, 'available'> | null>
   onQuantity: (index: number, quantity: number) => void
   onRemove: (index: number) => void
+  /** Opens the line in the item sheet to change its options or quantity. */
+  onEdit?: (index: number) => void
   discountPct: number
   onDiscountPct: (value: number) => void
   customerEmail: string
@@ -59,12 +64,32 @@ export function PosCartPanel(props: PosCartPanelProps) {
           </Typography>
         ) : (
           lines.map((line, index) => (
-            <Box key={`${line.productId}:${line.variantId ?? ''}`} sx={{ py: 0.5 }}>
+            <Box key={`${line.productId}:${line.variantId ?? ''}:${index}`} sx={{ py: 0.5 }}>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }} noWrap>
-                  {`${line.quantity}× ${line.name}`}
-                  {line.variantLabel ? ` (${line.variantLabel})` : ''}
-                </Typography>
+                <ButtonBase
+                  disabled={locked || !props.onEdit}
+                  onClick={() => props.onEdit?.(index)}
+                  aria-label={locked ? undefined : `Change ${line.name}`}
+                  sx={{
+                    flex: 1,
+                    minWidth: 0,
+                    minHeight: POS_TOUCH_PX,
+                    justifyContent: 'flex-start',
+                    textAlign: 'left',
+                    borderRadius: 1,
+                  }}
+                >
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="body2" noWrap>
+                      {`${line.quantity}× ${line.name}`}
+                    </Typography>
+                    {line.variantLabel ? (
+                      <Typography variant="caption" color="text.secondary" component="p" noWrap>
+                        {line.variantLabel}
+                      </Typography>
+                    ) : null}
+                  </Box>
+                </ButtonBase>
                 {!locked ? (
                   <>
                     <IconButton

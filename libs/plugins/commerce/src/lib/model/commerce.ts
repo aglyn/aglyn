@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { modifierGroupsProblem, type ProductModifierGroup } from './product-modifiers'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 
 /**
@@ -269,6 +270,14 @@ export interface HostProduct {
   giftCard?: boolean
   /** Tracked-total at/below this alerts host managers (AGL-281). */
   lowStockThreshold?: number
+  /**
+   * Choices added to the item at the register (AGL-3607) — "Oat milk",
+   * "Extra shot" — priced by the server from this list. See
+   * `product-modifiers.ts`.
+   */
+  modifierGroups?: ProductModifierGroup[]
+  /** Shown under Quick keys on the register's first screen (AGL-3607). */
+  posQuickKey?: boolean
   createdAtMs?: number
   updatedAtMs?: number
   deletedAt?: number | null
@@ -1245,6 +1254,8 @@ export function validateProduct(product: HostProduct): string | null {
   if (new Set(options.map((option) => option.name.trim())).size !== options.length) {
     return 'Each option needs its own name'
   }
+  const modifierProblem = modifierGroupsProblem(product.modifierGroups)
+  if (modifierProblem) return modifierProblem
   const variants = product.variants ?? []
   if (variants.length === 0) return 'Products need at least one variant'
   if (variants.length > COMMERCE_MAX_VARIANTS) {

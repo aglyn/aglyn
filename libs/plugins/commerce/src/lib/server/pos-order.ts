@@ -304,17 +304,26 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         return res.status(400).json({ error: `Set a price for ${product.name} before selling it.` })
       }
       const quantity = Math.max(1, Math.min(99, Math.round(Number(raw.quantity ?? 1))))
+      // Modifiers are priced from the product, never from the register
+      // (AGL-3607): the line names option ids and nothing else.
+      const chosen = CommerceModel.resolveLineModifiers(product, raw.modifiers)
+      if (!chosen.ok) return res.status(400).json({ error: chosen.error })
+      const variantLabel = CommerceModel.lineLabelWithModifiers(
+        Object.keys(variant.options ?? {}).length
+          ? Object.values(variant.options ?? {}).join(' / ')
+          : undefined,
+        chosen.modifiers,
+      )
       lineItems.push({
         productId: String(raw.productId),
         ...(variant.id !== 'default' ? { variantId: variant.id } : {}),
         name: product.name,
-        ...(Object.keys(variant.options ?? {}).length
-          ? { variantLabel: Object.values(variant.options ?? {}).join(' / ') }
-          : {}),
+        ...(variantLabel ? { variantLabel } : {}),
         ...(variant.sku ? { sku: variant.sku } : {}),
         productType: product.type,
         quantity,
-        unitAmountCents: Math.round(Number(variant.priceUsd) * 100),
+        unitAmountCents: Math.round(Number(variant.priceUsd) * 100) + chosen.extraCents,
+        ...(chosen.modifiers.length ? { modifiers: chosen.modifiers } : {}),
       })
     }
     if (lineItems.length === 0) {

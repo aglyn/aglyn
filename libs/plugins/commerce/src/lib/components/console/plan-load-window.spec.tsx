@@ -83,6 +83,13 @@ jest.mock('./pos-ops/register-ops', () => ({
   }),
 }))
 
+// The register panel renders beside the grid on a wide screen and in a
+// bottom sheet below that (AGL-3607); the plan gate is read in the panel, so
+// the page is drawn wide here, where the panel is on screen.
+jest.mock('@mui/material', () => ({
+  ...jest.requireActual('@mui/material'),
+  useMediaQuery: () => true,
+}))
 jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
   const { useListQueryDouble } = jest.requireActual(
     '@aglyn/tenant-feature-instance/testing/list-query-double',

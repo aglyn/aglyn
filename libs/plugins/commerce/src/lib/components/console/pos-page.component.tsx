@@ -66,7 +66,8 @@ import {
   type PosSaleSummary,
 } from './pos/pos-api'
 import { PosCartPanel, type RegisterLine } from './pos/pos-cart-panel.component'
-import { POS_TOUCH_PX, PosProductGrid } from './pos/pos-product-grid.component'
+import { POS_QUICK_KEYS, POS_TOUCH_PX, PosProductGrid } from './pos/pos-product-grid.component'
+import { PosItemDialog, posItemNeedsChoice, type PosItemChoice } from './pos/pos-item-dialog.component'
 import { PosReceiptPanel } from './pos/pos-receipt-panel.component'
 import { PosTenderPanel } from './pos/pos-tender-panel.component'
 import { usePosDisplay } from './pos/use-pos-display'
@@ -92,9 +93,11 @@ export function posProductPlan(options: {
   code?: { field: 'barcodes' | 'skus'; value: string }
   /** A category chip (AGL-3607): served by the storefront's own composite. */
   categoryId?: string
+  /** The Quick keys chip (AGL-3607): products marked `posQuickKey`. */
+  quickKeys?: boolean
 }) {
   const typed = options.search?.trim()
-  return planListQuery(
+  const plan = planListQuery(
     POS_GRID_QUERY,
     {
       base: PRODUCT_LIST_BASE,
@@ -113,6 +116,18 @@ export function posProductPlan(options: {
     },
     nameSearchNormalizers,
   )
+  // The Quick keys chip (AGL-3607) is a boolean equality the list planner
+  // does not model, added beside the scope and status it composes with —
+  // `deletedAt ==, status ==, posQuickKey ==, nameLower ASC` is declared in
+  // the index file. A typed word searches the whole catalog instead: a
+  // cashier who types is looking past the quick keys.
+  if (options.quickKeys && !typed && !options.code) {
+    return {
+      ...plan,
+      filters: [...plan.filters, { path: 'posQuickKey', op: '==', value: true }],
+    } as typeof plan
+  }
+  return plan
 }
 
 /**
@@ -157,6 +172,40 @@ export const POS_GRID_QUERY = {
  * same condition rather than guessing. The server routes remain the
  * enforcement point for every sale and every payment.
  */
+/** Where a register device remembers the category chip it was left on. */
+const POS_CATEGORY_KEY = 'aglyn.pos.category'
+
+/** The basket line an item-sheet choice makes: label and estimate from the product. */
+export function registerLineFor(
+  product: any,
+  choice: PosItemChoice,
+): RegisterLine {
+  const { variant, modifiers, quantity } = choice
+  const resolved = CommerceModel.resolveLineModifiers(product, modifiers)
+  const picked = resolved.ok ? resolved.modifiers : []
+  const label = CommerceModel.lineLabelWithModifiers(
+    Object.keys(variant.options ?? {}).length
+      ? Object.values(variant.options ?? {}).join(' / ')
+      : undefined,
+    picked,
+  )
+  return {
+    productId: product.$id,
+    ...(variant.id !== 'default' ? { variantId: variant.id } : {}),
+    name: product.name,
+    ...(label ? { variantLabel: label } : {}),
+    unitAmountCents:
+      Math.round(Number(variant.priceUsd) * 100) + (resolved.ok ? resolved.extraCents : 0),
+    quantity,
+    ...(modifiers.length ? { modifiers } : {}),
+  }
+}
+
+/** Same product, variant and choices: the lines that merge into one. */
+function lineKey(line: Pick<RegisterLine, 'productId' | 'variantId' | 'modifiers'>): string {
+  return `${line.productId}:${line.variantId ?? ''}:${CommerceModel.modifierSelectionKey(line.modifiers)}`
+}
+
 export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
@@ -165,9 +214,28 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
   const wide = useMediaQuery(theme.breakpoints.up('md'))
 
   const [search, setSearch] = useState('')
-  const [categoryId, setCategoryId] = useState('')
+  // The chip a register opens on is remembered per device: a counter that
+  // rings from its quick keys reopens on them.
+  const [categoryId, setCategoryIdState] = useState(() => {
+    try {
+      return window.localStorage.getItem(POS_CATEGORY_KEY) ?? ''
+    } catch {
+      return ''
+    }
+  })
+  const setCategoryId = useCallback((id: string) => {
+    setCategoryIdState(id)
+    try {
+      window.localStorage.setItem(POS_CATEGORY_KEY, id)
+    } catch {
+      // Storage blocked: the chip still works for this visit.
+    }
+  }, [])
   const gridPlan = useMemo(
-    () => posProductPlan({ search, categoryId }),
+    () =>
+      categoryId === POS_QUICK_KEYS
+        ? posProductPlan({ search, quickKeys: true })
+        : posProductPlan({ search, categoryId }),
     [search, categoryId],
   )
   const { data: productDocs } = useFirestoreCollection<any>(
@@ -317,33 +385,61 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     [enqueueSnackbar],
   )
 
-  const addProduct = useCallback((product: any, variant?: any) => {
-    const pick = variant ?? product.variants[0]
-    setLines((prev) => {
-      const key = `${product.$id}:${pick.id}`
-      const existing = prev.find(
-        (line) => `${line.productId}:${line.variantId ?? pick.id}` === key,
-      )
-      if (existing) {
-        return prev.map((line) =>
-          line === existing ? { ...line, quantity: line.quantity + 1 } : line,
-        )
+  /**
+   * Adds a line, or more of an identical one: the same product, variant and
+   * modifiers merge, so two oat lattes are one line of two and an oat latte
+   * beside a whole-milk one stays two lines.
+   */
+  const addProduct = useCallback(
+    (product: any, variant?: any, modifiers: CommerceModel.ModifierSelection[] = [], quantity = 1) => {
+      const next = registerLineFor(product, {
+        variant: variant ?? product.variants[0],
+        modifiers,
+        quantity,
+      })
+      setLines((prev) => {
+        const existing = prev.find((line) => lineKey(line) === lineKey(next))
+        if (existing) {
+          return prev.map((line) =>
+            line === existing
+              ? { ...line, quantity: Math.min(99, line.quantity + next.quantity) }
+              : line,
+          )
+        }
+        return [...prev, next]
+      })
+    },
+    [],
+  )
+
+  /** The item sheet: a product to add, or a basket line to change. */
+  const [itemSheet, setItemSheet] = useState<{
+    product: any
+    editIndex?: number
+    initial?: { variantId?: string; modifiers?: CommerceModel.ModifierSelection[]; quantity: number }
+  } | null>(null)
+  // Every product rung up this sale, so a line can be reopened after the
+  // grid has moved on to another category or search.
+  const productCache = useRef(new Map<string, any>())
+  const tapProduct = useCallback(
+    (product: any, variant?: any) => {
+      productCache.current.set(product.$id, product)
+      if (posItemNeedsChoice(product) && !(variant && CommerceModel.productModifierGroups(product).length === 0)) {
+        setItemSheet({
+          product,
+          ...(variant ? { initial: { variantId: variant.id, quantity: 1 } } : {}),
+        })
+        return
       }
-      return [
-        ...prev,
-        {
-          productId: product.$id,
-          ...(pick.id !== 'default' ? { variantId: pick.id } : {}),
-          name: product.name,
-          ...(Object.keys(pick.options ?? {}).length
-            ? { variantLabel: Object.values(pick.options ?? {}).join(' / ') }
-            : {}),
-          unitAmountCents: Math.round(Number(pick.priceUsd) * 100),
-          quantity: 1,
-        },
-      ]
-    })
-  }, [])
+      addProduct(product, variant)
+    },
+    [addProduct],
+  )
+  const basketCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const line of lines) counts.set(line.productId, (counts.get(line.productId) ?? 0) + line.quantity)
+    return counts
+  }, [lines])
 
   /**
    * The barcode wedge: a LOOKUP against the whole catalog (AGL-2501),
@@ -376,9 +472,11 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
         (item: any) =>
           item.barcode?.trim().toLowerCase() === needle || item.sku?.trim().toLowerCase() === needle,
       ) ?? product.variants[0]
-    addProduct(product, variant)
+    // A scanned variant is the variant; a product with modifiers still asks
+    // for them, with that variant already picked.
+    tapProduct(product, variant)
     setSearch('')
-  }, [search, sale, firestore, hostId, addProduct, notify])
+  }, [search, sale, firestore, hostId, tapProduct, notify])
 
   /** Prices the basket on the server and opens the sale for payment. */
   // A ref, not `opening`: two taps inside one React batch both read the
@@ -553,6 +651,22 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
           )
         }
         onRemove={(index) => setLines((prev) => prev.filter((_line, at) => at !== index))}
+        onEdit={(index) => {
+          const line = lines[index]
+          const product = line
+            ? (productCache.current.get(line.productId) ?? productsById.get(line.productId))
+            : undefined
+          if (!line || !product) return
+          setItemSheet({
+            product,
+            editIndex: index,
+            initial: {
+              ...(line.variantId ? { variantId: line.variantId } : {}),
+              ...(line.modifiers ? { modifiers: line.modifiers } : {}),
+              quantity: line.quantity,
+            },
+          })
+        }}
         discountPct={discountPct}
         onDiscountPct={setDiscountPct}
         customerEmail={customerEmail}
@@ -633,10 +747,12 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
             categoryId={categoryId}
             onCategory={setCategoryId}
             notices={gridPlan.notices}
+            hostId={hostId}
             products={products}
-            onAdd={(product, variant) => {
+            basketCounts={basketCounts}
+            onTap={(product) => {
               if (sale) return void notify('Finish or void the open sale first', 'info')
-              addProduct(product, variant)
+              tapProduct(product)
             }}
           />
         </Box>
@@ -707,6 +823,33 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
           </Drawer>
         </>
       ) : null}
+      <PosItemDialog
+        product={itemSheet?.product ?? null}
+        initial={itemSheet?.initial}
+        onClose={() => setItemSheet(null)}
+        onConfirm={(choice) => {
+          const sheet = itemSheet
+          setItemSheet(null)
+          if (!sheet) return
+          if (sheet.editIndex === undefined) {
+            addProduct(sheet.product, choice.variant, choice.modifiers, choice.quantity)
+            return
+          }
+          const at = sheet.editIndex
+          setLines((prev) =>
+            prev.map((line, index) => (index === at ? registerLineFor(sheet.product, choice) : line)),
+          )
+        }}
+        {...(itemSheet?.editIndex !== undefined
+          ? {
+              onRemove: () => {
+                const at = itemSheet.editIndex
+                setItemSheet(null)
+                setLines((prev) => prev.filter((_line, index) => index !== at))
+              },
+            }
+          : {})}
+      />
       <Dialog open={Boolean(pairing)} onClose={() => setPairing(null)} maxWidth="xs" fullWidth>
         <DialogTitle>{'Pair a customer display'}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

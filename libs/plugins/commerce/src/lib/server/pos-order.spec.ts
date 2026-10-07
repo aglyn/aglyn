@@ -2644,3 +2644,100 @@ describe('what a register sale carries (AGL-3609)', () => {
     delete process.env.TOKEN_SIGNING_SECRET
   })
 })
+
+describe('register modifiers are priced by the server (AGL-3607)', () => {
+  beforeEach(() => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Flat white',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 4, inventory: null }],
+      modifierGroups: [
+        {
+          id: 'milk',
+          name: 'Milk',
+          min: 1,
+          max: 1,
+          options: [
+            { id: 'whole', name: 'Whole milk', priceCents: 0 },
+            { id: 'oat', name: 'Oat milk', priceCents: 75 },
+          ],
+        },
+        {
+          id: 'extras',
+          name: 'Extras',
+          min: 0,
+          max: 2,
+          options: [
+            { id: 'shot', name: 'Extra shot', priceCents: 100 },
+            { id: 'syrup', name: 'Vanilla', priceCents: 50 },
+            { id: 'cream', name: 'Cream', priceCents: 50 },
+          ],
+        },
+      ],
+    })
+  })
+
+  it('adds each chosen option to the unit price and names it on the line', async () => {
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 2000,
+      lines: [
+        {
+          productId: 'product-1',
+          quantity: 2,
+          modifiers: [
+            { groupId: 'milk', optionId: 'oat' },
+            { groupId: 'extras', optionId: 'shot' },
+          ],
+          // A register naming its own price is ignored.
+          unitAmountCents: 1,
+        },
+      ],
+    })
+    expect(result.status).toBe(200)
+    const line = (orderDocs()[0]?.lineItems as any[])[0]
+    expect(line).toMatchObject({
+      unitAmountCents: 575,
+      quantity: 2,
+      variantLabel: 'Oat milk, Extra shot',
+      modifiers: [
+        { groupId: 'milk', optionId: 'oat', group: 'Milk', name: 'Oat milk', priceCents: 75 },
+        { groupId: 'extras', optionId: 'shot', group: 'Extras', name: 'Extra shot', priceCents: 100 },
+      ],
+    })
+    expect((orderDocs()[0]?.totals as any).itemsCents).toBe(1150)
+  })
+
+  it.each([
+    ['a required group left empty', [], 'Choose milk'],
+    ['a choice the product does not offer', [{ groupId: 'milk', optionId: 'soy' }], 'no longer offered'],
+    [
+      'more choices than the group allows',
+      [
+        { groupId: 'milk', optionId: 'whole' },
+        { groupId: 'extras', optionId: 'shot' },
+        { groupId: 'extras', optionId: 'syrup' },
+        { groupId: 'extras', optionId: 'cream' },
+      ],
+      'at most 2',
+    ],
+    [
+      'one choice twice',
+      [
+        { groupId: 'milk', optionId: 'oat' },
+        { groupId: 'milk', optionId: 'oat' },
+      ],
+      'picked twice',
+    ],
+  ])('refuses %s, before any sale is written', async (_case, modifiers, message) => {
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 2000,
+      lines: [{ productId: 'product-1', quantity: 1, modifiers }],
+    })
+    expect(result.status).toBe(400)
+    expect(String(result.body.error)).toContain(message)
+    expect(orderDocs()).toHaveLength(0)
+  })
+})

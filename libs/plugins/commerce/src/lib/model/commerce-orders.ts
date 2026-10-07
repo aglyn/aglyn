@@ -24,6 +24,7 @@
  * I/O here.
  */
 
+import type { OrderLineModifier } from './product-modifiers'
 import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 import type { PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import type { ProductType } from './commerce'
@@ -61,8 +62,13 @@ export interface OrderLineItem {
   sku?: string
   productType?: ProductType
   quantity: number
-  /** Per-unit price in cents at purchase time. */
+  /** Per-unit price in cents at purchase time, its modifiers included. */
   unitAmountCents: number
+  /**
+   * Choices added at the register (AGL-3607), as sold. Already folded into
+   * `variantLabel` and `unitAmountCents`; kept for reports and reorders.
+   */
+  modifiers?: OrderLineModifier[]
   /** Supplier at purchase time (dropship routing, AGL-289). */
   supplierId?: string
   /** Fulfillment id once this line ships (AGL-288). */

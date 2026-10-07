@@ -81,6 +81,7 @@ import {
   PaidDownloadAddButton,
   PaidMediaProtection,
 } from './paid-media'
+import { ProductRegisterFields } from './product-register-fields.component'
 
 /**
  * What each picker in this dialog will offer.
@@ -225,6 +226,9 @@ type ProductPatch =
 
 /** Spreads a patch over the draft as last rendered. One identity per dialog. */
 type ProductUpdate = (patch: ProductPatch) => void
+
+/** A stable empty list, so a product without modifiers never redraws its section. */
+const NO_MODIFIER_GROUPS: CommerceModel.ProductModifierGroup[] = []
 
 /** Replaces the draft with what `build` makes of it as last rendered. */
 type DraftReplace = (
@@ -1201,6 +1205,8 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
    */
   const subs = useCommerceEntitlement(hostId, 'storefrontSubscriptions')
   const gifts = useCommerceEntitlement(hostId, 'giftCards')
+  // The register settings show only where the plan includes POS (AGL-3607).
+  const pos = useCommerceEntitlement(hostId, 'pos')
   const subsLocked = subs.ready && !subs.entitled
   const giftsLocked = gifts.ready && !gifts.entitled
   const firestore = useFirestore()
@@ -1896,6 +1902,13 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           update={update}
           replaceDraft={replaceDraft}
         />
+        {pos.ready && pos.entitled ? (
+          <ProductRegisterFields
+            posQuickKey={Boolean(current.posQuickKey)}
+            modifierGroups={current.modifierGroups ?? NO_MODIFIER_GROUPS}
+            update={update}
+          />
+        ) : null}
         {current.type === 'digital' ? (
           <ProductDigitalFields
             hostId={hostId}
