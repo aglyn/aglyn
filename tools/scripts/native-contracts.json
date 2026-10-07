@@ -1,5 +1,5 @@
 {
-  "$comment": "What tools/scripts/generate-native-contracts.mjs emits for the native apps (docs/mobile/native-architecture.md §5). Every module must be on tools/scripts/mobile-pure-modules.json. `types` become Swift/Kotlin types, `values` become contracts.generated.json entries (typed by ContractValues). `ints` narrows a number field to an integer, `json` reads a field as raw JSON, `omit` leaves a field out; each names `Type.field` and must match a field the run emits. `listQueryCases` names the list declarations whose planner cases are recorded. `functionCases` runs pure functions over listed inputs (`args`, or `argsProduct` for every combination) into function-cases.generated.json, so each platform's formatter or rule replays the console's answers.",
+  "$comment": "What tools/scripts/generate-native-contracts.mjs emits for the native apps (docs/mobile/native-architecture.md §5). Every module must be on tools/scripts/mobile-pure-modules.json. `types` become Swift/Kotlin types, `values` become contracts.generated.json entries (typed by ContractValues). `ints` narrows a number field to an integer, `json` reads a field as raw JSON, `omit` leaves a field out; each names `Type.field` and must match a field the run emits. `optional` makes a field (`Type.field`) or every field of a struct (`Type`) decode when a stored document lacks it, and must match a field or struct the run emits. `listQueryCases` names the list declarations whose planner cases are recorded. `functionCases` runs pure functions over listed inputs (`args`, or `argsProduct` for every combination) into function-cases.generated.json, so each platform's formatter or rule replays the console's answers.",
   "modules": {
     "libs/shared/util/tools/src/lib/list-query/list-query-plan.ts": {
       "types": [
@@ -93,6 +93,10 @@
     "ListQueryRefusal.clause"
   ],
   "omit": [],
+  "optional": [
+    "HostOrder",
+    "OrderTotals"
+  ],
   "listQueryCases": {
     "ORDER_LIST_QUERY": {},
     "PRODUCT_LIST_QUERY": {

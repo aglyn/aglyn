@@ -94,7 +94,7 @@ data class HostOrder(
     val restockCheck: OrderRestockCheck? = null,
     val shiftId: String? = null,
     val shippingAddress: OrderAddress? = null,
-    val status: OrderStatus,
+    val status: OrderStatus? = null,
     val subscriptionId: String? = null,
     val taxMode: HostOrderTaxMode? = null,
     val timeline: List<OrderTimelineEvent>? = null,
@@ -631,13 +631,13 @@ data class OrderTimelineEvent(
 
 @Serializable
 data class OrderTotals(
-    val discountCents: Double,
-    val feeCents: Double,
-    val itemsCents: Double,
-    val shippingCents: Double,
-    val taxCents: Double,
+    val discountCents: Double? = null,
+    val feeCents: Double? = null,
+    val itemsCents: Double? = null,
+    val shippingCents: Double? = null,
+    val taxCents: Double? = null,
     val tipCents: Double? = null,
-    val totalCents: Double,
+    val totalCents: Double? = null,
 )
 
 @Serializable
