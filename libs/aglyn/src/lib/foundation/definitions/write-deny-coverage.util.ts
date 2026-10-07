@@ -589,7 +589,11 @@ export function readFieldsOf(
 ): string[] {
   const found = new Set<string>()
   for (const raw of sources) {
-    const source = stripQuotedStrings(stripComments(raw))
+    // The sources are TypeScript, so a `//` inside a string is not a comment:
+    // the rules-file stripper would cut the line there, leave the string
+    // unterminated for `stripQuotedStrings`, and let prose such as
+    // `'… link host. Default https://…'` read as a field access.
+    const source = stripQuotedStrings(stripTypeScriptComments(raw))
     // `host?.field` / `host.field` — the ordinary read.
     for (const hit of source.matchAll(
       new RegExp(`\\b${binding}\\s*\\??\\.\\s*([A-Za-z_$][A-Za-z0-9_$]*)`, 'g'),
