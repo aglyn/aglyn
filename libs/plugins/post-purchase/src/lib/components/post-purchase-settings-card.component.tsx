@@ -40,7 +40,7 @@ interface SettingsAnswer {
 
 const SUBHEADERS: Record<PostPurchaseVendor, string> = {
   aftership: 'Follow every parcel you ship through your AfterShip account, and send buyers to your AfterShip tracking page.',
-  route: 'Offer Route package protection at checkout. Buyers pay Route’s price; Aglyn adds nothing.',
+  route: 'Offer Route package protection at checkout. Buyers pay Route’s price, with nothing added.',
   narvar: 'Send each order and its parcels to your Narvar account, and send buyers to your Narvar tracking page.',
 }
 

@@ -113,8 +113,13 @@ export interface StoredPostPurchaseOrder {
 /** How long a claimed policy blocks a second delivery before it is tried again. */
 const CLAIM_STALE_MS = 2 * 60 * 1000
 
+/** One order's record id: the site and the order, so each pair has exactly one. */
+export function orderStateKey(hostId: string, recordId: string): string {
+  return `${hostId}__${recordId}`
+}
+
 export function orderStateRef(orgId: string, hostId: string, recordId: string) {
-  return orgRef(orgId).collection(POST_PURCHASE_COLLECTIONS.orders).doc(`${hostId}__${recordId}`)
+  return orgRef(orgId).collection(POST_PURCHASE_COLLECTIONS.orders).doc(orderStateKey(hostId, recordId))
 }
 
 interface Context {
