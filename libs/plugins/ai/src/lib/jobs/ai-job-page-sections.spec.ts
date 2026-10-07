@@ -916,13 +916,33 @@ describe('a repeated item written once (AGL-3053)', () => {
     expect(JSON.stringify(onceNodes)).not.toMatch(/\{\{|"repeat"/)
   })
 
-  it('refuses an item DRAWN once where the workspace keeps reusable components, telling the model to place instances (rule 1)', () => {
-    const result = checkCards(fixture.answers[1], aiPageCheckContext(fixture.inventory))
+  it('refuses an item DRAWN once where the section places a component the workspace keeps, telling the model to place instances (rule 1)', () => {
+    const inventory = { ...fixture.inventory, components: [{ id: 'cmp-practice', name: 'Practice area card', props: { title: 'text' } }] }
+    const result = aiPageSectionCheck({
+      page: heroPage(),
+      sectionIds,
+      index: 1,
+      context: aiPageCheckContext(inventory),
+      section: { name: 'x', uses: ['cmp-practice'], items: 0 },
+      inventory,
+    })({ tree: JSON.stringify(fixture.answers[1]) })
     expect(result.value).toBeNull()
     expect(result.violations).toEqual([
       expect.objectContaining({ rule: 1, code: 'repeat-not-inline', nodeIds: ['b5'], detail: expect.stringContaining('reusableInstance') }),
     ])
     expect(Object.keys(result.offending ?? {})).toEqual(['b5'])
+  })
+
+  it('draws an item written once inline where the workspace keeps components and the section places none (AGL-3596)', () => {
+    // A paid guided start's "Why choose us" was refused for rule 1 with no component to place.
+    const two = cardsWith('b5', (node) => ({ ...node, repeat: (node['repeat'] as unknown[]).slice(0, 2) }))
+    const result = checkCards(two, aiPageCheckContext(fixture.inventory))
+    expect(result.violations).toEqual([])
+    expect(JSON.stringify(result.value?.nodes)).not.toMatch(/\{\{|"repeat"/)
+    // Three copies or more are still a component to make, which rule 1 asks the plan for.
+    expect(checkCards(fixture.answers[1], aiPageCheckContext(fixture.inventory)).violations.map((violation) => violation.code)).toEqual([
+      'repeated-subtree',
+    ])
   })
 
   it('refuses a copy that leaves a placeholder without its value, quoting the item as the model wrote it', () => {

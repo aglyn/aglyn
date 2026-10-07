@@ -475,7 +475,12 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
     if (disagreeing.length) {
       return { value: null, violations: disagreeing, ...offendingOf(raw, disagreeing) }
     }
-    const drawn = expandAiRepeatedItems(raw, { inline: input.context.reusableComponents === false, noun: 'section' })
+    // A repeated item is drawn inline where the workspace keeps no reusable
+    // components, and where this section's plan line places none (AGL-3596):
+    // there is then no component it could be drawing by hand, and a paid
+    // guided start's "Why choose us" was refused for rule 1 with nothing to place.
+    const inline = input.context.reusableComponents === false || !input.section.uses.some((ref) => components.has(ref))
+    const drawn = expandAiRepeatedItems(raw, { inline, noun: 'section' })
     if (drawn.ok === false) {
       return { value: null, violations: drawn.violations, ...offendingOf(raw, drawn.violations) }
     }
