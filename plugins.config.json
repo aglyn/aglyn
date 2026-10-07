@@ -676,6 +676,49 @@
           "type": "memberSignOut",
           "order": 50,
           "label": "Member signed out"
+        },
+        {
+          "$comment": "Order and return events (AGL-3611): raised through the plugin event outbox and handed to the host event bus by commerce's own subscriber, so they reach an automation at least once and within a minute of the fact.",
+          "type": "orderPaid",
+          "order": 140,
+          "label": "Order paid",
+          "payloadKeys": ["orderId", "orderNumber", "status", "channel", "email", "name", "totalCents", "currency"]
+        },
+        {
+          "type": "orderFulfilled",
+          "order": 141,
+          "label": "Order fulfilled",
+          "payloadKeys": ["orderId", "orderNumber", "status", "email", "name", "totalCents", "fulfillmentId", "carrier", "trackingNumber", "trackingUrl"]
+        },
+        {
+          "type": "orderDelivered",
+          "order": 142,
+          "label": "Order delivered",
+          "payloadKeys": ["orderId", "orderNumber", "status", "email", "name", "totalCents"]
+        },
+        {
+          "type": "orderRefunded",
+          "order": 143,
+          "label": "Order refunded",
+          "payloadKeys": ["orderId", "orderNumber", "status", "email", "name", "totalCents", "refundCents", "fullRefund"]
+        },
+        {
+          "type": "orderCancelled",
+          "order": 144,
+          "label": "Order canceled",
+          "payloadKeys": ["orderId", "orderNumber", "status", "email", "name", "totalCents"]
+        },
+        {
+          "type": "returnRequested",
+          "order": 145,
+          "label": "Return requested",
+          "payloadKeys": ["orderId", "orderNumber", "email", "name", "returnId", "returnStatus"]
+        },
+        {
+          "type": "returnRefunded",
+          "order": 146,
+          "label": "Return refunded",
+          "payloadKeys": ["orderId", "orderNumber", "email", "name", "returnId", "returnStatus", "returnRefundCents"]
         }
       ],
       "subscriptionTopics": [

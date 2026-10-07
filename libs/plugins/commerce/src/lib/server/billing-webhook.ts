@@ -78,6 +78,8 @@ import { storefrontTaxModeOf } from './storefront-tax'
 import { recordStorefrontTax } from './storefront-tax-record'
 import { enqueueSupplierDelivery } from './supplier-outbox'
 import { notifyOrderBuyer, onlineReceiptExtras } from './order-notifications'
+import { ORDER_PAID_EVENT } from '../model/order-events'
+import { raiseOrderEvent } from './order-events'
 
 /**
  * Assigns unassigned license keys for a digital product (AGL-308):
@@ -2959,6 +2961,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           }
           return true
         })
+        // Other plugins and the merchant's webhooks hear of the sale (AGL-3611); keyed, so a redelivery raises it once.
+        await raiseOrderEvent(ORDER_PAID_EVENT, { hostId: invoiceHostId, orderId: invoiceId, key: 'paid' })
         // THE SALES TAX COMES BACK TO THE PLATFORM (AGL-1956), and like the
         // stop below it runs BEFORE the `recorded` short-circuit: a cycle
         // already on the ledger is exactly the cycle whose reversal may still
@@ -3693,6 +3697,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             .set({ licenseKeys: licenseKeysByProduct }, { merge: true })
             .catch(() => undefined)
         }
+        // Other plugins and the merchant's webhooks hear of the sale (AGL-3611); keyed, so a redelivery raises it once.
+        await raiseOrderEvent(ORDER_PAID_EVENT, { hostId: String(hostId), orderId: orderRef.id, key: 'paid' })
         // Branded receipt (AGL-296): env-gated like every outbound email.
         const buyerEmailForReceipt = object?.customer_details?.email
         // The store's receipt switch and the status link (AGL-3610).
@@ -4442,6 +4448,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           }
           // The receipt a payment link or a POS card sale never sent (AGL-3610).
           await notifyOrderBuyer({ hostId: String(hostId), orderId: String(orderId) }, 'receipt', { email: draftEmail })
+          await raiseOrderEvent(ORDER_PAID_EVENT, { hostId: String(hostId), orderId: String(orderId), key: 'paid' })
           if (productId) {
             const productRef = hostRef
               .collection('products')
@@ -4962,6 +4969,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               'exists, so the redemption is uncounted against its limit.',
           })
         }
+        // Other plugins and the merchant's webhooks hear of the sale (AGL-3611); keyed, so a redelivery raises it once.
+        await raiseOrderEvent(ORDER_PAID_EVENT, { hostId: String(hostId), orderId: orderRef.id, key: 'paid' })
         // Receipt + seller notification (AGL-96): env-gated like every
         // other outbound email; failures never fail the webhook.
         if (isEmailConfigured()) {

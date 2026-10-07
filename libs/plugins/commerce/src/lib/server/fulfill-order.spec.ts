@@ -1062,3 +1062,50 @@ describe('editing and canceling one fulfillment (AGL-3611)', () => {
     expect(storedOrder().fulfillments[0].status).toBeUndefined()
   })
 })
+
+describe('order events ride the shipment write (AGL-3611)', () => {
+  const outbox = () =>
+    [...docs.entries()]
+      .filter(([path]) => path.startsWith('pluginEventOutbox/'))
+      .map(([, value]) => value)
+
+  it('stages one order.fulfilled per shipment, with the order as it now stands', async () => {
+    seedHost()
+    seedOrder()
+    await post({ lineItems: [{ lineItemId: 0, quantity: 2 }], carrier: 'UPS', trackingNumber: '1Z' })
+
+    expect(outbox()).toHaveLength(1)
+    const [event] = outbox()
+    expect(event).toMatchObject({
+      status: 'pending',
+      event: 'order.fulfilled',
+      pluginId: 'commerce',
+      hostId: HOST,
+      attempts: 0,
+    })
+    expect(event.payload.order).toMatchObject({ id: ORDER, object: 'order', status: 'partially_fulfilled' })
+    expect(event.payload.fulfillment).toMatchObject({
+      lines: [{ lineItemId: 0, quantity: 2 }],
+      carrier: 'UPS',
+      trackingNumber: '1Z',
+      trackingUrl: 'https://www.ups.com/track?tracknum=1Z',
+    })
+  })
+
+  it('a keyed retry stages nothing more, and a refused shipment stages nothing', async () => {
+    seedHost()
+    seedOrder()
+    await post({ lineItems: [{ lineItemId: 0, quantity: 1 }] }, { 'idempotency-key': 'k' })
+    await post({ lineItems: [{ lineItemId: 0, quantity: 1 }] }, { 'idempotency-key': 'k' })
+    await post({ lineItems: [{ lineItemId: 0, quantity: 9 }] })
+    expect(outbox()).toHaveLength(1)
+  })
+
+  it('stages order.delivered when the order is marked delivered', async () => {
+    seedHost()
+    seedOrder({ status: 'fulfilled' })
+    await post({ to: 'delivered' })
+    expect(outbox().map((event) => event.event)).toEqual(['order.delivered'])
+    expect(outbox()[0].payload.order.status).toBe('delivered')
+  })
+})

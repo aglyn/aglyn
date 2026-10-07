@@ -34,6 +34,8 @@ import {
 } from '@aglyn/aglyn/server'
 import { alertLowStockCrossing } from './low-stock'
 import { notifyOrderBuyer } from './order-notifications'
+import { ORDER_PAID_EVENT } from '../model/order-events'
+import { raiseOrderEvent } from './order-events'
 import { decrementVariantStock } from './reserve-stock'
 import {
   type PromotionSlotHold,
@@ -1235,6 +1237,8 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     await claim.record(200, cashPayload)
     // The receipt, when the customer gave an email (AGL-3610).
     await notifyOrderBuyer({ hostId, orderId: orderRef.id }, 'receipt', { email: contactEmail })
+    // A cash or folio sale is paid on the spot (AGL-3611); a card sale is raised by the webhook.
+    await raiseOrderEvent(ORDER_PAID_EVENT, { hostId, orderId: orderRef.id, key: 'paid' })
     return res.status(200).json(cashPayload)
   } catch (error) {
     console.error(error)

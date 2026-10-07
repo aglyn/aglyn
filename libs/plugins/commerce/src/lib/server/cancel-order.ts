@@ -18,6 +18,8 @@
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { notifyOrderBuyer } from './order-notifications'
+import { ORDER_CANCELLED_EVENT } from '../model/order-events'
+import { raiseOrderEvent } from './order-events'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import {
   capRestockLines,
@@ -367,6 +369,7 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
     // The buyer is told (AGL-3610) — only by the request that cancelled it.
     if (outcome.status === 200 && !(outcome.body as { alreadyCancelled?: boolean }).alreadyCancelled) {
       await notifyOrderBuyer({ hostId, orderId }, 'cancelled')
+      await raiseOrderEvent(ORDER_CANCELLED_EVENT, { hostId, orderId, key: 'cancelled' })
     }
     return res.status(outcome.status).json(outcome.body)
   } catch (error) {

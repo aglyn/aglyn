@@ -25,6 +25,8 @@ import { recordPluginPersonRefund } from '@aglyn/aglyn/plugin-manager/plugin-per
 import { applyGiftCardRiskToOrder } from './gift-card-risk'
 import { flagOrderRestock } from './restock-flag'
 import { notifyOrderBuyer } from './order-notifications'
+import { ORDER_REFUNDED_EVENT } from '../model/order-events'
+import { raiseOrderEvent } from './order-events'
 import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 
 /**
@@ -715,6 +717,8 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     // The buyer is told what came back (AGL-3610), once per Stripe refund id —
     // a keyed retry replays at the claim above and never reaches here.
     await notifyOrderBuyer({ hostId, orderId }, 'refunded', { refundId: String(refund?.id ?? ''), refundCents, refundLineIndexes: requestedLineIds, fullyRefunded })
+    // Other plugins and the merchant's webhooks hear it too (AGL-3611), once per refund.
+    await raiseOrderEvent(ORDER_REFUNDED_EVENT, { hostId, orderId, key: `refund:${String(refund?.id ?? idempotencyKey)}`, extra: { refund: { id: refund?.id ? String(refund.id) : null, amountCents: refundCents, lineItemIds: [...(requestedLineIds ?? [])], full: Boolean(fullyRefunded) } } })
     return res.status(200).json(payload)
   } catch (error) {
     console.error(error)

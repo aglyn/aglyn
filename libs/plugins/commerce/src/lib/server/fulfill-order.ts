@@ -19,6 +19,8 @@ import * as CommerceModel from '../model'
 import { createResourceUid, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { notifyOrderBuyer } from './order-notifications'
+import { ORDER_DELIVERED_EVENT, ORDER_FULFILLED_EVENT } from '../model/order-events'
+import { fulfillmentEventView, stageOrderEvent } from './order-events'
 import { createHash } from 'crypto'
 
 /**
@@ -223,10 +225,12 @@ export async function recordOrderShipment(
         if (!CommerceModel.canTransitionOrder(order.status, 'delivered')) {
           return { outcome: 'blocked', from: order.status }
         }
-        transaction.update(orderRef, {
+        const delivered = {
           status: 'delivered',
           timeline: CommerceModel.appendOrderEvent(order, 'delivered', undefined, atMs),
-        })
+        }
+        transaction.update(orderRef, delivered)
+        stageOrderEvent(transaction, ORDER_DELIVERED_EVENT, { hostId, orderId, key: 'delivered', order: { ...snapshot.data(), ...delivered } })
         return { outcome: 'recorded', status: 'delivered' }
       }
 
@@ -291,7 +295,7 @@ export async function recordOrderShipment(
       if (status !== order.status && !CommerceModel.canTransitionOrder(order.status, status)) {
         return { outcome: 'blocked', from: order.status }
       }
-      transaction.update(orderRef, {
+      const shipped = {
         status,
         fulfillments,
         timeline: CommerceModel.appendOrderEvent(
@@ -300,7 +304,11 @@ export async function recordOrderShipment(
           shipmentDetail(order, lines, status === 'partially_fulfilled', carrier, trackingNumber),
           atMs,
         ),
-      })
+      }
+      transaction.update(orderRef, shipped)
+      // Once per shipment (AGL-3611), in the same write, so the event exists
+      // exactly when the shipment does.
+      stageOrderEvent(transaction, ORDER_FULFILLED_EVENT, { hostId, orderId, key: fulfillment.id, order: { ...snapshot.data(), ...shipped }, extra: { fulfillment: fulfillmentEventView(order, fulfillment) } })
       return { outcome: 'recorded', status, fulfillment }
     },
   )
