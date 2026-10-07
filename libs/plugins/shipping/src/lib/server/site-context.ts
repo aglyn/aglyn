@@ -18,12 +18,13 @@
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveHostEnabledPlugins } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { getHostDocAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { SHIPPING_ENTITLEMENT, SHIPPING_PLUGIN_ID } from '../constants/bundle-common'
+import { SELLER_PLUGIN_ID, SHIPPING_ENTITLEMENT, SHIPPING_PLUGIN_ID } from '../constants/bundle-common'
 
 /**
  * Whether shipping runs for one site (AGL-3612): the site has an
- * organization, the organization's plan sells, and neither the workspace nor
- * the site switched this plugin off. The one question every door asks before
+ * organization, the organization's plan sells, neither the workspace nor
+ * the site switched this plugin off, and commerce — whose orders it ships —
+ * is on for the site. The one question every door asks before
  * it reaches a provider, so a checkout, a label and a webhook agree.
  */
 export interface ShippingSiteContext {
@@ -41,6 +42,8 @@ export async function resolveShippingSite(hostId: string): Promise<ShippingSiteC
     org as { enabledPlugins?: string[] },
     host as { disabledPlugins?: string[]; enabledPlugins?: string[] },
   )
-  if (!enabled.includes(SHIPPING_PLUGIN_ID)) return null
+  // Shipping labels and rates are commerce's orders and checkouts: a site
+  // with commerce off has nothing to ship, whatever this plugin's switch says.
+  if (!enabled.includes(SHIPPING_PLUGIN_ID) || !enabled.includes(SELLER_PLUGIN_ID)) return null
   return { orgId: resolved.orgId, org, host }
 }

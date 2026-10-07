@@ -19,6 +19,12 @@
 export const SHIPPING_PLUGIN_ID = 'shipping'
 
 /**
+ * The plugin whose orders and checkouts this one ships, by id only — a
+ * plugin never imports another. Shipping runs only on a site where it is on.
+ */
+export const SELLER_PLUGIN_ID = 'commerce'
+
+/**
  * Where this plugin keeps what it keeps (AGL-3612). Every one is written by
  * the plugin's server half only; the Firestore rules refuse every client.
  *

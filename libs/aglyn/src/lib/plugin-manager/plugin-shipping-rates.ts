@@ -193,7 +193,7 @@ export async function quotePluginShippingRates(
   })
   try {
     return await Promise.race([
-      (async () => {
+      (async (): Promise<PluginShippingQuote[] | null> => {
         if (!(await quoter.available(request.hostId))) return null
         return quoter.quote({ ...request, signal: controller.signal })
       })().catch(() => null),

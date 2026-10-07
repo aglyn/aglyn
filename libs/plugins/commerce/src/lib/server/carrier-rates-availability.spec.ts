@@ -74,7 +74,7 @@ function invoke(options: { method?: string; token?: string; hostId?: string }) {
     headers: options.token ? { authorization: `Bearer ${options.token}` } : {},
     query: options.hostId === undefined ? {} : { hostId: options.hostId },
   }
-  return Promise.resolve(carrierRatesAvailabilityHandler(req as never, res as never, {} as never)).then(() => ({
+  return Promise.resolve(carrierRatesAvailabilityHandler(req as never, res as never)).then(() => ({
     status: statusCode,
     body: payload,
   }))

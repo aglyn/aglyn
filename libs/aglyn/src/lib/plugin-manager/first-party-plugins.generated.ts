@@ -184,10 +184,7 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     "id": "shipping",
     "label": "Shipping",
     "alwaysOnForWorkspace": true,
-    "description": "Carrier rates at checkout, shipping labels and tracking for physical orders.",
-    "requires": [
-      "commerce"
-    ],
+    "description": "Carrier rates at checkout, shipping labels and tracking for physical orders, where the platform has connected a carrier provider.",
     "siteOff": {
       "stops": "Switching Shipping off for this site stops live carrier rates at its checkout, which falls back to the site’s own shipping rates, and removes label buying from its orders.",
       "keeps": "Labels already bought, their tracking and their charges are kept, and Shipping keeps working on the workspace’s other sites."
