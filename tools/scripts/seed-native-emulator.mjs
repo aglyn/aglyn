@@ -8,7 +8,7 @@
 /**
  * Seeds a local Firebase emulator stack for the native apps (Aglyn and Aglyn
  * POS, AGL-3651): one member, one workspace on the Pro plan, one site with a
- * few redirect rules, then each area's rows from `./seed-native/*.mjs`, in
+ * few redirect rules, then each area's rows (the notification feed among them) from `./seed-native/*.mjs`, in
  * the shapes the console writes, so every screen has data under the real
  * rules.
  *
@@ -133,6 +133,7 @@ const areas = [
   ['marketing', 'seedMarketing'],
   ['store', 'seedCommerce'],
   ['pos', 'seedPos'],
+  ['notifications', 'seedNotifications'],
 ]
 for (const [file, name] of areas) {
   const area = await import(`./seed-native/${file}.mjs`)
