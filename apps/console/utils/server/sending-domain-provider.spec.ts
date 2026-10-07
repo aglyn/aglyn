@@ -113,6 +113,7 @@ function resendDomainPayload(overrides: Record<string, unknown> = {}) {
 import {
   NO_SENDING_DOMAIN_PROVIDER,
   readIssuedDkim,
+  readIssuedTrackingTarget,
   RESEND_SENDING_DOMAIN_PROVIDER,
   sendingDomainProvider,
 } from './sending-domain-provider'
@@ -219,6 +220,45 @@ describe('with a key', () => {
     ])
 
     expect(absolute).toEqual({ selector: 'aglyn-org1', publicKey: PUBLIC_KEY })
+  })
+
+  /**
+   * What Resend returns for a SUBDOMAIN: the name is relative to the zone the
+   * customer edits, so the subdomain's own label is left on the end.
+   */
+  it('reads a subdomain record named relative to its parent zone', async () => {
+    responses = [
+      {
+        ok: true,
+        status: 200,
+        json: resendDomainPayload({
+          name: 'news.acme.com',
+          records: [
+            { record: 'DKIM', name: 'resend._domainkey.news', type: 'TXT', value: `p=${PUBLIC_KEY}` },
+            { record: 'Tracking', name: 'links.news', type: 'CNAME', value: 'links1.resend-dns.com' },
+          ],
+        }),
+      },
+    ]
+
+    const issue = await sendingDomainProvider().issue('news.acme.com')
+
+    expect(issue.outcome).toBe('issued')
+    expect(issue.dkimSelector).toBe('resend')
+    expect(issue.dkimPublicKey).toBe(PUBLIC_KEY)
+    expect(
+      readIssuedTrackingTarget('news.acme.com', [
+        { name: 'links.news', type: 'CNAME', value: 'links1.resend-dns.com.' },
+      ]),
+    ).toBe('links1.resend-dns.com')
+  })
+
+  it('trims only whole labels of the subdomain, never part of one', () => {
+    expect(
+      readIssuedDkim('news.acme.com', [
+        { record: 'DKIM', name: 'resend._domainkey.wnews', value: `p=${PUBLIC_KEY}` },
+      ]),
+    ).toBeNull()
   })
 
   /**

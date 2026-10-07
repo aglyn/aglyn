@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import Foundation
 
 /// One Firestore document as the app reads it: its id and its fields.
@@ -34,17 +35,25 @@ public struct FirestoreQuery: @unchecked Sendable {
 
   public var collection: [String]
   public var equals: [(field: String, value: Any)]
+  /// Filters beyond equality, as a list-query plan makes them.
+  public var filters: [ListQueryConstraint]
   public var order: [Order]
   public var limit: Int?
 
   public init(
-    _ collection: [String], equals: [(field: String, value: Any)] = [], order: [Order] = [],
-    limit: Int? = nil
+    _ collection: [String], equals: [(field: String, value: Any)] = [], filters: [ListQueryConstraint] = [],
+    order: [Order] = [], limit: Int? = nil
   ) {
     self.collection = collection
     self.equals = equals
+    self.filters = filters
     self.order = order
     self.limit = limit
+  }
+
+  /// Every filter, equality ones first.
+  public var allFilters: [ListQueryConstraint] {
+    equals.map { ListQueryConstraint(path: $0.field, op: .equal, value: $0.value) } + filters
   }
 
   public var path: String { collection.joined(separator: "/") }
@@ -53,6 +62,35 @@ public struct FirestoreQuery: @unchecked Sendable {
 /// A value the server fills in on write.
 public enum FirestoreSentinel: Sendable {
   case serverTimestamp
+  /// Removes its field in a merge: the web SDK's `deleteField()`.
+  case delete
+}
+
+/// Writes the console makes straight to Firestore (no route), made the same
+/// way under the same security rules, as the signed-in person (the Kotlin
+/// kit's `FirestoreWriter`). `merge` is the web SDK's
+/// `setDoc(ref, data, { merge: true })`: nested maps merge key by key, every
+/// other value replaces its field, a missing document is created, a `Date`
+/// writes a timestamp and `FirestoreSentinel.delete` removes its field.
+public protocol FirestoreWriter: Sendable {
+  func merge(_ path: [String], _ data: [String: Any]) async throws
+}
+
+/// The writer over a reader's own merge write.
+public struct ReaderMergeWriter: FirestoreWriter {
+  let reader: FirestoreReader
+  public init(_ reader: FirestoreReader) { self.reader = reader }
+  public func merge(_ path: [String], _ data: [String: Any]) async throws {
+    try await reader.setDocument(path, data, merge: true)
+  }
+}
+
+/// A shell with nothing to write through; every write fails with words for the screen.
+public struct NoFirestoreWrites: FirestoreWriter {
+  public init() {}
+  public func merge(_ path: [String], _ data: [String: Any]) async throws {
+    throw ConsoleAPIError(status: 0, message: "Saving is not available here.")
+  }
 }
 
 /// A live listener; `remove()` stops it.
@@ -64,9 +102,9 @@ public protocol FirestoreListening: AnyObject {
 /// runs under, as the signed-in member. An interface rather than the SDK, so
 /// a platform without the SDK (or a test) can stand in its own reader.
 ///
-/// The writes here are for the member's own rows only (their device
-/// registry and notification read marks), which the rules keep owner-only.
-/// Every other write goes through a console API route.
+/// Its writes are the ones the console makes straight to Firestore, under the
+/// same rules (a plugin reaches them through `FirestoreWriter`); every other
+/// write goes through the console API route the console calls.
 public protocol FirestoreReader: AnyObject, Sendable {
   @MainActor
   func listen(

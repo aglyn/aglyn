@@ -390,12 +390,13 @@ function repeatedShapes(
   minNodes: number,
   minCount: number,
   groupOf: (visit: Visit) => string = () => tree.rootId,
+  skip: (visit: Visit) => boolean = () => false,
 ): Array<{ shape: string; ids: string[] }> {
   const byShape = new Map<string, string[]>()
   for (const visit of index.visits) {
     if (visit.id === tree.rootId) continue
     if ((index.sizeOf.get(visit.id) ?? 0) < minNodes) continue
-    if (repeatedByData(tree, visit)) continue
+    if (repeatedByData(tree, visit) || skip(visit)) continue
     const shape = JSON.stringify([groupOf(visit), index.shapeOf.get(visit.id)])
     byShape.set(shape, [...(byShape.get(shape) ?? []), visit.id])
   }
@@ -408,6 +409,67 @@ function repeatedShapes(
         !ids.every((id) => (ancestorsOf.get(id) ?? []).some((ancestor) => repeatedIds.has(ancestor))),
     )
     .map(([shape, ids]) => ({ shape, ids }))
+}
+
+/** Elements that frame and space what they hold, as rule 1 reads a frame. */
+const REPEAT_FRAMES = new Set(['muiBox', 'muiStack', 'muiContainer', 'muiGrid', 'section', 'muiList'])
+
+/**
+ * What rule 1 does not call a block (AGL-3660), however like another it is:
+ *
+ *  - a part of the page's OUTLINE — anything holding a heading at h1 or h2.
+ *    Three sections that each open with an h2 over a row of items share a
+ *    shape because a page has sections, and a component cannot carry the
+ *    page's outline: a heading inside one is no heading of the page.
+ *  - a FRAME OF ITEMS — a Grid container, a List, or a Stack of like
+ *    elements — and any frame that holds only such frames. What repeats in
+ *    it is its items, which are judged on their own: two rows of three
+ *    instances of two different components are not one block.
+ *
+ * So rule 1 still refuses three like cards, and the same card on two pages;
+ * it no longer refuses a page for having more than two sections, or more than
+ * two groups.
+ */
+function aiRepeatFrameOrSection(tree: AiDoctrineTree): (visit: Visit) => boolean {
+  const memo = new Map<string, boolean>()
+  const childrenOf = (id: string) => (tree.nodes[id]?.nodes ?? []).filter((child) => tree.nodes[child])
+  const holdsOutline = (id: string): boolean => {
+    const node = tree.nodes[id]
+    const level = node ? aiHeadingLevel(node) : null
+    return (level !== null && level <= 2) || childrenOf(id).some(holdsOutline)
+  }
+  const itemFrame = (id: string): boolean => {
+    const node = tree.nodes[id]
+    if (!node) return false
+    if (node.componentId === 'muiGrid' && node.props?.['container'] === true) return true
+    if (node.componentId === 'muiList') return true
+    const children = childrenOf(id)
+    // A Stack of like blocks — cards, rows, panels — and never of lines of text.
+    const kinds = new Set(children.map((child) => tree.nodes[child].componentId))
+    return (
+      node.componentId === 'muiStack' &&
+      children.length >= 2 &&
+      kinds.size === 1 &&
+      children.every((child) => (tree.nodes[child].nodes ?? []).length > 0)
+    )
+  }
+  const parentOf = new Map<string, string>()
+  for (const [id, node] of Object.entries(tree.nodes)) for (const child of node?.nodes ?? []) parentOf.set(child, id)
+  const exempt = (id: string): boolean => {
+    const known = memo.get(id)
+    if (known !== undefined) return known
+    const node = tree.nodes[id]
+    const children = childrenOf(id)
+    const parent = parentOf.get(id)
+    const result =
+      // An item of a frame is an item, whatever heading it carries.
+      (holdsOutline(id) && !(parent !== undefined && itemFrame(parent))) ||
+      itemFrame(id) ||
+      (!!node && REPEAT_FRAMES.has(node.componentId) && children.length > 0 && children.every(exempt))
+    memo.set(id, result)
+    return result
+  }
+  return (visit) => exempt(visit.id)
 }
 
 /**
@@ -429,6 +491,11 @@ export function detectRepeatedSubtrees(
     index,
     AI_REPEAT_MIN_NODES,
     AI_REPEAT_MIN_COUNT,
+    // Counted within the band of the page it sits in (AGL-3660), as rule 8
+    // counts a typed list: a heading over its words in the About band and in
+    // the Services band are two parts of two stories, not one block placed twice.
+    (visit) => [...visit.ancestors].reverse().find((id) => tree.nodes[id]?.componentId === 'section') ?? tree.rootId,
+    aiRepeatFrameOrSection(tree),
   ).map(({ ids }) => {
     const name = displayName(tree.nodes[ids[0]].componentId)
     return {

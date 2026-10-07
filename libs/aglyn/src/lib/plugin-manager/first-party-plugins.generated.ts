@@ -226,6 +226,26 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     "alwaysOn": true,
     "description": "Upload your own fonts and pick from the Google Fonts catalog for your site's theme."
   },
+  {
+    "id": "post-purchase",
+    "label": "Tracking and protection",
+    "alwaysOnForWorkspace": true,
+    "description": "Order tracking and package protection.",
+    "siteOff": {
+      "stops": "Stops protection and tracking for new orders.",
+      "keeps": "Bought protection stays in force."
+    }
+  },
+  {
+    "id": "fulfillment-networks",
+    "label": "Fulfillment networks",
+    "alwaysOnForWorkspace": true,
+    "description": "Paid orders shipped by your own ShipBob or Amazon Multi-Channel Fulfillment account, with tracking back on the order and stock counts in step.",
+    "siteOff": {
+      "stops": "Switching Fulfillment networks off for this site stops its paid orders going to ShipBob or Amazon, and stops their shipments and stock counts coming back.",
+      "keeps": "The connections and every order already sent are kept, and what a network already shipped stays on the order."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -254,6 +274,8 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "sales-channels": "routes",
   "marketing-platforms": "console-only",
   "fonts": "console-only",
+  "post-purchase": "console-only",
+  "fulfillment-networks": "console-only",
 }
 
 /**
@@ -2217,6 +2239,16 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "marketing-platforms",
     "name": "marketingPlatformEvents",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "fulfillment-networks",
+    "name": "fulfillmentNetworkConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "fulfillment-networks",
+    "name": "fulfillmentNetworkOrders",
     "orgField": "orgId"
   },
 ]

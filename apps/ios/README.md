@@ -32,7 +32,7 @@ Xcode 16 or later (the project uses synchronized folders), iOS 17+ and macOS 14+
 (cd cloud && firebase emulators:start --only auth,firestore --project demo-aglyn)
 node tools/scripts/seed-native-emulator.mjs   # prints the seeded sign-in
 
-open apps/ios/Aglyn.xcodeproj                  # run the Aglyn or AglynPOS scheme on a simulator or My Mac
+open apps/ios/Aglyn.xcodeproj                  # run the Aglyn or AglynPOS scheme (the app is "Aglyn POS") on a simulator or My Mac
 ```
 
 `Config/Emulator.xcconfig` is the default configuration: the Auth emulator on
@@ -58,6 +58,20 @@ Debug launch arguments, for screenshots and UI tests:
 | `-AglynSection notifications\|settings\|more` | opens that section |
 | `-AglynDemoRoute redirects.list` | pushes a plugin screen |
 | `-AglynShowSwitcher YES` | opens the workspace and site switcher |
+| `-AglynNoPushPrompt YES` | skips the notification permission prompt |
+| `-AglynAuthTransport rest\|sdk` | forces how the app signs in (see below) |
+
+### Sign-in on an unsigned Mac build
+
+The Firebase SDK keeps its user in the data-protection Keychain, which a Mac
+build without a team signature cannot write to (`-34018`). Such a build (any
+local `xcodebuild` until the Apple team exists) therefore signs in through the
+Identity Toolkit REST API instead and reads Firestore over REST with the same
+ID token, so the same security rules apply. A live list re-reads every 30
+seconds and on Refresh (⌘R). The refresh token is kept in the login Keychain;
+an ad-hoc rebuild changes the app's signature, and the next launch then asks
+for the password again instead of showing a Keychain prompt. A team-signed
+build uses the SDK, as iOS does.
 
 Links: `aglyn://<console path>` (and `aglyn-pos://` for the register) opens a
 console path, natively when a plugin answers it, otherwise in the console WebView:
@@ -86,6 +100,17 @@ After you change a plugin's `mobile` block, run `npm run generate:plugin-manifes
 # The app: unit tests, and the UI test that signs in and reaches Home (needs the seeded stack and Local.xcconfig)
 (cd apps/ios && xcodebuild test -project Aglyn.xcodeproj -scheme Aglyn -destination 'platform=iOS Simulator,name=iPhone 16')
 ```
+
+## Push
+
+Aglyn and Aglyn POS register with APNs after sign-in and keep one row per
+install at `users/{uid}/devices/{installId}` (APNs token, `sandbox` in debug
+builds, `production` in release builds). Signing out deletes the row first.
+Settings → Notifications holds one switch per notification type, stored at
+`users/{uid}.notificationSettings.accountTypes.{type}.push`, the console's own
+settings. APNs hands a token only to a build signed with the `aps-environment`
+entitlement, so until the team exists registration fails quietly and no row is
+written.
 
 ## What Zach owes
 

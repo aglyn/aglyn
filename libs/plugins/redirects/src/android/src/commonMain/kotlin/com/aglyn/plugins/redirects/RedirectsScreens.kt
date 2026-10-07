@@ -1,6 +1,20 @@
 package com.aglyn.plugins.redirects
 
 import androidx.compose.foundation.layout.Arrangement
+import com.aglyn.ui.SwitchRow
+import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.ChoiceChipRow
+import com.aglyn.ui.ChipOption
+import com.aglyn.ui.ActionDialog
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.Alignment
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Button
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,7 +33,6 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.aglyn.core.Live
-import com.aglyn.pluginhost.ConsoleScope
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
@@ -35,44 +48,60 @@ import com.aglyn.ui.space
 private fun matchLabel(kind: String?) = "${kind ?: "exact"} match"
 
 /**
- * The site's redirect rules. Read-only here; the rule beside the list on
- * wide windows. Editing opens the console's own Redirects page, which owns
- * the validation and the publish role a rule needs.
+ * The site's redirect rules, the rule beside the list on wide windows: add
+ * one, edit it, switch it off and on, or delete it, with the Redirects page's
+ * own checks and writes ([RedirectsEditor]).
  */
 @Composable
 fun RedirectsListScreen(context: NativePluginContext) {
+  val hostId = context.hostId ?: return
   val live = hostRedirects(context)
+  val scope = rememberCoroutineScope()
+  val editor = remember(hostId, context.uid) {
+    RedirectsEditor(ConsoleRedirectsWriteApi(context.api, context.writer, hostId), context.uid, scope)
+  }
   AglynListDetail(
     list = { selected, onSelect ->
-      when (live) {
-        Live.Loading -> SkeletonList(rows = 4)
-        is Live.Failed -> EmptyState(
-          "Could not load this site's redirects",
-          body = "Check the connection and try again.",
-          icon = AglynIcons.named("error"),
-        )
-        is Live.Ready -> LazyColumn(Modifier.fillMaxSize().testTag("redirects-list")) {
-          if (live.value.isEmpty()) {
-            item {
-              EmptyState("No redirects yet", body = "Rules you add in the console show up here.", icon = AglynIcons.named("alt_route"))
-            }
+      Column(Modifier.fillMaxSize()) {
+        Row(
+          Modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(1f)),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text("Rules", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Button(onClick = editor::add, Modifier.testTag("add-redirect")) {
+            Icon(AglynIcons.named("add"), contentDescription = null)
+            Text("Add redirect", Modifier.padding(start = space(1f)))
           }
-          items(live.value, key = { it.id }) { row ->
-            AglynListItem(
-              title = row.source,
-              supporting = "${row.statusCode} → ${row.destination}",
-              icon = AglynIcons.named(if (row.enabled) "alt_route" else "pause_circle"),
-              selected = row.id == selected,
-              trailing = { if (!row.enabled) StatusChip("Off") },
-              onClick = { onSelect(row.id) },
-              modifier = Modifier.testTag("redirect-${row.id}"),
-            )
+        }
+        if (editor.draft == null && editor.deleting == null) {
+          editor.error?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.padding(horizontal = space(2f))) }
+          editor.notice?.let { message ->
+            NoticeBanner(message, StatusTone.SUCCESS, Modifier.padding(horizontal = space(2f)), action = { TextButton(onClick = { editor.notice = null }) { Text("Dismiss") } })
           }
-          item {
-            Column(Modifier.padding(space(2f))) {
-              OutlinedButton(onClick = { context.openConsolePath("/redirects", ConsoleScope.SITE) }, Modifier.fillMaxWidth()) {
-                Text("Manage in the console")
+        }
+        when (live) {
+          Live.Loading -> SkeletonList(rows = 4)
+          is Live.Failed -> EmptyState(
+            "Could not load this site's redirects",
+            body = "Check the connection and try again.",
+            icon = AglynIcons.named("error"),
+          )
+          is Live.Ready -> LazyColumn(Modifier.fillMaxSize().testTag("redirects-list")) {
+            if (live.value.isEmpty()) {
+              item {
+                EmptyState("No redirects yet", body = "Send an old address to a new one, so links and search results keep working.", icon = AglynIcons.named("alt_route"))
               }
+            }
+            items(live.value, key = { it.id }) { row ->
+              AglynListItem(
+                title = row.source,
+                supporting = "${row.statusCode} → ${row.destination}",
+                icon = AglynIcons.named(if (row.enabled) "alt_route" else "pause_circle"),
+                selected = row.id == selected,
+                trailing = { if (!row.enabled) StatusChip("Off") },
+                onClick = { onSelect(row.id) },
+                modifier = Modifier.testTag("redirect-${row.id}"),
+              )
             }
           }
         }
@@ -83,16 +112,20 @@ fun RedirectsListScreen(context: NativePluginContext) {
       if (row == null) {
         EmptyState("Pick a redirect to see it here", icon = AglynIcons.named("alt_route"))
       } else {
-        RedirectDetail(row)
+        RedirectDetail(row, editor)
       }
     },
   )
+  RedirectDialogs(editor)
 }
 
 @Composable
-private fun RedirectDetail(row: RedirectRow) {
+private fun RedirectDetail(row: RedirectRow, editor: RedirectsEditor) {
   Column(Modifier.fillMaxSize().padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(2f))) {
-    SectionCard(null, Modifier.fillMaxWidth().testTag("redirect-detail")) {
+    SectionCard(
+      null,
+      Modifier.fillMaxWidth().testTag("redirect-detail"),
+    ) {
       Text(row.source, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
       HorizontalDivider()
       Text("Sends visitors to", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -102,7 +135,86 @@ private fun RedirectDetail(row: RedirectRow) {
         StatusChip(matchLabel(row.kind))
         StatusChip(if (row.enabled) "On" else "Off", if (row.enabled) StatusTone.SUCCESS else StatusTone.NEUTRAL)
       }
+      SwitchRow(
+        "Redirect is on",
+        row.enabled,
+        { on -> editor.toggle(row, on) },
+        supporting = "Switch it off to stop redirecting without deleting the rule.",
+        enabled = !editor.busy,
+        modifier = Modifier.testTag("redirect-enabled"),
+      )
+      Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+        Button(onClick = { editor.edit(row) }, Modifier.testTag("edit-redirect")) { Text("Edit") }
+        OutlinedButton(onClick = { editor.askDelete(row) }, Modifier.testTag("delete-redirect")) { Text("Delete") }
+      }
     }
+  }
+}
+
+@Composable
+private fun RedirectDialogs(editor: RedirectsEditor) {
+  editor.draft?.let { draft ->
+    ActionDialog(
+      title = if (draft.id == null) "Add a redirect" else "Edit redirect",
+      icon = "alt_route",
+      confirmLabel = "Save",
+      confirmEnabled = draft.source.isNotBlank() && draft.destination.isNotBlank(),
+      busy = editor.busy,
+      error = editor.error,
+      onDismiss = editor::close,
+      onConfirm = editor::save,
+    ) {
+      ChoiceChipRow(
+        options = REDIRECT_KIND_CHOICES.map { (key, label) -> ChipOption(key, label) },
+        selected = draft.kind,
+        onSelect = { editor.change(draft.copy(kind = it)) },
+        wrap = true,
+      )
+      OutlinedTextField(
+        draft.source,
+        { editor.change(draft.copy(source = it)) },
+        label = { Text(if (draft.kind == "regex") "Pattern" else "From path") },
+        placeholder = { Text(if (draft.kind == "regex") "^/blog/(.*)$" else "/old-page") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().testTag("redirect-source"),
+      )
+      OutlinedTextField(
+        draft.destination,
+        { editor.change(draft.copy(destination = it)) },
+        label = { Text("To") },
+        placeholder = { Text("/new-page or https://…") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().testTag("redirect-destination"),
+      )
+      ChoiceChipRow(
+        options = REDIRECT_STATUS_CHOICES.map { (code, label) -> ChipOption(code.toString(), label) },
+        selected = draft.statusCode.toString(),
+        onSelect = { editor.change(draft.copy(statusCode = it.toLong())) },
+        wrap = true,
+      )
+      OutlinedTextField(
+        draft.priority,
+        { editor.change(draft.copy(priority = it.filter(Char::isDigit).take(6))) },
+        label = { Text("Priority (optional)") },
+        supportingText = { Text("Lower runs first. Rules with none run at $REDIRECT_DEFAULT_PRIORITY.") },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.fillMaxWidth(),
+      )
+    }
+  }
+  editor.deleting?.let { row ->
+    ActionDialog(
+      title = "Delete this redirect?",
+      body = "${row.source} stops redirecting.",
+      icon = "delete",
+      confirmLabel = "Delete",
+      destructive = true,
+      busy = editor.busy,
+      error = editor.error,
+      onDismiss = editor::close,
+      onConfirm = editor::confirmDelete,
+    )
   }
 }
 

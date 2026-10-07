@@ -242,6 +242,20 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Commerce events still owed to a connected marketing platform (AGL-3639): checkout started, order paid, fulfilled, refunded or cancelled, with the shopper’s email, the order, its items and value, and the tracking number. A SHOPPER’s data held for the merchant as controller, so disclosed to the ORG only, for the reason `supplierDeliveries` gives; a row is deleted once delivered.',
   },
   {
+    collection: 'fulfillmentNetworkConnections',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'EXISTENCE ONLY for the grant — each site’s connection to the merchant’s own ShipBob or Amazon Multi-Channel Fulfillment account (AGL-3634): network, status, account name, ShipBob channel, Amazon marketplaces, routing and stock settings, the last stock count by SKU and totals. The sealed access and refresh tokens, the webhook token’s hash and the id of the key that sealed them carry `token` in their names and are redacted (see redactSecrets); the document id is the site id and the network.',
+  },
+  {
+    collection: 'fulfillmentNetworkOrders',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each paid order’s hand-off to a fulfillment network (AGL-3634): the order number, the lines sent with SKU and quantity, the network’s reference, the parcels read back with carrier, tracking number and status, and why anything was not sent. The merchant’s own fulfillment record of a SHOPPER’s order, so disclosed to the ORG only.',
+  },
+  {
     collection: 'ssoDomains',
     keyedBy: 'field',
     subjects: ['org'],
@@ -1040,6 +1054,8 @@ export async function exportOrgData(
     'taxEngineTransactions',
     'marketingPlatformConnections',
     'marketingPlatformEvents',
+    'fulfillmentNetworkConnections',
+    'fulfillmentNetworkOrders',
   ]) {
     data[collection] = await readByField(db, collection, 'orgId', orgId)
   }

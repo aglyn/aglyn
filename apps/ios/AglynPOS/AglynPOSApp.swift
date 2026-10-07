@@ -7,6 +7,11 @@ import SwiftUI
 /// "Aglyn POS": the register, on iPhone, iPad and Mac.
 @main
 struct AglynPOSApp: App {
+  #if os(iOS)
+    @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
+  #elseif os(macOS)
+    @NSApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
+  #endif
   @State private var model = AppModel(app: .pos)
 
   init() {

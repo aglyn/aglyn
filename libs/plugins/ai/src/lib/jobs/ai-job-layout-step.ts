@@ -72,6 +72,20 @@ import { aiLayoutSitePages, aiLayoutSitePagesLines, aiLayoutWithSitePages } from
 import { aiLayoutInventedContactViolations, aiLayoutWithSiteName } from './ai-layout-site-facts'
 import { aiLayoutWithFullHeight } from './ai-layout-full-height'
 import type { AiJobStepRunner } from './ai-job-text-step'
+import { AI_LAYOUT_FRAME_TOOL } from '../layout-language/ai-layout-language'
+import {
+  AI_JOB_LAYOUT_LANGUAGE_BUDGET,
+  AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS,
+  AI_LAYOUT_FRAME_KIND,
+  aiLayoutFrameCheck,
+  aiLayoutFramePrompt,
+  aiLayoutFrameTargets,
+  aiLayoutHomeId,
+  aiLayoutNavPages,
+  aiLayoutSiteName,
+  type AiLayoutFrameBuilt,
+} from './ai-job-layout-language'
+import { aiJobUsesLayoutLanguage } from './ai-job-page-language'
 import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
 
@@ -380,6 +394,54 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
 
     const allowance = await aiDraftAllowanceRefusal(firestore, { kind: 'layout', hostId, org })
     if (allowance) return aiUnspentOutcome(model, { review: aiLimitReview(allowance) })
+
+    if (aiJobUsesLayoutLanguage(job)) {
+      // ── The header and footer designed in the layout language (AGL-3660) ──
+      const siteName = aiLayoutSiteName(job)
+      const pages = aiLayoutNavPages(job, inventory)
+      const targets = aiLayoutFrameTargets(job, inventory)
+      const result = await runValidatedGeneration<AiLayoutFrameBuilt>(AI_LAYOUT_FRAME_KIND, {
+        step: 'job.layout',
+        model,
+        instructions: AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS,
+        inventory,
+        messages: [{ role: 'user', content: aiLayoutFramePrompt({ job, siteName, pages, targets }) }],
+        tool: AI_LAYOUT_FRAME_TOOL,
+        maxTokens: AI_JOB_LAYOUT_LANGUAGE_BUDGET.maxTokens(model),
+        thinking: 'off',
+        check: aiLayoutFrameCheck({
+          siteName,
+          homeId: aiLayoutHomeId(pages, inventory),
+          pages,
+          targets,
+          extend: aiLayoutChecks(inventory, plan, job.brief),
+        }),
+        ...(signal ? { signal } : {}),
+      })
+      const spent = aiGenerationSpent(result)
+      if (result.status === 'refused') return { ...spent, refused: true }
+      if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
+      const draft = await writeAiDraft(firestore, {
+        kind: 'layout',
+        hostId,
+        id: draftId,
+        uid: job.createdBy,
+        org,
+        name,
+        nodes: result.value.nodes,
+        aiJobId: aiOriginJobId(job),
+        now,
+      })
+      if (draft.ok === false) {
+        if (draft.status === 404) throw new Error(`site ${hostId} vanished while its layout was generated`)
+        return { ...spent, review: aiLimitReview(draft.error) }
+      }
+      const note = aiBracketedFactsNote({
+        tree: { rootId: result.value.rootId, nodes: result.value.nodes as unknown as AiDoctrineTree['nodes'] },
+        inventory,
+      })
+      return { ...spent, outputs: [output(draft, result.value.load, note)] }
+    }
 
     // The pages a site scaffold builds after this layout (AGL-3596): their
     // ids are the plan's, so the header links them by id, written by the

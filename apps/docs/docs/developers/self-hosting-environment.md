@@ -850,10 +850,18 @@ public internet, must never have them.
 | `XERO_CLIENT_ID` | Feature | Runtime, console | The Xero app's client id. |
 | `XERO_CLIENT_SECRET` | Feature | Runtime, console | The Xero app's client secret. |
 | `XERO_SCOPES` | Optional | Runtime, console | Space-separated scopes that replace the default request, for a Xero app made before Xero's granular scopes. |
+| `CODAT_API_KEY` | Feature | Runtime, console | The Codat client's API key. Set, the Accounting page also offers other accounting software (QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books, Wave and the rest Codat reaches), each workspace as one Codat company. |
 | `ACCOUNTING_TOKEN_KEY` | Feature | Runtime, console | 32 random bytes, base64. Seals every stored token. A comma-separated list rotates: the first key seals, the rest only open, and a token opened under an older key is sealed again under the first. |
 
 Register `https://<console>/api/accounting/oauth/callback` as the redirect URI
 in both developer apps. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
+
+For Codat, set the redirect in the Codat Portal under **Settings > Auth flow >
+Redirects** to
+`https://<console>/api/accounting/oauth/callback?code={companyId}&state={state}&statusCode={statusCode}`,
+and turn on the accounting integrations you want to offer under
+**Settings > Integrations > Accounting**. Codat is a subprocessor: publish its
+row before setting the key in production.
 
 ### Tax services {#tax-engines}
 
@@ -895,6 +903,36 @@ merchant's credential.
 
 Register `https://<console>/api/marketing-platforms/oauth/callback` as the
 redirect URI in each app. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
+
+### Fulfillment networks: ShipBob and Amazon Multi-Channel Fulfillment {#fulfillment-networks}
+
+A store can send its paid orders to the merchant's **own** ShipBob or Amazon
+Multi-Channel Fulfillment account, read the shipments and tracking back onto
+the order, and keep its stock counts in step. Neither network takes a key a
+merchant could paste: each needs an app the deployment registers with the
+network, and the merchant signs in to grant it. A network is offered only when
+its app's variables **and** the token key are set; with neither network set, no
+Fulfillment networks card appears and nothing is sent. Set these on the
+**console only**: the job that sends orders runs there, and the tenant runtime
+never opens a grant.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `FULFILLMENT_NETWORKS_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored grant with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`). **Losing the key loses every connection**: each merchant connects again. |
+| `SHIPBOB_CLIENT_ID` | Optional | Runtime, console | The ShipBob developer app's client id. ShipBob is offered only with it and its secret. |
+| `SHIPBOB_CLIENT_SECRET` | Optional | Runtime, console | The ShipBob app's client secret. |
+| `SHIPBOB_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to ShipBob's sandbox, which takes test orders only. Unset is production. |
+| `AMAZON_SP_API_APPLICATION_ID` | Optional | Runtime, console | The selling-partner app's id (`amzn1.sp.solution.…`). Amazon is offered only with it and the two Login with Amazon values below. |
+| `AMAZON_SP_API_LWA_CLIENT_ID` | Optional | Runtime, console | The app's Login with Amazon client id. |
+| `AMAZON_SP_API_LWA_CLIENT_SECRET` | Optional | Runtime, console | The app's Login with Amazon client secret. |
+| `AMAZON_SP_API_REGION` | Optional | Runtime, console | `na` (default), `eu` or `fe`: the Selling Partner API region the deployment's sellers are in. |
+| `AMAZON_SP_API_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to Amazon's sandbox. Unset is production. |
+| `AMAZON_SP_API_DRAFT_APP` | Optional | Runtime, console | `true` while the app is a draft, so the consent page is asked for with `version=beta`. |
+
+Register `https://<console>/api/fulfillment-networks/oauth/callback` as the
+redirect URI in both apps. ShipBob's webhooks are subscribed for each
+connection at `https://<console>/api/fulfillment-networks/webhooks/shipbob`
+with a token of their own; nothing needs registering for them.
 
 ---
 

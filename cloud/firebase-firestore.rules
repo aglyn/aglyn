@@ -679,6 +679,14 @@ service cloud.firestore {
              // /api/orgs/settings, Admin SDK, and denying the direct client
              // write therefore costs the product nothing.
              'timeZone',
+             // AGL-3662. What a new dataset (`defaultResourceScope`) and a new
+             // upload or media folder (`defaultMediaScope`) start shared with.
+             // `defaultMediaScopeOf` reads both in
+             // `libs/aglyn/src/lib/app-utils`, so they are resolver inputs and
+             // server-owned by the AGL-3237 argument: the console sets them
+             // through /api/orgs/settings, Admin SDK, so denying the direct
+             // client write costs the product nothing.
+             'defaultResourceScope', 'defaultMediaScope',
              // AGL-2501. The SEARCH KEYS behind the staff organization list.
              // Derived from `name` by `nameSearchFields` on every writer, so
              // there is no state in which a client should set one — and a
@@ -895,6 +903,20 @@ service cloud.firestore {
       // credential, and one that could write it could point the workspace's
       // labels at an account it holds.
       match /shippingConnections/{kind} {
+        allow read, write: if false;
+      }
+
+      // Post-purchase (AGL-3635): one site's AfterShip, Route and Narvar
+      // switches with the credentials its merchant connected, sealed under
+      // POST_PURCHASE_TOKEN_KEY, and what each service was told about an
+      // order — the Route policy a buyer paid for, the parcels followed.
+      // Server-written AND server-read: the plugin's routes serve what the
+      // console shows. A client that could write the settings could point a
+      // store's protection premium at someone else's account.
+      match /postPurchaseHostSettings/{hostId} {
+        allow read, write: if false;
+      }
+      match /postPurchaseOrders/{recordId} {
         allow read, write: if false;
       }
 
@@ -2339,8 +2361,12 @@ service cloud.firestore {
     // included: the console card connects, sends and disconnects through
     // `commerce/shipping-connectors` on the Admin SDK, and the order events
     // and the callback route read it server-side.
-    match /commerceShippingEasyConnections/{hostId}/{document=**} {
+    match /commerceShippingEasyConnections/{hostId} {
       allow read, write: if false;
+
+      match /orders/{orderId} {
+        allow read, write: if false;
+      }
     }
 
     // Outreach short tracking links (AGL-3297): what one link in a sent
@@ -2410,6 +2436,26 @@ service cloud.firestore {
       }
     }
     match /marketingPlatformEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    // Fulfillment networks (AGL-3634): a site's connection to the merchant's
+    // OWN ShipBob or Amazon Multi-Channel Fulfillment account — its grant
+    // sealed, its webhook token's hash, its settings, stock count and log —
+    // and each paid order's hand-off to a network. Written and read by the
+    // fulfillment-networks plugin's server half through the Admin SDK only.
+    // Deny ALL client access, staff and the owner included: a client that
+    // could read a connection could carry off a sealed grant, and one that
+    // could write a hand-off could mark units held or shipped that were not,
+    // which a label buyer and the stock count both act on. Org erasure
+    // destroys both by the `orgId` field.
+    match /fulfillmentNetworkConnections/{connectionId} {
+      allow read, write: if false;
+      match /log/{entryId} {
+        allow read, write: if false;
+      }
+    }
+    match /fulfillmentNetworkOrders/{handOffId} {
       allow read, write: if false;
     }
 

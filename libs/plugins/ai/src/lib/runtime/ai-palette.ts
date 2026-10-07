@@ -233,6 +233,12 @@ export interface AiSurfaceDefinition {
   root: string
   /** Every component id a node in this surface may carry. */
   allow: readonly string[]
+  /**
+   * Component ids admitted only in a tree the platform's own code composed
+   * (AGL-3660), never listed in the surface's catalog: see
+   * `AiNodeTreeContext.codeBuilt`.
+   */
+  codeOnly?: readonly string[]
 }
 
 /**

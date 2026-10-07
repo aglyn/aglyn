@@ -258,6 +258,20 @@ describe('rule 1 — repeats become one reusable component', () => {
     ).toEqual([])
   })
 
+  it('counts a block within its section, so like parts of different sections are no repeat (AGL-3660)', () => {
+    const intro = (title: string): Nested =>
+      section({
+        componentId: 'muiStack',
+        props: { spacing: '2' },
+        children: [text('h2', title, 'h2'), text('body1', `${title} in a sentence.`)],
+      })
+    expect(detectRepeatedSubtrees(tree(page(intro('Roofs'), intro('Gutters'), intro('Siding'))))).toEqual([])
+    // Three like cards in one section are still one component placed three times.
+    expect(
+      codes(detectRepeatedSubtrees(tree(page(section(card('A', 'a'), card('B', 'b'), card('C', 'c')))))),
+    ).toEqual(['repeated-subtree'])
+  })
+
   it('in a plan: repeated items place a component, and a section two screens share is one', () => {
     const repeated = planOf({ screens: [screen({ sections: [{ name: 'services grid', uses: [], items: 6 }] })] })
     expect(codes(detectPlanRepeats(repeated, INVENTORY))).toEqual(['plan-repeated-items'])

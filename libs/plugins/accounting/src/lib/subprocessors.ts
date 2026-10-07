@@ -31,6 +31,15 @@
  * is not accepted, Intuit and Xero become published subprocessors with an
  * Annex row each.
  *
+ * CODAT is different (AGL-3636): Aglyn chooses it and holds the account —
+ * one API key for the deployment, one Codat company per workspace — and the
+ * ledger data passes through it on the way to the business's own software.
+ * So Codat is a published SUBPROCESSOR: its row went on the Subprocessors
+ * page on 2026-10-07, ahead of `CODAT_API_KEY`, and `purpose` reads as that
+ * row does. With the key unset no request leaves for Codat. The accounting
+ * systems Codat reaches are the customer's own, as above, and are not
+ * declared here: Aglyn's code names none of their hosts.
+ *
  * Each host is read off the constant the adapter calls, so a moved endpoint
  * moves its declaration with it.
  */
@@ -38,9 +47,11 @@
 import type {
   PluginEgressHostDeclaration,
   PluginEgressUseDeclaration,
+  PluginSubprocessorDeclaration,
   PluginSubprocessorsAnswer,
 } from '@aglyn/aglyn/plugin-manager/plugin-subprocessors'
 import { STRIPE_API_BASE } from './server/payouts'
+import { CODAT_ENDPOINTS } from './server/providers/codat'
 import { QUICKBOOKS_ENDPOINTS } from './server/providers/quickbooks'
 import { XERO_ENDPOINTS } from './server/providers/xero'
 
@@ -113,6 +124,30 @@ export const ACCOUNTING_XERO_HOSTS: PluginEgressHostDeclaration[] = [
   },
 ]
 
+/** Codat's API: the aggregator Aglyn holds the account with. */
+export const CODAT_SUBPROCESSOR: PluginSubprocessorDeclaration = {
+  host: host(CODAT_ENDPOINTS.api),
+  entity: 'Codat Limited',
+  region: 'United Kingdom',
+  purpose:
+    'Connecting a merchant’s accounting software that the Services do not connect to directly, such as QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave, and posting the merchant’s sales, refunds, fees and payouts to it',
+  publishedOn: '2026-10-07',
+  reason:
+    "The Codat adapter (`libs/plugins/accounting/src/lib/server/providers/codat.ts`): one Codat company per workspace, tagged with the workspace's id, made when a member starts a connect; reads of the linked ledger's company details, chart of accounts and tax rates for the mapping; and writes of the workspace's direct incomes, direct costs, transfers or journals, and one walk-in customer and one fee supplier, through Codat into the linked software. The company is deleted on disconnect or erasure. Reached only while `CODAT_API_KEY` and the accounting plugin's token key are set.",
+  dataReceived:
+    "The workspace's name and id, as its Codat company. The workspace's own sales as ledger documents: per order, its number, date, line descriptions, quantities and prices, shipping, discount, sales tax and total, with the buyer's name and email address in the document's note; per refund, its amount and the order it reverses; per sale, the platform's fee; per Stripe payout, its amount and date. In daily-summary mode, one journal of the day's totals instead of the per-order documents. The platform's own API key authenticates; Codat holds the credentials to the merchant's software. Nothing about a site visitor who did not buy, and no card data.",
+}
+
+/** Codat Link, which the member's browser opens to choose and sign in to their software. */
+export const ACCOUNTING_CODAT_LINK_HOST: PluginEgressHostDeclaration = {
+  host: host(CODAT_ENDPOINTS.link),
+  disposition: 'no-request',
+  reason:
+    "Codat Link, whose address the Codat adapter's `authorizeUrl` answers and the member's own browser opens to pick their accounting software and sign in to it. No server of ours requests it.",
+  dataReceived:
+    "Nothing from our servers. The browser carries the Codat company's id and a signed state; what the member types there goes to Codat.",
+}
+
 /** Stripe, already declared by the inventory: this plugin reads the merchant's payouts. */
 export const ACCOUNTING_STRIPE_USE: PluginEgressUseDeclaration = {
   host: host(STRIPE_API_BASE),
@@ -121,11 +156,16 @@ export const ACCOUNTING_STRIPE_USE: PluginEgressUseDeclaration = {
   dataReceived: "The platform key and the connected account's id; Stripe answers with the account's payouts. Nothing is written.",
 }
 
-/** The plugin's `subprocessors` entry: no recipient of its own, its ledger hosts and one use. */
+/** The plugin's `subprocessors` entry: Codat, its ledger hosts and one use. */
 export function accountingSubprocessors(): PluginSubprocessorsAnswer {
   return {
-    subprocessors: [],
-    hosts: [...ACCOUNTING_QUICKBOOKS_API_HOSTS, ...ACCOUNTING_INTUIT_OAUTH_HOSTS, ...ACCOUNTING_XERO_HOSTS],
+    subprocessors: [CODAT_SUBPROCESSOR],
+    hosts: [
+      ...ACCOUNTING_QUICKBOOKS_API_HOSTS,
+      ...ACCOUNTING_INTUIT_OAUTH_HOSTS,
+      ...ACCOUNTING_XERO_HOSTS,
+      ACCOUNTING_CODAT_LINK_HOST,
+    ],
     uses: [ACCOUNTING_STRIPE_USE],
   }
 }

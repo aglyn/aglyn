@@ -7,12 +7,14 @@ import io.ktor.http.decodeURLQueryComponent
  * Turns a console URL or path into where the app should go. Every link the
  * app meets is a console link: an App Link to the console's own domain, an
  * `aglyn://` link, or a notification's `link`. A plugin that answers a path
- * natively registers a deep link for it; anything else opens in the console
- * view, so no link is a dead end.
+ * natively registers a deep link for it; a Besigner page opens the Besigner
+ * inside the app; anything else is [Unmatched], which the shell answers with
+ * its nearest native screen. No link ever opens a console page.
  */
 sealed interface NativeLinkTarget {
   data class Screen(val screen: String, val params: NativeParams) : NativeLinkTarget
-  data class Console(val path: String) : NativeLinkTarget
+  data class Besigner(val path: String) : NativeLinkTarget
+  data class Unmatched(val path: String) : NativeLinkTarget
 }
 
 data class ConsoleScopeSplit(val orgSlug: String? = null, val hostSlug: String? = null, val rest: String)
@@ -97,7 +99,7 @@ object DeepLinks {
         },
       )
     }
-    return NativeLinkTarget.Console(full)
+    return if (BesignerPaths.isBesignerPath(full)) NativeLinkTarget.Besigner(full) else NativeLinkTarget.Unmatched(full)
   }
 }
 

@@ -57,9 +57,6 @@ public final class NativePluginRegistry {
   }
 
   func add(_ action: NativeQuickAction) throws {
-    if (action.screen == nil) == (action.consolePath == nil) {
-      throw RegistryError("quick action \"\(action.id)\" opens a screen or a console path — exactly one")
-    }
     try checkFree(.quickActions, action.id)
     quickActionList[action.id] = action
   }
@@ -194,15 +191,15 @@ public final class NativePluginRegistrar {
   }
 
   public func quickAction(
-    _ id: String, title: String, icon: String, order: Int, screen: String? = nil,
-    params: NativeParams = [:], consolePath: String? = nil, requiresSite: Bool = false,
+    _ id: String, title: String, icon: String, order: Int, screen: String,
+    params: NativeParams = [:], requiresSite: Bool = false,
     apps: Set<AglynAppKind> = [.aglyn]
   ) {
     admit(.quickActions, id) {
       try registry.add(
         NativeQuickAction(
           pluginID: pluginID, id: id, title: title, icon: icon, order: order, requiresSite: requiresSite,
-          screen: screen, params: params, consolePath: consolePath, apps: apps))
+          screen: screen, params: params, apps: apps))
     }
   }
 
