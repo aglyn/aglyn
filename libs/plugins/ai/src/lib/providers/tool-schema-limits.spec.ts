@@ -56,6 +56,8 @@ import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_CATALOG_TOOL, AI_CATEGORIES_TOOL, AI_PRODUCT_COPY_TOOL } from '../tools/ai-products-tool'
 import { aiSeoFieldsTool, aiSeoFixesTool, aiSeoSiteTool } from '../tools/ai-seo-tool'
 import { aiThemeTool } from '../tools/ai-theme-tool'
+import { aiOverlayTool } from '../tools/ai-overlay-tool'
+import { AI_OVERLAY_COPY_CEILINGS } from '../model/ai-overlay-copy'
 import { aiAutomationTool, aiWorkflowExplanationTool } from '../tools/ai-workflow-tool'
 import { ANTHROPIC_TOOL_SCHEMA_LIMITS, anthropicProvider } from './anthropic'
 import { aiToolSchemaBreaches, aiToolSchemaCompiledBytes, aiToolSchemaCounts, type AiTool } from './contract'
@@ -178,6 +180,12 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
     explain: () => [aiExperimentExplainTool()],
   },
   'jobs/ai-job-text-step.ts': { text: () => [] },
+  // Overlay copy (AGL-3603), a text job answered through one tool: a bar's
+  // set and a popup's differ.
+  'jobs/ai-job-overlay-copy.ts': {
+    bar: () => [aiOverlayTool('bar', AI_OVERLAY_COPY_CEILINGS, [])],
+    popup: () => [aiOverlayTool('popup', AI_OVERLAY_COPY_CEILINGS, ['delay', 'scroll', 'exit'])],
+  },
   // The text-generation seam (AGL-3324) sends a caller's prompt and no tool:
   // its answer is prose the caller parses, held to the caller's own rules.
   'server/plugin-text-generation.ts': { generate: () => [] },
