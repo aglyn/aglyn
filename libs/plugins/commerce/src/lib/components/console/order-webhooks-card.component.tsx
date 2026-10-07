@@ -19,9 +19,15 @@
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { useFirestore, useFirestoreCollection, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useFirestoreCollection,
+  usePagedCollection,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Button,
@@ -423,25 +429,31 @@ interface DeliveriesDialogProps {
   onClose: () => void
 }
 
-/** The endpoint's delivery log, newest first, filtered by a Firestore query. */
+/** The endpoint's delivery log, newest first, filtered and paged by a Firestore query. */
 export function DeliveriesDialog(props: DeliveriesDialogProps) {
   const { hostId, endpoint, labelFor, busy, onResend, onClose } = props
   const firestore = useFirestore()
   const [statusFilter, setStatusFilter] = useState<Webhooks.OrderWebhookDeliveryStatus | ''>('')
   const [openBody, setOpenBody] = useState<string | null>(null)
-  const { data: deliveryDocs } = useFirestoreCollection<DeliveryRow>(
-    () =>
+  const {
+    rows: deliveries,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePagedCollection<DeliveryRow>(
+    (pageLimit) =>
       query(
         collection(firestore, 'hosts', hostId, 'orderWebhookDeliveries'),
         where('endpointId', '==', endpoint.$id),
         ...(statusFilter ? [where('status', '==', statusFilter)] : []),
         orderBy('createdAtMs', 'desc'),
-        limit(25),
+        limit(pageLimit),
       ),
     [firestore, hostId, endpoint.$id, statusFilter],
     { idField: '$id' },
   )
-  const deliveries = deliveryDocs ?? []
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>{`Deliveries · ${endpoint.url}`}</DialogTitle>
@@ -505,6 +517,14 @@ export function DeliveriesDialog(props: DeliveriesDialogProps) {
               )
             })
           )}
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={deliveries.length}
+            hasMore={hasMore}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </Stack>
       </DialogContent>
       <DialogActions>

@@ -46,6 +46,18 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     const path = (parts[0] as { path: string }).path
     return { data: path.endsWith('orderWebhooks') ? mockRows.endpoints : mockRows.deliveries }
   },
+  // One page of ten, read with the probe row the hook asks for.
+  usePagedCollection: (build: (pageLimit: number) => unknown[]) => {
+    build(11)
+    return {
+      rows: mockRows.deliveries,
+      hasMore: false,
+      page: 0,
+      setPage: jest.fn(),
+      pageSize: 10,
+      setPageSize: jest.fn(),
+    }
+  },
   useUser: () => ({ data: mockUser }),
 }))
 
@@ -142,7 +154,7 @@ it('sends a test event and resends from the log', async () => {
   await waitFor(() => expect(bodyOf(mockFetch.mock.calls[2])).toEqual({ hostId: 'h1', action: 'resend', deliveryId: 'd1' }))
 })
 
-it('filters the delivery log with a Firestore query', () => {
+it('filters and pages the delivery log with a Firestore query', () => {
   render(
     <DeliveriesDialog
       hostId="h1"
@@ -158,7 +170,7 @@ it('filters the delivery log with a Firestore query', () => {
     { path: 'hosts/h1/orderWebhookDeliveries' },
     { where: ['endpointId', '==', 'w1'] },
     { orderBy: ['createdAtMs', 'desc'] },
-    { limit: 25 },
+    { limit: 11 },
   ])
   fireEvent.mouseDown(screen.getByLabelText('Status'))
   fireEvent.click(screen.getByRole('option', { name: 'Failed' }))
@@ -167,6 +179,6 @@ it('filters the delivery log with a Firestore query', () => {
     { where: ['endpointId', '==', 'w1'] },
     { where: ['status', '==', 'failed'] },
     { orderBy: ['createdAtMs', 'desc'] },
-    { limit: 25 },
+    { limit: 11 },
   ])
 })
