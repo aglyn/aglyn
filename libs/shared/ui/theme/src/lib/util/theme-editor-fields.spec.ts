@@ -28,6 +28,7 @@ import {
   PALETTE_COLOR_FIELDS,
   readDarkScheme,
   readFontFamily,
+  readThemeFonts,
   readThemeColor,
   readToolbarHeight,
   resetComponentOverrides,
@@ -46,6 +47,7 @@ import {
   writeComponentOverride,
   writeDarkScheme,
   writeFontFamily,
+  writeThemeFonts,
   writeSpacing,
   writeThemeColor,
   writeToolbarHeight,
@@ -322,5 +324,119 @@ describe('the editor writes (AGL-2938)', () => {
     expect(theme.components?.['MuiButton']).toEqual({
       styleOverrides: { root: { borderRadius: 2 } },
     })
+  })
+})
+
+describe('readThemeFonts / writeThemeFonts (AGL-3656)', () => {
+  const inter = {
+    family: 'Inter',
+    category: 'sans-serif' as const,
+    weights: [400, 700],
+    source: 'google' as const,
+  }
+  const playfair = {
+    family: 'Playfair Display',
+    category: 'serif' as const,
+    weights: [700],
+    italics: [700],
+    source: 'google' as const,
+  }
+
+  it('writes a body font as the loaded entry and the theme-wide stack', () => {
+    const theme = writeThemeFonts({ typography: { variants: { h1: { fontWeight: 800 } } } }, {
+      body: inter,
+      heading: null,
+    })
+    expect(theme.fonts).toEqual([
+      { family: 'Inter', weights: [400, 700], source: 'google', category: 'sans-serif' },
+    ])
+    expect(theme.typography).toEqual({
+      fontFamily: '"Inter", sans-serif',
+      variants: { h1: { fontWeight: 800 } },
+    })
+    expect(readThemeFonts(theme)).toEqual({ body: inter, heading: null })
+    // The AI plugin's read keeps naming the body font.
+    expect(readFontFamily(theme)).toBe('Inter')
+  })
+
+  it('sets a heading font on displayXl and h1 to h6, and reads it back', () => {
+    const theme = writeThemeFonts({}, { body: inter, heading: playfair })
+    expect(theme.fonts?.map((font) => font.family)).toEqual(['Inter', 'Playfair Display'])
+    for (const key of ['displayXl', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const) {
+      expect(theme.typography?.variants?.[key]?.fontFamily).toBe('"Playfair Display", serif')
+    }
+    expect(readThemeFonts(theme)).toEqual({ body: inter, heading: playfair })
+  })
+
+  it('takes the heading font away again, keeping each heading’s own styles', () => {
+    const both = writeThemeFonts(
+      { typography: { variants: { h2: { fontWeight: 600 } } } },
+      { body: inter, heading: playfair },
+    )
+    const bodyOnly = writeThemeFonts(both, { body: inter, heading: null })
+    expect(bodyOnly.fonts?.map((font) => font.family)).toEqual(['Inter'])
+    expect(bodyOnly.typography?.variants).toEqual({ h2: { fontWeight: 600 } })
+    expect(readThemeFonts(bodyOnly).heading).toBeNull()
+  })
+
+  it('treats a heading font equal to the body font as no heading font', () => {
+    const theme = writeThemeFonts({}, { body: inter, heading: { ...inter, weights: [800] } })
+    expect(theme.fonts).toHaveLength(1)
+    expect(theme.typography?.variants).toBeUndefined()
+  })
+
+  it('goes back to the theme default, keeping uploaded fonts and other styles', () => {
+    const uploaded = { family: 'Brand Sans', source: 'custom' as const, weights: [400] }
+    const theme: HostTheme = {
+      fonts: [{ family: 'Inter', weights: [400], source: 'google' }, uploaded],
+      typography: { fontFamily: '"Inter", sans-serif', variants: { body2: { fontSize: 14 } } },
+    }
+    const cleared = writeThemeFonts(theme, { body: null, heading: null })
+    expect(cleared.fonts).toEqual([uploaded])
+    expect(cleared.typography).toEqual({ variants: { body2: { fontSize: 14 } } })
+    expect(readThemeFonts(cleared)).toEqual({ body: null, heading: null })
+    expect(writeThemeFonts({}, { body: null, heading: null })).toEqual({})
+  })
+
+  it('keeps loading a family another text style still names', () => {
+    const theme: HostTheme = {
+      fonts: [
+        { family: 'Inter', weights: [400], source: 'google' },
+        { family: 'Space Mono', weights: [400], source: 'google' },
+      ],
+      typography: {
+        fontFamily: '"Inter", sans-serif',
+        variants: { overline: { fontFamily: '"Space Mono", monospace' } },
+      },
+    }
+    const next = writeThemeFonts(theme, { body: playfair, heading: null })
+    expect(next.fonts?.map((font) => font.family)).toEqual(['Playfair Display', 'Space Mono'])
+  })
+
+  it('reads a font with no category from its stack, and an uploaded body font', () => {
+    const lora: HostTheme = {
+      fonts: [{ family: 'Lora', weights: [700, 400] }],
+      typography: { fontFamily: "'Lora', serif" },
+    }
+    expect(readThemeFonts(lora).body).toEqual({
+      family: 'Lora',
+      category: 'serif',
+      weights: [400, 700],
+      source: 'google',
+    })
+    // A listed font no stack names draws nothing: that is the theme default.
+    expect(readThemeFonts({ fonts: [{ family: 'Lora', weights: [400, 700] }] }).body).toBeNull()
+    expect(readThemeFonts({ fonts: [{ family: 'Lora' }], typography: { fontFamily: 'Lora' } }).body).toEqual({
+      family: 'Lora',
+      category: 'sans-serif',
+      weights: [400],
+      source: 'google',
+    })
+    const custom = writeThemeFonts({}, {
+      body: { family: 'Brand Sans', category: 'sans-serif', weights: [400], source: 'custom' },
+      heading: null,
+    })
+    expect(custom.fonts?.[0].source).toBe('custom')
+    expect(readThemeFonts(custom).body?.source).toBe('custom')
   })
 })
