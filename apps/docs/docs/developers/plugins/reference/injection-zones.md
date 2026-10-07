@@ -68,7 +68,7 @@ unloaded plugins.
 
 A zone can sit on a plugin's own surface rather than on a console page, such as `hostForms`
 on the forms plugin's Forms page, `hostAutomations`, `automationEditor` and `automationRun`
-on the workflows plugin's Automation page, `hostLogic`, `logicFunctionEditor` and
+on the workflows plugin's Automation page, `orgAutomations` on its Org automations section, `hostLogic`, `logicFunctionEditor` and
 `logicReferenceIssue` on the logic plugin's Functions & Variables page, or `recordInsights`, `recordEmail` and
 `importMapping` on the CRM plugin's record pages, one-to-one composer and import drawers, and in the import wizard. A plugin cannot import the console's `PluginWidgetSlot`,
 so the shell hands its renderer down: read it with `useConsoleWidgetSlot()` from
@@ -94,6 +94,7 @@ importing the host's package:
 | --- | --- | --- |
 | `hostForms` | A site's Forms page, the forms plugin's, beside Create Form: another way to start a form | `hostId`, `orgId` |
 | `hostAutomations` | The workflows plugin's Automation page: on Actions, beside **Add action** and **Recipes**; on Workflows, in the card's header, or its empty state while it has none. Another way to start an automation | `hostId`, `orgId`, `openAction(actionId)` — opens a listed action in the Actions editor (from Workflows, by going to Actions with the action named), and answers `false` for one the list has not read yet |
+| `orgAutomations` | The workflows plugin's workspace Org automations section, in the card's header, for a member who may write org automations. Another way to start one | `orgId`, `triggers` and `steps` — the host events an org automation may start on and the step types it may hold, as that plugin lists them — and `propose(automation)`, which opens `{ name, trigger, steps }` in the section's editor as a new automation, unsaved and switched off, and answers `false` when the plan lacks org automations or the automation is not one the section can hold |
 | `automationEditor` | Inside the editor of one saved automation, an action or a workflow, on the Automation page | `hostId`, `orgId`, `target` (`{ type: 'action' \| 'workflow', id, name }`, the automation as it is stored), and in an action's editor `openAction(actionId)` — opens another listed action, such as a copy the widget drafted, in its place |
 | `automationRun` | On each failed run in an automation's run history | `hostId`, `orgId`, `target` (as above), `runId` (the run's entry in the site's activity log) |
 | `hostLogic` | The logic plugin's Functions & Variables page, in the header of the Functions card and of the Variables card: another way to start one | `hostId`, `orgId`, `kind` (`'function'` or `'variable'`, the card it is drawn on), `propose(proposal)` — opens a proposal of that kind in the card's editor, unsaved, and answers `false` when it cannot (the plan's cap reached) |
@@ -123,6 +124,8 @@ page spaces it there:
 - `hostAutomations`, `automationEditor` and `automationRun`: a control the
   workflows plugin places beside its Actions buttons and in its Workflows
   card's header, in an automation's editor, and on a failed run.
+- `orgAutomations`: a control the workflows plugin places in its Org
+  automations card's header.
 - `hostLogic`, `logicFunctionEditor` and `logicReferenceIssue`: a control the
   logic plugin places in its Functions and Variables cards' headers, in a
   function's editor, and on a broken reference.
