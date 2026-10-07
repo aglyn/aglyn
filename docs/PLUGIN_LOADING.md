@@ -284,11 +284,17 @@ Generate the key pair with
 
 ## Performance guardrails (AGL-436)
 
-- **Per-plugin budgets**: `node tools/scripts/check-plugin-budgets.mjs`
-  measures each plugin's OWN minified code (everything external) against
-  `tools/plugin-budgets.json` (baseline + 25% headroom) and fails on
-  regression; `--update` re-baselines after a deliberate change. Current
-  baseline: commerce ~179 KB, everything else 8–61 KB.
+- **Per-plugin budgets** (`npm run check:plugin-budgets`, a CI guard since
+  AGL-3649): measures each plugin's OWN minified code (everything outside it
+  external), split by esbuild, and budgets the EAGER part — the static import
+  closure of `src/index.ts`, what loading the plugin downloads. A chunk
+  reached only through `import()` (a `React.lazy` page or card) is reported
+  as lazy and not counted. Budgets live in `tools/plugin-budgets.json`
+  (baseline + 25% headroom) and the check fails on regression;
+  `--why <id>` lists what is eager, largest first, and `--update <id>`
+  re-baselines that plugin after a deliberate change. A plugin that fills a
+  zone on every screen (AI fills the dock and the top bar) registers its
+  components lazily, so its eager cost is its registrations, not its cards.
 - **Loader metrics**: dev builds log `[plugin-loader] <id> [surfaces]
   load Xms, total Yms` per activation, so a slow plugin is visible
   instead of hiding in the gate's total.

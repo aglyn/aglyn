@@ -237,6 +237,7 @@
     "check:jsx-barrel": "node tools/scripts/check-jsx-barrel.mjs",
     "check:aglyn-barrel": "node tools/scripts/check-aglyn-barrel.mjs",
     "check:core-namespace-pin": "node tools/scripts/check-core-namespace-pin.mjs",
+    "check:plugin-budgets": "node tools/scripts/check-plugin-budgets.mjs",
     "check:browser-shim-aliases": "node tools/scripts/check-browser-shim-aliases.mjs",
     "check:tenant-page-weight": "node tools/scripts/check-tenant-page-weight.mjs",
     "check:tenant-wire-weight": "node tools/scripts/check-tenant-wire-weight.mjs",

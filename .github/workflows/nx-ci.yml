@@ -488,6 +488,13 @@ jobs:
       # nothing in the barrel's own graph. One of them, in the console's realm
       # plugin loader, cost 214.3 KB gzipped on every console route. ~1s.
       - run: npm run check:core-namespace-pin
+      # What each plugin costs the moment it loads (AGL-436, AGL-3649): the
+      # static import closure of its barrel, with lazy chunks counted apart.
+      # The console loads a plugin on every screen whose zones it fills, so
+      # one static import of a card is a download on all of them, and the
+      # same class again: only a bundler sees it. ~10s, most of it fetching
+      # the pinned esbuild.
+      - run: npm run check:plugin-budgets
       # The vendored assumption under the two `browser` resolve aliases
       # (AGL-2706). `re2js` and Next's compiled `buffer` are replaced in
       # browser bundles by modules that carry a name and no implementation,

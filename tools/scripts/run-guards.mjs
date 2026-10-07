@@ -156,6 +156,9 @@ const REPO_WIDE = new Set([
   'check:app-router-graph',
   'check:jsx-barrel',
   'check:aglyn-barrel',
+  // Bundles every plugin's barrel (AGL-3649): a commit to any plugin can
+  // flip it, and its budgets file belongs to no project.
+  'check:plugin-budgets',
   'check:tenant-page-weight',
   'check:page-view-rate',
   'check:monaco-dompurify',
