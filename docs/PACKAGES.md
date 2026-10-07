@@ -214,6 +214,17 @@ manifest) with TypeScript.
 | -- | -- | -- | -- | -- |
 | `native-kotlin` | none (Gradle modules, not npm) | `libs/native/kotlin` | `scope:mobile` `type:feature` | Gradle modules `core` (config, auth and Firestore seams, console API client, workspace store), `ui` (Material 3 theme from the generated tokens, the shared component kit, adaptive layouts), `plugin-host` (registrar, registry, deep links), `webview` (the authenticated console view), `shell` (the Aglyn and Aglyn POS shells), `contracts` (generated), `hardware` (POS peripherals) |
 
+### Native (Apple)
+
+The Swift foundation of the native iOS, iPadOS and macOS apps (AGL-3651,
+AGL-3653; `docs/mobile/native-architecture.md`). Swift packages built and
+tested by `xcodebuild`, not npm packages: no web toolchain reads them, and
+plugins reach the apps only through the generated `apps/ios/PluginManifest`.
+
+| project | npm name | root | tags | what it holds |
+| -- | -- | -- | -- | -- |
+| `native-apple` | none (Swift package `AglynKit`, not npm) | `libs/native/apple` | `scope:mobile` `type:feature` | Swift products `AglynCore` (config, Firebase auth, Firestore reader, workspace and site store, console API client, deep links, console sessions), `AglynUI` (generated theme tokens and typography, Roboto Flex, brand artwork, the shared component kit, adaptive layouts), `AglynWebView` (the authenticated console view and its bridge), `AglynPluginHost` (registrar, registry, loader), `AglynContracts` (generated), `AglynHardware` (POS peripherals) |
+
 ### Apps and deploy units
 
 Not packages today. The console becomes one (and the staff console, which
@@ -225,6 +236,7 @@ would need from `apps/console` has moved into libs — see the rules below.
 | `console` | `apps/console` | `scope:app` `scope:console` | The console and, under its staff routes, the staff console. |
 | `tenant` | `apps/tenant` | `scope:app` `scope:tenant` | The shell that serves published sites on the tenant runtime. |
 | `docs` | `apps/docs` | `scope:app` `scope:public` | The documentation site; standalone, not a package. |
+| `ios` | `apps/ios` | `scope:app` `scope:mobile` `type:app` | The Aglyn and Aglyn POS apps for iPhone, iPad and Mac (SwiftUI, one Xcode project); not a package. |
 | `mobile` | `apps/mobile` | `scope:app` `scope:mobile` `type:app` | The Aglyn app for iOS and Android, phone and tablet (Expo); standalone install, not a package. |
 | `android` | `apps/android` | `scope:app` `scope:mobile` `type:app` | Aglyn (`com.aglyn.app`) and Aglyn POS (`com.aglyn.pos`) for Android, and both on the JVM desktop (Windows); the Gradle root for every Kotlin module; not a package. |
 | `cloud-functions` | `cloud/functions` | `scope:app` | Cloud Functions; a deploy unit, not a package. |

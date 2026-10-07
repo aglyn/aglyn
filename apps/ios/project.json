@@ -1,0 +1,41 @@
+{
+  "name": "ios",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": ["scope:app", "scope:mobile", "type:app"],
+  "//": "The Aglyn and Aglyn POS apps for iPhone, iPad and Mac (SwiftUI), built by xcodebuild (README.md).",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "apps/ios",
+        "commands": [
+          "xcodebuild build -project Aglyn.xcodeproj -scheme Aglyn -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData -clonedSourcePackagesDirPath build/SourcePackages",
+          "xcodebuild build -project Aglyn.xcodeproj -scheme AglynPOS -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData -clonedSourcePackagesDirPath build/SourcePackages"
+        ],
+        "parallel": false
+      }
+    },
+    "build-macos": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "apps/ios",
+        "commands": [
+          "xcodebuild build -project Aglyn.xcodeproj -scheme Aglyn -destination 'platform=macOS' -derivedDataPath build/DerivedData -clonedSourcePackagesDirPath build/SourcePackages",
+          "xcodebuild build -project Aglyn.xcodeproj -scheme AglynPOS -destination 'platform=macOS' -derivedDataPath build/DerivedData -clonedSourcePackagesDirPath build/SourcePackages"
+        ],
+        "parallel": false
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "apps/ios",
+        "command": "xcodebuild test -project Aglyn.xcodeproj -scheme Aglyn -only-testing:AglynTests -destination 'platform=macOS' -derivedDataPath build/DerivedData -clonedSourcePackagesDirPath build/SourcePackages"
+      }
+    }
+  }
+}

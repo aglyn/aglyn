@@ -1,0 +1,33 @@
+{
+  "name": "native-apple",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "tags": ["scope:mobile", "type:feature"],
+  "//": "Swift package AglynKit (iOS 17+, macOS 14+), built and tested by xcodebuild, never by the root toolchain (docs/mobile/native-architecture.md).",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "libs/native/apple",
+        "command": "xcodebuild build -scheme AglynKit-Package -destination 'generic/platform=iOS Simulator' -derivedDataPath ../../../apps/ios/build/DerivedData-kit -clonedSourcePackagesDirPath ../../../apps/ios/build/SourcePackages"
+      }
+    },
+    "build-macos": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "libs/native/apple",
+        "command": "xcodebuild build -scheme AglynKit-Package -destination 'platform=macOS' -derivedDataPath ../../../apps/ios/build/DerivedData-kit -clonedSourcePackagesDirPath ../../../apps/ios/build/SourcePackages"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "libs/native/apple",
+        "command": "xcodebuild test -scheme AglynKit-Package -destination 'platform=macOS' -derivedDataPath ../../../apps/ios/build/DerivedData-kit -clonedSourcePackagesDirPath ../../../apps/ios/build/SourcePackages"
+      }
+    }
+  }
+}

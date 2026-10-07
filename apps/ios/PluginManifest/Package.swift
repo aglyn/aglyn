@@ -12,12 +12,14 @@ let package = Package(
   products: [.library(name: "AglynPluginManifest", targets: ["AglynPluginManifest"])],
   dependencies: [
     .package(path: "../../../libs/native/apple"),
+    .package(path: "Plugins/AglynRedirectsPlugin"),
   ],
   targets: [
     .target(
       name: "AglynPluginManifest",
       dependencies: [
         .product(name: "AglynPluginHost", package: "apple"),
+        .product(name: "AglynRedirectsPlugin", package: "AglynRedirectsPlugin"),
       ]
     ),
   ]
