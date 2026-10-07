@@ -249,8 +249,10 @@ import {
   getAiJob,
   heartbeatStep,
   listAiJobs,
+  aiJobTransitionListenerRegistered,
   registerAiJobPlanStep,
   registerAiJobStep,
+  registerAiJobTransitionListener,
   resumeAiJob,
   runAiJobStep,
   sweepAiJobs,
@@ -2096,5 +2098,107 @@ describe('a step that says how long it needs (AGL-2907)', () => {
     // A clock that never moves is still bounded.
     expect(runs).toBe(1 + AI_JOB_SWEEP_MAX_JOBS)
     expect(frozen.ran).toBe(1 + AI_JOB_SWEEP_MAX_JOBS)
+  })
+})
+
+/**
+ * The person who started a job is told when it needs them, finishes or stops
+ * (AGL-3593): the machine tells its listener from the write that changed the
+ * job, once per change — never again for a job already there, never for a
+ * cancel, and never at the cost of the write.
+ */
+describe('telling the person about a job’s changes (AGL-3593)', () => {
+  const told = jest.fn()
+  const planRunner = jest.fn()
+  const spend = { usage: USAGE, estCostUsd: 0.006, model: 'claude-sonnet-5', stopReason: 'tool_use' }
+  const LATER = new Date(NOW.getTime() + 60_000)
+  const proposed = () => ({
+    outputs: [],
+    ...spend,
+    plan: {
+      reuse: [],
+      create: [],
+      screens: [],
+      status: 'proposed' as const,
+      labels: {},
+      proposedAt: NOW,
+      confirmedAt: null,
+      confirmedBy: null,
+    },
+    review: { reason: 'plan' as const, message: 'The plan is ready.', findings: [] },
+  })
+
+  const transitions = () => told.mock.calls.map(([{ job, to }]) => [job.$id, to])
+
+  beforeEach(() => {
+    told.mockReset()
+    planRunner.mockReset()
+    registerAiJobTransitionListener(told)
+    registerAiJobPlanStep((context) => planRunner(context))
+  })
+  afterEach(() => {
+    registerAiJobTransitionListener(null)
+    registerAiJobPlanStep(null)
+  })
+
+  it('is registered by the console surface', () => {
+    registerAiJobTransitionListener(null)
+    expect(aiJobTransitionListenerRegistered()).toBe(false)
+    registerAiJobTransitionListener(told)
+    expect(aiJobTransitionListenerRegistered()).toBe(true)
+  })
+
+  it('tells once when a plan starts waiting, and not again while it waits', async () => {
+    planRunner.mockResolvedValue(proposed())
+    const job = await createAiJob(
+      firestore,
+      { orgId: ORG, hostId: 'host-1', kind: 'site', brief: 'A roofer.', createdBy: 'uid-1' },
+      NOW,
+    )
+    expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })).outcome).toBe(
+      'needs_review',
+    )
+    expect(transitions()).toEqual([[job.$id, 'needs-review']])
+    expect(told.mock.calls[0][0].job).toMatchObject({ createdBy: 'uid-1', review: { reason: 'plan' } })
+    // A parked job is nothing a runner can claim, so a second run tells nobody.
+    expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'beat', now: LATER })).outcome).toBe(
+      'not-claimable',
+    )
+    expect(told).toHaveBeenCalledTimes(1)
+    // Confirming is the person's own act: nobody is told about it.
+    expect((await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-1' }, LATER)).changed).toBe(true)
+    expect(told).toHaveBeenCalledTimes(1)
+  })
+
+  it('tells once when a job finishes, and once when one stops', async () => {
+    const finished = await newTextJob()
+    await completeAiJob(firestore, ORG, finished.$id, NOW)
+    await completeAiJob(firestore, ORG, finished.$id, LATER)
+    const stopped = await newTextJob()
+    await failAiJob(firestore, ORG, stopped.$id, 'It stopped.', undefined, NOW)
+    await failAiJob(firestore, ORG, stopped.$id, 'It stopped.', undefined, LATER)
+    expect(transitions()).toEqual([
+      [finished.$id, 'done'],
+      [stopped.$id, 'failed'],
+    ])
+  })
+
+  it('tells nobody about a cancel, or a finish after one', async () => {
+    const job = await newTextJob()
+    await cancelAiJob(firestore, ORG, job.$id, NOW)
+    await completeAiJob(firestore, ORG, job.$id, LATER)
+    await failAiJob(firestore, ORG, job.$id, 'no', undefined, LATER)
+    expect(told).not.toHaveBeenCalled()
+  })
+
+  it('keeps the write when the listener throws', async () => {
+    told.mockRejectedValue(new Error('fan-out down'))
+    const job = await newTextJob()
+    expect((await completeAiJob(firestore, ORG, job.$id, NOW)).status).toBe('done')
+    expect((await getAiJob(firestore, ORG, job.$id))?.status).toBe('done')
+    expect(console.error).toHaveBeenCalledWith(
+      'ai job transition listener failed',
+      expect.objectContaining({ jobId: job.$id, to: 'done' }),
+    )
   })
 })

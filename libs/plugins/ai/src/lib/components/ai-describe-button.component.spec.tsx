@@ -183,7 +183,33 @@ function writeBrief(entry: Entry, brief: string) {
 /** Starts the job, answering with a job of the entry's kind, and returns the body sent. */
 async function planIt(entry: Entry) {
   mockFetch.mockResolvedValueOnce(
-    json({ job: { id: 'job-1', kind: entry.kind, status: 'needs_review' } }),
+    json({
+      // A job as the create door answers with it: its plan already waiting,
+      // so the dialog follows nothing further (AGL-3593).
+      job: {
+        id: 'job-1',
+        orgId: 'org-1',
+        hostId: 'host-1',
+        kind: entry.kind,
+        status: 'needs_review',
+        brief: 'A brief',
+        batch: null,
+        steps: [
+          { name: 'plan', status: 'done', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+          { name: 'generate', status: 'pending', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+        ],
+        outputs: [],
+        creditsReserved: 0,
+        creditsSpent: 0,
+        createdBy: 'u1',
+        createdAt: '2026-10-06T10:00:00.000Z',
+        updatedAt: '2026-10-06T10:00:00.000Z',
+        error: null,
+        running: false,
+        plan: null,
+        review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+      },
+    }),
   )
   fireEvent.click(screen.getByRole('button', { name: entry.submit }))
   await screen.findByText(new RegExp(`The ${entry.noun} is being planned`))
@@ -408,11 +434,32 @@ describe.each(ENTRIES)('what the $kind entry promises, and what it says when ref
     if (entry.kind === 'template') fireEvent.click(screen.getByRole('button', { name: 'Author' }))
     await planIt(entry)
     const said = screen.getByText(new RegExp(`The ${entry.noun} is being planned`)).textContent
-    expect(said).toContain('Open AI jobs in the Assist panel to review the plan and confirm it.')
+    expect(said).toContain('Review the plan here or in AI jobs, and confirm it')
     expect(said).not.toMatch(/\bpublish|\blive\b|\bcredit/i)
     // The dialog closes on Close, with nothing left to start.
     expect(screen.queryByRole('button', { name: entry.submit })).toBeNull()
     expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy()
+  })
+
+  it('opens AI jobs on the job it started, and closes so the panel shows (AGL-3593)', async () => {
+    const { useAiJobsOpenRequest } = require('./ai-jobs-store') as typeof import('./ai-jobs-store')
+    let request = { seq: 0, jobId: null as string | null }
+    const Panel = () => {
+      request = useAiJobsOpenRequest()
+      return null
+    }
+    render(<Panel />)
+    await openDialog(entry)
+    writeBrief(entry, 'A brief')
+    if (entry.kind === 'template') fireEvent.click(screen.getByRole('button', { name: 'Author' }))
+    await planIt(entry)
+    // The live status says the plan waits, beside the button.
+    expect(screen.getByText(/Your plan is ready/)).toBeTruthy()
+    const before = request.seq
+    fireEvent.click(screen.getByRole('button', { name: 'Open AI jobs' }))
+    await waitFor(() => expect(request.seq).toBe(before + 1))
+    expect(request.jobId).toBe('job-1')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
   it('will not send an empty brief', async () => {

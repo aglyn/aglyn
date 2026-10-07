@@ -27,11 +27,12 @@ import { Box, Button, Collapse, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 
 /**
- * A job's plan and what it waits for (AGL-2935), inside the AI jobs drawer:
- * what the job reuses from the site, what it creates and why, the screens it
- * builds — and, while the job waits for a person, the one button that
- * confirms the plan or tries a refused step again. The drawer owns the
- * request; this renders.
+ * A job's plan and what it waits for (AGL-2935), inside the AI jobs drawer
+ * and the dialog that started the job (AGL-3593): what the job reuses from
+ * the site, what it creates and why, the screens it builds — and, while the
+ * job waits for a person, the one button that confirms the plan or tries a
+ * refused step again. Both send the same request (`resumeAiJobRequest`);
+ * this renders.
  */
 export interface AiJobPlanProps {
   job: AiJobSummary

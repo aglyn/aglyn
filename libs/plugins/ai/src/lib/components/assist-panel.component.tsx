@@ -43,6 +43,7 @@ import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
+  Badge,
   Box,
   Button,
   Chip,
@@ -79,6 +80,14 @@ import { applyAssistEdit, describeAssistEditCanvas } from './assist-edit-canvas'
 import { AssistEditCard } from './assist-edit-card.component'
 import { aiInsightSurfaceForPath } from '../model/ai-insight'
 import { AssistJobsDrawer } from './assist-jobs-drawer.component'
+import {
+  AI_JOB_LINK_PARAM,
+  openAiJobs,
+  useAiJobsInFlight,
+  useAiJobsOpenRequest,
+  type AiJobsOpenRequest,
+} from './ai-jobs-store'
+import { aiJobsActivity, aiJobsLauncherLabel } from '../model/ai-job-activity'
 import { AiModelSelector } from './ai-model-selector.component'
 import { AiUsageStrip } from './ai-usage-strip.component'
 import { useAiModelChoice } from './use-ai-model-choice'
@@ -559,6 +568,38 @@ export function AssistPanelComponent(props: AssistDockProps) {
     orgReady &&
     checkEntitlement(org as never, 'aiGenerative')
 
+  // ── AI jobs, findable from anywhere (AGL-3593) ─────────────────────────
+  //
+  // The workspace's unsettled jobs, from the one list the top-bar indicator
+  // reads — read only where the reader could run a job at all: the flag, the
+  // plan's `aiGenerative` and their own `ai.generate`, as the drawer's gate.
+  const jobsVisible = Boolean(scopedOrgId) && editRungHint
+  const inFlight = useAiJobsInFlight(user, scopedOrgId, jobsVisible)
+  const jobsActivity = aiJobsActivity(inFlight)
+  // Any surface asking to open AI jobs — an "Open AI jobs" button, the
+  // indicator, a notification's link — opens the panel on its drawer.
+  // The request is handed to the drawer until the panel closes, so opening
+  // the panel again later does not re-highlight a job asked for before.
+  const openRequest = useAiJobsOpenRequest()
+  const [jobsFocus, setJobsFocus] = useState<AiJobsOpenRequest | null>(null)
+  useEffect(() => {
+    if (openRequest.seq === 0) return
+    setJobsFocus(openRequest)
+    setOpen(true)
+    // A new `seq` is a new request; the object is read as it stands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest.seq])
+  useEffect(() => {
+    if (!open) setJobsFocus(null)
+  }, [open])
+  // A notification's link names the job as `?aiJob={id}` on a console page:
+  // arriving on it opens AI jobs on that job, once per address.
+  useEffect(() => {
+    if (!jobsVisible) return
+    const jobId = new URLSearchParams(globalThis.location?.search ?? '').get(AI_JOB_LINK_PARAM)
+    if (jobId) openAiJobs({ jobId })
+  }, [jobsVisible, pathname])
+
   const send = useCallback(async () => {
     const question = input.trim()
     if (!question || busy || !scopedOrgId || !ai.use) return
@@ -859,7 +900,8 @@ export function AssistPanelComponent(props: AssistDockProps) {
           <Fab
             color="primary"
             size="medium"
-            aria-label={`Open ${branding.productName} Assist`}
+            // Says what waits inside as well as what it opens (AGL-3593).
+            aria-label={aiJobsLauncherLabel(branding.productName, jobsActivity)}
             onClick={() => setOpen(true)}
             sx={{
               position: 'fixed',
@@ -887,7 +929,19 @@ export function AssistPanelComponent(props: AssistDockProps) {
                 broken. `medium` is the 24px MUI puts in its own FABs. Not
                 fixed in `MdiIcon`: that default is depended on across the
                 console, including twice in this file. */}
-            <MdiIcon path={mdiChatQuestionOutline.path} fontSize="medium" />
+            {/* A job running is a dot; a job that needs the person is a count in
+                the warning color, the same precedence as the top-bar chip
+                (AGL-3593). The Fab's own label says it in words. */}
+            <Badge
+              color={jobsActivity && jobsActivity.state !== 'running' ? 'warning' : 'secondary'}
+              variant={jobsActivity?.state === 'running' ? 'dot' : 'standard'}
+              badgeContent={jobsActivity ? jobsActivity.count : 0}
+              invisible={!jobsActivity}
+              overlap="circular"
+              data-ai-jobs-badge={jobsActivity?.state ?? undefined}
+            >
+              <MdiIcon path={mdiChatQuestionOutline.path} fontSize="medium" />
+            </Badge>
           </Fab>
         </Tooltip>
       )}
@@ -962,6 +1016,8 @@ export function AssistPanelComponent(props: AssistDockProps) {
               // (AGL-2915); hidden with the rest of AI jobs, and refused by
               // the jobs door where the member may not generate.
               insight={ai.generate ? aiInsightSurfaceForPath(pathname) : null}
+              inFlight={jobsVisible ? inFlight : undefined}
+              focus={jobsFocus}
             />
             {!messages.length && (
               <Alert severity="info" sx={{ mb: 2 }}>

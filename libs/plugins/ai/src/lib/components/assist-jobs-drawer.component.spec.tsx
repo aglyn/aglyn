@@ -549,7 +549,9 @@ describe('a job waiting for a person (AGL-2935)', () => {
     )
     renderDrawer()
     fireEvent.click(screen.getByLabelText('Show AI jobs'))
-    expect(await screen.findByText('Needs review')).toBeTruthy()
+    // The row says where the job stands in the words every AI surface uses
+    // (AGL-3593): a plan waiting to be confirmed, never `needs_review`.
+    expect(await screen.findByText('Plan ready')).toBeTruthy()
     expect(screen.getByText('Reuses the layout Site layout — the site chrome')).toBeTruthy()
     expect(screen.getByText('Creates the component Service card — Nothing lists a service.')).toBeTruthy()
     expect(
@@ -580,8 +582,11 @@ describe('a job waiting for a person (AGL-2935)', () => {
     fireEvent.click(screen.getByLabelText('Show AI jobs'))
     expect(await screen.findByText('A screen names no layout.')).toBeTruthy()
     expect(screen.getByText(message)).toBeTruthy()
+    // A refused answer needs attention, never "running" (AGL-3593).
+    expect(screen.getAllByText('Needs attention').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByText('Try again'))
-    expect(await screen.findByText('Queued')).toBeTruthy()
+    // Its plan is done, so the step it runs again is building.
+    expect(await screen.findByText('Building')).toBeTruthy()
     expect(posts).toHaveLength(1)
     expect(screen.queryByText('Try again')).toBeNull()
   })
@@ -623,7 +628,106 @@ describe('a job waiting for a person (AGL-2935)', () => {
     fireEvent.click(screen.getByLabelText('Show AI jobs'))
     fireEvent.click(await screen.findByText('Confirm plan'))
     expect(await screen.findByText('Your role does not include ai.generate')).toBeTruthy()
-    expect(screen.getByText('Needs review')).toBeTruthy()
+    expect(screen.getByText('Plan ready')).toBeTruthy()
     expect(posts).toHaveLength(1)
+  })
+})
+
+/**
+ * AI jobs, findable (AGL-3593): the drawer opens expanded while anything is
+ * moving or waiting, counts each state on its own, opens on the job an
+ * "Open AI jobs" names, and leads a finished job with what it built.
+ */
+describe('findable AI jobs (AGL-3593)', () => {
+  const planReady = job({
+    id: 'job-plan',
+    kind: 'site',
+    status: 'needs_review',
+    running: false,
+    review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+    steps: [
+      { name: 'plan', status: 'done', startedAt: null, endedAt: null, creditsSpent: 6, error: null },
+      { name: 'generate', status: 'pending', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+    ],
+  })
+  const refused = job({
+    id: 'job-refused',
+    status: 'needs_review',
+    running: false,
+    review: { reason: 'doctrine', message: 'Broke a rule.', findings: [] },
+  })
+
+  function armList(jobs: unknown[]) {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.startsWith('/api/ai/jobs?orgId=org-1')) return jsonResponse({ jobs })
+      if (url.includes('/events')) return sseResponse([])
+      throw new Error(`unarmed request to ${url}`)
+    })
+  }
+
+  it('opens expanded, and reads its list, while a job is in flight', async () => {
+    armList([planReady])
+    renderDrawer({ inFlight: [planReady] as never })
+    expect(await screen.findByLabelText('Hide AI jobs')).toBeTruthy()
+    expect(await screen.findByText('Plan ready')).toBeTruthy()
+  })
+
+  it('stays collapsed, and reads nothing, with nothing in flight', () => {
+    renderDrawer({ inFlight: [] })
+    expect(screen.getByLabelText('Show AI jobs')).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('counts a plan waiting and a refused answer apart, and neither as running', () => {
+    armList([])
+    renderDrawer({ inFlight: [planReady, refused] as never })
+    expect(screen.getByText('1 needs you')).toBeTruthy()
+    expect(screen.getByText('1 needs attention')).toBeTruthy()
+    expect(screen.queryByText(/running/)).toBeNull()
+  })
+
+  it('expands on a request to open AI jobs and highlights the job it names', async () => {
+    armList([refused, planReady])
+    const view = renderDrawer({ inFlight: [] })
+    expect(screen.getByLabelText('Show AI jobs')).toBeTruthy()
+    view.rerender(
+      <AssistJobsDrawer
+        orgId="org-1"
+        org={ENTITLED as never}
+        orgReady
+        orgSlug="acme"
+        user={USER as never}
+        visible
+        inFlight={[]}
+        focus={{ seq: 1, jobId: 'job-plan' }}
+      />,
+    )
+    expect(await screen.findByLabelText('Hide AI jobs')).toBeTruthy()
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-ai-job-id="job-plan"]')?.getAttribute('aria-current'),
+      ).toBe('true'),
+    )
+    expect(
+      document.querySelector('[data-ai-job-id="job-refused"]')?.getAttribute('aria-current'),
+    ).toBeNull()
+  })
+
+  it('leads a finished site job with its draft pages', async () => {
+    const built = job({
+      id: 'job-built',
+      kind: 'site',
+      status: 'done',
+      running: false,
+      outputs: [
+        { resource: 'screen', id: 'home', versionId: 'v1', hostId: 'host-1', hostSubdomain: 'roofers', label: 'Home' },
+        { resource: 'screen', id: 'about', versionId: 'v2', hostId: 'host-1', hostSubdomain: 'roofers', label: 'About' },
+      ],
+    })
+    armList([built])
+    renderDrawer()
+    fireEvent.click(screen.getByLabelText('Show AI jobs'))
+    const primary = await screen.findByText('Open your draft pages')
+    expect(primary.closest('a')?.getAttribute('href')).toBe('/acme/hosts/roofers/screens')
   })
 })

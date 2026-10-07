@@ -49,9 +49,34 @@ your site still has room for. A plan the job could not build is stopped before y
 asked to confirm it, with the reason. What a page's plan creates, such as its layout, a
 card that repeats or its form, is built first when you confirm, in the same job.
 
-The job then waits for you. Open **AI jobs** in the Assist panel, read the plan,
-and choose **Confirm plan** to build it, or **Cancel** to stop. Nothing is
-generated until you confirm.
+The job then waits for you. The window you started it from stays with it: it
+shows the job planning, then the plan itself, with **Confirm plan** to build it
+and **Cancel job** to stop. Nothing is generated until you confirm.
+
+## Finding your AI jobs
+
+You never have to remember where a job went:
+
+- **The window that started it** shows where it stands as it happens: queued,
+  planning, plan ready, building, then done or stopped. Once it is done, its first
+  button opens what it built, such as your site's draft pages or the draft page in
+  the editor.
+- **Open AI jobs**, in that window, opens the Assist panel on its **AI jobs** list
+  with your job highlighted, so you can close the window and follow it there.
+- **The AI chip in the top bar**, beside the notifications bell, is there while any
+  of your workspace's jobs is running or waiting for you. It reads **AI · plan
+  ready** when a plan is waiting for you to confirm it, **AI · needs attention**
+  when a job stopped for something only you can change, and **AI · planning** or
+  **AI · working** while jobs run. Choose it to open AI jobs on that job.
+- **The Assist button** at the bottom right shows a badge while a job runs, and a
+  count in the warning color while one needs you.
+- **A notification** arrives when a job's plan is ready for you to confirm, when it
+  finishes and when it stops. It opens the job, or what it built. You can turn
+  these off under **AI job needs you**, **AI job finished** and **AI job stopped** in
+  your notification settings.
+
+**AI jobs** opens on its own while anything is running or waiting for you, and
+lists each job with where it stands.
 
 ## The building rules
 

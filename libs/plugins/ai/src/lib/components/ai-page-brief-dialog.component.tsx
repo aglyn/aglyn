@@ -24,9 +24,9 @@ import { AiBriefDialog, type AiBriefDialogProps } from './ai-brief-dialog.compon
  * the Screens page's "Describe it" and the Assist panel's AI jobs.
  *
  * It is the shared brief dialog for a `page` job (AGL-3043): one text box and
- * an optional page type. The job plans first and waits in AI jobs, where the
- * member confirms the plan and opens the draft once it is built; nothing here
- * builds or writes anything.
+ * an optional page type. The job plans first; the dialog then follows it and
+ * offers its plan to confirm, as AI jobs does (AGL-3593). Nothing is built
+ * until the member confirms.
  */
 
 export type AiPageBriefDialogProps = Omit<AiBriefDialogProps, 'kind'>

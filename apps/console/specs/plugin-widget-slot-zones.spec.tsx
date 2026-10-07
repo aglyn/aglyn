@@ -184,6 +184,12 @@ const MOUNTS: Record<
     how: 'slot',
     props: {},
   },
+  // AGL-3593: a plugin's indicator beside the notifications bell.
+  consoleTopBar: {
+    file: 'apps/console/components/console-top-bar-slot.component.tsx',
+    how: 'slot',
+    props: {},
+  },
   besignerInspector: {
     file:
       'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner/page.tsx',

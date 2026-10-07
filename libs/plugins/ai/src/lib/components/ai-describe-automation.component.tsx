@@ -34,6 +34,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useState } from 'react'
+import { openAiJobs } from './ai-jobs-store'
 import { aiJobProblem, useAiJobRun, useAiJobsVerdict } from './use-ai-job-run'
 
 /**
@@ -62,7 +63,8 @@ export const AI_AUTOMATION_BRIEF_COPY = {
   submit: 'Draft the automation',
   started:
     'The automation is being drafted. This can take a few minutes. You can close this ' +
-    'window: the draft appears in the list, switched off, when it is ready.',
+    'window: the draft appears in the list, switched off, when it is ready. Open AI ' +
+    'jobs to follow it meanwhile.',
   drafted: 'Drafted',
   review: 'Review it',
   notListed: 'The draft is saved. It appears in the list in a moment.',
@@ -142,8 +144,26 @@ export function AiAutomationBriefDialog(props: AiAutomationBriefDialogProps) {
           </Stack>
         ) : (
           <Stack spacing={2} sx={{ pt: 1 }}>
-            {running ? (
-              <Alert severity="info" icon={<CircularProgress size={18} aria-label="Drafting" />}>
+            {running && job ? (
+              <Alert
+                severity="info"
+                icon={<CircularProgress size={18} aria-label="Drafting" />}
+                action={
+                  // Follows the job in the Assist panel (AGL-3593); the dialog
+                  // covers it, so it closes.
+                  <Button
+                    color="inherit"
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      openAiJobs({ jobId: job.id })
+                      onClose()
+                    }}
+                  >
+                    {'Open AI jobs'}
+                  </Button>
+                }
+              >
                 {copy.started}
               </Alert>
             ) : null}

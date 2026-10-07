@@ -42,6 +42,7 @@ import {
 import { releaseAssistMessage } from '../usage/assist-usage'
 import { aiUsageMeter } from '../usage/ai-usage-meter'
 import { aiJobsGate } from './ai-jobs-gate'
+import { AI_JOB_ACTIVE_STATUSES } from '../model/ai-job-activity'
 
 /**
  * AI generation jobs: create and list (AGL-2904).
@@ -304,10 +305,14 @@ export async function GET(request: Request): Promise<Response> {
   const status = (AI_JOB_STATUSES as readonly string[]).includes(rawStatus)
     ? (rawStatus as AiJobStatus)
     : undefined
+  // `active` (AGL-3593): every job not yet settled, which is what the
+  // console's top-bar indicator and the Assist launcher count.
+  const active = rawStatus === 'active'
   const limit = Number(url.searchParams.get('limit') ?? '')
   const now = new Date()
   const jobs = await listAiJobs(gate.firestore, gate.orgId, {
     ...(status ? { status } : {}),
+    ...(active ? { statuses: AI_JOB_ACTIVE_STATUSES } : {}),
     ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}),
   })
   return Response.json(

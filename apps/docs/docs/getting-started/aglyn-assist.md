@@ -45,7 +45,10 @@ or the AI credits a Free workspace gets — the same assistant also **builds**:
 whole pages, layouts, page templates, reusable components, forms, designed
 emails, campaigns, product copy, your search titles and descriptions, a change
 to your theme, and a small site from one brief. **AI jobs** in the panel is
-where you watch one work and open what it made.
+where you watch one work and open what it made. It opens on its own while a job
+is running or waiting for you, the **AI** chip in the top bar says what your jobs
+are doing, and the Assist button carries a badge while one runs. See
+[Finding your AI jobs](../ai/how-aglyn-ai-builds.md#finding-your-ai-jobs).
 
 Everything it builds arrives as a **draft**. It never publishes, never changes a
 live page in place and never sends anything, so a generated page has no address

@@ -27,6 +27,7 @@ import {
   AssistPanelOnHost,
 } from './components/ai-permissions-on-host.component'
 import AiCreditsCard from './components/ai-credits-card.component'
+import AiJobsTopBarIndicator from './components/ai-jobs-indicator.component'
 import {
   AiCollaboratorCreditsCell,
   AiCollaboratorCreditsHeader,
@@ -129,6 +130,18 @@ export function registerAiConsole(): void {
         widgetId: 'ai-assist-dock',
         title: 'Assistant',
         Component: AssistPanelOnHost,
+      },
+      // The AI jobs indicator (AGL-3593), beside the notifications bell on
+      // every page: what the workspace's jobs are doing, and the way to them.
+      // Gated as the other generative widgets are; it asks the shell for the
+      // release flags of the jobs and of the panel it opens.
+      {
+        slot: 'consoleTopBar',
+        widgetId: 'ai-jobs-indicator',
+        title: 'AI jobs',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiJobsTopBarIndicator,
       },
       {
         slot: 'orgBillingUsage',

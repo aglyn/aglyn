@@ -43,6 +43,7 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `hostMembers` | The site collaborators card: a column of its table when the widget declares `column`, a card beneath it otherwise | per row: `member`, `hostId`, `canManage`; as a card: `hostId`, `canManage` |
 | `siteMember` | A visitor account's drawer on a site's Users page, between the account's password help and its saved addresses: what your plugin holds about the person — what they bought, what they subscribe to. Each widget is a section of the drawer's column; open it with a `Divider` heading like the drawer's own | `hostId`, `member` (the account's `siteMembers` document, `$id` included; its `email` is how to find what the person did on the site) |
 | `consoleDock` | The console dock: a floating panel above every route boundary in both the app and editor shells (it was `assistPanel` until AGL-3080) | `orgId`, `org`, `orgReady`, `scopedOrgId` (the org a widget may act and be metered for, `undefined` where the page names none), `orgSlug`, `hostId`, `productName`, `releaseVerdict(key)` (`{ visible, staffPreview }` for any release flag, staff bypass applied), `isStaff`, `permissionsOnHost` |
+| `consoleTopBar` | The console's top bar, among its status controls just ahead of the notifications bell, on every page that draws the bar. One small control that keeps work in progress, or something waiting on the reader, in view; it draws nothing when it has nothing to say | The same props as `consoleDock` |
 | `besignerInspector` | A section at the bottom of the besigner's Attributes panel, under the selected element's fields, on every editor the designer opens | `hostId` (`null` on an editor that names no site), `node` (the selected element) |
 | `besignerToolbar` | The besigner's secondary toolbar, after undo and redo, on every editor the designer opens | `hostId` (`null` on an editor that names no site) |
 | `besignerInteractions` | The besigner's Interactions section, on every editor that offers one. Your widget draws nothing: it reads the section experiments your plugin runs on the site and calls `reportSectionExperiments` from an effect, and the section badges an element that has one and offers to start one from your `create`. Report `null` to withdraw | `hostId`, `screenId` (`null` on a layout or a component, which is no page to run one on: report no `create` there), `reportSectionExperiments(reporterId, { experiments, create? } \| null)` |
@@ -129,6 +130,7 @@ page spaces it there:
 - `besignerFunctions`, `orgData`, `orgMarketplace`, `orgAddons` and
   `marketplaceListing`: the body of a dialog or a page.
 - `consoleDock`: a floating dock.
+- `consoleTopBar`: a control in the top bar's row.
 - `besignerInteractions`: nothing; a widget there reports to the section and
   renders `null`.
 - `orgMembersListColumn`, `staffOrgsListColumn` and `staffOrgUsageColumn`: a

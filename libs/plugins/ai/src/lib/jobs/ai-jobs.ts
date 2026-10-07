@@ -31,6 +31,7 @@ import {
   assistRefusedByHardCap,
 } from '../usage/assist-credits'
 import {
+  AI_JOB_PLAN_STEP,
   AI_JOB_TERMINAL_STATUSES,
   type AiJob,
   type AiJobApplied,
@@ -209,8 +210,9 @@ export function isAiJobTerminal(status: AiJobStatus): boolean {
 
 // ── The step runner registry ──────────────────────────────────────────────
 
-/** The step a planned kind runs first (AGL-2935). */
-export const AI_JOB_PLAN_STEP = 'plan'
+// The step a planned kind runs first (AGL-2935), named in the model so the
+// console reads a job's phase off its steps without loading this machine.
+export { AI_JOB_PLAN_STEP }
 
 /**
  * The kinds that build site structure, and so plan before they generate
@@ -365,6 +367,48 @@ let pauseReader: AiJobPauseReader | null = null
  */
 export function registerAiJobPauseReader(reader: AiJobPauseReader | null): void {
   pauseReader = reader
+}
+
+// ── Telling the person (AGL-3593) ──────────────────────────────────────────
+
+/**
+ * A change a person is told about: the job's plan waits for them (or a step
+ * stopped for their decision), the job finished, or it stopped.
+ */
+export type AiJobTransition = 'needs-review' | 'done' | 'failed'
+
+export type AiJobTransitionListener = (input: {
+  job: AiJob
+  to: AiJobTransition
+}) => Promise<void> | void
+
+let transitionListener: AiJobTransitionListener | null = null
+
+/**
+ * The listener told each time a job ENTERS `needs_review`, `done` or `failed`
+ * — once per entry, from the write that made it, so a stream that re-reads
+ * the job or a beat that sees it again tells nobody twice. Registered by its
+ * own module (`ai-jobs-notify.ts`) from the console's server surface, as the
+ * pause reader is, so this machine never loads the notification fan-out.
+ * `null` unregisters it.
+ */
+export function registerAiJobTransitionListener(listener: AiJobTransitionListener | null): void {
+  transitionListener = listener
+}
+
+/** Whether a transition listener is registered: what a surface that runs jobs must have. */
+export function aiJobTransitionListenerRegistered(): boolean {
+  return transitionListener !== null
+}
+
+/** Tells the listener; a listener that throws never fails the write it follows. */
+async function announceAiJobTransition(job: AiJob, to: AiJobTransition): Promise<void> {
+  if (!transitionListener) return
+  try {
+    await transitionListener({ job, to })
+  } catch (error) {
+    console.error('ai job transition listener failed', { orgId: job.orgId, jobId: job.$id, to, error })
+  }
 }
 
 /** Whether a pause reader is registered: what a surface that runs jobs must have. */
@@ -543,10 +587,18 @@ export async function getAiJob(
 
 export interface ListAiJobsOptions {
   status?: AiJobStatus
+  /**
+   * Any of these statuses (AGL-3593): the console's indicator asks for every
+   * job not yet settled in one read. Ignored when `status` is given.
+   */
+  statuses?: readonly AiJobStatus[]
   limit?: number
 }
 
-/** Newest first. Needs the (status, createdAt) index when filtered. */
+/**
+ * Newest first. Needs the (status, createdAt) index when filtered, which
+ * answers an `in` over statuses as it answers one status.
+ */
 export async function listAiJobs(
   firestore: Firestore,
   orgId: string,
@@ -555,6 +607,7 @@ export async function listAiJobs(
   const limit = Math.min(Math.max(1, Math.floor(options.limit ?? 20)), 100)
   let query: FirebaseFirestore.Query = jobsCollection(firestore, orgId)
   if (options.status) query = query.where('status', '==', options.status)
+  else if (options.statuses?.length) query = query.where('status', 'in', [...options.statuses])
   const snapshot = await query.orderBy('createdAt', 'desc').limit(limit).get()
   return snapshot.docs
     .map((doc) => jobFrom(doc))
@@ -860,7 +913,7 @@ export async function recordStep(
   now = new Date(),
 ): Promise<RecordedStep> {
   const ref = jobsCollection(firestore, orgId).doc(jobId)
-  return firestore.runTransaction(async (tx: Transaction) => {
+  const recorded = await firestore.runTransaction(async (tx: Transaction) => {
     const job = jobFrom(await tx.get(ref))
     if (!job) throw new Error(`ai job ${orgId}/${jobId} vanished`)
     const steps = job.steps.map((step, index) =>
@@ -926,8 +979,12 @@ export async function recordStep(
     return {
       job: { ...job, ...(patch as unknown as Partial<AiJob>) } as AiJob,
       remaining,
+      // Entered `needs_review` in this write, rather than parked again.
+      parked: parksForReview && job.status !== 'needs_review',
     }
   })
+  if (recorded.parked) await announceAiJobTransition(recorded.job, 'needs-review')
+  return { job: recorded.job, remaining: recorded.remaining }
 }
 
 async function transition(
@@ -957,7 +1014,7 @@ export async function completeAiJob(
   jobId: string,
   now = new Date(),
 ): Promise<AiJob> {
-  const { job } = await transition(firestore, orgId, jobId, (current) =>
+  const { job, changed } = await transition(firestore, orgId, jobId, (current) =>
     isAiJobTerminal(current.status)
       ? null
       : {
@@ -968,6 +1025,7 @@ export async function completeAiJob(
           updatedAt: now,
         },
   )
+  if (changed) await announceAiJobTransition(job, 'done')
   return job
 }
 
@@ -990,7 +1048,7 @@ export async function failAiJob(
     stepIndex: detail?.stepIndex ?? null,
     error: detail?.error instanceof Error ? detail.error.message : detail?.error ?? null,
   })
-  const { job } = await transition(firestore, orgId, jobId, (current) =>
+  const { job, changed } = await transition(firestore, orgId, jobId, (current) =>
     isAiJobTerminal(current.status)
       ? null
       : {
@@ -1006,6 +1064,7 @@ export async function failAiJob(
           updatedAt: now,
         },
   )
+  if (changed) await announceAiJobTransition(job, 'failed')
   return job
 }
 
