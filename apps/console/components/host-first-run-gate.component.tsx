@@ -17,13 +17,17 @@
 
 'use client'
 
+import SiteLiveNotice from '@aglyn/shared-ui-jsx/components/site-live-notice.component'
 import { useUser } from '@aglyn/tenant-feature-instance'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import Dialog from '@mui/material/Dialog'
+import DialogContent from '@mui/material/DialogContent'
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useRef, useState } from 'react'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useHost } from '../hooks/use-host'
 import { useOrgSlug } from '../hooks/use-org-scope'
-import { hostIsBlankSite, requestStarterSite } from '../utils/host-first-run'
+import { buildRoute, Route } from '../constants/route-links'
+import { hostIsBlankSite, hostLiveUrl, requestStarterSite } from '../utils/host-first-run'
 import { useHostId, useHostSubdomain } from './host-id-provider'
 import PluginWidgetSlot from './plugin-widget-slot.component'
 
@@ -70,18 +74,47 @@ function HostFirstRunOffer({ hostId }: { hostId: string }) {
   // of the object that says so.
   const userRef = useRef(user)
   userRef.current = user
+  const params = useParams<{ host?: string }>()
   const [open, setOpen] = useState(true)
+  // The starter published the site: say so, with its address, until the
+  // person closes it. Read before the blank-site check, which the starter
+  // itself just turned false.
+  const [live, setLive] = useState(false)
 
-  const close = useCallback(() => {
-    setOpen(false)
+  const leaveUrl = useCallback(() => {
     if (pathname) router.replace(pathname)
   }, [pathname, router])
-  // Leaving the guided start for the starter site (AGL-3594).
+  const close = useCallback(() => {
+    setOpen(false)
+    leaveUrl()
+  }, [leaveUrl])
+  // Leaving the guided start for the starter site (AGL-3594). The `start`
+  // parameter stays until the notice is closed: dropping it unmounts this.
   const startBlank = useCallback(() => {
-    close()
-    void requestStarterSite(userRef.current, hostId)
-  }, [close, hostId])
+    setOpen(false)
+    void requestStarterSite(userRef.current, hostId).then((provisioned) => {
+      if (provisioned) setLive(true)
+      else leaveUrl()
+    })
+  }, [hostId, leaveUrl])
+  const closeLive = useCallback(() => {
+    setLive(false)
+    leaveUrl()
+  }, [leaveUrl])
 
+  if (live) {
+    const routeHost = params?.host ?? hostId
+    return (
+      <Dialog open onClose={closeLive} fullWidth maxWidth="sm" aria-label="Your site is live">
+        <DialogContent sx={{ py: 4 }}>
+          <SiteLiveNotice
+            liveUrl={hostLiveUrl(host)}
+            pagesHref={orgSlug ? buildRoute(Route.HOST_SCREENS, { orgSlug, host: routeHost }) : null}
+          />
+        </DialogContent>
+      </Dialog>
+    )
+  }
   if (!open || status !== 'success' || !hostIsBlankSite(host)) return null
   return (
     <PluginWidgetSlot
