@@ -55,10 +55,12 @@ import {
   AI_PAGE_SECTION_TOOL,
   aiEmptyPage,
   aiPageCheckContext,
+  aiPageLinkablePages,
   aiPageRecordNote,
   aiPageRecordTemplate,
   aiPageRecordTokens,
   aiPageSectionCheck,
+  aiPageSectionLinkablePagesLine,
   aiPageSectionNodeId,
   aiPageSectionPrompt,
   aiPageSectionSmaller,
@@ -1008,6 +1010,50 @@ describe('a repeated item written once (AGL-3053)', () => {
         code: 'tree-lineage',
         detail: 'Typography (b2) cannot hold other elements, but lists b2x',
       }),
+    ])
+  })
+})
+
+describe('a link to a page the site builds after this one (AGL-3596)', () => {
+  const fixture = AI_PAGE_BRIEF_FIXTURES[0]
+  const screen = fixture.plan.screens[0]
+  const sectionIds = screen.sections.map((_, index) => aiPageSectionNodeId('job-links', index))
+  const home = fixture.inventory.screens.filter((row) => row.slug === '/')
+  const inventory = { ...fixture.inventory, screens: home }
+  const contact = { id: 'planned-contact', label: 'Contact', slug: '/contact' }
+  const hero = (button: Record<string, unknown>) => {
+    const answer = structuredClone(fixture.answers[0])
+    answer.nodes['a3'].props = button
+    return answer
+  }
+
+  it('names the planned pages and holds as the one target the page that is neither home nor this one', () => {
+    expect(aiPageLinkablePages(inventory, [{ id: 'planned-home', label: 'Home', slug: '/' }, contact], ['planned-home'])).toEqual({
+      linkablePages: [contact],
+      linkTarget: 'planned-contact',
+    })
+    // Two pages it could mean: none is chosen.
+    expect(aiPageLinkablePages(inventory, [contact, { id: 'planned-about', label: 'About', slug: '/about' }], []).linkTarget).toBeNull()
+    expect(aiPageSectionLinkablePagesLine([contact])).toBe(
+      'Other pages of this site: Contact (/contact, id "planned-contact"). A button or link that goes to one sets its "screenId" to that id.',
+    )
+  })
+
+  it('sends a button that names no destination to that page, and keeps one the model linked there itself', () => {
+    const context = aiPageCheckContext(inventory, { linkablePages: [contact] })
+    const check = (button: Record<string, unknown>, linkTarget: string | null) =>
+      aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, section: screen.sections[0], inventory, linkTarget })({
+        tree: JSON.stringify(hero(button)),
+      })
+    const settled = check({ children: 'Book an appointment', variant: 'contained' }, 'planned-contact')
+    expect(settled.violations).toEqual([])
+    const button = Object.values((settled.value as AiPageSection).nodes).find((node) => (node as { componentId: string }).componentId === 'muiButton')
+    expect((button as { props: Record<string, unknown> }).props['screenId']).toBe('planned-contact')
+    // Written with the planned page's id, the palette validator keeps it.
+    expect(check({ children: 'Book an appointment', variant: 'contained', screenId: 'planned-contact' }, null).violations).toEqual([])
+    // With no one page it can only mean, it is re-asked.
+    expect(check({ children: 'Book an appointment', variant: 'contained' }, null).violations.map((violation) => violation.code)).toEqual([
+      'link-without-destination',
     ])
   })
 })

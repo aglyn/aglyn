@@ -2056,6 +2056,14 @@ when the hero was written.
   place of a section, and a `scrollTo` there goes nowhere.
 - **Taught by the re-ask alone.** No prompt line and no cached prefix changes: a model
   learns a link may go to a section of the page only when rule 10 refuses one.
+- **Pages built after this one (AGL-3596).** A guided start mints its pages' ids on the
+  plan and builds Home first, so Home's "Book an appointment" had no Contact page to go
+  to and was refused after its re-ask. A site job's page unit now carries the plan's
+  pages (`sitePages`, as the layout does): a section request names them by id in one
+  line of its user message (no cached prefix changes), the palette validator keeps a
+  `screenId` naming one, and a Button or Page Link that names no destination at all, on
+  a site with exactly one page besides its home and this one, goes to that page
+  (`aiPageLinkablePages`). With two or more such pages it is re-asked as before.
 - **Controls.** `ai-job-free-page.spec.ts` runs the recording's two hero answers, kept as
   `AI_FREE_PAGE_HERO_ANSWERS` in `jobs/fixtures/ai-free-page-recording.ts`, through the
   real page step: the first is re-asked, the second is kept, and the page completes with
