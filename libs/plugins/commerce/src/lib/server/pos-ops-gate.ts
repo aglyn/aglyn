@@ -27,6 +27,7 @@ import {
 } from '../model/commerce-pos-ops'
 import type { PrintReport } from '../model/commerce-printers'
 import { posOpsSettings, type PosOpsSettings } from '../pos-ops-config'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /*==========================================
  * WHO MAY RUN THE REGISTER (AGL-3609), for the shift, PIN, customer and
@@ -210,7 +211,8 @@ export async function authorizePosOps(
   let uid: string
   try {
     uid = (await deps.verifyIdToken(idToken)).uid
-  } catch {
+  } catch (error) {
+    if (!isRefusedIdToken(error)) throw error
     return { ok: false, status: 401, error: 'Unauthenticated' }
   }
   const hostRef = deps.firestore().collection('hosts').doc(hostId)
