@@ -217,3 +217,40 @@ describe('what the reader will take off a job’s outputs', () => {
     ).toEqual(['a line'])
   })
 })
+
+describe('a description is never cut mid-phrase (AGL-3596)', () => {
+  // The 2026-10-06 production guided start, whose description went out as
+  // "…for dog owners in Hillside and nearby towns who want a calm, gentle".
+  const PRODUCTION = {
+    about: 'a dog grooming salon with full grooms, baths, nail trims and a self-wash station',
+    audience: 'dog owners in Hillside and nearby towns who want a calm, gentle groom for nervous or senior dogs',
+  }
+  const DANGLING_END = /\b(?:a|an|and|at|by|for|from|in|of|on|or|that|the|to|with|who|which|calm|gentle)[.]?$/i
+
+  it('drops the audience’s trailing clause rather than cutting through it', () => {
+    const description = values(PRODUCTION)?.['seo.description'] ?? ''
+    expect(description).toBe(
+      'Dog grooming salon with full grooms, baths, nail trims and a self-wash station, for dog owners in Hillside and nearby towns who want a calm, gentle groom.',
+    )
+    // One clause more than fits goes whole, back to the place.
+    expect(
+      values({ ...PRODUCTION, audience: `${PRODUCTION.audience.replace(' for nervous or senior dogs', '')} every single visit, booked online` })?.[
+        'seo.description'
+      ],
+    ).toBe('Dog grooming salon with full grooms, baths, nail trims and a self-wash station, for dog owners in Hillside and nearby towns.')
+    expect(description.length).toBeLessThanOrEqual(AI_SITE_SEO_LIMITS.description)
+    expect(description).not.toMatch(DANGLING_END)
+  })
+
+  it('keeps the whole sentence where it fits, and the subject alone where nothing else does', () => {
+    expect(values({ about: 'a dog groomer', audience: 'dog owners who want a calm, gentle groom' })?.['seo.description']).toBe(
+      'Dog groomer, for dog owners who want a calm, gentle groom.',
+    )
+    const long = 'x'.repeat(10)
+    const description =
+      values({ about: `a dog groomer with ${Array.from({ length: 30 }, () => long).join(' ')}`, audience: 'dog owners' })?.[
+        'seo.description'
+      ] ?? ''
+    expect(description).toBe('Dog groomer, for dog owners.')
+  })
+})

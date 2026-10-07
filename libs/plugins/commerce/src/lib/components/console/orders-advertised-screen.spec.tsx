@@ -153,10 +153,13 @@ describe('the advertised Orders table', () => {
   it('renders the six columns the mockup names, in that order', () => {
     orderDocs = [order('a', { number: 1042 })]
     render(<HostOrdersCard hostId="host-1" />)
+    // The first header is the bulk-selection checkbox (AGL-3611), which has
+    // no words; the named columns follow it in the mockup's order.
     const headers = screen
       .getAllByRole('columnheader')
       .map((cell) => cell.textContent)
-    expect(headers).toEqual([
+    expect(headers[0]).toBe('')
+    expect(headers.slice(1)).toEqual([
       'Order',
       'Customer',
       'Channel',
@@ -251,7 +254,8 @@ describe('the advertised money tiles', () => {
     expect(screen.queryByText('Revenue · 30d')).toBeNull()
     // …and the table, which is not a paid feature, still renders.
     expect(screen.getByText('#1')).toBeTruthy()
-    expect(screen.getAllByRole('columnheader')).toHaveLength(6)
+    // Six named columns and the selection checkbox (AGL-3611).
+    expect(screen.getAllByRole('columnheader')).toHaveLength(7)
   })
 
   it('withholds them while the plan doc is still in flight', () => {

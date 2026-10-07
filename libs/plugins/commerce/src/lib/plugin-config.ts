@@ -16,6 +16,7 @@
  */
 
 import type { PluginConfigSchema } from '@aglyn/aglyn'
+import { posTipPercentages } from './model/commerce-pos'
 
 /**
  * The ceiling a register may discount to, when the merchant has not set one
@@ -66,8 +67,92 @@ export const COMMERCE_CONFIG_SCHEMA: PluginConfigSchema = {
         'A register that asks for more is refused, and the sale is not rung ' +
         'up. Set to 0 to stop staff discounting at the register entirely.',
     },
+    // THE REGISTER'S TIPS, RECEIPTS AND CUSTOMER DISPLAY (AGL-3607, AGL-3608).
+    // Off by default: a store that never asked for tips does not start
+    // asking its customers for one on the day this ships.
+    {
+      key: 'posTippingEnabled',
+      label: 'Ask for tips at the register',
+      type: 'boolean',
+      description:
+        'Offers the customer a tip on the card reader and on the customer ' +
+        'display. Tips are yours: they are not counted as sales and carry no ' +
+        'platform fee.',
+    },
+    {
+      key: 'posTipPercentages',
+      label: 'Tip choices (%)',
+      type: 'string',
+      description:
+        'Up to four percentages, separated by commas, shown to the customer ' +
+        'as tip buttons. The customer can also enter an amount or choose no tip.',
+    },
+    {
+      key: 'posReceiptDefault',
+      label: 'Receipts at the register',
+      type: 'select',
+      options: [
+        { value: 'ask', label: 'Ask the customer' },
+        { value: 'print', label: 'Always print' },
+        { value: 'none', label: 'No receipt unless asked' },
+      ],
+      description:
+        'With a customer display paired, "Ask the customer" lets them choose ' +
+        'email, print or no receipt on their own screen.',
+    },
+    {
+      key: 'posDisplayMessage',
+      label: 'Customer display welcome',
+      type: 'string',
+      description:
+        'The line the customer display shows under your store name between ' +
+        'sales. Leave blank for "Welcome".',
+    },
+    {
+      key: 'posDisplayMarketingOptIn',
+      label: 'Offer email sign-up on the customer display',
+      type: 'boolean',
+      description:
+        'Shows an unticked "Email me news and offers" box when a customer ' +
+        'asks for an email receipt. Only a ticked box adds them to your ' +
+        'marketing audience.',
+    },
   ],
-  defaults: { posMaxDiscountPct: POS_MAX_DISCOUNT_PCT_DEFAULT },
+  defaults: {
+    posMaxDiscountPct: POS_MAX_DISCOUNT_PCT_DEFAULT,
+    posTippingEnabled: false,
+    posTipPercentages: '15, 18, 20, 25',
+    posReceiptDefault: 'ask',
+    posDisplayMessage: '',
+    posDisplayMarketingOptIn: true,
+  },
+}
+
+/** The register's tip, receipt and display settings, resolved for one site. */
+export interface PosRegisterSettings {
+  tippingEnabled: boolean
+  tipPercentages: number[]
+  receiptDefault: 'ask' | 'print' | 'none'
+  displayMessage: string
+  displayMarketingOptIn: boolean
+}
+
+/**
+ * The register settings out of a merged commerce config, with every value
+ * typed and bounded so the register, the display and the server agree.
+ */
+export function posRegisterSettings(
+  config: Record<string, unknown> | null | undefined,
+): PosRegisterSettings {
+  const receipt = String(config?.['posReceiptDefault'] ?? 'ask')
+  return {
+    tippingEnabled: config?.['posTippingEnabled'] === true,
+    tipPercentages: posTipPercentages(config?.['posTipPercentages']),
+    receiptDefault:
+      receipt === 'print' || receipt === 'none' ? receipt : 'ask',
+    displayMessage: String(config?.['posDisplayMessage'] ?? '').trim().slice(0, 120),
+    displayMarketingOptIn: config?.['posDisplayMarketingOptIn'] !== false,
+  }
 }
 
 /**

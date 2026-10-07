@@ -49,6 +49,7 @@ import '../../../../utils/entry-schedule-job'
 // silent way to stop re-checking whether a verified sending domain still
 // publishes its records.
 import '../../../../utils/sending-domain-recheck-job'
+import '../../../../utils/plugin-event-outbox-job'
 // Imported for its registration side effect too (AGL-2495): it is what tells
 // core's job gate how to resolve a host's lockdown. Core cannot import the
 // admin lib (that edge is a cycle), so if this import goes, every job on the

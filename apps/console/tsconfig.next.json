@@ -170,6 +170,12 @@
       "@aglyn/plugins-themes/*": [
         "../../libs/plugins/themes/src/lib/*"
       ],
+      "@aglyn/plugins-sms": [
+        "../../libs/plugins/sms/src/index.ts"
+      ],
+      "@aglyn/plugins-sms/*": [
+        "../../libs/plugins/sms/src/lib/*"
+      ],
       "@aglyn/plugins-video-delivery": [
         "../../libs/plugins/video-delivery/src/index.ts"
       ],

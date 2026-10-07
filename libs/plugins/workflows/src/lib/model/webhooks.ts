@@ -25,7 +25,7 @@
 export interface HostWebhook {
   name: string
   direction: 'outbound' | 'inbound'
-  /** Outbound delivery URL (https only; checked again at send time). */
+  /** Outbound delivery URL (https only; resolved and checked at send time). */
   url?: string
   /** Shared secret: signs outbound bodies, verifies inbound callers. */
   secret?: string
@@ -34,6 +34,12 @@ export interface HostWebhook {
   enabled?: boolean
 }
 
-/** Outbound URLs must be public https — first-line SSRF guard. */
+/**
+ * A hint for the webhooks card's URL field: https, and not an obvious private
+ * IPv4 literal. It is NOT the SSRF guard — it reads only the URL's text, so
+ * an IPv6 literal, a decimal IPv4 or a name that resolves inward all pass it.
+ * Delivery goes through `fetchConfiguredPublicUrl` (`@aglyn/tenant-data-admin`),
+ * which resolves, pins and refuses redirects.
+ */
 export const WEBHOOK_URL_PATTERN =
   /^https:\/\/(?!localhost)(?!127\.)(?!0\.)(?!10\.)(?!172\.(1[6-9]|2\d|3[01])\.)(?!192\.168\.)(?!169\.254\.)[^\s]+$/i

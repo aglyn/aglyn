@@ -57,7 +57,7 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 // The AI add-on as its plugin declares it (AGL-2939): the entitlement gate
 // folds `aiAddon` only once the declaration is registered.
 import '../declarations'
-import { AssistJobsDrawer, aiJobOutputHref } from './assist-jobs-drawer.component'
+import { AssistJobsDrawer, aiJobOutputHref, aiJobRestartHref } from './assist-jobs-drawer.component'
 import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
 
@@ -343,6 +343,47 @@ describe('watching a job', () => {
     expect(await screen.findByText('The AI request failed — try again.')).toBeTruthy()
     await waitFor(() => expect(mockTrackEvent).toHaveBeenCalledWith('ai_job_failed', { kind: 'text' }))
     expect(mockTrackEvent).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('a guided start that failed on our side (AGL-3596)', () => {
+  const FAILED_SITE = job({
+    kind: 'site',
+    status: 'failed',
+    running: false,
+    brief: 'A two-page website for a dog grooming salon.',
+    steps: [
+      { name: 'plan', status: 'done', startedAt: null, endedAt: null, creditsSpent: 13, error: null },
+      { name: 'generate', status: 'failed', startedAt: null, endedAt: null, creditsSpent: 89, error: null },
+    ],
+    error: 'Something went wrong building your site, and it was not built.',
+    creditsSpent: 102,
+    refundedCredits: 102,
+    siteInputs: { businessType: 'dog grooming salon', pages: 2 },
+  })
+
+  it('shows it failed, that it cost nothing, and no credits charged', async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.startsWith('/api/ai/jobs?orgId=org-1')) return jsonResponse({ jobs: [FAILED_SITE] })
+      throw new Error(`unarmed request to ${url}`)
+    })
+    renderDrawer()
+    fireEvent.click(screen.getByLabelText('Show AI jobs'))
+    expect(
+      await screen.findByText('This one’s on us — you weren’t charged. The 102 credits it used are back in your AI credits.'),
+    ).toBeTruthy()
+    expect(screen.getByText('Failed')).toBeTruthy()
+    expect(screen.queryByText(/102 credits$/)).toBeNull()
+  })
+
+  it('tries again on the site’s own build page, which reopens the start filled in', () => {
+    const at = { orgSlug: 'acme', hostId: 'host-1', pathname: '/acme/hosts/groomer/screens' }
+    expect(aiJobRestartHref(FAILED_SITE as never, at)).toBe('/acme/hosts/groomer/ai-jobs/job-1?retry=1')
+    // Not a site job, not ended, another site, or no answers to reopen: nothing.
+    expect(aiJobRestartHref({ ...FAILED_SITE, kind: 'page' } as never, at)).toBeNull()
+    expect(aiJobRestartHref({ ...FAILED_SITE, status: 'running' } as never, at)).toBeNull()
+    expect(aiJobRestartHref(FAILED_SITE as never, { ...at, hostId: 'host-2' })).toBeNull()
+    expect(aiJobRestartHref({ ...FAILED_SITE, siteInputs: null } as never, at)).toBeNull()
   })
 })
 

@@ -130,4 +130,21 @@ describe('a job that stopped', () => {
     expect(notice.body).toBe('The site could not be planned.')
     expect(normalizeNotificationLink(notice.link, context)).toBe('/acme/hosts/roofers/ai-jobs/job-1')
   })
+
+  it('tells the person a failure on our side cost them nothing, with the credits the job recorded giving back (AGL-3596)', () => {
+    const failed = aiJobNotice(
+      source({ error: 'Something went wrong building your site, and it was not built.', creditsSpent: 102, refundedCredits: 102 }),
+      'failed',
+    )
+    expect(failed.body).toBe(
+      'Something went wrong building your site, and it was not built. This one’s on us — you weren’t charged. The 102 credits it used are back in your AI credits.',
+    )
+    const parked = aiJobNotice(
+      source({ review: { reason: 'doctrine', message: 'It could not be built within the building rules.' }, creditsSpent: 6, refundedCredits: 6 }),
+      'needs-review',
+    )
+    expect(parked.body).toContain('This one’s on us — you weren’t charged. The 6 credits it used are back in your AI credits.')
+    // Nothing given back, nothing promised.
+    expect(aiJobNotice(source({ error: 'It stopped.', creditsSpent: 6 }), 'failed').body).toBe('It stopped.')
+  })
 })

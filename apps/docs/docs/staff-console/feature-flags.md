@@ -116,20 +116,19 @@ sequenceDiagram
 
 ### A flag is not always sufficient on its own
 
-`release_native_checkout` (in-page Stripe checkout, AGL-1132 and AGL-1944) is gated on the
-flag **and** on `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` being set. A `ui_mode` Checkout
-session returns a client secret and no redirect URL, so a browser that cannot mount the
-form has nowhere to send the buyer — flipping the flag without the key would turn Upgrade
-into a dead button, and a storefront's Buy button into one too. Both surfaces require both
-and otherwise serve the redirect.
+`release_native_checkout` (in-page storefront checkout, AGL-1944, released to every
+workspace 2026-10-06 by AGL-3606) is gated on the flag **and** on
+`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` being set. A `ui_mode` Checkout session returns a
+client secret and no redirect URL, so a browser that cannot mount the form has nowhere to
+send the buyer — flipping the flag without the key would turn a storefront's Buy button
+into a dead one. The storefront routes require both and otherwise serve the hosted
+redirect. The console's plan checkout no longer renders Stripe Checkout at all, so the
+flag has no console surface.
 
-The key is **per Vercel project**, and the two surfaces do not share one. Measured
-2026-08-18: `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is set on `aglyn-console` and is set
-**nowhere on `aglyn-tenant`**, which is the project that serves customer storefronts. So
-turning this flag on today changes the console and changes nothing at all on a storefront
-— which is safe, and is also why "I flipped it and nothing happened" is the expected
-report until the key is promoted to a team-shared variable and linked to both projects
-(the pattern `STRIPE_SECRET_KEY` already follows). Note that `vercel env ls` cannot see
+The key lives on `aglyn-tenant`, the Vercel project that serves storefronts, for
+production, preview and development (added 2026-08-23; an earlier 2026-08-18 check had
+found it only on `aglyn-console`). Turning the flag off, globally or for one org,
+returns those storefronts to the redirect. Note that `vercel env ls` cannot see
 team-shared variables; check through the REST API.
 
 Worth copying whenever a flag turns on a path that needs configuration the flag does not

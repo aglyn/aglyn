@@ -23,6 +23,7 @@ import type { ReactNode } from 'react'
 import type { CommerceConsoleSectionId } from './commerce-console-sections'
 import CatalogOrganizationCard from './console/catalog-organization-card.component'
 import CommerceAnalyticsCard from './console/commerce-analytics-card.component'
+import CustomerNotificationsCard from './console/customer-notifications-card.component'
 import DiscountsCard from './console/discounts-card.component'
 import GiftCardsCard from './console/gift-cards-card.component'
 import HostCouponsCard from './console/host-coupons-card.component'
@@ -125,6 +126,10 @@ function sectionBody(
             {
               size: { xs: 12 },
               children: <StoreSettingsCard hostId={hostId} />,
+            },
+            {
+              size: { xs: 12 },
+              children: <CustomerNotificationsCard hostId={hostId} />,
             },
             { size: { xs: 12 }, children: <TaxSettingsCard hostId={hostId} /> },
             { size: { xs: 12 }, children: <LocationsCard hostId={hostId} /> },

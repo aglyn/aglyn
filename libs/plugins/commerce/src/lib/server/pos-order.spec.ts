@@ -2555,3 +2555,41 @@ describe('a variant nobody has priced yet at the register (AGL-2916)', () => {
     expect(stripeCalls).toHaveLength(0)
   })
 })
+
+/**
+ * AN OPEN SALE (AGL-3607): priced exactly like every tender, written pending
+ * with an empty ledger and the sale's take, and no money moved.
+ */
+describe('the open tender (AGL-3607)', () => {
+  it('writes a pending sale with an empty ledger, the take and no Stripe call', async () => {
+    {
+      const result = await post({ payment: 'open' })
+      expect(result.status).toBe(200)
+      expect(result.body).toMatchObject({ dueCents: 400 })
+      const order = orderDocs()[0]
+      expect(order).toMatchObject({
+        status: 'pending',
+        channel: 'pos',
+        registerId: 'register-1',
+        cashierId: 'cashier-1',
+        payments: [],
+        posFeeOrgId: 'org-1',
+      })
+      expect(order?.posTakeFeeCents).toBe(order?.totals?.feeCents)
+      expect(stripeCalls).toHaveLength(0)
+    }
+  })
+
+  it('records the tender on a single-tender cash sale', async () => {
+    await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(orderDocs()[0]?.payments).toEqual([
+      expect.objectContaining({
+        method: 'cash',
+        amountCents: 400,
+        status: 'succeeded',
+        cashTenderedCents: 500,
+        changeCents: 100,
+      }),
+    ])
+  })
+})

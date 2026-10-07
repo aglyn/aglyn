@@ -1585,6 +1585,12 @@ describe('hosts', () => {
       // would hold a hash to crack offline. Named here for the `registers`
       // reason above.
       'siteMemberCredentials',
+      // A register's cloud receipt printers and their print queue (AGL-3619).
+      // A forged printer row rewrites the device a poll URL accepts; a forged
+      // job prints whatever its author likes or pops a cash drawer open. Only
+      // `/api/commerce/printers` and the printers' poll routes write either.
+      'printers',
+      'printJobs',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),

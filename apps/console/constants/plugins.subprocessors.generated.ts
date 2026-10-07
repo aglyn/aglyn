@@ -14,6 +14,54 @@ import type { PluginSubprocessorManifestEntry } from '@aglyn/aglyn/plugin-manage
 
 export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = [
   {
+    pluginId: 'commerce',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "tools.usps.com",
+        disposition: "no-request",
+        reason: "USPS's public tracking page. Commerce builds a link to it from a shipment’s carrier and tracking number (`libs/plugins/commerce/src/lib/model/tracking-url.ts`) and prints it in the buyer’s shipping email and order status page; no platform server ever requests it.",
+        dataReceived: "Nothing from the platform. When the buyer clicks the link, their own browser sends the carrier the tracking number in the URL; no customer record, email or order detail goes with it.",
+      },
+      {
+        host: "www.ups.com",
+        disposition: "no-request",
+        reason: "UPS's public tracking page. Commerce builds a link to it from a shipment’s carrier and tracking number (`libs/plugins/commerce/src/lib/model/tracking-url.ts`) and prints it in the buyer’s shipping email and order status page; no platform server ever requests it.",
+        dataReceived: "Nothing from the platform. When the buyer clicks the link, their own browser sends the carrier the tracking number in the URL; no customer record, email or order detail goes with it.",
+      },
+      {
+        host: "www.fedex.com",
+        disposition: "no-request",
+        reason: "FedEx's public tracking page. Commerce builds a link to it from a shipment’s carrier and tracking number (`libs/plugins/commerce/src/lib/model/tracking-url.ts`) and prints it in the buyer’s shipping email and order status page; no platform server ever requests it.",
+        dataReceived: "Nothing from the platform. When the buyer clicks the link, their own browser sends the carrier the tracking number in the URL; no customer record, email or order detail goes with it.",
+      },
+      {
+        host: "www.dhl.com",
+        disposition: "no-request",
+        reason: "DHL's public tracking page. Commerce builds a link to it from a shipment’s carrier and tracking number (`libs/plugins/commerce/src/lib/model/tracking-url.ts`) and prints it in the buyer’s shipping email and order status page; no platform server ever requests it.",
+        dataReceived: "Nothing from the platform. When the buyer clicks the link, their own browser sends the carrier the tracking number in the URL; no customer record, email or order detail goes with it.",
+      },
+      {
+        host: "www.canadapost-postescanada.ca",
+        disposition: "no-request",
+        reason: "Canada Post's public tracking page. Commerce builds a link to it from a shipment’s carrier and tracking number (`libs/plugins/commerce/src/lib/model/tracking-url.ts`) and prints it in the buyer’s shipping email and order status page; no platform server ever requests it.",
+        dataReceived: "Nothing from the platform. When the buyer clicks the link, their own browser sends the carrier the tracking number in the URL; no customer record, email or order detail goes with it.",
+      },
+      {
+        host: "www.royalmail.com",
+        disposition: "no-request",
+        reason: "Royal Mail's public tracking page. Commerce builds a link to it from a shipment’s carrier and tracking number (`libs/plugins/commerce/src/lib/model/tracking-url.ts`) and prints it in the buyer’s shipping email and order status page; no platform server ever requests it.",
+        dataReceived: "Nothing from the platform. When the buyer clicks the link, their own browser sends the carrier the tracking number in the URL; no customer record, email or order detail goes with it.",
+      },
+      {
+        host: "auspost.com.au",
+        disposition: "no-request",
+        reason: "Australia Post's public tracking page. Commerce builds a link to it from a shipment’s carrier and tracking number (`libs/plugins/commerce/src/lib/model/tracking-url.ts`) and prints it in the buyer’s shipping email and order status page; no platform server ever requests it.",
+        dataReceived: "Nothing from the platform. When the buyer clicks the link, their own browser sends the carrier the tracking number in the URL; no customer record, email or order detail goes with it.",
+      },
+    ],
+  },
+  {
     pluginId: 'outreach',
     subprocessors: [],
     hosts: [
@@ -61,6 +109,20 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         publishedOn: "2026-10-05",
         reason: "Reached through the AI plugin's Anthropic adapter (`libs/plugins/ai/src/lib/providers/anthropic.ts`) by the doors that call the AI runtime. `libs/plugins/ai/src/lib/server/assist-chat.ts` is gated by `release_assist` AND the key, and a generation job's text step by `release_ai_generative`; `libs/plugins/ai/src/lib/server/ai-assist.ts` carries NO release flag, so setting `ANTHROPIC_API_KEY` in production is by itself what starts this flow. `assist-anthropic-subprocessor-gate.spec.ts` holds the per-door detail and is the deeper guard for this one vendor.",
         dataReceived: "What the user submits — a question, instruction or brief, with the earlier messages of the same Assist conversation — and the content of the element, post, section or page being worked on, with the generated response. On Pro and above, the organization's name and the console route and host travel with an Assist question. For an edit the assistant proposes in the besigner, an outline of the open page, component or layout: element and component ids, layer names, shortened setting values and the selected element's styles. For a generation job, the site inventory: the names and addresses of its pages and collections, the names of its components, layouts, templates, forms and datasets with their prop and field names, and the theme's summary, colors and fonts. For a theme change, the site's current theme settings and brand colors as hex values, from the organization's brand settings, the site logo in the media library or a public page the brief links to. For features that review or write search information, the text and structure of the pages concerned. For product copy, the store's name, the product's name, type, description, tags, options and search listing, the store's category names, and the product's first media-library photo as a copy at most 768 px on its longer edge with its metadata stripped; never another media file, a price, stock, an order or a customer. For products, categories and discounts proposed from a brief, the store's name and its existing category names. For an automation drafted from a brief, which of CRM, webhooks and bookings the plan includes; for an explanation, the automation's outline (trigger, conditions, each step's text with the names of the lists, campaigns, workflows, webhooks and datasets it uses and whether each exists, and a workflow's function names and expressions) and, for a failed run, its time, steps and recorded errors, with email addresses removed and never the triggering event's data. For an insight, the figure reports available and aggregate tables: traffic with top page paths, referrers and campaign tags; form views and submissions; revenue, orders and best-selling product names; bookings by service; campaign subjects with delivery, open and click rates; A/B test and variant conversions; and, for a dataset the member can see, field names and types, record and fill counts, number ranges and totals grouped by a value at least three records share. Email addresses and phone numbers are removed, and no individual record is sent. For CRM assistance, the opened record as the CRM shows it, with all of its standard and custom fields, including contact details, notes, timeline and related records. An email draft adds the request and the record's merge field names; an import sends the field names and types and each column's header and value kind, never a row. No account identifiers or authentication tokens, and no email address outside an opened CRM record.",
+      },
+    ],
+  },
+  {
+    pluginId: 'sms',
+    subprocessors: [
+      {
+        host: "api.twilio.com",
+        entity: "Twilio Inc.",
+        region: "United States",
+        purpose: "Delivery of text messages a site sends its own customers, such as order receipts and shipping updates",
+        publishedOn: "2026-10-06",
+        reason: "The Messages REST API, reached only from the SMS plugin’s Twilio adapter (`libs/plugins/sms/src/lib/twilio-provider.ts`) when a site texts a buyer an order update or a merchant re-sends a receipt by text. Inbound STOP replies arrive from Twilio on a signed webhook.",
+        dataReceived: "The recipient’s phone number and the message text (the store name, order number, amounts, carrier tracking link and order status link). Twilio returns delivery status. No email address, payment detail or account credential is sent.",
       },
     ],
   },

@@ -175,6 +175,22 @@ jest.mock('../../../libs/plugins/commerce/src/lib/server/fulfill-order', () => (
     const path = `hosts/${request.hostId}/orders/${request.orderId}`
     const order = mockDocs.get(path)
     if (!order) return { outcome: 'no_such_order' }
+    // The quantity refusal (AGL-3611), on the one line the fixtures carry.
+    const named = (request.lineItems as Array<{ quantity: number }> | undefined) ?? []
+    if (named.some((entry) => entry.quantity > 1)) {
+      return {
+        outcome: 'invalid_lines',
+        problem: { problem: 'over_fulfilled', lineItemId: 0, remaining: 1, requested: 2 },
+        message: 'Line 0 has only 1 left to fulfill, not 2',
+      }
+    }
+    if (named.some((entry) => !Number.isInteger(entry.quantity) || entry.quantity < 1)) {
+      return {
+        outcome: 'invalid_lines',
+        problem: { problem: 'bad_quantity', lineItemId: 0 },
+        message: 'The quantity for line 0 must be a whole number above zero',
+      }
+    }
     if (order.status === request.to) return { outcome: 'already' }
     // The double models the real transition rule on the one axis these
     // cases turn on: a terminal order refuses, and nothing is written.
@@ -411,16 +427,60 @@ describe('what the endpoint will and will not accept', () => {
 
   it('names an unknown key rather than dropping it', async () => {
     // RED CHECK: delete the unknown-key check and this returns 200 with a
-    // `trackingUrl` that went nowhere — "we recorded your shipment as you
+    // `shippedAt` that went nowhere — "we recorded your shipment as you
     // described it" when half of it was discarded. The `updateFormSubmission`
     // and `updateContact` rule.
     const { status, body } = await patch('/sites/host_1/orders/ord_1', {
       status: 'fulfilled',
-      trackingUrl: 'https://example.com/track',
+      shippedAt: '2026-10-06',
     })
     expect(status).toBe(400)
     expect(body.error.code).toBe('validation_failed')
-    expect(body.error.fields.trackingUrl).toBe('Not writable on an order')
+    expect(body.error.fields.shippedAt).toBe('Not writable on an order')
+    expect(mockShipments).toHaveLength(0)
+  })
+
+  it('passes a partial shipment, its link and the notify flag through (AGL-3611)', async () => {
+    const { status } = await patch('/sites/host_1/orders/ord_1', {
+      status: 'fulfilled',
+      carrier: 'Courier',
+      trackingNumber: 'C-1',
+      trackingUrl: 'https://courier.example/C-1',
+      lineItems: [{ lineItemId: 0, quantity: 1 }],
+      notify: false,
+    })
+    expect(status).toBe(200)
+    expect(mockShipments[0]).toMatchObject({
+      lineItems: [{ lineItemId: 0, quantity: 1 }],
+      trackingUrl: 'https://courier.example/C-1',
+      notify: false,
+    })
+  })
+
+  it('answers over-fulfillment 409 over_fulfilled, and a bad quantity 400', async () => {
+    const over = await patch('/sites/host_1/orders/ord_1', {
+      status: 'fulfilled',
+      lineItems: [{ lineItemId: 0, quantity: 2 }],
+    })
+    expect(over.status).toBe(409)
+    expect(over.body.error.code).toBe('over_fulfilled')
+    const bad = await patch('/sites/host_1/orders/ord_1', {
+      status: 'fulfilled',
+      lineItems: [{ lineItemId: 0, quantity: 0.5 }],
+    })
+    expect(bad.status).toBe(400)
+    expect(bad.body.error.fields.lineItems).toMatch(/whole number/)
+    expect(stored().status).toBe('paid')
+  })
+
+  it('refuses line items on a `delivered` update, and an empty list', async () => {
+    const delivered = await patch('/sites/host_1/orders/ord_1', {
+      status: 'delivered',
+      lineItems: [{ lineItemId: 0, quantity: 1 }],
+    })
+    expect(delivered.status).toBe(400)
+    const empty = await patch('/sites/host_1/orders/ord_1', { status: 'fulfilled', lineItems: [] })
+    expect(empty.status).toBe(400)
     expect(mockShipments).toHaveLength(0)
   })
 

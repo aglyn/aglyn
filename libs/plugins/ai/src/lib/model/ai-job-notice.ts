@@ -17,6 +17,7 @@
 
 import type { AglynNotification } from '@aglyn/aglyn/app-utils/notifications'
 import { aiJobKindNoun } from './ai-job-activity'
+import { aiJobRefundCopy } from './ai-job-failure-copy'
 import type { AiJobKind, AiJobOutput, AiJobReviewReason, AiJobSitePublish } from './ai-jobs.types'
 
 /** The besigner segment each versioned resource lives under. */
@@ -53,6 +54,15 @@ export interface AiJobNoticeSource {
   error?: string | null
   /** What a guided site start put live (AGL-3596); absent on every other job. */
   sitePublish?: Pick<AiJobSitePublish, 'published' | 'drafts'> | null
+  /** What the job spent, and gave back for a failure on our side (AGL-3596). */
+  creditsSpent?: number
+  refundedCredits?: number
+}
+
+/** A stopped job's sentence with what became of its credits, from the job's recorded give-back (AGL-3596). */
+function withRefund(job: AiJobNoticeSource, text: string, status: 'failed' | 'needs_review'): string {
+  const refund = aiJobRefundCopy({ status, refundedCredits: job.refundedCredits, creditsSpent: job.creditsSpent })
+  return refund ? `${text} ${refund}` : text
 }
 
 export type AiJobNotice = Pick<
@@ -118,7 +128,7 @@ export function aiJobNotice(job: AiJobNoticeSource, to: AiJobNoticeTransition): 
       type: 'content.aiJobNeedsYou',
       level: 'warning',
       title: `Your ${noun === 'AI job' ? 'AI job' : `${noun} job`} needs you`,
-      body: job.review?.message || job.error || 'It stopped for your decision. It waits in AI jobs.',
+      body: withRefund(job, job.review?.message || job.error || 'It stopped for your decision. It waits in AI jobs.', 'needs_review'),
       link,
       ...scope,
     }
@@ -167,7 +177,7 @@ export function aiJobNotice(job: AiJobNoticeSource, to: AiJobNoticeTransition): 
     type: 'content.aiJobFailed',
     level: 'warning',
     title: `Your ${noun === 'AI job' ? 'AI job' : `${noun} job`} stopped`,
-    body: job.error || 'It stopped before it finished.',
+    body: withRefund(job, job.error || 'It stopped before it finished.', 'failed'),
     link,
     ...scope,
   }
