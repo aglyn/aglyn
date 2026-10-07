@@ -611,11 +611,9 @@ async function runServerStep(
       // resolves inward, and a public host answering `302` to the metadata
       // endpoint, none of which a pattern over the URL text can see.
       //
-      // Loaded here, not at the top: it brings `undici`, which only this step
-      // needs and which cannot load under jsdom, where specs of the other
-      // steps run.
+      // Loaded here, not at the top: see `webhook-delivery.ts`.
       const { describeConfiguredUrlRefusal, fetchConfiguredPublicUrl } =
-        await import('@aglyn/tenant-data-admin/server/configured-url-fetch')
+        await import('./webhook-delivery')
       let delivered = false
       let lastStatus: number | undefined
       for (let attempt = 0; attempt < 3 && !delivered; attempt += 1) {

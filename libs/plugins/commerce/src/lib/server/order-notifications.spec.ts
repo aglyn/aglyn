@@ -348,6 +348,40 @@ describe('notifyOrderBuyer (AGL-3610)', () => {
     expect(sent).toHaveLength(1)
   })
 
+  it('asks for quiet hours in the store zone on later moments, never on a receipt', async () => {
+    const sent: PluginSmsSendRequest[] = []
+    registerPluginSmsMessaging(
+      {
+        isConfigured: () => true,
+        send: async (request) => {
+          sent.push(request)
+          return {
+            status: 'sent',
+            id: 'SM1',
+            to: '+15555550100',
+            segments: 1,
+            ...(request.quietHours ? { scheduledForMs: 1_000 } : {}),
+          }
+        },
+      },
+      { pluginId: 'sms-test' },
+    )
+    seed({ customerEmail: null, customerPhone: '+15555550100' })
+    docs.set(`hosts/${HOST}`, {
+      subdomain: 'northwind',
+      displayName: 'Northwind Coffee',
+      timeZone: 'America/Denver',
+    })
+    await notifyOrderBuyer(REF, 'receipt')
+    await notifyOrderBuyer(REF, 'delivered')
+    expect(sent[0].quietHours).toBeUndefined()
+    expect(sent[1].quietHours).toEqual({ timeZone: 'America/Denver' })
+    const timeline = docs.get(ORDER_PATH)?.['timeline'] as Array<{ detail?: string }>
+    expect(timeline.map((entry) => entry.detail)).toContain(
+      'Delivery confirmation sent (held for the morning) by text',
+    )
+  })
+
   it('records a suppressed text as a failure and leaves it retryable', async () => {
     registerPluginSmsMessaging(
       { isConfigured: () => true, send: async () => ({ status: 'suppressed' }) },

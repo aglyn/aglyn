@@ -215,6 +215,9 @@ snapshots, totals, and a timeline:
   cancel/refund exits guarded by a status machine. The seven of them, and the
   labels the console shows, are in [Statuses and channels](#order-statuses).
 - **Fulfill with tracking**, print **packing slips**, add internal notes.
+- **Ship with the tools you already use**:
+  [Pirate Ship, Shippo or EasyPost](use-pirate-ship.md) work through a
+  spreadsheet out and a file of tracking numbers back.
 - **Refunds** (full or partial) go through Stripe and reverse the platform
   fee. Refunding needs the **admin** role *and* organization-wide membership —
   a workspace owner or admin, or a member given access to every site. A
@@ -525,5 +528,6 @@ to post tracking back, which fulfills the order. Pro plan and above.
 ## Related
 
 - [Product catalog](catalog.md)
+- [Use Pirate Ship with Aglyn](use-pirate-ship.md)
 - [Billing & plans](../../workspace-and-billing/billing-and-plans/overview.md)
 - [Bookings & scheduling](../bookings/overview.md)

@@ -18,28 +18,8 @@
 'use client'
 
 import { Alert, Stack } from '@mui/material'
-import type { ListFilterField } from '../const/list-filter'
-import { listFilterClauseSentence } from '../const/list-filter-sentence'
-import type { ListFilterClause, ListFilterOption } from '../const/list-grid-filter'
 
-/**
- * A plan's refusals as the notices read them: each refused clause by the
- * same sentence its chip reads ("Reason is Bounced"), and the search as
- * "Search". Every list maps `plan.refused` through this and nothing else.
- */
-export function listQueryRefusals(
-  refused: ReadonlyArray<{ clause: ListFilterClause | 'search'; reason: string }>,
-  context: {
-    fields: readonly ListFilterField[]
-    headers?: Readonly<Record<string, string>>
-    options?: Readonly<Record<string, readonly ListFilterOption[]>>
-  },
-): Array<{ label: string; reason: string }> {
-  return refused.map((entry) => ({
-    label: entry.clause === 'search' ? 'Search' : listFilterClauseSentence(entry.clause, context),
-    reason: entry.reason,
-  }))
-}
+export { listQueryRefusals } from '@aglyn/shared-util-tools/list-query/list-query-refusals'
 
 export interface ListQueryNoticesProps {
   /**

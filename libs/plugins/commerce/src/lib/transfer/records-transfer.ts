@@ -47,6 +47,7 @@ import {
   type HostOrder,
   type OrderAddress,
 } from '../model/commerce-orders'
+import { orderShippingRecord, type ProductWeights } from '../model/order-shipping-export'
 
 /*
  * ORDERS, DISCOUNTS, COUPONS, GIFT CARDS AND CATEGORIES AS FILES (AGL-3531):
@@ -108,6 +109,33 @@ export function planWithCreateRequired(input: BuildTransferPlanInput, required: 
  * ORDERS
  *=========================================*/
 
+/**
+ * What a label tool reads (AGL-3613): the ship-to address split into its
+ * parts, what is still to be packed and what it weighs — `orderShippingRecord`.
+ * The weight is the remaining units' recorded product weights; blank when
+ * no product records one, so the tool uses its default package instead.
+ */
+export const ORDER_SHIPPING_FIELDS: readonly TransferField[] = [
+    { id: 'orderRef', label: 'Order reference', group: 'shipping', type: 'text', readOnly: true, description: 'The order number, as a label tool sends it back.' },
+    { id: 'shipName', label: 'Ship to name', group: 'shipping', type: 'text', readOnly: true },
+    { id: 'shipLine1', label: 'Ship to address line 1', group: 'shipping', type: 'text', readOnly: true },
+    { id: 'shipLine2', label: 'Ship to address line 2', group: 'shipping', type: 'text', readOnly: true },
+    { id: 'shipCity', label: 'Ship to city', group: 'shipping', type: 'text', readOnly: true },
+    { id: 'shipState', label: 'Ship to state', group: 'shipping', type: 'text', readOnly: true },
+    { id: 'shipPostalCode', label: 'Ship to postal code', group: 'shipping', type: 'text', readOnly: true },
+    { id: 'shipCountry', label: 'Ship to country', group: 'shipping', type: 'text', readOnly: true },
+    { id: 'shipPhone', label: 'Ship to phone', group: 'shipping', type: 'phone', readOnly: true },
+    { id: 'shipEmail', label: 'Ship to email', group: 'shipping', type: 'email', readOnly: true },
+    { id: 'itemsToShip', label: 'Items to ship', group: 'shipping', type: 'longText', readOnly: true, description: 'What is still to ship: quantity × name (variant), SKU.' },
+    { id: 'unitsToShip', label: 'Units to ship', group: 'shipping', type: 'integer', readOnly: true },
+    { id: 'weightOz', label: 'Weight (oz)', group: 'shipping', type: 'number', readOnly: true },
+    { id: 'weightLb', label: 'Weight (lb)', group: 'shipping', type: 'number', readOnly: true },
+    { id: 'weightUnit', label: 'Weight unit', group: 'shipping', type: 'text', readOnly: true, description: 'Always oz, beside Weight (oz), for tools that ask for the unit.' },
+]
+
+/** The shipping fields' ids, which an export reads product weights for. */
+export const ORDER_SHIPPING_FIELD_IDS: readonly string[] = ORDER_SHIPPING_FIELDS.map((field) => field.id)
+
 export const ORDER_TRANSFER_FIELDS: readonly TransferField[] = [
   { id: 'number', label: 'Order number', group: 'order', type: 'integer', readOnly: true },
   { id: 'date', label: 'Date', group: 'order', type: 'datetime', readOnly: true },
@@ -139,6 +167,7 @@ export const ORDER_TRANSFER_FIELDS: readonly TransferField[] = [
   { id: 'note', label: 'Note', group: 'order', type: 'longText', readOnly: true },
   { id: 'dispute', label: 'Dispute', group: 'order', type: 'text', readOnly: true },
   { id: 'paymentIntentId', label: 'Payment ID', group: TRANSFER_SYSTEM_GROUP.id, type: 'text', system: true },
+  ...ORDER_SHIPPING_FIELDS,
 ]
 
 export const ORDER_TRANSFER_GROUPS = [
@@ -146,6 +175,7 @@ export const ORDER_TRANSFER_GROUPS = [
   { id: 'customer', label: 'Customer' },
   { id: 'items', label: 'Items' },
   { id: 'money', label: 'Money' },
+  { id: 'shipping', label: 'Shipping' },
 ]
 
 /** An order as a stored document, with the id the export reads it under. */
@@ -176,6 +206,7 @@ export function orderRecord(
   id: string,
   stored: StoredOrder,
   productNames: Readonly<Record<string, string>> = {},
+  weights: ProductWeights = {},
 ): Record<string, unknown> {
   const lifted = liftLegacyOrder(stored)
   const lineItems = stored.lineItems ?? []
@@ -215,6 +246,7 @@ export function orderRecord(
     note: stored.note ?? null,
     dispute: stored.dispute ? text((stored.dispute as { status?: string }).status) || 'open' : null,
     paymentIntentId: stored.paymentIntentId ?? null,
+    ...orderShippingRecord(id, stored, weights),
   }
 }
 

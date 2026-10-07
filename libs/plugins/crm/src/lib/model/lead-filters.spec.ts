@@ -20,7 +20,7 @@ import {
   EMAIL_STATE_STATUSES,
 } from '@aglyn/aglyn'
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
-import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { planListQuery } from '@aglyn/shared-util-tools/list-query/list-query-plan'
 import {
   LEAD_EMAIL_FILTER_LABELS,
   LEAD_EMAIL_FILTERS,

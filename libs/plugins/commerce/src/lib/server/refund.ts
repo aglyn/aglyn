@@ -576,6 +576,8 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
         orderRef,
         {
           ...(fullyRefunded ? { status: 'refunded' } : {}),
+          // What a shipping tool's feed asks to learn of it (AGL-3613).
+          updatedAtMs: Date.now(),
           // The entitlement withdrawal, recorded WITH the money (AGL-2454).
           // `arrayUnion` rather than a written-back array: two admins refunding
           // different lines at once must not erase each other's, and this

@@ -22,12 +22,12 @@ import {
   type TaskDueState,
   taskDueState,
 } from '@aglyn/aglyn'
-import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
+import type { ListFilterField } from '@aglyn/shared-util-tools/list-query/list-filter'
 import type {
   ListQueryDeclaration,
   ListQueryFilter,
   ListQuerySort,
-} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+} from '@aglyn/shared-util-tools/list-query/list-query-plan'
 import { CRM_LIST_SEARCH, crmSelectField } from './crm-list-query'
 import type { CrmRoutes } from './crm-routes'
 

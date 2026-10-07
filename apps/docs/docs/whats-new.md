@@ -10,7 +10,28 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — checkout on your own site (newest)
+## October 2026 — Pirate Ship and shipping spreadsheets (newest)
+
+- **[Use Pirate Ship with Aglyn](commerce-and-bookings/commerce/use-pirate-ship.md)** —
+  **Export for shipping** on the Orders card writes the orders still to ship as a
+  spreadsheet Pirate Ship, Shippo or EasyPost reads, and **Import tracking** takes the
+  tool's shipment report back: each order is marked shipped and your customer gets the
+  tracking link. A tracking number already on an order is never recorded twice.
+
+## October 2026 — order emails and a status page
+
+- **[Order emails](commerce-and-bookings/commerce/order-notifications.md)** — customers
+  now hear about every step of their order: a receipt for register sales and paid payment
+  links too, an email for each package you ship with its tracking link, and emails when
+  you mark an order delivered, refund it or cancel it. Each is sent once, can be designed
+  under Emails, and can be switched off under Customer notifications.
+- **[Order status page](commerce-and-bookings/commerce/order-notifications.md#order-status-page)**
+  — every order email links to a private page on your site with the order's status,
+  packages and tracking. No account needed.
+- **[Resend receipt](commerce-and-bookings/commerce/order-notifications.md#resend-receipt)**
+  — from any order, to the customer or to another address.
+
+## October 2026 — checkout on your own site
 
 - **[In-page checkout](guides/commerce-end-to-end.md#paying-without-leaving-your-site)** —
   shoppers pay on your store instead of being sent to Stripe's page. The Buy and

@@ -905,6 +905,247 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
     "footerReason": "You’re receiving this because this address was entered on {{host.businessName}}’s signup form."
   },
   {
+    "key": "return-requested",
+    "name": "Return requested",
+    "description": "Tells the store a buyer asked to return items, with what and why, so someone can approve or decline it.",
+    "pluginId": "commerce",
+    "plugin": "Commerce",
+    "control": "besigner",
+    "defaultSubject": "Return requested for order {{order.number}}",
+    "mergeTokens": [
+      {
+        "name": "order.number",
+        "description": "The order number, as the store shows it",
+        "sample": "#1042"
+      },
+      {
+        "name": "return.items",
+        "description": "The items being returned, one per line, with the reason",
+        "sample": "1× House Blend — Arrived damaged"
+      },
+      {
+        "name": "buyer.email",
+        "description": "The buyer’s email",
+        "sample": "buyer@example.com"
+      },
+      {
+        "name": "return.customerNote",
+        "description": "What the buyer wrote; empty when they wrote nothing",
+        "sample": "The lid was cracked."
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "A buyer asked for a return",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "{{buyer.email}} wants to return items from order {{order.number}}.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{return.items}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{return.customerNote}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Approve or decline it under Products → Returns.",
+        "variant": "caption"
+      }
+    ],
+    "footerReason": "You’re receiving this because you manage {{host.businessName}}."
+  },
+  {
+    "key": "return-approved",
+    "name": "Return approved",
+    "description": "Tells the buyer their return was approved and how to send the items back, with the return label when the store attached one.",
+    "pluginId": "commerce",
+    "plugin": "Commerce",
+    "control": "besigner",
+    "defaultSubject": "Your return for order {{order.number}} is approved",
+    "mergeTokens": [
+      {
+        "name": "order.number",
+        "description": "The order number, as the store shows it",
+        "sample": "#1042"
+      },
+      {
+        "name": "return.items",
+        "description": "The items being returned, one per line, with the reason",
+        "sample": "1× House Blend — Arrived damaged"
+      },
+      {
+        "name": "return.note",
+        "description": "The store’s note to the buyer on this return; empty when none",
+        "sample": "Please include the original packaging."
+      },
+      {
+        "name": "return.label",
+        "description": "A sentence with the return label link and its tracking; empty when the store attached no label",
+        "sample": "Print your return label: https://labels.example.com/r/123"
+      },
+      {
+        "name": "order.statusUrl",
+        "description": "Link to the order status page: status, shipments and tracking. Private to the buyer; it needs no account",
+        "sample": "https://shop.example.com/order-status?o=ord_123&t=…"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "Your return is approved",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "{{host.businessName}} approved the return of:",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{return.items}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{return.note}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{return.label}}",
+        "variant": "body"
+      },
+      {
+        "block": "button",
+        "label": "View your order",
+        "href": "{{order.statusUrl}}"
+      }
+    ],
+    "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}."
+  },
+  {
+    "key": "return-declined",
+    "name": "Return declined",
+    "description": "Tells the buyer their return was declined, with the store’s note.",
+    "pluginId": "commerce",
+    "plugin": "Commerce",
+    "control": "besigner",
+    "defaultSubject": "About your return for order {{order.number}}",
+    "mergeTokens": [
+      {
+        "name": "order.number",
+        "description": "The order number, as the store shows it",
+        "sample": "#1042"
+      },
+      {
+        "name": "return.items",
+        "description": "The items being returned, one per line, with the reason",
+        "sample": "1× House Blend — Arrived damaged"
+      },
+      {
+        "name": "return.note",
+        "description": "The store’s note to the buyer on this return; empty when none",
+        "sample": "Please include the original packaging."
+      },
+      {
+        "name": "order.statusUrl",
+        "description": "Link to the order status page: status, shipments and tracking. Private to the buyer; it needs no account",
+        "sample": "https://shop.example.com/order-status?o=ord_123&t=…"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "We could not accept this return",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "{{host.businessName}} declined the return of:",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{return.items}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{return.note}}",
+        "variant": "body"
+      },
+      {
+        "block": "button",
+        "label": "View your order",
+        "href": "{{order.statusUrl}}"
+      }
+    ],
+    "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}."
+  },
+  {
+    "key": "return-refunded",
+    "name": "Return refunded",
+    "description": "Tells the buyer their return was received and refunded, and how much.",
+    "pluginId": "commerce",
+    "plugin": "Commerce",
+    "control": "besigner",
+    "defaultSubject": "Your refund for order {{order.number}}",
+    "mergeTokens": [
+      {
+        "name": "order.number",
+        "description": "The order number, as the store shows it",
+        "sample": "#1042"
+      },
+      {
+        "name": "return.items",
+        "description": "The items being returned, one per line, with the reason",
+        "sample": "1× House Blend — Arrived damaged"
+      },
+      {
+        "name": "return.refundTotal",
+        "description": "The amount refunded for this return",
+        "sample": "$24.00"
+      },
+      {
+        "name": "order.statusUrl",
+        "description": "Link to the order status page: status, shipments and tracking. Private to the buyer; it needs no account",
+        "sample": "https://shop.example.com/order-status?o=ord_123&t=…"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "Your return is refunded",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "{{host.businessName}} received your return and refunded {{return.refundTotal}} to your original payment method.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{return.items}}",
+        "variant": "body"
+      },
+      {
+        "block": "button",
+        "label": "View your order",
+        "href": "{{order.statusUrl}}"
+      }
+    ],
+    "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}."
+  },
+  {
     "key": "campaign",
     "name": "Campaign broadcast",
     "description": "A campaign sent to the site's subscriber list.",

@@ -116,6 +116,9 @@ const INDIRECT_READS: Record<string, string> = {
   DOCS_ERROR_BEACON_ENDPOINT: 'apps/docs/docusaurus.config.ts',
   DOCS_STATUS_TARGETS: 'apps/docs/docusaurus.config.ts',
   DOCS_STATUS_FALLBACK_URL: 'apps/docs/docusaurus.config.ts',
+  TWILIO_ACCOUNT_SID: 'libs/plugins/sms/src/lib/twilio-provider.ts',
+  TWILIO_AUTH_TOKEN: 'libs/plugins/sms/src/lib/twilio-provider.ts',
+  TWILIO_MESSAGING_SERVICE_SID: 'libs/plugins/sms/src/lib/twilio-provider.ts',
 }
 
 /**
