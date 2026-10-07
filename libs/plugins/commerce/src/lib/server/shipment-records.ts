@@ -140,6 +140,11 @@ export async function readShippableOrder(
         atMs: fulfillment.atMs,
       })),
     ...(order.createdAtMs ? { createdAtMs: order.createdAtMs } : {}),
+    testMode: CommerceModel.orderIsTestMode({
+      checkoutSessionId: order.checkoutSessionId,
+      livemode: (order as unknown as { livemode?: unknown }).livemode,
+      $id: orderId,
+    }),
   }
 }
 
