@@ -245,16 +245,6 @@ export default [
       '@nx/enforce-module-boundaries': ['error', moduleBoundaryOptions],
     },
   },
-  {
-    // A plugin's `src/mobile` entry (AGL-3620) is compiled by the mobile apps,
-    // never built with the plugin, so the mobile foundation it imports has no
-    // build target of its own to depend on. Which files may import it at all
-    // is `check:mobile-isolation`'s.
-    files: ['**/src/mobile/**/*.ts', '**/src/mobile/**/*.tsx'],
-    rules: {
-      '@nx/enforce-module-boundaries': ['error', { ...moduleBoundaryOptions, enforceBuildableLibDependency: false }],
-    },
-  },
   // `.mts` alongside `.ts` (AGL-2926): the two `.mts` tools scripts were
   // matched by NO block — the `.mjs` hole AGL-1815 closed, one extension
   // over — so `eslint tools` evaluated nothing for them and exited 0.

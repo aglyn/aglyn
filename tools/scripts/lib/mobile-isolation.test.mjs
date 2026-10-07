@@ -16,7 +16,7 @@
  */
 
 /**
- * `check:mobile-isolation` (AGL-3620), and its forced reds.
+ * `check:mobile-isolation` (AGL-3620, AGL-3651), and its forced reds.
  *
  * Every rule is driven over a synthetic tree, so each red is forced without
  * editing the repository; then the real tree and the real allowlist are run,
@@ -32,9 +32,7 @@ import { fileURLToPath } from 'node:url'
 import {
   aliasTable,
   domAccess,
-  evaluateMobileToWeb,
   evaluateNativeToWeb,
-  evaluateWebToMobile,
   evaluateWebToNative,
   importSpecifiers,
   provePureModules,
@@ -43,9 +41,7 @@ import {
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 
 const ALIASES = aliasTable({
-  '@aglyn/mobile-core': ['./libs/mobile/core/src/index.ts'],
   '@aglyn/plugins-shop': ['./libs/plugins/shop/src/index.ts'],
-  '@aglyn/plugins-shop/mobile': ['./libs/plugins/shop/src/mobile/index.ts'],
   '@aglyn/plugins-shop/*': ['./libs/plugins/shop/src/lib/*'],
   '@aglyn/shared-util-x/*': ['./libs/shared/util/x/src/lib/*'],
 })
@@ -64,15 +60,8 @@ function tree(sources) {
 }
 
 const CLEAN = {
-  'libs/mobile/core/src/index.ts': "import { useState } from 'react'\nimport { View } from 'react-native'\nexport const x = 1\n",
-  'libs/plugins/shop/src/index.ts': "export * from './lib/plugin'\n",
-  'libs/plugins/shop/src/lib/plugin.ts': "import { Box } from '@mui/material'\nexport const a = Box\n",
-  'libs/plugins/shop/src/lib/model/price.ts': "import { cents } from '@aglyn/shared-util-x/money'\nexport const p = cents\n",
+  'libs/plugins/shop/src/lib/model/price.ts': "import { cents } from '@aglyn/shared-util-x/money'\nimport type { Theme } from '@mui/material'\nexport const p = cents\n",
   'libs/shared/util/x/src/lib/money.ts': 'export const cents = (n: number) => Math.round(n * 100)\n',
-  'libs/plugins/shop/src/mobile/index.ts':
-    "import { x } from '@aglyn/mobile-core'\nimport { p } from '../lib/model/price'\nimport type { Theme } from '@mui/material'\nexport const run = () => [x, p]\n",
-  'apps/mobile/src/app.tsx': "import { run } from '@aglyn/plugins-shop/mobile'\nconst script = `document.title = 'x'`\nexport default run\n",
-  'apps/mobile/metro.config.js': "const path = require('node:path')\nmodule.exports = path\n",
 }
 const PURE = ['libs/plugins/shop/src/lib/model/price.ts', 'libs/shared/util/x/src/lib/money.ts']
 
@@ -100,73 +89,30 @@ test('domAccess sees code, not strings or comments', () => {
   assert.deepEqual(domAccess('window.document.title = x'), [1])
 })
 
-test('a clean tree passes both directions and proves its pure modules', () => {
-  const t = tree(CLEAN)
-  assert.deepEqual(evaluateWebToMobile(t), [])
-  const mobile = evaluateMobileToWeb({ ...t, pure: PURE })
-  assert.deepEqual(mobile.failures, [])
-  assert.deepEqual(mobile.reachedPure, PURE)
-  assert.deepEqual(provePureModules({ ...t, pure: PURE }), [])
+test('a clean pure list proves pure', () => {
+  assert.deepEqual(provePureModules({ ...tree(CLEAN), pure: PURE }), [])
 })
 
-test('forced red: a plugin web file imports its own mobile entry (web → mobile)', () => {
-  const t = tree({ ...CLEAN, 'libs/plugins/shop/src/index.ts': "export * from './mobile'\n" })
-  const failures = evaluateWebToMobile(t)
-  assert.equal(failures.length, 1)
-  assert.match(failures[0].why, /mobile code libs\/plugins\/shop\/src\/mobile\/index.ts/)
-})
-
-test('forced red: console imports react-native, @aglyn/mobile-*, or a /mobile entry', () => {
-  const t = tree({
-    ...CLEAN,
-    'apps/console/app/page.tsx':
-      "import { View } from 'react-native'\nimport { x } from '@aglyn/mobile-core'\nconst m = import('@aglyn/plugins-shop/mobile')\nimport * as N from '@react-navigation/native'\nimport E from 'expo-constants'\n",
-  })
+test('forced red: a listed module that does not exist, or touches the DOM, fails its proof', () => {
+  const t = tree({ ...CLEAN, 'libs/shared/util/x/src/lib/money.ts': 'export const cents = () => document.title\n' })
   assert.deepEqual(
-    evaluateWebToMobile(t).map((failure) => failure.specifier),
-    ['react-native', '@aglyn/mobile-core', '@react-navigation/native', 'expo-constants', '@aglyn/plugins-shop/mobile'],
+    provePureModules({ ...t, pure: [...PURE, 'libs/gone.ts'] }).map((failure) => failure.why),
+    ['touches the DOM', 'does not exist'],
   )
 })
 
-test('forced red: mobile reaches MUI, Next, firebase-admin, Stripe, Node, CSS', () => {
+test('forced red: a listed module reaching Node, Next, firebase-admin or a non-neutral package fails its proof', () => {
   const t = tree({
     ...CLEAN,
-    'libs/mobile/core/src/index.ts':
-      "import { Box } from '@mui/material'\nimport Link from 'next/link'\nimport admin from 'firebase-admin'\nimport Stripe from 'stripe'\nimport fs from 'node:fs'\nimport './a.css'\nimport { createRoot } from 'react-dom/client'\nimport lodash from 'lodash'\n",
+    'libs/shared/util/x/src/lib/money.ts':
+      "import fs from 'node:fs'\nimport Link from 'next/link'\nimport admin from 'firebase-admin'\nimport lodash from 'lodash'\nexport const cents = 1\n",
   })
-  const whys = evaluateMobileToWeb({ ...t, pure: PURE }).failures.map((failure) => failure.why).sort()
-  assert.deepEqual(whys, [
-    'MUI (web UI)',
-    'Next.js',
-    'React DOM',
+  assert.deepEqual(provePureModules({ ...t, pure: PURE }).map((failure) => failure.why), [
     'a Node built-in',
-    'a stylesheet',
-    'lodash is not a mobile package',
+    'Next.js',
     'server-only (admin SDK)',
-    'the Stripe Node SDK (server-only)',
+    'lodash is not a platform-neutral package',
   ])
-})
-
-test("forced red: mobile reaches a plugin's web entry, server code, or an unlisted module", () => {
-  const t = tree({
-    ...CLEAN,
-    'libs/plugins/shop/src/lib/server/charge.ts': 'export const c = 1\n',
-    'libs/plugins/shop/src/lib/model/other.ts': 'export const o = 1\n',
-    'libs/plugins/shop/src/mobile/index.ts':
-      "import { a } from '@aglyn/plugins-shop'\nimport { c } from '../lib/server/charge'\nimport { o } from '../lib/model/other'\nexport const run = () => [a, c, o]\n",
-  })
-  const whys = evaluateMobileToWeb({ ...t, pure: PURE }).failures.map((failure) => failure.why)
-  assert.equal(whys.length, 3)
-  assert.match(whys[0], /a plugin's web entry/)
-  assert.match(whys[1], /server-only code/)
-  assert.match(whys[2], /not on the proven-pure allowlist/)
-})
-
-test('forced red: the DOM in mobile code, outside a string', () => {
-  const t = tree({ ...CLEAN, 'apps/mobile/src/app.tsx': 'export default () => document.title\n' })
-  const failures = evaluateMobileToWeb({ ...t, pure: PURE }).failures
-  assert.equal(failures.length, 1)
-  assert.equal(failures[0].why, 'touches the DOM outside a string')
 })
 
 test('forced red: an allowlisted module that is not pure fails its proof', () => {

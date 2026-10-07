@@ -18,7 +18,6 @@
 import {
   accountPushSwitch,
   isApnsDeviceToken,
-  isExpoPushToken,
   isFcmRegistrationToken,
   isMobilePushToken,
   MOBILE_APP_BUNDLES,
@@ -80,13 +79,6 @@ describe('the mobile push channel (AGL-3620)', () => {
     expect(MOBILE_APP_BUNDLES).toEqual({ aglyn: 'com.aglyn.app', 'aglyn-pos': 'com.aglyn.pos' })
   })
 
-  it('recognizes only Expo push tokens', () => {
-    expect(isExpoPushToken('ExponentPushToken[abcdefgh1234]')).toBe(true)
-    expect(isExpoPushToken('ExpoPushToken[abcdefgh1234]')).toBe(true)
-    expect(isExpoPushToken('abcdefgh1234')).toBe(false)
-    expect(isExpoPushToken('ExponentPushToken[]')).toBe(false)
-    expect(isExpoPushToken(42)).toBe(false)
-  })
 
   it('round-trips the data a tap acts on, and refuses a link the app must not open', () => {
     const data = mobilePushData({ type: 'content.order', link: '/acme/orders', orgId: 'org-1', hostId: null })

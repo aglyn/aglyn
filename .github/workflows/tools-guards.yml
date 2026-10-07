@@ -929,12 +929,12 @@ jobs:
       - run: npm run test:plugin-domain-in-core
       - run: npm run check:plugin-domain-in-core
 
-      # The native apps never cost the web a byte (AGL-3620): nothing a web
-      # app reaches imports React Native, Expo, libs/mobile or a plugin's
-      # /mobile entry, and nothing the mobile apps bundle reaches MUI, Next,
-      # React DOM, server code, Node built-ins or the DOM, apart from the
-      # proven-pure modules in tools/scripts/mobile-pure-modules.json. The
-      # forced reds run first so a detector that matched nothing cannot pass.
+      # The native apps never cost the web a byte (AGL-3620, AGL-3651): no web
+      # file or tsconfig reaches apps/ios, apps/android, libs/native or a
+      # plugin's src/ios|src/android, nothing there points outside the native
+      # trees, and every module the native generators read proves pure on
+      # tools/scripts/mobile-pure-modules.json. The forced reds run first so a
+      # detector that matched nothing cannot pass.
       - run: npm run test:mobile-isolation
       - run: npm run check:mobile-isolation
 

@@ -16,27 +16,18 @@
  */
 
 /**
- * The pure half of `check:mobile-isolation` (AGL-3620).
+ * The pure half of `check:mobile-isolation` (AGL-3620, AGL-3651).
  *
  * The native apps and the web apps share one repository and never one byte.
- * Two directions, both enforced over the import graph:
+ * Two things are held here:
  *
- *  - WEB → MOBILE. No file a web app can reach (console, tenant, docs, core,
- *    shared, and every plugin file outside `src/mobile`) imports React
- *    Native, Expo, React Navigation, `libs/mobile`, `@aglyn/mobile-*` or a
- *    plugin's `/mobile` entry. Because EVERY non-mobile file is held to this,
- *    no web entry (`src/index.ts`, `server.ts`, `declarations*.ts`) can reach
- *    `src/mobile` transitively either: the path would need one edge from a
- *    non-mobile file into mobile code, and that edge is the red.
- *  - MOBILE → WEB. From every file of `apps/mobile`, `apps/pos-mobile`,
- *    `libs/mobile/*` and each plugin's `src/mobile`, imports are followed
- *    transitively. A bare package must be a mobile package; MUI, Emotion,
- *    Next, React DOM, firebase-admin, the Stripe Node SDK and Node built-ins
- *    are refused by name. A workspace module outside the mobile trees must be
- *    on the PURE allowlist, and an allowlisted module is admitted only while
- *    its own closure is pure (`provePureModules`), so the list can grow only
- *    with that proof. The DOM (`document`) is refused outside string
- *    literals: a WebView's injected script is a string, and runs in the page.
+ *  - THE PURE LIST. `tools/scripts/mobile-pure-modules.json` names the
+ *    TypeScript modules the native generators (contracts, theme, catalog) may
+ *    read. A listed module is admitted only while its own imports are listed
+ *    pure modules or platform-neutral packages, with no DOM, no Node built-in
+ *    and nothing web- or server-only (`provePureModules`), so the list grows
+ *    only with that proof.
+ *  - THE NATIVE TREES, at the file level, both ways (the native walk below).
  *
  * Type-only imports are erased by the compiler and are not edges.
  */
@@ -46,61 +37,8 @@ import { posix } from 'node:path'
 
 export const CODE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']
 
-/** Trees a web app bundles or serves from. */
-export const WEB_ROOTS = [
-  'apps/console/',
-  'apps/tenant/',
-  'apps/docs/',
-  'libs/aglyn/',
-  'libs/tenant/',
-  'libs/besigner/',
-  'libs/shared/',
-  'libs/plugins/',
-]
-
-/** Trees that are mobile code. */
-export const MOBILE_ROOTS = ['apps/mobile/', 'apps/pos-mobile/', 'libs/mobile/']
-
-/** A plugin's mobile entry: `libs/plugins/<id>/src/mobile/…`. */
-export const PLUGIN_MOBILE = /^libs\/plugins\/[^/]+\/src\/mobile\//
-
-/**
- * Build-time configs at a mobile app's root run in Node under Expo's CLI,
- * Metro or jest, and are never bundled into the app.
- */
-const MOBILE_BUILD_CONFIG = /^apps\/(mobile|pos-mobile)\/[^/]+\.config\.(js|ts|cjs|mjs)$/
-
-export function isMobileFile(path) {
-  return MOBILE_ROOTS.some((root) => path.startsWith(root)) || PLUGIN_MOBILE.test(path)
-}
-
 export function isCodeFile(path) {
   return CODE_EXTENSIONS.some((ext) => path.endsWith(ext)) && !path.endsWith('.d.ts')
-}
-
-const isSpec = (path) => /\.(spec|test)\.[cm]?[jt]sx?$/.test(path)
-
-/** Mobile files the graph starts from: everything the apps can bundle. */
-export function mobileRoots(files) {
-  return files.filter(
-    (path) =>
-      isMobileFile(path) &&
-      isCodeFile(path) &&
-      !isSpec(path) &&
-      !MOBILE_BUILD_CONFIG.test(path) &&
-      !path.split('/').includes('node_modules'),
-  )
-}
-
-/** Web files whose imports are held to the web → mobile rule. */
-export function webFiles(files) {
-  return files.filter(
-    (path) =>
-      WEB_ROOTS.some((root) => path.startsWith(root)) &&
-      !isMobileFile(path) &&
-      isCodeFile(path) &&
-      !path.split('/').includes('node_modules'),
-  )
 }
 
 /* ---------------------------------------------------------------------------
@@ -302,30 +240,11 @@ export function resolveSpecifier(specifier, from, { aliases, exists }) {
  * Rules
  * ------------------------------------------------------------------------- */
 
-/** Packages that exist only for the native apps. */
-export function isMobilePackage(name) {
-  return (
-    name === 'react-native' ||
-    name.startsWith('react-native-') ||
-    name.startsWith('@react-native/') ||
-    name.startsWith('@react-native-') ||
-    name === 'expo' ||
-    name.startsWith('expo-') ||
-    name.startsWith('@expo/') ||
-    name.startsWith('@react-navigation/') ||
-    name === '@stripe/stripe-terminal-react-native'
-  )
-}
+/** Platform-neutral packages a pure module may import. */
+const NEUTRAL_PACKAGES = new Set(['react', 'firebase'])
 
-/** Platform-neutral packages mobile code may also import. */
-const NEUTRAL_PACKAGES = new Set(['react', 'firebase', '@tanstack/react-query', '@tanstack/query-async-storage-persister', '@tanstack/react-query-persist-client'])
-
-export function isAllowedMobilePackage(name) {
-  return isMobilePackage(name) || NEUTRAL_PACKAGES.has(name) || name.startsWith('@firebase/')
-}
-
-/** Refused from mobile code by name, with the reason a person reads. */
-export function bannedForMobile(specifier) {
+/** Refused from a pure module by name, with the reason a person reads. */
+export function bannedForPure(specifier) {
   const name = packageOf(specifier)
   if (isNodeBuiltin(specifier)) return 'a Node built-in'
   if (name.startsWith('@mui/')) return 'MUI (web UI)'
@@ -338,130 +257,6 @@ export function bannedForMobile(specifier) {
   return null
 }
 
-/** A web-only or server-only workspace path, named for the message. */
-export function webOnlyReason(path) {
-  if (path.startsWith('libs/besigner/')) return 'the Besigner (web UI)'
-  if (path.startsWith('libs/tenant/feature/')) return 'a web UI lib'
-  if (/(^|\/)server(\/|\.ts$|\.tsx$)/.test(path)) return 'server-only code'
-  if (/secret-box/.test(path)) return 'server-only secrets'
-  if (/-admin(\/|$)/.test(path) || /\/admin\/src\//.test(path)) return 'server-only (admin)'
-  if (/^libs\/plugins\/[^/]+\/src\/(index|server)\.tsx?$/.test(path)) return "a plugin's web entry"
-  if (/\/components\//.test(path)) return 'web components'
-  if (/\.(css|scss|sass|less)$/.test(path)) return 'a stylesheet'
-  return null
-}
-
-/** Is a web file's import of `specifier` (resolved to `target`) a mobile edge? */
-export function mobileEdge(specifier, target) {
-  if (target.kind === 'package' && isMobilePackage(target.name)) return `imports ${target.name}`
-  if (/^@aglyn\/mobile-/.test(specifier)) return `imports ${specifier}`
-  if (/^@aglyn\/plugins-[^/]+\/mobile(\/|$)/.test(specifier)) return `imports ${specifier}`
-  if (target.kind === 'file' && isMobileFile(target.path)) return `imports mobile code ${target.path}`
-  return null
-}
-
-/**
- * Web → mobile. Returns one failure per offending import.
- * `read(path)` returns source text.
- */
-export function evaluateWebToMobile({ files, read, aliases, exists }) {
-  const failures = []
-  for (const file of webFiles(files)) {
-    let source
-    try {
-      source = read(file)
-    } catch {
-      continue
-    }
-    for (const specifier of importSpecifiers(source)) {
-      const target = resolveSpecifier(specifier, file, { aliases, exists })
-      const why = mobileEdge(specifier, target)
-      if (why) failures.push({ direction: 'web→mobile', file, specifier, why })
-    }
-  }
-  return failures
-}
-
-/**
- * Mobile → web. Walks from every mobile root; returns one failure per
- * offending edge, and the set of pure modules mobile code reached.
- */
-export function evaluateMobileToWeb({ files, read, aliases, exists, pure }) {
-  const failures = []
-  const reachedPure = new Set()
-  const seen = new Set()
-  const queue = mobileRoots(files)
-  const pureSet = new Set(pure)
-  while (queue.length) {
-    const file = queue.shift()
-    if (seen.has(file)) continue
-    seen.add(file)
-    let source
-    try {
-      source = read(file)
-    } catch {
-      continue
-    }
-    for (const line of domAccess(source)) {
-      failures.push({ direction: 'mobile→web', file, specifier: `line ${line}`, why: 'touches the DOM outside a string' })
-    }
-    for (const specifier of importSpecifiers(source)) {
-      const banned = bannedForMobile(specifier)
-      if (banned) {
-        failures.push({ direction: 'mobile→web', file, specifier, why: banned })
-        continue
-      }
-      const target = resolveSpecifier(specifier, file, { aliases, exists })
-      if (target.kind === 'unresolved') {
-        failures.push({ direction: 'mobile→web', file, specifier, why: 'does not resolve to a file' })
-        continue
-      }
-      if (target.kind === 'package') {
-        if (!isAllowedMobilePackage(target.name)) {
-          failures.push({ direction: 'mobile→web', file, specifier, why: `${target.name} is not a mobile package` })
-        }
-        continue
-      }
-      if (isMobileFile(target.path)) {
-        queue.push(target.path)
-        continue
-      }
-      if (pureSet.has(target.path)) {
-        reachedPure.add(target.path)
-        continue
-      }
-      const reason = webOnlyReason(target.path)
-      failures.push({
-        direction: 'mobile→web',
-        file,
-        specifier,
-        why: reason
-          ? `reaches ${reason}: ${target.path}`
-          : `reaches ${target.path}, which is not on the proven-pure allowlist`,
-      })
-    }
-  }
-  // What the reached pure modules reach in turn (their proof is separate).
-  const pending = [...reachedPure]
-  while (pending.length) {
-    const file = pending.pop()
-    let source
-    try {
-      source = read(file)
-    } catch {
-      continue
-    }
-    for (const specifier of importSpecifiers(source)) {
-      const target = resolveSpecifier(specifier, file, { aliases, exists })
-      if (target.kind === 'file' && pureSet.has(target.path) && !reachedPure.has(target.path)) {
-        reachedPure.add(target.path)
-        pending.push(target.path)
-      }
-    }
-  }
-  return { failures, reachedPure: [...reachedPure].sort() }
-}
-
 /**
  * The allowlist's proof: every listed module's own imports are listed pure
  * modules or neutral packages, with no DOM, no Node built-in and nothing
@@ -471,10 +266,6 @@ export function provePureModules({ pure, read, aliases, exists }) {
   const failures = []
   const pureSet = new Set(pure)
   for (const file of pure) {
-    if (isMobileFile(file)) {
-      failures.push({ direction: 'pure', file, specifier: '', why: 'is mobile code, which needs no allowlisting' })
-      continue
-    }
     let source
     try {
       source = read(file)
@@ -486,7 +277,7 @@ export function provePureModules({ pure, read, aliases, exists }) {
       failures.push({ direction: 'pure', file, specifier: `line ${line}`, why: 'touches the DOM' })
     }
     for (const specifier of importSpecifiers(source)) {
-      const banned = bannedForMobile(specifier)
+      const banned = bannedForPure(specifier)
       if (banned) {
         failures.push({ direction: 'pure', file, specifier, why: banned })
         continue

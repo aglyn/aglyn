@@ -900,26 +900,33 @@ redirect URI in each app. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
 
 ## Mobile apps and push {#mobile}
 
-The iOS and Android apps (`apps/mobile`) are built with Expo, not served by
-your containers. Their `EXPO_PUBLIC_*` variables are **build** variables:
-Expo inlines each one into the app bundle when it is built, so changing one
-means building and shipping the app again. None of them is a secret.
+The native apps (Aglyn and Aglyn POS, for iOS, iPadOS and macOS from
+`apps/ios`, and for Android and the Windows desktop from `apps/android`) are
+built, not served by your containers. Their settings are **build** settings,
+compiled into the app, so changing one means building and shipping the app
+again. None of them is a secret. On Apple they are xcconfig keys (copy
+`apps/ios/Config/Production.xcconfig.example`); on Android and the desktop
+they are Gradle settings, `-Paglyn.<name>=…` or the `AGLYN_<NAME>`
+environment variable.
+
+| Apple (xcconfig) | Android (Gradle) | Need | Value |
+| --- | --- | --- | --- |
+| `AGLYN_CONSOLE_URL` | `consoleUrl` | Required | Your console origin. Every API call and console page the app opens is on it, and it is the app's universal-link host. Default `https://app.aglyn.com`. |
+| `AGLYN_BRAND_NAME` | — | Optional | The app's name and the product name its copy says. Default `Aglyn`. |
+| `AGLYN_FIREBASE_API_KEY` | `firebaseApiKey` | Required | The Firebase app config of the app you registered in your project, per bundle. |
+| `AGLYN_FIREBASE_AUTH_DOMAIN` | `firebaseAuthDomain` | Required | As above. |
+| `AGLYN_FIREBASE_PROJECT_ID` | `firebaseProjectId` | Required | As above. |
+| `AGLYN_FIREBASE_APP_ID` | `firebaseAppId` | Required | As above. |
+| `AGLYN_FIREBASE_MESSAGING_SENDER_ID` | `firebaseMessagingSenderId` | Optional | As above. |
+| `AGLYN_FIREBASE_STORAGE_BUCKET` | — | Optional | As above. |
+| `AGLYN_GOOGLE_IOS_CLIENT_ID`, `AGLYN_GOOGLE_WEB_CLIENT_ID` | — | Optional | Google sign-in's OAuth client ids. The Google button is hidden until both are set. |
+| `AGLYN_AUTH_EMULATOR_HOST` | `authEmulatorHost` | Development | `host:port` of a local Auth emulator. Never set in a store build. |
+| `AGLYN_FIRESTORE_EMULATOR_HOST` | `firestoreEmulatorHost` | Development | `host:port` of a local Firestore emulator. Never set in a store build. |
+
+The server side of push is configured in your containers:
 
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
-| `EXPO_PUBLIC_CONSOLE_URL` | Required | Build, app | Your console origin. Every API call and console page the app opens is on it, and it is the app's universal-link host. Default `https://app.aglyn.com`. |
-| `EXPO_PUBLIC_BRAND_NAME` | Optional | Build, app | The app's name and the product name its copy says. Default `Aglyn`. |
-| `EXPO_PUBLIC_FIREBASE_API_KEY` | Required | Build, app | The Firebase app config of the iOS or Android app you registered in your project. |
-| `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN` | Required | Build, app | As above. |
-| `EXPO_PUBLIC_FIREBASE_PROJECT_ID` | Required | Build, app | As above. |
-| `EXPO_PUBLIC_FIREBASE_APP_ID` | Required | Build, app | As above. |
-| `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` | Optional | Build, app | As above. |
-| `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Optional | Build, app | As above. |
-| `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | Optional | Build, app | Google sign-in's iOS OAuth client id. The Google button is hidden until both client ids are set. |
-| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Optional | Build, app | Google sign-in's web OAuth client id. |
-| `EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` | Development | Build, app | `host:port` of a local Auth emulator. Never set in a store build. |
-| `EXPO_PUBLIC_FIRESTORE_EMULATOR_HOST` | Development | Build, app | `host:port` of a local Firestore emulator. Never set in a store build. |
-| `EAS_PROJECT_ID` | Feature | Build, app | Your EAS project id. Without it the app registers no push token, so no device receives a push. |
 | `MOBILE_PUSH_ENABLED` | Optional | Runtime, console and tenant | The kill switch for every push sender. `0` stops every push; anything else, or unset, leaves push on. |
 | `APNS_KEY_P8` | Feature | Runtime, console and tenant | Your Apple Push Notification service key (the `.p8` file from your Apple Developer account): its PEM text, or that PEM base64-encoded. Without it, and the two below, iOS and macOS devices are not sent a push, and the server logs that once. A secret. |
 | `APNS_KEY_ID` | Feature | Runtime, console and tenant | The 10-character id of that key. |

@@ -8,7 +8,7 @@ On 2026-10-07 Zach decided to build two native apps per platform. Later the
 same day he dropped React Native: the native apps are now **the only apps**.
 `apps/mobile`, `apps/pos-mobile`, `libs/mobile/*`, each plugin's `src/mobile`,
 the RN dependencies, the RN mobile manifest, the Expo push sender and the RN
-CI job are removed from `main` once the native skeletons land (AGL-3651).
+CI job were removed from `main` once both native skeletons landed (AGL-3651).
 Their unmerged work is parked, never to be merged, on
 `reference/rn-pos-mobile-agl3618`, `reference/rn-mobile-commerce-agl3621` and
 `reference/rn-mobile-workspace-agl3622`. Those branches and the RN code in
@@ -165,7 +165,7 @@ five contribution kinds, `screens`, `tabs`, `widgets`, `quickActions` and
 `deepLinks`. Ids are `<pluginId>.<name>`, and the ids are **the same ones**
 the plugin declares under `mobile.contributes` in `plugins.config.json`. The
 native registry refuses a registration the declaration does not name, the
-same rule the RN loader enforces. The RN and native apps are two renderers of
+rule the RN loader enforced. The Swift and Kotlin apps are two renderers of
 one declared inventory. A link or notification therefore resolves to the same
 contribution id in both, and no plugin has two lists that drift.
 
@@ -173,8 +173,7 @@ Native-only fields are kept to the minimum:
 
 - `apps`: `[.aglyn]`, `[.pos]` or both, with `.aglyn` as the default. The POS
   shell shows only contributions that name `.pos`.
-- `icon`: an SF Symbol on Apple and a Material Symbol on Kotlin. The RN
-  Ionicons name stays with RN.
+- `icon`: an SF Symbol on Apple and a Material Symbol on Kotlin.
 - `placement`, for POS: `register`, `tender`, `peripheral` or `menu`.
 
 ```swift
@@ -214,8 +213,8 @@ registrars next to its declared contributions:
 }
 ```
 
-The RN registrar name (`register`) stays only until React Native is removed,
-and goes with it.
+The React Native registrar name (`register`) went with React Native; a
+`mobile` block takes only `contributes`, `ios` and `android`.
 
 `tools/scripts/generate-plugin-manifests.mjs` (with its rows built and
 validated in `tools/scripts/lib/native-manifest.mjs`, which has its own tests)
@@ -694,8 +693,11 @@ drift or a crossing is red on every push.
 ## 12. Configuration and what Zach owes
 
 The apps build against the Firebase emulator stack and test configs by
-default. The seed script moves from `apps/mobile/scripts/seed-emulator.mjs` to
-`tools/scripts/seed-native-emulator.mjs` when React Native is removed. There are no real
+default. `tools/scripts/seed-native-emulator.mjs` seeds that stack: a member,
+a workspace on the Pro plan and a site, then each area's rows from
+`tools/scripts/seed-native/` (workspace, people, form submissions, inbox,
+marketing, the store with its orders and bookings, and the POS register with
+its categories, modifiers and quick keys). It prints the member's sign-in. There are no real
 `GoogleService-Info.plist` or `google-services.json` files: the Firebase SDKs
 are configured in code from build settings (`FirebaseOptions`), which is also
 how the self-hosted builds are configured.

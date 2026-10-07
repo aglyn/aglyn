@@ -65,7 +65,7 @@ import {
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { mobileManifestContent, mobileManifestRows } from './lib/mobile-manifest.mjs'
+import { mobileManifestRows } from './lib/mobile-manifest.mjs'
 import {
   IOS_MANIFEST_PLUGINS_DIR,
   nativeManifestOutputs,
@@ -3711,19 +3711,13 @@ function consoleRedirectRows() {
 }
 
 /**
- * The mobile manifest (AGL-3620): what each plugin adds to the Aglyn mobile
- * apps, from its `mobile` block. A SEPARATE file only the mobile apps import;
- * the web manifests above never read `mobile`. Built and validated in
- * ./lib/mobile-manifest.mjs, which has its own tests.
- */
-const MOBILE_MANIFEST = 'apps/mobile/src/plugins.mobile.generated.ts'
-
-/**
  * The native plugin manifest (docs/mobile/native-architecture.md §3): the
  * Swift package and Kotlin module the native app shells load plugins through.
  * Built and validated in ./lib/native-manifest.mjs, which has its own tests;
  * a plugin may name its registrar only once its native package exists.
  */
+// Each `mobile` block's declared inventory is valid before a native row reads it.
+mobileManifestRows(config.plugins)
 const NATIVE_ROWS = nativeManifestRows(config.plugins, { exists: (path) => existsSync(join(ROOT, path)) })
 
 const check = process.argv.includes('--check')
@@ -3765,7 +3759,6 @@ const ALL = [
     describe: describeSubprocessorDrift,
   },
   { file: REDIRECTS_MANIFEST, content: `${JSON.stringify(consoleRedirectRows(), null, 2)}\n` },
-  { file: MOBILE_MANIFEST, content: mobileManifestContent(mobileManifestRows(config.plugins)) },
   ...nativeManifestOutputs(NATIVE_ROWS),
 ]
 

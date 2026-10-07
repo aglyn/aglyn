@@ -147,9 +147,10 @@ const REPO_WIDE = new Set([
   // domain-named file, a vendor literal, a plugin id, a static plugin import
   // (AGL-3080). A new one is refused; the allowlist only shrinks.
   'check:plugin-domain-in-core',
-  // Walks every web tree for an import of mobile code, and every mobile tree
-  // for a reach into web or server code (AGL-3620); a commit to any lib can
-  // flip it, whichever project it belongs to.
+  // Walks every web tree and tsconfig for a reach into the native trees, every
+  // native tree for a reach out of them, and proves the pure modules the
+  // native generators read (AGL-3620, AGL-3651); a commit to any lib can flip
+  // it, whichever project it belongs to.
   'check:mobile-isolation',
   'check:manifest-versions',
   // Walk every app's routes and every lib they reach; a cost only a bundler

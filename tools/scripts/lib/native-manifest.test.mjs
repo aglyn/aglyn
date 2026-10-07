@@ -51,7 +51,7 @@ test('names follow the plugin id', () => {
 })
 
 test('no native block, no row, and every output is still well formed', () => {
-  const rows = rowsOf([plugin({ register: 'registerX', contributes })])
+  const rows = rowsOf([plugin({ contributes })])
   assert.deepEqual(rows, [])
   const outputs = nativeManifestOutputs(rows)
   assert.equal(outputs.length, 4)
@@ -62,7 +62,7 @@ test('no native block, no row, and every output is still well formed', () => {
 })
 
 test('a declaration becomes a row and the four outputs name it', () => {
-  const rows = rowsOf([plugin({ register: 'registerX', contributes, ios, android })])
+  const rows = rowsOf([plugin({ contributes, ios, android })])
   assert.deepEqual(rows, [
     {
       id: 'site-search',
@@ -99,7 +99,7 @@ test('a declaration becomes a row and the four outputs name it', () => {
 })
 
 test('one platform alone is a row for that platform only', () => {
-  const rows = rowsOf([plugin({ register: 'registerX', contributes, ios })])
+  const rows = rowsOf([plugin({ contributes, ios })])
   assert.equal(rows[0].android, undefined)
   assert.doesNotMatch(androidPropertiesContent(rows), /site-search=/)
   assert.doesNotMatch(kotlinManifestContent(rows), /NativePluginManifestEntry\(/)
@@ -107,12 +107,12 @@ test('one platform alone is a row for that platform only', () => {
 })
 
 test('the mobile manifest accepts ios and android next to its own fields', () => {
-  assert.equal(mobileManifestRows([plugin({ register: 'registerX', contributes, ios, android })]).length, 1)
+  assert.equal(mobileManifestRows([plugin({ contributes, ios, android })]).length, 1)
 })
 
 test('refusals', () => {
   const refuse = (mobile, pattern, has = exists) => assert.throws(() => rowsOf([plugin(mobile)], has), pattern)
-  const base = { register: 'registerX', contributes }
+  const base = { contributes }
   refuse({ ...base, ios: { ...ios, target: 'x' } }, /target is not a field/)
   refuse({ ...base, android: { ...android, module: 'x' } }, /module is not a field/)
   refuse({ ...base, ios: { ...ios, module: 'SiteSearchPlugin' } }, /must be "AglynSiteSearchPlugin"/)
@@ -120,7 +120,7 @@ test('refusals', () => {
   refuse({ ...base, ios: { ...ios, register: 'siteSearch' } }, /register<Name>/)
   refuse({ ...base, android: { ...android, register: 'register' } }, /register<Name>/)
   refuse({ ...base, ios: 'AglynSiteSearchPlugin' }, /is an object/)
-  refuse({ register: 'registerX', ios }, /needs declared mobile\.contributes/)
+  refuse({ ios }, /needs declared mobile\.contributes/)
   refuse({ ...base, ios, android }, /src\/ios\/Package\.swift does not exist[\s\S]*src\/android\/build\.gradle\.kts does not exist/, () => false)
   assert.throws(() => rowsOf([{ id: 'site-search', ios }]), /belongs inside its mobile block/)
 })

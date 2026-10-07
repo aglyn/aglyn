@@ -734,12 +734,6 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       'XML namespace URIs, in the RSS `atom:` declaration, the admin bar and the icon and image components. A namespace is an identifier that happens to look like a URL.',
     dataReceived: 'Nothing. No request is made.',
   },
-  '10.0.2.2': {
-    disposition: 'no-request',
-    reason:
-      "The Android emulator's alias for the developer machine's own loopback, allowed beside `localhost` and `127.0.0.1` in the mobile app's WebView origin list (`libs/mobile/webview/src/lib/console-webview.tsx`) so a development build can open a console served from the same machine. A private address, never a third party.",
-    dataReceived: 'Nothing leaves for a third party. It reaches only a server on the developer machine running the emulator.',
-  },
   'schemas.android.com': {
     disposition: 'no-request',
     reason:

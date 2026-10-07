@@ -397,7 +397,6 @@
       },
       "mobile": {
         "$comment": "AGL-3621: the Aglyn app's store screens. Orders (list, detail, fulfill, refund, receipt print and share), products (list, edit, camera photos to the DAM, stock), barcode scan, and the sales and traffic dashboard; list and detail split side by side on tablets.",
-        "register": "registerCommerceMobile",
         "contributes": {
           "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales"],
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
@@ -2216,7 +2215,6 @@
       },
       "mobile": {
         "$comment": "AGL-3620: the sample mobile registration. The site's rules as a native list (a split view on tablets), a dashboard count, a quick action, and the console's Redirects page opening natively from a link or a notification.",
-        "register": "registerRedirectsMobile",
         "ios": { "module": "AglynRedirectsPlugin", "register": "registerRedirectsNative" },
         "contributes": {
           "screens": ["redirects.list"],

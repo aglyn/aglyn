@@ -1,5 +1,5 @@
 {
-  "$comment": "Workspace modules outside the mobile trees that mobile code may import (AGL-3620). check-mobile-isolation admits each one only while its own imports are pure: listed modules, platform-neutral packages, no DOM, no Node built-in, nothing web- or server-only. The list grows only with that proof; a module that mixes pure and web code is split, never listed.",
+  "$comment": "Workspace TypeScript modules the native generators may read (AGL-3620, AGL-3651): the contracts, theme and catalog generators refuse any other. check-mobile-isolation admits each one only while its own imports are pure: listed modules, platform-neutral packages, no DOM, no Node built-in, nothing web- or server-only. The list grows only with that proof; a module that mixes pure and web code is split, never listed.",
   "modules": [
     {
       "path": "libs/aglyn/src/lib/app-utils/host-naming.ts",

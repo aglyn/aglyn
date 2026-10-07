@@ -92,8 +92,6 @@ export const DEP_CONSTRAINTS = Object.freeze([
       'scope:data',
       'scope:feature',
       'scope:lib',
-      // A plugin's `src/mobile` entry on the mobile foundation (AGL-3620).
-      'scope:mobile',
     ],
   },
   {
@@ -167,20 +165,15 @@ export const DEP_CONSTRAINTS = Object.freeze([
     // plugins share goes through a core plugin-manager seam or down into a
     // shared lib. Today's plugin → plugin edges are the allowlist.
     sourceTag: 'scope:plugin',
-    // `scope:mobile` for the plugin's `src/mobile` entry alone (AGL-3620):
-    // which FILES may reach it is `check:mobile-isolation`'s, since a
-    // project-level edge cannot tell a plugin's mobile entry from its web one.
-    onlyDependOnLibsWithTags: ['scope:tenant', 'scope:renderer', 'scope:besigner', 'scope:core', 'scope:shared', 'scope:mobile'],
+    onlyDependOnLibsWithTags: ['scope:tenant', 'scope:renderer', 'scope:besigner', 'scope:core', 'scope:shared'],
   },
   {
-    // `libs/mobile/*` and the mobile apps (AGL-3620): React Native, on the
-    // mobile foundation, shared code and the core's PURE modules. Which core
-    // files is `check:mobile-isolation`'s (its proven-pure allowlist), since a
-    // project edge cannot tell a pure module from the rest of the core.
-    // Plugins reach the apps through the generated mobile manifest,
-    // dynamically, never statically.
+    // The native apps and libraries (AGL-3651): Swift and Kotlin projects,
+    // which import no TypeScript project at all. What they share with the
+    // TypeScript side is generated from the pure modules, and
+    // `check:mobile-isolation` holds the file level both ways.
     sourceTag: 'scope:mobile',
-    onlyDependOnLibsWithTags: ['scope:mobile', 'scope:shared', 'scope:core'],
+    onlyDependOnLibsWithTags: ['scope:mobile'],
   },
   {
     sourceTag: 'scope:cli',

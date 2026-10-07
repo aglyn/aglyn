@@ -430,14 +430,12 @@ jobs:
       # core export that moves or a MUI upgrade stales it, and neither marks
       # the apps holding the tables affected.
       - run: npm run generate:realm-host-exports:check
-      # Same shape (AGL-3620): the mobile apps' theme tokens are the console's
-      # resolved MUI palette written out as data, because no MUI may reach a
-      # React Native bundle. A palette change stales them, and the console is
-      # not the mobile lib's project.
+      # Same shape (AGL-3620, AGL-3651): the native apps' Swift and Kotlin theme
+      # tokens are the console's resolved MUI theme written out as source. A
+      # palette change stales them, and the console is not the native libs'
+      # project. Their color parsing and type scale are unit-tested, and the
+      # bundled brand face is pinned by sha256 beside its license.
       - run: npm run generate:mobile-theme-tokens:check
-      # The native apps' Swift and Kotlin tokens come from the same run; their
-      # color parsing and type scale are unit-tested, and the bundled brand
-      # face is pinned by sha256 beside its license.
       - run: npm run test:native-theme
       - run: npm run check:native-fonts
       # And the logo, wordmark and app icons, from the SVGs the console serves.
@@ -865,26 +863,6 @@ jobs:
       # not built in this run, and says which one it skipped.
       - run: node tools/scripts/check-plugins-load-where-used.mjs --if-built
 
-  # The native apps (AGL-3620). apps/mobile is a standalone npm package with
-  # its own lockfile, like apps/docs: React Native pins a React the web apps
-  # do not run, so it is never part of the root install, and the root
-  # typecheck and jest skip it. This job is where its compiler and its jest
-  # run: the app shell, libs/mobile/* and every plugin's src/mobile. It needs
-  # nothing of the root install, so it skips the shared setup.
-  mobile:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: 'npm'
-          cache-dependency-path: apps/mobile/package-lock.json
-      - run: npm ci --prefix apps/mobile
-      - run: npm --prefix apps/mobile run typecheck
-      - run: npm --prefix apps/mobile test -- --ci
-
   # ONE CHECK NAME FOR BRANCH PROTECTION TO REQUIRE (AGL-1777, AGL-2505).
   #
   # Required status checks are configured by NAME, and a matrix publishes one
@@ -901,7 +879,7 @@ jobs:
   # otherwise the one job protection depends on would go green precisely when
   # its dependencies never ran.
   ci:
-    needs: [typecheck, checks, lint, test, build, mobile]
+    needs: [typecheck, checks, lint, test, build]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -17,8 +17,7 @@
  */
 
 /**
- * The notification catalog as data for the Aglyn apps: the React Native app
- * (AGL-3620) and the native apps.
+ * The notification catalog as data for the native apps (AGL-3620, AGL-3651).
  *
  *   node tools/scripts/generate-mobile-notification-catalog.mjs          # write
  *   node tools/scripts/generate-mobile-notification-catalog.mjs --check  # CI
@@ -36,8 +35,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
-export const CATALOG_FILE = 'apps/mobile/src/notification-catalog.generated.json'
-/** The same catalog for the native apps' push settings (docs/mobile/native-architecture.md §6). */
+/** The catalog the native apps' push settings and notification rows read (docs/mobile/native-architecture.md §6). */
 export const NATIVE_CATALOG_FILE = 'libs/native/contracts/notification-catalog.generated.json'
 const SOURCE = 'libs/aglyn/src/lib/app-utils/notifications.ts'
 
@@ -77,7 +75,7 @@ export function nativeCatalogFrom(notifications) {
   }
 }
 
-export function catalogContent(catalog, reader = "the Aglyn app's push settings (AGL-3620)") {
+export function catalogContent(catalog, reader) {
   return `${JSON.stringify(
     {
       '//': [
@@ -95,9 +93,7 @@ async function main() {
   const { createJiti } = createRequire(join(ROOT, 'package.json'))('jiti')
   const jiti = createJiti(join(ROOT, 'package.json'), { interopDefault: true, fsCache: false })
   const notifications = await jiti.import(join(ROOT, SOURCE))
-  const catalog = catalogFrom(notifications)
   const outputs = [
-    { file: CATALOG_FILE, content: catalogContent(catalog) },
     {
       file: NATIVE_CATALOG_FILE,
       content: catalogContent(nativeCatalogFrom(notifications), "the native apps' push settings and notification rows"),

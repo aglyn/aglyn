@@ -16,15 +16,14 @@
  */
 
 /**
- * The mobile manifest (AGL-3620): what each plugin adds to the Aglyn mobile
- * apps, from its `mobile` block. A SEPARATE file that only the mobile apps
- * import — the web manifests never read `mobile`, so declaring a
- * mobile surface changes none of them, byte for byte. Each entry loads the
- * plugin's `./mobile` entry and nothing else, which is where its registrar
- * lives and where `check-mobile-isolation` holds every import it makes.
+ * A plugin's `mobile` block (AGL-3620, AGL-3651): the contributions it adds
+ * to the native apps, declared once, and the native registrars that add them
+ * (`ios`, `android`; validated in ./native-manifest.mjs). This checks the
+ * declared inventory — kinds, `<pluginId>.<name>` ids, no id declared twice —
+ * which the native registries refuse to step outside.
  */
 export const MOBILE_CONTRIBUTION_KINDS = ['screens', 'tabs', 'widgets', 'quickActions', 'deepLinks']
-const MOBILE_BLOCK_KEYS = ['register', 'contributes', 'ios', 'android']
+const MOBILE_BLOCK_KEYS = ['contributes', 'ios', 'android']
 const MOBILE_ID = /^[a-z][a-z0-9-]*\.[a-zA-Z0-9.-]+$/
 
 export function mobileManifestRows(plugins) {
@@ -35,12 +34,8 @@ export function mobileManifestRows(plugins) {
     if (declared === undefined) continue
     const where = `plugins.config.json: "${plugin.id}" mobile`
     const { $comment: _note, ...block } = declared ?? {}
-    // `ios` and `android` name the native registrars; ./native-manifest.mjs validates them.
     const unknown = Object.keys(block).filter((key) => !MOBILE_BLOCK_KEYS.includes(key))
     if (unknown.length) throw new Error(`${where}: ${unknown.join(', ')} is not a mobile field`)
-    if (typeof block.register !== 'string' || !/^register[A-Za-z0-9]+$/.test(block.register)) {
-      throw new Error(`${where}: "register" names the registrar its ./mobile entry exports`)
-    }
     const contributes = block.contributes ?? {}
     const kinds = Object.keys(contributes)
     const strange = kinds.filter((kind) => !MOBILE_CONTRIBUTION_KINDS.includes(kind))
@@ -61,34 +56,7 @@ export function mobileManifestRows(plugins) {
       out[kind] = [...ids].sort()
     }
     if (!Object.keys(out).length) throw new Error(`${where} declares nothing — drop it`)
-    rows.push({ id: plugin.id, package: plugin.package, register: block.register, contributes: out })
+    rows.push({ id: plugin.id, contributes: out })
   }
   return rows
-}
-
-export function mobileManifestContent(rows) {
-  const entries = rows
-    .map(
-      (row) =>
-        `  {\n` +
-        `    id: '${row.id}',\n` +
-        `    register: '${row.register}',\n` +
-        `    contributes: ${JSON.stringify(row.contributes)},\n` +
-        `    load: () => import('${row.package}/mobile'),\n` +
-        `  },`,
-    )
-    .join('\n')
-  return (
-    `/**\n` +
-    ` * GENERATED FILE — do not edit. Regenerate with:\n` +
-    ` *   node tools/scripts/generate-plugin-manifests.mjs\n` +
-    ` *\n` +
-    ` * The mobile apps' plugin manifest (AGL-3620), from each plugin's \`mobile\`\n` +
-    ` * block in plugins.config.json. Only the mobile apps import it; each entry\n` +
-    ` * loads the plugin's \`./mobile\` entry and nothing else.\n` +
-    ` */\n` +
-    `/* eslint-disable @nx/enforce-module-boundaries */\n\n` +
-    `import type { MobilePluginManifest } from '@aglyn/mobile-plugin-host'\n\n` +
-    `export const MOBILE_PLUGIN_MANIFEST: MobilePluginManifest = [\n${entries}${entries ? '\n' : ''}]\n`
-  )
 }

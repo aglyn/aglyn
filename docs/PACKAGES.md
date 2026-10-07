@@ -45,8 +45,8 @@ hold and the new axis sits beside them.
 | `scope:besigner-ui` | `besigner-ui`, `besigner`, `renderer`, `core`, `shared` | The designer's React surface. |
 | `scope:tenant` | `tenant`, `renderer`, `core`, `shared` | The runtime that serves a published site, and the tenant app shell. Plugins reach it only through the loader manifests. |
 | `scope:console` | everything above, plugins only dynamically | The console app. |
-| `scope:plugin` | `tenant`, `renderer`, `besigner`, `core`, `shared`, and `mobile` from its `src/mobile` entry only | A feature plugin. Never another plugin; never the designer UI. Its domain lives here and nowhere else — what it imports from the layers below it is generic, never its own model wearing a lower layer's tag. Its native screens live in `src/mobile`, reached only through its `./mobile` export (AGL-3620). |
-| `scope:mobile` | `mobile`, `shared`, and `core`'s proven-pure modules only | The native apps and their foundation (React Native). Plugins reach the apps only through the generated mobile manifest. `check:mobile-isolation` holds the file level both ways: no web file imports mobile code, and mobile code reaches only mobile code and the proven-pure modules in `tools/scripts/mobile-pure-modules.json`. |
+| `scope:plugin` | `tenant`, `renderer`, `besigner`, `core`, `shared` | A feature plugin. Never another plugin; never the designer UI. Its domain lives here and nowhere else — what it imports from the layers below it is generic, never its own model wearing a lower layer's tag. Its native screens live in `src/ios` (a Swift package) and `src/android` (a Kotlin module), reached only through the generated native manifest (AGL-3651). |
+| `scope:mobile` | `mobile` only | The native apps and their foundation: Swift and Kotlin projects that import no TypeScript project. What they share with TypeScript is generated from the proven-pure modules in `tools/scripts/mobile-pure-modules.json`, and `check:mobile-isolation` holds the file level both ways: no web file or tsconfig reaches a native tree, and no native file reaches outside one. |
 | `scope:cli` | `cli`, `core`, `shared` | The command-line client. |
 
 The `type:` axis is the same rule the `scope:data|ui|util|feature` tags
@@ -189,19 +189,6 @@ marked where it sits.
 | `shared-util-tools` | `@aglyn/shared-util-tools` | `libs/shared/util/tools` | `scope:shared` `type:util` | `.`, `./*` — also the pure list filter grammar under `./list-query/*` (`list-filter`, `list-query-plan`, `list-filter-codecs`, `list-filter-sentence`, `list-query-refusals`): no React, no MUI, so the native app plans the same Firestore queries the console does (AGL-3622) |
 | `shared-util-vendor` | `@aglyn/shared-util-vendor` | `libs/shared/util/vendor` | `scope:shared` `type:util` | `.`, `./*` |
 
-### Mobile
-
-The foundation both native apps stand on (AGL-3620). React Native source,
-compiled and tested by the mobile apps' own install rather than the root's;
-nothing on the web reaches it (`check:mobile-isolation`).
-
-| project | npm name | root | tags | entry points |
-| -- | -- | -- | -- | -- |
-| `mobile-core` | `@aglyn/mobile-core` | `libs/mobile/core` | `scope:mobile` `type:feature` | `.` — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/mobile-core --publish`, then `trust:packages --set`); Firebase auth, the workspace and site switcher, the console API client, console sessions for WebViews, the offline query cache |
-| `mobile-ui` | `@aglyn/mobile-ui` | `libs/mobile/ui` | `scope:mobile` `type:ui` | `.` — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/mobile-ui --publish`, then `trust:packages --set`); theme tokens generated from the console palette, `useLayout()`/`SplitView`, basic components |
-| `mobile-webview` | `@aglyn/mobile-webview` | `libs/mobile/webview` | `scope:mobile` `type:ui` | `.` — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/mobile-webview --publish`, then `trust:packages --set`); the authenticated console WebView and its origin- and nonce-checked bridge |
-| `mobile-plugin-host` | `@aglyn/mobile-plugin-host` | `libs/mobile/plugin-host` | `scope:mobile` `type:util` | `.` — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/mobile-plugin-host --publish`, then `trust:packages --set`); the `registerMobile…` registrars, the registry, the manifest loader and deep-link resolution |
-
 ### Native (Kotlin)
 
 The Kotlin Multiplatform foundation of the native Android and JVM desktop apps
@@ -237,7 +224,6 @@ would need from `apps/console` has moved into libs — see the rules below.
 | `tenant` | `apps/tenant` | `scope:app` `scope:tenant` | The shell that serves published sites on the tenant runtime. |
 | `docs` | `apps/docs` | `scope:app` `scope:public` | The documentation site; standalone, not a package. |
 | `ios` | `apps/ios` | `scope:app` `scope:mobile` `type:app` | The Aglyn and Aglyn POS apps for iPhone, iPad and Mac (SwiftUI, one Xcode project); not a package. |
-| `mobile` | `apps/mobile` | `scope:app` `scope:mobile` `type:app` | The Aglyn app for iOS and Android, phone and tablet (Expo); standalone install, not a package. |
 | `android` | `apps/android` | `scope:app` `scope:mobile` `type:app` | Aglyn (`com.aglyn.app`) and Aglyn POS (`com.aglyn.pos`) for Android, and both on the JVM desktop (Windows); the Gradle root for every Kotlin module; not a package. |
 | `cloud-functions` | `cloud/functions` | `scope:app` | Cloud Functions; a deploy unit, not a package. |
 | `console-e2e` | `apps/console-e2e` | `scope:app` `scope:e2e` | End-to-end suites; not a package. |

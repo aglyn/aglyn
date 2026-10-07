@@ -86,16 +86,6 @@ export function isMobilePushToken(transport: unknown, token: unknown): boolean {
   return false
 }
 
-const EXPO_PUSH_TOKEN = /^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]{8,128}\]$/
-
-/**
- * The React Native app's Expo token, which the registry no longer accepts
- * and the fan-out prunes; read only by that app, and removed with it.
- */
-export function isExpoPushToken(value: unknown): value is string {
-  return typeof value === 'string' && EXPO_PUSH_TOKEN.test(value)
-}
-
 /**
  * What a push carries for the app to act on when it is tapped. The app
  * resolves `link` the way it resolves a feed row: natively when a plugin
