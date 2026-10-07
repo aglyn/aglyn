@@ -423,6 +423,29 @@ the face at launch (`CTFontManagerRegisterFontsForURL` on
 `Bundle.module`'s `fontResource`). Compose builds its `FontFamily` from
 `Res.font.robotoflex_variable` and passes it to `aglynTypography`.
 
+`tools/scripts/generate-native-brand-assets.mjs` (`--check`) writes the
+logo, wordmark and app icons from the SVGs in
+`apps/console/public/_static/images/brand`. A `-dark` file (dark ink) is the
+light appearance, and `-light` the dark one:
+
+- `libs/native/apple/Sources/AglynUI/Resources/Brand.xcassets`: image sets
+  `AglynMark`, `AglynLogo` and `AglynWordmark`, each the console's SVG byte
+  for byte with `preserves-vector-representation`, and a dark appearance
+  where the ink changes. Read them as `Image("AglynLogo", bundle: .module)`.
+- `libs/native/kotlin/ui/src/commonMain/composeResources/drawable{,-dark}/`:
+  `aglyn_mark`, `aglyn_logo` and `aglyn_wordmark` as vector drawables
+  (`Res.drawable.aglyn_logo`), converted from the same SVG paths.
+- App icons: `apps/ios/{Aglyn,AglynPOS}/Assets.xcassets/AppIcon.appiconset`
+  (1024 universal, and 512 at 1x and 2x for the Mac), and for
+  `apps/android/{app,pos}`, an adaptive icon
+  (`res/mipmap-anydpi-v26/ic_launcher.xml`, a vector foreground, a white
+  background) plus the 512 `ic_launcher-playstore.png`. They show the
+  multi-color mark on the white ground the console's installed icon uses, at
+  its proportion. The brand kit has no POS mark, so Aglyn POS uses the same
+  icon. The PNGs are rendered with sharp (librsvg). `--check` holds them by
+  size and by the sha256 of the SVG they came from, in
+  `tools/scripts/native-brand-assets.lock.json`.
+
 ### Brand, type and polish (binding)
 
 Every Apple screen is SwiftUI, on iPhone, iPad and macOS. UIKit or AppKit

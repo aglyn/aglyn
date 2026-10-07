@@ -139,6 +139,7 @@ const REPO_WIDE = new Set([
   'generate:mobile-theme-tokens:check',
   'generate:mobile-notification-catalog:check',
   'check:native-fonts',
+  'generate:native-brand-assets:check',
   'sync:next-tsconfigs:check',
   'check:ai-palette',
   // Sweeps every tree that is not a plugin for a plugin's domain: a

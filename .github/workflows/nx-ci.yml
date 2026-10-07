@@ -440,6 +440,8 @@ jobs:
       # face is pinned by sha256 beside its license.
       - run: npm run test:native-theme
       - run: npm run check:native-fonts
+      # And the logo, wordmark and app icons, from the SVGs the console serves.
+      - run: npm run generate:native-brand-assets:check
       # And the notification catalog the app's push settings list (AGL-3620):
       # a new notification type or category stales it.
       - run: npm run generate:mobile-notification-catalog:check
