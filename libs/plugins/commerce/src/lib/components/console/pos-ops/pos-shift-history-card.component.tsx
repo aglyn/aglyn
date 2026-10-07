@@ -19,6 +19,7 @@
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import {
   Button,
@@ -33,7 +34,11 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, limit, orderBy, query } from 'firebase/firestore'
-import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useFirestoreCollection,
+  usePagedCollection,
+} from '@aglyn/tenant-feature-instance'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useEffect, useMemo, useState } from 'react'
 import { posMoney, posShiftsCsv, type PosShift } from '../../../model/commerce-pos-ops'
@@ -42,9 +47,6 @@ import { PosShiftReportView } from './pos-shift-report.component'
 export interface PosShiftHistoryCardProps {
   hostId: string
 }
-
-/** Shifts read per page; "Show more" reads the next page's worth. */
-const PAGE = 25
 
 type ShiftRow = PosShift & { $id: string }
 
@@ -62,7 +64,7 @@ const when = (ms?: number) =>
 /**
  * Shift history (AGL-3609): one register's shifts, newest first, from an
  * ordered Firestore query — open ones included — with each closed shift's Z
- * report a click away and the loaded shifts exportable as a spreadsheet.
+ * report a click away and the shifts on the page exportable as a spreadsheet.
  */
 export function PosShiftHistoryCard(props: PosShiftHistoryCardProps) {
   const { hostId } = props
@@ -83,21 +85,26 @@ export function PosShiftHistoryCard(props: PosShiftHistoryCardProps) {
   useEffect(() => {
     if (!registerId && registers.length) setRegisterId(registers[0].$id)
   }, [registerId, registers])
-  const [pages, setPages] = useState(1)
-  useEffect(() => setPages(1), [registerId])
-  const { data: shiftDocs, status } = useFirestoreCollection<ShiftRow>(
-    () =>
+  const {
+    rows: shifts,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    status,
+  } = usePagedCollection<ShiftRow>(
+    (pageLimit) =>
       registerId
         ? query(
             collection(firestore, 'hosts', hostId, 'registers', registerId, 'shifts'),
             orderBy('openedAtMs', 'desc'),
-            limit(PAGE * pages),
+            limit(pageLimit),
           )
         : null,
-    [firestore, hostId, registerId, pages],
+    [firestore, hostId, registerId],
     { idField: '$id' },
   )
-  const shifts = shiftDocs ?? []
   const [selected, setSelected] = useState<ShiftRow | null>(null)
   const registerName = registers.find((register: any) => register.$id === registerId)?.name ?? ''
 
@@ -232,11 +239,14 @@ export function PosShiftHistoryCard(props: PosShiftHistoryCardProps) {
             onOpen={(_id, row) => (row as ShiftRow).report && setSelected(row as ShiftRow)}
           />
         )}
-        {shifts.length >= PAGE * pages ? (
-          <Button size="small" onClick={() => setPages((count) => count + 1)} sx={{ alignSelf: 'flex-start' }}>
-            {'Show more'}
-          </Button>
-        ) : null}
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={shifts.length}
+          hasMore={hasMore}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </Stack>
       <Dialog open={Boolean(selected)} onClose={() => setSelected(null)} maxWidth="xs" fullWidth>
         <DialogTitle>{`Z report · ${when(selected?.closedAtMs)}`}</DialogTitle>
