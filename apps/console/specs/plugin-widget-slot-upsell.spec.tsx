@@ -44,6 +44,12 @@ let mockRegistered: Array<{
   extension: Record<string, unknown>
   widget: Record<string, unknown>
 }>
+/** What the shell's release-flag provider answers, as every page loads it. */
+let mockFlags: {
+  ready: boolean
+  isStaff: boolean
+  flags: Record<string, { released: boolean }>
+}
 /** The props each widget was last constructed with. */
 let received: Record<string, Record<string, unknown>>
 
@@ -69,6 +75,11 @@ jest.mock('../hooks/use-org-scope', () => ({
   __esModule: true,
   default: () => ({ currentOrg: { $id: 'org-1' }, loading: false }),
   useOrgSlug: () => 'acme',
+}))
+
+jest.mock('../hooks/use-release-flags', () => ({
+  __esModule: true,
+  useReleaseFlags: () => mockFlags,
 }))
 
 jest.mock('../hooks/use-current-org', () => ({
@@ -114,6 +125,7 @@ const registerWidget = (options: {
   featureFlag?: string
   permission?: string
   optIn?: boolean
+  releaseFlag?: string
 }) => {
   mockRegistered.push({
     extension: { pluginId: 'demo', displayName: 'Demo' },
@@ -123,6 +135,7 @@ const registerWidget = (options: {
       featureFlag: options.featureFlag ?? 'demoUpsell',
       permission: options.permission,
       ...(options.optIn === false ? {} : { showWhenNotEntitled: true }),
+      ...(options.releaseFlag ? { releaseFlag: options.releaseFlag } : {}),
       Component: widgetComponent(options.id),
     },
   })
@@ -161,6 +174,14 @@ beforeEach(() => {
   mockMemberDoc = { role: 'owner' }
   mockOrg = { $id: 'org-1', plan: 'pro', billingStatus: 'active' }
   mockEnabled = ['demo']
+  mockFlags = {
+    ready: true,
+    isStaff: false,
+    flags: {
+      release_addon_store: { released: true },
+      release_ai_generative: { released: true },
+    },
+  }
   mockRegistered = []
   received = {}
   // The sentinel: an ungated widget on a second zone, drawn once the member
@@ -260,5 +281,41 @@ describe('a widget that is its own upsell', () => {
     await mountZone()
     expect(received['plain']).toBeUndefined()
     expect(received['plain-ok']).toEqual({ hostId: 'h1', orgId: 'org-1' })
+  })
+})
+
+describe('a widget behind a release flag (AGL-3601)', () => {
+  it('draws where the flag is on, with no request of its own', async () => {
+    registerWidget({ id: 'ai', releaseFlag: 'release_ai_generative' })
+    await mountZone()
+    expect(screen.getByText('widget-ai')).toBeTruthy()
+  })
+
+  it('stays absent where the flag is off for this workspace', async () => {
+    mockFlags.flags['release_ai_generative'] = { released: false }
+    registerWidget({ id: 'ai', releaseFlag: 'release_ai_generative' })
+    await mountZone()
+    expect(received['ai']).toBeUndefined()
+  })
+
+  it('draws for staff with the flag off, as the server lets staff preview it', async () => {
+    mockFlags = { ...mockFlags, isStaff: true }
+    mockFlags.flags['release_ai_generative'] = { released: false }
+    registerWidget({ id: 'ai', releaseFlag: 'release_ai_generative' })
+    await mountZone()
+    expect(screen.getByText('widget-ai')).toBeTruthy()
+  })
+
+  it('is withheld until the flags settle, so it is never drawn and then taken away', async () => {
+    mockFlags = { ...mockFlags, ready: false }
+    registerWidget({ id: 'ai', releaseFlag: 'release_ai_generative' })
+    await mountZone()
+    expect(received['ai']).toBeUndefined()
+  })
+
+  it('stays absent for an unknown flag', async () => {
+    registerWidget({ id: 'ai', releaseFlag: 'release_nothing' })
+    await mountZone()
+    expect(received['ai']).toBeUndefined()
   })
 })

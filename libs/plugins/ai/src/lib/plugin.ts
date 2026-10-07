@@ -368,11 +368,12 @@ export function registerAiConsole(): void {
         Component: AiSeoAuditCard,
       },
       // A page from a brief (AGL-2907): "Create with AI" beside Templates and
-      // Create New Screen. Gated as the other generative widgets are, and it
-      // asks the jobs route about the release flag before it shows anything.
+      // Create New Screen. Gated as the other generative widgets are.
       // On a plan that could buy the AI add-on and has not, each "Create with
       // AI" entry here is mounted anyway (`showWhenNotEntitled`) and opens
-      // the add-on's dialog instead of the brief (AGL-3601).
+      // the add-on's dialog instead of the brief (AGL-3601). The shell holds
+      // each behind `release_ai_generative` too, so an entry draws at once
+      // and asks the jobs route nothing until its brief is sent.
       {
         slot: 'hostScreens',
         widgetId: 'ai-describe-page',
@@ -380,12 +381,12 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiDescribePageButton,
       },
       // The same entry for a page template, a layout and a form (AGL-3043),
       // beside the create action of the page that lists each: the same
-      // dialog, the same gates, and the same question to the jobs route
-      // before it shows anything.
+      // dialog and the same gates.
       {
         slot: 'hostTemplates',
         widgetId: 'ai-describe-template',
@@ -393,6 +394,7 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiDescribeTemplateButton,
       },
       {
@@ -402,6 +404,7 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiDescribeLayoutButton,
       },
       {
@@ -411,6 +414,7 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiDescribeFormButton,
       },
       // And a reusable component from a brief (AGL-3051), beside Templates
@@ -423,14 +427,16 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiDescribeComponentButton,
       },
       // Automations by AI (AGL-2919), in the zones the workflows plugin hosts
       // on its Automation page: "Create with AI" beside Add action and Recipes,
       // "Explain it" in the editor of a saved automation, and "Why did this
       // fail?" on a failed run. Gated as the other generative widgets are;
-      // each asks the jobs route about the release flag before it shows
-      // anything, and none of them changes an automation.
+      // the two explain controls ask the jobs route about the release flag
+      // before they show anything, "Create with AI" is held behind it by the
+      // shell (AGL-3601), and none of them changes an automation.
       {
         slot: 'hostAutomations',
         widgetId: 'ai-describe-automation',
@@ -438,6 +444,7 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiDescribeAutomationButton,
       },
       {

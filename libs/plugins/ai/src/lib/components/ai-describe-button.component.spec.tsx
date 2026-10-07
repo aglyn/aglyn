@@ -168,9 +168,8 @@ afterEach(() => {
 /** Renders the entry the zone draws, and opens its dialog once the route said yes. */
 async function openDialog(entry: Entry) {
   const Widget = widgetFor(entry.zone)
-  mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
   render(<Widget {...zoneProps()} />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
   const dialog = screen.getByRole('dialog')
   expect(within(dialog).getByText(entry.title)).toBeTruthy()
   return dialog
@@ -244,6 +243,8 @@ describe('each entry is on its own page’s zone, gated as the page entry is', (
         title: entry.title,
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        releaseFlag: 'release_ai_generative',
+        showWhenNotEntitled: true,
       }),
     ])
   })
@@ -253,50 +254,38 @@ describe('each entry is on its own page’s zone, gated as the page entry is', (
     expect(page).toEqual(expect.objectContaining({ widgetId: 'ai-describe-page' }))
     for (const entry of ENTRIES) {
       const [widget] = registeredOn(entry.zone)
-      expect({ featureFlag: widget.featureFlag, permission: widget.permission }).toEqual({
+      expect({
+        featureFlag: widget.featureFlag,
+        permission: widget.permission,
+        releaseFlag: widget.releaseFlag,
+      }).toEqual({
         featureFlag: page.featureFlag,
         permission: page.permission,
+        releaseFlag: page.releaseFlag,
       })
     }
   })
 })
 
-describe('whether the button is here at all', () => {
+describe('the button is drawn at once (AGL-3601)', () => {
   describe.each(ENTRIES)('on $zone', (entry) => {
-    it.each([
-      ['the route is not registered for this deployment', 404],
-      ['the workspace or the member may not generate', 403],
-    ])('stays absent when %s', async (_why, status) => {
+    it('draws on the first render and asks nothing of a server to do it', () => {
       const Widget = widgetFor(entry.zone)
-      mockFetch.mockResolvedValue(json({ error: 'No' }, status))
-      const { container } = render(<Widget {...zoneProps()} />)
-      await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-      expect(container.textContent).toBe('')
+      render(<Widget {...zoneProps()} />)
+      expect(screen.getByRole('button', { name: 'Create with AI' })).toBeTruthy()
+      expect(mockFetch).not.toHaveBeenCalled()
     })
 
-    it('stays absent when the route cannot be reached', async () => {
+    it('draws while the page has not resolved its org, and still asks nothing', () => {
       const Widget = widgetFor(entry.zone)
-      mockFetch.mockRejectedValue(new Error('offline'))
-      const { container } = render(<Widget {...zoneProps()} />)
-      await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-      expect(container.textContent).toBe('')
+      render(<Widget {...zoneProps({ orgId: undefined })} />)
+      expect(screen.getByRole('button', { name: 'Create with AI' })).toBeTruthy()
+      expect(mockFetch).not.toHaveBeenCalled()
     })
 
-    it('stays absent while the probe is still out, and asks the route only once', async () => {
-      const Widget = widgetFor(entry.zone)
-      mockFetch.mockReturnValue(new Promise(() => undefined))
-      const { container, rerender } = render(<Widget {...zoneProps()} />)
-      rerender(<Widget {...zoneProps()} />)
-      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
-      expect(String(mockFetch.mock.calls[0][0])).toBe('/api/ai/jobs?orgId=org-1&limit=1')
-      expect(container.textContent).toBe('')
-    })
-
-    it('asks nothing while the page has not resolved its org', async () => {
-      const Widget = widgetFor(entry.zone)
-      const { container } = render(<Widget {...zoneProps({ orgId: undefined })} />)
-      await waitFor(() => expect(mockFetch).not.toHaveBeenCalled())
-      expect(container.textContent).toBe('')
+    it('opens the brief on click without a request', async () => {
+      await openDialog(entry)
+      expect(mockFetch).not.toHaveBeenCalled()
     })
   })
 })
@@ -467,7 +456,7 @@ describe.each(ENTRIES)('what the $kind entry promises, and what it says when ref
     writeBrief(entry, '   ')
     if (entry.kind === 'template') fireEvent.click(screen.getByRole('button', { name: 'Author' }))
     expect(planButton(entry).disabled).toBe(true)
-    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('says why the door refused, and leaves the brief to try again', async () => {

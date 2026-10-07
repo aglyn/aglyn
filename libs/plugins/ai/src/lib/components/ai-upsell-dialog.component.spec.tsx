@@ -26,14 +26,13 @@
  *
  * Every entry is rendered through the component the AI plugin REGISTERED on
  * its zone, with the props the shell hands an upsell (`entitled={false}` and
- * `upgrade`), and the jobs route answering as its gate does for a plan without
- * `aiGenerative`: 403 with `reason: 'entitlement'`. The same button is there,
- * and it opens the add-on's dialog, never the brief and never a job.
+ * `upgrade`). The same button is there on the first render, and it opens the
+ * add-on's dialog, never the brief, and nothing asks a server anything.
  */
 
 import { listConsoleWidgets } from '@aglyn/aglyn'
 import type { ConsoleWidgetUpgrade } from '@aglyn/aglyn/plugin-manager/feature-plugins'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ComponentType } from 'react'
 
 const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
@@ -64,13 +63,6 @@ jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
 import { AI_PLUGIN_ID } from '../constants'
 import { registerAiConsole } from '../plugin'
 import { AI_UPSELL_COPY, aiUpsellOffer, type AiUpsellKind } from './ai-upsell-dialog.component'
-import { forgetAiJobsVerdicts } from './use-ai-job-run'
-
-const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
-
-/** The gate's answer for a plan without `aiGenerative` (`ai-jobs-gate.ts`). */
-const PLAN_LACKS_IT = () =>
-  json({ error: "This workspace's plan does not include that feature", reason: 'entitlement' }, 403)
 
 const BILLING = '/acme/billing#addons'
 const OWNER: ConsoleWidgetUpgrade = { billingHref: BILLING, canManageBilling: true }
@@ -103,15 +95,6 @@ beforeAll(() => {
 beforeEach(() => {
   mockFetch.mockReset()
   mockTrack.mockReset()
-  forgetAiJobsVerdicts()
-})
-
-afterEach(() => {
-  // A probe at most: the upsell starts no job and reaches no other door.
-  for (const [url, init] of mockFetch.mock.calls) {
-    expect(String(url)).toBe('/api/ai/jobs?orgId=org-1&limit=1')
-    expect(init?.method ?? 'GET').toBe('GET')
-  }
 })
 
 describe('every Create with AI entry opts in, and only those', () => {
@@ -124,6 +107,7 @@ describe('every Create with AI entry opts in, and only those', () => {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
       }),
     )
   })
@@ -140,11 +124,10 @@ describe('every Create with AI entry opts in, and only those', () => {
 })
 
 describe.each(ENTRIES)('$widgetId on a plan without the add-on', ({ zone, widgetId, kind }) => {
-  it('is the same button, and opens the add-on with a link to Billing’s add-ons', async () => {
+  it('is the same button, drawn at once, and opens the add-on with no request', () => {
     const Widget = widgetFor(zone, widgetId)
-    mockFetch.mockResolvedValue(PLAN_LACKS_IT())
     render(<Widget {...zoneProps} entitled={false} upgrade={OWNER} />)
-    const button = await screen.findByRole('button', { name: 'Create with AI' })
+    const button = screen.getByRole('button', { name: 'Create with AI' })
     expect(button.querySelector('svg')).toBeTruthy()
     fireEvent.click(button)
 
@@ -163,13 +146,13 @@ describe.each(ENTRIES)('$widgetId on a plan without the add-on', ({ zone, widget
     fireEvent.click(add)
     expect(mockTrack).toHaveBeenCalledWith('ai_upsell_clicked', { kind })
     expect(within(dialog).getByRole('button', { name: 'Not now' })).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it('tells a member who cannot buy it to ask an owner or admin, with no link', async () => {
+  it('tells a member who cannot buy it to ask an owner or admin, with no link', () => {
     const Widget = widgetFor(zone, widgetId)
-    mockFetch.mockResolvedValue(PLAN_LACKS_IT())
     render(<Widget {...zoneProps} entitled={false} upgrade={MEMBER} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Create with AI' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
 
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByText(aiUpsellOffer(false))).toBeTruthy()
@@ -177,33 +160,22 @@ describe.each(ENTRIES)('$widgetId on a plan without the add-on', ({ zone, widget
     expect(within(dialog).queryByRole('link')).toBeNull()
     expect(within(dialog).getByRole('button', { name: 'Close' })).toBeTruthy()
     expect(mockTrack).toHaveBeenCalledWith('ai_upsell_shown', { kind, can_manage: false })
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it('stays absent where the generative doors do not exist (404)', async () => {
+  it('stays absent when the shell gave it no way to buy it', () => {
     const Widget = widgetFor(zone, widgetId)
-    mockFetch.mockResolvedValue(json({ error: 'Not found' }, 404))
-    const { container } = render(<Widget {...zoneProps} entitled={false} upgrade={OWNER} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    const { container } = render(<Widget {...zoneProps} entitled={false} />)
     expect(container.textContent).toBe('')
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it('stays absent on a refusal that is not the plan', async () => {
+  it('opens the brief, not the add-on, where the plan includes it', () => {
     const Widget = widgetFor(zone, widgetId)
-    mockFetch.mockResolvedValue(json({ error: 'You are not a member of that organization' }, 403))
-    const { container } = render(<Widget {...zoneProps} entitled={false} upgrade={OWNER} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(container.textContent).toBe('')
-  })
-
-  it('stays absent when the shell did not mount it as an upsell', async () => {
-    const Widget = widgetFor(zone, widgetId)
-    mockFetch.mockResolvedValue(PLAN_LACKS_IT())
-    const { container } = render(<Widget {...zoneProps} />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(container.textContent).toBe('')
+    render(<Widget {...zoneProps} entitled />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+    expect(within(screen.getByRole('dialog')).getByRole('textbox')).toBeTruthy()
     expect(mockTrack).not.toHaveBeenCalled()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })

@@ -40,6 +40,7 @@
 
 import { runInAction } from 'mobx'
 import type { OrgPermissions } from '../app-utils/org-permissions'
+import type { ReleaseFlagKey } from '../app-utils/release-flags'
 import type { SeoAuditReport } from '../app-utils/seo-audit'
 import type { SeoListingFieldKey } from '../app-utils/seo-listing-fields'
 import type { AglynOrgBilling, OrgFeatureFlags } from '../foundation'
@@ -1681,6 +1682,17 @@ export interface ConsoleWidget {
    * feature: the shell has decided the plan does not include it.
    */
   showWhenNotEntitled?: boolean
+  /**
+   * The release flag this widget is behind, which the shell resolves from the
+   * flags it already loads for every page (AGL-3601) — staff bypass applied,
+   * as the server's own doors apply it. The widget is absent while the flag
+   * is off for this workspace, and while the flags have not settled, so a
+   * control is never drawn and then taken away.
+   *
+   * For a widget that would otherwise have to ask a server door whether its
+   * feature exists before it draws anything.
+   */
+  releaseFlag?: ReleaseFlagKey
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Component: ComponentType<any>
 }

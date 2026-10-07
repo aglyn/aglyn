@@ -39,7 +39,7 @@ import {
 import { useEffect, useState } from 'react'
 import { openAiJobs } from './ai-jobs-store'
 import { AiUpsellButton } from './ai-upsell-dialog.component'
-import { aiJobProblem, useAiJobRun, useAiJobsVerdict } from './use-ai-job-run'
+import { aiJobProblem, useAiJobRun } from './use-ai-job-run'
 
 /**
  * "Create with AI" on the Automation page's Actions (AGL-2919), beside Add action
@@ -207,10 +207,12 @@ export function AiAutomationBriefDialog(props: AiAutomationBriefDialogProps) {
 }
 
 /**
- * Renders nothing until the jobs route has answered for this workspace, and
- * nothing when it says the feature is not this workspace's — except on a plan
- * that could buy the AI add-on (AGL-3601), where the shell mounts it with
- * `entitled={false}` and the same button opens the add-on's dialog.
+ * Drawn at once, from the gates the shell resolved before mounting it (the
+ * plan, `ai.generate`, the site's AI switch and the release flag); nothing is
+ * asked of a server to draw it (AGL-3601). The start door decides when the
+ * description is sent, and says why in the dialog if it refuses. On a plan
+ * that could buy the AI add-on, the shell mounts it with `entitled={false}`
+ * and the same button opens the add-on's dialog.
  */
 export function AiDescribeAutomationButton({
   hostId,
@@ -220,13 +222,11 @@ export function AiDescribeAutomationButton({
   upgrade,
 }: ConsoleHostAutomationsZoneProps & ConsoleWidgetEntitlementProps) {
   const { data: user } = useUser()
-  const verdict = useAiJobsVerdict(user, orgId)
   const [open, setOpen] = useState(false)
 
-  if (verdict === 'upsell' && entitled === false && upgrade) {
-    return <AiUpsellButton kind="workflow" upgrade={upgrade} />
+  if (entitled === false) {
+    return upgrade ? <AiUpsellButton kind="workflow" upgrade={upgrade} /> : null
   }
-  if (verdict !== 'ready') return null
   return (
     <>
       <Button
