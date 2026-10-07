@@ -551,6 +551,7 @@ describe('the order object publishes its shipments', () => {
     mockDocs.set(`${ORDERS}/o1`, {
       status: 'fulfilled',
       totals: { totalCents: 2500 },
+      lineItems: [{ quantity: 2 }, { quantity: 1 }],
       fulfillments: [
         {
           id: 'f1',
@@ -567,9 +568,17 @@ describe('the order object publishes its shipments', () => {
       {
         id: 'f1',
         lineItemIds: [0, 1],
+        // A fulfillment without `lines` ships every unit of each line it names.
+        lines: [
+          { lineItemId: 0, quantity: 2 },
+          { lineItemId: 1, quantity: 1 },
+        ],
+        status: 'active',
         carrier: 'USPS',
         trackingNumber: '9400111899',
-        trackingUrl: null,
+        // Derived from the carrier when none was stored.
+        trackingUrl: 'https://tools.usps.com/go/TrackConfirmAction?tLabels=9400111899',
+        labelUrl: null,
         // ISO, like `created` — never the raw millisecond number.
         at: new Date(1_760_000_000_000).toISOString(),
       },
