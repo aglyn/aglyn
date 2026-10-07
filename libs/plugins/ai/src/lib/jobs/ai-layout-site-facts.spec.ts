@@ -89,6 +89,16 @@ describe('what a layout may say about its business (AGL-3596)', () => {
       ).toEqual([])
     })
 
+    it('reads no icon drawing as a phone number, however its path is written (AGL-3660)', () => {
+      const tree = footer('Grooming for every coat')
+      tree.nodes['heart'] = {
+        componentId: 'icon',
+        props: { iconPath: 'M12.1,18.55L12,18.65L11.89,18.55C7.14,14.24 4,11.39 4,8.5C4,6.5 5.5,5 7.5,5Z' },
+      }
+      tree.nodes['star'] = { componentId: 'icon', props: { iconPath: 'M14.94 19.5L12 17.77L9.06 19.5L9.84 16.1 7.1 13.41Z' } }
+      expect(aiLayoutInventedContactViolations(tree, GUIDED_BRIEF)).toEqual([])
+    })
+
     it('reads no year, price or bracketed placeholder as a phone number', () => {
       expect(
         aiLayoutInventedContactViolations(footer('© 2026', 'From $45', 'Call [Office phone number]'), GUIDED_BRIEF),

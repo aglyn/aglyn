@@ -99,6 +99,9 @@ const HOURS = new RegExp(
   'gi',
 )
 
+/** SVG path data: a move command, then only commands and numbers. */
+const SVG_PATH_DATA = /^\s*[Mm][\s\d.,eE+-]*[\d.][\s\d.,eE+\-MmLlHhVvCcSsQqTtAaZz]*$/
+
 /** The words of an address, as a brief and a layout can both spell them. */
 const addressKey = (value: string) => {
   const [number, word] = value.toLowerCase().match(/[a-z0-9]+/g) ?? []
@@ -134,7 +137,8 @@ export function aiLayoutInventedContactViolations(tree: AiDoctrineTree, brief: s
   const nodeIds: string[] = []
   for (const { id, node } of walkTree(tree)) {
     for (const value of Object.values((node as AiDoctrineNode).props ?? {})) {
-      if (typeof value !== 'string') continue
+      // An icon's drawing (`iconPath`) is SVG path data, whose coordinates read as phone numbers.
+      if (typeof value !== 'string' || SVG_PATH_DATA.test(value)) continue
       const found = [
         ...(value.match(EMAIL) ?? []).filter((email) => !given.emails.has(email.toLowerCase())),
         ...(value.match(PHONE) ?? []).filter((phone) => {
