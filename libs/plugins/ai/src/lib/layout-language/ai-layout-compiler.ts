@@ -425,7 +425,9 @@ function compileSection(
   const content =
     parts.length === 1
       ? parts[0]
-      : tree.add('muiStack', { spacing: '6' }, null, parts, 'content')
+      : // Gap, not margins: a stack's margin spacing resets its children's
+        // margins, which un-centers a reading-width head (AGL-3660).
+        tree.add('muiStack', { spacing: '6', useFlexGap: true }, null, parts, 'content')
   const container = tree.add(
     'muiContainer',
     { maxWidth: wide ? 'lg' : 'md' },

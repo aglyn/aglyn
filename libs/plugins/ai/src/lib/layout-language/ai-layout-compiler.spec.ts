@@ -574,6 +574,14 @@ describe('copy', () => {
     expect(texts[0]).toBe('Gentle grooming for nervous dogs')
     expect(texts[1]).toBe('Call [phone number] or 512-555-0199 to book.')
   })
+
+  it('writes a unicode escape the model spelled out as the character it names', () => {
+    const { compiled } = build([{ blocks: [{ kind: 'heading', text: 'Drop in \\u2014 no experience needed' }] }], pagePlan, false)
+    const [title] = Object.values(compiled.tree.nodes)
+      .filter((node) => node.componentId === 'muiTypography')
+      .map((node) => node.props?.['children'])
+    expect(title).toBe('Drop in \u2014 no experience needed')
+  })
 })
 
 describe('repeats (rule 1)', () => {

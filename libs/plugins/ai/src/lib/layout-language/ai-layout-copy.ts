@@ -72,7 +72,12 @@ const TRAILING_JOINERS = /[\s,;:—–-]+$/
 /** Collapses whitespace and takes out markup a page would print. */
 export function aiLayoutCleanText(value: unknown): string {
   if (typeof value !== 'string') return ''
-  return value.replace(MARKUP, '').replace(/\s+/g, ' ').trim()
+  return value
+    .replace(MARKUP, '')
+    // A JSON escape a model wrote out as text ("\\u2014") is the character it names.
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 /** The line with every trailing dangling word taken off, as rule 14 reads one. */
