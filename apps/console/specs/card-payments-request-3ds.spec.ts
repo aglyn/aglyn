@@ -193,6 +193,10 @@ const PAYMENT_DOORS: Record<string, DoorClass> = {
     surface: 'signed-in',
     why: 'a register operator rings it up on the console surface',
   },
+  'libs/plugins/commerce/src/lib/server/pos-terminal.ts': {
+    surface: 'signed-in',
+    why: 'a register operator takes the card through commerce/pos-payment, behind authorizePosStaff',
+  },
   'libs/plugins/marketplace/src/lib/server/checkout.ts': {
     surface: 'signed-in',
     why: 'a workspace member buys a listing on the console surface',
