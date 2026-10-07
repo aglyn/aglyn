@@ -479,8 +479,9 @@ async function screenCapRefusal(options: {
  * * a declared collection counted by a FLAT cap — the table below.
  * * `collections`/`entries` — uncapped by design; AGL-1387 declined
  *   `collectionsPerHost` and this is not the issue that re-opens it.
- * * `components` — `reusableComponents` is a BOOLEAN entitlement, true on
- *   every plan that can reach here. There is no number to compare against.
+ * * `components` — `componentsPerHost` is unlimited on every plan that can
+ *   reach here (Free's 1 is the only finite allowance, AGL-3615), so there is
+ *   no number to compare against.
  * * `media` — the meter is bytes at upload, and an import copies no bytes.
  */
 const CAPPED_HOST_COLLECTIONS: ReadonlyArray<{

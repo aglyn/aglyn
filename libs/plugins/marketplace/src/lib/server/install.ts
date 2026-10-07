@@ -20,7 +20,7 @@
 // mocks have no reason to stage.
 import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import {
-  checkEntitlement,
+  checkQuota,
   createResourceUid,
   decodeStoredNodes,
   encodeStoredNodes,
@@ -82,33 +82,51 @@ export const installHandler: PluginApiHandler = async (req, res) => {
     }
 
     // The SAME gate the console's own create path applies to this exact
-    // document (AGL-2072). `/api/hosts/resources` declares
-    // `reusableComponent: { collection: 'components', entitlement:
-    // 'reusableComponents' }` and says why: a reusable component renders on
-    // the LIVE SITE, so the Starter+ gate has to be server-enforced rather
-    // than merely hidden in the console (AGL-473). This route writes a
-    // byte-for-byte equivalent doc into `hosts/{hostId}/components` and asked
-    // nothing — so a free org installed from the marketplace and got the
-    // working feature its own console would have refused.
+    // document (AGL-2072). `/api/hosts/resources` creates
+    // `hosts/{hostId}/components` and refuses past the plan's allowance,
+    // because a reusable component renders on the LIVE SITE and the gate has
+    // to be server-enforced rather than merely hidden in the console
+    // (AGL-473). This route writes a byte-for-byte equivalent doc into the
+    // same collection, so it asks the same question: before AGL-2072 it asked
+    // nothing, and a free org got the working feature its own console would
+    // have refused.
     //
-    // The assumption that hid it is written down at
-    // `apps/console/app/api/hosts/import/route.ts:329-331`:
-    // "`reusableComponents` is a BOOLEAN entitlement, true on every plan that
-    // can reach here". True of import, which is Pro+. False here — any plan
-    // reaches the marketplace, and free listings cost nothing to install.
+    // The question is a COUNT since AGL-3615: `componentsPerHost`, Free 1 and
+    // every paid plan unlimited, no longer the `reusableComponents` flag. A
+    // re-install lands on the copy the site already holds, so it creates
+    // nothing and is not counted; only a first install of the listing is.
     //
     // Ahead of `requirePurchase`, deliberately, and matching
     // `install-dataset-schema.ts:89`: refusing on plan AFTER taking someone's
     // money for the listing would be the worse order. The whole org doc is
     // read (`getOrgDoc` projects nothing), so `resolveEffectivePlan` sees the
-    // subscription status and a LAPSED org is refused exactly as a free one
+    // subscription status and a LAPSED org is counted exactly as a free one
     // is — the gate is re-asked per install, never inherited from whatever
     // plan was in force when an earlier copy was installed.
     const org = (await getOrgForHost(hostId))?.org
-    if (!checkEntitlement(org as any, 'reusableComponents')) {
-      return res.status(403).json({
-        error: 'Reusable components require a Starter plan or higher',
-      })
+    const componentsRef = hostRef.collection('components')
+    const existing = await componentsRef
+      .where('marketplace.listingId', '==', listingId)
+      .limit(1)
+      .get()
+    if (existing.empty) {
+      // LIVE components only, as `/api/hosts/resources` counts them: a
+      // deletion stamps `deletedAt` and keeps the document. Nothing is read
+      // on a plan whose allowance is unlimited.
+      const limit = checkQuota(org as any, 'componentsPerHost', 0).limit
+      const used = Number.isFinite(limit)
+        ? (await componentsRef.select('deletedAt').get()).docs.filter(
+            (entry) => entry.get('deletedAt') == null,
+          ).length
+        : 0
+      const quota = checkQuota(org as any, 'componentsPerHost', used)
+      if (!quota.allowed) {
+        return res.status(403).json({
+          error:
+            `Your plan includes ${quota.limit} reusable component${quota.limit === 1 ? '' : 's'} — ` +
+            'upgrade in Billing for more',
+        })
+      }
     }
 
     const listingRef = firestore
@@ -188,11 +206,6 @@ export const installHandler: PluginApiHandler = async (req, res) => {
     // carried, which leaves a re-installed copy's own properties in place.
     const props = readPublishedProps(version.props)
 
-    const componentsRef = hostRef.collection('components')
-    const existing = await componentsRef
-      .where('marketplace.listingId', '==', listingId)
-      .limit(1)
-      .get()
     const componentRef = existing.empty
       ? componentsRef.doc(createResourceUid())
       : existing.docs[0].ref

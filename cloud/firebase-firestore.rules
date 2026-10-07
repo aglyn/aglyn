@@ -3055,7 +3055,7 @@ service cloud.firestore {
       // Reusable components (AGL-679) now carry editing history like screens
       // and layouts. The component DOC stays API-create-only (the catch-all
       // below excludes `components`, and the resources route enforces the
-      // reusableComponents entitlement) — but its `versions` subcollection
+      // plan's `componentsPerHost` allowance, AGL-3615) — but its `versions` subcollection
       // has to be client-writable, and the catch-all's create exclusion is
       // by collection NAME, so `components/{id}/versions/{v}` was caught by
       // it too. This dedicated block carves the versions back out.

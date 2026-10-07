@@ -18,17 +18,17 @@
  */
 
 /**
- * The `reusableComponents` gate on marketplace component install (AGL-2072).
+ * The component-allowance gate on marketplace component install (AGL-2072,
+ * a count since AGL-3615).
  *
- * `/api/hosts/resources` declares that creating a doc in
- * `hosts/{hostId}/components` requires the `reusableComponents` entitlement,
- * because a reusable component RENDERS ON THE LIVE SITE and so the Starter+
- * gate has to be server-enforced rather than hidden in the console (AGL-473).
- * This route wrote the equivalent document and asked nothing, so a free org
- * installed any marketplace component and got the working feature its own
- * console would have refused.
+ * `/api/hosts/resources` counts a doc created in `hosts/{hostId}/components`
+ * against `componentsPerHost` — Free 1, every paid plan unlimited — because
+ * a reusable component RENDERS ON THE LIVE SITE and so the gate has to be
+ * server-enforced rather than hidden in the console (AGL-473). This route
+ * wrote the equivalent document and asked nothing, so a free org installed
+ * any number of marketplace components its own console would have refused.
  *
- * `checkEntitlement` is the REAL one against the REAL plan table — a fake
+ * `checkQuota` is the REAL one against the REAL plan table — a fake
  * returning a boolean would only prove that this file's own stub agrees with
  * itself, and the whole defect was an assumption about what the table says.
  * The listing is FREE here (`priceUsd: 0`), which is the population the gap
@@ -68,8 +68,20 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     /** Whatever `getOrgForHost` should answer for this test. */
     org: { id: 'buyer-org', plan: 'starter' } as Record<string, unknown>,
     componentWrites: [] as Array<Record<string, unknown>>,
+    /** How many components the site already holds, for the count. */
+    held: 0,
+    /** How many of those are deleted: a tombstone keeps its document. */
+    deleted: 0,
   }
   const componentsCollection = {
+    // The allowance reads `deletedAt` and counts the live ones (AGL-3615).
+    select: () => ({
+      get: async () => ({
+        docs: Array.from({ length: state.held }, (_, index) => ({
+          get: () => (index < state.deleted ? { seconds: 1 } : undefined),
+        })),
+      }),
+    }),
     where: () => ({
       limit: () => ({ get: async () => ({ empty: true, docs: [] }) }),
     }),
@@ -141,6 +153,7 @@ const state = (
     __state: {
       org: Record<string, unknown>
       componentWrites: Array<Record<string, unknown>>
+      held: number
     }
   }
 ).__state
@@ -171,19 +184,48 @@ const makeReq = () =>
 beforeEach(() => {
   state.componentWrites.length = 0
   state.org = { id: 'buyer-org', plan: 'starter' }
+  state.held = 0
+  state.deleted = 0
 })
 
-describe('marketplace component install honours reusableComponents (AGL-2072)', () => {
-  /** THE DEFECT: this wrote the component and returned 200. */
-  it('refuses a FREE org and writes nothing', async () => {
+describe('marketplace component install meets the component allowance (AGL-2072, AGL-3615)', () => {
+  /*
+   * THE DEFECT AGL-2072 closed: this wrote the component and returned 200
+   * whatever the plan said. Since AGL-3615 the plan's answer is a count —
+   * Free 1 — so a Free site holding its one component is refused the next.
+   */
+  it('refuses a FREE site that already holds its one component, and writes nothing', async () => {
     state.org = { id: 'buyer-org', plan: 'free' }
+    state.held = 1
     const res = makeRes()
 
     await installHandler(makeReq(), res)
 
     expect(res.statusCode).toBe(403)
-    expect(String(res.body.error)).toMatch(/Starter plan or higher/)
+    expect(res.body.error).toBe('Your plan includes 1 reusable component — upgrade in Billing for more')
     expect(state.componentWrites).toHaveLength(0)
+  })
+
+  it('installs on a FREE site whose one component was deleted, counting live ones only', async () => {
+    state.org = { id: 'buyer-org', plan: 'free' }
+    state.held = 1
+    state.deleted = 1
+    const res = makeRes()
+
+    await installHandler(makeReq(), res)
+
+    expect(res.statusCode).toBe(200)
+    expect(state.componentWrites).toHaveLength(1)
+  })
+
+  it('installs on a FREE site with none, as its one component', async () => {
+    state.org = { id: 'buyer-org', plan: 'free' }
+    const res = makeRes()
+
+    await installHandler(makeReq(), res)
+
+    expect(res.statusCode).toBe(200)
+    expect(state.componentWrites).toHaveLength(1)
   })
 
   /**
@@ -192,12 +234,13 @@ describe('marketplace component install honours reusableComponents (AGL-2072)', 
    * collapses a dead subscription to free, and the whole org doc is read so
    * the status is actually there to see.
    */
-  it('refuses a LAPSED paid org, whose stale `plan` field still says starter', async () => {
+  it('counts a LAPSED paid org as Free, whose stale `plan` field still says starter', async () => {
     state.org = {
       id: 'buyer-org',
       plan: 'starter',
       subscription: { status: 'canceled' },
     }
+    state.held = 1
     const res = makeRes()
 
     await installHandler(makeReq(), res)
@@ -211,8 +254,9 @@ describe('marketplace component install honours reusableComponents (AGL-2072)', 
    * fail-CLOSED direction, and the same one every other entitlement door
    * takes.
    */
-  it('refuses an org the host index cannot resolve', async () => {
+  it('counts an org the host index cannot resolve as Free', async () => {
     state.org = undefined as any
+    state.held = 1
     const res = makeRes()
 
     await installHandler(makeReq(), res)
@@ -222,7 +266,8 @@ describe('marketplace component install honours reusableComponents (AGL-2072)', 
   })
 
   /** And the entitled path still installs — the assertion above is live. */
-  it('installs for a STARTER org, the lowest plan that includes the feature', async () => {
+  it('installs for a STARTER org beside any number held, its allowance unlimited', async () => {
+    state.held = 200
     const res = makeRes()
 
     await installHandler(makeReq(), res)
@@ -247,7 +292,8 @@ describe('marketplace component install honours reusableComponents (AGL-2072)', 
    * has to keep working — the gate must read the RESOLVED entitlement, not
    * the plan name.
    */
-  it('installs for a free org staff granted the feature', async () => {
+  it('installs for a free org staff granted the feature, which lifts the count', async () => {
+    state.held = 40
     state.org = {
       id: 'buyer-org',
       plan: 'free',
