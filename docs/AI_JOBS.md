@@ -2785,7 +2785,8 @@ sees a record, and every insight a person reads is traced to the numbers it cite
   `bookings.services`, the marketing plugin's `marketing.campaigns`, `marketing.experiments`,
   `marketing.conversions` (attribution records counted by kind and channel over the window,
   by aggregation only) and `marketing.revenue` (each window send's revenue rollup, one row per
-  currency),
+  currency), the funnels plugin's `funnels.overview` and `funnels.steps`
+  (`server/funnel-figures.ts`, on the Analytics surface, sold under `screenAnalytics`),
   and the data plugin's `datasets.summary` and `datasets.breakdown` (`server/dataset-figures.ts`,
   from its console-only server declarations). This plugin registers the readers for records the
   platform keeps (`src/lib/insights/ai-figure-readers.ts`): `traffic.summary`, `traffic.pages`,
@@ -2816,7 +2817,7 @@ sees a record, and every insight a person reads is traced to the numbers it cite
   than three records into one row.
 - **Who may read what.** `aiInsightReaders` (`src/lib/insights/ai-insight-readers.ts`) offers a
   reader only when the surface asks about its kind of figures, the plan includes the feature it is
-  sold under (`commerceAnalytics`, `bookings`, `abTesting`, `dataStore`), and its plugin is past
+  sold under (`commerceAnalytics`, `bookings`, `abTesting`, `screenAnalytics`, `dataStore`), and its plugin is past
   its release flag and on for the site. A dataset reader reads what the asking member may see, and
   on a site only what is shared with it.
 - **Runner.** `src/lib/jobs/ai-job-insight-step.ts`. Two calls through `runAiRequest`, sharing one

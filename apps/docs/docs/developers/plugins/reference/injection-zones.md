@@ -17,6 +17,7 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `hostDashboard` | Host dashboard glance row, one card per capability | `hostId` |
 | `orgDashboard` | The organization's Sites page, above the site grid — the org-level twin of `hostDashboard`, rendered only for an org-wide member who may open the org-level CRM | `hostId` (always `null`), `orgMount`, `basePath` (the org-level hub's path) |
 | `commerceGlance` | Host dashboard commerce summary | `hostId` |
+| `hostAnalytics` | A site's **Analytics** page, below its traffic cards: a whole section a plugin computes, such as Funnels | `hostId`, `orgId` |
 | `orgData` | Organization → Data page body | `orgId`, `org` |
 | `besignerFunctions` | Besigner ƒx panel | `hostId` |
 | `hostArtifactPublish` | Wherever a console page offers to publish something it holds (a site's layouts, the organization's publish panel): the dialog that publishes it. The page keeps the control that opens it, and leaves that control out when no widget is registered here | `artifact` (`{ kind, hostId?, orgId?, artifactId?, displayName?, description? }`, or `null` while nothing is open), `onClose()` |
@@ -111,6 +112,8 @@ importing the host's package:
 | `hostCampaigns` | The marketing plugin's **Campaigns** section, a site's or the organization's, beside **Create campaign** and again in the empty list: another way to start a campaign | `hostId` (`null` on the organization's hub), `orgId`, `sites` (on the organization's hub, the sites a campaign could be placed on, each `{ id, name }`; empty under a site) |
 | `marketingInsights` | In the header of the marketing plugin's **Conversions** section and of one campaign's report, beside the page's own actions: the figures in words | `hostId` (the site the figures are one site's: the site picked, or the site a campaign email was sent as; `null` when there is none yet), `subject` (`conversions` \| `campaign`), `campaign` (the campaign's subject line on its report, else `null`) |
 | `overlayEditor` | Among the fields of the marketing plugin's overlay editor: copy proposed for the bar or popup being edited, which the editor's **Save** writes | `hostId`, `overlayId` (empty while new), `kind` (`bar` \| `popup`), `copy` (the copy as the editor holds it), `limits`, `triggers`, `proposeValues(proposal, key)` — fills the fields unsaved |
+| `funnelsCreate` | The funnels plugin's Funnels card on a site's Analytics page, beside **New funnel** and in its empty state: another way to start a funnel | `hostId`, `orgId`, `propose(brief)` — asks the funnels plugin for a draft checked against the site and opens the editor on it; resolves to `null`, or a sentence saying why there is no draft |
+| `funnelInsight` | Under a funnel's results on the Funnels card: a control that explains them | `hostId`, `orgId`, `funnelName`, `days` (the range shown) |
 
 ## How a zone spaces your widget
 
@@ -136,6 +139,8 @@ page spaces it there:
 - `hostLogic`, `logicFunctionEditor` and `logicReferenceIssue`: a control the
   logic plugin places in its Functions and Variables cards' headers, in a
   function's editor, and on a broken reference.
+- `funnelsCreate` and `funnelInsight`: a control the funnels plugin places
+  beside **New funnel** and under a funnel's results.
 - `siteMember`: a section of a site user's drawer.
 - `besignerInspector` and `seoFields`: a section among a panel's own fields.
 - `besignerPageProperties`: a section of the Page Properties drawer's column.

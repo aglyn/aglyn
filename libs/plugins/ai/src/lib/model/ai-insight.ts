@@ -104,7 +104,8 @@ export function aiInsightSurface(inputs: Readonly<Record<string, unknown>> | nul
  * its datasets.
  */
 export const AI_INSIGHT_SURFACE_READERS: Readonly<Record<AiInsightSurface, readonly string[]>> = {
-  analytics: ['automations', 'bookings', 'commerce', 'crm', 'forms', 'marketing', 'traffic'],
+  // `funnels` (AGL-3605): a site's funnels, step by step, beside its traffic.
+  analytics: ['automations', 'bookings', 'commerce', 'crm', 'forms', 'funnels', 'marketing', 'traffic'],
   datasets: ['datasets'],
   'crm-reports': ['bookings', 'commerce', 'crm', 'forms', 'marketing', 'traffic'],
   marketing: ['commerce', 'forms', 'marketing', 'traffic'],

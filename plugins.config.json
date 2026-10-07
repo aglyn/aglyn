@@ -271,7 +271,7 @@
         "bookings"
       ],
       "catalog": {
-        "order": 5,
+        "order": 6,
         "label": "Bookings",
         "description": "Services, open slots, and paid bookings.",
         "releaseFlag": "release_bookings",
@@ -406,7 +406,7 @@
         {
           "id": "accounts",
           "catalog": {
-            "order": 4,
+            "order": 5,
             "$comment": "The Members blocks and the membership/* handlers are registered by this bundle, so there is no separate package to load; what this id contributes is the SWITCH the tenant route gate, the console card and the sitemap all ask (AGL-2486). Commerce off = member pages with no server, hence requires.",
             "label": "User Accounts",
             "description": "Visitor accounts on the site: the /signin, /signup and /recover pages, and the Members blocks. On for a new site; a site created before that stays off until you turn it on.",
@@ -425,7 +425,7 @@
         }
       ],
       "catalog": {
-        "order": 6,
+        "order": 7,
         "label": "Commerce",
         "description": "Products, carts, checkout, orders, POS.",
         "releaseFlag": "release_commerce_v2",
@@ -856,7 +856,7 @@
         "marketplace"
       ],
       "catalog": {
-        "order": 7,
+        "order": 8,
         "label": "Marketplace",
         "description": "Marketplace listings, templates, and installs.",
         "releaseFlag": "release_marketplace",
@@ -948,7 +948,7 @@
         "libs/plugins/crm/src/lib/server/merge-contacts.ts"
       ],
       "catalog": {
-        "order": 8,
+        "order": 9,
         "$comment": "The id was contacts until AGL-2595 widened one list into the hub; the release flag kept its key because it is persisted in Remote Config.",
         "label": "CRM",
         "description": "Leads, contacts, companies, deals, tasks and reports.",
@@ -1272,7 +1272,7 @@
         "libs/plugins/outreach/src/lib/transfer/do-not-contact-transfer.ts"
       ],
       "catalog": {
-        "order": 9,
+        "order": 10,
         "$comment": "Works the CRM's records but is released and entitled on its own (AGL-2974). Reads Sequences since AGL-3199; the id is stored on every org, so it stays.",
         "label": "Sequences",
         "description": "One-to-one email sequences sent from connected mailboxes.",
@@ -1392,7 +1392,7 @@
         }
       ],
       "catalog": {
-        "order": 10,
+        "order": 11,
         "label": "Data",
         "description": "Datasets, records, and CSV import/export.",
         "releaseFlag": "release_data_store",
@@ -1555,7 +1555,7 @@
         }
       ],
       "catalog": {
-        "order": 11,
+        "order": 12,
         "label": "Email",
         "description": "Designed emails and campaign sending.",
         "releaseFlag": "release_email",
@@ -1623,7 +1623,7 @@
         "events"
       ],
       "catalog": {
-        "order": 12,
+        "order": 13,
         "label": "Events Calendar",
         "description": "Event lists and calendars.",
         "releaseFlag": "release_events",
@@ -1710,7 +1710,7 @@
         "inbox"
       ],
       "catalog": {
-        "order": 13,
+        "order": 14,
         "label": "Inbox",
         "description": "Form submissions and lead inbox.",
         "releaseFlag": "release_inbox",
@@ -1761,7 +1761,7 @@
         "serverDeclarations": "registerLogicServerDeclarations"
       },
       "catalog": {
-        "order": 14,
+        "order": 15,
         "label": "Logic",
         "description": "Variables, functions, and reference health.",
         "releaseFlag": "release_logic",
@@ -1867,7 +1867,7 @@
         ]
       },
       "catalog": {
-        "order": 15,
+        "order": 16,
         "label": "Marketing",
         "description": "Overlays, campaigns, and experiments.",
         "releaseFlag": "release_marketing",
@@ -2031,7 +2031,7 @@
         "consoleServerDeclarations": "registerRedirectsConsoleServerDeclarations"
       },
       "catalog": {
-        "order": 16,
+        "order": 17,
         "label": "Redirects",
         "description": "URL redirect rules.",
         "releaseFlag": "release_redirects",
@@ -2152,7 +2152,7 @@
         "automations"
       ],
       "catalog": {
-        "order": 17,
+        "order": 18,
         "$comment": "The id is stored on every org's enabled-plugin list; only the label moved.",
         "label": "Automation",
         "description": "Workflows, actions, webhooks, and run logs.",
@@ -2387,6 +2387,8 @@
             "besignerToolbar",
             "experimentResult",
             "experimentVariants",
+            "funnelInsight",
+            "funnelsCreate",
             "hostAutomations",
             "hostCampaigns",
             "hostComponents",
@@ -2461,6 +2463,54 @@
         "serverDeclarations": "registerVideoDeliveryServerDeclarations"
       },
       "contributes": {}
+    },
+    {
+      "id": "funnels",
+      "package": "@aglyn/plugins-funnels",
+      "register": {
+        "console": "registerFunnelsConsole",
+        "consoleApi": "registerFunnelsConsoleApi",
+        "serverDeclarations": "registerFunnelsServerDeclarations"
+      },
+      "apiPrefixes": [
+        "funnels"
+      ],
+      "catalog": {
+        "order": 4,
+        "$comment": "On for every workspace, off for a site only when that site says so (AGL-3605): funnels are a way of reading the paid analytics tier, so the card needs no switch of its own to be sold, and it records nothing until a site saves its first funnel.",
+        "label": "Funnels",
+        "alwaysOnForWorkspace": true,
+        "description": "Step-by-step conversion on a site's Analytics page: visits at each step, drop-off and time between steps.",
+        "siteOff": {
+          "stops": "Switching Funnels off for this site removes the Funnels card from its Analytics page.",
+          "keeps": "Saved funnels are kept, and visits keep being recorded while the site has one; delete the funnels to stop recording."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "hostCollections": [
+        {
+          "name": "funnels",
+          "mediaScan": "none",
+          "mediaScanReason": "A funnel is a name and its steps — paths and record ids, never an asset. Written only by the funnels save route."
+        },
+        {
+          "name": "funnelJourneys",
+          "mediaScan": "none",
+          "mediaScanReason": "One document per recorded visit: step types, paths or record ids, server times and UTM labels. Written only by the site collector on the Admin SDK, read only by the results route; expires 90 days after the visit."
+        },
+        {
+          "name": "funnelResults",
+          "mediaScan": "none",
+          "mediaScanReason": "A computed funnel result — counts, shares and durations — kept up to a day by the results route and expiring on its own."
+        }
+      ],
+      "contributes": {
+        "console": {
+          "slots": [
+            "hostAnalytics"
+          ]
+        }
+      }
     }
   ]
 }

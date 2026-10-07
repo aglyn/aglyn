@@ -175,6 +175,7 @@ const PLUGIN_TOPICS = {
   emailCampaigns: '/marketing-and-automation/email-campaigns/overview',
   events: '/content-and-data/events/overview',
   forms: '/content-and-data/forms/overview',
+  funnels: '/marketing-and-automation/analytics/funnels',
   installYourFirstPlugin: '/guides/install-your-first-plugin',
   inviteTeammates: '/workspace-and-billing/teams-and-roles/invite-teammates',
   marketingOverlays: '/marketing-and-automation/marketing-overlays/overview',

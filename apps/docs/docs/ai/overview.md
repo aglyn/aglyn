@@ -58,6 +58,7 @@ Each capability has its own page, next to the thing it builds:
 | What your campaigns caused and earned | **Marketing → Conversions**, or a campaign's report | [Marketing with AI](marketing-with-ai.md#ask-about-these-numbers) |
 | An automation, or a change to one you have | **Automation → Create with AI**, or a saved action's editor | [Automations with AI](automations-with-ai.md) |
 | A site function or variable, or a change to a function | **Logic → Create with AI**, or a saved function's editor | [Functions and variables with AI](logic-with-ai.md) |
+| A funnel from a description, and what its drop-off means | **Analytics → Funnels** | [Funnels](../marketing-and-automation/analytics/funnels.md#create-with-ai) |
 | A change to the page you have open | The Assist panel, in the Besigner | [Edits in the Besigner](../getting-started/aglyn-assist.md#edits-in-the-besigner) |
 
 Everything in that table follows the same building rules — reuse before creating, your

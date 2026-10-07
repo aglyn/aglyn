@@ -24,7 +24,7 @@ on one of these pages and choose **Ask about your numbers** under **AI jobs**:
 
 - a site's dashboard or **Analytics** page — traffic, top pages, where visits came from, forms,
   bookings, campaigns, A/B tests, announcement bars and popups, store sales, automation runs,
-  and the CRM pipeline and deals closed;
+  the CRM pipeline and deals closed, and [funnels](funnels.md);
 - a site's **CRM → Reports** page — the same figures, for questions about where people came
   from and what they did;
 - a site's **Marketing** page — campaigns, the conversions they were credited with and the

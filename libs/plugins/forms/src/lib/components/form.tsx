@@ -17,6 +17,7 @@
 
 import { sendAnalyticsBeacon } from '@aglyn/aglyn/app-utils/analytics-beacon'
 import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
+import { recordSiteJourneyStep } from '@aglyn/aglyn/app-utils/site-journey'
 import { utmTouchField } from '@aglyn/aglyn/app-utils/utm-touch'
 import * as Aglyn from '@aglyn/aglyn'
 import {
@@ -482,6 +483,9 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
           // property and aglyn.com's reports into ours. It is consent-gated
           // either way: without a grant the script never loaded (AGL-1498)
           // and the delivery path finds no `window.gtag` to call.
+          // A funnel step (AGL-3605): the form, by its id. Dropped unless the
+          // site records journeys and the visitor's consent grants.
+          recordSiteJourneyStep('form', formId)
           await trackEventBeforeNavigation('generate_lead', {
             form_name: formName || 'Form',
             form_location: window.location.pathname,

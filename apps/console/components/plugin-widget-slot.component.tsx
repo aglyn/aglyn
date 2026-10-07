@@ -88,6 +88,8 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // commerce glance sits.
   hostDashboard: 'bare',
   commerceGlance: 'bare',
+  // Cards of the site's Analytics page, among its own traffic cards.
+  hostAnalytics: 'stack',
   // Tiles of the org dashboard row's grid on the sites page.
   orgDashboard: 'bare',
   // Page and section bodies: the widget IS the surface.

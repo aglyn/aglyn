@@ -16,6 +16,7 @@
  */
 
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import { recordSiteJourneyStep } from '@aglyn/aglyn/app-utils/site-journey'
 import { useEffect } from 'react'
 import { buildBookingPurchaseParams } from '../model/booking-purchase-analytics'
 
@@ -146,6 +147,9 @@ export function useBookingPurchaseEvent(
 
       const purchase = buildBookingPurchaseParams(source)
       if (!purchase) return
+      // A funnel step (AGL-3605), recorded before the wait for the tag: the
+      // journey has its own consent gate and does not need GA on the page.
+      recordSiteJourneyStep('booking', purchase.items?.[0]?.item_id)
 
       // `trackEvent` no-ops when `window.gtag` is absent and never queues, so
       // waiting for the tag IS the delivery mechanism here.

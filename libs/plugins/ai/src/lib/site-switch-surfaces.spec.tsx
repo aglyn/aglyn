@@ -140,6 +140,10 @@ const SITE_ZONES: readonly string[] = [
   // "Ask AI about these numbers" on a site's dashboard and Analytics page
   // (AGL-3603).
   CONSOLE_WIDGET_SLOTS.hostDashboard,
+  // The Funnels card's two zones (AGL-3605), hosted by the funnels plugin on
+  // a site's Analytics page. Plain ids for the same reason.
+  'funnelsCreate',
+  'funnelInsight',
 ]
 
 /** Zones drawn on the WORKSPACE's pages, where no site's switch reaches. */
