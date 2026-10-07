@@ -141,7 +141,7 @@ function describeDrift(actualJson, expectedPaths) {
  * Metro does the same through `metro.config.js`. Generated here, beside the
  * Next apps' copies, because it is the same rebasing of the same table.
  */
-const MOBILE_APPS = ['mobile']
+const MOBILE_APPS = ['mobile', 'pos-mobile']
 
 const MOBILE_PACKAGE_PATHS = {
   react: ['./node_modules/@types/react'],

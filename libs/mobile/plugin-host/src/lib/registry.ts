@@ -58,6 +58,11 @@ const listeners = new Set<() => void>()
 /** The scope a registrar runs in: what its plugin declared it may register. */
 let scope: { pluginId: string; allowed: (kind: MobileContributionKind, id: string) => boolean } | null = null
 
+/** @internal The plugin whose registrar is running, for registries that attribute by it. */
+export function currentRegisteringPlugin(): string | null {
+  return scope?.pluginId ?? null
+}
+
 /** @internal The loader's hook; plugins never call it. */
 export function runInPluginScope(
   pluginId: string,

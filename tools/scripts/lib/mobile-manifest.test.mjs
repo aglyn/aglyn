@@ -55,3 +55,31 @@ test('refusals: unknown fields and kinds, a bad registrar, foreign or duplicate 
     /also declared by "shop"/,
   )
 })
+
+test('Aglyn POS reads only the `pos` block, and the Aglyn app never does (AGL-3618)', () => {
+  const both = plugin({
+    register: 'registerShopMobile',
+    contributes: { screens: ['shop.list'] },
+    pos: { $comment: 'x', register: 'registerShopPos', contributes: { tabs: ['shop.register'], screens: ['shop.register'] } },
+  })
+  const posOnly = plugin({ pos: { register: 'registerDeskPos', contributes: { screens: ['desk.today'] } } }, 'desk')
+  assert.deepEqual(mobileManifestRows([both, posOnly]), [
+    { id: 'shop', package: '@aglyn/plugins-shop', register: 'registerShopMobile', contributes: { screens: ['shop.list'] } },
+  ])
+  assert.deepEqual(mobileManifestRows([both, posOnly], 'aglyn-pos'), [
+    {
+      id: 'shop',
+      package: '@aglyn/plugins-shop',
+      register: 'registerShopPos',
+      contributes: { screens: ['shop.register'], tabs: ['shop.register'] },
+    },
+    { id: 'desk', package: '@aglyn/plugins-desk', register: 'registerDeskPos', contributes: { screens: ['desk.today'] } },
+  ])
+  assert.match(mobileManifestContent([], 'aglyn-pos'), /Aglyn POS's \(AGL-3618\)/)
+  assert.doesNotMatch(mobileManifestContent([]), /Aglyn POS/)
+  assert.throws(
+    () => mobileManifestRows([plugin({ pos: { register: 'registerShopPos', contributes: { pages: ['shop.a'] } } })], 'aglyn-pos'),
+    /"shop" mobile\.pos\.contributes: pages is not a mobile contribution/,
+  )
+  assert.throws(() => mobileManifestRows([], 'web'), /is not a mobile app/)
+})

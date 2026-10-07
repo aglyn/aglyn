@@ -79,6 +79,72 @@ export interface MobilePluginContext {
    * URL scheme.
    */
   openConsolePath(path: string, scope?: 'site' | 'org' | 'absolute'): void
+  /**
+   * The device's card reader (Tap to Pay or a connected Bluetooth reader),
+   * when the app drives one: Aglyn POS does, the Aglyn app does not, so a
+   * screen that takes a card shows its alternative when this is absent.
+   */
+  readonly cardReader?: MobileCardReader | null
+  /**
+   * Scans one barcode or QR code with the camera and resolves its text, or
+   * null when the person closed the scanner. Absent in an app that ships no
+   * camera scanner.
+   */
+  readonly scanCode?: (prompt: string) => Promise<string | null>
+  /** False while the device has no connection; screens hold writes then. */
+  readonly online?: boolean
+}
+
+/*==========================================
+ * DEVICE CAPABILITIES (AGL-3618).
+ *
+ * What an app's hardware does for a plugin, described by what it does and
+ * never by the SDK behind it. The money stays the server's: a plugin's route
+ * makes the payment intent, the reader only presents the card to it, and the
+ * plugin's route reads the outcome back from the processor rather than
+ * trusting the device's word.
+ *=========================================*/
+
+/** One card-present payment for the reader to collect. */
+export interface MobileCardCollectRequest {
+  readonly paymentIntentId: string
+  /** The intent's client secret, which names the intent it belongs to. */
+  readonly clientSecret: string
+  /**
+   * What the customer was shown, tip included. The reader refuses an intent
+   * for any other amount before it asks for the card.
+   */
+  readonly amountCents: number
+  /** Let a reader that can show a tip screen ask the customer for one. */
+  readonly tipEligible?: boolean
+}
+
+export type MobileCardCollectOutcome =
+  | { status: 'collected'; paymentIntentId: string; amountCents: number; tipCents: number }
+  | { status: 'canceled'; paymentIntentId: string }
+  | { status: 'failed'; paymentIntentId: string; message: string }
+
+export interface MobileCardReaderState {
+  readonly connected: boolean
+  readonly kind: 'tapToPay' | 'bluetooth' | null
+  /** The reader's name for the person ("Tap to Pay", "Stripe Reader M2"). */
+  readonly label: string | null
+  /** A payment is being collected. */
+  readonly busy: boolean
+  /** Test-mode keys: simulated readers and test cards only. */
+  readonly testMode: boolean
+  /** What the reader asks the customer to do right now. */
+  readonly prompt: string | null
+}
+
+export interface MobileCardReader {
+  readonly state: MobileCardReaderState
+  /** Never rejects: every outcome is one of the three. */
+  collect(request: MobileCardCollectRequest): Promise<MobileCardCollectOutcome>
+  /** Stops the collection in progress, if any. */
+  cancel(): Promise<void>
+  /** Opens the app's reader setup: find, connect and update readers. */
+  manage(): void
 }
 
 export interface MobileScreenProps {

@@ -1,16 +1,23 @@
 {
-  "extends": "expo/tsconfig.base",
+  "//": "Aglyn POS and everything it compiles: the shell, libs/mobile/*, and the src/mobile of each plugin its manifest loads (AGL-3618). Run with `npm --prefix apps/pos-mobile run typecheck`; the root `npm run typecheck` skips it because this app's packages are its own install. Strictness matches apps/mobile, because the pure workspace modules the app compiles are written under tsconfig.base.json.",
+  "extends": ["expo/tsconfig.base", "./tsconfig.paths.generated.json"],
   "compilerOptions": {
-    "strict": true,
+    "strict": false,
+    "strictBindCallApply": true,
     "noUncheckedIndexedAccess": false,
-    "types": ["jest"],
-    "paths": {
-      "@aglyn/mobile-core": ["../../libs/mobile/core/src/index.ts"],
-      "@aglyn/mobile-ui": ["../../libs/mobile/ui/src/index.ts"],
-      "@aglyn/mobile-webview": ["../../libs/mobile/webview/src/index.ts"],
-      "*": ["./node_modules/@types/*", "./node_modules/*"]
-    }
+    "noEmit": true,
+    "types": ["jest", "node"]
   },
-  "include": ["**/*.ts", "**/*.tsx", "../../libs/mobile/*/src/**/*.ts", "../../libs/mobile/*/src/**/*.tsx"],
-  "exclude": ["node_modules", "ios", "android"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "../../libs/mobile/*/src/**/*.ts",
+    "../../libs/mobile/*/src/**/*.tsx",
+    "../../libs/plugins/commerce/src/mobile/pos/**/*.ts",
+    "../../libs/plugins/commerce/src/mobile/pos/**/*.tsx",
+    "../../libs/plugins/commerce/src/mobile/index.ts",
+    "../../libs/plugins/bookings/src/mobile/**/*.ts",
+    "../../libs/plugins/bookings/src/mobile/**/*.tsx"
+  ],
+  "exclude": ["node_modules", "ios", "android", "dist"]
 }

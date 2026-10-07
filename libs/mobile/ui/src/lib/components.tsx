@@ -358,6 +358,56 @@ export function EmptyState({
   )
 }
 
+/**
+ * A one-line state the screen is in (AGL-3618): offline, test mode, a
+ * refusal to read out. Tinted by tone from the console palette, with at most
+ * one action beside the words.
+ */
+export function Notice({
+  tone = 'info',
+  message,
+  action,
+  testID,
+}: {
+  tone?: 'info' | 'success' | 'warning' | 'error'
+  message: string
+  action?: { label: string; onPress: () => void }
+  testID?: string
+}) {
+  const theme = useMobileTheme()
+  const color = theme.colors[tone]
+  const icon = { info: 'information-circle', success: 'checkmark-circle', warning: 'warning', error: 'alert-circle' }[tone]
+  return (
+    <View
+      testID={testID}
+      accessibilityRole="alert"
+      style={[
+        styles.notice,
+        {
+          borderRadius: theme.radius,
+          borderColor: color.main,
+          backgroundColor: theme.colors.background.paper,
+          paddingHorizontal: theme.space(1.5),
+          paddingVertical: theme.space(1),
+          gap: theme.space(1),
+        },
+      ]}
+    >
+      <Icon name={icon} size={20} color={color.text} />
+      <Text variant="caption" style={[styles.flex, { color: color.text }]}>
+        {message}
+      </Text>
+      {action ? (
+        <Pressable accessibilityRole="button" onPress={action.onPress} hitSlop={8}>
+          <Text variant="label" style={{ color: color.text }}>
+            {action.label}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  )
+}
+
 /** A pulsing placeholder the size of the content it stands in for. */
 export function Skeleton({ height = 16, width = '100%' }: { height?: number; width?: number | `${number}%` }) {
   const theme = useMobileTheme()
@@ -442,6 +492,7 @@ const styles = StyleSheet.create({
   button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   input: { minHeight: 44, borderWidth: 1 },
   empty: { alignItems: 'center', justifyContent: 'center' },
+  notice: { flexDirection: 'row', alignItems: 'center', borderWidth: 1 },
   scrim: { flex: 1, opacity: 0.4 },
   sheet: { maxHeight: '80%' },
 })

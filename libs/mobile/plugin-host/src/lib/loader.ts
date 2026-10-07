@@ -26,6 +26,7 @@
  */
 
 import { registeredBy, runInPluginScope, unregisterMobilePlugin } from './registry'
+import { unregisterMobileServices } from './services'
 import type {
   MobileContributionKind,
   MobilePluginManifest,
@@ -96,6 +97,7 @@ export async function loadMobilePlugins(
       loaded.push(entry.id)
     } catch (error) {
       unregisterMobilePlugin(entry.id)
+      unregisterMobileServices(entry.id)
       failed.push({
         pluginId: entry.id,
         error: error instanceof Error ? error.message : String(error),

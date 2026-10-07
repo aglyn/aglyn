@@ -54,7 +54,7 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { mobileManifestContent, mobileManifestRows } from './lib/mobile-manifest.mjs'
+import { MOBILE_APPS, mobileManifestContent, mobileManifestRows } from './lib/mobile-manifest.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const config = JSON.parse(readFileSync(join(ROOT, 'plugins.config.json'), 'utf8'))
@@ -3694,12 +3694,12 @@ function consoleRedirectRows() {
 }
 
 /**
- * The mobile manifest (AGL-3620): what each plugin adds to the Aglyn mobile
- * apps, from its `mobile` block. A SEPARATE file only the mobile apps import;
- * the web manifests above never read `mobile`. Built and validated in
- * ./lib/mobile-manifest.mjs, which has its own tests.
+ * The mobile manifests (AGL-3620, AGL-3618): what each plugin adds to each
+ * mobile app, from its `mobile` block — one SEPARATE file per app, which only
+ * that app imports; the web manifests above never read `mobile`. Built and
+ * validated in ./lib/mobile-manifest.mjs, which has its own tests.
  */
-const MOBILE_MANIFEST = 'apps/mobile/src/plugins.mobile.generated.ts'
+const MOBILE_MANIFESTS = Object.entries(MOBILE_APPS).map(([app, { manifest }]) => ({ app, file: manifest }))
 
 const check = process.argv.includes('--check')
 const drifted = []
@@ -3740,7 +3740,10 @@ const ALL = [
     describe: describeSubprocessorDrift,
   },
   { file: REDIRECTS_MANIFEST, content: `${JSON.stringify(consoleRedirectRows(), null, 2)}\n` },
-  { file: MOBILE_MANIFEST, content: mobileManifestContent(mobileManifestRows(config.plugins)) },
+  ...MOBILE_MANIFESTS.map(({ app, file }) => ({
+    file,
+    content: mobileManifestContent(mobileManifestRows(config.plugins, app), app),
+  })),
 ]
 
 for (const { file, content, describe = describeDrift } of ALL) {

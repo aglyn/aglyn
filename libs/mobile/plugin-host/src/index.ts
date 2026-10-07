@@ -35,3 +35,11 @@ export {
 export * from './lib/loader'
 export * from './lib/deep-links'
 export * from './lib/hooks'
+export {
+  defineMobileServiceContract,
+  registerMobileService,
+  resolveMobileService,
+  resetMobileServices,
+  type MobileServiceContract,
+} from './lib/services'
+export * from './lib/card-reader'
