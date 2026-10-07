@@ -56,7 +56,7 @@ import { normalizeAreaServed } from './local-business'
  */
 
 /** The collection a profile document lives in, under a host or an org. */
-export const BUSINESS_PROFILE_COLLECTION = 'businessProfile'
+export const BUSINESS_PROFILE_SUBCOLLECTION = 'businessProfile'
 /** The site's profile document id. */
 export const BUSINESS_PROFILE_SITE_DOC = 'profile'
 /** The workspace defaults document id. */
