@@ -130,6 +130,8 @@ const WORKSPACE_ZONES: readonly string[] = [
   CONSOLE_WIDGET_SLOTS.orgSites,
   // "Ask AI about these numbers" on the workspace's sites page (AGL-3603).
   CONSOLE_WIDGET_SLOTS.orgDashboard,
+  // "Create with AI" on the workspace's Org automations (AGL-3603).
+  'orgAutomations',
 ]
 
 /** A workspace that never listed AI, and one of its sites that switched it off. */

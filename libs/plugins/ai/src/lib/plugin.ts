@@ -65,6 +65,7 @@ import AiSiteStartCard from './components/ai-site-start-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
 import AiDescribeAutomationButton from './components/ai-describe-automation.component'
 import AiReviseAutomation from './components/ai-revise-automation.component'
+import AiDescribeOrgAutomationButton from './components/ai-describe-org-automation.component'
 import { AiInsightHostCard, AiInsightOrgCard } from './components/ai-insight-card.component'
 import {
   AiLogicCreateButton,
@@ -456,6 +457,17 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiReviseAutomation,
+      },
+      // "Create with AI" on the workspace's Org automations (AGL-3603): one
+      // of the workspace's automations drafted from a description and opened
+      // in that section's editor, unsaved and switched off.
+      {
+        slot: 'orgAutomations',
+        widgetId: 'ai-describe-org-automation',
+        title: 'Describe an org automation',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeOrgAutomationButton,
       },
       // "Ask AI about these numbers" (AGL-3603): a tile on a site's
       // dashboard and Analytics page, which both draw `hostDashboard`, and on

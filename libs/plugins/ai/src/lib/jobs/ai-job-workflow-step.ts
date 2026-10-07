@@ -22,7 +22,9 @@ import {
   CRM_TASK_MAX_DUE_DAYS,
 } from '@aglyn/aglyn/app-utils/crm'
 import { HOST_EVENT_PAYLOAD_KEYS, type HostEventType } from '@aglyn/aglyn/app-utils/host-events'
-import { isHostPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
+import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { isHostPluginEnabled, isPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
+import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin/server/release-flags'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
@@ -30,6 +32,7 @@ import {
   aiAutomationDraftNote,
   aiAutomationRevisionChanges,
   aiAutomationRevisionNote,
+  type AiAutomationDraft,
   type AiAutomationRecords,
 } from '../model/ai-automation-draft'
 import {
@@ -64,12 +67,16 @@ import {
   AI_WORKFLOW_REVISE_BLOCKER_COPY,
   AI_WORKFLOW_REVISE_WORKFLOW_COPY,
   AI_WORKFLOW_UNAVAILABLE_COPY,
+  AI_ORG_AUTOMATION_PLAN_COPY,
+  AI_ORG_AUTOMATION_RESOURCE,
+  AI_ORG_AUTOMATION_UNAVAILABLE_COPY,
   aiActionReviseBlocker,
   aiAutomationCapabilities,
   aiAutomationTriggerLabel,
   parseAiWorkflowJobInputs,
   type AiAutomationCapabilities,
   type AiAutomationStepType,
+  type AiOrgAutomationVocabulary,
 } from '../model/ai-workflow-job'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
@@ -84,6 +91,7 @@ import {
   AI_WORKFLOW_EXPLANATION_TOOL_NAME,
   aiAutomationTool,
   aiWorkflowExplanationTool,
+  holdAiAutomationAnswerToVocabulary,
   readAiAutomationAnswer,
   readAiWorkflowExplanation,
   type AiAutomationAnswer,
@@ -104,6 +112,7 @@ import { AI_JOB_BRIEF_MAX_CHARS, type AiJobStepOutcome, type AiJobStepRunner } f
 import { registerAiJobStep } from './ai-jobs'
 import {
   readAiAutomationRecords,
+  readAiOrgAutomationRecords,
   readAiWorkflowFunctions,
   readAiWorkflowRun,
   readAiWorkflowTarget,
@@ -154,6 +163,16 @@ import {
  * from the two stored shapes. An action holding what the vocabulary cannot
  * write is refused before the model is asked, so a revision never drops an
  * on-page step the person did not ask to lose.
+ *
+ * ## A workspace's automation (AGL-3603)
+ *
+ * A draft with `scope: 'org'` names no site. It is asked as a draft is — the
+ * same cached vocabulary, the same tool — with the org automation's narrower
+ * vocabulary stated in the user turn and held by the check, and matched
+ * against the workspace's lists, campaigns, datasets and stages. Nothing is
+ * written: the automation rides on an `orgAutomation` output, which the Org
+ * automations editor opens unsaved, where its sites are picked and its save
+ * route — the workflows plugin's — holds it to that plugin's rules.
  */
 
 /** The longest an explanation or a draft's generation may take reading the site first. */
@@ -299,20 +318,33 @@ export function aiJobWorkflowDraftPrompt(input: {
   records: Pick<AiAutomationRecords, 'forms' | 'datasets'>
   /** The saved action a revision starts from, as its outline. */
   revising?: { outline: string } | null
+  /** A workspace's automation (AGL-3603): what it may start on and do. */
+  org?: AiOrgAutomationVocabulary | null
 }): string {
   const { crm, webhooks, bookings } = input.capabilities
   const forms = input.records.forms.slice(0, AI_WORKFLOW_FORMS_LISTED)
   const datasets = input.records.datasets.slice(0, AI_WORKFLOW_DATASETS_LISTED)
   return [
+    ...(input.org
+      ? [
+          'This automation belongs to the workspace: it runs on each site it is placed on, as that site. It may start only on these triggers, and use only these steps; anything else, even if listed above, is never used.',
+          `Triggers: ${input.org.triggers.join(', ')}.`,
+          `Steps: ${input.org.steps.join(', ')}.`,
+        ]
+      : []),
     `This workspace can use: the CRM — ${yesNo(crm)}; webhooks — ${yesNo(webhooks)}; bookings — ${yesNo(bookings)}.`,
-    'Forms on this site (id · name · fields):',
-    ...(forms.length
-      ? forms.map(
-          (form) =>
-            `- ${form.id} · ${form.name} · ${form.fields.slice(0, AI_WORKFLOW_FORM_FIELDS_LISTED).join(', ') || 'no fields'}`,
-        )
-      : ['- none']),
-    'Datasets on this site (name):',
+    ...(input.org
+      ? ['Forms: an automation of the workspace runs on several sites, so none is listed; a form is named in the description’s words.']
+      : [
+          'Forms on this site (id · name · fields):',
+          ...(forms.length
+            ? forms.map(
+                (form) =>
+                  `- ${form.id} · ${form.name} · ${form.fields.slice(0, AI_WORKFLOW_FORM_FIELDS_LISTED).join(', ') || 'no fields'}`,
+              )
+            : ['- none']),
+        ]),
+    input.org ? 'Datasets in this workspace (name):' : 'Datasets on this site (name):',
     ...(datasets.length ? datasets.map((dataset) => `- ${dataset.name}`) : ['- none']),
     ...(input.revising
       ? [
@@ -357,11 +389,15 @@ export function aiJobWorkflowDraftGeneration(request: {
   capabilities: AiAutomationCapabilities
   records: Pick<AiAutomationRecords, 'forms' | 'datasets'>
   revising?: { outline: string } | null
+  org?: AiOrgAutomationVocabulary | null
   model: string
   signal?: AbortSignal
 }): AiCustomGenerationInput<AiAutomationAnswer> {
+  const org = request.org
   const check: AiGenerationCheck<AiAutomationAnswer> = (answer) =>
-    readAiAutomationAnswer(answer, request.capabilities)
+    org
+      ? holdAiAutomationAnswerToVocabulary(readAiAutomationAnswer(answer, request.capabilities), org)
+      : readAiAutomationAnswer(answer, request.capabilities)
   return {
     step: 'job.workflow',
     model: request.model,
@@ -403,6 +439,7 @@ export interface AiJobWorkflowStepDeps {
   /** How the automation draft writer is found; the core's registry otherwise. */
   writerFor?: AiPluginDraftWriterLookup
   readRecords?: typeof readAiAutomationRecords
+  readOrgRecords?: typeof readAiOrgAutomationRecords
   readTarget?: typeof readAiWorkflowTarget
   readRun?: typeof readAiWorkflowRun
   readFunctions?: typeof readAiWorkflowFunctions
@@ -417,6 +454,7 @@ function quotedName(name: string): string {
 export function createAiJobWorkflowStep(deps: AiJobWorkflowStepDeps = {}): AiJobStepRunner {
   const writerFor = deps.writerFor ?? aiPluginDraftWriter
   const readRecords = deps.readRecords ?? readAiAutomationRecords
+  const readOrgRecords = deps.readOrgRecords ?? readAiOrgAutomationRecords
   const readTarget = deps.readTarget ?? readAiWorkflowTarget
   const readRun = deps.readRun ?? readAiWorkflowRun
   const readFunctions = deps.readFunctions ?? readAiWorkflowFunctions
@@ -426,6 +464,48 @@ export function createAiJobWorkflowStep(deps: AiJobWorkflowStepDeps = {}): AiJob
     const unspent = (failure: string): AiJobStepOutcome => ({ ...aiUnspentOutcome(model), failure })
     const inputs = parseAiWorkflowJobInputs(job.inputs)
     if (typeof inputs === 'string') return unspent(inputs)
+
+    if (inputs.mode === 'draft' && inputs.scope === 'org') {
+      // A workspace's automation (AGL-3603): no site, and nothing written.
+      const orgData = (org ?? (await firestore.collection('orgs').doc(job.orgId).get()).data() ?? null) as Record<
+        string,
+        unknown
+      > | null
+      if (!checkEntitlement(orgData as Partial<AglynOrgBilling> | null, 'actions')) {
+        return aiUnspentOutcome(model, { review: aiLimitReview(AI_ORG_AUTOMATION_PLAN_COPY) })
+      }
+      const capabilities = aiAutomationCapabilities(orgData)
+      const vocabulary = { triggers: inputs.triggers, steps: inputs.steps }
+      const records = await readOrgRecords(firestore, { orgId: job.orgId, crm: capabilities.crm })
+      const generation = await runValidatedGeneration(
+        'workflow',
+        aiJobWorkflowDraftGeneration({
+          brief: job.brief,
+          capabilities,
+          records,
+          org: vocabulary,
+          model,
+          ...(signal ? { signal } : {}),
+        }),
+      )
+      const spent = { ...aiGenerationSpent(generation), ...(generation.effort ? { effort: generation.effort } : {}) }
+      if (generation.status === 'refused') return { ...spent, refused: true }
+      if (generation.status === 'needs_input') return { ...spent, review: aiDoctrineReview(generation) }
+      const answer = generation.value
+      if (answer.unsupported) {
+        return {
+          ...spent,
+          failure:
+            answer.unsupported === 'no-trigger' || answer.unsupported === 'no-step'
+              ? AI_ORG_AUTOMATION_UNSUPPORTED_COPY
+              : AI_AUTOMATION_UNSUPPORTED_COPY[answer.unsupported],
+        }
+      }
+      if (!answer.steps.length) return { ...spent, failure: AI_WORKFLOW_NO_DRAFT_COPY }
+      const draft = aiAutomationDraft(answer, records)
+      return { ...spent, outputs: [orgProposalOutput(draft, answer.notes)] }
+    }
+
     const hostId = job.hostId
     if (!hostId) return unspent(AI_WORKFLOW_NO_SITE_COPY)
     // The door checks the caller's membership of the org the job is metered
@@ -618,6 +698,38 @@ export function createAiJobWorkflowStep(deps: AiJobWorkflowStepDeps = {}): AiJob
   }
 }
 
+/** What a person is told when a workspace's automation would need what only one site runs. */
+export const AI_ORG_AUTOMATION_UNSUPPORTED_COPY =
+  'An org automation cannot do what this description asks — it starts only on what the server sees and uses only the steps every site runs the same way — so nothing was drafted. Build it as an action on the site instead.'
+
+/**
+ * A workspace's drafted automation as the output that proposes it
+ * (AGL-3603): the stored shape the Org automations editor opens — its name,
+ * trigger and steps, never a placement, which the person picks — and what
+ * to fill in before switching it on.
+ */
+export function orgProposalOutput(draft: AiAutomationDraft, notes: readonly string[]): AiJobOutput {
+  const { name, trigger, steps } = draft.action
+  return {
+    resource: AI_ORG_AUTOMATION_RESOURCE as AiJobOutput['resource'],
+    // A proposal has no document; the id names what it is within the job.
+    id: 'proposal',
+    hostId: null,
+    hostSubdomain: null,
+    label: name,
+    note: [
+      'Nothing is saved yet: it opens in the org automation editor, switched off, where you choose the sites it runs on and save it.',
+      ...(draft.placeholders.length
+        ? [
+            `Fill in ${draft.placeholders.length === 1 ? 'its placeholder' : `its ${draft.placeholders.length} placeholders`} before switching it on.`,
+          ]
+        : []),
+      ...notes,
+    ].join(' '),
+    proposal: { automation: { name, trigger, steps } } as unknown as Record<string, unknown>,
+  }
+}
+
 /** The name a revised copy is saved under when the change asked for no other. */
 export function aiRevisedName(name: string): string {
   const clean = name.replace(/\s+/g, ' ').trim() || 'Automation'
@@ -667,6 +779,28 @@ async function workflowsPluginRefusal(
     : { status: 403, error: aiPluginDraftUnavailable('Automation') }
 }
 
+/**
+ * Whether a workspace's automation may be drafted (AGL-3603): no site is
+ * named, the plugin that keeps automations runs for the workspace and is
+ * past its release flag, and the plan includes the actions builder that
+ * section is sold under. Nothing is written, so no allowance is asked: the
+ * section's save route counts its cap when the person saves.
+ */
+async function orgAutomationRefusal(context: Parameters<AiJobAdmission>[0]): Promise<AiJobAdmissionRefusal | null> {
+  if (context.hostId) return { status: 400, error: 'An org automation belongs to no one site' }
+  const owner = aiPluginDraftOwner(AI_AUTOMATION_RESOURCE)
+  if (!owner) return { status: 403, error: AI_ORG_AUTOMATION_UNAVAILABLE_COPY }
+  const org = context.org as ({ enabledPlugins?: string[] } & Partial<AglynOrgBilling>) | null
+  const released = await filterEnabledPluginsByReleaseFlags([owner], {
+    orgId: context.orgId,
+    authorization: null,
+  })
+  if (!released.includes(owner) || !isPluginEnabled(org, owner)) {
+    return { status: 403, error: AI_ORG_AUTOMATION_UNAVAILABLE_COPY }
+  }
+  return checkEntitlement(org, 'actions') ? null : { status: 403, error: AI_ORG_AUTOMATION_PLAN_COPY }
+}
+
 export interface AiWorkflowJobAdmissionDeps {
   readTarget?: typeof readAiWorkflowTarget
   readRun?: typeof readAiWorkflowRun
@@ -685,6 +819,7 @@ export function createAiWorkflowJobAdmission(deps: AiWorkflowJobAdmissionDeps = 
   return async (context) => {
     const inputs = parseAiWorkflowJobInputs(context.inputs)
     if (typeof inputs === 'string') return { status: 400, error: inputs }
+    if (inputs.mode === 'draft' && inputs.scope === 'org') return orgAutomationRefusal(context)
     if (inputs.mode === 'draft') {
       return aiPluginDraftAdmissionRefusal(context, {
         kind: 'workflow',

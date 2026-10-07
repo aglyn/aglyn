@@ -48,6 +48,16 @@ import type { AiAutomationFormatStepType } from './ai-automation-format'
  *    the vocabulary cannot write (an on-page step, a page event, a filter
  *    expression) is refused rather than revised without it.
  *
+ * `draft` has a second scope (AGL-3603): `scope: 'org'` drafts one of the
+ * WORKSPACE's automations — the ones the workflows plugin's Org automations
+ * section places on several sites — with no site named. Its vocabulary is
+ * the narrower one that section's zone hands the widget (`triggers` and
+ * `steps`, each a comma-separated list, intersected here with the drafting
+ * vocabulary below), its records are the workspace's, and nothing is written:
+ * the automation rides on an `orgAutomation` output as a proposal that the
+ * section's editor opens unsaved, switched off, where the person picks its
+ * sites and saves it through that section's own route.
+ *
  * Nothing in any mode switches an automation on, runs one, or changes a saved
  * one.
  */
@@ -59,8 +69,15 @@ export type AiWorkflowJobMode = (typeof AI_WORKFLOW_JOB_MODES)[number]
 export const AI_WORKFLOW_TARGET_TYPES = ['action', 'workflow'] as const
 export type AiWorkflowTargetType = (typeof AI_WORKFLOW_TARGET_TYPES)[number]
 
+/** What an org automation may start on and do, as the zone that asks for one says. */
+export interface AiOrgAutomationVocabulary {
+  triggers: HostEventType[]
+  steps: AiAutomationStepType[]
+}
+
 export type AiWorkflowJobInputs =
-  | { mode: 'draft' }
+  | { mode: 'draft'; scope?: 'site' }
+  | ({ mode: 'draft'; scope: 'org' } & AiOrgAutomationVocabulary)
   | { mode: 'explain'; targetType: AiWorkflowTargetType; targetId: string }
   | { mode: 'diagnose'; targetType: AiWorkflowTargetType; targetId: string; runId: string }
   | { mode: 'revise'; targetType: 'action'; targetId: string }
@@ -75,7 +92,11 @@ export function parseAiWorkflowJobInputs(
   if (!(AI_WORKFLOW_JOB_MODES as readonly unknown[]).includes(mode)) {
     return 'inputs.mode must be draft, explain, diagnose or revise'
   }
-  if (mode === 'draft') return { mode }
+  if (mode === 'draft') {
+    if (inputs?.['scope'] !== 'org') return { mode }
+    const vocabulary = readAiOrgAutomationVocabulary(inputs)
+    return vocabulary ? { mode, scope: 'org', ...vocabulary } : AI_ORG_AUTOMATION_NO_VOCABULARY_COPY
+  }
   const targetType = inputs?.['targetType']
   const targetId = inputs?.['targetId']
   if (
@@ -95,6 +116,44 @@ export function parseAiWorkflowJobInputs(
   const runId = inputs?.['runId']
   if (typeof runId !== 'string' || !DOCUMENT_ID.test(runId)) return 'Pick the run to explain'
   return { mode: 'diagnose', ...target, runId }
+}
+
+/** A comma-separated list of names, each kept only when `known` has it, in `known`'s order. */
+function knownNames<T extends string>(raw: unknown, known: readonly T[]): T[] {
+  const asked = new Set(
+    (typeof raw === 'string' ? raw : '')
+      .split(',')
+      .map((name) => name.trim())
+      .filter(Boolean),
+  )
+  return known.filter((name) => asked.has(name))
+}
+
+/**
+ * An org automation's vocabulary from a job's inputs: the triggers and steps
+ * the zone named that the drafting vocabulary also has, or `null` when that
+ * leaves no trigger or no step. The zone can only narrow what is drafted;
+ * the section's save route holds what is saved to its own rules.
+ */
+export function readAiOrgAutomationVocabulary(
+  inputs: Readonly<Record<string, unknown>> | null | undefined,
+): AiOrgAutomationVocabulary | null {
+  const triggers = knownNames(inputs?.['triggers'], AI_AUTOMATION_TRIGGERS)
+  const steps = knownNames(inputs?.['steps'], AI_AUTOMATION_STEP_TYPES)
+  return triggers.length && steps.length ? { triggers, steps } : null
+}
+
+/** An org automation's vocabulary as a job's inputs carry it. */
+export function aiOrgAutomationInputs(vocabulary: {
+  triggers: readonly string[]
+  steps: readonly string[]
+}): Record<string, string> {
+  return {
+    mode: 'draft',
+    scope: 'org',
+    triggers: vocabulary.triggers.join(','),
+    steps: vocabulary.steps.join(','),
+  }
 }
 
 // ── What a workspace can run ──────────────────────────────────────────────
@@ -248,6 +307,58 @@ export const AI_WORKFLOW_NO_EXPLANATION_COPY =
   'The AI could not explain this automation. Try again.'
 export const AI_WORKFLOW_SAVE_FAILURE_COPY =
   'The automation was drafted but could not be saved. Try the job again.'
+export const AI_ORG_AUTOMATION_NO_VOCABULARY_COPY =
+  'Open Org automations to draft one: the page says what an org automation can start on and do.'
+export const AI_ORG_AUTOMATION_UNAVAILABLE_COPY =
+  'Turn on Automation for this workspace before drafting an org automation.'
+export const AI_ORG_AUTOMATION_PLAN_COPY =
+  'Org automations are built from the actions builder, which this workspace’s plan does not include. Upgrade in Billing to build them.'
+
+/**
+ * The output resource an org automation's proposal rides on (AGL-3603): never
+ * a document — the Org automations editor opens it unsaved.
+ */
+export const AI_ORG_AUTOMATION_RESOURCE = 'orgAutomation'
+
+/** The automation an `orgAutomation` output proposes, as the editor opens it. */
+export interface AiOrgAutomationProposal {
+  name: string
+  trigger: {
+    event: string
+    conditions?: Array<{ field: string; op: string; value?: string }>
+    combinator?: 'and' | 'or'
+  }
+  steps: Array<Record<string, unknown> & { type: string }>
+}
+
+/** An output's proposal read back, or `null` for one that is not an org automation. */
+export function readAiOrgAutomationProposal(value: unknown): AiOrgAutomationProposal | null {
+  const automation = (value as { automation?: unknown } | null | undefined)?.automation as
+    | Record<string, unknown>
+    | null
+    | undefined
+  if (!automation || typeof automation !== 'object') return null
+  const trigger = automation['trigger'] as Record<string, unknown> | null | undefined
+  const steps = automation['steps']
+  if (!trigger || typeof trigger['event'] !== 'string' || !Array.isArray(steps)) return null
+  if (!steps.every((step) => step && typeof step === 'object' && typeof (step as { type?: unknown }).type === 'string')) {
+    return null
+  }
+  return {
+    name: typeof automation['name'] === 'string' ? automation['name'] : '',
+    trigger: {
+      event: trigger['event'],
+      ...(Array.isArray(trigger['conditions'])
+        ? { conditions: trigger['conditions'] as NonNullable<AiOrgAutomationProposal['trigger']['conditions']> }
+        : {}),
+      ...(trigger['combinator'] === 'or' || trigger['combinator'] === 'and'
+        ? { combinator: trigger['combinator'] }
+        : {}),
+    },
+    steps: steps as AiOrgAutomationProposal['steps'],
+  }
+}
+
 export const AI_WORKFLOW_REVISE_WORKFLOW_COPY =
   'Only an action can be changed with AI. A workflow can be explained, and edited in its own editor.'
 

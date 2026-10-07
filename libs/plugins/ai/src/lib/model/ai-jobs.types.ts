@@ -240,6 +240,7 @@ export type AiJobOutputResource =
   | 'insight'
   | 'crm'
   | 'logic'
+  | 'orgAutomation'
 
 /**
  * One thing a job wrote. Addressed by resource and id so the console can
@@ -267,6 +268,10 @@ export type AiJobOutputResource =
  * A `logic` output is a proposal too (AGL-3603): a site function or variable
  * the Functions & Variables editor opens unsaved. Saving it is the editor's
  * write, which a person makes, or does not.
+ *
+ * An `orgAutomation` output is a proposal too (AGL-3603): one of the
+ * workspace's automations, which the Org automations editor opens unsaved and
+ * switched off. `hostId` is `null`: it belongs to no one site.
  */
 export interface AiJobOutput {
   resource: AiJobOutputResource

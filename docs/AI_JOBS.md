@@ -2632,12 +2632,36 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
   the step, before the model is asked (`aiActionReviseBlocker`), so a revision
   never drops a part the person did not ask to lose. A workflow of function
   calls is never revised.
+- **A workspace's automation (`draft` with `scope: 'org'`, AGL-3603).** One of
+  the workspace's org automations, with no site named. The zone that asks for
+  it (`orgAutomations`, hosted by the workflows plugin in its Org automations
+  card's header) hands the widget what an org automation may start on and
+  hold; the widget sends them as comma-separated `triggers` and `steps`
+  inputs, which `readAiOrgAutomationVocabulary` intersects with the drafting
+  vocabulary — the zone can only narrow it. The request is the draft's — same
+  cached instructions and tool — with that vocabulary stated in the user turn
+  and held by the check (`holdAiAutomationAnswerToVocabulary`, so an answer
+  using anything else is re-asked), no site's forms listed, and the records
+  matched being the workspace's (`readAiOrgAutomationRecords`): its lists and
+  stages, and the live campaigns and datasets shared with every site, since
+  the draft opens placed on every site — the rule the editor's own pickers
+  keep. Nothing is written: the automation rides on an `orgAutomation` output
+  (`hostId: null`) as `proposal.automation` (name, trigger, steps), which the
+  widget (`ai-describe-org-automation.component.tsx`) hands to the zone's
+  `propose`; the section's editor opens it as a NEW automation, unsaved and
+  switched off, and the section's save route is the write. A description
+  that needs what only one site runs fails with a sentence saying to build it
+  as an action on that site.
 - **Admission.** Every mode needs a site of the job's own org with the
   Automation plugin on for it and past its release flag. A draft also needs
   the writer registered and the owner's `refusal` for the member; an
   explanation needs the automation to exist, and a run's explanation a FAILED
   run of that automation. A revision needs both: the draft's writer and
-  refusal, and the action it starts from, revisable.
+  refusal, and the action it starts from, revisable. A workspace's automation
+  needs NO site, the plugin that registered the automation writer switched on
+  for the workspace and past its release flag, and the plan's `actions`
+  entitlement; nothing is written, so no allowance is asked until the person
+  saves.
 - **Where a member starts one.** Three widgets the AI plugin registers in the
   zones the workflows plugin hosts on the Automation page
   (`src/lib/components/ai-describe-automation.component.tsx` and

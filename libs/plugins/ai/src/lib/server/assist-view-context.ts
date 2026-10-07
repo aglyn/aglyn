@@ -570,6 +570,7 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     plain: [
       'An org automation starts on something the server sees — a form, a lead, a booking, a member or a CRM event — and runs on each site it is placed on, as that site.',
       'Each site can pause an org automation for itself without changing it for the others.',
+      'Create with AI in the Org automations card’s header drafts one from a description and opens it in the editor, switched off and unsaved, for you to place on sites and save.',
       'A site’s own actions, workflows and webhooks are built on that site’s Automation page.',
     ],
     technical: [
