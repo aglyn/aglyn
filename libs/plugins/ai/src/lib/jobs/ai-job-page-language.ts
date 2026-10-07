@@ -46,6 +46,7 @@ import {
 import type { AiUsage } from '../providers/contract'
 import {
   validateAiDoctrineTree,
+  type AiDoctrineNode,
   type AiDoctrineTreeContext,
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
@@ -364,7 +365,10 @@ export function aiLayoutPageCheck(
     // or an email the compiler already writes as its gap.
     const violations: AiDoctrineViolation[] = [
       ...report.violations,
-      ...aiLayoutInventedContactViolations({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: stored.nodes }, input.targets.facts),
+      ...aiLayoutInventedContactViolations(
+        { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: stored.nodes as unknown as Record<string, AiDoctrineNode> },
+        input.targets.facts,
+      ),
     ]
     return {
       value: violations.length
