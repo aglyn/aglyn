@@ -19,7 +19,7 @@
 import { CONSOLE_WIDGET_SLOTS } from '@aglyn/aglyn'
 import type { HostTheme } from '@aglyn/shared-data-types'
 import { Skeleton, Stack } from '@mui/material'
-import type { ReactNode } from 'react'
+import { Suspense, type ReactNode } from 'react'
 import { useHostId } from '../host-id-provider'
 import { useSlotWidgets } from '../plugin-widget-slot.component'
 
@@ -46,14 +46,20 @@ export function ThemeFontControl(props: ThemeFontControlProps) {
   if (controls.length) {
     return (
       <Stack spacing={2} data-widget-zone={CONSOLE_WIDGET_SLOTS.themeEditorFonts}>
+        {/* A widget may be lazy; its own boundary keeps the rest of the
+            card, and the editor around it, drawn while it loads. */}
         {controls.map((widget) => (
-          <widget.Component
+          <Suspense
             key={widget.widgetId}
-            hostId={hostId}
-            draft={draft}
-            updateDraft={updateDraft}
-            {...widget.entitlementProps}
-          />
+            fallback={<Skeleton variant="rounded" height={40} aria-label="Loading fonts" />}
+          >
+            <widget.Component
+              hostId={hostId}
+              draft={draft}
+              updateDraft={updateDraft}
+              {...widget.entitlementProps}
+            />
+          </Suspense>
         ))}
       </Stack>
     )
