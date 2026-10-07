@@ -41,8 +41,6 @@ export function isMarketplaceId(value: unknown): value is MarketplaceId {
 
 export interface MarketplaceInfo {
   label: string
-  /** Where the merchant manages their seller account, for the card's link. */
-  sellerCenterUrl: string
   /** Whether the connection can publish a product that has no listing yet. */
   canPublish: boolean
   /** Whether the connection can send prices (Faire's are wholesale, so it cannot). */
@@ -54,42 +52,36 @@ export interface MarketplaceInfo {
 export const MARKETPLACES: Readonly<Record<MarketplaceId, MarketplaceInfo>> = {
   amazon: {
     label: 'Amazon',
-    sellerCenterUrl: 'https://sellercentral.amazon.com',
     canPublish: true,
     canSyncPrices: true,
     accountNoun: 'Seller Central account',
   },
   ebay: {
     label: 'eBay',
-    sellerCenterUrl: 'https://www.ebay.com/sh/ovw',
     canPublish: true,
     canSyncPrices: true,
     accountNoun: 'eBay seller account',
   },
   etsy: {
     label: 'Etsy',
-    sellerCenterUrl: 'https://www.etsy.com/your/shops/me/dashboard',
     canPublish: false,
     canSyncPrices: true,
     accountNoun: 'Etsy shop',
   },
   tiktok: {
     label: 'TikTok Shop',
-    sellerCenterUrl: 'https://seller-us.tiktok.com',
     canPublish: false,
     canSyncPrices: true,
     accountNoun: 'TikTok Shop seller account',
   },
   walmart: {
     label: 'Walmart',
-    sellerCenterUrl: 'https://seller.walmart.com',
     canPublish: false,
     canSyncPrices: true,
     accountNoun: 'Walmart Marketplace account',
   },
   faire: {
     label: 'Faire',
-    sellerCenterUrl: 'https://www.faire.com/brand-portal',
     canPublish: false,
     canSyncPrices: false,
     accountNoun: 'Faire brand account',
