@@ -139,14 +139,15 @@ export function aiLayoutInventedContactViolations(tree: AiDoctrineTree, brief: s
     for (const value of Object.values((node as AiDoctrineNode).props ?? {})) {
       // An icon's drawing (`iconPath`) is SVG path data, whose coordinates read as phone numbers.
       if (typeof value !== 'string' || SVG_PATH_DATA.test(value)) continue
-      const found = [
-        ...(value.match(EMAIL) ?? []).filter((email) => !given.emails.has(email.toLowerCase())),
-        ...(value.match(PHONE) ?? []).filter((phone) => {
+      const matches = (pattern: RegExp): string[] => [...(value.match(pattern) ?? [])]
+      const found: string[] = [
+        ...matches(EMAIL).filter((email) => !given.emails.has(email.toLowerCase())),
+        ...matches(PHONE).filter((phone) => {
           const digits = digitsOf(phone)
           return digits.length >= 7 && !given.digits.includes(digits)
         }),
-        ...(value.match(ADDRESS) ?? []).filter((address) => !given.addresses.has(addressKey(address))),
-        ...(given.hours ? [] : (value.match(HOURS) ?? [])),
+        ...matches(ADDRESS).filter((address) => !given.addresses.has(addressKey(address))),
+        ...(given.hours ? [] : matches(HOURS)),
       ]
       if (!found.length) continue
       invented.push(...found.map((fact) => fact.trim()))
