@@ -75,6 +75,7 @@ import {
   AI_PAGE_SECTION_TOOL,
   aiEmptyPage,
   aiPageCheckContext,
+  aiPageLinkablePages,
   aiPageRecordNote,
   aiPageRecordTemplate,
   aiPageRecordTokens,
@@ -85,6 +86,7 @@ import {
   aiPageWithSection,
   type AiPageSection,
 } from './ai-job-page-sections'
+import { aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { AI_PLAN_ITEMS_MIN, aiPlanCopiedPageViolations } from './ai-job-plan-conformance'
 import {
   aiCreationUnit,
@@ -583,11 +585,15 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const sections = screen.sections.map((section) => section.name)
     // A third-party player the confirmed plan lists for this page is the only one it may embed (AGL-3433).
     const embeds = aiPlanEmbedsFor(plan, { slug: screen.slug })
+    // The site's other pages a link may go to, built or minted on a guided
+    // start's plan, and the one a link that names none can only mean (AGL-3596).
+    const { linkablePages, linkTarget } = aiPageLinkablePages(inventory, aiLayoutSitePages(job.inputs), [screen.id, draftId])
     const context = aiPageCheckContext(inventory, {
       reusableComponents,
       sections,
       embeds,
       recordTokens: aiPageRecordTokens(record),
+      linkablePages,
     })
 
     // ── The last pass: the whole page, its listing, and the draft reported ──
@@ -701,7 +707,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       messages: [
         {
           role: 'user',
-          content: aiPageSectionPrompt({ job, plan, screen, index, maxElements, reusableComponents, record }),
+          content: aiPageSectionPrompt({ job, plan, screen, index, maxElements, reusableComponents, record, linkablePages }),
         },
       ],
       tool: AI_PAGE_SECTION_TOOL,
@@ -717,6 +723,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         context,
         section: screen.sections[index],
         inventory,
+        linkTarget,
       }),
       ...(signal ? { signal } : {}),
     })

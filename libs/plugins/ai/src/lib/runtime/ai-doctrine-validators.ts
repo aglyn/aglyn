@@ -26,6 +26,7 @@ import {
   parseMediaRef,
 } from '@aglyn/aglyn/app-utils/media-ref'
 import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { createIdUrlSafe } from '@aglyn/aglyn/foundation/constants/app'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   REUSABLE_INSTANCE_COMPONENT_ID,
@@ -70,6 +71,7 @@ import {
   AI_EMAIL_CLIP_BYTES,
   AI_OUTPUT_BUDGETS,
   AI_OUTPUT_SURFACE,
+  AI_TEXT_LIMITS,
   isHeadlineVariant,
   type AiBudgetMetric,
   type AiLoadEstimate,
@@ -1475,6 +1477,156 @@ export function detectUnresponsiveGrids(
   return violations
 }
 
+/** The breakpoints a size names, in the order the renderer's string writes them. */
+const GRID_SIZE_BREAKPOINTS = ['xs', 'sm', 'md', 'lg', 'xl']
+
+/**
+ * A size the model wrote as an object of breakpoints (`{ "xs": 12, "md": 4 }`),
+ * which the palette validator drops because a size is stored as one string,
+ * written as that string (`xs:12 md:4`). Anything else is not read.
+ */
+function writtenGridSizeText(size: unknown): string | null {
+  if (!isRecord(size)) return null
+  const pairs: string[] = []
+  for (const [breakpoint, value] of Object.entries(size)) {
+    const span = typeof value === 'string' && value.trim() !== '' ? Number(value) : value
+    if (!GRID_SIZE_BREAKPOINTS.includes(breakpoint) || typeof span !== 'number' || !Number.isInteger(span)) return null
+    pairs.push(`${breakpoint}:${span}`)
+  }
+  pairs.sort((a, b) => GRID_SIZE_BREAKPOINTS.indexOf(a.split(':')[0]) - GRID_SIZE_BREAKPOINTS.indexOf(b.split(':')[0]))
+  return pairs.length ? pairs.join(' ') : null
+}
+
+/**
+ * Rule 12's `grid-item-size`, settled before the check reads it where it has
+ * one answer (AGL-3596), as `aiSettlePlanRefs` settles a plan. The re-ask for
+ * it states the very size to write, and a production Home page was refused and
+ * refunded after its re-ask still left a container's items unsized: the model
+ * breaks a different rule each run, and a rule whose answer the validator
+ * already knows is applied rather than asked for.
+ *
+ * For every Grid container, its items are read exactly as
+ * `detectUnresponsiveGrids` counts them, a Box or a Stack holding nothing but
+ * sized Grid items lending its items to the container:
+ *
+ * - an item whose size is missing, or is not full width on a phone, takes the
+ *   size the model wrote as an object of breakpoints where that one is full
+ *   width on a phone, and otherwise the size the re-ask would ask for
+ *   (`gridItemSizeFor`);
+ * - an element that is no Grid, directly in the container, is wrapped in a new
+ *   Grid item of that size, minted the way the palette validator mints ids;
+ * - a container of several items none of which steps down to columns at a
+ *   larger width takes that size on every item, which is what the re-ask asks;
+ * - a `container` written as the text "true" in any case or spacing
+ *   (`grid-container-text`) is true, since it can mean nothing else.
+ *
+ * A size that is already full width on a phone is kept. Nothing else rule 12
+ * names is touched: a Grid that is not a container may be meant as a row or as
+ * a stack (`grid-not-container`, `grid-as-stack`), and a sized item inside a
+ * Box (`grid-item-outside-container`) is moved only by changing the Box.
+ *
+ * `written` is the node as the model wrote it, by an id of `tree`, as
+ * `detectUnresponsiveGrids` reads it, for a tree the palette validator has
+ * read; a tree as the model wrote it is read as it stands, which is how the
+ * tree check settles a layout, a template or a component (`aiSettleWrittenGridItems`).
+ * A tree with nothing to settle comes back
+ * as the same object, so settling is idempotent. A node that is changed is
+ * copied, never edited in place.
+ */
+export function aiSettleGridItems<T extends AiDoctrineTree>(
+  tree: T,
+  options: { written?: (id: string) => unknown; mintId?: () => string } = {},
+): T {
+  const written = options.written ?? (() => undefined)
+  const mintId = options.mintId ?? createIdUrlSafe
+  const nodes: Record<string, AiDoctrineNode> = { ...tree.nodes }
+  const copied = new Set<string>()
+  const edit = (id: string): AiDoctrineNode & Record<string, unknown> => {
+    if (!copied.has(id)) {
+      const node = nodes[id]
+      nodes[id] = { ...node, props: { ...node.props }, ...(node.nodes ? { nodes: [...node.nodes] } : {}) }
+      copied.add(id)
+    }
+    return nodes[id] as AiDoctrineNode & Record<string, unknown>
+  }
+  const setSize = (id: string, size: string): void => {
+    if (nodes[id].props?.['size'] === size) return
+    ;(edit(id).props as Record<string, unknown>)['size'] = size
+  }
+  const writtenProp = (id: string, name: string): unknown => {
+    const node = written(id)
+    return isRecord(node) && isRecord(node['props']) ? node['props'][name] : undefined
+  }
+  const childrenOf = (id: string): string[] => (nodes[id]?.nodes ?? []).filter((child) => nodes[child])
+  const isSized = (id: string): boolean => nodes[id]?.componentId === GRID && nodes[id].props?.['size'] !== undefined
+  const wrapsItems = (id: string): boolean => {
+    const children = childrenOf(id)
+    return GRID_ITEM_WRAPPERS.has(nodes[id].componentId) && children.length > 0 && children.every(isSized)
+  }
+
+  for (const { id } of walkTree(tree)) {
+    if (nodes[id].componentId !== GRID) continue
+    if (nodes[id].props?.['container'] !== true) {
+      // Text the palette validator dropped, or, in a tree as the model wrote it, the prop itself.
+      const own = nodes[id].props?.['container']
+      const text = own === undefined ? writtenProp(id, 'container') : own
+      if (typeof text !== 'string' || text.trim().toLowerCase() !== 'true') continue
+      ;(edit(id).props as Record<string, unknown>)['container'] = true
+    }
+    const container = nodes[id]
+    const columns = gridColumns(container)
+    const children = childrenOf(id)
+    const items = children.flatMap((child) => (wrapsItems(child) ? childrenOf(child) : [child]))
+    if (!items.length) continue
+    const size = gridItemSizeFor(items.length, columns)
+    const settledItems: string[] = []
+    for (const item of items) {
+      if (nodes[item].componentId !== GRID) {
+        // Only a direct child can be no Grid: a wrapper lends only sized Grid items.
+        const wrapperId = mintId()
+        const host = edit(id)
+        host.nodes = (host.nodes ?? []).map((child) => (child === item ? wrapperId : child))
+        const shape = container as AiDoctrineNode & Record<string, unknown>
+        nodes[wrapperId] = {
+          ...('$id' in shape ? { $id: wrapperId } : {}),
+          ...('type' in shape ? { type: shape['type'] } : {}),
+          componentId: GRID,
+          ...('pluginId' in shape ? { pluginId: shape['pluginId'] } : {}),
+          ...('parentId' in shape ? { parentId: id } : {}),
+          nodes: [item],
+          props: { size },
+        } as AiDoctrineNode
+        copied.add(wrapperId)
+        if ('parentId' in (nodes[item] as unknown as Record<string, unknown>)) edit(item)['parentId'] = wrapperId
+        settledItems.push(wrapperId)
+        continue
+      }
+      if (!gridItemSpan(nodes[item].props?.['size'], columns).phoneFull) {
+        const own = writtenGridSizeText(writtenProp(item, 'size') ?? nodes[item].props?.['size'])
+        setSize(item, own !== null && gridItemSpan(own, columns).phoneFull ? own : size)
+      }
+      settledItems.push(item)
+    }
+    const steps = settledItems.some((item) => gridItemSpan(nodes[item].props?.['size'], columns).steps)
+    if (settledItems.length >= 2 && !steps) for (const item of settledItems) setSize(item, size)
+  }
+  return copied.size ? ({ ...tree, nodes } as T) : tree
+}
+
+/**
+ * `aiSettleGridItems` on a tree as the model wrote it, before the palette
+ * validator reads it (AGL-3596): the tree check every kind but a page section
+ * goes through stores what the validator makes of its answer, so the answer
+ * is settled first. Anything that is no flat node map comes back as it was.
+ */
+export function aiSettleWrittenGridItems(input: unknown): unknown {
+  if (!isRecord(input) || typeof input['rootId'] !== 'string' || !isRecord(input['nodes'])) return input
+  const nodes = Object.fromEntries(Object.entries(input['nodes']).filter(([, node]) => isRecord(node)))
+  const tree = { rootId: input['rootId'], nodes: nodes as unknown as Record<string, AiDoctrineNode> }
+  const settled = aiSettleGridItems(tree)
+  return settled === tree ? input : { ...input, nodes: { ...input['nodes'], ...settled.nodes } }
+}
+
 /** The palette colors a link or a button can take, and a band can be painted in. */
 const LINK_COLOR_FAMILIES = new Set(['primary', 'secondary', 'success', 'error', 'info', 'warning'])
 /** The elements a page links with; each draws its words in its `color` unless told otherwise. */
@@ -2571,6 +2723,168 @@ export function detectDisagreeingNodes(input: unknown): AiDoctrineViolation[] {
     })
   }
   return violations
+}
+
+/** The key a repeated item is written under (`AI_REPEAT_KEY` in `ai-repeated-items.ts`, which imports this file). */
+const REPEAT_KEY = 'repeat'
+
+/**
+ * A node map that does not agree with itself, settled where it has one
+ * reading (AGL-3596), before `detectDisagreeingNodes` reads it. A guided
+ * start's Home page stopped on each of these after its re-ask, and each is
+ * one line the model left out, not a choice it made.
+ *
+ * - A name listed under `nodes` that the map never holds is taken out of the
+ *   list: there is nothing written to place there.
+ * - An element written and listed by nobody goes where the model said it
+ *   goes, when its own `parentId` names an element the tree reaches that can
+ *   hold it. Failing that, a single such element goes in the single element
+ *   the tree reaches that can hold elements and holds none, which is the shape
+ *   of a row whose item was written beside it. Failing both, it is dropped,
+ *   with everything under it: nothing on the page holds it, and none of it
+ *   would ever be shown.
+ * - A repeated item (`repeat`) is the exception: dropping it would lose every
+ *   card it draws, so one that cannot be placed is left for the re-ask.
+ *
+ * Reads and returns the tree as the model wrote it; an input with nothing to
+ * settle comes back as the same object.
+ */
+export function aiSettleDisagreeingNodes(input: unknown): unknown {
+  if (!isRecord(input) || typeof input['rootId'] !== 'string' || !isRecord(input['nodes'])) return input
+  const rootId = input['rootId']
+  const source = input['nodes']
+  if (!isRecord(source[rootId])) return input
+  const nodes: Record<string, unknown> = { ...source }
+  let changed = false
+  const listed = (id: string): unknown[] => {
+    const node = nodes[id]
+    return isRecord(node) && Array.isArray(node['nodes']) ? node['nodes'] : []
+  }
+  const setListed = (id: string, children: unknown[]): void => {
+    nodes[id] = { ...(nodes[id] as Record<string, unknown>), nodes: children }
+    changed = true
+  }
+  const holds = (id: string): boolean => {
+    const node = nodes[id]
+    return isRecord(node) && typeof node['componentId'] === 'string' && AI_PALETTE[node['componentId']]?.acceptsChildren === true
+  }
+  const reach = (): Set<string> => {
+    const reached = new Set<string>([rootId])
+    const queue = [rootId]
+    while (queue.length) {
+      for (const child of listed(queue.shift() as string)) {
+        if (typeof child !== 'string' || reached.has(child) || !isRecord(nodes[child])) continue
+        reached.add(child)
+        queue.push(child)
+      }
+    }
+    return reached
+  }
+
+  // Names that were never written come out of the lists that name them.
+  for (const id of Object.keys(nodes)) {
+    const children = listed(id)
+    const written = children.filter((child) => typeof child !== 'string' || isRecord(nodes[child]))
+    if (written.length !== children.length) setListed(id, written)
+  }
+
+  let reached = reach()
+  const orphans = Object.keys(nodes).filter((id) => !reached.has(id) && isRecord(nodes[id]))
+  if (orphans.length) {
+    const inOrphan = new Set(orphans.flatMap((id) => listed(id)))
+    const roots = orphans.filter((id) => !inOrphan.has(id))
+    const empty = [...reached].filter((id) => id !== rootId && holds(id) && listed(id).length === 0)
+    for (const id of roots) {
+      const named = (nodes[id] as Record<string, unknown>)['parentId']
+      const parent =
+        typeof named === 'string' && reached.has(named) && holds(named)
+          ? named
+          : roots.length === 1 && empty.length === 1
+            ? empty[0]
+            : null
+      if (parent) setListed(parent, [...listed(parent), id])
+    }
+    reached = reach()
+    const unplaced = Object.keys(nodes).filter((id) => !reached.has(id) && isRecord(nodes[id]))
+    // A repeated item, and what it holds, is kept for the re-ask to place.
+    const kept = new Set<string>()
+    const queue = unplaced.filter((id) => (nodes[id] as Record<string, unknown>)[REPEAT_KEY] !== undefined)
+    while (queue.length) {
+      const id = queue.shift() as string
+      if (kept.has(id) || !isRecord(nodes[id])) continue
+      kept.add(id)
+      for (const child of listed(id)) if (typeof child === 'string') queue.push(child)
+    }
+    for (const id of unplaced) {
+      if (kept.has(id)) continue
+      delete nodes[id]
+      changed = true
+    }
+  }
+  return changed ? { ...input, nodes } : input
+}
+
+
+/** The fewest words a heading cut at a boundary keeps, so a cut never leaves a stub. */
+const HEADING_CUT_MIN_WORDS = 3
+/** The least share of the ceiling a heading cut at a boundary keeps. */
+const HEADING_CUT_MIN_SHARE = 0.3
+/** Where a sentence ends: its stop is kept. */
+const SENTENCE_END = /[.!?](?=\s)/g
+/** Where a clause ends: the mark is dropped. */
+const CLAUSE_END = /\s*(?:[,;:]|\s[—–-])\s/g
+
+/**
+ * The longest whole part of a heading that fits `limit`: up to the last
+ * sentence that ends within it, else the last clause, or `null` where neither
+ * does, or where what is left is a stub.
+ */
+function headingWithin(line: string, limit: number): string | null {
+  const keeps = (head: string): boolean =>
+    head.split(/\s+/).length >= HEADING_CUT_MIN_WORDS && head.length >= limit * HEADING_CUT_MIN_SHARE
+  for (const [pattern, keepMark] of [
+    [SENTENCE_END, true],
+    [CLAUSE_END, false],
+  ] as const) {
+    let best: string | null = null
+    for (const match of line.matchAll(pattern)) {
+      const head = line.slice(0, (match.index ?? 0) + (keepMark ? match[0].length : 0)).trim()
+      if (head.length > limit) break
+      best = head
+    }
+    if (best !== null && keeps(best)) return best
+  }
+  return null
+}
+
+/**
+ * A heading written past the headline ceiling, settled where it has one
+ * reading (AGL-3596). The palette validator cuts such a line where the
+ * ceiling falls, mid-word, and the check refuses the cut (rule 14,
+ * `copy-cut-at-ceiling`); live guided starts' heroes stopped on it after
+ * their re-ask. A heading whose first sentence or clause ends within the
+ * ceiling is a whole line already, so it is kept to that, its later words
+ * dropped: "Free inspections after a storm, with photos of every shingle we
+ * replace and a written…" becomes "Free inspections after a storm". A heading
+ * with no such boundary, or whose part within is a stub, is left for the
+ * re-ask. Reads and returns the tree as the model wrote it.
+ */
+export function aiSettleCutHeadings(input: unknown): unknown {
+  if (!isRecord(input) || !isRecord(input['nodes'])) return input
+  const limit = Math.min(AI_PALETTE['muiTypography']?.textLimits?.['children'] ?? Infinity, AI_TEXT_LIMITS.headline)
+  let nodes: Record<string, unknown> | null = null
+  for (const [id, node] of Object.entries(input['nodes'])) {
+    if (!isRecord(node) || node['componentId'] !== 'muiTypography' || !isRecord(node['props'])) continue
+    const line = node['props']['children']
+    if (!isHeadlineVariant(node['props']['variant']) || typeof line !== 'string') continue
+    const trimmed = line.trim()
+    if (trimmed.length <= limit || trimmed.includes('{{')) continue
+    const head = headingWithin(trimmed, limit)
+    if (head === null) continue
+    nodes ??= { ...input['nodes'] }
+    nodes[id] = { ...node, props: { ...node['props'], children: head } }
+  }
+  return nodes ? { ...input, nodes } : input
 }
 
 export interface AiDoctrineTreeReport {
