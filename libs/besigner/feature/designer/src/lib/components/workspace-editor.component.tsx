@@ -175,6 +175,9 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [compact, leftToggled, rightToggled])
 
+    // Only a palette drag hides the overlay panels: it starts in a drawer
+    // and ends on the canvas that drawer covers. A hierarchy row is dropped
+    // within the hierarchy, so that drawer stays in view and stays open.
     const [dragging, setDragging] = useState(false)
 
     const pannerRef = useRef<any>(null)
@@ -234,7 +237,7 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
         if (start) pointer.current = start
         const node = active?.data.current.node
         Besigner.dnd.setDragNode(node)
-        setDragging(true)
+        setDragging(active?.data.current?.type === Besigner.DragType.PRESET)
       },
       onDragCancel() {
         setDragging(false)
@@ -242,9 +245,13 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
       onDragEnd(e: DragEndEvent) {
         e.activatorEvent.stopPropagation()
         setDragging(false)
-        // Below `md` the panel a drag started in overlays the canvas; after
-        // a drop the canvas is what the author wants to see.
-        if (compact && e.over) {
+        // Below `md` the palette's drawer overlays the canvas; after a drop
+        // from it the canvas is what the author wants to see.
+        if (
+          compact &&
+          e.over &&
+          e.active.data.current?.type === Besigner.DragType.PRESET
+        ) {
           setLeftToggled(false)
           setRightToggled(false)
         }

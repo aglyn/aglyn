@@ -125,6 +125,9 @@ const TreeView = styled(MuiList)<MuiListProps>(({ theme }) => ({
       borderBottomLeftRadius: 4,
       [`& .${classKey.dragHandle}, & .${classKey.moreButton}`]: {
         visibility: 'hidden',
+        // No hover on a touch screen to reveal them, and a hidden grip
+        // cannot be touched: there every row carries both.
+        '@media (hover: none)': { visibility: 'visible' },
       },
       // An open menu keeps its own button on screen — the pointer has left
       // the row to reach the menu, so the hover rule no longer holds it.
