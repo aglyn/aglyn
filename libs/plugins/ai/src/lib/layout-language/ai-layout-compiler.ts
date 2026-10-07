@@ -286,7 +286,12 @@ function compileSection(
       formSection: page.formSection,
     },
   }
-  const blocks = placePlanned(scope, raw)
+  // A quote is a gap the owner fills, and a published page shows no gap (AGL-3660).
+  const blocks = placePlanned(scope, raw).filter((block) => {
+    if (block.kind !== 'quotes') return true
+    page.settled.push({ at, what: 'a quotes group left out: a published page shows no customer words the brief did not give' })
+    return false
+  })
   const cols = raw.cols && raw.cols.length >= 2 ? raw.cols : null
   // Above the row, the row's columns, and below it.
   const head: AiLayoutBlock[] = []

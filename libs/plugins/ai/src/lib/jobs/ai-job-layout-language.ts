@@ -26,7 +26,9 @@ import type {
   AiLayoutPage,
   AiLayoutTargets,
 } from '../layout-language/ai-layout-links'
+import { aiLayoutGapViolations, aiLayoutWithoutGaps } from '../layout-language/ai-layout-gaps'
 import { aiLayoutStoredTree } from '../layout-language/ai-layout-store'
+import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import type { AiJob } from '../model/ai-jobs.types'
 import {
   aiHomeScreenIds,
@@ -80,7 +82,7 @@ export const AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS: readonly AiSystemBlock[] = [
       '',
       "Now you design a site's header and footer, each one section of the language, answered with submit_frame.",
       "- header: the platform writes the site's name and its navigation itself. Choose its band and align (start, or center for a centered navigation), and give it at most one button: the call to action every page shows.",
-      '- footer: a section like any other, usually a row of two or three columns: a few words about the business, the details the brief gives, and a list of links (items with to). Put no contact detail, opening hours or address in it that the brief does not give.',
+      '- footer: a section like any other, usually a row of two or three columns: a few words about the business, the details the brief gives, and a list of links (items with to). Put no contact detail, opening hours or address in it that the brief does not give, and no gap in square brackets for one.',
     ].join('\n'),
     cacheBreakpoint: true,
   },
@@ -144,6 +146,8 @@ export interface AiLayoutFrameBuilt {
   rootId: string
   nodes: NodesMap
   load: AiLoadEstimate | null
+  /** What the last answer's gaps took out of the frame (`ai-layout-gaps.ts`). */
+  dropped: string[]
 }
 
 /** The check a frame answer is held to: read, compiled, stored and checked as a layout, with the layout door's own checks. */
@@ -154,7 +158,11 @@ export function aiLayoutFrameCheck(input: {
   targets: AiLayoutTargets
   extend: (tree: AiValidatedTree) => AiDoctrineViolation[]
 }): AiGenerationCheck<AiLayoutFrameBuilt> {
+  let answers = 0
   return (answer) => {
+    // The last answer a generation takes has its gaps taken out rather than asked about again.
+    answers += 1
+    const last = answers >= AI_GENERATION_MAX_ATTEMPTS
     const frame = aiReadLayoutFrame(answer)
     const compiled = aiCompileLayoutFrame(
       frame,
@@ -190,16 +198,20 @@ export function aiLayoutFrameCheck(input: {
         ],
       }
     }
+    const gaps = aiLayoutGapViolations(stored.nodes)
+    const { nodes, dropped } =
+      gaps.length && last ? aiLayoutWithoutGaps(stored.nodes, stored.rootId) : { nodes: stored.nodes, dropped: [] }
     const report = validateAiDoctrineTree(
-      { rootId: stored.rootId, nodes: stored.nodes },
+      { rootId: stored.rootId, nodes },
       'layout',
       context,
     )
     const violations = [
       ...report.violations,
+      ...(last ? [] : gaps),
       ...input.extend({
         rootId: stored.rootId,
-        nodes: stored.nodes,
+        nodes,
         repairs: [],
         sourceIds: {},
         score: report.score as AiValidatedTree['score'],
@@ -209,7 +221,7 @@ export function aiLayoutFrameCheck(input: {
     return {
       value: violations.length
         ? null
-        : { rootId: stored.rootId, nodes: stored.nodes, load: report.load },
+        : { rootId: stored.rootId, nodes, load: report.load, dropped },
       violations,
     }
   }

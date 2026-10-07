@@ -250,6 +250,7 @@ interface Result {
   credits: number
   findings: string[]
   settled: number
+  dropped: string[]
 }
 
 function record(name: string, prompt: string, before: number, result: { status: string; estCostUsd: number; attempts: number } & Record<string, unknown>): Result {
@@ -268,6 +269,8 @@ function record(name: string, prompt: string, before: number, result: { status: 
         ? ((result['violations'] as Array<{ code: string; message: string }>) ?? []).map((violation) => `${violation.code}: ${violation.message}`)
         : [],
     settled: result.status === 'ok' ? (((result['value'] as { settled?: unknown[] })?.settled ?? []).length) : 0,
+    // What the last answer's gaps took out (`ai-layout-gaps.ts`), as text, for the run's report.
+    dropped: result.status === 'ok' ? ((result['value'] as { dropped?: string[] })?.dropped ?? []) : [],
   }
 }
 

@@ -65,4 +65,16 @@ describe('a page in the layout language gives no contact detail the job was not 
     expect(result.violations).toEqual([])
     expect(result.value).not.toBeNull()
   })
+
+  it('asks again about a gap, and takes it out of the last answer rather than publishing it', () => {
+    const page = check('A dog groomer in Austin.')
+    const gapped = answer('Call us at [phone number] to book.')
+    const first = page(gapped)
+    expect(first.value).toBeNull()
+    expect(first.violations.map((violation) => violation.code)).toEqual(['layout-gap'])
+    const last = page(gapped)
+    expect(last.violations).toEqual([])
+    expect(last.value?.dropped).toEqual(['Call us at [phone number] to book.', 'the section "Visit", left with only its heading'])
+    expect(JSON.stringify(last.value?.nodes)).not.toContain('[phone number]')
+  })
 })

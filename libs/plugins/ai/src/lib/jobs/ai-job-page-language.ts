@@ -35,7 +35,9 @@ import type {
   AiLayoutPage,
   AiLayoutTargets,
 } from '../layout-language/ai-layout-links'
+import { aiLayoutGapViolations, aiLayoutWithoutGaps } from '../layout-language/ai-layout-gaps'
 import { aiLayoutStoredTree } from '../layout-language/ai-layout-store'
+import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import {
   runValidatedGeneration,
@@ -241,6 +243,8 @@ export interface AiLayoutPageBuilt {
   nodes: NodesMap
   load: AiLoadEstimate | null
   settled: AiLayoutSettlement[]
+  /** What the last answer's gaps took out of the page (`ai-layout-gaps.ts`). */
+  dropped: string[]
 }
 
 export interface AiLayoutPageCheckInput {
@@ -295,7 +299,11 @@ export function aiLayoutPageCheck(
 ): AiGenerationCheck<AiLayoutPageBuilt> {
   const kept: Array<AiLayoutSection | null> = input.kept ?? input.screen.sections.map(() => null)
   const fills = input.only ?? input.screen.sections.map((_, index) => index)
+  let answers = 0
   return (answer) => {
+    // The last answer a generation takes has its gaps taken out rather than asked about again.
+    answers += 1
+    const last = answers >= AI_GENERATION_MAX_ATTEMPTS
     const reading = aiReadLayoutPage(answer, fills.length)
     reading.sections.forEach((section, position) => {
       // A section the answer gives is taken as given; one it leaves out keeps
@@ -352,8 +360,11 @@ export function aiLayoutPageCheck(
         ],
       }
     }
+    const gaps = aiLayoutGapViolations(stored.nodes)
+    const { nodes, dropped } =
+      gaps.length && last ? aiLayoutWithoutGaps(stored.nodes, CANVAS_ROOT_ELEMENT_ID) : { nodes: stored.nodes, dropped: [] }
     const report = validateAiDoctrineTree(
-      { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: stored.nodes },
+      { rootId: CANVAS_ROOT_ELEMENT_ID, nodes },
       'page',
       {
         ...input.context,
@@ -365,8 +376,9 @@ export function aiLayoutPageCheck(
     // or an email the compiler already writes as its gap.
     const violations: AiDoctrineViolation[] = [
       ...report.violations,
+      ...(last ? [] : gaps),
       ...aiLayoutInventedContactViolations(
-        { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: stored.nodes as unknown as Record<string, AiDoctrineNode> },
+        { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: nodes as unknown as Record<string, AiDoctrineNode> },
         input.targets.facts,
       ),
     ]
@@ -374,9 +386,10 @@ export function aiLayoutPageCheck(
       value: violations.length
         ? null
         : {
-            nodes: stored.nodes,
+            nodes,
             load: report.load,
             settled: [...reading.settled, ...compiled.settled],
+            dropped,
           },
       violations,
     }
