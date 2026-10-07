@@ -213,6 +213,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/redirects/create-a-redirect',
     title: 'Create a redirect',
   },
+  createImages: {
+    path: '/ai/create-images',
+    title: 'Create images with AI',
+  },
   crm: {
     path: '/content-and-data/crm/overview',
     title: 'CRM',
@@ -794,6 +798,7 @@ export const DOCS_HELP_ANCHORS = {
   copyAssist: ['#use-it', '#what-you-get-back', '#tips', '#who-can-use-it', '#related'],
   copyPaste: ['#copy', '#paste', '#between-documents', '#copy--paste-vs-duplicate-vs-reusable-components', '#shortcuts', '#related'],
   createARedirect: ['#add-a-rule', '#read-hit-metrics', '#related'],
+  createImages: ['#make-a-picture', '#what-each-picture-gets', '#credits', '#safety', '#what-is-sent', '#who-can-use-it', '#related'],
   crm: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-and-export', '#segments', '#everywhere-the-crm-shows-up', '#capture-replies', '#at-the-organization-level', '#who-can-open-the-crm', '#one-sender-one-crm', '#related'],
   crmByAi: ['#summarize-a-record', '#summaries-are-reused-until-the-record-changes', '#draft-an-email', '#match-columns', '#what-is-sent', '#who-can-use-it', '#related'],
   customDomains: ['#connect-a-domain', '#related'],
