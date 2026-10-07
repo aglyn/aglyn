@@ -499,6 +499,8 @@ export function registerAiConsole(): void {
         title: 'Describe a funnel',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiFunnelCreateButton,
       },
       {
@@ -507,6 +509,8 @@ export function registerAiConsole(): void {
         title: 'Ask AI about this funnel',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiFunnelAskButton,
       },
       {

@@ -16,6 +16,7 @@
  */
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn'
+import type { ConsoleWidgetEntitlementProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { mdiCreation } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -34,6 +35,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import { aiInsightSurfaceForPath } from '../model/ai-insight'
 import { AiInsightDialog } from './ai-insight-dialog.component'
+import { AiUpsellButton } from './ai-upsell-dialog.component'
 
 /**
  * Funnels by AI (AGL-3605), in the two zones the funnels plugin hosts on its
@@ -84,11 +86,19 @@ export function aiFunnelQuestion(funnelName: string, days: number): string {
   return `In my funnel "${funnelName}" over the last ${days} days, where do visitors drop off most, and what might explain it?`
 }
 
-export function AiFunnelCreateButton({ propose }: ConsoleFunnelsCreateZoneProps) {
+export function AiFunnelCreateButton({
+  propose,
+  entitled,
+  upgrade,
+}: ConsoleFunnelsCreateZoneProps & ConsoleWidgetEntitlementProps) {
   const [open, setOpen] = useState(false)
   const [brief, setBrief] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  if (entitled === false) {
+    return upgrade ? <AiUpsellButton kind="funnel" upgrade={upgrade} /> : null
+  }
 
   const submit = async () => {
     setBusy(true)
@@ -144,11 +154,21 @@ export function AiFunnelCreateButton({ propose }: ConsoleFunnelsCreateZoneProps)
   )
 }
 
-export function AiFunnelAskButton({ hostId, orgId, funnelName, days }: ConsoleFunnelInsightZoneProps) {
+export function AiFunnelAskButton({
+  hostId,
+  orgId,
+  funnelName,
+  days,
+  entitled,
+  upgrade,
+}: ConsoleFunnelInsightZoneProps & ConsoleWidgetEntitlementProps) {
   const { data: user } = useUser()
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
 
+  if (entitled === false) {
+    return upgrade ? <AiUpsellButton kind="insight" upgrade={upgrade} /> : null
+  }
   if (!orgId) return null
   const orgSlug = String(pathname ?? '').split('/').filter(Boolean)[0] ?? ''
   const host = aiInsightSurfaceForPath(pathname)?.host ?? null

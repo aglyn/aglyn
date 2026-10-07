@@ -47,7 +47,14 @@ import type { AiBriefKind } from './ai-brief-dialog.component'
  * automation, products, a function or variable, an overlay, and an answer
  * about the figures on a page.
  */
-export type AiUpsellKind = AiBriefKind | 'workflow' | 'product' | 'logic' | 'overlay' | 'insight'
+export type AiUpsellKind =
+  | AiBriefKind
+  | 'workflow'
+  | 'product'
+  | 'logic'
+  | 'overlay'
+  | 'funnel'
+  | 'insight'
 
 /** What one entry's dialog says. */
 export interface AiUpsellCopy {
@@ -134,6 +141,12 @@ export const AI_UPSELL_COPY: Readonly<Record<AiUpsellKind, AiUpsellCopy>> = {
     does:
       'Describe the announcement bar or popup you want and AI writes its copy within the ' +
       'overlay’s limits. It is saved switched off, for you to check and turn on.',
+  },
+  funnel: {
+    title: 'Create a funnel with AI',
+    does:
+      'Describe the journey you want to measure and AI proposes its steps from the site’s ' +
+      'real pages, forms and products. It opens in the funnel editor for you to check and save.',
   },
   insight: {
     title: 'Ask AI about these numbers',
