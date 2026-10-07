@@ -377,6 +377,41 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: 'The merchant editing their own catalogue in the console, picker-only. The IP at risk is the merchant\'s own.',
   },
+  'libs/plugins/commerce/src/lib/components/console/pos/pos-product-grid.component.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The till's product tiles on the console's register page (AGL-3607). The tile image is the product's first media item, or its imageUrl, through resolveMediaSrc with the site's id. The reader is the merchant's own cashier on the store's own device, signed in to the console, so the IP at risk is the store's, never a visitor's.",
+  },
+  'libs/plugins/commerce/src/lib/components/console/pos-display/brand-screen.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The store's logo on the customer display (AGL-3608), the console's public kiosk page at `/kiosk/commerce/pos-display`, which only a display paired to a register can read. The src is the branding server/pos-display.ts answers, where the host's logoUrl and logoDarkUrl go through resolveMediaSrc. The device is the store's own screen turned toward the counter, so the request comes from the store's network, not a site visitor's.",
+  },
+  'libs/plugins/commerce/src/lib/components/console/pos-ops/pos-receipt.ts': {
+    markers: 2,
+    guard: 'off-tenant',
+    why: "The 80 mm thermal receipt (AGL-3609), printed from a hidden frame on the console's register and order pages. Its `<style>` is POS_RECEIPT_STYLES, a literal in this file. The logo is the host's stored logoUrl through posReceiptLogoUrl in this file: absoluteMediaSrc with the site's id against the console's origin, then kept only if it is https:, and escaped into the attribute. The printing device is the store's own.",
+  },
+  'libs/plugins/commerce/src/lib/components/console/pos-ops/pos-shift-report.component.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The printable Z report (AGL-3609), printed from the console's shift history and register. The marker is its `<style>`, the receipt's own POS_RECEIPT_STYLES constant imported from pos-receipt.ts; the document carries no image and no URL, only escaped report rows.",
+  },
+  'libs/plugins/commerce/src/lib/printing/product-labels.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The printable product and shelf labels (AGL-3619), opened from the console's product labels dialog for the store's label printer. The marker is the page's `<style>`: literal CSS whose only interpolations are the width and height of a size from the LABEL_SIZES table in this file. The labels carry text and an inline SVG barcode, no image URL.",
+  },
+  'libs/plugins/commerce/src/mobile/data/receipts.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The receipt the Aglyn app prints from an order's detail screen (AGL-3621) through the phone's own print service. The marker is its `<style>`, literal CSS whose one interpolation is PRINTED_RECEIPT_COLUMNS, the print layout's column count. Every receipt line is escaped and the page carries no image. A native app screen, never a tenant page.",
+  },
+  'libs/plugins/shipping/src/lib/model/printables.ts': {
+    markers: 2,
+    guard: 'off-tenant',
+    why: "The packing slips and the label sheet a batch prints (AGL-3612), opened in a tab of their own from the console's orders list batch widget. Both markers are a `<style>` holding PAGE_STYLE, a literal in this file. Neither page has an image: each label is an `Open label` link written only when the carrier's URL is https, and every typed value is escaped.",
+  },
   'libs/plugins/commerce/src/lib/components/product-detail.tsx': {
     markers: 3,
     guard: 'raw',
