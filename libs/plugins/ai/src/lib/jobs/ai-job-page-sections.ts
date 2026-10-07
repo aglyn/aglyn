@@ -35,6 +35,7 @@ import {
   type AiGenerationCheck,
 } from '../runtime/ai-doctrine'
 import {
+  aiSettleDisagreeingNodes,
   aiSettleGridItems,
   detectCutLines,
   detectDisagreeingNodes,
@@ -467,7 +468,9 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
   const components = new Set((input.inventory?.components ?? []).map((row) => row.id))
   const forms = new Set((input.inventory?.forms ?? []).map((row) => row.id))
   return (answer) => {
-    const raw = aiAnswerTree(answer)
+    // A child named and never written, or an element written and held by
+    // nothing, is settled where it has one reading (AGL-3596).
+    const raw = aiSettleDisagreeingNodes(aiAnswerTree(answer))
     // Before anything is drawn or dropped: a repeated item written and never
     // placed is content the section loses silently, and a child named and
     // never written ends the pass with nothing to answer (AGL-3143).

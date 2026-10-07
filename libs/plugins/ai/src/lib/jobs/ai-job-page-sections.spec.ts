@@ -201,36 +201,28 @@ describe('a section that breaks the page’s rules', () => {
     },
   })
 
-  it('is refused for the repeated item it wrote and never placed, by the item’s own id (AGL-3143)', () => {
-    // Read as an empty grid, the answer was "an element meant to hold content
-    // is empty — remove it, or fill it", of a container whose content was
-    // already written one line away.
+  it('places a repeated item it wrote beside the empty row meant to hold it (AGL-3143, AGL-3596)', () => {
+    // Read as an empty grid, the answer was once "an element meant to hold
+    // content is empty — remove it, or fill it", of a container whose content
+    // was already written one line away. The one item held by nothing goes in
+    // the one element that holds nothing.
     const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, section: { name: 'x', uses: [], items: 0 }, inventory: fixture.inventory })({
       tree: JSON.stringify(practiceAreas(null)),
     })
-    expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
-      { rule: 16, code: 'orphan-node', nodeIds: ['practice_item', 'practice_card', 'practice_card_text'] },
-    ])
-    const reask = aiReaskMessage('page-section', 'submit_section', result.violations, result.offending)
-    expect(reask).toContain('List it under the element it belongs in, or take it out. (nodes practice_item')
-    expect(Object.keys(result.offending ?? {})).toContain('practice_item')
+    expect(result.violations).toEqual([])
+    const stored = Object.values((result.value as AiPageSection).nodes) as unknown as Array<{ componentId: string; props: Record<string, unknown>; nodes: string[] }>
+    const grid = stored.find((node) => node.componentId === 'muiGrid' && node.props['container'] === true)
+    expect(grid?.nodes).toHaveLength(2)
   })
 
-  it('is refused for the children it named and never wrote, naming what is missing (AGL-3143)', () => {
-    // The pass that ended the build: four cells listed, one written. The
-    // sanitizer under the palette validator refuses this as `Missing node
-    // "card2"`, which reached the model as "the answer could not be used as a
-    // section" — no rule, no node, and nothing to change.
+  it('takes the children it named and never wrote out of the list that names them (AGL-3143, AGL-3596)', () => {
+    // The pass that ended a build: four cells listed, one written. The
+    // sanitizer under the palette validator once refused this as `Missing node
+    // "card2"`, which reached the model with no rule, no node and nothing to change.
     const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, section: { name: 'x', uses: [], items: 0 }, inventory: fixture.inventory })({
       tree: JSON.stringify(practiceAreas(['practice_item', 'card2', 'card3'])),
     })
-    expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
-      { rule: null, code: 'missing-child', nodeIds: ['practice_grid'] },
-    ])
-    expect(result.violations[0].detail).toBe('Listed under "nodes" and missing from the answer: "card2", "card3".')
-    expect(aiReaskMessage('page-section', 'submit_section', result.violations, result.offending)).toContain(
-      'Write each one, or take its name out of the list of what this holds.',
-    )
+    expect(result.violations).toEqual([])
   })
 
   it('keeps the section once the item it wrote is placed', () => {

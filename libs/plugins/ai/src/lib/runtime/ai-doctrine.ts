@@ -47,6 +47,7 @@ import {
   AI_SIMILAR_PAGES_MIN,
   aiDoctrineViolationText,
   detectPublishIntent,
+  aiSettleDisagreeingNodes,
   aiSettlePlanLayouts,
   aiSettlePlanRefs,
   validateAiBuildPlan,
@@ -599,7 +600,9 @@ export function aiDoctrineTreeCheck(
   otherPages: readonly AiDoctrineTree[] = [],
 ): AiGenerationCheck<AiValidatedTree> {
   return (answer) => {
-    const input = aiAnswerTree(answer)
+    // A child named and never written, or an element held by nothing, is
+    // settled where it has one reading before the tree is read (AGL-3596).
+    const input = aiSettleDisagreeingNodes(aiAnswerTree(answer))
     const report = validateAiDoctrineTree(input, kind, context, otherPages)
     if (!report.tree || !report.score) {
       return { value: null, violations: report.violations }

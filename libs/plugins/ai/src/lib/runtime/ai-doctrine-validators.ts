@@ -2706,6 +2706,106 @@ export function detectDisagreeingNodes(input: unknown): AiDoctrineViolation[] {
   return violations
 }
 
+/** The key a repeated item is written under (`AI_REPEAT_KEY` in `ai-repeated-items.ts`, which imports this file). */
+const REPEAT_KEY = 'repeat'
+
+/**
+ * A node map that does not agree with itself, settled where it has one
+ * reading (AGL-3596), before `detectDisagreeingNodes` reads it. A guided
+ * start's Home page stopped on each of these after its re-ask, and each is
+ * one line the model left out, not a choice it made.
+ *
+ * - A name listed under `nodes` that the map never holds is taken out of the
+ *   list: there is nothing written to place there.
+ * - An element written and listed by nobody goes where the model said it
+ *   goes, when its own `parentId` names an element the tree reaches that can
+ *   hold it. Failing that, a single such element goes in the single element
+ *   the tree reaches that can hold elements and holds none, which is the shape
+ *   of a row whose item was written beside it. Failing both, it is dropped,
+ *   with everything under it: nothing on the page holds it, and none of it
+ *   would ever be shown.
+ * - A repeated item (`repeat`) is the exception: dropping it would lose every
+ *   card it draws, so one that cannot be placed is left for the re-ask.
+ *
+ * Reads and returns the tree as the model wrote it; an input with nothing to
+ * settle comes back as the same object.
+ */
+export function aiSettleDisagreeingNodes(input: unknown): unknown {
+  if (!isRecord(input) || typeof input['rootId'] !== 'string' || !isRecord(input['nodes'])) return input
+  const rootId = input['rootId']
+  const source = input['nodes']
+  if (!isRecord(source[rootId])) return input
+  const nodes: Record<string, unknown> = { ...source }
+  let changed = false
+  const listed = (id: string): unknown[] => {
+    const node = nodes[id]
+    return isRecord(node) && Array.isArray(node['nodes']) ? node['nodes'] : []
+  }
+  const setListed = (id: string, children: unknown[]): void => {
+    nodes[id] = { ...(nodes[id] as Record<string, unknown>), nodes: children }
+    changed = true
+  }
+  const holds = (id: string): boolean => {
+    const node = nodes[id]
+    return isRecord(node) && typeof node['componentId'] === 'string' && AI_PALETTE[node['componentId']]?.acceptsChildren === true
+  }
+  const reach = (): Set<string> => {
+    const reached = new Set<string>([rootId])
+    const queue = [rootId]
+    while (queue.length) {
+      for (const child of listed(queue.shift() as string)) {
+        if (typeof child !== 'string' || reached.has(child) || !isRecord(nodes[child])) continue
+        reached.add(child)
+        queue.push(child)
+      }
+    }
+    return reached
+  }
+
+  // Names that were never written come out of the lists that name them.
+  for (const id of Object.keys(nodes)) {
+    const children = listed(id)
+    const written = children.filter((child) => typeof child !== 'string' || isRecord(nodes[child]))
+    if (written.length !== children.length) setListed(id, written)
+  }
+
+  let reached = reach()
+  const orphans = Object.keys(nodes).filter((id) => !reached.has(id) && isRecord(nodes[id]))
+  if (orphans.length) {
+    const inOrphan = new Set(orphans.flatMap((id) => listed(id)))
+    const roots = orphans.filter((id) => !inOrphan.has(id))
+    const empty = [...reached].filter((id) => id !== rootId && holds(id) && listed(id).length === 0)
+    for (const id of roots) {
+      const named = (nodes[id] as Record<string, unknown>)['parentId']
+      const parent =
+        typeof named === 'string' && reached.has(named) && holds(named)
+          ? named
+          : roots.length === 1 && empty.length === 1
+            ? empty[0]
+            : null
+      if (parent) setListed(parent, [...listed(parent), id])
+    }
+    reached = reach()
+    const unplaced = Object.keys(nodes).filter((id) => !reached.has(id) && isRecord(nodes[id]))
+    // A repeated item, and what it holds, is kept for the re-ask to place.
+    const kept = new Set<string>()
+    const queue = unplaced.filter((id) => (nodes[id] as Record<string, unknown>)[REPEAT_KEY] !== undefined)
+    while (queue.length) {
+      const id = queue.shift() as string
+      if (kept.has(id) || !isRecord(nodes[id])) continue
+      kept.add(id)
+      for (const child of listed(id)) if (typeof child === 'string') queue.push(child)
+    }
+    for (const id of unplaced) {
+      if (kept.has(id)) continue
+      delete nodes[id]
+      changed = true
+    }
+  }
+  return changed ? { ...input, nodes } : input
+}
+
+
 export interface AiDoctrineTreeReport {
   ok: boolean
   /** The palette validator's result: the tree to store, its repairs and its id map. */

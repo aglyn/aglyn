@@ -49,12 +49,14 @@ import {
   aiFreePageSectionsWithin,
   aiPlanEmbedBriefViolations,
   aiNamesMatch,
+  aiSettleDisagreeingNodes,
   aiSettleGridItems,
   aiTreeCopy,
   detectAdHocWidths,
   detectCreateBeforeReuse,
   detectCutLines,
   detectDanglingWords,
+  detectDisagreeingNodes,
   detectDocumentStructure,
   detectEmptyItems,
   detectHeavyDocument,
@@ -1536,6 +1538,44 @@ describe('rule 12 — a Grid container’s items are sized where the rule has on
     const headed = settle(grid({ container: true }, [heading, ...cells()]))
     expect(sizes(headed, ['n3', 'n5', 'n10', 'n15'])).toEqual(['xs:12', 'xs:12 sm:6 md:3', 'xs:12 sm:6 md:3', 'xs:12 sm:6 md:3'])
     expect(codesOf(headed)).toEqual([])
+  })
+})
+
+describe('a node map that disagrees with itself is settled where it has one reading (AGL-3596)', () => {
+  const heading = { componentId: 'muiTypography', props: { variant: 'h2', component: 'h2', children: 'Why us' } }
+  const answer = (nodes: Record<string, unknown>) => ({
+    rootId: 'root',
+    nodes: { root: { componentId: 'div', nodes: ['sec'] }, sec: { componentId: 'section', nodes: ['stack'] }, ...nodes },
+  })
+  const settled = (input: unknown) => aiSettleDisagreeingNodes(input) as { nodes: Record<string, { nodes?: string[] }> }
+
+  it('takes a child it named and never wrote out of the list', () => {
+    const out = settled(answer({ stack: { componentId: 'muiStack', nodes: ['head', 'ghost'] }, head: heading }))
+    expect(out.nodes['stack'].nodes).toEqual(['head'])
+    expect(detectDisagreeingNodes(out)).toEqual([])
+  })
+
+  it('puts an element held by nothing where its own parentId says, else in the one element that holds nothing', () => {
+    const byParent = settled(answer({ stack: { componentId: 'muiStack', nodes: ['head'] }, head: heading, lead: { ...heading, parentId: 'stack' } }))
+    expect(byParent.nodes['stack'].nodes).toEqual(['head', 'lead'])
+    const intoEmpty = settled(
+      answer({ stack: { componentId: 'muiStack', nodes: ['head', 'row'] }, head: heading, row: { componentId: 'muiGrid', props: { container: true } }, item: { componentId: 'muiGrid', props: { size: 'xs:12 md:4' } } }),
+    )
+    expect(intoEmpty.nodes['row'].nodes).toEqual(['item'])
+    expect(detectDisagreeingNodes(intoEmpty)).toEqual([])
+  })
+
+  it('drops what it cannot place, with everything under it, and keeps a repeated item for the re-ask', () => {
+    const stray = { componentId: 'muiBox', nodes: ['strayText'] }
+    const dropped = settled(answer({ stack: { componentId: 'muiStack', nodes: ['head'] }, head: heading, stray, strayText: heading }))
+    expect(Object.keys(dropped.nodes).sort()).toEqual(['head', 'root', 'sec', 'stack'])
+    const repeated = answer({ stack: { componentId: 'muiStack', nodes: ['head'] }, head: heading, card: { componentId: 'muiBox', repeat: [['A'], ['B']], nodes: ['cardText'] }, cardText: heading })
+    expect(detectDisagreeingNodes(settled(repeated)).map((violation) => violation.code)).toEqual(['orphan-node'])
+  })
+
+  it('returns a map that agrees with itself as it was given', () => {
+    const whole = answer({ stack: { componentId: 'muiStack', nodes: ['head'] }, head: heading })
+    expect(aiSettleDisagreeingNodes(whole)).toBe(whole)
   })
 })
 
