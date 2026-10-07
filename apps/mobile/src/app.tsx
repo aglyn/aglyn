@@ -18,7 +18,9 @@
 /**
  * The Aglyn app (AGL-3620): the shell every plugin's mobile surface plugs
  * into. It holds no feature of its own beyond the dashboard, the switcher,
- * notifications and settings; everything else is a plugin's contribution or
+ * notifications and settings. The platform's own screens (sites, the media
+ * library, team and users) come from `@aglyn/mobile-workspace` through the
+ * same registry (AGL-3622); everything else is a plugin's contribution or
  * the console in a WebView.
  */
 
@@ -30,6 +32,7 @@ import {
 } from '@aglyn/mobile-core'
 import { loadMobilePlugins } from '@aglyn/mobile-plugin-host'
 import { MobileThemeProvider, useMobileTheme } from '@aglyn/mobile-ui'
+import { registerWorkspaceMobile } from '@aglyn/mobile-workspace'
 import { StatusBar } from 'expo-status-bar'
 import * as SystemUI from 'expo-system-ui'
 import { useEffect, type ReactNode } from 'react'
@@ -42,6 +45,9 @@ import { SignInScreen } from './screens/sign-in'
 import { PluginContextProvider } from './shell/plugin-context'
 
 configureFromEnv()
+
+// The platform's own screens register first; plugins never shadow their ids.
+registerWorkspaceMobile()
 
 // Registrars are small; each plugin's screens load on first open. A plugin
 // that fails is skipped (and reported in development) so the rest still load.

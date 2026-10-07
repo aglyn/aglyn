@@ -1,5 +1,5 @@
 {
-  "//": "The Aglyn app and everything it compiles: the shell, libs/mobile/*, and each plugin's src/mobile (AGL-3620). Run with `npm --prefix apps/mobile run typecheck`; the root `npm run typecheck` skips it because this app's packages are its own install. Strictness matches tsconfig.base.json, because the pure workspace modules the app compiles are written under it.",
+  "//": "The Aglyn app and everything it compiles: the shell, libs/mobile/*, and each plugin's src/mobile (AGL-3620). Run with `npm --prefix apps/mobile run typecheck`; the root `npm run typecheck` skips it because this app's packages are its own install. Strictness matches tsconfig.base.json, because the pure workspace modules the app compiles are written under it. `@tshelpers` is the workspace's ambient type helpers, which the pure core model modules the app reads are written against (AGL-3622).",
   "extends": [
     "expo/tsconfig.base",
     "./tsconfig.paths.generated.json"
@@ -10,8 +10,14 @@
     "noUncheckedIndexedAccess": false,
     "noEmit": true,
     "types": [
+      "@tshelpers",
+      "@jsx",
       "jest",
       "node"
+    ],
+    "typeRoots": [
+      "../../types",
+      "./node_modules/@types"
     ]
   },
   "include": [

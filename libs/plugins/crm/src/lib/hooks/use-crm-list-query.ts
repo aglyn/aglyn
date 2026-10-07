@@ -17,12 +17,10 @@
 'use client'
 
 import type { ListFilterField, ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
-import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
-import {
-  type ListQueryDeclaration,
-  type ListQueryFilter,
-  type ListQuerySort,
-  planListQuery,
+import type {
+  ListQueryDeclaration,
+  ListQueryFilter,
+  ListQuerySort,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useFirestore, useScopeTokens } from '@aglyn/tenant-feature-instance'
 import {
@@ -31,7 +29,7 @@ import {
 } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { collection as collectionRef } from 'firebase/firestore'
 import { useMemo } from 'react'
-import { crmListBase, crmListDeclarationFor } from '../model/crm-list-query'
+import { crmListAsk, crmListPlanReadBack } from '../model/crm-list-query'
 import { crmScopeListable } from './use-crm-scope'
 
 /**
@@ -111,9 +109,9 @@ export function useCrmListQuery<T>(options: UseCrmListQueryOptions): UseListQuer
     foldsScope,
     declaration,
     clauses,
-    search = [],
-    sort = null,
-    base = [],
+    search,
+    sort,
+    base,
     impliesScope,
     prefixSearch,
     soloClause,
@@ -125,81 +123,21 @@ export function useCrmListQuery<T>(options: UseCrmListQueryOptions): UseListQuer
     () => (readable && scope ? collectionRef(firestore, scope[0], scope[1], collection) : null),
     [readable, firestore, scope, collection],
   )
-  // A collaborator's search, as the prefix range their rules can prove.
-  const collaboratorPrefix =
-    visibleTo && !foldsScope && prefixSearch && search.some((word) => word.trim())
-      ? prefixSearch
-      : null
-  const reader = useMemo(() => {
-    const own = crmListDeclarationFor(declaration, foldsScope)
-    return collaboratorPrefix
-      ? { ...own, fields: [...own.fields, collaboratorPrefix.field] }
-      : own
-  }, [declaration, foldsScope, collaboratorPrefix])
-  const asked = useMemo(() => {
-    const prefixClause: ListFilterRequest | null = collaboratorPrefix
-      ? {
-          field: collaboratorPrefix.field.column,
-          op: 'startsWith',
-          value: search.find((word) => word.trim())?.trim() ?? '',
-        }
-      : null
-    const all = prefixClause ? [...clauses, prefixClause] : [...clauses]
-    const searching = !prefixClause && search.some((word) => word.trim())
-    const alone = (clause: ListFilterRequest) =>
-      Boolean(soloClause?.(clause)) && (all.length > 1 || searching)
-    return {
-      clauses: all.filter((clause) => !alone(clause)),
-      search: prefixClause ? [] : search,
-      refused: all
-        .filter(alone)
-        .map((clause) => ({
-          clause,
-          reason:
-            'it orders the list by its own field, so it stands alone — clear the other filters and the search to use it',
-        })),
-      prefixClause,
-    }
-  }, [clauses, search, collaboratorPrefix, soloClause])
-  const request = useMemo(() => {
-    const { clauses: kept, search: words } = asked
-    const scoped = { clauses: kept, search: words, sort, base: [...crmListBase(visibleTo), ...base] }
-    if (!visibleTo || !foldsScope || !impliesScope || !kept.some(impliesScope)) return scoped
-    // Plan it without the scope clause first; keep that only if a clause
-    // standing in for the scope is on the query.
-    const unscoped = { clauses: kept, search: words, sort, base: [...base] }
-    const trial = planListQuery(reader, unscoped, nameSearchNormalizers)
-    return trial.served.some(impliesScope) ? unscoped : scoped
-  }, [asked, sort, base, visibleTo, foldsScope, impliesScope, reader])
+  const ask = useMemo(
+    () => crmListAsk(options),
+    // The options object is new every render; these are what the ask reads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visibleTo, foldsScope, declaration, clauses, search, sort, base, impliesScope, prefixSearch, soloClause],
+  )
   const result = useListQuery<T>({
     collection: ref,
-    declaration: reader,
-    request,
+    declaration: ask.reader,
+    request: ask.request,
     deps: [scope?.[0] ?? null, scope?.[1] ?? null, collection, readable],
     idField: '$id',
     ...(pageSize ? { pageSize } : {}),
   })
-  /*
-   * What the list says about it: the solo clauses refused before planning,
-   * and the collaborator's prefix read back as the search it stands for.
-   */
-  const plan = useMemo(() => {
-    const prefix = asked.prefixClause
-    const isPrefix = (clause: ListFilterRequest | 'search') =>
-      Boolean(prefix) &&
-      clause !== 'search' &&
-      clause.field === prefix?.field &&
-      clause.op === prefix?.op &&
-      clause.value === prefix?.value
-    const refused = [...asked.refused, ...result.plan.refused].map((entry) =>
-      isPrefix(entry.clause) ? { clause: 'search' as const, reason: entry.reason } : entry,
-    )
-    const servedPrefix = prefix && result.plan.served.some((clause) => isPrefix(clause))
-    const notices = servedPrefix && collaboratorPrefix
-      ? [...result.plan.notices, collaboratorPrefix.notice]
-      : result.plan.notices
-    return !prefix && !asked.refused.length ? result.plan : { ...result.plan, refused, notices }
-  }, [asked, result.plan, collaboratorPrefix])
+  const plan = useMemo(() => crmListPlanReadBack(result.plan, ask), [result.plan, ask])
   return useMemo(() => ({ ...result, plan }), [result, plan])
 }
 

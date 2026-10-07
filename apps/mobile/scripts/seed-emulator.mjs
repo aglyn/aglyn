@@ -7,7 +7,8 @@
 /**
  * Seeds a local Firebase emulator stack for the Aglyn app (AGL-3620): one
  * member, one workspace, one site and a few redirect rules, so sign-in, the
- * workspace and site switcher and the Redirects sample screen all have data.
+ * workspace and site switcher and the Redirects sample screen all have data;
+ * then each area's rows from `./seed/*.mjs` (AGL-3622).
  *
  *   node apps/mobile/scripts/seed-emulator.mjs [--auth 127.0.0.1:9099] [--firestore 127.0.0.1:8082] [--project demo-aglyn]
  *
@@ -78,7 +79,7 @@ const orgId = 'mobile-demo-org'
 const hostId = 'mobile-demo-site'
 
 await put(`users/${uid}`, { email: EMAIL, displayName: 'Mobile Owner', createdAt: now })
-await put(`orgs/${orgId}`, { name: 'Demo Workspace', slug: 'demo-workspace', memberRoles: { [uid]: 'owner' }, createdAt: now })
+await put(`orgs/${orgId}`, { name: 'Demo Workspace', slug: 'demo-workspace', plan: 'pro', memberRoles: { [uid]: 'owner' }, createdAt: now })
 await put(`users/${uid}/orgs/${orgId}`, { orgName: 'Demo Workspace', slug: 'demo-workspace', role: 'owner' })
 await put(`hosts/${hostId}`, { orgId, displayName: 'Demo Site', subdomain: 'demo-site', memberRoles: { [uid]: 'admin' }, createdAt: now })
 await put(`users/${uid}/hostMemberships/${hostId}`, {
@@ -99,5 +100,19 @@ for (const [id, source, destination, statusCode, kind] of rules) {
   await put(`hosts/${hostId}/redirects/${id}`, { source, destination, statusCode, kind, enabled: true, createdAt: now })
 }
 
-console.log(`seed-emulator: ${PROJECT} seeded (workspace ${orgId}, site ${hostId}, ${rules.length} redirects).`)
+// Each area of the app seeds its own rows (AGL-3622), in the shapes the
+// console writes, so every screen has data under the real rules.
+const areas = [
+  ['workspace', 'seedWorkspace'],
+  ['crm', 'seedCrm'],
+  ['forms', 'seedForms'],
+  ['inbox', 'seedInbox'],
+  ['marketing', 'seedMarketing'],
+]
+for (const [file, name] of areas) {
+  const area = await import(`./seed/${file}.mjs`)
+  await area[name]({ put, uid, orgId, hostId, now })
+}
+
+console.log(`seed-emulator: ${PROJECT} seeded (workspace ${orgId}, site ${hostId}, ${rules.length} redirects, ${areas.map(([file]) => file).join(', ')}).`)
 console.log(`  sign in as ${EMAIL} / ${PASSWORD}`)

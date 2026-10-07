@@ -2,8 +2,48 @@
   "$comment": "Workspace modules outside the mobile trees that mobile code may import (AGL-3620). check-mobile-isolation admits each one only while its own imports are pure: listed modules, platform-neutral packages, no DOM, no Node built-in, nothing web- or server-only. The list grows only with that proof; a module that mixes pure and web code is split, never listed.",
   "modules": [
     {
+      "path": "libs/aglyn/src/lib/app-utils/console-routes.ts",
+      "why": "The console's route table, so the app's workspace screens open the console's own Besigner, Pages and dashboard paths (AGL-3622)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/host-naming.ts",
+      "why": "Reached by organizations: site naming and slug rules over strings."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/host-status.ts",
+      "why": "A site's Live/Draft/Maintenance/Suspended status, the pill the console's Sites cards and the app's Sites screens show (AGL-3622)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-alt.ts",
+      "why": "Reached by media-metadata: alt text limits and normalization over strings."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-embedded-fields.ts",
+      "why": "Reached by media-metadata: the embedded-metadata field shapes and search text, no I/O."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-filter.ts",
+      "why": "The media library's list declaration and query (`mediaQuery`), shared by the console's DAM and the app's media library (AGL-3622)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "why": "Reached by media-filter: the media search token and filter keys over a document's plain fields."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/name-search.ts",
       "why": "Name-search token normalizers, so an app list search matches the console's search index (AGL-3621)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/organizations.ts",
+      "why": "Whether a member reaches the whole workspace and the scope tokens their reads are admitted by, read by the app's org access (AGL-3622)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "why": "Reached by organizations: the scope token grammar (org, host, consent group)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/site-list-query.ts",
+      "why": "The console Sites list's query declaration over the reader's hostMemberships, which the app's Sites screen plans the same query from (AGL-3622)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/site-wide-outbox.ts",
@@ -12,6 +52,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/stripe-deployment-mode.ts",
       "why": "Reached by the commerce model: test or live mode from a plain value, no Stripe SDK."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/tenant-apex.ts",
+      "why": "Reached by host-naming: the tenant apex domain constants."
     },
     {
       "path": "libs/plugins/commerce/src/lib/constants/orders-list-query.ts",
@@ -50,6 +94,30 @@
       "why": "Carrier tracking-link templates over a tracking number, no I/O (AGL-3621)."
     },
     {
+      "path": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "why": "The email send's shape, its collection paths and what a send is doing (campaignSendDisplay), read by the app's email list and report (AGL-3622)."
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/model/campaign-list-query.ts",
+      "why": "The Emails list query declaration and the site scope the console grid plans with; the app's email list plans the same Firestore query (AGL-3622)."
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/model/campaign-report.ts",
+      "why": "One send's figures and rates over named denominators, so the app's email report matches the console's (AGL-3622)."
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/model/email-record.ts",
+      "why": "An email's send time, audience name and recorded sender, read by the app's email list and report (AGL-3622)."
+    },
+    {
+      "path": "libs/shared/ui/email-campaigns/src/lib/model/send-report.ts",
+      "why": "Reached by the campaign report: the send stats shape, rate math and link rollup, plain TypeScript (AGL-3622)."
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/list-unsubscribe.ts",
+      "why": "Reached by the campaign container model: the List-Unsubscribe header policy over plain values (AGL-3622)."
+    },
+    {
       "path": "libs/plugins/redirects/src/lib/model/redirects.ts",
       "why": "The redirect rule's shape and evaluation order, shared by the console page, the tenant serve path and the Redirects mobile screen."
     },
@@ -80,6 +148,166 @@
     {
       "path": "libs/shared/util/tools/src/lib/list-query/list-query-plan.ts",
       "why": "The pure list query planner (AGL-3622): a list filter becomes the same Firestore constraints on web and native."
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/constants/list-queries.ts",
+      "why": "The Inbox's submission list declarations and scopes, so the Inbox app screens (AGL-3622) plan the console's own Firestore query."
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/model/submission-presenter.ts",
+      "why": "Who sent a submission, its initials and relative time, and its routing chips, as the console's Inbox draws them (AGL-3622)."
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/model/reply-policy.ts",
+      "why": "Whether a submission can be replied to, the default subject and the length caps the reply route applies (AGL-3622)."
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/model/submission-links.ts",
+      "why": "What an open submission links to (form, page, filed person), read by the Inbox app's detail (AGL-3622)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/container-membership.ts",
+      "why": "Reached by submission-links: normalizes campaign id lists, plain arrays and strings."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/contacts.ts",
+      "why": "Reached by container-membership: the contact record's field names and readers over plain values."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/consent-groups.ts",
+      "why": "Reached by contacts: which sites share one consent group, over plain values and scope tokens."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/marketing-consent.ts",
+      "why": "Reached by contacts: the marketing-consent field names and basis readers, no I/O."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/retained-refusals.ts",
+      "why": "Reached by contacts: the retained-refusal record's field names and readers, no I/O."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/message-search.ts",
+      "why": "Reached by submission-presenter: the sender of a message and its search tokens, over plain values."
+    },
+    {
+      "path": "libs/plugins/forms/src/lib/constants/form-list-query.ts",
+      "why": "The forms list query declaration the console grid plans with; the Forms app screens (AGL-3622) plan the same Firestore query from it."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "why": "The CRM's record shapes, collections, scope tokens, lead status values and list fields, read by the CRM app screens (AGL-3622); it imports the foundation's definition modules, not its barrel."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-kinds.ts",
+      "why": "Reached by crm: the CRM's fixed vocabularies (lifecycle stages, activity and task kinds)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/email-state.ts",
+      "why": "Reached by crm and the lead filters: the email verdict vocabulary over plain values."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/picklists.ts",
+      "why": "Reached by crm: picklist values and their judgement over plain values (lead status, lead source)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/foundation/definitions/contact.types.ts",
+      "why": "Reached by crm: the postal address and phone normalizers, no imports."
+    },
+    {
+      "path": "libs/shared/util/tools/src/lib/list-query/list-filter-codecs.ts",
+      "why": "Reached by the lead filters: the grid filter codecs over plain clause values."
+    },
+    {
+      "path": "libs/shared/util/tools/src/lib/list-query/list-query-refusals.ts",
+      "why": "Reached by crm-list-query: a refused clause named in the console's words, so the CRM app's notices read as the console's."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/crm-list-query.ts",
+      "why": "Every CRM list's ask (scope clause, search, solo and scope-implying clauses) and its read-back, shared by useCrmListQuery and the CRM app lists (AGL-3622)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/lead-filters.ts",
+      "why": "The Leads list declaration and its clause translator, so the CRM app asks the console's Leads query (AGL-3622)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/lead-source-direction.ts",
+      "why": "Reached by the lead filters: the lead source groups (inbound, outbound) over the picklist."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/crm-next-activity.ts",
+      "why": "Reached by the company and deal filters: the No next activity clause and field."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/constants/contact-filters.ts",
+      "why": "The Contacts list declaration and its facet clause translator, so the CRM app asks the console's Contacts query (AGL-3622)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/constants/company-filters.ts",
+      "why": "The Companies list declaration the console grid plans with; the CRM app asks the same query (AGL-3622)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/constants/deal-filters.ts",
+      "why": "The Deals table declaration, its clause translator and pipeline base; the CRM app asks the same query (AGL-3622)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/lead-status-choices.ts",
+      "why": "What a lead status select offers and the unqualify reason limit, shared with the CRM app's status sheet (AGL-3622)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/deal-board-model.ts",
+      "why": "Pipelines, stages, deal status labels and money formatting, read by the CRM app's deals (AGL-3622)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/contact-holder.ts",
+      "why": "The holder a contact or lead is read through at the organization level, as the console's record pages read it (AGL-3622)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/crm-sharing.ts",
+      "why": "The crm/sharing route and its id cap, for the re-evaluation the console asks after a client-direct lead write (AGL-3622)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/task-routes.ts",
+      "why": "Reached by the CRM app's writes: the site-or-org scope a CRM route call names (crmTaskCallScope)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/plan-entitlements.ts",
+      "why": "Whether the org's plan carries a feature (checkEntitlement over the static plan tables), so the CRM app locks the CRM on a plan without it, as the console's hub does (AGL-3622)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/org-override-reason.ts",
+      "why": "Reached by plan-entitlements: the reason a staff override carries, over plain values."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/platform-brand.ts",
+      "why": "Reached by plan-entitlements: the platform's brand literals, read from build-time constants with fallbacks."
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/plugin-entitlements.ts",
+      "why": "Reached by plan-entitlements: the plugin entitlement defaults merged into a plan."
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/plugin-org-capacity.ts",
+      "why": "Reached by plan-entitlements: per-plugin org capacity over the plan tables."
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/plugin-usage-axes.ts",
+      "why": "Reached by plan-entitlements: the usage axes plugins declare, a plain registry."
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/plugin-plan-entitlements.ts",
+      "why": "Reached by plan-entitlements: the plan entitlements plugins declare, a plain registry."
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "why": "Reached by the plugin entitlement modules: which first-party plugins are enabled, from the generated list."
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/first-party-plugins.generated.ts",
+      "why": "Reached by enabled-plugins: the generated first-party plugin ids."
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/plugin-permissions.ts",
+      "why": "Reached by the plugin entitlement modules: the permission keys plugins declare, a plain registry."
     }
   ]
 }

@@ -22,14 +22,17 @@ import {
   type CrmListFieldsContext,
   crmListFields,
 } from '@aglyn/aglyn/app-utils/crm'
-import { scopedSearch } from '@aglyn/aglyn/app-utils/name-search'
+import { nameSearchNormalizers, scopedSearch } from '@aglyn/aglyn/app-utils/name-search'
 import type { ListFilterField, ListFilterRequest } from '@aglyn/shared-util-tools/list-query/list-filter'
 import type { ListFilterOption } from '@aglyn/shared-util-tools/list-query/list-filter-codecs'
 import { listQueryRefusals } from '@aglyn/shared-util-tools/list-query/list-query-refusals'
-import type {
-  ListQueryDeclaration,
-  ListQueryFilter,
-  ListQueryPlan,
+import {
+  type ListQueryDeclaration,
+  type ListQueryFilter,
+  type ListQueryPlan,
+  type ListQueryRequest,
+  type ListQuerySort,
+  planListQuery,
 } from '@aglyn/shared-util-tools/list-query/list-query-plan'
 
 /*
@@ -83,6 +86,103 @@ export function crmListDeclarationFor(
 ): ListQueryDeclaration {
   if (foldsScope || !declaration.search?.scoped) return declaration
   return { ...declaration, search: { tokensPath: declaration.search.tokensPath } }
+}
+
+/** What a CRM list is asked to show, before it is planned — see {@link crmListAsk}. */
+export interface CrmListAskInput {
+  /** The reader's scope tokens, or `null` at the organization level. */
+  visibleTo: readonly string[] | null
+  /** Whether the reader may run queries without the scope clause (`useCrmFoldsScope`). */
+  foldsScope: boolean
+  declaration: ListQueryDeclaration
+  clauses: readonly ListFilterRequest[]
+  search?: readonly string[]
+  sort?: ListQuerySort | null
+  /** Predicates beside the scope the list always applies (a task view, a pipeline). */
+  base?: readonly ListQueryFilter[]
+  /** A clause no record outside the reader's scope can answer; see `useCrmListQuery`. */
+  impliesScope?: (clause: ListFilterRequest) => boolean
+  /** A collaborator's search as a prefix of one text field; see `useCrmListQuery`. */
+  prefixSearch?: { field: ListFilterField; notice: string }
+  /** A clause that stands alone beside the scope; see `useCrmListQuery`. */
+  soloClause?: (clause: ListFilterRequest) => boolean
+}
+
+/** A CRM list's ask: the declaration the reader runs, the request, and what was refused first. */
+export interface CrmListAsk {
+  reader: ListQueryDeclaration
+  request: ListQueryRequest
+  /** Solo clauses refused before planning. */
+  refused: Array<{ clause: ListFilterRequest; reason: string }>
+  /** The collaborator's search as the prefix clause it is asked as, or null. */
+  prefixClause: ListFilterRequest | null
+  /** The collaborator's prefix search it stands for — its notice is said when served — or null. */
+  prefix: CrmListAskInput['prefixSearch'] | null
+}
+
+/**
+ * Every CRM list's ask, on the web and in the app alike (AGL-3321): the
+ * scope clause as the plan's base, the reader's declaration
+ * (`crmListDeclarationFor`), a collaborator's search as the prefix their
+ * rules can prove, a solo clause refused beside others, and a clause that
+ * implies the scope standing in for it only when the plan serves it.
+ */
+export function crmListAsk(input: CrmListAskInput): CrmListAsk {
+  const { visibleTo, foldsScope, search = [], sort = null, base = [], impliesScope, prefixSearch } = input
+  const word = search.find((typed) => typed.trim())
+  // A collaborator's search, as the prefix range their rules can prove.
+  const collaboratorPrefix = visibleTo && !foldsScope && prefixSearch && word ? prefixSearch : null
+  const own = crmListDeclarationFor(input.declaration, foldsScope)
+  const reader = collaboratorPrefix
+    ? { ...own, fields: [...own.fields, collaboratorPrefix.field] }
+    : own
+  const prefixClause: ListFilterRequest | null =
+    collaboratorPrefix && word
+      ? { field: collaboratorPrefix.field.column, op: 'startsWith', value: word.trim() }
+      : null
+  const all = [...input.clauses, ...(prefixClause ? [prefixClause] : [])]
+  // Searching beside it, unless the search is the prefix clause itself.
+  const alone = (clause: ListFilterRequest) =>
+    Boolean(input.soloClause?.(clause) && (all.length > 1 || (!prefixClause && word)))
+  const kept = all.filter((clause) => !alone(clause))
+  const words = prefixClause ? [] : search
+  const refused = all.filter(alone).map((clause) => ({
+    clause,
+    reason:
+      'it orders the list by its own field, so it stands alone — clear the other filters and the search to use it',
+  }))
+  const scoped = { clauses: kept, search: words, sort, base: [...crmListBase(visibleTo), ...base] }
+  // Planned without the scope clause first; kept only if a clause standing
+  // in for the scope is on the query.
+  const unscoped = { clauses: kept, search: words, sort, base: [...base] }
+  const request: ListQueryRequest =
+    visibleTo &&
+    foldsScope &&
+    impliesScope &&
+    kept.some(impliesScope) &&
+    planListQuery(reader, unscoped, nameSearchNormalizers).served.some(impliesScope)
+      ? unscoped
+      : scoped
+  return { reader, request, refused, prefixClause, prefix: collaboratorPrefix }
+}
+
+/**
+ * The plan as the list reads it back: the solo clauses refused before
+ * planning, and the collaborator's prefix named as the search it stands for.
+ */
+export function crmListPlanReadBack(plan: ListQueryPlan, ask: CrmListAsk): ListQueryPlan {
+  const prefix = ask.prefixClause
+  const isPrefix = (clause: ListFilterRequest | 'search') =>
+    clause !== 'search' &&
+    clause.field === prefix?.field &&
+    clause.op === prefix?.op &&
+    clause.value === prefix?.value
+  const refused = [...ask.refused, ...plan.refused].map((entry) =>
+    isPrefix(entry.clause) ? { clause: 'search' as const, reason: entry.reason } : entry,
+  )
+  const notices =
+    ask.prefix && plan.served.some(isPrefix) ? [...plan.notices, ask.prefix.notice] : plan.notices
+  return !prefix && !ask.refused.length ? plan : { ...plan, refused, notices }
 }
 
 /*------------------------------------------

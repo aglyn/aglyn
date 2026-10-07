@@ -88,7 +88,7 @@ import {
   FORM_LIST_SELECT_FIELDS,
   FORM_STATUS_OPTIONS,
   formListRequest,
-} from './form-list-query'
+} from '../constants/form-list-query'
 import { FORM_SUBMISSIONS_TRANSFER_KEY } from '../transfer/form-submissions-transfer-key'
 import { HOST_FORMS_ZONE } from './form-zones'
 
@@ -267,7 +267,7 @@ export function HostFormsCard(props: HostFormsCardProps) {
    * is past the first page is still found. What one query cannot hold — a
    * second range, a second array clause — is refused by name above the list
    * (`ListQueryNotices`) rather than matched over the rows read. See
-   * `form-list-query.ts` for every field and the indexes they cost.
+   * `../constants/form-list-query.ts` for every field and the indexes they cost.
    *
    * Unfiltered it reads in document order, as it always has: `orderBy` on a
    * name would drop every form stored without one rather than mis-sort it.

@@ -98,6 +98,23 @@
         "planEntitlements": "formsPlanEntitlements",
         "usageAxes": "formsUsageAxes"
       },
+      "mobile": {
+        "$comment": "AGL-3622: a site's forms with what each collected, one form's figures, and its submissions through the Inbox's reader (by screen id, as the console's form page hosts the Inbox's zone); a Form submissions quick action; the console's Forms pages opening natively.",
+        "register": "registerFormsMobile",
+        "contributes": {
+          "screens": [
+            "forms.list",
+            "forms.form"
+          ],
+          "quickActions": [
+            "forms.submissions"
+          ],
+          "deepLinks": [
+            "forms.page",
+            "forms.record"
+          ]
+        }
+      },
       "apiPrefixes": [
         "forms"
       ],
@@ -1037,6 +1054,44 @@
         "planEntitlements": "crmPlanEntitlements",
         "usageAxes": "crmUsageAxes"
       },
+      "mobile": {
+        "$comment": "AGL-3622: leads, contacts, companies and deals as native lists on their Firestore queries (split view on tablets), each record's detail and activity, status changes through the console's routes, and the CRM's console pages opening natively from a link or a notification.",
+        "register": "registerCrmMobile",
+        "contributes": {
+          "screens": [
+            "crm.home",
+            "crm.leads",
+            "crm.lead",
+            "crm.contacts",
+            "crm.contact",
+            "crm.companies",
+            "crm.company",
+            "crm.deals",
+            "crm.deal"
+          ],
+          "tabs": [
+            "crm.tab"
+          ],
+          "widgets": [
+            "crm.openLeads"
+          ],
+          "quickActions": [
+            "crm.leadsAction",
+            "crm.dealsAction"
+          ],
+          "deepLinks": [
+            "crm.page",
+            "crm.leadsPage",
+            "crm.leadPage",
+            "crm.contactsPage",
+            "crm.contactPage",
+            "crm.companiesPage",
+            "crm.companyPage",
+            "crm.dealsPage",
+            "crm.dealPage"
+          ]
+        }
+      },
       "requiredPersonEraser": true,
       "apiPrefixes": [
         "crm"
@@ -1854,6 +1909,23 @@
         "console": "registerInboxConsole",
         "consoleApi": "registerInboxConsoleApi"
       },
+      "mobile": {
+        "$comment": "AGL-3622: the Inbox tab: a site's (or every site's) form submissions as threads, the message and the replies sent to it, a reply through /api/inbox/reply, and the console's Inbox addresses and new-submission notifications opening natively.",
+        "register": "registerInboxMobile",
+        "contributes": {
+          "screens": [
+            "inbox.submissions",
+            "inbox.submission"
+          ],
+          "tabs": [
+            "inbox.tab"
+          ],
+          "deepLinks": [
+            "inbox.page",
+            "inbox.submissionsPage"
+          ]
+        }
+      },
       "apiPrefixes": [
         "inbox"
       ],
@@ -1981,6 +2053,25 @@
         "site": "registerMarketingPlugin",
         "serverDeclarations": "registerMarketingServerDeclarations",
         "tenantEmails": "marketingTenantEmails"
+      },
+      "mobile": {
+        "$comment": "AGL-3622: email campaigns, their stats, and a test or real send through the console's routes behind the console's confirmations.",
+        "register": "registerMarketingMobile",
+        "contributes": {
+          "screens": [
+            "marketing.campaigns",
+            "marketing.campaign"
+          ],
+          "quickActions": [
+            "marketing.open"
+          ],
+          "deepLinks": [
+            "marketing.messages",
+            "marketing.message",
+            "marketing.campaignsPage",
+            "marketing.campaignPage"
+          ]
+        }
       },
       "transferResources": [
         {

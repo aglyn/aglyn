@@ -1,0 +1,34 @@
+{
+  "name": "@aglyn/mobile-workspace",
+  "version": "1.0.0-beta.230",
+  "private": true,
+  "description": "The Aglyn app's own workspace screens: sites, the media library, and team and users.",
+  "license": "Apache-2.0",
+  "homepage": "https://aglyn.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aglyn/aglyn.git",
+    "directory": "libs/mobile/workspace"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "expo-image-picker": "~57.0.20",
+    "react-native": "0.86.3"
+  },
+  "peerDependencies": {
+    "firebase": "^12.19.0",
+    "react": "^19.2.0"
+  },
+  "sideEffects": false
+}

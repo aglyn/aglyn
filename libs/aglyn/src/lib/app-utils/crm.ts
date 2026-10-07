@@ -45,12 +45,14 @@
  * would otherwise write for itself. No Firestore, no React.
  */
 
+// The definition modules themselves, not the foundation barrel: what is
+// imported is pure, and the barrel reaches the platform's runtime constants.
 import {
   type AglynPostalAddress,
   normalizeAddress,
   normalizePhone,
-  type OrgCrmAssignmentRule,
-} from '../foundation'
+} from '../foundation/definitions/contact.types'
+import type { OrgCrmAssignmentRule } from '../foundation/definitions/org-billing.types'
 import { type ConsentGroup, consentGroupScope } from './consent-groups'
 import {
   CONTACT_LIFECYCLE_STAGES,
@@ -2330,8 +2332,8 @@ export function readContactCompanyLink(
   contact: Record<string, unknown> | null | undefined,
   groupId: string,
 ): ContactCompanyLinkState {
-  const document = contact ?? {}
-  const facets = document[CONTACT_FACETS_FIELD]
+  const stored = contact ?? {}
+  const facets = stored[CONTACT_FACETS_FIELD]
   const heldElsewhere = new Set<string>()
   if (facets && typeof facets === 'object' && !Array.isArray(facets)) {
     for (const [holder, facet] of Object.entries(
@@ -2345,9 +2347,9 @@ export function readContactCompanyLink(
       if (typeof named === 'string' && named) heldElsewhere.add(named)
     }
   }
-  const mirror = document[CONTACT_COMPANY_IDS_FIELD]
+  const mirror = stored[CONTACT_COMPANY_IDS_FIELD]
   return {
-    companyId: readContactFacet(document, groupId).companyId ?? null,
+    companyId: readContactFacet(stored, groupId).companyId ?? null,
     companyIds: Array.isArray(mirror)
       ? mirror.filter((id): id is string => typeof id === 'string' && !!id)
       : [],

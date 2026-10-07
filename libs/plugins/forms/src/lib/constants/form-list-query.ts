@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
-import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListFilterField } from '@aglyn/shared-util-tools/list-query/list-filter'
+import type { ListFilterClause } from '@aglyn/shared-util-tools/list-query/list-filter-codecs'
 import type {
   ListQueryDeclaration,
   ListQueryFilter,
   ListQueryRequest,
-} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+} from '@aglyn/shared-util-tools/list-query/list-query-plan'
 
 /*==========================================
  * WHAT THE FORMS LIST FILTERS AND SEARCHES BY — ALL OF IT ON THE QUERY
@@ -71,7 +71,7 @@ import type {
  * the name tokens, Slug, the two counters' equalities, `retired`, Lead
  * routing, Campaign, In a campaign) times three orders, less the Submissions
  * equality against its own order, is 26 — In a campaign is the last three,
- * the whole of what "in no campaign" costs. `form-list-query.spec.ts` pins
+ * the whole of what "in no campaign" costs. `components/form-list-query.spec.ts` pins
  * every one against the index file.
  *=========================================*/
 

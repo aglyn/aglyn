@@ -46,7 +46,7 @@ hold and the new axis sits beside them.
 | `scope:tenant` | `tenant`, `renderer`, `core`, `shared` | The runtime that serves a published site, and the tenant app shell. Plugins reach it only through the loader manifests. |
 | `scope:console` | everything above, plugins only dynamically | The console app. |
 | `scope:plugin` | `tenant`, `renderer`, `besigner`, `core`, `shared`, and `mobile` from its `src/mobile` entry only | A feature plugin. Never another plugin; never the designer UI. Its domain lives here and nowhere else — what it imports from the layers below it is generic, never its own model wearing a lower layer's tag. Its native screens live in `src/mobile`, reached only through its `./mobile` export (AGL-3620). |
-| `scope:mobile` | `mobile`, `shared` | The native apps and their foundation (React Native). Plugins reach the apps only through the generated mobile manifest. `check:mobile-isolation` holds the file level both ways: no web file imports mobile code, and mobile code reaches only mobile code and the proven-pure modules in `tools/scripts/mobile-pure-modules.json`. |
+| `scope:mobile` | `mobile`, `core`, `shared` | The native apps and their foundation (React Native); `core` for the platform's pure model the app's own screens read (AGL-3622). Plugins reach the apps only through the generated mobile manifest. `check:mobile-isolation` holds the file level both ways: no web file imports mobile code, and mobile code reaches only mobile code and the proven-pure modules in `tools/scripts/mobile-pure-modules.json`. |
 | `scope:cli` | `cli`, `core`, `shared` | The command-line client. |
 
 The `type:` axis is the same rule the `scope:data|ui|util|feature` tags
@@ -198,6 +198,7 @@ nothing on the web reaches it (`check:mobile-isolation`).
 | `mobile-ui` | `@aglyn/mobile-ui` | `libs/mobile/ui` | `scope:mobile` `type:ui` | `.` — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/mobile-ui --publish`, then `trust:packages --set`); theme tokens generated from the console palette, `useLayout()`/`SplitView`, basic components |
 | `mobile-webview` | `@aglyn/mobile-webview` | `libs/mobile/webview` | `scope:mobile` `type:ui` | `.` — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/mobile-webview --publish`, then `trust:packages --set`); the authenticated console WebView and its origin- and nonce-checked bridge |
 | `mobile-plugin-host` | `@aglyn/mobile-plugin-host` | `libs/mobile/plugin-host` | `scope:mobile` `type:util` | `.` — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/mobile-plugin-host --publish`, then `trust:packages --set`); the `registerMobile…` registrars, the registry, the manifest loader and deep-link resolution |
+| `mobile-workspace` | `@aglyn/mobile-workspace` | `libs/mobile/workspace` | `scope:mobile` `type:feature` | `.` — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/mobile-workspace --publish`, then `trust:packages --set`); the Aglyn app's own workspace screens (sites and their publish status, the media library with camera and photo uploads, team and users), registered by the shell through the same `registerMobile…` registrars as `workspace`, over the console's list queries and API routes |
 
 ### Apps and deploy units
 

@@ -78,6 +78,9 @@
       "@aglyn/mobile-webview": [
         "../../libs/mobile/webview/src/index.ts"
       ],
+      "@aglyn/mobile-workspace": [
+        "../../libs/mobile/workspace/src/index.ts"
+      ],
       "@aglyn/plugins-email": [
         "../../libs/plugins/email/src/index.ts"
       ],
@@ -182,6 +185,18 @@
       ],
       "@aglyn/plugins-redirects": [
         "../../libs/plugins/redirects/src/index.ts"
+      ],
+      "@aglyn/plugins-crm/mobile": [
+        "../../libs/plugins/crm/src/mobile/index.ts"
+      ],
+      "@aglyn/plugins-forms/mobile": [
+        "../../libs/plugins/forms/src/mobile/index.ts"
+      ],
+      "@aglyn/plugins-inbox/mobile": [
+        "../../libs/plugins/inbox/src/mobile/index.ts"
+      ],
+      "@aglyn/plugins-marketing/mobile": [
+        "../../libs/plugins/marketing/src/mobile/index.ts"
       ],
       "@aglyn/plugins-redirects/mobile": [
         "../../libs/plugins/redirects/src/mobile/index.ts"
