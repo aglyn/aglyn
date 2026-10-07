@@ -222,3 +222,29 @@ export function aiSiteContextSystemBlock(
   if (!text) return []
   return [options.cache === false ? { text, volatile: true } : { text, cacheBreakpoint: true }]
 }
+
+/**
+ * A door's own instructions with the site context after them (AGL-3661) —
+ * THE call a generator makes to give its model the site:
+ *
+ *   instructions: aiInstructionsWithSiteContext(MY_INSTRUCTIONS, context)
+ *
+ * The door's last instruction block is marked a breakpoint, so the
+ * platform-wide prefix (the doctrine and the door's rules) stays one cache
+ * entry for every workspace, and the context block after it is the per-site
+ * entry. Without a context it hands the instructions back unchanged, so a
+ * door's prompt is byte-for-byte what it was for a job that has no site.
+ */
+export function aiInstructionsWithSiteContext(
+  instructions: readonly AiSystemBlock[],
+  context: AiSiteContextInput | null | undefined,
+): readonly AiSystemBlock[] {
+  const site = aiSiteContextSystemBlock(context)
+  if (!site.length) return instructions
+  const blocks = [...instructions]
+  const last = blocks.length - 1
+  if (last >= 0 && !blocks[last].volatile && !blocks.some((block) => block.cacheBreakpoint)) {
+    blocks[last] = { ...blocks[last], cacheBreakpoint: true }
+  }
+  return [...blocks, ...site]
+}

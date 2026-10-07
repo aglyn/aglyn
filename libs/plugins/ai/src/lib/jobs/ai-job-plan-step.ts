@@ -64,6 +64,8 @@ import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import type { AiTool } from '../providers/contract'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
+import { readAiSiteContext } from '../runtime/site-context'
+import { aiInstructionsWithSiteContext, type AiSiteContextInput } from '../model/ai-site-context'
 import {
   AI_BUILD_CREATE_KINDS,
   AI_BUILD_STRUCTURAL_OPS,
@@ -551,7 +553,23 @@ export interface AiJobPlanStepDeps {
   admissionRefusal?: typeof aiJobAdmissionRefusal
   /** A build's operations on its site (AGL-3616); the registry and its gates otherwise. */
   readOps?: AiBuildOpsReader
+  /**
+   * The site's business profile, status and remembered preferences
+   * (AGL-3661); specs and the eval recorder hand in their own, and `null`
+   * turns it off.
+   */
+  readSiteContext?: AiSiteContextReader | null
 }
+
+/** What a job's site context is read with (AGL-3661). */
+export type AiSiteContextReader = (input: {
+  job: AiJob
+  firestore: FirebaseFirestore.Firestore
+}) => Promise<AiSiteContextInput | null>
+
+/** The reader the step uses in production: fail-soft, org-scoped, `null` for a job with no site. */
+export const readAiJobSiteContext: AiSiteContextReader = ({ job, firestore }) =>
+  readAiSiteContext(firestore, { orgId: job.orgId, hostId: job.hostId })
 
 /** What a build may plan on its site (AGL-3616). */
 export type AiBuildOpsReader = (input: {
@@ -592,12 +610,18 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
   const readCapabilities = deps.readCapabilities ?? readAiJobPlanCapabilities
   const admissionRefusal = deps.admissionRefusal ?? aiJobAdmissionRefusal
   const readOps = deps.readOps ?? readAiBuildOps
+  const readContext = deps.readSiteContext === undefined ? readAiJobSiteContext : deps.readSiteContext
   return async ({ job, now, signal, firestore, modelFor, org: orgDocument }) => {
     const org = (orgDocument ?? null) as Partial<AglynOrgBilling> | null
-    const [inventory, workspace] = await Promise.all([
+    const [inventory, workspace, siteContext] = await Promise.all([
       job.hostId ? readInventory(job.orgId, job.hostId, { firestore }) : Promise.resolve(null),
       readCapabilities({ job, org, firestore }),
+      job.hostId && readContext ? readContext({ job, firestore }) : Promise.resolve(null),
     ])
+    // The site's profile, status and memory (AGL-3661), as a per-site cached
+    // block after the plan rules. The inventory block already lists what the
+    // site holds, so the context carries no index of its own here.
+    const instructions = aiInstructionsWithSiteContext(AI_JOB_PLAN_INSTRUCTIONS, siteContext)
     const scope = AI_JOB_PLAN_SCOPES[job.kind] ?? null
     const capabilities = aiSitePlanCapabilities(
       job,
@@ -660,7 +684,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       job,
       prompt,
       model: resolved,
-      system: aiDoctrineSystemBlocks(inventory, { instructions: AI_JOB_PLAN_INSTRUCTIONS }),
+      system: aiDoctrineSystemBlocks(inventory, { instructions }),
       tool,
     })
     const reused = findPlansByKey
@@ -694,7 +718,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     const result = await runValidatedGeneration('plan', {
       step: 'job.plan',
       ...(model ? { model } : {}),
-      instructions: AI_JOB_PLAN_INSTRUCTIONS,
+      instructions,
       inventory,
       messages: [{ role: 'user', content: prompt }],
       tool,

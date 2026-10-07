@@ -31,6 +31,8 @@ import {
   type AiInsightTable,
 } from '../model/ai-insight'
 import { aiHostPublishContext, aiSiteStatusTable } from '../model/ai-host-publish-context'
+import { aiSiteContextSystemBlock } from '../model/ai-site-context'
+import { readAiSiteContext } from '../runtime/site-context'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
@@ -254,10 +256,19 @@ export const runAiJobInsightStep: AiJobStepRunner = async (context: AiJobStepCon
   const maxTokens = AI_JOB_INSIGHT_STEP_BUDGET.maxTokens(model)
   const allowance = AI_GENERATION_MAX_ATTEMPTS * maxTokens
   const left = () => allowance - spend.usage.outputTokens
+  // What the business is and what the owner's edits showed (AGL-3661), so an
+  // answer reads the numbers for THIS business. No contact details: an
+  // insight names nobody. No publish state either: that is the Site status
+  // table's to say, and the rules send the model there.
+  const siteContext = await readAiSiteContext(firestore, { orgId: job.orgId, hostId, host: site.host ?? null })
+  const system = [
+    ...AI_JOB_INSIGHT_SYSTEM,
+    ...aiSiteContextSystemBlock(siteContext ? { ...siteContext, publish: null, contact: false } : null),
+  ]
   const ask = (messages: AiMessage[], tool: 'read' | 'answer', ceiling: number) =>
     runAiRequest({
       model,
-      system: AI_JOB_INSIGHT_SYSTEM,
+      system,
       messages,
       tools: [tool === 'read' ? aiInsightReadTool() : aiInsightAnswerTool()],
       maxTokens: Math.max(1, Math.min(ceiling, left())),
