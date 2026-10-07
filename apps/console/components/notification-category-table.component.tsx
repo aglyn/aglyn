@@ -139,12 +139,9 @@ export function NotificationCategoryTable(props: NotificationCategoryTableProps)
             <TableCell
               key={channel.key}
               align="center"
-              // Below md the switch columns hug their one-line headers so the
-              // category column, which wraps, keeps the width.
-              sx={{
-                whiteSpace: { xs: 'nowrap', md: 'normal' },
-                width: { xs: '1%', md: 'auto' },
-              }}
+              // The switch columns hug their one-line headers so the category
+              // column, which wraps, keeps the width.
+              sx={{ whiteSpace: 'nowrap', width: '1%' }}
             >
               {channel.label}
             </TableCell>
