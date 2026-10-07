@@ -61,12 +61,17 @@ whichever theme you pick.
 ## Set colors and fonts
 
 - Choose your **palette** and **typography**.
-- Pick any Google font. Your published site serves it from its **own address** — the
+- Pick any Google font. Your published site serves it from its **own address**: the
   font rules are part of the page and the files come from your site with a long cache,
   so text never waits on a stylesheet from Google, and visitors' browsers never contact
-  Google for your fonts. The one or two fonts the top of the page uses start loading
-  with the page itself. Text shows in a fallback font for the moment a font file is
-  still arriving, never as blank space.
+  Google for your fonts.
+- Your site loads each font **at the weights your text styles use**, including the bold
+  headings, so a heading never shows a stand-in weight. Each font comes either as one
+  file per weight or as one file holding every weight, whichever is smaller.
+- The fonts for the body text and the main heading start loading with the page. Until a
+  font arrives, text shows in a fallback that is **sized to match it**, so nothing moves
+  when the font swaps in.
+- A site that picks no font uses the visitor's system font and loads no font files.
 - Configure both **light and dark** schemes. Published sites follow the visitor's system
   scheme (or their choice in the theme mode switcher); anything you leave unset under
   **Dark** comes from the platform's default dark palette, so a site goes dark without a

@@ -10,7 +10,15 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — sell on Google, Meta, TikTok, Pinterest, Snapchat and Microsoft (newest)
+## October 2026 — faster fonts on every site (newest)
+
+- **[Fonts load the way your text uses them](building-sites/theme-builder/edit-your-theme.md#set-colors-and-fonts)** —
+  your published site now loads each font at the weights its headings and body text
+  use, from your own address, as the smallest set of files. Text that shows before a
+  font arrives is sized to match it, so the page no longer shifts when the font swaps
+  in.
+
+## October 2026 — sell on Google, Meta, TikTok, Pinterest, Snapchat and Microsoft
 
 - **[Sales channels](commerce-and-bookings/commerce/sales-channels.md)** — a product
   feed for each of Google (Shopping, free listings and YouTube), Meta (Facebook and
