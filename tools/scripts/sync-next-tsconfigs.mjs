@@ -113,15 +113,15 @@ function expectedContent() {
  * the drift that actually happened (AGL-1069) was a handful of missing
  * aliases in a 94-entry map.
  */
-function describeDrift(actualJson) {
+function describeDrift(actualJson, expectedPaths) {
   const actual = actualJson?.compilerOptions?.paths
   if (!actual) return ['  the file is missing its `compilerOptions.paths`']
-  const missing = Object.keys(webRebased).filter((alias) => !(alias in actual))
-  const extra = Object.keys(actual).filter((alias) => !(alias in webRebased))
-  const wrong = Object.keys(webRebased).filter(
+  const missing = Object.keys(expectedPaths).filter((alias) => !(alias in actual))
+  const extra = Object.keys(actual).filter((alias) => !(alias in expectedPaths))
+  const wrong = Object.keys(expectedPaths).filter(
     (alias) =>
       alias in actual &&
-      JSON.stringify(actual[alias]) !== JSON.stringify(webRebased[alias]),
+      JSON.stringify(actual[alias]) !== JSON.stringify(expectedPaths[alias]),
   )
   const lines = []
   if (missing.length) lines.push(`  missing (${missing.length}): ${missing.join(', ')}`)
@@ -211,7 +211,7 @@ for (const { relative, content } of TARGETS) {
   drifted.push(
     actualText === null
       ? `${relative}\n  the file does not exist`
-      : `${relative}\n${describeDrift(actualJson).join('\n')}`,
+      : `${relative}\n${describeDrift(actualJson, JSON.parse(content).compilerOptions.paths).join('\n')}`,
   )
 }
 

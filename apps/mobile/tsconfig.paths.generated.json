@@ -189,6 +189,12 @@
       "@aglyn/plugins-redirects/*": [
         "../../libs/plugins/redirects/src/lib/*"
       ],
+      "@aglyn/plugins-shipping": [
+        "../../libs/plugins/shipping/src/index.ts"
+      ],
+      "@aglyn/plugins-shipping/*": [
+        "../../libs/plugins/shipping/src/lib/*"
+      ],
       "@aglyn/plugins-themes": [
         "../../libs/plugins/themes/src/index.ts"
       ],
