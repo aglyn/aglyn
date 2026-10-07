@@ -22,7 +22,6 @@ import { ACCOUNTING_CONSOLE_SECTIONS } from './components/accounting-console-sec
 import {
   ACCOUNTING_ENTITLEMENT,
   ACCOUNTING_MANAGE_PERMISSION,
-  ACCOUNTING_NAV_TAB_ID,
   ACCOUNTING_PERMISSIONS,
   ACCOUNTING_PLUGIN_ID,
 } from './constants/bundle-common'
@@ -59,7 +58,7 @@ export function registerAccountingConsole(): void {
         label: 'Accounting',
         href: '/accounting',
         sections: ACCOUNTING_CONSOLE_SECTIONS,
-        navTabId: ACCOUNTING_NAV_TAB_ID,
+        navTabId: 'nav-tab-org-accounting',
         icon: { path: mdiBookOpenVariant.path },
         header: { title: 'Accounting', icon: { path: mdiBookOpenVariant.path } },
         Component: AccountingConsolePage,

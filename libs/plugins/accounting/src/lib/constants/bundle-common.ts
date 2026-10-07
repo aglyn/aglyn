@@ -48,8 +48,5 @@ export const ACCOUNTING_PERMISSIONS: readonly PluginPermission[] = [
  */
 export const ACCOUNTING_ENTITLEMENT = 'commerce'
 
-/** The release flag's nav tab id; `release_accounting` names it. */
-export const ACCOUNTING_NAV_TAB_ID = 'nav-tab-org-accounting'
-
 /** The console cron that runs the sync, as `/api/health/crons` lists it. */
 export const ACCOUNTING_SYNC_JOB_ID = 'accounting-sync'
