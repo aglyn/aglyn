@@ -111,7 +111,7 @@ export const DOCS_HELP_EXCERPTS = {
   generateAComponentWithAglynAi: 'Describe a block your site repeats, or point at one already on a page, and Aglyn AI makes it a reusable component with typed properties bound to the elements that show them.',
   generateAForm: 'An AI form generator inside Aglyn: describe the form you need and a build job makes it as a draft on the Forms page, with its fields, required answers, marketing consent and routing already agreed.',
   generateAPage: 'An AI landing page generator built into the canvas: describe a page and Aglyn AI plans it, then builds it section by section as an unpublished draft from your own theme, layout, components and forms.',
-  generateASite: 'Generate a website from a prompt: describe a business and an Aglyn AI build job plans a small site — pages, navigation, layout, contact form and palette — then builds each page as an unpublished draft.',
+  generateASite: 'Generate a website from a prompt: describe a business and an Aglyn AI build job plans a small site — pages, navigation, layout, contact form and palette — then builds it. A guided start publishes it.',
   generateSection: 'Describe a section and Aglyn AI builds it from real components, on the page you have open, as an unsaved change you can undo.',
   generateWithAi: 'An AI email campaign generator that drafts rather than sends: turn a brief into a draft email design, or a draft campaign and the email it would send. Nothing is sent, and nothing is aimed at anybody, until you choose.',
   gettingStarted: 'Sign in, create your first site, and understand what a site contains.',
