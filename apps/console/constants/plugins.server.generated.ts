@@ -77,6 +77,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-marketing/server'),
   },
   {
+    id: 'redirects',
+    apiPrefixes: ["redirects"],
+    register: {"consoleApi":"registerRedirectsConsoleApi"},
+    load: () => import('@aglyn/plugins-redirects/server'),
+  },
+  {
     id: 'workflows',
     apiPrefixes: ["hooks","automations"],
     register: {"consoleApi":"registerWorkflowsConsoleApi"},

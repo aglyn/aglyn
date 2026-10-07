@@ -38,6 +38,23 @@ class RestFirestoreWriterTest {
   }
 
   @Test
+  fun aDeletedFieldIsMaskedButNotSentAndATimestampIsATimestamp() = runTest {
+    var seen: io.ktor.client.request.HttpRequestData? = null
+    var body = ""
+    val http = HttpClient(MockEngine { request ->
+      seen = request
+      body = String(request.body.toByteArray())
+      respond("{}", HttpStatusCode.OK)
+    })
+    val rest = RestFirestoreReader(http, "demo-x", null, { "id-token" })
+    rest.merge("hosts/h1/redirects/r1", mapOf("enabled" to false, "externalDestinationApprovedBy" to FirestoreDelete, "updatedAt" to FirestoreTimestamp(1_700_000_000, 5)))
+    assertEquals(listOf("enabled", "externalDestinationApprovedBy", "updatedAt"), seen!!.url.parameters.getAll("updateMask.fieldPaths"))
+    val fields = Json.parseToJsonElement(body).jsonObject.getValue("fields").jsonObject
+    assertEquals(setOf("enabled", "updatedAt"), fields.keys)
+    assertEquals("""{"timestampValue":"2023-11-14T22:13:20.000000005Z"}""", fields.getValue("updatedAt").toString())
+  }
+
+  @Test
   fun aRefusedMergeSaysWhy() = runTest {
     val http = HttpClient(MockEngine { respond("""{"error":{"message":"Missing or insufficient permissions."}}""", HttpStatusCode.Forbidden) })
     val rest = RestFirestoreReader(http, "demo-x", null, { "id-token" })
