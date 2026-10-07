@@ -98,6 +98,12 @@ console, **imported**, or created through the **REST API** are written without a
 announcement and fire nothing.
 :::
 
+### Funnel events {#funnel-events}
+
+| Event | Fires when | Keys in scope for filters and conditions |
+| --- | --- | --- |
+| **Left a funnel** (`funnelLeft`) | A person who submitted a form on your site reached a [funnel](../analytics/funnels.md#act-on-drop-off) step that an automation follows up on, and had not reached the next step after the wait. Once per person, funnel, step and wait; never for an anonymous visitor. **Act on this drop-off** on the Funnels card drafts an automation on it, switched off. | `funnelId` · `funnelName` · `step` (the step reached, from 1) · `stepLabel` · `nextStepLabel` · `afterHours` (the wait) · `email` |
+
 ### Only run when a field matches
 
 Every action can carry a **condition** over the event's payload — for form submissions,
