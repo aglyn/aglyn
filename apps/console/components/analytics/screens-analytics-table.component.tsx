@@ -247,9 +247,9 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
               setRange(Number(event.target.value))
             }}
           >
-            <MenuItem value={7}>{'7 days'}</MenuItem>
-            <MenuItem value={14}>{'14 days'}</MenuItem>
-            <MenuItem value={30}>{'30 days'}</MenuItem>
+            <MenuItem value={7}>{'Last 7 days'}</MenuItem>
+            <MenuItem value={14}>{'Last 14 days'}</MenuItem>
+            <MenuItem value={30}>{'Last 30 days'}</MenuItem>
           </TextField>
         ),
       }}
