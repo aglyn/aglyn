@@ -34,8 +34,11 @@ import { sendAnalyticsBeacon } from './analytics-beacon'
  * a cookie, not `localStorage`, never derived from the address or the
  * browser, never shared between sites (the stored id names the site it was
  * minted for, and another site's page mints its own). Two tabs are two
- * visits; closing the tab and coming back tomorrow is a new visit; nothing
- * links a visit to a person.
+ * visits; closing the tab and coming back tomorrow is a new visit. Nothing
+ * here links a visit to a person: only a door that already verified who the
+ * visitor is — a form they submitted — may hand the id to the server beside
+ * the address they typed ({@link siteJourneyField}), so a drop-off follow-up
+ * reaches a person who identified themselves and never an anonymous visit.
  *
  * ## Consent
  *
@@ -76,6 +79,9 @@ export const SITE_JOURNEY_BEACON_FIELD = 'journey'
  * - `order`: a storefront order was placed and paid; no key.
  * - `overlay`: an announcement bar or popup was clicked; key = the overlay id.
  * - `event`: a custom event an interaction fired; key = the event name.
+ * - `email`: a person the visit identified opened or clicked an email the
+ *   site sent them; key = `opened` or `clicked`. Recorded by the SERVER from
+ *   the delivery log, never by a page: a browser that sends one is refused.
  */
 export const SITE_JOURNEY_STEP_TYPES = [
   'page',
@@ -85,6 +91,7 @@ export const SITE_JOURNEY_STEP_TYPES = [
   'order',
   'overlay',
   'event',
+  'email',
 ] as const
 
 export type SiteJourneyStepType = (typeof SITE_JOURNEY_STEP_TYPES)[number]
@@ -95,6 +102,19 @@ export function isSiteJourneyStepType(value: unknown): value is SiteJourneyStepT
     (SITE_JOURNEY_STEP_TYPES as readonly string[]).includes(value)
   )
 }
+
+/** The step types only the server records; a page's beacon naming one is refused. */
+export const SITE_JOURNEY_SERVER_STEP_TYPES: ReadonlySet<SiteJourneyStepType> = new Set(['email'])
+
+/** The keys an `email` step carries. */
+export const SITE_JOURNEY_EMAIL_KEYS = ['opened', 'clicked'] as const
+
+/**
+ * The body field an identifying door (a form submission) carries the visit
+ * id under, so the server can tie the visit to the person the door verified.
+ * See {@link siteJourneyField}.
+ */
+export const SITE_JOURNEY_SUBMISSION_FIELD = 'journey'
 
 /** The most steps one visit records. A visit past it records nothing more. */
 export const SITE_JOURNEY_MAX_STEPS = 60
@@ -242,7 +262,7 @@ export function recordSiteJourneyStep(
 ): void {
   try {
     if (typeof window === 'undefined' || !state.enabled || !state.hostId) return
-    if (!isSiteJourneyStepType(type)) return
+    if (!isSiteJourneyStepType(type) || SITE_JOURNEY_SERVER_STEP_TYPES.has(type)) return
     const hostId = state.hostId
     const cleanKey = String(key ?? '').trim().slice(0, SITE_JOURNEY_KEY_MAX)
     if (type === 'page' && !cleanKey.startsWith('/')) return
@@ -271,6 +291,25 @@ export function recordSiteJourneyStep(
     })
   } catch {
     // A journey step never breaks the page.
+  }
+}
+
+/**
+ * The visit id for a door that identifies the visitor — a form submission —
+ * as `{ journey: id }`, or nothing: when the page has not enabled recording
+ * (no funnel on the site, or no analytics consent), or no visit has started.
+ *
+ * The id is what lets a funnel's drop-off follow-up reach a PERSON (AGL-3605):
+ * the door verifies who submitted, and the server ties this visit to that
+ * address. Nothing is minted here; a visit with no recorded step has no id.
+ */
+export function siteJourneyField(): { journey?: string } {
+  try {
+    if (typeof window === 'undefined' || !state.enabled || !state.hostId) return {}
+    const journey = readStored()
+    return journey && journey.hostId === state.hostId ? { [SITE_JOURNEY_SUBMISSION_FIELD]: journey.id } : {}
+  } catch {
+    return {}
   }
 }
 

@@ -110,6 +110,13 @@ export interface JourneySource {
 export interface JourneyForCompute {
   steps: readonly JourneyStepRecord[]
   source?: JourneySource | null
+  /**
+   * The address a form submission tied the visit to, when one did: every
+   * visit of the same person is one visitor (`mergeJourneysByPerson`).
+   */
+  personEmail?: string | null
+  /** When the visit started, epoch ms, for the person's first source. */
+  startedAtMs?: number
 }
 
 /** A step's row in a result. */

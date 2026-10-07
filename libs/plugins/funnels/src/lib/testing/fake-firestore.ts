@@ -17,21 +17,54 @@
 
 /**
  * A small in-memory Firestore for the funnels specs: documents by path, and
- * the query shapes the plugin's server code uses — equality-free ranges,
- * one ordering, a projection, a cursor and a limit. Nothing else.
+ * the query shapes the plugin's server code uses — ranges and equality, one
+ * ordering, a projection, a cursor, a limit, a collection group, a batch —
+ * and the update sentinels it writes ({@link FAKE_FIELD_VALUE}). Nothing else.
  */
+
+/**
+ * Stand-ins for `FieldValue`, which a spec mocks `firebase-admin/firestore`
+ * with so `update` can apply them.
+ */
+export const FAKE_FIELD_VALUE = {
+  serverTimestamp: () => 'SERVER_TIME',
+  delete: () => ({ __fake: 'delete' }),
+  arrayUnion: (...values: unknown[]) => ({ __fake: 'arrayUnion', values }),
+}
+
+function applyUpdate(held: Data, patch: Data): Data {
+  const next: Data = { ...held }
+  for (const [key, value] of Object.entries(patch)) {
+    const parts = key.split('.')
+    let target: Data = next
+    for (const part of parts.slice(0, -1)) {
+      target[part] = { ...(target[part] ?? {}) }
+      target = target[part]
+    }
+    const leaf = parts[parts.length - 1]
+    if (value && value.__fake === 'delete') delete target[leaf]
+    else if (value && value.__fake === 'arrayUnion') {
+      const list = Array.isArray(target[leaf]) ? [...target[leaf]] : []
+      for (const one of value.values) {
+        if (!list.some((held: unknown) => JSON.stringify(held) === JSON.stringify(one))) list.push(one)
+      }
+      target[leaf] = list
+    } else target[leaf] = value
+  }
+  return next
+}
 
 type Data = Record<string, any>
 
 const comparable = (value: any): any =>
   value && typeof value.toMillis === 'function' ? value.toMillis() : value
 
-function snapshot(path: string, data: Data | undefined) {
+function snapshot(db: FakeFirestore, path: string, data: Data | undefined) {
   const id = path.split('/').pop() as string
   return {
     id,
     exists: data !== undefined,
-    ref: { path },
+    ref: new FakeDoc(db, path),
     data: () => (data === undefined ? undefined : { ...data }),
     get: (field: string) => data?.[field],
   }
@@ -43,6 +76,22 @@ export class FakeFirestore {
 
   collection(name: string) {
     return new FakeCollection(this, name)
+  }
+
+  /** Every collection named `name`, at any depth. */
+  collectionGroup(name: string) {
+    return new FakeQuery(this, name, [], null, null, null, true)
+  }
+
+  batch() {
+    const ops: Array<() => Promise<void>> = []
+    return {
+      update: (ref: FakeDoc, data: Data) => void ops.push(() => ref.update(data)),
+      delete: (ref: FakeDoc) => void ops.push(() => ref.delete()),
+      commit: async () => {
+        for (const op of ops) await op()
+      },
+    }
   }
 
   seed(path: string, data: Data): this {
@@ -59,6 +108,7 @@ class FakeQuery {
     protected readonly order: [string, 'asc' | 'desc'] | null = null,
     protected readonly max: number | null = null,
     protected readonly after: string | null = null,
+    protected readonly group = false,
   ) {}
 
   protected clone(next: Partial<{ filters: Array<[string, string, any]>; order: [string, 'asc' | 'desc'] | null; max: number | null; after: string | null }>) {
@@ -69,6 +119,7 @@ class FakeQuery {
       next.order === undefined ? this.order : next.order,
       next.max === undefined ? this.max : next.max,
       next.after === undefined ? this.after : next.after,
+      this.group,
     )
   }
 
@@ -90,9 +141,13 @@ class FakeQuery {
 
   private matching(): Array<[string, Data]> {
     const prefix = `${this.path}/`
-    let rows = [...this.db.docs.entries()].filter(
-      ([path]) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/'),
-    )
+    let rows = [...this.db.docs.entries()].filter(([path]) => {
+      if (this.group) {
+        const parts = path.split('/')
+        return parts.length % 2 === 0 && parts[parts.length - 2] === this.path
+      }
+      return path.startsWith(prefix) && !path.slice(prefix.length).includes('/')
+    })
     for (const [field, op, raw] of this.filters) {
       const value = comparable(raw)
       rows = rows.filter(([, data]) => {
@@ -100,6 +155,7 @@ class FakeQuery {
         if (held === undefined) return false
         if (op === '>=') return held >= value
         if (op === '<') return held < value
+        if (op === '<=') return held <= value
         if (op === '==') return held === value
         throw new Error(`unsupported op ${op}`)
       })
@@ -121,7 +177,7 @@ class FakeQuery {
   }
 
   async get() {
-    const docs = this.matching().map(([path, data]) => snapshot(path, data))
+    const docs = this.matching().map(([path, data]) => snapshot(this.db, path, data))
     return { docs, empty: docs.length === 0, size: docs.length }
   }
 
@@ -143,11 +199,19 @@ class FakeDoc {
   get id() {
     return this.path.split('/').pop() as string
   }
+  /** The collection, whose `parent` is the document above it. */
+  get parent() {
+    const parts = this.path.split('/')
+    return {
+      id: parts[parts.length - 2],
+      parent: parts.length > 2 ? { id: parts[parts.length - 3] } : null,
+    }
+  }
   collection(name: string) {
     return new FakeCollection(this.db, `${this.path}/${name}`)
   }
   async get() {
-    return snapshot(this.path, this.db.docs.get(this.path))
+    return snapshot(this.db, this.path, this.db.docs.get(this.path))
   }
   async set(data: Data, options?: { merge?: boolean }) {
     this.db.writes.push({ op: 'set', path: this.path, data, options })
@@ -158,7 +222,7 @@ class FakeDoc {
     this.db.writes.push({ op: 'update', path: this.path, data })
     const held = this.db.docs.get(this.path)
     if (!held) throw new Error(`no document at ${this.path}`)
-    this.db.docs.set(this.path, { ...held, ...data })
+    this.db.docs.set(this.path, applyUpdate(held, data))
   }
   async delete() {
     this.db.writes.push({ op: 'delete', path: this.path })

@@ -17,6 +17,7 @@
 
 import {
   isSiteJourneyStepType,
+  SITE_JOURNEY_EMAIL_KEYS,
   SITE_JOURNEY_KEY_MAX,
   type SiteJourneyStepType,
 } from '@aglyn/aglyn/app-utils/site-journey'
@@ -39,6 +40,13 @@ export const FUNNEL_STEP_TYPE_LABELS: Record<SiteJourneyStepType, string> = {
   order: 'Placed an order',
   overlay: 'Clicked a bar or popup',
   event: 'Custom event',
+  email: 'Email from the site',
+}
+
+/** What an `email` step's key reads as. */
+export const FUNNEL_EMAIL_KEY_LABELS: Record<(typeof SITE_JOURNEY_EMAIL_KEYS)[number], string> = {
+  opened: 'opened',
+  clicked: 'link clicked',
 }
 
 /** Types whose step may name nothing, meaning any of that kind. */
@@ -85,6 +93,12 @@ export function normalizeFunnelStep(
   if (type === 'order') {
     return { step: { type, key: '', ...(label ? { label } : {}) } }
   }
+  if (type === 'email') {
+    if (!(SITE_JOURNEY_EMAIL_KEYS as readonly string[]).includes(key)) {
+      return { error: 'An email step is an email opened or a link in it clicked.' }
+    }
+    return { step: { type, key, ...(label ? { label } : {}) } }
+  }
   if (type === 'event') {
     if (!EVENT_NAME.test(key)) {
       return { error: 'A custom event step needs the event’s name, as the interaction sends it.' }
@@ -129,6 +143,8 @@ export function funnelStepMatches(step: FunnelStep, event: JourneyStepRecord): b
     return path === step.key
   }
   if (step.type === 'order') return true
+  // A click is read in an opened email, whether or not the open was tracked.
+  if (step.type === 'email') return step.key === event.k || (step.key === 'opened' && event.k === 'clicked')
   return !step.key || step.key === event.k
 }
 
@@ -140,5 +156,8 @@ export function funnelStepTitle(step: FunnelStep): string {
     return step.match === 'prefix' ? `${what}: ${step.key} and below` : `${what}: ${step.key}`
   }
   if (step.type === 'order') return what
+  if (step.type === 'email') {
+    return `${what}: ${FUNNEL_EMAIL_KEY_LABELS[step.key as keyof typeof FUNNEL_EMAIL_KEY_LABELS] ?? step.key}`
+  }
   return step.key ? `${what}: ${step.key}` : `${what} (any)`
 }

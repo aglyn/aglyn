@@ -20,7 +20,9 @@ import type {
   PluginApiRequest,
   PluginApiResponse,
 } from '@aglyn/aglyn/app-utils/api-plugins'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { pluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import {
   EmailNotVerifiedError,
@@ -29,6 +31,14 @@ import {
 } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { getOrgForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { FieldValue } from 'firebase-admin/firestore'
+import {
+  DROP_OFF_ACTIONS,
+  DROP_OFF_WATCHES_MAX,
+  dropOffAutomationContent,
+  funnelWatches,
+  normalizeDropOffWatch,
+  type DropOffAction,
+} from '../model/drop-off'
 import { funnelRange } from '../model/funnel-compute'
 import { normalizeFunnelDefinition } from '../model/funnel-definition'
 import { labelStepFromInventory, stepInventoryProblem } from '../model/funnel-inventory'
@@ -40,10 +50,12 @@ import {
 } from '../model/funnel-proposal'
 import {
   FUNNEL_FEATURE,
+  FUNNEL_JOURNEYS_COLLECTION,
   FUNNEL_MAX_RANGE_DAYS,
   FUNNELS_COLLECTION,
   FUNNELS_MAX_PER_SITE,
 } from '../model/funnels.types'
+import { forgetFunnelHostState } from './funnel-host-state'
 import { readFunnelInventory } from './funnel-inventory.server'
 import { funnelResult } from './funnel-results.server'
 
@@ -65,6 +77,12 @@ import { funnelResult } from './funnel-results.server'
  *   draft through the workspace's text generator (core's text-generation
  *   seam), which applies the AI plugin's own permission, plan, switch and
  *   credit rules. Nothing is saved.
+ * - `funnels/act` — "Act on this drop-off": a watch on one step of a funnel
+ *   and an automation that starts on it, DRAFTED switched off through the
+ *   `automation` draft writer (core's resource-drafts seam, which the
+ *   workflows plugin fills with its own role, plan, room and schema rules).
+ *   Nothing runs until a person switches the automation on. See
+ *   `model/drop-off.ts`.
  *
  * Every door but the inventory needs the paid analytics tier
  * ({@link FUNNEL_FEATURE}); the plan is read from the site's own workspace.
@@ -190,7 +208,7 @@ export const funnelsSaveHandler: PluginApiHandler = async (req, res) => {
   }
   const steps = normalized.funnel.steps.map((step) => labelStepFromInventory(step, inventory))
   const collection = funnelsRef(caller.firestore, hostId)
-  const ref = funnelId ? collection.doc(funnelId) : collection.doc()
+  const ref = collection.doc(funnelId || createResourceUid())
   if (funnelId) {
     const existing = await ref.get()
     if (!existing.exists) return res.status(404).json({ error: 'Unknown funnel' })
@@ -212,6 +230,7 @@ export const funnelsSaveHandler: PluginApiHandler = async (req, res) => {
     { merge: true },
   )
   const recordingChanged = await setRecording(caller.firestore, hostId, caller.hostData, true)
+  forgetFunnelHostState(hostId)
   res.status(200).json({ funnelId: ref.id, recordingChanged })
 }
 
@@ -227,6 +246,7 @@ export const funnelsDeleteHandler: PluginApiHandler = async (req, res) => {
   const recordingChanged = left.empty
     ? await setRecording(caller.firestore, hostId, caller.hostData, false)
     : false
+  forgetFunnelHostState(hostId)
   res.status(200).json({ deleted: true, recordingChanged })
 }
 
@@ -284,4 +304,83 @@ export const funnelsProposeHandler: PluginApiHandler = async (req, res) => {
   const checked = checkFunnelProposal(answer.text, inventory)
   if ('error' in checked) return res.status(422).json({ error: checked.error })
   res.status(200).json(checked.proposal)
+}
+
+/** The draft writer's resource, as the workflows plugin registers it. */
+const AUTOMATION_RESOURCE = 'automation'
+
+/** How far back a new watch looks for people who already left. */
+const BACKFILL_LIMIT = 500
+
+export const funnelsActHandler: PluginApiHandler = async (req, res) => {
+  const caller = await resolveSiteCaller(req, res, { manage: true, entitled: true })
+  if (!caller) return
+  const hostId = String(req.body.hostId)
+  const funnelId = String(req.body.funnelId ?? '').trim()
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(funnelId)) return res.status(400).json({ error: 'Unknown funnel' })
+  const action = String(req.body.action ?? '') as DropOffAction
+  if (!DROP_OFF_ACTIONS.includes(action)) {
+    return res.status(400).json({ error: 'Pick an email or a task.' })
+  }
+  if (!caller.orgId) return res.status(400).json({ error: 'This site is not part of a workspace' })
+  const drafts = pluginResourceDraftWriter(AUTOMATION_RESOURCE)
+  if (!drafts) return res.status(404).json({ error: 'Automations are not available for this workspace' })
+
+  const ref = funnelsRef(caller.firestore, hostId).doc(funnelId)
+  const snapshot = await ref.get()
+  if (!snapshot.exists) return res.status(404).json({ error: 'Unknown funnel' })
+  const normalized = normalizeFunnelDefinition(snapshot.data())
+  if ('error' in normalized) return res.status(422).json({ error: normalized.error })
+  const { funnel } = normalized
+  const read = normalizeDropOffWatch(req.body, funnel.steps.length)
+  if ('error' in read) return res.status(400).json({ error: read.error })
+  const watch = read.watch
+  const watches = funnelWatches(snapshot.get('dropOffWatches'), funnel.steps.length)
+  const watched = watches.some((one) => one.step === watch.step && one.afterHours === watch.afterHours)
+  if (!watched && watches.length >= DROP_OFF_WATCHES_MAX) {
+    return res.status(409).json({
+      error: `A funnel follows up on up to ${DROP_OFF_WATCHES_MAX} drop-offs. Remove one from its automations first.`,
+    })
+  }
+
+  const context = {
+    orgId: caller.orgId,
+    hostId,
+    uid: caller.uid,
+    org: caller.org,
+    now: new Date(),
+  }
+  const refusal = await drafts.writer.refusal(context)
+  if (refusal) return res.status(refusal.status).json({ error: refusal.error })
+  const draft = dropOffAutomationContent({ funnelId, funnelName: funnel.name, steps: funnel.steps, watch, action })
+  const check = drafts.writer.check(draft.content, { hostId })
+  if (check.ok === false) return res.status(422).json({ error: check.problems[0] })
+  const written = await drafts.writer.write({
+    ...context,
+    id: createResourceUid(),
+    name: draft.name,
+    content: draft.content,
+  })
+  if (written.ok === false) return res.status(written.status).json({ error: written.error })
+
+  if (!watched) {
+    await ref.update({ dropOffWatches: FieldValue.arrayUnion(watch) })
+    forgetFunnelHostState(hostId)
+    // People identified within the wait who are already past due are looked
+    // at on the next tick rather than never: a watch applies from today.
+    const since = Date.now() - (watch.afterHours * 60 * 60 * 1000 + 24 * 60 * 60 * 1000)
+    const recent = await caller.firestore
+      .collection('hosts')
+      .doc(hostId)
+      .collection(FUNNEL_JOURNEYS_COLLECTION)
+      .where('identifiedAt', '>=', since)
+      .limit(BACKFILL_LIMIT)
+      .get()
+    if (!recent.empty) {
+      const batch = caller.firestore.batch()
+      for (const doc of recent.docs) batch.update(doc.ref, { dropOffCheckAt: Date.now() })
+      await batch.commit()
+    }
+  }
+  res.status(200).json({ automationId: written.id, name: written.name, replayed: written.replayed })
 }

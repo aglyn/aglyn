@@ -94,6 +94,7 @@ describe('the journey beacon (AGL-3605)', () => {
     ['an unknown step type', { journey: VISIT, stepType: 'hover', stepKey: '/' }],
     ['a page step with no path', { journey: VISIT, stepType: 'page', stepKey: 'pricing' }],
     ['an event step with no name', { journey: VISIT, stepType: 'event' }],
+    ['an email step, which only the delivery log records', { journey: VISIT, stepType: 'email', stepKey: 'opened' }],
   ])('refuses %s without writing', async (_name, body) => {
     const db = store()
     expect(await countJourneyBeacon({ hostId: 'h1', body }, db, NOW)).toBe(false)

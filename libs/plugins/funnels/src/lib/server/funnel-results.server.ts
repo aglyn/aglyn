@@ -16,7 +16,7 @@
  */
 
 import { Timestamp } from 'firebase-admin/firestore'
-import { computeFunnel } from '../model/funnel-compute'
+import { computeFunnel, mergeJourneysByPerson } from '../model/funnel-compute'
 import {
   FUNNEL_JOURNEY_READ_CAP,
   FUNNEL_JOURNEYS_COLLECTION,
@@ -35,7 +35,8 @@ import {
  *
  * One range on `startedAt`, ordered on the same field — Firestore indexes
  * every field in both directions on its own, so no composite index is owed —
- * with a projection to the two fields a computation reads. A visit is read
+ * with a projection to the fields a computation reads. Visits a person
+ * identified are merged into one visitor (`mergeJourneysByPerson`). A visit is read
  * once per computation however many funnels the site has.
  *
  * ## Cached per (funnel, version, range)
@@ -70,7 +71,7 @@ export async function readJourneys(
     .where('startedAt', '>=', Timestamp.fromMillis(startMs))
     .where('startedAt', '<', Timestamp.fromMillis(endMs))
     .orderBy('startedAt', 'desc')
-    .select('steps', 'source', 'startedAt')
+    .select('steps', 'source', 'startedAt', 'personEmail')
   const journeys: JourneyForCompute[] = []
   let cursor: unknown = null
   while (journeys.length < cap) {
@@ -81,6 +82,8 @@ export async function readJourneys(
       journeys.push({
         steps: Array.isArray(data.steps) ? data.steps : [],
         source: data.source ?? null,
+        personEmail: typeof data.personEmail === 'string' ? data.personEmail : null,
+        startedAtMs: typeof data.startedAt?.toMillis === 'function' ? data.startedAt.toMillis() : undefined,
       })
     }
     if (page.docs.length < size) return { journeys, capped: false }
@@ -119,7 +122,7 @@ export async function funnelResult(options: {
     if (held && now - Number(held.computedAt ?? 0) < ttl) return held
   }
   const { journeys, capped } = await readJourneys(firestore, hostId, options.startMs, options.endMs)
-  const computed = computeFunnel(options.steps, journeys)
+  const computed = computeFunnel(options.steps, mergeJourneysByPerson(journeys))
   const result: FunnelResult = {
     funnelId,
     from,

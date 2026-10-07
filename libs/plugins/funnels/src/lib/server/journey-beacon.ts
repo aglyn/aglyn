@@ -18,6 +18,7 @@
 import {
   isSiteJourneyStepType,
   SITE_JOURNEY_BEACON_FIELD,
+  SITE_JOURNEY_SERVER_STEP_TYPES,
   SITE_JOURNEY_ID_PATTERN,
   SITE_JOURNEY_KEY_MAX,
 } from '@aglyn/aglyn/app-utils/site-journey'
@@ -87,7 +88,8 @@ export async function countJourneyBeacon(
   const visitId = String(body[SITE_JOURNEY_BEACON_FIELD] ?? '')
   if (!SITE_JOURNEY_ID_PATTERN.test(visitId)) return false
   const type = body['stepType']
-  if (!isSiteJourneyStepType(type)) return false
+  // An email step is the delivery log's to record; a page cannot claim one.
+  if (!isSiteJourneyStepType(type) || SITE_JOURNEY_SERVER_STEP_TYPES.has(type)) return false
   const key = String(body['stepKey'] ?? '').trim().slice(0, SITE_JOURNEY_KEY_MAX)
   if (type === 'page' && !key.startsWith('/')) return false
   if (type === 'event' && !key) return false

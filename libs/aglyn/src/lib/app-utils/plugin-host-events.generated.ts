@@ -30,6 +30,7 @@ export type PluginHostEventType =
   | 'orderCancelled'
   | 'returnRequested'
   | 'returnRefunded'
+  | 'funnelLeft'
 
 export const PLUGIN_HOST_EVENTS: readonly HostEventDeclaration[] = [
   {
@@ -304,6 +305,21 @@ export const PLUGIN_HOST_EVENTS: readonly HostEventDeclaration[] = [
       "returnId",
       "returnStatus",
       "returnRefundCents"
+    ]
+  },
+  {
+    "pluginId": "funnels",
+    "type": "funnelLeft",
+    "order": 150,
+    "label": "Left a funnel",
+    "payloadKeys": [
+      "funnelId",
+      "funnelName",
+      "step",
+      "stepLabel",
+      "nextStepLabel",
+      "afterHours",
+      "email"
     ]
   }
 ]

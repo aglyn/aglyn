@@ -39,6 +39,11 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change', () =>
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: (_user: unknown, url: string, init: { body: string }) => mockFetch(url, JSON.parse(init.body)),
 }))
+jest.mock('next/navigation', () => ({ useParams: () => ({ orgSlug: 'acme', host: 'shop' }) }))
+const mockRecordHref = jest.fn((_kind: string, context: { orgSlug: string; host: string }, _id: string) => `/${context.orgSlug}/hosts/${context.host}/automation/actions`)
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-record-routes', () => ({
+  pluginRecordHref: (...args: [string, { orgSlug: string; host: string }, string]) => mockRecordHref(...args),
+}))
 jest.mock('firebase/firestore', () => ({
   collection: () => ({}),
   doc: () => ({}),
@@ -144,7 +149,7 @@ describe('the Funnels card (AGL-3605)', () => {
     mockFunnels = [FUNNEL]
     respond({ results: () => ({ ok: true, body: { result: RESULT } }) })
     render(<FunnelsCard hostId="h1" orgId="o1" />)
-    await waitFor(() => expect(screen.getByText(/30 of 200 visits completed every step \(15%\)/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/30 of 200 visitors completed every step \(15%\)/)).toBeTruthy())
     const contact = screen.getByLabelText('Step 2: Contact')
     expect(within(contact).getByText(/15% of the previous step · 170 dropped off · median 2m 05s/)).toBeTruthy()
     expect(screen.getByText('google.com')).toBeTruthy()
@@ -186,5 +191,31 @@ describe('the Funnels card (AGL-3605)', () => {
     const saved = mockFetch.mock.calls.find(([url]) => url === '/api/funnels/save')?.[1]
     expect(saved.funnel.name).toBe('Mine')
     expect(saved.funnel.steps).toHaveLength(2)
+  })
+
+  it('drafts a drop-off automation from a step, for a manager only', async () => {
+    mockFunnels = [FUNNEL]
+    respond({
+      results: () => ({ ok: true, body: { result: RESULT } }),
+      act: () => ({ ok: true, body: { automationId: 'a1', name: 'Follow up: Pricing to contact step 1', replayed: false } }),
+    })
+    render(<FunnelsCard hostId="h1" orgId="o1" />)
+    fireEvent.click(await screen.findByLabelText('Act on the drop-off before step 2'))
+    expect(screen.getByText(/People who reached step 1/)).toBeTruthy()
+    fireEvent.click(screen.getByText('Draft the automation'))
+    expect(await screen.findByText(/Drafted “Follow up: Pricing to contact step 1”, switched off/)).toBeTruthy()
+    expect(screen.getByText('Open it on the Automation page').getAttribute('href')).toBe('/acme/hosts/shop/automation/actions')
+    expect(mockRecordHref).toHaveBeenCalledWith('action', { orgSlug: 'acme', host: 'shop' }, 'a1')
+    const sent = mockFetch.mock.calls.find(([url]) => url === '/api/funnels/act')?.[1]
+    expect(sent).toEqual({ hostId: 'h1', funnelId: 'f1', step: 1, afterHours: 24, action: 'email' })
+  })
+
+  it('offers no drop-off action to a member who cannot manage funnels', async () => {
+    mockRole = 'viewer'
+    mockFunnels = [FUNNEL]
+    respond({ results: () => ({ ok: true, body: { result: RESULT } }) })
+    render(<FunnelsCard hostId="h1" orgId="o1" />)
+    await screen.findByText(/30 of 200 visitors completed every step/)
+    expect(screen.queryByText('Act on this drop-off')).toBeNull()
   })
 })

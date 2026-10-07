@@ -135,6 +135,27 @@ export interface PluginEventPayloads {
     collection: string
     records: ReadonlyArray<{ id: string; data: Readonly<Record<string, unknown>> }>
   }
+  /**
+   * A site's email was opened, or a link in it clicked (AGL-3605): the
+   * delivery events one webhook delivery recorded for a send tagged with the
+   * site, the FIRST of each type per message only — the delivery log decides
+   * which those are, so a replay or a reader opening one email six times is
+   * one event. Raised by the plugin whose webhook reads the provider, after
+   * the log has recorded them; a subscriber that counts engagement of its own
+   * reads it here rather than subscribing to the provider.
+   */
+  'host.email.engaged': {
+    hostId: string
+    events: ReadonlyArray<{
+      /** The recipient, lowercased. */
+      to: string
+      /** `opened` or `clicked`. */
+      type: string
+      /** When it happened, epoch ms. */
+      at: number
+      firstOfType: boolean
+    }>
+  }
   /** One permission key moved on a subject of the org. */
   'org.permissions.changed': {
     orgId: string

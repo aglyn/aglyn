@@ -16,14 +16,26 @@
  */
 
 import { SITE_JOURNEY_BEACON_FIELD } from '@aglyn/aglyn/app-utils/site-journey'
+import { registerPluginEventHandler } from '@aglyn/aglyn/plugin-manager/plugin-events'
+import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { registerPluginSiteBeacon } from '@aglyn/aglyn/plugin-manager/plugin-site-beacons'
+// The registry from its own module, not the runtime barrel: boot needs the
+// registry and nothing else.
+import { registerHostEventListener } from '@aglyn/tenant-runtime/host-event-listeners'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
- * The funnels plugin's server declarations (AGL-3605): it counts the site
- * collector's journey beacons — one step of a recorded visit each — into the
- * site's `funnelJourneys`. The counting code and the Admin SDK load with the
- * first beacon.
+ * The funnels plugin's server declarations (AGL-3605), in both apps:
+ *
+ * - it counts the site collector's journey beacons — one step of a recorded
+ *   visit each — into the site's `funnelJourneys`;
+ * - it hears every host event, and a person's own action that names the
+ *   visit it ended (a form submission) identifies that visit;
+ * - it hears the platform's `host.email.engaged`, and an email opened or
+ *   clicked by a person a visit identified becomes an `email` step;
+ * - it erases the visits a person identified, with the person.
+ *
+ * Every body, and the Admin SDK, loads with the first event that needs it.
  */
 export function registerFunnelsServerDeclarations(): void {
   registerPluginSiteBeacon(
@@ -33,6 +45,29 @@ export function registerFunnelsServerDeclarations(): void {
         const { countJourneyBeacon } = await import('./server/journey-beacon')
         await countJourneyBeacon(request)
       },
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerHostEventListener(BUNDLE_ID, {
+    async onEvent(hostId, event, _payload, context) {
+      if (!context?.journeyId) return
+      const { identifyJourney } = await import('./server/journey-people.platform')
+      await identifyJourney(hostId, event, context)
+    },
+  })
+  registerPluginEventHandler(
+    'host.email.engaged',
+    async ({ hostId, events }) => {
+      if (!events.some((one) => one.firstOfType)) return
+      const { recordEmailEngagement } = await import('./server/journey-people.platform')
+      await recordEmailEngagement(hostId, events)
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginPersonEraser(
+    async (request) => {
+      const { eraseFunnelPersonOnPlatform } = await import('./server/journey-people.platform')
+      return eraseFunnelPersonOnPlatform(request)
     },
     { pluginId: BUNDLE_ID },
   )

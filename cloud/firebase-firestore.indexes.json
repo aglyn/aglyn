@@ -7941,6 +7941,29 @@
       "indexes": []
     },
     {
+      "collectionGroup": "funnelJourneys",
+      "fieldPath": "left",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "funnelJourneys",
+      "fieldPath": "dropOffCheckAt",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "funnelResults",
       "fieldPath": "expiresAt",
       "ttl": true,

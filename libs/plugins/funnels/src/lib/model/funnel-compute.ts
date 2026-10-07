@@ -67,6 +67,38 @@ export function journeyProgress(
   return { reached: index, times }
 }
 
+/**
+ * Visits as VISITORS: a visit is one browser tab, and a person who submitted
+ * a form is known across tabs by the address they gave, so all their visits
+ * in the read are one visitor — their steps together, in time order, credited
+ * to the source of their earliest visit. A visit no person identified stays
+ * its own visitor.
+ */
+export function mergeJourneysByPerson(journeys: Iterable<JourneyForCompute>): JourneyForCompute[] {
+  const out: JourneyForCompute[] = []
+  const people = new Map<string, JourneyForCompute & { steps: JourneyForCompute['steps'][number][] }>()
+  for (const journey of journeys) {
+    const email = String(journey.personEmail ?? '')
+    if (!email) {
+      out.push(journey)
+      continue
+    }
+    const held = people.get(email)
+    if (!held) {
+      const first = { ...journey, steps: [...(journey.steps ?? [])] }
+      people.set(email, first)
+      out.push(first)
+      continue
+    }
+    held.steps.push(...(journey.steps ?? []))
+    if ((journey.startedAtMs ?? Infinity) < (held.startedAtMs ?? Infinity)) {
+      held.startedAtMs = journey.startedAtMs
+      held.source = journey.source ?? null
+    }
+  }
+  return out
+}
+
 /** The median of a list, or null when it is empty. */
 export function median(values: readonly number[]): number | null {
   if (!values.length) return null
