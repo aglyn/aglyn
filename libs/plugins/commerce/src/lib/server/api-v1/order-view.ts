@@ -58,7 +58,22 @@ export function orderViewFromData(id: string, data: Record<string, any>) {
         : Number.isFinite(legacyFee)
           ? legacyFee
           : 0,
+      // Optional lines the buyer added at checkout (AGL-3635), inside
+      // `totalCents` and outside `itemsCents`.
+      extrasCents: Number(totals.extrasCents ?? 0) || 0,
     },
+    // What those lines were and whose offer each was: the fact a plugin that
+    // insures a parcel reads off `order.paid` to know it was bought.
+    extras: (Array.isArray(data.extras) ? data.extras : [])
+      .filter((entry: Record<string, unknown>) => entry && typeof entry.id === 'string')
+      .map((entry: Record<string, unknown>) => ({
+        id: String(entry.id),
+        pluginId: String(entry.pluginId ?? ''),
+        key: String(entry.key ?? ''),
+        label: String(entry.label ?? ''),
+        amountCents: Number(entry.amountCents ?? 0) || 0,
+        quoteRef: typeof entry.quoteRef === 'string' ? entry.quoteRef : null,
+      })),
     // Money already handed back, for any reason. A chargeback lands here too,
     // so `refundedCents > 0` does not by itself mean the merchant chose it.
     refundedCents: Number(data.refundedCents ?? 0),

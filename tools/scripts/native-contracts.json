@@ -1,5 +1,5 @@
 {
-  "$comment": "What tools/scripts/generate-native-contracts.mjs emits for the native apps (docs/mobile/native-architecture.md §5). Every module must be on tools/scripts/mobile-pure-modules.json. `types` become Swift/Kotlin types, `values` become contracts.generated.json entries (typed by ContractValues). `ints` narrows a number field to an integer, `json` reads a field as raw JSON, `omit` leaves a field out; each names `Type.field` and must match a field the run emits. `listQueryCases` names the list declarations whose planner cases are recorded. `functionCases` runs pure functions over listed inputs (`args`, or `argsProduct` for every combination) into function-cases.generated.json, so each platform's formatter or rule replays the console's answers.",
+  "$comment": "What tools/scripts/generate-native-contracts.mjs emits for the native apps (docs/mobile/native-architecture.md §5). Every module must be on tools/scripts/mobile-pure-modules.json. `types` become Swift/Kotlin types, `values` become contracts.generated.json entries (typed by ContractValues). `ints` narrows a number field to an integer, `json` reads a field as raw JSON, `omit` leaves a field out; each names `Type.field` and must match a field the run emits. `optional` makes a field (`Type.field`) or every field of a struct (`Type`) decode when a stored document lacks it, and must match a field or struct the run emits. `listQueryCases` names the list declarations whose planner cases are recorded. `functionCases` runs pure functions over listed inputs (`args`, or `argsProduct` for every combination) into function-cases.generated.json, so each platform's formatter or rule replays the console's answers.",
   "modules": {
     "libs/shared/util/tools/src/lib/list-query/list-query-plan.ts": {
       "types": [
@@ -93,6 +93,10 @@
     "ListQueryRefusal.clause"
   ],
   "omit": [],
+  "optional": [
+    "HostOrder",
+    "OrderTotals"
+  ],
   "listQueryCases": {
     "ORDER_LIST_QUERY": {},
     "PRODUCT_LIST_QUERY": {
@@ -397,6 +401,156 @@
           {
             "productId": "p1",
             "amountCents": 900
+          }
+        ]
+      ]
+    },
+    "accountPushSwitch": {
+      "module": "libs/aglyn/src/lib/app-utils/mobile-push.ts",
+      "args": [
+        [
+          null,
+          "content.order",
+          "content",
+          true
+        ],
+        [
+          null,
+          "content.order",
+          "content",
+          false
+        ],
+        [
+          {},
+          "content.order",
+          "content",
+          true,
+          {
+            "content": false
+          }
+        ],
+        [
+          {
+            "accountTypes": {
+              "content.order": {
+                "push": false
+              }
+            }
+          },
+          "content.order",
+          "content",
+          true
+        ],
+        [
+          {
+            "accountTypes": {
+              "content.order": {
+                "push": true
+              }
+            },
+            "account": {
+              "content": {
+                "push": false
+              }
+            }
+          },
+          "content.order",
+          "content",
+          true
+        ],
+        [
+          {
+            "account": {
+              "content": {
+                "push": false
+              }
+            }
+          },
+          "content.order",
+          "content",
+          true
+        ],
+        [
+          {
+            "account": {
+              "content": {
+                "push": true
+              }
+            }
+          },
+          "content.order",
+          "content",
+          false,
+          {
+            "content": false
+          }
+        ],
+        [
+          {
+            "accountTypes": {
+              "content.order": {
+                "console": false
+              }
+            }
+          },
+          "content.order",
+          "content",
+          true
+        ],
+        [
+          {
+            "accountTypes": {
+              "content.order": {
+                "console": true
+              }
+            },
+            "account": {
+              "content": {
+                "console": false
+              }
+            }
+          },
+          "content.order",
+          "content",
+          false
+        ],
+        [
+          {
+            "account": {
+              "content": {
+                "console": false
+              }
+            }
+          },
+          "content.order",
+          "content",
+          true
+        ],
+        [
+          {
+            "accountTypes": {
+              "content.booking": {
+                "push": false
+              }
+            }
+          },
+          "content.order",
+          "content",
+          true
+        ],
+        [
+          {
+            "account": {
+              "content": {
+                "email": true
+              }
+            }
+          },
+          "content.order",
+          "content",
+          true,
+          {
+            "content": true
           }
         ]
       ]

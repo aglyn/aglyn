@@ -946,6 +946,8 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
               [
                 ['Items', totals.itemsCents],
                 ['Shipping', totals.shippingCents],
+                // Optional lines the buyer took at checkout (AGL-3635), by name.
+                ...(order.extras ?? []).map((extra) => [extra.label, extra.amountCents]),
                 ['Tax', totals.taxCents],
                 ['Discount', -totals.discountCents],
                 ['Total', totals.totalCents],

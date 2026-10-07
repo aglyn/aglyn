@@ -197,7 +197,7 @@ internal fun NotificationsScreen(services: ShellServices, uid: String, context: 
 }
 
 @Composable
-internal fun SettingsScreen(services: ShellServices) {
+internal fun SettingsScreen(services: ShellServices, onNotificationSettings: () -> Unit = {}) {
   val auth by services.auth.state.collectAsState()
   val user = (auth as? com.aglyn.core.AuthState.SignedIn)?.user
   val scope = rememberCoroutineScope()
@@ -207,6 +207,16 @@ internal fun SettingsScreen(services: ShellServices) {
       title = user?.displayName ?: user?.email ?: "Signed in",
       supporting = user?.email,
       icon = AglynIcons.named("settings"),
+    )
+    HorizontalDivider()
+    SectionHeader("Preferences")
+    AglynListItem(
+      title = "Notifications",
+      supporting = "Choose what is sent as push",
+      icon = AglynIcons.named("notifications"),
+      trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
+      onClick = onNotificationSettings,
+      modifier = Modifier.testTag("settings-notifications"),
     )
     HorizontalDivider()
     Column(Modifier.padding(space(2f)).widthIn(max = 480.dp).fillMaxWidth()) {

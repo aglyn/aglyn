@@ -58,6 +58,7 @@ object AndroidShell {
       debugSignIn = debugSignIn,
       peripherals = peripherals,
       push = com.aglyn.core.FcmPushRegistrar(firebase, prefs, config.app, appVersion),
+      writer = com.aglyn.core.FirebaseFirestoreWriter(firebase.firestore),
     )
   }
 }

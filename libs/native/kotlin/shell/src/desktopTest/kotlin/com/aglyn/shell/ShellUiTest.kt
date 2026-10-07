@@ -2,6 +2,9 @@ package com.aglyn.shell
 
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -64,7 +67,10 @@ private class FakeFirestore(private val collections: Map<String, List<FirestoreD
 
 @OptIn(ExperimentalTestApi::class)
 class ShellUiTest {
-  private fun services(): ShellServices {
+  private fun services(
+    userDoc: Map<String, Any?>? = null,
+    writer: com.aglyn.core.FirestoreWriter = com.aglyn.core.NoFirestoreWrites,
+  ): ShellServices {
     val auth = FakeAuth()
     val firestore = FakeFirestore(
       collections = mapOf(
@@ -80,7 +86,7 @@ class ShellUiTest {
           ),
         ),
       ),
-      docs = mapOf("hosts/h1" to FirestoreDoc("h1", "hosts/h1", mapOf("screens" to mapOf("home" to emptyMap<String, Any>(), "about" to emptyMap<String, Any>())))),
+      docs = listOfNotNull(userDoc?.let { "users/u1" to FirestoreDoc("u1", "users/u1", it) }).toMap() + mapOf("hosts/h1" to FirestoreDoc("h1", "hosts/h1", mapOf("screens" to mapOf("home" to emptyMap<String, Any>(), "about" to emptyMap<String, Any>())))),
     )
     val prefs = InMemoryKeyValueStore()
     val config = AglynConfig.read(AglynEnv(consoleUrl = "https://app.example.com", firebaseProjectId = "demo-test"), AglynAppId.AGLYN)
@@ -94,6 +100,7 @@ class ShellUiTest {
       prefs = prefs,
       registry = NativePluginRegistry(),
       console = { _, _ -> },
+      writer = writer,
     )
   }
 
@@ -134,6 +141,58 @@ class ShellUiTest {
     onNodeWithTag("home-switcher").performClick()
     onNodeWithTag("switcher-site-h1").assertIsDisplayed()
     assertEquals(1, onAllNodesWithTagCount("switcher-org-o1"))
+  }
+  private class RecordingWriter(private val fail: Boolean = false) : com.aglyn.core.FirestoreWriter {
+    val writes = mutableListOf<Pair<String, Map<String, Any?>>>()
+    override suspend fun merge(path: String, data: Map<String, Any?>) {
+      if (fail) throw IllegalStateException("offline")
+      writes += path to data
+    }
+  }
+
+  @Test
+  fun notificationSettingsShowStoredAnswersAndWriteOneSwitch() = runComposeUiTest {
+    val writer = RecordingWriter()
+    val services = services(
+      userDoc = mapOf("notificationSettings" to mapOf("accountTypes" to mapOf("content.order" to mapOf("push" to false)))),
+      writer = writer,
+    )
+    setContent { com.aglyn.ui.AglynTheme(dark = false) { NotificationSettingsScreen(services, "u1") } }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("notification-settings") > 0 }
+    onNodeWithTag("notification-category-content").assertExists()
+    onNodeWithTag("push-switch-content.order").assertIsOff()
+    onNodeWithTag("push-switch-content.booking").assertIsOn()
+    // Desktop registers no push, so the screen says where push goes.
+    onNodeWithTag("notification-settings-no-push").assertExists()
+
+    onNodeWithTag("push-switch-content.order").performScrollTo().performClick()
+    waitUntil(timeoutMillis = 3_000) { writer.writes.isNotEmpty() }
+    assertEquals("users/u1" to com.aglyn.core.accountPushWrite("content.order", true), writer.writes.single())
+    onNodeWithTag("push-switch-content.order").assertIsOn()
+  }
+
+  @Test
+  fun aFailedSaveTurnsTheSwitchBackAndSaysSo() = runComposeUiTest {
+    val services = services(userDoc = emptyMap(), writer = RecordingWriter(fail = true))
+    setContent { com.aglyn.ui.AglynTheme(dark = false) { NotificationSettingsScreen(services, "u1") } }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("notification-settings") > 0 }
+    onNodeWithTag("push-switch-content.order").assertIsOn().performScrollTo().performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("notification-settings-save-error") > 0 }
+    onNodeWithTag("push-switch-content.order").assertIsOn()
+  }
+
+  @Test
+  fun settingsOpensNotificationSettings() = runComposeUiTest {
+    val services = services(userDoc = emptyMap())
+    val navigator = ShellNavigator()
+    setContent { AglynShell(services, navigator) }
+    onNodeWithTag("sign-in-email").performTextInput("dana@example.test")
+    onNodeWithTag("sign-in-password").performTextInput("right")
+    onNodeWithTag("sign-in-submit").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("site-header") > 0 }
+    runOnIdle { navigator.select(ShellNavigator.SETTINGS) }
+    onNodeWithTag("settings-notifications").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("notification-settings") > 0 }
   }
 }
 

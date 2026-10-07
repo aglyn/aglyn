@@ -1,5 +1,8 @@
 package com.aglyn.plugins.commerce.pos
 
+import com.aglyn.hardware.CameraScanFilter
+import com.aglyn.ui.BarcodeScanSheet
+import com.aglyn.ui.LocalCameraScanner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
@@ -143,6 +146,8 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit) {
   var basketOpen by remember { mutableStateOf(false) }
   var holdsOpen by remember { mutableStateOf(false) }
   var codeOpen by remember { mutableStateOf(false) }
+  val camera = LocalCameraScanner.current
+  var cameraOpen by remember { mutableStateOf(false) }
   val scanner = remember(model) { model.peripherals.hidScanner ?: HidBurstDetector() }
 
   // Charging from the phone's basket sheet moves to checkout; the sheet stays shut after it.
@@ -217,7 +222,7 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit) {
     if (wide) {
       Row(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
-          CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true })
+          CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, onCamera = camera?.let { { cameraOpen = true } })
           // The basket is the sale now: the grid rests until it is paid or canceled.
           if (checkout != null) {
             Box(
@@ -245,7 +250,7 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit) {
       Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { CheckoutPane(model, checkout, onOpenReaders) }
     } else {
       Column(Modifier.fillMaxSize()) {
-        CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, Modifier.weight(1f))
+        CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, Modifier.weight(1f), onCamera = camera?.let { { cameraOpen = true } })
         BasketBar(model) { basketOpen = true }
       }
     }
@@ -266,6 +271,23 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit) {
   }
   model.sheet?.let { ItemSheetDialog(model, it, wide) }
   if (holdsOpen) HoldsDialog(model) { holdsOpen = false }
+  if (cameraOpen && camera != null) {
+    val filter = remember { CameraScanFilter() }
+    var status by remember { mutableStateOf<String?>(null) }
+    BarcodeScanSheet(
+      scanner = camera,
+      accept = { filter.accept(it, nowMs()) },
+      onCode = { code ->
+        model.lookUp(code) { answer ->
+          status = answer.words
+          // An item with options opens its sheet; the camera makes way for it.
+          if (answer.needsSheet) cameraOpen = false
+        }
+      },
+      onDismiss = { cameraOpen = false },
+      status = status,
+    )
+  }
   if (codeOpen) CodeDialog(onDismiss = { codeOpen = false }) { code ->
     codeOpen = false
     model.lookUp(code)
@@ -282,6 +304,8 @@ private fun CatalogPane(
   searchFocus: FocusRequester,
   onEnterCode: () -> Unit,
   modifier: Modifier = Modifier,
+  /** Opens the camera scanner; null where the app has no camera scanner. */
+  onCamera: (() -> Unit)? = null,
 ) {
   Column(modifier.fillMaxHeight()) {
     Row(
@@ -304,6 +328,11 @@ private fun CatalogPane(
         shape = MaterialTheme.shapes.large,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
       )
+      if (onCamera != null) {
+        IconButton(onClick = onCamera, modifier = Modifier.testTag("pos-scan-camera")) {
+          Icon(AglynIcons.named("photo_camera"), contentDescription = "Scan barcodes with the camera")
+        }
+      }
       IconButton(onClick = onEnterCode, modifier = Modifier.testTag("pos-enter-code")) {
         Icon(AglynIcons.named("barcode"), contentDescription = "Enter a barcode or SKU")
       }

@@ -196,6 +196,21 @@ describe('computeCheckoutSessionTotals', () => {
     expect(totals.totalCents).toBe(11408)
   })
 
+  it('names the optional lines the buyer took, so the parts still sum to the charge (AGL-3635)', () => {
+    const totals = computeCheckoutSessionTotals(
+      [LINE],
+      { ...SESSION, amount_total: SESSION.amount_total + 198 },
+      { feeCents: FEE_CENTS, extrasCents: 198 },
+    )
+    expect(totals.extrasCents).toBe(198)
+    expect(totals.itemsCents).toBe(10000)
+    expect(
+      totals.itemsCents + totals.shippingCents + totals.taxCents - totals.discountCents + (totals.extrasCents ?? 0),
+    ).toBe(totals.totalCents)
+    // No extras, no field: an order from before reads the same.
+    expect(computeCheckoutSessionTotals([LINE], SESSION, { feeCents: FEE_CENTS })).not.toHaveProperty('extrasCents')
+  })
+
   it('closes the exact 1000c gap AGL-1641 had to route around', () => {
     // What the pre-fix webhook stored: `shippingCents` left to default.
     const preFix = computeOrderTotals([LINE], {

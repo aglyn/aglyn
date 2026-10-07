@@ -5,6 +5,192 @@
   ],
   "timeZone": "UTC",
   "functions": {
+    "accountPushSwitch": {
+      "module": "libs/aglyn/src/lib/app-utils/mobile-push.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            "content.order",
+            "content",
+            true
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            null,
+            "content.order",
+            "content",
+            false
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {},
+            "content.order",
+            "content",
+            true,
+            {
+              "content": false
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "accountTypes": {
+                "content.order": {
+                  "push": false
+                }
+              }
+            },
+            "content.order",
+            "content",
+            true
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "accountTypes": {
+                "content.order": {
+                  "push": true
+                }
+              },
+              "account": {
+                "content": {
+                  "push": false
+                }
+              }
+            },
+            "content.order",
+            "content",
+            true
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "account": {
+                "content": {
+                  "push": false
+                }
+              }
+            },
+            "content.order",
+            "content",
+            true
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "account": {
+                "content": {
+                  "push": true
+                }
+              }
+            },
+            "content.order",
+            "content",
+            false,
+            {
+              "content": false
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "accountTypes": {
+                "content.order": {
+                  "console": false
+                }
+              }
+            },
+            "content.order",
+            "content",
+            true
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "accountTypes": {
+                "content.order": {
+                  "console": true
+                }
+              },
+              "account": {
+                "content": {
+                  "console": false
+                }
+              }
+            },
+            "content.order",
+            "content",
+            false
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "account": {
+                "content": {
+                  "console": false
+                }
+              }
+            },
+            "content.order",
+            "content",
+            true
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "accountTypes": {
+                "content.booking": {
+                  "push": false
+                }
+              }
+            },
+            "content.order",
+            "content",
+            true
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "account": {
+                "content": {
+                  "email": true
+                }
+              }
+            },
+            "content.order",
+            "content",
+            true,
+            {
+              "content": true
+            }
+          ],
+          "result": true
+        }
+      ]
+    },
     "apportionCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "cases": [

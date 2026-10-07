@@ -226,6 +226,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     "alwaysOn": true,
     "description": "Upload your own fonts and pick from the Google Fonts catalog for your site's theme."
   },
+  {
+    "id": "post-purchase",
+    "label": "Tracking and protection",
+    "alwaysOnForWorkspace": true,
+    "description": "Parcel tracking through AfterShip, package protection at checkout through Route, and Narvar order tracking, with the store's own accounts.",
+    "siteOff": {
+      "stops": "Switching Tracking and protection off for this site stops offering package protection in its cart, following new parcels and sending new orders to Narvar.",
+      "keeps": "Protection already bought stays open with Route, connected accounts stay connected, and it keeps working on the workspace's other sites."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -254,6 +264,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "sales-channels": "routes",
   "marketing-platforms": "console-only",
   "fonts": "console-only",
+  "post-purchase": "console-only",
 }
 
 /**

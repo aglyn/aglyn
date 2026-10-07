@@ -24,6 +24,10 @@ import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import { consumeRateLimit, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
 import { verifyOrderStatusToken } from './order-status-token'
+import { resolvePluginTrackingPages } from '@aglyn/aglyn/plugin-manager/plugin-tracking-pages'
+
+/** How long the page waits for a tracking service's own page link (AGL-3635). */
+export const TRACKING_PAGE_TIMEOUT_MS = 1_500
 
 /** Status lookups one address may make per site, per ten minutes. */
 export const ORDER_STATUS_LOOKUPS_PER_WINDOW = 60
@@ -142,6 +146,23 @@ export const orderStatusHandler: PluginApiHandler = async (req, res) => {
       number: CommerceModel.formatOrderNumber(order, orderId),
       actions: await actionsFor({ hostId, orderId, order, token }),
     })
+    // A tracking service's own page for each parcel, where the merchant
+    // follows them through one (AGL-3635); the carrier's link otherwise.
+    const pages = await resolvePluginTrackingPages(
+      view.shipments
+        .filter((shipment) => shipment.trackingNumber)
+        .map((shipment) => ({
+          hostId,
+          recordId: orderId,
+          carrier: shipment.carrier,
+          trackingNumber: String(shipment.trackingNumber),
+        })),
+      { timeoutMs: TRACKING_PAGE_TIMEOUT_MS },
+    )
+    for (const shipment of view.shipments) {
+      const page = shipment.trackingNumber ? pages.get(shipment.trackingNumber) : undefined
+      if (page) shipment.trackingUrl = page
+    }
     return res.status(200).json(view)
   } catch (error) {
     console.error('orderStatus failed', error)

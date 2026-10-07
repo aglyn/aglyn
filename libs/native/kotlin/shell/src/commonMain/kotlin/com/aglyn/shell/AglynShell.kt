@@ -125,6 +125,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
       is Route.Screen -> services.registry.screen(route.screenId)?.title ?: "Not found"
       is Route.Console -> "Console"
       Route.Switcher -> "Switch site"
+      Route.NotificationSettings -> "Notifications"
       null -> destinations.firstOrNull { it.key == navigator.top }?.label ?: ""
     }
     Scaffold(
@@ -159,6 +160,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
           is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, workspace.site != null) { navigator.back() }
           is Route.Console -> services.console(route.path) { navigator.back() }
           Route.Switcher -> SwitcherScreen(services.workspace, workspace) { navigator.back() }
+          Route.NotificationSettings -> NotificationSettingsScreen(services, uid)
           null -> when {
             navigator.top == ShellNavigator.HOME -> HomeScreen(services, context, workspace, widthClass, navigator)
             navigator.top == ShellNavigator.MORE -> MoreScreen(services, context)
@@ -166,7 +168,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
             navigator.top == ShellNavigator.CONSOLE -> services.console(
               com.aglyn.pluginhost.scopedConsolePath("/", com.aglyn.pluginhost.ConsoleScope.SITE, context.orgSlug, context.hostSlug),
             ) { navigator.select(ShellNavigator.HOME) }
-            navigator.top == ShellNavigator.SETTINGS -> SettingsScreen(services)
+            navigator.top == ShellNavigator.SETTINGS -> SettingsScreen(services) { navigator.push(Route.NotificationSettings) }
             navigator.top.startsWith("screen:") ->
               PluginScreenHost(services, context, navigator.top.removePrefix("screen:"), emptyMap(), workspace.site != null) {
                 navigator.select(ShellNavigator.HOME)

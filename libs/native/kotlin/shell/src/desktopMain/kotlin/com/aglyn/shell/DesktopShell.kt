@@ -17,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.swing.Swing
+import kotlinx.coroutines.launch
 
 /**
  * The shell's services on the JVM desktop: Identity Toolkit REST for auth,
@@ -71,10 +72,25 @@ object DesktopShell {
     val config = AglynConfig.read(env, if (app == NativeApp.POS) AglynAppId.POS else AglynAppId.AGLYN)
     config.problems().forEach { System.err.println("Aglyn: $it") }
     val http = defaultHttpClient()
-    val auth = IdentityToolkitAuthSession(http, config.firebase.apiKey, config.authEmulatorHost)
-    val firestore = RestFirestoreReader(http, config.firebase.projectId, config.firestoreEmulatorHost, { auth.idToken(false) })
+    // One kept session per app and Firebase project, so an emulator run never restores into production.
+    val auth = IdentityToolkitAuthSession(
+      http,
+      config.firebase.apiKey,
+      config.authEmulatorHost,
+      credentials = com.aglyn.core.CredentialStores.forOs(),
+      credentialKey = "Aglyn/${config.app.wire}/${config.firebase.projectId}",
+    )
+    val firestore = RestFirestoreReader(
+      http,
+      config.firebase.projectId,
+      config.firestoreEmulatorHost,
+      { auth.idToken(false) },
+      listen = com.aglyn.core.GrpcFirestoreListen(config.firebase.projectId, config.firestoreEmulatorHost),
+      freshIdToken = { auth.idToken(true) },
+    )
     val prefs = JavaPreferencesStore(if (app == NativeApp.POS) "com/aglyn/pos" else "com/aglyn/app")
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Swing)
+    scope.launch { auth.restore() }
     val registry = NativePluginRegistry()
     registry.load(manifest).failed.forEach { System.err.println("Aglyn: plugin ${it.pluginId}: ${it.error}") }
     // The seeded emulator member (tools/scripts/seed-native-emulator.mjs) fills the
@@ -97,6 +113,7 @@ object DesktopShell {
       console = { path, onExit -> ConsoleView(config.consoleOrigin, path, auth, config.brandName, onExit) },
       debugSignIn = debugSignIn,
       peripherals = peripherals,
+      writer = firestore,
     )
   }
 }

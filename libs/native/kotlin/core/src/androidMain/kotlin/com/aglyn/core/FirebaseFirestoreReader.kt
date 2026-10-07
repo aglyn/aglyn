@@ -4,6 +4,7 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -80,6 +81,13 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
   private fun toSdk(value: Any?): Any? = when (value) {
     is FirestoreTimestamp -> Timestamp(value.seconds, value.nanos)
     else -> value
+  }
+}
+
+/** [FirestoreWriter] on the Firebase Android SDK: `set` with `SetOptions.merge()`, as the web SDK's merge. */
+class FirebaseFirestoreWriter(private val db: FirebaseFirestore) : FirestoreWriter {
+  override suspend fun merge(path: String, data: Map<String, Any?>) {
+    db.document(path).set(data, SetOptions.merge()).await()
   }
 }
 

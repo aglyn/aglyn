@@ -17,8 +17,27 @@ and behavior. The apps are:
 
 | app | bundle / package | what it is |
 | -- | -- | -- |
-| **Aglyn** | `com.aglyn.app` | Manages the workspace: sites, team, products, orders, forms, media, analytics, bookings, CRM, emails, inbox and notifications. The Besigner and the long-tail console screens open in an authenticated WebView. There is no native builder. |
+| **Aglyn** | `com.aglyn.app` | Manages the workspace: sites, team, products, orders, forms, media, analytics, bookings, CRM, emails, inbox and notifications. Every console area is a native screen. Only the Besigner opens in a web view, inside the app. There is no native builder. |
 | **Aglyn POS** | `com.aglyn.pos` | The register: fast item picking, Stripe Terminal (Tap to Pay and Bluetooth readers on mobile, smart readers everywhere), tips, receipts and booking payments. |
+
+### Native console, Besigner-only web view (binding, Zach 2026-10-07)
+
+The apps manage the workspace natively. Every console area the Aglyn app
+covers (sites, team, products, orders, forms, media, analytics, bookings, CRM,
+emails, inbox, notifications and settings) is a native screen with native
+reads and writes, never a console page loaded in a web view.
+
+The **Besigner** is the only web content. It opens in an authenticated web
+view *inside* the app, never in the system browser. A console link or
+notification that targets a non-Besigner page goes to the matching native
+screen. If no native screen exists yet, that is a gap to build; it never falls
+back to opening the console web page.
+
+The one exception is OAuth sign-in. Google refuses sign-in from embedded web
+views, so Google sign-in uses the platform's auth sheet
+(`ASWebAuthenticationSession`, Android Custom Tabs, or the desktop
+loopback/PKCE flow below). That sheet only signs the user in; it never shows
+console pages.
 
 Both apps run on phone, tablet and desktop. UI quality is the bar. The iOS and
 macOS apps use SwiftUI with the standard navigation and controls. The Android
@@ -80,7 +99,7 @@ libs/native/apple/                       Swift package "AglynKit" (iOS 17+, macO
   Package.swift
   Sources/AglynCore/                     auth, workspace/site, API client, Firestore reads, push, deep links, config
   Sources/AglynUI/                       theme (Tokens.generated.swift), components, adaptive layout
-  Sources/AglynWebView/                  authenticated console WebView + bridge
+  Sources/AglynWebView/                  authenticated Besigner web view + bridge
   Sources/AglynPluginHost/               registrars, registry, deep-link resolution
   Sources/AglynContracts/                GENERATED contracts (Contracts.generated.swift + JSON resource)
   Sources/AglynHardware/                 POS peripherals: ESC/POS printers, cash drawer, HID scanners (macOS/iPad)
@@ -151,8 +170,8 @@ behavior, and keep its specs' cases.
 | API client | `api-client.ts` | `ConsoleAPIClient` (`URLSession`, async/await): bearer ID token, one forced refresh on 401, GET/idempotent retries on network/502/503/504 with 400·2ⁿ ms backoff, `Idempotency-Key`, `ConsoleAPIError(status, message)` with `consoleErrorMessage` wording | the same, on Ktor client (`OkHttp` engine on Android, `Java` engine on desktop) + kotlinx.serialization |
 | Firestore reads | `live-doc.ts`, `list-query.ts` | Firebase iOS SDK snapshot listeners; `ListQuery` runs the generated list declarations (§5) as SDK constraints, a page at a time plus one probe row | Android: Firebase Android SDK listeners. Desktop: **Firestore REST + gRPC `Listen`** (§4) |
 | workspace + site | `workspace.tsx`, `org-access.ts` | `WorkspaceStore` (`@Observable`): `users/{uid}/orgs`, `users/{uid}/hostMemberships where orgId ==`, persisted pick | `WorkspaceStore` (`StateFlow`), same queries |
-| console WebView | `libs/mobile/webview` | `WKWebView` signed in by POSTing the ID token to `/api/auth/session` (the console's own route; HttpOnly `__session` cookie into `WKHTTPCookieStore`); origin-checked bridge with the same method allowlist as `bridge-protocol.ts`; native back | Android `WebView` + `CookieManager`; desktop: the system browser with a one-time session handoff, because the JVM has no first-party WebView |
-| deep links | `plugin-host/src/lib/deep-links.ts` | the same grammar: strip `/{org}/hosts/{host}`, match registered patterns, otherwise WebView. Universal links on the console origin, plus the `aglyn://` scheme | App Links + `aglyn://`; desktop: `aglyn://` URL handler (macOS via the app, Windows via MSIX protocol registration) |
+| Besigner web view | `libs/mobile/webview` | Besigner paths only. `WKWebView` (iOS, iPadOS, macOS) signed in by POSTing the ID token to `/api/auth/session` (the console's own route; HttpOnly `__session` cookie into `WKHTTPCookieStore`); origin-checked bridge with the same method allowlist as `bridge-protocol.ts`; native back | Android `WebView` + `CookieManager`. Windows: an embedded web view inside the app window, never the system browser. The embedding library (WebView2 or JCEF) needs Zach's dependency approval first. |
+| deep links | `plugin-host/src/lib/deep-links.ts` | the same grammar: strip `/{org}/hosts/{host}`, match registered patterns. A Besigner path opens the Besigner web view; any other unmatched path opens the nearest native screen, never a web page. Universal links on the console origin, plus the `aglyn://` scheme | App Links + `aglyn://`; desktop: `aglyn://` URL handler (macOS via the app, Windows via MSIX protocol registration) |
 | theme | `libs/mobile/ui` + `tokens.generated.json` | `Tokens.generated.swift` (§7), applied through SwiftUI `tint`, semantic colors and `ShapeStyle`s; system fonts and Dynamic Type | `Tokens.generated.kt`, giving a Material 3 `ColorScheme` (light/dark) for `MaterialTheme`. Dynamic color stays off, so the brand palette holds |
 | layout | `useLayout()`, `SplitView` | `NavigationSplitView` on iPad/Mac, `TabView` + `NavigationStack` on iPhone; Mac adds `commands` (menus + shortcuts) and `WindowGroup`s for an order/product in its own window | `NavigationSuiteScaffold` (bar → rail → drawer by window size class) + `ListDetailPaneScaffold`; desktop adds a `MenuBar` with shortcuts and extra windows |
 | push | `apps/mobile/src/shell/push.ts` | APNs directly (§8): register, write `users/{uid}/devices/{installId}`, delete on sign-out, deep-link the tap | FCM directly (§8), same registry; desktop has no push in v1 (§8) |
@@ -198,7 +217,7 @@ A screen gets a `NativePluginContext`, the twin of `MobilePluginContext`:
   REST;
 - `api`;
 - `navigate(screenId, params)`;
-- `openConsolePath(path, scope)`.
+- `openBesigner(path, scope)`, which accepts Besigner paths only; there is no general console-page opener.
 
 ### Generated native manifest
 
@@ -278,7 +297,7 @@ repositories on 2026-10-07, and one was chosen per platform.
 | **iOS / iPadOS** | firebase-ios-sdk (SPM) + GoogleSignIn-iOS | Official GA, with full coverage: offline Firestore, FCM/APNs, App Attest. |
 | **macOS** (native, not Catalyst) | firebase-ios-sdk (SPM) + GoogleSignIn-iOS | The same Swift code as iOS. "Official beta", but Firestore, Storage, Functions, Messaging and App Check are all supported. The "partial" Auth cell is tested against the methods we use (email/password, Google, custom token). |
 | **Android** | Firebase Android SDK (BoM) | Official GA, full coverage. |
-| **Windows** (Compose Desktop / JVM) | **Identity Toolkit REST for Auth, Firestore REST for reads, grpc-java `Listen` for realtime, all with the user's ID token. Writes and uploads stay on our console API routes.** | It is the only option built on official, production Google APIs with the rules enforced. The C++ desktop SDK is officially not for shipping. GitLive's JVM SDK is alpha, untouched since 2025-10, and lacks Google sign-in and Storage. |
+| **Windows** (Compose Desktop / JVM) | **Identity Toolkit REST for Auth, Firestore REST for reads, grpc-java `Listen` for realtime, all with the user's ID token. Writes and uploads stay on our console API routes, except where the console itself writes Firestore as the owner (the notification settings map), which desktop writes the same way, a REST merge under the same rule.** | It is the only option built on official, production Google APIs with the rules enforced. The C++ desktop SDK is officially not for shipping. GitLive's JVM SDK is alpha, untouched since 2025-10, and lacks Google sign-in and Storage. |
 
 How this shapes the code:
 
@@ -291,20 +310,36 @@ How this shapes the code:
 - **`desktopMain` paging.** It pages with `runQuery` `structuredQuery`
   cursors, translated from the same generated declarations (§5).
 - **Desktop realtime.** `Listen` runs over gRPC with
-  `Authorization: Bearer <ID token>`, and the stream is re-opened when the
-  token refreshes. Firestore's docs confirm the rules for ID-token REST
-  calls. That `Listen` accepts a Firebase ID token is how the client SDKs
-  work, but the docs do not state it, so a spike proves it before the
-  Windows build depends on it.
-- **If the spike fails,** desktop falls back to REST with refresh on focus,
-  on pull, and every 30 seconds while a list is visible. It never falls back
-  to the C++ SDK. Desktop starts online-only with an in-memory cache.
+  `Authorization: Bearer <ID token>` (`GrpcFirestoreListen`, grpc-java over
+  OkHttp with the published `proto-google-cloud-firestore-v1` messages and a
+  hand-built method descriptor, so no protoc or generated stub). Each stream
+  opens with a freshly minted token and is re-opened after 50 minutes, before
+  that token expires; the new stream resends every row.
+- **What the spike proved (2026-10-07), and what it did not.** Against the
+  Firestore emulator (`demo-aglyn-native`), a `Listen` carrying the seeded
+  member's ID token streamed their own `users/{uid}` document to CURRENT; the
+  same token on another user's document, and no token at all, had the target
+  removed with `PERMISSION_DENIED` from the `users/{userId}` rule; a token
+  that is not a JWT was refused as `invalid jwt`. So the emulator evaluates
+  the rules with the token's claims. The emulator does not check a token's
+  signature or expiry the way production does, and nothing here has run
+  against production Firestore: that production `Listen` accepts a Firebase
+  ID token is still how the client SDKs work rather than something observed.
+- **The fallback is built in.** An observation whose stream fails three
+  times in a row without a snapshot (a refused or unreachable call) falls
+  back to REST, re-reading every 30 seconds while it is collected, so a
+  production refusal degrades to the polling desktop had before. A target the
+  rules remove is shown as a failure, not a fallback, since REST would be
+  refused the same way. It never falls back to the C++ SDK. Desktop is
+  online-only with an in-memory cache.
 - **Desktop Google sign-in** follows Google's recommended flow for desktop
   apps. The app opens the system browser and the redirect comes back to a
   loopback address, using PKCE. The resulting Google ID token goes to
   `accounts:signInWithIdp`. The refresh token is kept in the OS credential
-  store: Windows Credential Manager through JNA, and Keychain on macOS for
-  development runs of the JVM build.
+  store: Windows Credential Manager through JNA (`CredWriteW`/`CredReadW`/
+  `CredDeleteW` on `Advapi32`, a generic credential per app and Firebase
+  project), restored with `securetoken` and `accounts:lookup` at launch. A
+  macOS or Linux development run of the JVM build keeps it in memory.
 - **App Check enforcement on Firestore must wait** until a desktop custom
   provider exists, because Windows has no built-in attestation. Turning it
   on earlier would lock Windows out.

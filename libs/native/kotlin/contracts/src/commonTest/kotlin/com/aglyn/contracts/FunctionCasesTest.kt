@@ -4,9 +4,9 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -26,32 +26,15 @@ class FunctionCasesTest {
       it.jsonObject.getValue("args").jsonArray to it.jsonObject.getValue("result")
     }
 
-  /**
-   * A partial order as the TypeScript functions take it. The generated
-   * HostOrder holds status and every totals field required, so the gaps are
-   * filled the way liftLegacyOrder and a stored order fill them.
-   */
-  private fun order(json: JsonElement): HostOrder {
-    val obj = json.jsonObject
-    val filled = buildJsonObject {
-      for ((key, value) in obj) if (key != "totals") put(key, value)
-      if ("status" !in obj) put("status", JsonPrimitive("paid"))
-      (obj["totals"] as? JsonObject)?.let { totals ->
-        put("totals", buildJsonObject {
-          for (field in listOf("discountCents", "feeCents", "itemsCents", "shippingCents", "taxCents")) put(field, JsonPrimitive(0))
-          for ((key, value) in totals) put(key, value)
-        })
-      }
-    }
-    return ContractJsonFormat.decodeFromJsonElement(HostOrder.serializer(), filled)
-  }
+  /** A partial order as the TypeScript functions take it; every HostOrder field is optional. */
+  private fun order(json: JsonElement): HostOrder = ContractJsonFormat.decodeFromJsonElement(HostOrder.serializer(), json)
 
   private fun str(element: JsonElement?): String? = (element as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
 
   @Test
   fun everyFunctionHasCases() {
     assertEquals("UTC", root.getValue("timeZone").jsonPrimitive.content)
-    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents")))
+    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch")))
   }
 
   @Test
@@ -116,5 +99,16 @@ class FunctionCasesTest {
   fun contractValuesDecode() {
     assertEquals("Online", Contracts.orderChannelLabels["online"])
     assertTrue(Contracts.orderListQuery.fields.isNotEmpty())
+  }
+
+  @Test
+  fun accountPushSwitchCases() = cases("accountPushSwitch").forEach { (args, result) ->
+    val settings = (args[0] as? JsonObject)?.let { ContractJsonFormat.decodeFromJsonElement(AccountPushSettings.serializer(), it) }
+    val legacy = (args.getOrNull(4) as? JsonObject)?.mapValues { it.value.jsonPrimitive.boolean }
+    assertEquals(
+      result.jsonPrimitive.boolean,
+      accountPushSwitch(settings, args[1].jsonPrimitive.content, args[2].jsonPrimitive.content, args[3].jsonPrimitive.boolean, legacy),
+      args.toString(),
+    )
   }
 }
