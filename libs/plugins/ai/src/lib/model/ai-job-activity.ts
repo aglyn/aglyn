@@ -45,6 +45,37 @@ export interface AiJobPhaseSource {
   status: AiJobStatus
   review?: { reason: AiJobReviewReason } | null
   steps: ReadonlyArray<{ name: string; status: AiJobStepStatus }>
+  /** The wire summary's: the machine confirms this job's plan itself. */
+  autoConfirm?: boolean
+  /** When the job last moved; the wire summary's ISO string. */
+  updatedAt?: unknown
+}
+
+/**
+ * How long a self-confirming plan may sit parked before it reads as waiting
+ * for a person after all: a confirmation that never came.
+ */
+export const AI_JOB_SELF_CONFIRM_GRACE_MS = 5 * 60_000
+
+/**
+ * Whether a job is parked on a plan the machine is about to confirm itself
+ * (AGL-3596). A guided site start records its plan step — parking the job on
+ * the plan as every planned job does — and confirms it in the next write, so
+ * a surface that reads in between sees `needs_review` for an instant. That
+ * instant is the build going on, never a stop: read as one, it showed the
+ * person a failed site that turned green again a moment later. The job's
+ * `updatedAt` there is the clock its step was claimed at, so the grace covers
+ * the plan step's own run as well as the confirmation. Past
+ * {@link AI_JOB_SELF_CONFIRM_GRACE_MS} without the confirmation, the park is
+ * what it says.
+ */
+export function aiJobConfirmingOwnPlan(
+  job: Pick<AiJobPhaseSource, 'status' | 'review' | 'autoConfirm' | 'updatedAt'>,
+  now: number = Date.now(),
+): boolean {
+  if (job.status !== 'needs_review' || job.review?.reason !== 'plan' || job.autoConfirm !== true) return false
+  const at = typeof job.updatedAt === 'string' ? Date.parse(job.updatedAt) : NaN
+  return !Number.isFinite(at) || now - at < AI_JOB_SELF_CONFIRM_GRACE_MS
 }
 
 /**
@@ -73,7 +104,7 @@ export function aiJobPhase(job: AiJobPhaseSource): AiJobPhase {
   if (job.status === 'done' || job.status === 'failed' || job.status === 'canceled') {
     return job.status
   }
-  if (job.status === 'needs_review') {
+  if (job.status === 'needs_review' && !aiJobConfirmingOwnPlan(job)) {
     return job.review?.reason === 'plan' ? 'plan-ready' : 'attention'
   }
   if (job.status === 'needs_input') return 'attention'

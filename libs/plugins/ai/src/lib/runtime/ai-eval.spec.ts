@@ -182,15 +182,14 @@ describe('the floors', () => {
       .map((control) => scoreAiEvalCandidate(about, { ...reference, answer: control.answer }, audits).findings)
       .filter((findings) => findings.some((finding) => finding.startsWith('grid-')))
       .map((findings) => findings.filter((finding) => finding.startsWith('grid-')))
+    // Unsized items and a container written as the text "True" are settled before the check (AGL-3596).
     expect(grids).toEqual([
       ['grid-not-container'],
       ['grid-not-container'],
-      ['grid-item-size'],
       ['grid-gap'],
       ['grid-as-stack'],
       ['grid-as-stack'],
       ['grid-item-outside-container'],
-      ['grid-container-text'],
     ])
   })
 

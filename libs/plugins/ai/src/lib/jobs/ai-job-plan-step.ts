@@ -46,6 +46,7 @@ import {
   AI_SITE_FREE_PAGES,
   AI_SITE_PLAN_MAX_TOKENS,
   aiFreeSiteSectionsWithin,
+  aiSiteNameSentence,
   aiSitePlanShapeRefusal,
 } from '../model/ai-site-job'
 import { aiPlanFailureCopy, aiPlanRetryRefusal } from '../model/ai-job-failure-copy'
@@ -219,12 +220,16 @@ export function aiPlanBuildLines(
  * job's turn, whose length the Free page's wall is proven at.
  */
 export function aiPlanSiteLines(
-  job: Pick<AiJob, 'kind'>,
+  job: Pick<AiJob, 'kind'> & Partial<Pick<AiJob, 'inputs'>>,
   inventory: AiSiteInventory | null,
   capabilities: AiPlanCapabilities | null,
 ): string[] {
   if (job.kind !== 'site') return []
   const lines: string[] = []
+  // The business's own name, as the name to use (AGL-3596): the plan's search
+  // titles carry it, and an input line alone left the model free to coin one.
+  const name = job.inputs?.['businessName']
+  if (typeof name === 'string' && name.trim()) lines.push(aiSiteNameSentence(name.trim()))
   const pages = (inventory?.screens ?? []).filter((screen) => !screen.template)
   const starter = pages.find((screen) => screen.replaceable)
   if (pages.length) {
@@ -739,7 +744,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
             codes: result.violations.map((violation) => violation.code),
             refunded: false,
           }),
-          detail: review.message,
+          detail: review.detail ?? review.message,
           ...(retryRefusal ? { retryRefusal } : {}),
         },
       }

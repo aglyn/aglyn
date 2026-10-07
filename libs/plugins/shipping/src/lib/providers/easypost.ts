@@ -31,6 +31,8 @@ import {
 } from './http'
 import {
   ShippingProviderError,
+  type CarrierCredentialField,
+  type ConnectableCarrierForm,
   type LabelFormat,
   type ProviderAccount,
   type ProviderCarrierAccount,
@@ -413,5 +415,87 @@ export function createEasypostProvider(options: EasypostProviderOptions): Shippi
           authorization: 'connected' as const,
         }))
     },
+
+    /**
+     * The carriers a child can bring its own account for (AGL-3632), read off
+     * EasyPost's `GET /carrier_types`: each type names the credential fields
+     * it takes. A type with `custom_workflow` (UPS, FedEx and the like, which
+     * register through their own flows) is left out, and so is a field
+     * EasyPost marks `fake` or `readonly`, which it never wants typed.
+     */
+    async connectableCarriers(account): Promise<ConnectableCarrierForm[]> {
+      const rows = await call<EasypostCarrierType[]>(childKey(account), '/carrier_types')
+      return readCarrierTypes(rows)
+    },
+
+    async connectCarrierAccount(account, input) {
+      const credentials = Object.fromEntries(
+        Object.entries(input.credentials ?? {})
+          .map(([key, value]) => [key, String(value ?? '').trim()] as const)
+          .filter(([key, value]) => /^[a-z0-9_]{1,60}$/.test(key) && value),
+      )
+      const created = await call<{ id?: string; type?: string; readable?: string; description?: string }>(
+        childKey(account),
+        '/carrier_accounts',
+        {
+          method: 'POST',
+          body: {
+            carrier_account: {
+              type: input.carrier,
+              description: (input.description || `${input.carrier.replace(/Account$/, '')} (own account)`).slice(0, 100),
+              credentials,
+            },
+          },
+        },
+      )
+      const id = String(created?.id ?? '')
+      if (!id) throw new ShippingProviderError('EasyPost connected no account', 502, 'easypost')
+      const accountNumber = credentials['account_number'] || input.accountNumber
+      return {
+        carrierAccount: {
+          id,
+          carrier: String(created?.type ?? input.carrier).replace(/Account$/, '').toLowerCase(),
+          carrierName: String(created?.readable ?? input.carrier),
+          ...(accountNumber ? { accountNumber } : {}),
+          active: true,
+          platformOwned: false,
+          authorization: 'connected',
+        },
+      }
+    },
   }
+}
+
+/** One row of EasyPost's `GET /carrier_types`. */
+export interface EasypostCarrierType {
+  type?: string
+  readable?: string
+  fields?: {
+    credentials?: Record<string, { visibility?: string; label?: string } | undefined>
+    custom_workflow?: boolean
+  } | null
+}
+
+/** EasyPost's carrier types as connect forms: only the ones a form can connect. */
+export function readCarrierTypes(rows: unknown): ConnectableCarrierForm[] {
+  const forms: ConnectableCarrierForm[] = []
+  for (const row of Array.isArray(rows) ? (rows as EasypostCarrierType[]) : []) {
+    const type = String(row?.type ?? '')
+    const credentials = row?.fields?.credentials
+    if (!/^[A-Za-z0-9]{2,60}Account$/.test(type) || row?.fields?.custom_workflow === true || !credentials) continue
+    const fields: CarrierCredentialField[] = []
+    for (const [key, spec] of Object.entries(credentials)) {
+      const visibility = String(spec?.visibility ?? 'visible')
+      if (!/^[a-z0-9_]{1,60}$/.test(key) || visibility === 'fake' || visibility === 'readonly') continue
+      fields.push({
+        key,
+        label: String(spec?.label ?? key).slice(0, 80),
+        secret: visibility === 'password' || visibility === 'masked',
+        ...(visibility === 'checkbox' ? { checkbox: true } : {}),
+      })
+    }
+    if (!fields.length) continue
+    forms.push({ carrier: type, label: String(row.readable ?? type).slice(0, 80), flow: 'credentials', fields })
+  }
+  return forms.sort((a, b) => a.label.localeCompare(b.label))
 }

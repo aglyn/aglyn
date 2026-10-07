@@ -16,9 +16,10 @@
  */
 
 import type { AglynNotification } from '@aglyn/aglyn/app-utils/notifications'
+import { aiBuildOutcomeLine, aiSitePartialCopy } from './ai-build-progress'
 import { aiJobKindNoun } from './ai-job-activity'
-import { aiJobRefundCopy } from './ai-job-failure-copy'
-import type { AiJobKind, AiJobOutput, AiJobReviewReason, AiJobSitePublish } from './ai-jobs.types'
+import { aiCustomerSafeCopy, aiJobRefundCopy } from './ai-job-failure-copy'
+import type { AiJobItemLedger, AiJobKind, AiJobOutput, AiJobReviewReason, AiJobSitePublish } from './ai-jobs.types'
 
 /** The besigner segment each versioned resource lives under. */
 export const AI_JOB_BESIGNER_SEGMENT: Partial<Record<AiJobOutput['resource'], string>> = {
@@ -57,6 +58,8 @@ export interface AiJobNoticeSource {
   /** What the job spent, and gave back for a failure on our side (AGL-3596). */
   creditsSpent?: number
   refundedCredits?: number
+  /** A build's or a guided start's items (AGL-3616), so a finished one says what was not built. */
+  items?: AiJobItemLedger[] | null
 }
 
 /** A stopped job's sentence with what became of its credits, from the job's recorded give-back (AGL-3596). */
@@ -128,25 +131,43 @@ export function aiJobNotice(job: AiJobNoticeSource, to: AiJobNoticeTransition): 
       type: 'content.aiJobNeedsYou',
       level: 'warning',
       title: `Your ${noun === 'AI job' ? 'AI job' : `${noun} job`} needs you`,
-      body: withRefund(job, job.review?.message || job.error || 'It stopped for your decision. It waits in AI jobs.', 'needs_review'),
+      // The doctrine's own words never reach a customer (AGL-3596).
+      body: withRefund(
+        job,
+        aiCustomerSafeCopy(job.review?.message || job.error || 'It stopped for your decision. It waits in AI jobs.', { page: job.kind === 'page' }),
+        'needs_review',
+      ),
       link,
       ...scope,
     }
   }
   if (to === 'done') {
+    // A job that finished with part of it unbuilt (AGL-3596) says so in the
+    // words its page uses, as a warning: "done" alone hid a page that failed.
+    const items = job.items ?? []
+    const unbuilt = items.some((row) => row.status === 'failed' || row.status === 'skipped')
+    const level = unbuilt ? 'warning' : 'success'
+    const partial =
+      job.kind === 'site'
+        ? aiSitePartialCopy({ items, status: 'done' })
+        : unbuilt
+          ? aiBuildOutcomeLine({ items, status: 'done' })
+          : null
     // A guided site start publishes its pages when it finishes (AGL-3596):
     // with one live, the site is, and the build page lists any that stayed
     // drafts with the reason for each.
     const live = job.kind === 'site' ? (job.sitePublish?.published.length ?? 0) : 0
     if (live > 0) {
       const drafts = job.sitePublish?.drafts.length ?? 0
+      const stayed = drafts === 1 ? 'one that stayed a draft' : `${drafts} that stayed drafts`
       return {
         type: 'content.aiJobDone',
-        level: 'success',
-        title: 'Your site is live',
-        body:
-          drafts > 0
-            ? `Your pages are published, except ${drafts === 1 ? 'one that stayed a draft' : `${drafts} that stayed drafts`}. Open it to see why.`
+        level,
+        title: partial ? 'Your site is live, but part of it wasn’t built' : 'Your site is live',
+        body: partial
+          ? `${partial} ${drafts > 0 ? `What was built is published, except ${stayed}.` : 'What was built is published.'}`
+          : drafts > 0
+            ? `Your pages are published, except ${stayed}. Open it to see why.`
             : 'Your pages are published. Open it to view your site or edit your pages.',
         link,
         ...scope,
@@ -163,12 +184,12 @@ export function aiJobNotice(job: AiJobNoticeSource, to: AiJobNoticeTransition): 
             : `Your ${noun} is ready`
     return {
       type: 'content.aiJobDone',
-      level: 'success',
+      level,
       title,
       body:
         job.kind === 'insight' || job.kind === 'text'
           ? 'Open AI jobs to read it.'
-          : 'Everything it built is an unpublished draft until you publish it.',
+          : [partial, 'Everything it built is an unpublished draft until you publish it.'].filter(Boolean).join(' '),
       link,
       ...scope,
     }
@@ -177,7 +198,7 @@ export function aiJobNotice(job: AiJobNoticeSource, to: AiJobNoticeTransition): 
     type: 'content.aiJobFailed',
     level: 'warning',
     title: `Your ${noun === 'AI job' ? 'AI job' : `${noun} job`} stopped`,
-    body: withRefund(job, job.error || 'It stopped before it finished.', 'failed'),
+    body: withRefund(job, aiCustomerSafeCopy(job.error || 'It stopped before it finished.', { page: job.kind === 'page' }), 'failed'),
     link,
     ...scope,
   }

@@ -43,9 +43,14 @@ export const QUOTE_CACHE_TTL_MS = 10 * 60 * 1000
 const memory = new Map<string, { quotes: PluginShippingQuote[]; expiresAtMs: number }>()
 
 /** The cache key for a request. */
-export function quoteCacheKey(request: Omit<PluginShippingQuoteRequest, 'signal'>): string {
+export function quoteCacheKey(
+  request: Omit<PluginShippingQuoteRequest, 'signal'>,
+  /** Who answered: the platform's id, or `shipperhq` — a workspace that changes it is quoted afresh. */
+  source?: string,
+): string {
   const to = request.to
   const identity = JSON.stringify({
+    ...(source ? { source } : {}),
     host: request.hostId,
     to: [to.country, to.postalCode, to.state, to.city, to.line1, to.line2, to.residential]
       .map((part) => String(part ?? '').trim().toUpperCase()),

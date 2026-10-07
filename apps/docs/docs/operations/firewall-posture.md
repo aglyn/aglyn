@@ -357,6 +357,38 @@ anonymous curl  /signin                      429  the page challenge still stand
 A self-hosted proxy with bot rules of its own owes the same exemption; see
 [Environment variables → Link domains](../developers/self-hosting-environment.md#sequences-link-domains).
 
+### Shipping connectors (AGL-3613, AGL-3633)
+
+ShipStation pulls a store's orders from, and posts shipments to,
+`/api/commerce/shipstation/{hostId}`; ShippingEasy posts its shipment
+callback to `/api/commerce/shippingeasy/{hostId}`. Both callers are the
+shipping apps' own servers, which run no JavaScript and send no header we
+choose, so a challenge leaves the connector importing nothing and marking
+nothing shipped.
+
+`Shipping connector bypass` is DECLARED in `tools/scripts/lib/firewall-posture.mjs`
+with two groups, and is added to the console project's live config with
+`PATCH rules.insert` before the first live test of either connector — until
+then `firewall-drift.yml` reports it missing:
+
+| Group | Admits |
+| --- | --- |
+| `path pre /api/commerce/shipstation/` | ShipStation's Custom Store export and shipnotify for one site |
+| `path pre /api/commerce/shippingeasy/` | ShippingEasy's signed shipment callback for one site |
+
+Each route proves its caller before it reads anything — ShipStation by the
+site's HTTP Basic pair, ShippingEasy by an HMAC of the path, query and body
+under the merchant's API secret — and answers an unproven caller 401. Both
+keep a per-site, per-address rate limit of their own. The trailing slash in
+each prefix keeps a sibling path that merely starts the same way challenged.
+
+Check both directions the minute it goes in:
+
+```text
+anonymous curl  /api/commerce/shippingeasy/<hostId>  (POST, no signature)  401 from the route
+anonymous curl  /signin                                                    429 the page challenge still stands
+```
+
 ### The remaining gap: `aglyn-plugins` — reviewed, and deliberately open
 
 `GET /v1/security/firewall/config/active` still answers **404** for it, and a

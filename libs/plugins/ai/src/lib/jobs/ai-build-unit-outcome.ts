@@ -65,7 +65,12 @@ export function aiUnitFailure(slot: string, outcome: AiJobStepOutcome): AiJobIte
     return {
       slot,
       status: 'failed',
-      failure: { ours, reason: ours ? 'doctrine-refused' : 'review', message: outcome.review.message || AI_BUILD_UNIT_EMPTY_COPY },
+      failure: {
+        ours,
+        reason: ours ? 'doctrine-refused' : 'review',
+        message: outcome.review.message || AI_BUILD_UNIT_EMPTY_COPY,
+        ...(outcome.review.detail ? { detail: outcome.review.detail } : {}),
+      },
       outputs,
     }
   }

@@ -24,7 +24,9 @@ import {
   pluginShipmentRecords,
   type PluginShippableRecord,
 } from '@aglyn/aglyn/plugin-manager/plugin-shipment-records'
-import { createHash } from 'node:crypto'
+import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
+import { createHash, randomBytes } from 'node:crypto'
+import { SHIPPING_API_ROUTES } from '../constants/api-routes'
 import { SHIPPING_COLLECTIONS, SHIPPING_PLUGIN_ID } from '../constants/bundle-common'
 import type { LabelBillingMethod } from '../model/label-billing'
 import { isCompleteAddress, type ShippingHostSettings } from '../model/shipping-settings'
@@ -33,6 +35,7 @@ import type {
   ProviderCarrierAccount,
   ProviderCustomsItem,
   ProviderRate,
+  ProviderShipmentInput,
   ProviderVoidStatus,
   RateBadge,
   SignatureOption,
@@ -119,6 +122,10 @@ export interface StoredLabel {
   trackingUrl?: string
   labelUrl?: string
   commercialInvoiceUrl?: string
+  /** Opens `labels/file` for this label, when the provider serves the file only to its caller. */
+  fileToken?: string
+  /** The provider's handle on that file. */
+  providerDocumentRef?: string
   costCents: number
   currency: string
   billing?: LabelBillingRecord
@@ -393,7 +400,7 @@ export async function rateRecord(
     uid: actor.uid,
   })
   const signature = input.signature ?? settings.signature
-  const quote = await config.provider.quoteRates(account, {
+  const shipmentInput: Omit<ProviderShipmentInput, 'signal'> = {
     from,
     to,
     parcels: [{ weightGrams, lengthCm, widthCm, heightCm }],
@@ -410,7 +417,8 @@ export async function rateRecord(
           },
         }
       : {}),
-  })
+  }
+  const quote = await config.provider.quoteRates(account, shipmentInput)
   const owned = await carrierAccounts(actor.orgId, config, account)
   const rates: QuotedRate[] = quote.rates.map((rate) => {
     const carrierAccount = owned.find((one) => one.id === rate.carrierAccountId)
@@ -437,12 +445,22 @@ export async function rateRecord(
         recordId: input.recordId,
         kind: input.kind,
         quote: result,
+        // What was quoted, for a provider that announces the label from it
+        // rather than from a shipment it keeps (Sendcloud, AGL-3632).
+        shipmentInput,
+        providerId: config.providerId,
         insuranceCents: insure && valueCents > 0 ? valueCents : 0,
         expiresAtMs: Date.now() + QUOTE_HOLD_MS,
         expiresAt: new Date(Date.now() + QUOTE_HOLD_MS),
       })
   }
   return result
+}
+
+/** The address a label file is served at when the provider will not serve it to the merchant itself. */
+export function labelFileUrl(orgId: string, labelId: string, token: string): string {
+  const query = new URLSearchParams({ o: orgId, l: labelId, t: token })
+  return `${platformConsoleOrigin()}/api/${SHIPPING_API_ROUTES.labelFile}?${query.toString()}`
 }
 
 /** The label document's id for one attempt. */
@@ -474,7 +492,17 @@ export async function buyLabel(
     .doc(heldQuoteDocId(String(input.shipmentId)))
     .get()
   const hold = held.data() as
-    | { orgId: string; hostId: string; recordId: string; kind: LabelKind; quote: RecordQuote; insuranceCents: number; expiresAtMs: number }
+    | {
+        orgId: string
+        hostId: string
+        recordId: string
+        kind: LabelKind
+        quote: RecordQuote
+        insuranceCents: number
+        expiresAtMs: number
+        shipmentInput?: Omit<ProviderShipmentInput, 'signal'>
+        providerId?: string
+      }
     | undefined
   // The quote is the workspace's own, for this record, and still fresh: a
   // shipment id from another workspace, or another order, buys nothing.
@@ -483,7 +511,11 @@ export async function buyLabel(
     hold.orgId !== actor.orgId ||
     hold.hostId !== actor.hostId ||
     hold.recordId !== input.recordId ||
-    hold.expiresAtMs < Date.now()
+    hold.expiresAtMs < Date.now() ||
+    // Quoted on another platform than the one the workspace ships through
+    // now (it connected or disconnected its own account since): the rate
+    // means nothing here.
+    (hold.providerId !== undefined && hold.providerId !== config.providerId)
   ) {
     throw new ShippingFlowError('Those rates have expired. Get rates again.', 409)
   }
@@ -564,6 +596,7 @@ export async function buyLabel(
       format: settings.labelFormat,
       ...(hold.insuranceCents > 0 ? { insuranceCents: hold.insuranceCents } : {}),
       reference: `${actor.hostId}/${input.recordId}/${labelId}`,
+      ...(hold.shipmentInput ? { shipment: hold.shipmentInput } : {}),
     })
   } catch (error) {
     const message =
@@ -574,6 +607,11 @@ export async function buyLabel(
     throw new ShippingFlowError(message, 502)
   }
   const costCents = bought.amountCents > 0 ? bought.amountCents : rate.amountCents
+  // A provider that serves the label file only to its own caller (AGL-3632)
+  // gets an address of ours, opened by a token only this label carries, so
+  // the label prints, mails and links like any other.
+  const fileToken = !bought.labelUrl && bought.documentRef ? randomBytes(24).toString('base64url') : null
+  const labelUrl = fileToken ? labelFileUrl(actor.orgId, labelId, fileToken) : bought.labelUrl
   const purchased: Partial<StoredLabel> = {
     status: 'purchased',
     providerLabelId: bought.providerLabelId,
@@ -582,7 +620,8 @@ export async function buyLabel(
     serviceLabel: bought.serviceLabel || rate.label,
     trackingNumber: bought.trackingNumber,
     ...(bought.trackingUrl ? { trackingUrl: bought.trackingUrl } : {}),
-    labelUrl: bought.labelUrl,
+    labelUrl,
+    ...(fileToken ? { fileToken, providerDocumentRef: String(bought.documentRef) } : {}),
     ...(bought.commercialInvoiceUrl ? { commercialInvoiceUrl: bought.commercialInvoiceUrl } : {}),
     costCents,
     currency: bought.currency || rate.currency,
@@ -618,7 +657,7 @@ export async function buyLabel(
         carrier: String(purchased.carrier ?? ''),
         trackingNumber: bought.trackingNumber,
         ...(bought.trackingUrl ? { trackingUrl: bought.trackingUrl } : {}),
-        ...(/^https:\/\//.test(bought.labelUrl) ? { labelUrl: bought.labelUrl } : {}),
+        ...(/^https:\/\//.test(labelUrl) ? { labelUrl } : {}),
         labelRef: labelId,
         actorUid: actor.uid,
       })
@@ -661,6 +700,7 @@ export async function voidLabel(
   if (label.status !== 'purchased' && label.status !== 'void_rejected') {
     throw new ShippingFlowError('Only a bought label can be voided.', 409)
   }
+  assertVoidableHere(label, config)
   let status: ProviderVoidStatus
   try {
     status = await config.provider.voidLabel(account, {
@@ -673,6 +713,23 @@ export async function voidLabel(
     throw new ShippingFlowError(message, 502)
   }
   return (await settleVoid(actor.orgId, labelId, status)) ?? label
+}
+
+/**
+ * A label is voided where it was bought (AGL-3632). Once the workspace ships
+ * through another platform — its own account connected or disconnected
+ * since — the label's ids mean nothing to this one, and asking it would
+ * void nothing or, worse, something else.
+ */
+export function assertVoidableHere(label: Pick<StoredLabel, 'providerId'>, config: Pick<ShippingConfig, 'providerId'>): void {
+  if (label.providerId !== config.providerId) {
+    throw new ShippingFlowError('This label was bought through another shipping account. Void it there.', 409)
+  }
+}
+
+/** A workspace's label, or `null`. */
+export async function readLabel(orgId: string, labelId: string): Promise<StoredLabel | null> {
+  return ((await labelsRef(orgId).doc(labelId).get()).data() as StoredLabel | undefined) ?? null
 }
 
 /** Records a void's state, and gives the charge back once the provider refunded. */

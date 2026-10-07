@@ -297,6 +297,17 @@ export const AI_SITE_SUBMISSION_CHOICES: ReadonlyArray<{
  */
 export const AI_SITE_EMAIL_TYPE = 'reply'
 
+/**
+ * What a site job's plan and every unit it builds are told about the
+ * business's name (AGL-3596): that it is the name, used as written. Said on
+ * the job's own turn, never in a cached system block, because it is one
+ * site's. A model handed only what the business does named it itself —
+ * "Hillside Dog Grooming" was built as "Austin Paws Grooming".
+ */
+export function aiSiteNameSentence(name: string): string {
+  return `The business is named “${name}”: the site names it exactly that way, in the header, the footer, the copy and the search listing, and never by any other name.`
+}
+
 /** Where a job's inputs say submissions go, or `null` where they do not say. */
 export function aiSiteSubmissions(
   inputs: Readonly<Record<string, unknown>> | null | undefined,

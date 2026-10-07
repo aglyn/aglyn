@@ -86,5 +86,6 @@ made is canceled, and each tracking number it replaced is put back.
 ## Related
 
 - [Use ShipStation with Aglyn](use-shipstation.md)
+- [Use ShippingEasy with Aglyn](use-shippingeasy.md)
 - [Import and export store data](store-import-and-export.md)
 - [Commerce](overview.md#orders)

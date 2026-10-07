@@ -399,9 +399,9 @@ describe('the job each unit is built under', () => {
     expect(derived.inputs['sitePages']).toEqual(
       plan.screens.filter((screen) => screen.nav).map((screen) => ({ id: screen.id, label: screen.title, slug: screen.slug })),
     )
-    // Only the layout is told: a page or a form unit is not.
+    // A page unit is told them too, so its buttons may go to a page built after it; a form unit is not.
     expect(aiSiteUnitJob(siteJob({ plan }), units[1], built).inputs['sitePages']).toBeUndefined()
-    expect(aiSiteUnitJob(siteJob({ plan }), units[2], built).inputs['sitePages']).toBeUndefined()
+    expect(aiSiteUnitJob(siteJob({ plan }), units[2], built).inputs['sitePages']).toEqual(derived.inputs['sitePages'])
   })
 
   it('hands a page unit one screen, no creations, and the ids the scaffold built', () => {
