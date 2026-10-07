@@ -407,6 +407,11 @@
       },
       "mobile": {
         "$comment": "AGL-3621: the Aglyn app's store screens. Orders (list, detail, fulfill, refund, receipt print and share), products (list, edit, camera photos to the DAM, stock), barcode scan, and the sales and traffic dashboard; list and detail split side by side on tablets.",
+        "ios": {
+          "$comment": "AGL-3651: the Aglyn POS register (item grid, basket, checkout, receipt) and its card readers on iPhone, iPad and Mac; Tap to Pay and Bluetooth readers through the Stripe Terminal SDK on iPhone and iPad, smart readers everywhere. The Aglyn app's store screens open the console's pages until their native versions land.",
+          "module": "AglynCommercePlugin",
+          "register": "registerCommerceNative"
+        },
         "android": {
           "$comment": "AGL-3652: the Aglyn POS register (item grid, basket, checkout, receipt), its card readers panel and today's bookings at the counter; the Aglyn app's store screens open the console's pages until their native versions land.",
           "package": "com.aglyn.plugins.commerce",
@@ -415,7 +420,7 @@
         "contributes": {
           "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers"],
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
-          "widgets": ["commerce.today", "commerce.sales-trend"],
+          "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship"],
           "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
           "deepLinks": ["commerce.orders-page", "commerce.products-page"]
         }
@@ -2226,11 +2231,14 @@
       "register": {
         "console": "registerRedirectsConsole",
         "tenantApi": "registerRedirectsApi",
+        "consoleApi": "registerRedirectsConsoleApi",
         "consoleServerDeclarations": "registerRedirectsConsoleServerDeclarations"
       },
+      "apiPrefixes": ["redirects"],
       "mobile": {
         "$comment": "AGL-3620: the sample mobile registration. The site's rules as a native list (a split view on tablets), a dashboard count, a quick action, and the console's Redirects page opening natively from a link or a notification.",
         "ios": { "module": "AglynRedirectsPlugin", "register": "registerRedirectsNative" },
+        "android": { "package": "com.aglyn.plugins.redirects", "register": "registerRedirectsNative" },
         "contributes": {
           "screens": ["redirects.list"],
           "widgets": ["redirects.summary"],
@@ -2759,6 +2767,37 @@
       }
     },
     {
+      "id": "post-purchase",
+      "package": "@aglyn/plugins-post-purchase",
+      "register": {
+        "console": "registerPostPurchaseConsole",
+        "consoleApi": "registerPostPurchaseConsoleApi",
+        "serverDeclarations": "registerPostPurchaseServerDeclarations",
+        "subprocessors": "postPurchaseSubprocessors"
+      },
+      "apiPrefixes": ["post-purchase"],
+      "catalog": {
+        "order": 25,
+        "$comment": "AfterShip tracking, Route package protection and Narvar for the commerce plugin's orders (AGL-3635), each with the merchant's own account, through core's checkout-extras and tracking-pages seams and commerce's order events by name; it never imports commerce. No `requires` edge, for shipping's reason: a workspace cannot switch it off, so it runs only on a site where commerce is on (site-context.ts). On for every workspace, off for a site only when that site says so, and no release flag: every surface hides itself until the deployment sets POST_PURCHASE_VENDORS and POST_PURCHASE_TOKEN_KEY.",
+        "label": "Tracking and protection",
+        "alwaysOnForWorkspace": true,
+        "description": "Order tracking and package protection.",
+        "siteOff": {
+          "stops": "Stops protection and tracking for new orders.",
+          "keeps": "Bought protection stays in force."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "orderDetail"
+          ]
+        }
+      }
+    },
+    {
       "id": "tax-engines",
       "package": "@aglyn/plugins-tax-engines",
       "register": {
@@ -2849,6 +2888,52 @@
         "console": {
           "slots": [
             "hostSettings"
+          ]
+        }
+      }
+    },
+    {
+      "id": "fulfillment-networks",
+      "package": "@aglyn/plugins-fulfillment-networks",
+      "register": {
+        "console": "registerFulfillmentNetworksConsole",
+        "consoleApi": "registerFulfillmentNetworksConsoleApi",
+        "serverDeclarations": "registerFulfillmentNetworksServerDeclarations",
+        "consoleServerDeclarations": "registerFulfillmentNetworksConsoleServerDeclarations",
+        "subprocessors": "fulfillmentNetworksSubprocessors"
+      },
+      "apiPrefixes": [
+        "fulfillment-networks"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's connection to the merchant's OWN ShipBob or Amazon Multi-Channel Fulfillment account, its grant sealed, with its settings, its last stock count and its log subcollection (AGL-3634). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "fulfillmentNetworkConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One paid order's hand-off to one network: the lines sent, the network's order and the parcels read back (AGL-3634). Written by the order-event intake and the console job.",
+          "name": "fulfillmentNetworkOrders",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 26,
+        "$comment": "Third-party logistics for the commerce plugin's orders (AGL-3634): paid orders routed to the merchant's OWN ShipBob or Amazon Multi-Channel Fulfillment account, shipments and tracking written back through core's shipment-records seam, the units a network holds published on core's fulfillment-providers seam, and stock counts set through core's stock-levels seam; it imports neither commerce nor shipping. Sold with commerce (`features.commerce`), no price of its own. On for every workspace, off for a site only when that site says so, and no release flag: nothing draws until the console holds FULFILLMENT_NETWORKS_TOKEN_KEY and a network's app credentials (SHIPBOB_CLIENT_ID/SECRET, or AMAZON_SP_API_APPLICATION_ID with AMAZON_SP_API_LWA_CLIENT_ID/SECRET).",
+        "label": "Fulfillment networks",
+        "alwaysOnForWorkspace": true,
+        "description": "Paid orders shipped by your own ShipBob or Amazon Multi-Channel Fulfillment account, with tracking back on the order and stock counts in step.",
+        "siteOff": {
+          "stops": "Switching Fulfillment networks off for this site stops its paid orders going to ShipBob or Amazon, and stops their shipments and stock counts coming back.",
+          "keeps": "The connections and every order already sent are kept, and what a network already shipped stays on the order."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "orderDetail"
           ]
         }
       }

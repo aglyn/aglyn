@@ -27,14 +27,9 @@ class PluginHostTest {
   }
 
   @Test
-  fun holdsAQuickActionToExactlyOneTarget() {
-    val r = registry.registrarFor("a")
-    assertTrue(assertFailsWith<IllegalArgumentException> { r.quickAction("a.go", "Go", "add", 1) }.message!!.contains("exactly one"))
-    assertTrue(
-      assertFailsWith<IllegalArgumentException> { r.quickAction("a.go", "Go", "add", 1, screen = "a.list", consolePath = "/a") }
-        .message!!.contains("exactly one"),
-    )
-    r.quickAction("a.go", "Go", "add", 1, screen = "a.list")
+  fun aQuickActionOpensANativeScreen() {
+    registry.registrarFor("a").quickAction("a.go", "Go", "add", 1, screen = "a.list")
+    assertEquals("a.list", registry.quickActions(NativeApp.AGLYN).single { it.id == "a.go" }.screen)
   }
 
   @Test
@@ -115,8 +110,13 @@ class DeepLinksTest {
   }
 
   @Test
-  fun opensEveryOtherConsolePathInTheConsoleAndRefusesWhatIsNotAConsoleLink() {
-    assertEquals(NativeLinkTarget.Console("/acme/hosts/shop/besigner"), DeepLinks.resolve("/acme/hosts/shop/besigner", links))
+  fun opensABesignerPageInTheBesignerAndNeverAnotherConsolePage() {
+    assertEquals(
+      NativeLinkTarget.Besigner("/acme/hosts/shop/screens/s1/versions/v2/besigner"),
+      DeepLinks.resolve("https://app.aglyn.com/acme/hosts/shop/screens/s1/versions/v2/besigner", links),
+    )
+    assertEquals(NativeLinkTarget.Unmatched("/acme/hosts/shop/besigner"), DeepLinks.resolve("/acme/hosts/shop/besigner", links))
+    assertEquals(NativeLinkTarget.Unmatched("/acme/hosts/shop/media"), DeepLinks.resolve("/acme/hosts/shop/media", links))
     assertNull(DeepLinks.resolve("//evil.example/x", links))
     assertNull(DeepLinks.resolve("javascript:alert(1)", links))
     assertNull(DeepLinks.consolePathOf(""))
@@ -138,23 +138,49 @@ class DeepLinksTest {
   }
 }
 
-class ConsoleScreenTest {
+class UpcomingScreenTest {
   @Test
-  fun registersADeclaredScreenTheConsoleServes() {
+  fun registersADeclaredScreenThatIsNotNativeYetAsUpcoming() {
     val registry = NativePluginRegistry()
-    registry.registrarFor("a").consoleScreen("a.orders", "Orders", "/commerce/orders")
+    registry.registrarFor("a").upcomingScreen("a.orders", "Orders")
     val screen = registry.screen("a.orders")!!
-    assertEquals("/commerce/orders", screen.consolePath)
-    assertEquals(ConsoleScope.SITE, screen.consoleScope)
+    assertTrue(screen.upcoming)
     assertTrue(screen.requiresSite)
-    assertEquals("/acme/hosts/shop/commerce/orders", scopedConsolePath(screen.consolePath!!, screen.consoleScope, "acme", "shop"))
+  }
+}
+
+class BesignerPathsTest {
+  @Test
+  fun acceptsTheEditorRoutesOnly() {
+    val yes = listOf(
+      "/acme/hosts/shop/theme",
+      "/acme/hosts/shop/screens/s1/versions/v2",
+      "/acme/hosts/shop/screens/s1/versions/v2/besigner",
+      "/acme/hosts/shop/screens/s1/versions/v2/preview?device=phone",
+      "/acme/hosts/shop/screens/s1/versions/v2/view",
+      "/acme/hosts/shop/components/c1/versions/v1/besigner",
+      "/acme/hosts/shop/layouts/l1/versions/v1/preview",
+      "/acme/hosts/shop/sequences/d1/versions/v1/besigner",
+      "/acme/hosts/shop/templates/t1/besigner",
+      "/acme/hosts/shop/emails/order-receipt/versions/v1/besigner",
+      "/admin/emails/welcome/versions/v1/besigner",
+      "/admin/sites/h1/preview/screens/s1",
+    )
+    val no = listOf(
+      "/", "", "/acme", "/acme/crm", "/acme/hosts/shop", "/acme/hosts/shop/screens", "/acme/hosts/shop/media",
+      "/acme/hosts/shop/products/orders", "/acme/hosts/shop/redirects", "/acme/hosts/shop/settings/team",
+      "/acme/hosts/shop/screens/s1/versions/v2/publish", "/acme/hosts/shop/screens/../media/x/versions/v/besigner",
+      "/acme/hosts/shop/screens//versions/v2/besigner", "/admin", "/admin/sites/h1", "/billing/plans",
+      "acme/hosts/shop/theme", "https://evil.example/acme/hosts/shop/theme",
+    )
+    for (path in yes) assertTrue(BesignerPaths.isBesignerPath(path), path)
+    for (path in no) assertTrue(!BesignerPaths.isBesignerPath(path), path)
   }
 
   @Test
-  fun refusesAConsoleScreenThatIsNotAConsolePath() {
-    val error = assertFailsWith<IllegalArgumentException> {
-      NativePluginRegistry().registrarFor("a").consoleScreen("a.orders", "Orders", "commerce/orders")
-    }
-    assertTrue(error.message!!.contains("starts with /"))
+  fun buildsAPagesBesignerPathUnderTheSite() {
+    val path = BesignerPaths.screen("s1", "v2")
+    assertEquals("/acme/hosts/shop/screens/s1/versions/v2/besigner", scopedConsolePath(path, ConsoleScope.SITE, "acme", "shop"))
+    assertTrue(BesignerPaths.isBesignerPath(scopedConsolePath(path, ConsoleScope.SITE, "acme", "shop")))
   }
 }

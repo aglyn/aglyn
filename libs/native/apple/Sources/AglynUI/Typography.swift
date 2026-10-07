@@ -20,24 +20,48 @@ public enum AglynFonts {
     registered = true
     CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
     #if os(iOS)
-      // Navigation bar titles are the one place SwiftUI takes its face from UIKit.
-      let large = AglynTokens.Typography.h3
-      let inline = AglynTokens.Typography.h6
-      let appearance = UINavigationBar.appearance()
-      if let face = UIFont(name: AglynTokens.fontPostScriptName, size: large.size) {
-        appearance.largeTitleTextAttributes = [
-          .font: UIFontMetrics(forTextStyle: .largeTitle).scaledFont(for: face.withWeight(700))
-        ]
-      }
-      if let face = UIFont(name: AglynTokens.fontPostScriptName, size: inline.size) {
-        appearance.titleTextAttributes = [
-          .font: UIFontMetrics(forTextStyle: .headline).scaledFont(for: face.withWeight(600))
-        ]
-      }
+      styleNavigationBars()
     #endif
   }
 
   @MainActor private static var registered = false
+
+  #if os(iOS)
+    /// Navigation bar titles are the one place SwiftUI takes its face from
+    /// UIKit. The bar reads its title fonts from its `UINavigationBarAppearance`
+    /// objects (the legacy `largeTitleTextAttributes` is ignored once one is
+    /// set), so the face goes on each: the standard and compact bars keep the
+    /// system's default background, the scroll-edge bar its transparent one.
+    @MainActor
+    static func styleNavigationBars() {
+      let large = AglynTokens.Typography.h3
+      let inline = AglynTokens.Typography.h6
+      guard let largeFace = UIFont(name: AglynTokens.fontPostScriptName, size: large.size),
+        let inlineFace = UIFont(name: AglynTokens.fontPostScriptName, size: inline.size)
+      else { return }
+      let largeTitle: [NSAttributedString.Key: Any] = [
+        .font: UIFontMetrics(forTextStyle: .largeTitle).scaledFont(for: largeFace.withWeight(700))
+      ]
+      let title: [NSAttributedString.Key: Any] = [
+        .font: UIFontMetrics(forTextStyle: .headline).scaledFont(for: inlineFace.withWeight(600))
+      ]
+      let standard = UINavigationBarAppearance()
+      standard.configureWithDefaultBackground()
+      let edge = UINavigationBarAppearance()
+      edge.configureWithTransparentBackground()
+      for appearance in [standard, edge] {
+        appearance.largeTitleTextAttributes = largeTitle
+        appearance.titleTextAttributes = title
+      }
+      let bar = UINavigationBar.appearance()
+      bar.standardAppearance = standard
+      bar.compactAppearance = standard
+      bar.scrollEdgeAppearance = edge
+      bar.compactScrollEdgeAppearance = edge
+      bar.largeTitleTextAttributes = largeTitle
+      bar.titleTextAttributes = title
+    }
+  #endif
 }
 
 #if canImport(UIKit)

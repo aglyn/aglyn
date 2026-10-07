@@ -95,6 +95,8 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
     'a package import creates campaigns and their draft sends; reads the email design screens they name (AGL-3535)',
   'libs/plugins/marketing/src/lib/components/host-experiments-card.component.tsx':
     'writes experiments through a batch; names the screen under test',
+  'tools/e2e/ai-guided-start-local.e2e.mjs':
+    'writes the owner’s legal acceptance and the workspace’s AI release flag; reads the screens the guided start built through the UI (AGL-3596)',
   'tools/e2e/besigner-editors.e2e.mjs': 'seeds components and templates; reads the seeded home screen',
   'tools/e2e/presence-two-session.e2e.mjs': 'seeds members and roles; reads the seeded home screen',
   'tools/e2e/save-as-template.e2e.mjs': 'seeds layouts, components and templates; reads screens',

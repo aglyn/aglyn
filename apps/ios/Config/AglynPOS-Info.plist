@@ -30,6 +30,12 @@
 	<string>$(AGLYN_DEBUG_EMAIL)</string>
 	<key>AGLYN_DEBUG_PASSWORD</key>
 	<string>$(AGLYN_DEBUG_PASSWORD)</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Aglyn POS connects to your Bluetooth card reader to take card payments.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Card payments need this device's location, as card networks require.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>The camera reads product barcodes so you can find and sell items quickly.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

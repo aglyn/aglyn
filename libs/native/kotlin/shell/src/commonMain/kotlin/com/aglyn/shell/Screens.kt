@@ -131,7 +131,7 @@ internal fun MoreScreen(services: ShellServices, context: NativePluginContext) {
       AglynListItem(
         title = action.title,
         icon = AglynIcons.named(action.icon),
-        onClick = { context.navigate(action.screen!!, action.params) },
+        onClick = { context.navigate(action.screen, action.params) },
         modifier = Modifier.testTag("more-${action.id}"),
       )
     }
@@ -148,12 +148,16 @@ internal fun PluginScreenHost(
   onExit: () -> Unit = {},
 ) {
   val screen = services.registry.screen(screenId)
-  val consolePath = screen?.consolePath
   when {
     screen == null -> EmptyState("This page is not available", body = "Update the app to open it.", icon = AglynIcons.named("error"))
     screen.requiresSite && !hasSite -> EmptyState("Pick a site first", body = "This page shows one site's data.", icon = AglynIcons.named("public"))
-    consolePath != null ->
-      services.console(com.aglyn.pluginhost.scopedConsolePath(consolePath, screen.consoleScope, context.orgSlug, context.hostSlug), onExit)
+    screen.upcoming -> EmptyState(
+      "${screen.title} is coming to the app",
+      body = "This part of ${services.config.brandName} is on its way to the app.",
+      icon = AglynIcons.named(screen.icon ?: "extension"),
+      action = { OutlinedButton(onClick = onExit) { Text("Back") } },
+      modifier = Modifier.testTag("upcoming-${screen.id}"),
+    )
     else -> screen.content(context, params)
   }
 }
@@ -197,7 +201,7 @@ internal fun NotificationsScreen(services: ShellServices, uid: String, context: 
 }
 
 @Composable
-internal fun SettingsScreen(services: ShellServices) {
+internal fun SettingsScreen(services: ShellServices, onNotificationSettings: () -> Unit = {}) {
   val auth by services.auth.state.collectAsState()
   val user = (auth as? com.aglyn.core.AuthState.SignedIn)?.user
   val scope = rememberCoroutineScope()
@@ -207,6 +211,16 @@ internal fun SettingsScreen(services: ShellServices) {
       title = user?.displayName ?: user?.email ?: "Signed in",
       supporting = user?.email,
       icon = AglynIcons.named("settings"),
+    )
+    HorizontalDivider()
+    SectionHeader("Preferences")
+    AglynListItem(
+      title = "Notifications",
+      supporting = "Choose what is sent as push",
+      icon = AglynIcons.named("notifications"),
+      trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
+      onClick = onNotificationSettings,
+      modifier = Modifier.testTag("settings-notifications"),
     )
     HorizontalDivider()
     Column(Modifier.padding(space(2f)).widthIn(max = 480.dp).fillMaxWidth()) {

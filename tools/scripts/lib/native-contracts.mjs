@@ -26,6 +26,8 @@
  * tools/scripts/mobile-pure-modules.json; a shape the translation has no
  * honest native form for fails by name (`Type.field: why`), and the config
  * may then omit the field, read it as JSON, or narrow a number to an integer.
+ * It may also make a field optional where the stored documents do not hold
+ * it on every record, so the native decoder takes the record without it.
  */
 
 export const SWIFT_CONTRACTS_FILE = 'libs/native/apple/Sources/AglynContracts/Contracts.generated.swift'
@@ -56,7 +58,9 @@ export const camelFromConstant = (name) => {
  * `config` is tools/scripts/native-contracts.json: `modules` maps a module
  * path to the `types` and `values` it exports to native; `ints`, `json` and
  * `omit` name fields (`Type.field`) that read as an integer, as raw JSON, or
- * not at all. `pure` is the set of module paths the guard proves pure.
+ * not at all; `optional` names a field (`Type.field`) or a whole struct
+ * (`Type`) that decodes when absent. `pure` is the set of module paths the
+ * guard proves pure.
  */
 export function buildContractModel({ ts, program, root, config, pure }) {
   const checker = program.getTypeChecker()
@@ -64,7 +68,8 @@ export function buildContractModel({ ts, program, root, config, pure }) {
   const ints = new Set(config.ints ?? [])
   const asJson = new Set(config.json ?? [])
   const omit = new Set(config.omit ?? [])
-  const used = { ints: new Set(), json: new Set(), omit: new Set() }
+  const optional = new Set(config.optional ?? [])
+  const used = { ints: new Set(), json: new Set(), omit: new Set(), optional: new Set() }
   const types = new Map()
   const origins = new Map()
   const errors = []
@@ -222,6 +227,7 @@ export function buildContractModel({ ts, program, root, config, pure }) {
   const sameMembers = (a, b) => a.length === b.length && a.every((t) => b.includes(t))
 
   const structFields = (owner, props) => {
+    if (optional.has(owner)) used.optional.add(owner)
     const fields = []
     for (const prop of props) {
       const where = `${owner}.${prop.name}`
@@ -234,9 +240,11 @@ export function buildContractModel({ ts, program, root, config, pure }) {
         throw new Error(`${where}: a method has no native form`)
       }
       const type = checker.getTypeOfSymbol(prop)
-      const optional = Boolean(prop.flags & ts.SymbolFlags.Optional)
+      const declaredOptional = Boolean(prop.flags & ts.SymbolFlags.Optional)
+      if (optional.has(where)) used.optional.add(where)
+      const forced = optional.has(owner) || optional.has(where)
       const t = ref(type, `${owner}${pascal(prop.name)}`, where)
-      fields.push({ name: prop.name, type: t, optional: optional || Boolean(t.nullable) })
+      fields.push({ name: prop.name, type: t, optional: declaredOptional || forced || Boolean(t.nullable) })
     }
     return fields.sort((a, b) => a.name.localeCompare(b.name))
   }
@@ -273,6 +281,7 @@ export function buildContractModel({ ts, program, root, config, pure }) {
     ...[...ints].filter((k) => !used.ints.has(k)).map((k) => `ints: ${k}`),
     ...[...asJson].filter((k) => !used.json.has(k)).map((k) => `json: ${k}`),
     ...[...omit].filter((k) => !used.omit.has(k)).map((k) => `omit: ${k}`),
+    ...[...optional].filter((k) => !used.optional.has(k)).map((k) => `optional: ${k}`),
   ]
   if (stale.length) throw new Error(`native-contracts.json names fields no emitted type has:\n${stale.join('\n')}`)
 

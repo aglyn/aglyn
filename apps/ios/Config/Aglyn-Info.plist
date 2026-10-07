@@ -30,6 +30,8 @@
 	<string>$(AGLYN_DEBUG_EMAIL)</string>
 	<key>AGLYN_DEBUG_PASSWORD</key>
 	<string>$(AGLYN_DEBUG_PASSWORD)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>The camera reads product barcodes so you can find and sell items quickly.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

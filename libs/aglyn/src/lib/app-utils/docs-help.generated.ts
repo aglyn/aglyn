@@ -247,6 +247,11 @@ export const PLUGIN_DOCS = {
     title: 'Forms & Lead Capture',
     excerpt: 'Add forms to your site, collect submissions in an inbox, and write them into datasets.',
   },
+  fulfillmentNetworks: {
+    path: '/commerce-and-bookings/commerce/fulfillment-networks',
+    title: 'Fulfillment networks (ShipBob and Amazon MCF)',
+    excerpt: 'Send paid orders to ShipBob or Amazon Multi-Channel Fulfillment, get their shipments and tracking back on the order, and keep stock counts in step. Rolling out.',
+  },
   funnels: {
     path: '/marketing-and-automation/analytics/funnels',
     title: 'Funnels',
@@ -306,6 +311,11 @@ export const PLUGIN_DOCS = {
     path: '/commerce-and-bookings/commerce/pos-operations',
     title: 'Running the register',
     excerpt: 'Shifts and the cash drawer with X and Z reports, staff PINs, customers at the register, returns and exchanges, and printed thermal receipts.',
+  },
+  postPurchase: {
+    path: '/commerce-and-bookings/commerce/tracking-and-protection',
+    title: 'Tracking and protection (AfterShip, Route and Narvar)',
+    excerpt: 'Connect your own AfterShip, Route or Narvar account so parcels are followed, buyers land on your branded tracking page, and shipped orders can carry Route package protection. Rolling out.',
   },
   publishAPlugin: {
     path: '/developers/plugins/publish-a-plugin',
@@ -415,6 +425,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   emailPlatforms: ['#connect', '#who-is-sent', '#unsubscribes-from-the-platform', '#settings', '#sync-log', '#disconnect', '#one-off-imports'],
   events: ['#manage-events', '#import-and-export-events', '#columns', '#how-a-row-finds-an-existing-event', '#conflicts-the-dry-run-and-undo', '#files-from-other-calendars', '#show-events-on-a-screen', '#search-engines', '#related'],
   forms: ['#reading-submissions-from-code', '#build-a-form', '#place-a-saved-form', '#saved-forms-per-site', '#monthly-allowance-per-plan', '#spam-and-abuse-protection', '#the-per-site-monthly-ceiling', '#field-types', '#labels-and-placeholders', '#example-a-quick-survey', '#after-submit', '#example-grow-an-email-list-from-a-signup-form', '#consent-group-disclosure', '#where-submissions-go', '#the-inbox', '#filter-the-inbox', '#who-a-submission-is-from', '#what-it-links-to', '#where-this-one-went', '#replying-to-a-submission', '#every-sites-inbox-at-once', '#one-forms-own-page', '#export-submissions', '#find-a-form', '#duplicate-a-form', '#switch-forms-off-for-one-site', '#related'],
+  fulfillmentNetworks: ['#connect-a-network', '#settings', '#how-orders-are-sent', '#stock-counts', '#shipments-and-tracking', '#canceling-and-refunds', '#activity'],
   funnels: ['#step-types', '#how-it-counts', '#what-is-a-visit', '#identified-visitors', '#create', '#create-with-ai', '#act-on-drop-off', '#ask-ai'],
   installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#what-to-do-next', '#related'],
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#declining-an-invite', '#an-ordinary-invitation-never-changes-who-owns-the-workspace', '#owner-handoff', '#aglyn-staff', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#ai-actions', '#ai-usage', '#ai-allotment', '#tips', '#related'],
@@ -427,6 +438,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   pos: ['#registers', '#the-register', '#modifiers', '#selling-past-the-count', '#taking-payment', '#platform-fees-at-the-register', '#when-something-disconnects', '#tips', '#receipts', '#card-readers', '#customer-display', '#reservations', '#related'],
   posHardware: ['#recommended-kit', '#card-readers', '#receipt-printers', '#add-a-printer', '#what-prints', '#your-logo-on-the-receipt', '#status', '#cash-drawer', '#barcode-scanning', '#label-printers', '#product-labels', '#shipping-labels', '#customer-display-tablet', '#related'],
   posOperations: ['#shifts-and-the-cash-drawer', '#what-the-reports-show', '#shift-history', '#requiring-a-shift', '#who-rang-it', '#staff-pins', '#customers-at-the-register', '#returns-and-exchanges', '#refund-limits-and-manager-approval', '#printed-receipts', '#related'],
+  postPurchase: ['#connect-a-service', '#afterships-webhook', '#package-protection-at-checkout', '#branded-tracking-pages', '#on-the-order', '#switching-it-off-for-a-site'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#tips', '#related'],
   publisherHandbook: ['#before-your-first-publish', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#rules-an-email-starter-has-to-meet', '#publishing-a-version', '#before-you-publish', '#review-what-happens-after-you-publish', '#the-two-badges-and-what-each-one-promises', '#asking-to-be-verified', '#testing-a-version-before-it-is-approved', '#watching-your-own-submission', '#disabled-versions', '#private-plugins', '#authoring-your-listing', '#what-your-listing-can-say-about-aglyn', '#versioning--updates', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#getting-paid', '#low-prices-and-processing'],
   redirects: ['#manage-redirects', '#sending-visitors-to-another-site', '#import-and-export', '#columns', '#how-a-row-finds-an-existing-rule', '#conflicts-the-dry-run-and-undo', '#metrics', '#match-modes-v2', '#related'],

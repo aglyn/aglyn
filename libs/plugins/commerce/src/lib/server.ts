@@ -56,6 +56,7 @@ import { commerceSitePageEnricher } from './server/site-page-enricher'
 import { commerceSitePageResolver } from './server/site-page-resolver'
 import { cartCheckoutHandler } from './server/cart-checkout'
 import { cartHandler } from './server/cart'
+import { cartExtrasHandler } from './server/checkout-extras'
 import { catalogHandler } from './server/catalog'
 import { checkoutHandler } from './server/checkout'
 import { downloadHandler } from './server/download'
@@ -301,6 +302,8 @@ export function registerCommerceApi(): void {
   registerSitePageEnricher(commerceSitePageEnricher)
   registerPluginApiRoute('commerce/cart-checkout', cartCheckoutHandler, CARD_PAYMENT_DOOR)
   registerPluginApiRoute('commerce/cart', cartHandler)
+  // Optional lines another plugin offers at the cart (AGL-3635).
+  registerPluginApiRoute('commerce/cart-extras', cartExtrasHandler)
   registerPluginApiRoute('commerce/catalog', catalogHandler)
   registerPluginApiRoute('commerce/checkout', checkoutHandler, CARD_PAYMENT_DOOR)
   registerPluginApiRoute('commerce/download', downloadHandler)

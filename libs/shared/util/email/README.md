@@ -29,7 +29,7 @@ The sender, and the settings of the provider that carries the mail, read at
 call time:
 
 ```
-USAGE_EMAIL_FROM="Aglyn <noreply@aglyn.com>"
+USAGE_EMAIL_FROM="Aglyn <noreply@notify.aglyn.com>"
 RESEND_API_KEY=re_xxxxxxxx             # the default provider
 # or, for your own sender:
 AGLYN_MAIL_WEBHOOK_URL=https://relay.internal/send

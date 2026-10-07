@@ -193,6 +193,9 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
     // merchant's credentials. Sales channels (AGL-3637): sold with commerce,
     // and a site that does not sell has no feed to publish. Email platforms
     // (AGL-3639) the same way: a site connects its own account, or nothing.
+    // Tracking and protection (AGL-3635) and Fulfillment networks (AGL-3634)
+    // as well: sold with commerce, each hidden until the deployment can seal
+    // a merchant's own vendor account.
     expect(WORKSPACE_LOCKED).toEqual([
       'forms',
       'ai',
@@ -202,6 +205,8 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
       'tax-engines',
       'sales-channels',
       'marketing-platforms',
+      'post-purchase',
+      'fulfillment-networks',
     ])
   })
 

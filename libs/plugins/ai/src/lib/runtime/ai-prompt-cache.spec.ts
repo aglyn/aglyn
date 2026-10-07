@@ -234,6 +234,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     caches: true,
     why: "the doctrine, the page rules and the screen palette; one section a pass, so the prefix is read many times over one page",
   },
+  'jobs/ai-job-page-language.ts': {
+    step: 'job.page',
+    caches: true,
+    why: 'the doctrine and the layout language; a whole page is one answer, and a site asks it once a page (AGL-3660)',
+  },
   'jobs/ai-job-theme-step.ts': {
     step: 'job.theme',
     caches: true,

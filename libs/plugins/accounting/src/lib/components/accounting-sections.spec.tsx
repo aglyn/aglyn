@@ -49,7 +49,7 @@ function api(overrides: Partial<AccountingApi> = {}): AccountingApi {
 }
 
 const status = (overrides: Partial<AccountingStatusResponse> = {}): AccountingStatusResponse => ({
-  providers: { quickbooks: false, xero: false },
+  providers: { quickbooks: false, xero: false, codat: false },
   connection: null,
   counts: { pending: 0, synced: 0, needsAttention: 0 },
   seenTaxKeys: [],
@@ -88,7 +88,7 @@ describe('the Connection section', () => {
   it('offers a Connect button for exactly the providers configured, and sends the browser to consent', async () => {
     const navigate = jest.fn()
     const routes = api({
-      status: jest.fn(async () => status({ providers: { quickbooks: true, xero: false } })),
+      status: jest.fn(async () => status({ providers: { quickbooks: true, xero: false, codat: false } })),
       connect: jest.fn(async () => ({ url: 'https://appcenter.intuit.com/connect/oauth2?x=1' })),
     })
     render(<AccountingConnectionSection orgId="org-1" api={routes} navigate={navigate} />)
@@ -99,10 +99,41 @@ describe('the Connection section', () => {
     expect(routes.connect).toHaveBeenCalledWith('quickbooks')
   })
 
+  it('offers other accounting software only once Codat is configured, and names connected books by company and software', async () => {
+    const hidden = api({ status: jest.fn(async () => status({ providers: { quickbooks: true, xero: true, codat: false } })) })
+    const { unmount } = render(<AccountingConnectionSection orgId="org-1" api={hidden} />)
+    await screen.findByRole('button', { name: connectLabel('quickbooks') })
+    expect(screen.queryByRole('button', { name: 'Connect other accounting software' })).toBeNull()
+    unmount()
+
+    const navigate = jest.fn()
+    const offered = api({
+      status: jest.fn(async () => status({ providers: { quickbooks: false, xero: false, codat: true } })),
+      connect: jest.fn(async () => ({ url: 'https://link.codat.io/company/c-1?state=s' })),
+    })
+    const second = render(<AccountingConnectionSection orgId="org-1" api={offered} navigate={navigate} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect other accounting software' }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('https://link.codat.io/company/c-1?state=s'))
+    expect(offered.connect).toHaveBeenCalledWith('codat')
+    second.unmount()
+
+    const connected = api({
+      status: jest.fn(async () =>
+        status({
+          providers: { quickbooks: false, xero: false, codat: true },
+          connection: connection({ provider: 'codat', tenantName: 'Acme Inc (NetSuite)', environment: null, status: 'reconnect-required' }),
+        }),
+      ),
+    })
+    render(<AccountingConnectionSection orgId="org-1" api={connected} />)
+    expect(await screen.findAllByText('Acme Inc (NetSuite)')).not.toHaveLength(0)
+    expect(screen.getByRole('button', { name: 'Reconnect your accounting software' })).toBeTruthy()
+  })
+
   it('finishes a connect the provider sent back, once, and clears the code from the address', async () => {
     window.history.replaceState(null, '', '/acme/accounting/connection#accounting=code&code=c-1&state=as1.s&realmId=9130')
     const routes = api({
-      status: jest.fn(async () => status({ providers: { quickbooks: true, xero: true }, connection: connection() })),
+      status: jest.fn(async () => status({ providers: { quickbooks: true, xero: true, codat: false }, connection: connection() })),
       completeConnect: jest.fn(async () => ({ connection: connection() })),
     })
     render(<AccountingConnectionSection orgId="org-1" api={routes} />)
@@ -114,13 +145,13 @@ describe('the Connection section', () => {
 
   it('says so when the provider was refused access', async () => {
     window.history.replaceState(null, '', '/acme/accounting/connection#accounting=error&reason=access_denied')
-    render(<AccountingConnectionSection orgId="org-1" api={api({ status: jest.fn(async () => status({ providers: { quickbooks: true, xero: false } })) })} />)
+    render(<AccountingConnectionSection orgId="org-1" api={api({ status: jest.fn(async () => status({ providers: { quickbooks: true, xero: false, codat: false } })) })} />)
     expect(await screen.findByText('Access was not granted, so nothing was connected.')).toBeTruthy()
   })
 
   it('shows the mapping form for a connected ledger, with bank accounts only for clearing', async () => {
     const routes = api({
-      status: jest.fn(async () => status({ providers: { quickbooks: true, xero: false }, connection: connection() })),
+      status: jest.fn(async () => status({ providers: { quickbooks: true, xero: false, codat: false }, connection: connection() })),
       options: jest.fn(async () => ({
         accounts: [
           { id: '79', code: null, name: 'Sales', type: 'Income', classification: 'income' as const, currency: 'USD' },
@@ -146,7 +177,7 @@ describe('the Connection section', () => {
         api={api({
           status: jest.fn(async () =>
             status({
-              providers: { quickbooks: true, xero: false },
+              providers: { quickbooks: true, xero: false, codat: false },
               connection: connection({ status: 'reconnect-required', lastError: 'invalid_grant' }),
             }),
           ),

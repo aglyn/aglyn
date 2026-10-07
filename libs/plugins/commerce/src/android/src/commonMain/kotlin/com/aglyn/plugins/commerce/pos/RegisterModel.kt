@@ -107,6 +107,9 @@ class RegisterModel(
   }
 
   fun start() {
+    // A device reader connected or dropped on the readers screen (or by the
+    // SDK's own reconnect) joins or leaves the tender buttons at once.
+    cardCollector?.let { collector -> scope.launch { collector.state.collect { syncDeviceReader(collector) } } }
     scope.launch { loadRegisters() }
     scope.launch { loadStore() }
     scope.launch { loadCategories() }
@@ -153,16 +156,24 @@ class RegisterModel(
       val loaded = api.context()
       context = loaded
       online = true
-      readers.clear()
-      cardCollector?.let { collector ->
-        runCatching { collector.connect(hostId, terminal) }
-        if (collector.state.value is CardCollectorState.Connected) readers += DeviceReaderService(collector)
-      }
+      readers.removeAll { it.kind == CardReaderKind.SMART }
       loaded.readers.filter { it.online }.forEach { readers += SmartReaderService(it) }
+      cardCollector?.let { collector ->
+        runCatching { collector.connect(hostId, terminal) }.onFailure { if (it is CancellationException) throw it }
+        syncDeviceReader(collector)
+      }
     } catch (error: Throwable) {
       if (error is CancellationException) throw error
       if (error is ConsoleApiError && error.status == 0) online = false
     }
+  }
+
+  /** This device's reader is first among the tenders while it is connected. */
+  private fun syncDeviceReader(collector: CardCollector) {
+    val connected = collector.state.value is CardCollectorState.Connected
+    val listed = readers.any { it is DeviceReaderService }
+    if (connected && !listed) readers.add(0, DeviceReaderService(collector))
+    if (!connected && listed) readers.removeAll { it is DeviceReaderService }
   }
 
   // ---- the grid
@@ -222,12 +233,18 @@ class RegisterModel(
     }
   }
 
-  /** A scan or a typed code, looked up across the catalog: barcode first, then SKU. */
-  fun lookUp(raw: String) {
+  /**
+   * A scan or a typed code, looked up across the catalog: barcode first, then
+   * SKU. [onAnswer] hears the outcome in words, for a camera sheet that stays
+   * open between scans; it is told [ScanAnswer.needsSheet] when the item
+   * opened the item sheet, which the camera sheet must then make way for.
+   */
+  fun lookUp(raw: String, onAnswer: ((ScanAnswer) -> Unit)? = null) {
     if (checkout != null) return
     val code = scannedProductCode(raw)
     if (code == null) {
-      toast = Notice(NoticeTone.WARNING, "That code could not be read. Try again.")
+      val words = "That code could not be read. Try again."
+      if (onAnswer != null) onAnswer(ScanAnswer(words)) else toast = Notice(NoticeTone.WARNING, words)
       return
     }
     scope.launch {
@@ -241,12 +258,22 @@ class RegisterModel(
         found
       } catch (error: Throwable) {
         if (error is CancellationException) throw error
-        toast = Notice(NoticeTone.ERROR, "The lookup did not work. Check the connection and try again.")
+        val words = "The lookup did not work. Check the connection and try again."
+        if (onAnswer != null) onAnswer(ScanAnswer(words)) else toast = Notice(NoticeTone.ERROR, words)
         return@launch
       }
       when (result) {
-        is ScanResult.Found -> if (result.item.modifierGroups.isNotEmpty()) open(result.item, result.variant) else add(result.item, result.variant)
-        is ScanResult.Missing -> toast = Notice(NoticeTone.WARNING, "No product has the code ${result.code}.")
+        is ScanResult.Found -> if (result.item.modifierGroups.isNotEmpty()) {
+          open(result.item, result.variant)
+          onAnswer?.invoke(ScanAnswer("Choose options for ${result.item.name}", needsSheet = true))
+        } else {
+          val added = add(result.item, result.variant)
+          onAnswer?.invoke(ScanAnswer(if (added) "Added ${result.item.name}" else toast?.message ?: "${result.item.name} could not be added."))
+        }
+        is ScanResult.Missing -> {
+          val words = "No product has the code ${result.code}."
+          if (onAnswer != null) onAnswer(ScanAnswer(words)) else toast = Notice(NoticeTone.WARNING, words)
+        }
         ScanResult.Unreadable -> Unit
       }
     }
@@ -433,3 +460,6 @@ class RegisterModel(
     }
   }
 }
+
+/** What a looked-up code did, for a scanner that stays open. */
+data class ScanAnswer(val words: String, val needsSheet: Boolean = false)

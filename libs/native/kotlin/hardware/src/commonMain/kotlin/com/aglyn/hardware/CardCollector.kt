@@ -101,7 +101,10 @@ fun interface CardReaderSessionSource {
 interface CardCollector {
   val state: StateFlow<CardCollectorState>
 
-  /** Connects for one site; [sessions] mints the connection tokens. */
+  /**
+   * Gets ready for one site; [sessions] mints the connection tokens. A
+   * device reader reconnects the reader it last used, if it can.
+   */
   suspend fun connect(hostId: String, sessions: CardReaderSessionSource): CardCollectorState
 
   /** Retrieves, collects and confirms one server-made intent. Validates [request] first. */
@@ -112,27 +115,25 @@ interface CardCollector {
 }
 
 /**
- * The Stripe Terminal SDK reader (Tap to Pay and Bluetooth readers). The SDK
- * is not part of the build yet, so this reports itself unavailable and
- * refuses to collect; the register then offers smart readers and cash. When
- * the SDK lands, this is the one class that binds it: `connect` fetches the
- * token through [CardReaderSessionSource] (never with `onBehalfOf`: card-
- * present charges settle on the platform account), and `collect` runs
- * retrievePaymentIntent → collectPaymentMethod → confirmPaymentIntent.
+ * A device with no card reader of its own: it reports itself unavailable and
+ * refuses to collect, so the register offers smart readers and cash. The
+ * Stripe Terminal SDK reader (Tap to Pay and Bluetooth) lives in the Aglyn POS
+ * Android app, which alone carries the SDK; it implements [CardCollector] and
+ * [DeviceReaderControls] and runs the shared [collectCardPayment] sequence.
  */
-class StripeTerminalSdkCollector : CardCollector {
-  private val mutableState = MutableStateFlow<CardCollectorState>(CardCollectorState.Unavailable(UNAVAILABLE))
+class UnavailableCardCollector(private val reason: String = UNAVAILABLE) : CardCollector {
+  private val mutableState = MutableStateFlow<CardCollectorState>(CardCollectorState.Unavailable(reason))
   override val state: StateFlow<CardCollectorState> = mutableState
 
   override suspend fun connect(hostId: String, sessions: CardReaderSessionSource): CardCollectorState = mutableState.value
 
   override suspend fun collect(request: CardCollectRequest): CardCollectOutcome =
-    CardCollectOutcome.Failed(request.paymentIntentId, UNAVAILABLE)
+    CardCollectOutcome.Failed(request.paymentIntentId, reason)
 
   override suspend fun cancel() = Unit
 
   companion object {
-    const val UNAVAILABLE = "Tap to Pay and Bluetooth readers are not available on this device yet. Use a smart reader or cash."
+    const val UNAVAILABLE = "Tap to Pay and Bluetooth readers are not available on this device. Use a smart reader or cash."
   }
 }
 

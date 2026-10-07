@@ -686,6 +686,14 @@ allow update: if (isSuperStaff() &&
 
 
 
+'defaultResourceScope', 'defaultMediaScope',
+
+
+
+
+
+
+
 'nameLower', 'nameTokens', 'nameReversed',
 'crmInbound',
 
@@ -895,6 +903,20 @@ allow read, write: if false;
 
 
 match /shippingConnections/{kind} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+match /postPurchaseHostSettings/{hostId} {
+allow read, write: if false;
+}
+match /postPurchaseOrders/{recordId} {
 allow read, write: if false;
 }
 
@@ -2339,8 +2361,12 @@ allow read, write: if false;
 
 
 
-match /commerceShippingEasyConnections/{hostId}/{document=**} {
+match /commerceShippingEasyConnections/{hostId} {
 allow read, write: if false;
+
+match /orders/{orderId} {
+allow read, write: if false;
+}
 }
 
 
@@ -2410,6 +2436,26 @@ allow read, write: if false;
 }
 }
 match /marketingPlatformEvents/{eventId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+match /fulfillmentNetworkConnections/{connectionId} {
+allow read, write: if false;
+match /log/{entryId} {
+allow read, write: if false;
+}
+}
+match /fulfillmentNetworkOrders/{handOffId} {
 allow read, write: if false;
 }
 

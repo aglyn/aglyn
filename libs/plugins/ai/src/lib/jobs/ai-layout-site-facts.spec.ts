@@ -61,6 +61,44 @@ describe('what a layout may say about its business (AGL-3596)', () => {
       ).toEqual([])
     })
 
+    it('refuses a street address or opening hours the brief never gave', () => {
+      const violations = aiLayoutInventedContactViolations(
+        footer('1234 South Lamar Blvd, Austin, TX', 'Open Mon–Sat, 8am – 6pm', 'Grooming for every coat'),
+        GUIDED_BRIEF,
+      )
+      expect(violations).toEqual([
+        expect.objectContaining({ rule: 14, code: 'contact-not-in-brief', nodeIds: ['line0', 'line1'] }),
+      ])
+      expect(violations[0].message).toContain('"1234 South Lamar Blvd"')
+      expect(violations[0].message).toContain('"Mon–Sat"')
+    })
+
+    it('keeps an address and hours the brief gives, however the footer rewords them', () => {
+      const brief = `${GUIDED_BRIEF}\nWe are at 1234 South Lamar Blvd. Open Monday through Saturday, 8 AM to 6 PM.`
+      expect(
+        aiLayoutInventedContactViolations(footer('1234 S. Lamar', '1234 South Lamar Blvd.', 'Mon–Sat 8am–6pm'), brief),
+      ).toEqual([])
+    })
+
+    it('reads no count, duration or step as an address or hours', () => {
+      expect(
+        aiLayoutInventedContactViolations(
+          footer('3 Easy Steps', 'Sunrise to Sunset Grooming', 'Ready in 2–3 weeks', '1-2 dogs a visit', 'Est. 2019', '[Opening hours]'),
+          GUIDED_BRIEF,
+        ),
+      ).toEqual([])
+    })
+
+    it('reads no icon drawing as a phone number, however its path is written (AGL-3660)', () => {
+      const tree = footer('Grooming for every coat')
+      tree.nodes['heart'] = {
+        componentId: 'icon',
+        props: { iconPath: 'M12.1,18.55L12,18.65L11.89,18.55C7.14,14.24 4,11.39 4,8.5C4,6.5 5.5,5 7.5,5Z' },
+      }
+      tree.nodes['star'] = { componentId: 'icon', props: { iconPath: 'M14.94 19.5L12 17.77L9.06 19.5L9.84 16.1 7.1 13.41Z' } }
+      expect(aiLayoutInventedContactViolations(tree, GUIDED_BRIEF)).toEqual([])
+    })
+
     it('reads no year, price or bracketed placeholder as a phone number', () => {
       expect(
         aiLayoutInventedContactViolations(footer('© 2026', 'From $45', 'Call [Office phone number]'), GUIDED_BRIEF),

@@ -22,6 +22,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useEffect, useRef } from 'react'
 import { editorHintCookieDomain } from './editor-hint-cookie.component'
 import { emailGateWouldRefuse } from '../utils/email-verification-gate'
+import { useSignUpLandingHeld } from '../utils/sign-up-landing-hold'
 
 /**
  * The `*.aglyn.app` half of the editor-presence hint (AGL-1842).
@@ -47,6 +48,11 @@ import { emailGateWouldRefuse } from '../utils/email-verification-gate'
  *   write would be partitioned into uselessness anyway;
  * - not the `/edit-access` page itself — that page is mid-handshake with a
  *   tenant site (popup or probe) and must never be navigated away;
+ * - not a sign-in door, and not while a sign-up is landing — the door is
+ *   still awaiting the acquisition record and the workspace when the user
+ *   resolves, and this navigation tore it down mid-flight on a slow phone
+ *   (AGL-3578's shape through a second door). The doors always navigate on,
+ *   so the bounce runs on the page they land;
  * - a first-party console host (`editorHintCookieDomain` non-null) — a
  *   white-label console on a customer's domain must not leak its editors
  *   through our bounce, and localhost has no `.aglyn.app` to reach;
@@ -78,6 +84,13 @@ export const EDIT_HINT_BOUNCE_ORIGIN = `https://console.${TENANT_APEX}`
 
 export const EDIT_HINT_BOUNCE_STAMP_KEY = 'aglyn-edit-hint-bounce-at'
 
+/** The pages that create the session and still have work to do once it
+ * exists. Leaving one mid-flight loses that work. */
+export const EDIT_HINT_BOUNCE_SKIPPED_PATHS: ReadonlySet<string> = new Set([
+  '/signin',
+  '/signup',
+])
+
 /** Once a day per browser; the planted cookie lives 7, so a weekly console
  * visit keeps the hint alive continuously. */
 export const EDIT_HINT_BOUNCE_INTERVAL_MS = 24 * 60 * 60 * 1000
@@ -91,6 +104,7 @@ export default function EditHintBounce({
   navigate,
 }: EditHintBounceProps): null {
   const { data: user } = useUser()
+  const signUpLanding = useSignUpLandingHeld()
   // One attempt per mount — auth state re-emits must not re-fire the work.
   const startedRef = useRef(false)
 
@@ -109,6 +123,8 @@ export default function EditHintBounce({
     if (startedRef.current) return
     if (window.top !== window) return
     if (window.location.pathname === '/edit-access') return
+    if (EDIT_HINT_BOUNCE_SKIPPED_PATHS.has(window.location.pathname)) return
+    if (signUpLanding) return
     if (!editorHintCookieDomain(window.location.hostname)) return
 
     let lastBounceAt: number
@@ -169,7 +185,7 @@ export default function EditHintBounce({
         // Silent by design; the next throttle window retries.
       }
     })()
-  }, [user, navigate])
+  }, [user, navigate, signUpLanding])
 
   return null
 }

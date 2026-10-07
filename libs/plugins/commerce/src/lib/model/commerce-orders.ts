@@ -90,6 +90,30 @@ export interface OrderTotals {
    * revenue figures and out of the platform's take.
    */
   tipCents?: number
+  /**
+   * Optional lines the buyer added at checkout from another plugin's offer
+   * (AGL-3635) — package protection — summed. Inside `totalCents`, never in
+   * `itemsCents`: an extra is not goods, so no fulfillment, stock or
+   * platform take reads it.
+   */
+  extrasCents?: number
+}
+
+/**
+ * One optional line the buyer took at checkout (AGL-3635), as core's
+ * checkout-extras seam records it: whose offer it was, what it was called
+ * and what it cost. Never a line item: it does not ship and is never
+ * refunded by line.
+ */
+export interface OrderExtra {
+  /** `{pluginId}.{key}`. */
+  id: string
+  pluginId: string
+  key: string
+  label: string
+  amountCents: number
+  /** The offering plugin's quote id. */
+  quoteRef?: string
 }
 
 export interface OrderAddress {
@@ -306,6 +330,8 @@ export interface OrderUnresolvedLine {
 export interface HostOrder {
   /** Human order number, sequential per host (e.g. #1042). */
   number?: number
+  /** Optional lines the buyer added at checkout (AGL-3635); see {@link OrderExtra}. */
+  extras?: OrderExtra[]
   status: OrderStatus
   channel?: OrderChannel
   /**
@@ -774,6 +800,12 @@ export interface CheckoutSessionTotalsParts {
    * invisible to `total_details.amount_discount`, so it is added to it.
    */
   pricedInDiscountCents?: number
+  /**
+   * The optional lines the buyer took (AGL-3635). Inside `amount_total` as
+   * ordinary Stripe lines, so the parts only sum to the charge with it
+   * named; recorded only when there is one.
+   */
+  extrasCents?: number
 }
 
 export function computeCheckoutSessionTotals(
@@ -792,9 +824,11 @@ export function computeCheckoutSessionTotals(
       Number(parts?.pricedInDiscountCents ?? 0),
   })
   const amountTotal = Number(session?.amount_total ?? NaN)
+  const extrasCents = wholeCents(parts?.extrasCents)
   return {
     ...totals,
-    totalCents: Number.isFinite(amountTotal) ? amountTotal : totals.totalCents,
+    ...(extrasCents > 0 ? { extrasCents } : {}),
+    totalCents: Number.isFinite(amountTotal) ? amountTotal : totals.totalCents + extrasCents,
   }
 }
 

@@ -22,6 +22,8 @@ import {
   registerOrderStatusActions,
 } from './order-status'
 import { mintOrderStatusToken } from './order-status-token'
+import { registerPluginTrackingPage } from '@aglyn/aglyn/plugin-manager/plugin-tracking-pages'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 
 /**
  * The guest order-status data route (AGL-3610): the signed link is the whole
@@ -181,5 +183,35 @@ describe('orderStatusHandler (AGL-3610)', () => {
     expect(result.body.actions).toEqual([
       { id: 'return', label: 'Request a return', url: '/returns?o=order-1' },
     ])
+  })
+
+  it('sends each parcel to the store’s own tracking page where a plugin has one (AGL-3635)', async () => {
+    resetPluginServicesForTests()
+    registerPluginTrackingPage(
+      async ({ hostId, recordId, carrier, trackingNumber }) =>
+        hostId === HOST && recordId === ORDER && carrier === 'UPS'
+          ? `https://northwind.narvar.com/northwind/tracking/ups?tracking_numbers=${trackingNumber}`
+          : null,
+      { pluginId: 'post-purchase' },
+    )
+    const result = await call({ hostId: HOST, o: ORDER, t: token() })
+    expect(result.body.shipments[0].trackingUrl).toBe(
+      'https://northwind.narvar.com/northwind/tracking/ups?tracking_numbers=1Z1',
+    )
+    resetPluginServicesForTests()
+  })
+
+  it('names the optional lines the buyer paid for, and nothing about whose they were (AGL-3635)', async () => {
+    const order = docs.get(`hosts/${HOST}/orders/${ORDER}`) as Record<string, any>
+    docs.set(`hosts/${HOST}/orders/${ORDER}`, {
+      ...order,
+      totals: { ...order.totals, extrasCents: 198, totalCents: 4098 },
+      extras: [
+        { id: 'post-purchase.package-protection', pluginId: 'post-purchase', key: 'package-protection', label: 'Package protection', amountCents: 198, quoteRef: 'q_secret' },
+      ],
+    })
+    const result = await call({ hostId: HOST, o: ORDER, t: token() })
+    expect(result.body.extras).toEqual([{ label: 'Package protection', amountCents: 198 }])
+    expect(JSON.stringify(result.body)).not.toContain('q_secret')
   })
 })

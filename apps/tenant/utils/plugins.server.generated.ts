@@ -54,6 +54,7 @@ export const TENANT_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
   },
   {
     id: 'redirects',
+    apiPrefixes: ["redirects"],
     register: {"tenantApi":"registerRedirectsApi"},
     load: () => import('@aglyn/plugins-redirects/server'),
   },

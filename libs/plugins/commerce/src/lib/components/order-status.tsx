@@ -288,6 +288,8 @@ const OrderStatus = forwardRef<HTMLDivElement, OrderStatusProps>((props, ref) =>
               ['Subtotal', view.totals.itemsCents],
               ['Discount', -view.totals.discountCents],
               ['Shipping', view.totals.shippingCents],
+              // Optional lines the buyer took at checkout (AGL-3635), by name.
+              ...(view.extras ?? []).map((extra) => [extra.label, extra.amountCents]),
               ['Tax', view.totals.taxCents],
             ] as Array<[string, number]>
           )
