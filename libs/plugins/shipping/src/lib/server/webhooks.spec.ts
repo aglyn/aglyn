@@ -76,6 +76,21 @@ describe('Shippo webhooks', () => {
     })
   })
 
+  it('settles a queued void from transaction_updated, and ignores other transaction states', () => {
+    const body = (status: string) =>
+      JSON.stringify({ event: 'transaction_updated', test: true, data: { status, tracking_number: 'TRK_1' } })
+    expect(verifyShippoWebhook({ rawBody: body('REFUNDED'), urlToken: 'tok_shippo_123', signatureHeader: null, secrets })).toEqual({
+      ok: true,
+      events: [{ kind: 'refund', providerId: 'shippo', trackingNumber: 'TRK_1', refunded: true, test: true }],
+    })
+    expect(
+      verifyShippoWebhook({ rawBody: body('REFUNDREJECTED'), urlToken: 'tok_shippo_123', signatureHeader: null, secrets }),
+    ).toMatchObject({ ok: true, events: [{ kind: 'refund', refunded: false }] })
+    expect(
+      verifyShippoWebhook({ rawBody: body('REFUNDPENDING'), urlToken: 'tok_shippo_123', signatureHeader: null, secrets }),
+    ).toEqual({ ok: true, events: [] })
+  })
+
   it('also verifies the HMAC header when a secret is set, within five minutes', () => {
     const withHmac = { token: 'tok_shippo_123', hmacSecret: 'hmac_secret' }
     const t = 1_791_000_000

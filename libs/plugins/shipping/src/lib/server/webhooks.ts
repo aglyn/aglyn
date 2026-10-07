@@ -128,6 +128,23 @@ export function verifyShippoWebhook(input: {
       })
     }
   }
+  // A void Shippo could not settle at once (`QUEUED`/`PENDING`) settles
+  // later on the transaction itself: `transaction_updated` carries it as
+  // `REFUNDED` or `REFUNDREJECTED`, the only word a void ever gets back.
+  if (payload['event'] === 'transaction_updated') {
+    const data = (payload['data'] ?? {}) as Record<string, any>
+    const status = String(data['status'] ?? '').toUpperCase()
+    const trackingNumber = String(data['tracking_number'] ?? '').trim()
+    if (trackingNumber && (status === 'REFUNDED' || status === 'REFUNDREJECTED')) {
+      events.push({
+        kind: 'refund',
+        providerId: 'shippo',
+        trackingNumber,
+        refunded: status === 'REFUNDED',
+        test: payload['test'] === true,
+      })
+    }
+  }
   return { ok: true, events }
 }
 
