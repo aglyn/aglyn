@@ -52,12 +52,15 @@ export const ZAPIER_HOOKS_RESOURCE = 'hooks'
 export const ZAPIER_APP_URL_ENV = 'ZAPIER_APP_URL'
 
 /**
- * The only hosts a hook may post to. Zapier mints every REST hook URL on
+ * The only origin a hook may post to. Zapier mints every REST hook URL on
  * this host, so a key cannot be used to make the platform post a site's
  * orders to any other server — the egress the subprocessor inventory
  * declares is exactly this.
  */
-export const ZAPIER_HOOK_HOSTS: readonly string[] = ['hooks.zapier.com']
+export const ZAPIER_HOOK_ORIGIN = 'https://hooks.zapier.com'
+
+/** The hostnames of {@link ZAPIER_HOOK_ORIGIN}, which a hook's URL must be on. */
+export const ZAPIER_HOOK_HOSTS: readonly string[] = [new URL(ZAPIER_HOOK_ORIGIN).hostname]
 
 /** Hooks one site may hold: a Zap holds one per Aglyn trigger it starts on. */
 export const ZAPIER_MAX_HOOKS_PER_SITE = 100
