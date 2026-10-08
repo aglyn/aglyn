@@ -35,7 +35,13 @@ import {
 } from '@mui/material'
 import { collection, doc, limit, orderBy, query, where } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
-import { useFirestore, useFirestoreCollection, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useFirestoreCollection,
+  useFirestoreDoc,
+  usePagedCollection,
+} from '@aglyn/tenant-feature-instance'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import OrderDetailDialog from './order-detail-dialog.component'
 import { nextLocalFulfillmentSteps, useLocalFulfillmentStep } from './order-local-fulfillment-panel.component'
 
@@ -83,17 +89,27 @@ export function PickupDeliveryQueueCard(props: PickupDeliveryQueueCardProps) {
   const active = tabs.some((entry) => entry.key === tab) ? tab : (tabs[0]?.key ?? tab)
   const plan = useMemo(() => localFulfillmentQueueQuery(active, locationId || null), [active, locationId])
   const anyOn = tabs.length > 0
-  const { data: rows, status } = useFirestoreCollection<any>(
-    () =>
+  // Paged like every list of something that grows: one tab's query, a page
+  // at a time (the native app pages it by `plan.limit`).
+  const {
+    rows,
+    status,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    hasMore,
+  } = usePagedCollection<any>(
+    (pageLimit) =>
       anyOn
         ? query(
             collection(firestore, 'hosts', hostId, 'orders'),
             ...plan.where.map((clause) => where(clause.field, clause.op, clause.value as never)),
             orderBy(plan.orderBy.field, plan.orderBy.direction),
-            limit(plan.limit),
+            limit(pageLimit),
           )
         : null,
-    [firestore, hostId, plan, anyOn],
+    [firestore, hostId, active, locationId, anyOn],
     { idField: '$id' },
   )
 
@@ -202,6 +218,14 @@ export function PickupDeliveryQueueCard(props: PickupDeliveryQueueCardProps) {
             )
           })
         )}
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={orders.length}
+          hasMore={hasMore}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </Stack>
       {open ? <OrderDetailDialog hostId={hostId} order={open} onClose={() => setOpen(null)} /> : null}
     </CardDisplay>

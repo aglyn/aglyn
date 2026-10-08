@@ -1362,6 +1362,13 @@ const NOT_A_LIST: Array<[string, string]> = [
       'The cardinality is the set of figures, which the card declares.',
   ],
   [
+    'libs/plugins/commerce/src/lib/components/console/local-delivery-settings-card.component.tsx',
+    'Configuration: a row per delivery zone, kept to `LOCAL_DELIVERY_ZONES_MAX` ' +
+      '(20) by the normalizer that saves them (AGL-3624). The capped read is ' +
+      'the location picker, a lookup of the same `limit(25)` locations the ' +
+      'Inventory locations card lists.',
+  ],
+  [
     'libs/plugins/commerce/src/lib/components/console/locations-card.component.tsx',
     'One row per inventory location, and the plan bands are 1 / 1 / 2 / 4 / ' +
       '6 against a `limit(25)` window — the ceiling is four times the largest ' +
@@ -2044,7 +2051,9 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // product's variants, which the store caps per product.
     // 80 with what Aglyn AI learned on one site (AGL-3661): its preferences,
     // capped by the memory's own `AI_SITE_MEMORY_MAX`.
-    expect(NOT_A_LIST).toHaveLength(80)
+    // 81 with local delivery's zones (AGL-3624), capped by its normalizer.
+    // The pickup and delivery queue beside it is a real list, and pages.
+    expect(NOT_A_LIST).toHaveLength(81)
   })
 })
 

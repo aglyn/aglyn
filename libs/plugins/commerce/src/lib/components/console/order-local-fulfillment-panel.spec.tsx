@@ -50,6 +50,19 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     return { data: mockRows[built.path] ?? [], status: 'success' }
   },
   useFirestoreDoc: () => ({ data: mockStore }),
+  usePagedCollection: (build: (pageLimit: number) => any) => {
+    const built = build(26)
+    if (built) mockQueries.push(built)
+    return {
+      rows: built ? (mockRows[built.path] ?? []) : [],
+      status: 'success',
+      page: 0,
+      setPage: () => undefined,
+      pageSize: 25,
+      setPageSize: () => undefined,
+      hasMore: false,
+    }
+  },
   useUser: () => ({ data: { uid: 'uid-admin', getIdToken: jest.fn(async () => 'tok-3624') } }),
 }))
 
@@ -189,7 +202,7 @@ describe('the Pickup & delivery queue', () => {
       { where: ['fulfillmentKey', '==', 'pickup_preparing'] },
       { where: ['status', 'in', ['paid', 'partially_fulfilled', 'fulfilled']] },
       { orderBy: ['fulfillmentDueMs', 'asc'] },
-      { limit: 50 },
+      { limit: 26 },
     ])
     expect(screen.getByText('#7 · Ada · 2 items')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Mark ready' }))
