@@ -13,8 +13,18 @@ final class ShellTests: XCTestCase {
     let registry = NativePluginRegistry()
     let result = NativePluginLoader.load(NativePluginManifest.entries, into: registry)
     XCTAssertEqual(result.failed, [])
-    XCTAssertEqual(result.loaded, ["redirects"])
+    // Every plugin the generated manifest names loads, whichever lands next.
+    XCTAssertEqual(result.loaded.sorted(), NativePluginManifest.entries.map(\.id).sorted())
     XCTAssertNotNil(registry.screen("redirects.list"))
+  }
+
+  func testThePlatformEntriesLoadBeforeThePlugins() {
+    let registry = NativePluginRegistry()
+    let result = NativePluginLoader.load(AppModel.platformEntries + NativePluginManifest.entries, into: registry)
+    XCTAssertEqual(result.failed, [])
+    XCTAssertEqual(result.loaded.first, "site")
+    XCTAssertNotNil(registry.screen("site.pages"))
+    XCTAssertEqual(registry.resolve("/acme/hosts/shop/screens"), .screen("site.pages", ["orgSlug": "acme", "hostSlug": "shop"]))
   }
 
   func testANavigationPushLandsOnTheSelectedSection() {

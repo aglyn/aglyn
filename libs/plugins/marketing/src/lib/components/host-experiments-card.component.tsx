@@ -48,6 +48,8 @@ import {
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
@@ -146,6 +148,13 @@ const EXPERIMENT_FILTER_OPTIONS = {
   })),
 }
 
+/** Tests is drawn from the target and the variant count: it sorts the page (AGL-3680). */
+const EXPERIMENT_PAGE_SORTS = {
+  target: (experiment: ExperimentDraft) =>
+    `${EXPERIMENT_TARGET_NOUNS[experiment.target] ?? experiment.target} ${(experiment.variants ?? []).length}`,
+}
+const EXPERIMENT_PAGE_SORT_HEADERS = { target: 'Tests' }
+
 /**
  * Experiments manager (AGL-252): create screen/section/email A/B tests
  * with weighted variants and a conversion goal; start/pause/finish them
@@ -171,6 +180,8 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
    * happen to be loaded.
    */
   const gridFilter = useListGridFilter({ selectFields: ['target', 'status'] })
+  // Experiment and Status order the query, Tests the page (AGL-3680).
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const filtering =
     gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
   const {
@@ -208,11 +219,21 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
      * returns is live, and a page holds as many rows as its size.
      */
     declaration: EXPERIMENT_LIST_QUERY,
-    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords },
+    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords, sort: askedSort },
     deps: [firestore, hostId],
     idField: '$id',
   })
-  const experiments: ExperimentDraft[] = experimentRows
+  const experimentSort = useListColumnSort<ExperimentDraft>({
+    sorts: EXPERIMENT_LIST_QUERY.sorts,
+    defaultSort: EXPERIMENT_LIST_QUERY.sorts[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: experimentPlan.orderBy,
+    rows: experimentRows,
+    pageSorts: EXPERIMENT_PAGE_SORTS,
+    headers: EXPERIMENT_PAGE_SORT_HEADERS,
+  })
+  const experiments: ExperimentDraft[] = experimentSort.rows as ExperimentDraft[]
   const experimentColumnsFor = (columns: GridColDef[]) =>
     listFilterGridColumns(
       columns,
@@ -647,7 +668,10 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
               onChange={gridFilter.setClauses}
               options={EXPERIMENT_FILTER_OPTIONS}
             />
-            <ListQueryNotices refused={experimentRefusals} notices={experimentPlan.notices} />
+            <ListQueryNotices
+              refused={experimentRefusals}
+              notices={[...experimentPlan.notices, ...experimentSort.notices]}
+            />
             <ListTable
               aria-label="Experiments"
               rows={experiments}
@@ -656,9 +680,9 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
               onOpen={(_id, experiment) => void openResults(experiment)}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
-              // The rows keep the query's order; a header sort would order
-              // only the page on screen and read as the whole list's.
-              disableColumnSorting
+              // Experiment and Status order the query; Tests sorts the page
+              // and says so (AGL-3680).
+              columnSort={experimentSort}
               /*
                * The panel and the search are the grid's; every clause and the
                * search word are on the list's query (AGL-3321), so the grid

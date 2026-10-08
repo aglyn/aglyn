@@ -387,8 +387,12 @@ export function tasksTransferResource(): TransferRecordsHooks {
               ...(status === 'done' && ctx.actorUid ? { completedByUid: ctx.actorUid } : {}),
               ...stored,
               ...scope,
-              // What the Tasks list searches by (AGL-3321).
-              ...crmTaskListFields({ title: stored['title'], visibleTo: scope['visibleTo'] }),
+              // What the Tasks list searches and sorts by (AGL-3321, AGL-3680).
+              ...crmTaskListFields({
+                title: stored['title'],
+                priority: stored['priority'] ?? priority,
+                visibleTo: scope['visibleTo'],
+              }),
             })
             const after = (await readTasks(env, [ref.id], run.lists)).get(ref.id) ?? {}
             result = { row: row.index, outcome: 'created', recordId: ref.id }

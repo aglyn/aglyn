@@ -4,6 +4,7 @@
 import AglynCore
 import AglynPluginHost
 import AglynPluginManifest
+import AglynSite
 import Foundation
 import Observation
 
@@ -63,12 +64,17 @@ final class AppModel {
       self.reader = nil
       self.api = nil
     }
-    let result = NativePluginLoader.load(NativePluginManifest.entries, into: registry)
+    let result = NativePluginLoader.load(Self.platformEntries + NativePluginManifest.entries, into: registry)
     pluginFailures = result.failed
     for failure in result.failed {
       print("Aglyn: plugin \(failure.pluginID) did not load: \(failure.error)")
     }
   }
+
+  /// The platform's own content screens (sites, pages, media…), which are
+  /// core rather than a plugin's: loaded before the generated plugin
+  /// manifest, through the same registrar and declaration check.
+  static var platformEntries: [NativePluginManifestEntry] { NativePlatformEntries.entries }
 
   var brandName: String { config?.brandName ?? AglynConfig.defaultBrandName }
 
@@ -111,7 +117,13 @@ final class AppModel {
       writer: ReaderMergeWriter(reader),
       staff: auth?.staff,
       navigate: { [weak navigation] screen, params in navigation?.push(.screen(screen, params)) },
-      openBesigner: { [weak navigation] path in navigation?.push(.besigner(path)) })
+      openBesigner: { [weak navigation] path in navigation?.push(.besigner(path)) },
+      siteRole: workspace?.site?.role, orgRole: workspace?.org?.role,
+      selectSite: { [weak workspace = self.workspace] hostID in workspace?.selectSite(hostID) },
+      back: { [weak navigation] in
+        guard let navigation else { return }
+        _ = navigation.paths[navigation.section]?.popLast()
+      })
   }
 
   /// Opens a console link (universal link, `aglyn://`, a notification's
@@ -121,7 +133,18 @@ final class AppModel {
     switch registry.resolve(link) {
     case .screen(let screen, let params)?: navigation.push(.screen(screen, params))
     case .besigner(let path)?: navigation.push(.besigner(path))
-    case .unavailable(let path)?: navigation.push(.unavailable(path))
+    case .unavailable(let path)?:
+      // The app's own screens answer the console's own pages.
+      if path.hasPrefix("/manage/notifications/settings") {
+        navigation.select(.notifications)
+        navigation.push(.notificationSettings)
+      } else if path.hasPrefix("/manage/notifications") {
+        navigation.select(.notifications)
+      } else if DeepLinks.splitConsoleScope(path).rest.hasPrefix("/analytics") {
+        navigation.push(.analytics)
+      } else {
+        navigation.push(.unavailable(path))
+      }
     case nil: break
     }
   }

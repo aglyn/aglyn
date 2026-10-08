@@ -60,15 +60,26 @@ public struct NativePluginContext {
   /// The signed-in person's Aglyn staff standing; nil for everyone else.
   /// For what to show only: the `/api/admin` routes decide.
   public let staff: StaffStanding?
+  /// The person's role on the picked site (`admin`, `editor`, `author` or
+  /// `viewer`), as their membership row names it; nil without a site. A
+  /// screen reads it only to grey out what the rules would refuse.
+  public let siteRole: String?
+  /// The person's role in the picked workspace (`owner`, `admin`, `editor`, `viewer`).
+  public let orgRole: String?
   private let navigateAction: @MainActor (String, NativeParams) -> Void
   private let openBesignerAction: @MainActor (String) -> Void
+  private let selectSiteAction: (@MainActor (String) -> Void)?
+  private let backAction: (@MainActor () -> Void)?
 
   public init(
     uid: String, orgID: String?, hostID: String?, orgSlug: String?, hostSlug: String?,
     firestore: FirestoreReader, api: ConsoleAPIClient, writer: FirestoreWriter = NoFirestoreWrites(),
     staff: StaffStanding? = nil,
     navigate: @escaping @MainActor (String, NativeParams) -> Void,
-    openBesigner: @escaping @MainActor (String) -> Void
+    openBesigner: @escaping @MainActor (String) -> Void,
+    siteRole: String? = nil, orgRole: String? = nil,
+    selectSite: (@MainActor (String) -> Void)? = nil,
+    back: (@MainActor () -> Void)? = nil
   ) {
     self.uid = uid
     self.orgID = orgID
@@ -81,6 +92,20 @@ public struct NativePluginContext {
     self.staff = staff
     self.navigateAction = navigate
     self.openBesignerAction = openBesigner
+    self.siteRole = siteRole
+    self.orgRole = orgRole
+    self.selectSiteAction = selectSite
+    self.backAction = back
+  }
+
+  /// Makes `hostID` the picked site, as the site switcher does.
+  @MainActor public func selectSite(_ hostID: String) {
+    selectSiteAction?(hostID)
+  }
+
+  /// Leaves the current screen, as the back button does.
+  @MainActor public func back() {
+    backAction?()
   }
 
   /// Opens a registered screen by id.
@@ -163,6 +188,9 @@ public struct NativeWidget: Identifiable {
   public var staffZone: StaffZone? = nil
   /// The staff roles that see the card; nil is every staff role.
   public var staffRoles: [String]? = nil
+  /// A core page's slot it renders in instead of Home, the native twin of
+  /// the console's `PluginWidgetSlot` (`hostAnalytics` is the Analytics page's).
+  public var slot: String? = nil
   public let make: WidgetBuilder
   public var makeStaff: StaffWidgetBuilder? = nil
 

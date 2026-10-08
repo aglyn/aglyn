@@ -30,6 +30,7 @@ import {
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import {
   ListQueryNotices,
@@ -40,6 +41,7 @@ import {
   ACTIVITY_LIST_FILTER_HEADERS,
 } from '../utils/list-filters'
 import {
+  ACTIVITY_LIST_SORT,
   ACTIVITY_SEARCH_HINT,
 } from '../utils/activity-list-query'
 import type { GridColDef } from '@mui/x-data-grid'
@@ -63,6 +65,24 @@ export interface ActorActivityEntry {
   actorEmailNow?: string | null
   apiKeyName?: string
   createdAt?: { seconds: number } | null
+}
+
+/*
+ * EVERY HEADER SORTS (AGL-3680). When is the route's own order, newest
+ * first, over the whole feed — the only order either route reads: the staff
+ * feed is a collection-group query on `actorId`, where any other order would
+ * cost a composite per direction, and the member feed merges its subjects by
+ * the clock. Action, Target, Who and Where sort the page on screen and say
+ * so: Where is the document's path, Target and Who are drawn from the row,
+ * and Action on the query is not worth two collection-group composites on
+ * one person's log.
+ */
+const ACTOR_ACTIVITY_SORTS = [ACTIVITY_LIST_SORT]
+const ACTOR_ACTIVITY_SORT_HEADERS = {
+  action: 'Action',
+  target: 'Target',
+  actorEmail: 'Who (then)',
+  scopeId: 'Where',
 }
 
 export interface ActorActivityTableProps {
@@ -287,6 +307,26 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
     [scopeNames],
   )
 
+  const pageSorts = useMemo(
+    () => ({
+      action: (row: ActorActivityEntry) => activityActionLabel(row.action) || null,
+      target: (row: ActorActivityEntry) => activityTargetLabel(row.target as never) || null,
+      actorEmail: (row: ActorActivityEntry) => activityActorLabel(row) || null,
+      scopeId: (row: ActorActivityEntry) => scopeLabel(row),
+    }),
+    // `scopeLabel` closes over `scopeNames`, which is the only thing that
+    // moves it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scopeNames],
+  )
+  const columnSort = useListColumnSort<ActorActivityEntry>({
+    sorts: ACTOR_ACTIVITY_SORTS,
+    defaultSort: ACTIVITY_LIST_SORT,
+    rows,
+    pageSorts,
+    headers: ACTOR_ACTIVITY_SORT_HEADERS,
+  })
+
   const filtering = clauses.length > 0 || Boolean(search)
   const refusals = listQueryRefusals(refused, {
     fields: ACTIVITY_LIST_FILTER_FIELDS,
@@ -332,9 +372,12 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
         />
       }
       filterNotices={
-        refusals.length || notices.length || search ? (
+        refusals.length || notices.length || columnSort.notices.length || search ? (
           <Stack spacing={1}>
-            <ListQueryNotices refused={refusals} notices={notices} />
+            <ListQueryNotices
+              refused={refusals}
+              notices={[...notices, ...columnSort.notices]}
+            />
             {search ? (
               <Typography variant="caption" color="text.secondary">
                 {ACTIVITY_SEARCH_HINT}
@@ -350,16 +393,17 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
       loading={loading}
       unreadable={unreadable}
       /*
-       * The grid must NOT also filter, search or sort. The feed is paged, so
-       * a client-side pass would narrow or reorder the rows on screen and
-       * call that the answer — on an audit log, "nothing happened" is the
-       * wrong answer to give about everything that is not on this page.
-       * Passing a handler is what puts the grid in server-filter mode.
+       * The grid must NOT also filter or search. The feed is paged, so a
+       * client-side pass would narrow the rows on screen and call that the
+       * answer — on an audit log, "nothing happened" is the wrong answer to
+       * give about everything that is not on this page. Passing a handler is
+       * what puts the grid in server-filter mode. A header sorts the route's
+       * order or the page, saying which (`columnSort`).
        */
       filterModel={gridFilter.filterModel}
       onFilterModelChange={gridFilter.onFilterModelChange}
       quickFilter
-      disableColumnSorting
+      columnSort={columnSort}
       page={page}
       pageSize={pageSize}
       hasMore={Boolean(nextCursor)}

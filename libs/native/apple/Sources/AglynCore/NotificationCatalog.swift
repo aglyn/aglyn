@@ -17,18 +17,59 @@ public struct NotificationCatalog: Decodable, Sendable {
     public let type: String
     public let label: String
     public let consoleDefault: Bool
+    /// Whether it is emailed when nobody has answered (a site's transactions are).
+    public let emailDefault: Bool?
     public let level: String
+    /// Set for a type that sends its own email: why its Email switch does not decide that.
+    public let selfSentEmail: String?
     public var id: String { type }
+
+    public init(type: String, label: String, consoleDefault: Bool, emailDefault: Bool? = nil, level: String, selfSentEmail: String? = nil) {
+      self.type = type
+      self.label = label
+      self.consoleDefault = consoleDefault
+      self.emailDefault = emailDefault
+      self.level = level
+      self.selfSentEmail = selfSentEmail
+    }
+  }
+
+  /// What a category does on each channel when nobody has answered for it.
+  public struct ChannelDefaults: Decodable, Hashable, Sendable {
+    public let console: Bool
+    public let email: Bool
   }
 
   public struct Category: Decodable, Hashable, Sendable, Identifiable {
     public let id: String
     public let label: String
+    /// What arrives in it, in the reader's words.
+    public let description: String?
+    public let channelDefaults: ChannelDefaults?
     public let types: [Entry]
+
+    public init(id: String, label: String, description: String? = nil, channelDefaults: ChannelDefaults? = nil, types: [Entry]) {
+      self.id = id
+      self.label = label
+      self.description = description
+      self.channelDefaults = channelDefaults
+      self.types = types
+    }
+  }
+
+  /// A digest the settings page lists, under the key its sender reads.
+  public struct Digest: Decodable, Hashable, Sendable, Identifiable {
+    public let key: String
+    public let label: String
+    public let description: String
+    public var id: String { key }
   }
 
   public let levels: [Level]
   public let categories: [Category]
+  public let digests: [Digest]?
+  public let digestPrefsField: String?
+  public let insightDigestsField: String?
 
   /// The bundled catalog.
   public static let shared: NotificationCatalog = {
@@ -39,9 +80,18 @@ public struct NotificationCatalog: Decodable, Sendable {
     return catalog
   }()
 
-  public init(levels: [Level], categories: [Category]) {
+  public init(levels: [Level], categories: [Category], digests: [Digest]? = nil) {
     self.levels = levels
     self.categories = categories
+    self.digests = digests
+    self.digestPrefsField = nil
+    self.insightDigestsField = nil
+  }
+
+  /// The category a type falls in: its prefix when that category exists, else `system`.
+  public func category(of type: String) -> String {
+    let prefix = String(type.split(separator: ".").first ?? "")
+    return categories.contains { $0.id == prefix } ? prefix : "system"
   }
 
   public func entry(_ type: String?) -> Entry? {

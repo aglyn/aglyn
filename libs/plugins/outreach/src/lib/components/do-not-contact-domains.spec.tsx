@@ -155,7 +155,7 @@ describe('Do not contact domains (AGL-3244)', () => {
     expect(lastListQueryPlan()?.filters).toEqual([
       { path: 'searchTokens', op: 'array-contains', value: 'other' },
     ])
-    expect(lastListQueryPlan()?.orderBy).toEqual({ path: '__name__', direction: 'asc' })
+    expect(lastListQueryPlan()?.orderBy).toMatchObject({ path: '__name__', direction: 'asc' })
   })
 
   it('finds a domain past the first page, alphabetically (AGL-3321)', async () => {

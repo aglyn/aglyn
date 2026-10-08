@@ -22,7 +22,11 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { planNotificationFilters } from './notification-filters'
+import {
+  NOTIFICATION_DEFAULT_SORT,
+  NOTIFICATION_SORTS,
+  planNotificationFilters,
+} from './notification-filters'
 
 const notificationFilterWheres = (
   clauses: Parameters<typeof planNotificationFilters>[0],
@@ -91,5 +95,42 @@ describe('planNotificationFilters', () => {
         'type:ASCENDING,read:ASCENDING,createdAt:DESCENDING',
       ]),
     )
+  })
+})
+
+describe('the feed sorts by every stored header (AGL-3680)', () => {
+  it('serves each header order on the query while nothing narrows the feed', () => {
+    for (const sort of NOTIFICATION_SORTS) {
+      const plan = planNotificationFilters([], { path: sort.path, direction: sort.direction })
+      expect(plan.orderBy).toBe(sort)
+      expect(plan.notices).toEqual([])
+    }
+  })
+
+  it('newest first is the default and holds under a filter', () => {
+    const status = { field: 'readAt', op: 'equals', value: 'false' } as const
+    expect(planNotificationFilters([]).orderBy).toBe(NOTIFICATION_DEFAULT_SORT)
+    const plan = planNotificationFilters([status], NOTIFICATION_DEFAULT_SORT)
+    expect(plan.orderBy).toBe(NOTIFICATION_DEFAULT_SORT)
+    expect(plan.notices).toEqual([])
+  })
+
+  it('an alone order under a filter falls back to newest first and says so', () => {
+    const type = { field: 'type', op: 'equals', value: 'billing.invoice' } as const
+    const plan = planNotificationFilters([type], { path: 'title', direction: 'asc' })
+    expect(plan.orderBy).toBe(NOTIFICATION_DEFAULT_SORT)
+    expect(plan.notices).toEqual([
+      'Sorted by When: Notification sorts only with no filter on.',
+    ])
+  })
+
+  it('an order the feed does not offer is newest first, never a raw path', () => {
+    expect(planNotificationFilters([], { path: 'body', direction: 'asc' }).orderBy).toBe(
+      NOTIFICATION_DEFAULT_SORT,
+    )
+  })
+
+  it('every non-default order is alone, so it needs no composite', () => {
+    expect(NOTIFICATION_SORTS.slice(1).every((sort) => sort.alone)).toBe(true)
   })
 })

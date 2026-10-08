@@ -164,11 +164,33 @@ export function crmTaskViewPlan(
  * Done.
  *=========================================*/
 
-/** The orders the list takes: soonest first, and Done's most recently due first. */
+/**
+ * The orders the list takes: soonest first, and Done's most recently due
+ * first — the Due header either way — then each header the query can order
+ * by (AGL-3680): the title (`titleLower`) and the priority by its rank
+ * (`priorityRank`), each stored on every task. Each
+ * is `alone`: served with no filter or search on beyond the view, beside the
+ * view's base by one `(status, field)`, `(assigneeUid, field)` and
+ * `(visibleTo, field)` composite per direction — and under a dated view
+ * (Overdue, Today, Upcoming), whose window orders the list by Due, not at
+ * all, which the list says. Type and Status (picklists, in the org's
+ * order), Assignee and For sort the page.
+ */
 export const TASK_LIST_SORTS: readonly ListQuerySort[] = [
-  { path: 'dueAtMs', direction: 'asc' },
-  { path: 'dueAtMs', direction: 'desc' },
+  { path: 'dueAtMs', direction: 'asc', column: 'dueAtMs', label: 'Due' },
+  { path: 'dueAtMs', direction: 'desc', column: 'dueAtMs', label: 'Due' },
+  { path: 'titleLower', direction: 'asc', column: 'title', label: 'Task', alone: true },
+  { path: 'titleLower', direction: 'desc', column: 'title', label: 'Task', alone: true },
+  { path: 'priorityRank', direction: 'asc', column: 'priority', label: 'Priority', alone: true },
+  { path: 'priorityRank', direction: 'desc', column: 'priority', label: 'Priority', alone: true },
 ]
+
+/** The view's own order: the Due header, the way the view reads it. */
+export function crmTaskViewSort(plan: Pick<CrmTaskViewPlan, 'direction'>): ListQuerySort {
+  return TASK_LIST_SORTS.find(
+    (sort) => sort.path === 'dueAtMs' && sort.direction === plan.direction,
+  ) as ListQuerySort
+}
 
 /** What the Filters panel may name on a task, besides the view. */
 export const TASK_LIST_QUERY_FIELDS: readonly ListFilterField[] = [

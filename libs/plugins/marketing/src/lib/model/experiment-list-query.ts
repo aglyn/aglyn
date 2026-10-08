@@ -59,6 +59,17 @@ export const EXPERIMENT_LIST_QUERY: ListQueryDeclaration = {
     { column: 'target', kind: 'exact', path: 'target', presence: 'always', operators: ['equals', 'isAnyOf'] },
     { column: 'status', kind: 'exact', path: 'status', presence: 'always', operators: ['equals', 'isAnyOf'] },
   ],
-  sorts: [{ path: 'name', direction: 'asc' }],
+  /*
+   * The headers (AGL-3680): Experiment orders the query both ways — `name`
+   * is on every experiment (see the card) — and Status alone; Tests is
+   * drawn from the target and the variant count and sorts the page. `alone`
+   * on this unscoped collection costs no composite.
+   */
+  sorts: [
+    { path: 'name', direction: 'asc', column: 'name', label: 'Experiment' },
+    { path: 'name', direction: 'desc', column: 'name', label: 'Experiment', alone: true },
+    { path: 'status', direction: 'asc', column: 'status', label: 'Status', alone: true },
+    { path: 'status', direction: 'desc', column: 'status', label: 'Status', alone: true },
+  ],
   search: { tokensPath: EXPERIMENT_NAME_TOKENS },
 }

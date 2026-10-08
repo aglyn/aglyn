@@ -60,7 +60,6 @@ private fun nowMs() = Clock.System.now().toEpochMilliseconds()
 @OptIn(ExperimentalUuidApi::class)
 private fun attemptKey() = "pos-booking-${Uuid.random()}"
 
-private fun usd(cents: Long) = formatReceiptMoney(cents.toDouble(), "usd")
 
 private sealed interface Loaded {
   data object Loading : Loaded
@@ -73,7 +72,7 @@ private fun stateChip(state: BookingInPersonState): Pair<String, StatusTone> = w
   BookingInPersonState.COLLECTING -> "Card in progress" to StatusTone.INFO
   BookingInPersonState.AWAITING_ONLINE -> "Paying online" to StatusTone.INFO
   BookingInPersonState.PAYABLE -> "To pay" to StatusTone.WARNING
-  BookingInPersonState.CANCELED -> "Canceled" to StatusTone.NEUTRAL
+  BookingInPersonState.CANCELED, BookingInPersonState.UNKNOWN -> "Canceled" to StatusTone.NEUTRAL
 }
 
 /**
@@ -193,7 +192,7 @@ private fun BookingRow(booking: CounterBooking, canPay: Boolean, onPay: () -> Un
 }
 
 @Composable
-private fun PayDialog(
+internal fun PayDialog(
   booking: CounterBooking,
   onDismiss: () -> Unit,
   pay: suspend (Long, (PricedCharge) -> Unit) -> InPersonOutcome,

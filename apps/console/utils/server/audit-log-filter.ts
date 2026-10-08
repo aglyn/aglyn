@@ -16,6 +16,7 @@
  */
 
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import type { ListFilterInput } from './list-filter'
 
 /**
@@ -55,4 +56,15 @@ export function auditLogSearchWords(raw: unknown): string[] {
     .split(/\s+/)
     .map((word) => word.trim())
     .filter(Boolean)
+}
+
+/**
+ * The header order an audit-log request asks for, from its `sort` parameter
+ * (`path:asc` or `path:desc`, AGL-3680), or null for the log's own order.
+ * Only an order the declaration offers is ever served — `planListQuery`
+ * ignores any other — so a forged path reads nothing new.
+ */
+export function readAuditLogSort(raw: unknown): ListQuerySort | null {
+  const [path, direction] = String(raw ?? '').split(':')
+  return path && (direction === 'asc' || direction === 'desc') ? { path, direction } : null
 }

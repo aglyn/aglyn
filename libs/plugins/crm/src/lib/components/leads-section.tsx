@@ -45,6 +45,7 @@ import { customFieldColumns } from './contact-custom-columns'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
 import { useCrmFoldsScope, useCrmListQuery } from '../hooks/use-crm-list-query'
+import { crmViewQuerySort, useCrmColumnSort } from '../hooks/use-crm-column-sort'
 import CrmViewsControl from './crm-views-control'
 import { CrmListActions, CrmListToolbar } from './crm-list-toolbar'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
@@ -78,6 +79,7 @@ import {
   LEAD_FILTER_CODECS,
   LEAD_LIST_DECLARATION,
   LEAD_LIST_FILTER_FIELDS,
+  LEAD_LIST_SORTS,
   LEAD_LIST_FILTER_HEADERS,
   LEAD_PICKLIST_FILTERS,
   LEAD_SOURCE_DIRECTION_FILTER_OPTIONS,
@@ -88,6 +90,7 @@ import {
   leadClauseImpliesScope,
   leadClausesToStore,
   leadQueryClause,
+  leadStatusBase,
 } from '../model/lead-filters'
 import { crmAskClauses, crmQueryRefusals } from '../model/crm-list-query'
 import {
@@ -314,14 +317,35 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     [clauses, scopeTokens, foldsScope],
   )
   const searchKey = gridFilter.searchWords.join(' ')
+  /*
+   * The Status the list always asks is its BASE (AGL-3680; see
+   * `leadStatusBase`), so a header order — served only with no filter on —
+   * is served on the Open leads the list opens with. Every other clause
+   * stays a filter.
+   */
+  const statusBase = useMemo(
+    () => leadStatusBase(asked.clauses.find((clause) => clause.field === 'status')),
+    [asked.clauses],
+  )
+  const filterClauses = useMemo(
+    () => asked.clauses.filter((clause) => clause.field !== 'status'),
+    [asked.clauses],
+  )
+  // The header order the view asks (AGL-3680), read before the query it orders.
+  const leadSort = useMemo(
+    () => crmViewQuerySort(LEAD_LIST_SORTS, views.state.sort, LEAD_LIST_SORTS[0]),
+    [views.state.sort],
+  )
   const paged = useCrmListQuery<Record<string, unknown> & CrmLeadFields & { $id: string }>({
     scope: dataRoot,
     collection: 'leads',
     visibleTo: scopeTokens,
     foldsScope,
     declaration: LEAD_LIST_DECLARATION,
-    clauses: asked.clauses,
+    clauses: filterClauses,
     search: gridFilter.searchWords,
+    base: statusBase,
+    sort: leadSort.sort,
     impliesScope: leadClauseImpliesScope,
     prefixSearch: LEAD_PREFIX_SEARCH,
   })
@@ -360,9 +384,13 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
 
   // The list's filter, when one narrows it, for the export to read the same
   // records the list does (AGL-3528).
+  // The Status rides the plan's base (AGL-3680), so it narrows the export too.
   const exportFilter = useMemo(
-    () => (paged.plan.served.length || paged.plan.searched ? { label: 'what the list shows', plan: paged.plan } : null),
-    [paged.plan],
+    () =>
+      paged.plan.served.length || paged.plan.searched || statusBase.length
+        ? { label: 'what the list shows', plan: paged.plan }
+        : null,
+    [paged.plan, statusBase],
   )
 
   const [assigning, setAssigning] = useState<LeadRow | null>(null)
@@ -781,6 +809,36 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     [columns, filterOptions],
   )
   const grid = useCrmViewGrid(views, filterColumns, LEAD_HIDDEN_COLUMNS)
+  /*
+   * EVERY HEADER SORTS (AGL-3680): the stored ones on the query
+   * (`LEAD_LIST_SORTS`), the rest over the page, saying so — Status by its
+   * meaning's place, and the picklist columns in the order the org keeps
+   * their values, as a picklist sorts.
+   */
+  const pageSorts = useMemo(() => {
+    const rank = (set: Parameters<typeof Aglyn.crmPicklistRank>[0] | undefined, label: unknown) =>
+      set && String(label ?? '').trim() ? Aglyn.crmPicklistRank(set, label) : null
+    return {
+      status: (row: LeadRow) => Aglyn.CRM_LEAD_STATUSES.indexOf(Aglyn.crmLeadStatus(row)),
+      leadSource: (row: LeadRow) => rank(leadSourceList.picklist, row.leadSource),
+      ...Object.fromEntries(
+        LEAD_PICKLIST_FILTERS.map((entry) => [
+          entry.column,
+          (row: LeadRow) => rank(leadPicklists.lists[entry.picklistId], row[entry.column]),
+        ]),
+      ),
+    }
+  }, [leadSourceList.picklist, leadPicklists.lists])
+  const columnSort = useCrmColumnSort<LeadRow>({
+    views,
+    sorts: LEAD_LIST_SORTS,
+    defaultSort: LEAD_LIST_SORTS[0],
+    asked: leadSort,
+    orderBy: paged.plan.orderBy,
+    rows,
+    columns: grid.columns,
+    pageSorts,
+  })
 
   return (
     <>
@@ -831,7 +889,10 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
               marksServed={false}
             />
           </CrmListToolbar>
-          <ListQueryNotices refused={refused} notices={paged.plan.notices} />
+          <ListQueryNotices
+            refused={refused}
+            notices={[...paged.plan.notices, ...columnSort.notices]}
+          />
           <LeadsBulkBar
             rows={rows}
             selected={selectedIds}
@@ -843,7 +904,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           />
           <CrmColumnOrderProvider value={grid.columnOrder}>
             <ListTable
-              rows={rows}
+              rows={columnSort.rows}
+              columnSort={columnSort}
               columns={grid.columns}
               slots={CRM_LIST_SLOTS}
               selectable={{
@@ -852,13 +914,11 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
               }}
               loading={status === 'loading'}
               onOpen={(_id, row: LeadRow) => router.push(routes.lead(row.leadId))}
-              // Columns are the view's, controlled (AGL-2617). The query
-              // orders the list — newest seen first — so the grid sorts
-              // nothing itself: a sort over one page would reorder that page.
+              // Columns are the view's, controlled (AGL-2617). The headers
+              // sort through `columnSort` (AGL-3680): a stored column
+              // re-asks the query, any other sorts the page and says so.
               columnVisibilityModel={grid.columnVisibilityModel}
               onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
-              sortingMode="server"
-              disableColumnSorting
               // The panel and the search are the grid's; the query answers
               // both (AGL-3321).
               filterMode="server"

@@ -47,6 +47,8 @@ import {
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
@@ -176,6 +178,19 @@ const SEND_FILTER_HEADERS: Readonly<Record<string, string>> = {
   status: 'Status',
   createdAtMs: 'Created',
 }
+
+/*
+ * State is derived from the send's counters, and the counters stay absent
+ * until something is counted (see `campaign-list-query.ts`), so these sort
+ * the page (AGL-3680); Subject orders the query.
+ */
+const SEND_PAGE_SORTS = {
+  state: (send: CampaignSend) => campaignSendDisplay(send).label,
+  sent: (send: CampaignSend) => send.stats?.sent ?? null,
+  opens: (send: CampaignSend) => send.stats?.opens ?? null,
+  clicks: (send: CampaignSend) => send.stats?.clicks ?? null,
+}
+const SEND_PAGE_SORT_HEADERS = { state: 'State', sent: 'Sent', opens: 'Opens', clicks: 'Clicks' }
 
 export interface CampaignDetailCardProps {
   /** The site, or `null` on the org Marketing hub. */
@@ -374,6 +389,8 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
    * like the window: a single send's report reads none of it.
    */
   const gridFilter = useListGridFilter({ selectFields: ['status'] })
+  // Subject orders the query; State and the figures the page (AGL-3680).
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const sendPage = useListQuery<CampaignSend>({
     collection: campaign ? campaignSendsCollection(firestore, orgId) : null,
     declaration: CAMPAIGN_EMAILS_QUERY,
@@ -384,9 +401,19 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         { path: 'emailCampaignId', op: '==', value: campaignId },
         ...campaignSendsScope(hostId),
       ],
+      sort: askedSort,
     },
     deps: [firestore, orgId, hostId, campaignId, Boolean(campaign)],
     idField: '$id',
+  })
+  const sendSort = useListColumnSort<CampaignSend>({
+    sorts: CAMPAIGN_EMAILS_QUERY.sorts,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: sendPage.plan.orderBy,
+    rows: sendPage.rows,
+    pageSorts: SEND_PAGE_SORTS,
+    headers: SEND_PAGE_SORT_HEADERS,
   })
   // The ids the two sections beneath the figures join on. Derived from the
   // window this card already holds, so neither of them reads the send list
@@ -1133,11 +1160,11 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
                 headers: SEND_FILTER_HEADERS,
                 options: SEND_FILTER_OPTIONS,
               })}
-              notices={sendPage.plan.notices}
+              notices={[...sendPage.plan.notices, ...sendSort.notices]}
             />
             <ListTable
               aria-label="The campaign's emails"
-              rows={sendPage.rows}
+              rows={sendSort.rows}
               columns={listFilterGridColumns(
                 sendColumns as GridColDef[],
                 SEND_FILTER_FIELDS,
@@ -1153,13 +1180,14 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
               /*
                * The panel and the search are the grid's; every clause and the
                * search word are on the table's query (AGL-3321), and the grid
-               * neither filters nor sorts the page it is handed.
+               * neither filters nor sorts the page it is handed: Subject
+               * orders the query, State and the figures the page (AGL-3680).
                */
               filterMode="server"
               filterModel={gridFilter.filterModel}
               onFilterModelChange={gridFilter.onFilterModelChange}
               quickFilter
-              disableColumnSorting
+              columnSort={sendSort}
               hideFooter
               initialState={{
                 columns: {

@@ -30,10 +30,11 @@ import { CRM_NEXT_ACTIVITY_FIELD, readNextTaskAtMs } from '../model/crm-next-act
  * color, today emphasized — because it IS that date, seen from the record.
  * A dash for a record with nothing scheduled, and the same dash for one
  * written before the field existed: the reader's question is "is anything
- * planned", and to both the answer is no. Sorting is off for the reason
- * the custom columns' is — the value is on the row, and a sort over the
- * loaded window would look like a sort over the collection. Filtering is
- * the list's to switch on, through `CRM_NEXT_ACTIVITY_FILTER_FIELD`.
+ * planned", and to both the answer is no. The grid's own sort is off — a
+ * sort over the loaded window would look like a sort over the collection —
+ * and the list sorts the header instead, on its query, through its
+ * `columnSort` (AGL-3680). Filtering is the list's to switch on, through
+ * `CRM_NEXT_ACTIVITY_FILTER_FIELD`.
  */
 export function nextActivityColumn(nowMs: number): GridColDef {
   return {
