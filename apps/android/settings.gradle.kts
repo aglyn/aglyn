@@ -39,7 +39,7 @@ for (module in listOf("app", "pos", "desktop", "plugin-manifest")) {
   if (file("$module/build.gradle.kts").isFile) include(":$module")
 }
 
-val nativeLibs = listOf("core", "ui", "webview", "plugin-host", "contracts", "hardware", "screens", "shell")
+val nativeLibs = listOf("core", "ui", "webview", "plugin-host", "contracts", "hardware", "site", "screens", "shell")
 for (lib in nativeLibs) {
   include(":native-$lib")
   project(":native-$lib").projectDir = file("../../libs/native/kotlin/$lib")

@@ -6,6 +6,30 @@
       "why": "Reached by organizations: site naming and slug rules over strings."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/media-alt.ts",
+      "why": "Reached by media-metadata: the alt text length cap, no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-embedded-fields.ts",
+      "why": "Reached by media-metadata: the embedded-metadata field names and search text, no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-filter.ts",
+      "why": "The media library's list query declaration, sorts and options; the native media screens plan the same Firestore query (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-folders.ts",
+      "why": "Media folder name, depth and sibling rules the native folder dialogs show (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "why": "Reached by media-filter: media kinds, orientation and the name-token normalizer the library search asks with."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/message-search.ts",
+      "why": "Who sent a form submission (`messageSender`), which the native submissions list and detail name the same way (AGL-3668)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/mobile-push.ts",
       "why": "The push device registry shape, Expo token check, tap data and the account-scope push switch (AGL-3620); no imports at all."
     },
@@ -28,6 +52,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
       "why": "Reached by organizations: the scope token grammar (org, host, consent group)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/site-list-query.ts",
+      "why": "The Sites list query declaration (search and filters on the member's hostMemberships rows); the native Sites screens plan the same query (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/site-wide-outbox.ts",
@@ -82,20 +110,20 @@
       "why": "The product, collection and store shapes, read by the Commerce app product screens (AGL-3621)."
     },
     {
-      "path": "libs/plugins/commerce/src/lib/model/product-channel.ts",
-      "why": "A product's shopping-channel facts (brand, GTIN, MPN, condition, category) and their normalizing, imports nothing; commerce.ts stages them in the product editor (AGL-3637)."
-    },
-    {
-      "path": "libs/plugins/commerce/src/lib/model/product-modifiers.ts",
-      "why": "A product's register modifiers and their validation, imports nothing; commerce.ts checks them when a product is stored (AGL-3607)."
-    },
-    {
       "path": "libs/plugins/commerce/src/lib/model/order-figures.ts",
       "why": "Integer-cent order totals, so the app's sales figures match the console's to the cent (AGL-3621)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
       "why": "Fulfillment state of an order line, reached by the app's order screens (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/product-channel.ts",
+      "why": "A product's shopping-channel facts (brand, GTIN, MPN, condition, category) and their normalizing, imports nothing; commerce.ts stages them in the product editor (AGL-3637)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/product-modifiers.ts",
+      "why": "A product's register modifiers and their validation, imports nothing; commerce.ts checks them when a product is stored (AGL-3607)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/smart-collection-reads.ts",
@@ -112,6 +140,14 @@
     {
       "path": "libs/plugins/commerce/src/lib/printing/render-text.ts",
       "why": "The print layout as plain text, for the app's share sheet (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/forms/src/lib/components/form-list-query.ts",
+      "why": "The forms list query declaration and its options; the native Forms screens plan the same query (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/constants/list-queries.ts",
+      "why": "The submissions list query declarations; the native submissions screens plan the same query (AGL-3668)."
     },
     {
       "path": "libs/plugins/redirects/src/lib/model/redirects.ts",

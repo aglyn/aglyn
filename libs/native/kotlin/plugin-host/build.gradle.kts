@@ -22,6 +22,7 @@ kotlin {
       api(project(":native-core"))
       api(project(":native-hardware"))
       api(libs.compose.runtime)
+      implementation(project(":native-ui"))
     }
     commonTest.dependencies {
       implementation(kotlin("test"))

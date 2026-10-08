@@ -101,6 +101,15 @@
       "apiPrefixes": [
         "forms"
       ],
+      "mobile": {
+        "$comment": "AGL-3668: a site's forms in the Aglyn app: search, in use or retired, create, duplicate, rename, retire, CRM routing, questions, versions (open in the Besigner, publish) and the form's submissions (the Inbox plugin's screens) with export; list and detail side by side on tablets and desktop.",
+        "android": { "package": "com.aglyn.plugins.forms", "register": "registerFormsNative" },
+        "contributes": {
+          "screens": ["forms.form", "forms.list"],
+          "quickActions": ["forms.open"],
+          "deepLinks": ["forms.page", "forms.record"]
+        }
+      },
       "modules": {
         "site": "site"
       },
@@ -1912,6 +1921,14 @@
       "apiPrefixes": [
         "inbox"
       ],
+      "mobile": {
+        "$comment": "AGL-3668: a site's form submissions in the Aglyn app, the site's or one form's (the Forms screens open it with formId): read filter, search, export, and each submission's fields with read or unread, reply and delete; list and detail side by side on tablets and desktop.",
+        "android": { "package": "com.aglyn.plugins.inbox", "register": "registerInboxNative" },
+        "contributes": {
+          "screens": ["inbox.submission", "inbox.submissions"],
+          "deepLinks": ["inbox.submissions-page"]
+        }
+      },
       "catalog": {
         "order": 14,
         "label": "Inbox",
@@ -2924,6 +2941,40 @@
       }
     },
     {
+      "id": "zapier",
+      "$comment": "AGL-3643: the REST hooks Aglyn's Zapier app subscribes to (`/v1/sites/{siteId}/hooks`, console server declarations), delivering commerce's order events, the bookings plugin's booking events, and relayed contactCreated / formSubmission host events through core's domain-event outbox to the URL Zapier minted for each Zap. It imports no other plugin. Infrastructure, like sms: no catalog entry and no switch — a hook is a standing read held to the API key's scopes and the plan features of what it reads, asked at every delivery. The console card on a site's setup page lists the site's Zaps; it draws nothing, and the user docs say nothing, until the deployment sets ZAPIER_APP_URL, the published app's link. The Zapier app itself lives in apps/zapier and is published from Zapier's developer platform by the operator.",
+      "package": "@aglyn/plugins-zapier",
+      "register": {
+        "console": "registerZapierConsole",
+        "consoleApi": "registerZapierConsoleApi",
+        "serverDeclarations": "registerZapierServerDeclarations",
+        "consoleServerDeclarations": "registerZapierConsoleServerDeclarations",
+        "subprocessors": "zapierSubprocessors"
+      },
+      "apiPrefixes": [
+        "zapier"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "One REST hook: the site, the events, the URL Zapier minted for the Zap and the API key that subscribed it (AGL-3643). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "zapierHooks",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "That one event reached one hook, so an outbox retry does not post it twice (AGL-3643). No customer data; expires by TTL.",
+          "name": "zapierHookDeliveries",
+          "orgField": "orgId"
+        }
+      ],
+      "contributes": {
+        "console": {
+          "slots": [
+            "hostSettings"
+          ]
+        }
+      }
+    },
+    {
       "id": "fulfillment-networks",
       "package": "@aglyn/plugins-fulfillment-networks",
       "register": {
@@ -3114,6 +3165,51 @@
           "slots": [
             "commerceSettings",
             "orderDetail"
+          ]
+        }
+      }
+    },
+    {
+      "id": "delivery-apps",
+      "package": "@aglyn/plugins-delivery-apps",
+      "register": {
+        "console": "registerDeliveryAppsConsole",
+        "consoleApi": "registerDeliveryAppsConsoleApi",
+        "consoleServerDeclarations": "registerDeliveryAppsConsoleServerDeclarations",
+        "subprocessors": "deliveryAppsSubprocessors"
+      },
+      "apiPrefixes": [
+        "delivery-apps"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's link to the merchant's OWN DoorDash, Uber Eats or Grubhub store, by the store id the service shows them: the settings, the item matches and the menu's last send (AGL-3644). No credential: every call is signed with the deployment's partner credentials. Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "deliveryAppStores",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One delivery-service order and the store order it became, with where it stands at the counter and with the service (AGL-3644). Written by the webhooks, the register's routes and the console job.",
+          "name": "deliveryAppOrders",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 30,
+        "$comment": "Delivery-app orders for the POS register (AGL-3644): the merchant's OWN DoorDash, Uber Eats or Grubhub store, linked by its store id; each service's signed webhook brings its orders to the register (the commerce plugin's posOrders zone) to accept, reject, mark ready and hand over, and the answers go back with the deployment's partner credentials. An accepted order becomes a real order through core's core.channel-orders, whose seller takes its units off the shelf in the same transaction; the service's changes, cancels and refunds are recorded through the same seam. The menu is built from core's core.product-catalog. It imports no other plugin. Sold with the register (`features.pos`), no price of its own; the services' fees are theirs. On for every workspace, off for a site only when that site says so, and no release flag: nothing draws until the console holds a service's partner credentials (DELIVERY_APPS_* in .env.selfhost.example).",
+        "label": "Delivery apps",
+        "alwaysOnForWorkspace": true,
+        "description": "Take DoorDash, Uber Eats and Grubhub orders at your register: accept, make and hand them over, with their items off the same shelf.",
+        "siteOff": {
+          "stops": "Switching Delivery apps off for this site stops its DoorDash, Uber Eats and Grubhub orders reaching the register; the services are told the store is not connected.",
+          "keeps": "The linked stores, their item matches and every order already taken are kept, and switching it back on takes new orders again."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "posOrders"
           ]
         }
       }

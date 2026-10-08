@@ -366,8 +366,8 @@ object AglynIcons {
     "help_outline" to Icons.AutoMirrored.Outlined.HelpOutline,
   )
 
-  fun named(name: String?): ImageVector = byName[name] ?: Icons.Outlined.Extension
+  fun named(name: String?): ImageVector = byName[name] ?: CONTENT_ICONS[name] ?: Icons.Outlined.Extension
 
   /** Whether a name has its own icon (a spec naming one that does not would draw the fallback). */
-  fun has(name: String): Boolean = name in byName
+  fun has(name: String): Boolean = name in byName || name in CONTENT_ICONS
 }

@@ -2072,6 +2072,2038 @@
         ],
         "notices": []
       }
+    },
+    {
+      "declaration": "SITE_LIST_DECLARATION",
+      "label": "no clauses",
+      "request": {
+        "clauses": []
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "asc",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_LIST_DECLARATION",
+      "label": "hasCustomDomain is",
+      "request": {
+        "clauses": [
+          {
+            "field": "hasCustomDomain",
+            "op": "is",
+            "value": "true"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "hasCustomDomain",
+            "op": "==",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "nameLower"
+        },
+        "served": [
+          {
+            "field": "hasCustomDomain",
+            "op": "is",
+            "value": "true"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_LIST_DECLARATION",
+      "label": "createdAt is",
+      "request": {
+        "clauses": [
+          {
+            "field": "createdAt",
+            "op": "is",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "createdAt",
+            "op": ">=",
+            "value": {
+              "$date": "2026-03-14T00:00:00.000Z"
+            }
+          },
+          {
+            "path": "createdAt",
+            "op": "<",
+            "value": {
+              "$date": "2026-03-15T00:00:00.000Z"
+            }
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "createdAt",
+            "op": "is",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_LIST_DECLARATION",
+      "label": "createdAt after",
+      "request": {
+        "clauses": [
+          {
+            "field": "createdAt",
+            "op": "after",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "createdAt",
+            "op": ">=",
+            "value": {
+              "$date": "2026-03-15T00:00:00.000Z"
+            }
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "createdAt",
+            "op": "after",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_LIST_DECLARATION",
+      "label": "createdAt onOrAfter",
+      "request": {
+        "clauses": [
+          {
+            "field": "createdAt",
+            "op": "onOrAfter",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "createdAt",
+            "op": ">=",
+            "value": {
+              "$date": "2026-03-14T00:00:00.000Z"
+            }
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "createdAt",
+            "op": "onOrAfter",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_LIST_DECLARATION",
+      "label": "createdAt before",
+      "request": {
+        "clauses": [
+          {
+            "field": "createdAt",
+            "op": "before",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "createdAt",
+            "op": "<",
+            "value": {
+              "$date": "2026-03-14T00:00:00.000Z"
+            }
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "createdAt",
+            "op": "before",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_LIST_DECLARATION",
+      "label": "createdAt onOrBefore",
+      "request": {
+        "clauses": [
+          {
+            "field": "createdAt",
+            "op": "onOrBefore",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "createdAt",
+            "op": "<",
+            "value": {
+              "$date": "2026-03-15T00:00:00.000Z"
+            }
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "createdAt",
+            "op": "onOrBefore",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_LIST_DECLARATION",
+      "label": "sort nameLower asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "asc",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "asc",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_LIST_DECLARATION",
+      "label": "sort nameLower reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "desc",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "asc",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_LIST_DECLARATION",
+      "label": "sort createdAt desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "desc",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_LIST_DECLARATION",
+      "label": "sort createdAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "asc",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "asc",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_LIST_DECLARATION",
+      "label": "an undeclared sort is ignored",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "path": "undeclared",
+          "direction": "asc"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "asc",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_LIST_DECLARATION",
+      "label": "search one word",
+      "request": {
+        "clauses": [],
+        "search": [
+          "Acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_LIST_DECLARATION",
+      "label": "search two words",
+      "request": {
+        "clauses": [],
+        "search": [
+          "acme",
+          "widgets"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": [
+          "Search matches one word at a time: showing results for \"acme\"."
+        ]
+      }
+    },
+    {
+      "declaration": "SITE_LIST_DECLARATION",
+      "label": "an unknown field is refused",
+      "request": {
+        "clauses": [
+          {
+            "field": "nope",
+            "op": "equals",
+            "value": "x"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "asc",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [
+          {
+            "clause": {
+              "field": "nope",
+              "op": "equals",
+              "value": "x"
+            },
+            "reason": "this list does not filter by that"
+          }
+        ],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "no clauses",
+      "request": {
+        "clauses": []
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "displayName contains",
+      "request": {
+        "clauses": [
+          {
+            "field": "displayName",
+            "op": "contains",
+            "value": "Acme Widgets"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "nameTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [
+          {
+            "field": "displayName",
+            "op": "contains",
+            "value": "Acme Widgets"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "slug equals",
+      "request": {
+        "clauses": [
+          {
+            "field": "slug",
+            "op": "equals",
+            "value": "Acme Widgets"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "slug",
+            "op": "==",
+            "value": "acme widgets"
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [
+          {
+            "field": "slug",
+            "op": "equals",
+            "value": "Acme Widgets"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "submissions =",
+      "request": {
+        "clauses": [
+          {
+            "field": "submissions",
+            "op": "=",
+            "value": "42"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.submissions",
+            "op": "==",
+            "value": 42
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [
+          {
+            "field": "submissions",
+            "op": "=",
+            "value": "42"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "submissions !=",
+      "request": {
+        "clauses": [
+          {
+            "field": "submissions",
+            "op": "!=",
+            "value": "42"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.submissions",
+            "op": "!=",
+            "value": 42
+          }
+        ],
+        "orderBy": {
+          "path": "stats.submissions",
+          "direction": "asc"
+        },
+        "served": [
+          {
+            "field": "submissions",
+            "op": "!=",
+            "value": "42"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "submissions >",
+      "request": {
+        "clauses": [
+          {
+            "field": "submissions",
+            "op": ">",
+            "value": "42"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.submissions",
+            "op": ">",
+            "value": 42
+          }
+        ],
+        "orderBy": {
+          "path": "stats.submissions",
+          "direction": "asc"
+        },
+        "served": [
+          {
+            "field": "submissions",
+            "op": ">",
+            "value": "42"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "submissions >=",
+      "request": {
+        "clauses": [
+          {
+            "field": "submissions",
+            "op": ">=",
+            "value": "42"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.submissions",
+            "op": ">=",
+            "value": 42
+          }
+        ],
+        "orderBy": {
+          "path": "stats.submissions",
+          "direction": "asc"
+        },
+        "served": [
+          {
+            "field": "submissions",
+            "op": ">=",
+            "value": "42"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "submissions <",
+      "request": {
+        "clauses": [
+          {
+            "field": "submissions",
+            "op": "<",
+            "value": "42"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.submissions",
+            "op": "<",
+            "value": 42
+          }
+        ],
+        "orderBy": {
+          "path": "stats.submissions",
+          "direction": "asc"
+        },
+        "served": [
+          {
+            "field": "submissions",
+            "op": "<",
+            "value": "42"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "submissions <=",
+      "request": {
+        "clauses": [
+          {
+            "field": "submissions",
+            "op": "<=",
+            "value": "42"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.submissions",
+            "op": "<=",
+            "value": 42
+          }
+        ],
+        "orderBy": {
+          "path": "stats.submissions",
+          "direction": "asc"
+        },
+        "served": [
+          {
+            "field": "submissions",
+            "op": "<=",
+            "value": "42"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "submissions isEmpty",
+      "request": {
+        "clauses": [
+          {
+            "field": "submissions",
+            "op": "isEmpty",
+            "value": ""
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.submissions",
+            "op": "==",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [
+          {
+            "field": "submissions",
+            "op": "isEmpty",
+            "value": ""
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "submissions isNotEmpty",
+      "request": {
+        "clauses": [
+          {
+            "field": "submissions",
+            "op": "isNotEmpty",
+            "value": ""
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.submissions",
+            "op": "!=",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "path": "stats.submissions",
+          "direction": "asc"
+        },
+        "served": [
+          {
+            "field": "submissions",
+            "op": "isNotEmpty",
+            "value": ""
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "leads =",
+      "request": {
+        "clauses": [
+          {
+            "field": "leads",
+            "op": "=",
+            "value": "42"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.leads",
+            "op": "==",
+            "value": 42
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [
+          {
+            "field": "leads",
+            "op": "=",
+            "value": "42"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "leads isEmpty",
+      "request": {
+        "clauses": [
+          {
+            "field": "leads",
+            "op": "isEmpty",
+            "value": ""
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.leads",
+            "op": "==",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [
+          {
+            "field": "leads",
+            "op": "isEmpty",
+            "value": ""
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "lastSubmission is",
+      "request": {
+        "clauses": [
+          {
+            "field": "lastSubmission",
+            "op": "is",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.lastSubmissionAtMs",
+            "op": ">=",
+            "value": 1773446400000
+          },
+          {
+            "path": "stats.lastSubmissionAtMs",
+            "op": "<",
+            "value": 1773532800000
+          }
+        ],
+        "orderBy": {
+          "path": "stats.lastSubmissionAtMs",
+          "direction": "desc"
+        },
+        "served": [
+          {
+            "field": "lastSubmission",
+            "op": "is",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "lastSubmission after",
+      "request": {
+        "clauses": [
+          {
+            "field": "lastSubmission",
+            "op": "after",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.lastSubmissionAtMs",
+            "op": ">=",
+            "value": 1773532800000
+          }
+        ],
+        "orderBy": {
+          "path": "stats.lastSubmissionAtMs",
+          "direction": "desc"
+        },
+        "served": [
+          {
+            "field": "lastSubmission",
+            "op": "after",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "lastSubmission onOrAfter",
+      "request": {
+        "clauses": [
+          {
+            "field": "lastSubmission",
+            "op": "onOrAfter",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.lastSubmissionAtMs",
+            "op": ">=",
+            "value": 1773446400000
+          }
+        ],
+        "orderBy": {
+          "path": "stats.lastSubmissionAtMs",
+          "direction": "desc"
+        },
+        "served": [
+          {
+            "field": "lastSubmission",
+            "op": "onOrAfter",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "lastSubmission before",
+      "request": {
+        "clauses": [
+          {
+            "field": "lastSubmission",
+            "op": "before",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.lastSubmissionAtMs",
+            "op": "<",
+            "value": 1773446400000
+          }
+        ],
+        "orderBy": {
+          "path": "stats.lastSubmissionAtMs",
+          "direction": "desc"
+        },
+        "served": [
+          {
+            "field": "lastSubmission",
+            "op": "before",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "lastSubmission onOrBefore",
+      "request": {
+        "clauses": [
+          {
+            "field": "lastSubmission",
+            "op": "onOrBefore",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.lastSubmissionAtMs",
+            "op": "<",
+            "value": 1773532800000
+          }
+        ],
+        "orderBy": {
+          "path": "stats.lastSubmissionAtMs",
+          "direction": "desc"
+        },
+        "served": [
+          {
+            "field": "lastSubmission",
+            "op": "onOrBefore",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "lastSubmission isNotEmpty",
+      "request": {
+        "clauses": [
+          {
+            "field": "lastSubmission",
+            "op": "isNotEmpty",
+            "value": ""
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "stats.lastSubmissionAtMs",
+            "op": "!=",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "path": "stats.lastSubmissionAtMs",
+          "direction": "desc"
+        },
+        "served": [
+          {
+            "field": "lastSubmission",
+            "op": "isNotEmpty",
+            "value": ""
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "updatedAt is",
+      "request": {
+        "clauses": [
+          {
+            "field": "updatedAt",
+            "op": "is",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "updatedAt",
+            "op": ">=",
+            "value": {
+              "$date": "2026-03-14T00:00:00.000Z"
+            }
+          },
+          {
+            "path": "updatedAt",
+            "op": "<",
+            "value": {
+              "$date": "2026-03-15T00:00:00.000Z"
+            }
+          }
+        ],
+        "orderBy": {
+          "path": "updatedAt",
+          "direction": "desc"
+        },
+        "served": [
+          {
+            "field": "updatedAt",
+            "op": "is",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "updatedAt after",
+      "request": {
+        "clauses": [
+          {
+            "field": "updatedAt",
+            "op": "after",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "updatedAt",
+            "op": ">=",
+            "value": {
+              "$date": "2026-03-15T00:00:00.000Z"
+            }
+          }
+        ],
+        "orderBy": {
+          "path": "updatedAt",
+          "direction": "desc"
+        },
+        "served": [
+          {
+            "field": "updatedAt",
+            "op": "after",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "updatedAt onOrAfter",
+      "request": {
+        "clauses": [
+          {
+            "field": "updatedAt",
+            "op": "onOrAfter",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "updatedAt",
+            "op": ">=",
+            "value": {
+              "$date": "2026-03-14T00:00:00.000Z"
+            }
+          }
+        ],
+        "orderBy": {
+          "path": "updatedAt",
+          "direction": "desc"
+        },
+        "served": [
+          {
+            "field": "updatedAt",
+            "op": "onOrAfter",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "updatedAt before",
+      "request": {
+        "clauses": [
+          {
+            "field": "updatedAt",
+            "op": "before",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "updatedAt",
+            "op": "<",
+            "value": {
+              "$date": "2026-03-14T00:00:00.000Z"
+            }
+          }
+        ],
+        "orderBy": {
+          "path": "updatedAt",
+          "direction": "desc"
+        },
+        "served": [
+          {
+            "field": "updatedAt",
+            "op": "before",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "updatedAt onOrBefore",
+      "request": {
+        "clauses": [
+          {
+            "field": "updatedAt",
+            "op": "onOrBefore",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "updatedAt",
+            "op": "<",
+            "value": {
+              "$date": "2026-03-15T00:00:00.000Z"
+            }
+          }
+        ],
+        "orderBy": {
+          "path": "updatedAt",
+          "direction": "desc"
+        },
+        "served": [
+          {
+            "field": "updatedAt",
+            "op": "onOrBefore",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "status equals",
+      "request": {
+        "clauses": [
+          {
+            "field": "status",
+            "op": "equals",
+            "value": "true"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "retired",
+            "op": "==",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [
+          {
+            "field": "status",
+            "op": "equals",
+            "value": "true"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "leadRouting equals",
+      "request": {
+        "clauses": [
+          {
+            "field": "leadRouting",
+            "op": "equals",
+            "value": "true"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "routing.lead",
+            "op": "==",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [
+          {
+            "field": "leadRouting",
+            "op": "equals",
+            "value": "true"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "campaignIds isAnyOf",
+      "request": {
+        "clauses": [
+          {
+            "field": "campaignIds",
+            "op": "isAnyOf",
+            "value": "alpha,beta"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "campaignIds",
+            "op": "array-contains-any",
+            "value": [
+              "alpha",
+              "beta"
+            ]
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [
+          {
+            "field": "campaignIds",
+            "op": "isAnyOf",
+            "value": "alpha,beta"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "inCampaign equals",
+      "request": {
+        "clauses": [
+          {
+            "field": "inCampaign",
+            "op": "equals",
+            "value": "true"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "inCampaign",
+            "op": "==",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [
+          {
+            "field": "inCampaign",
+            "op": "equals",
+            "value": "true"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort __name__ asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "asc",
+          "path": "__name__"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort __name__ reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "desc",
+          "path": "__name__"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "an undeclared sort is ignored",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "path": "undeclared",
+          "direction": "asc"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "search one word",
+      "request": {
+        "clauses": [],
+        "search": [
+          "Acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "search two words",
+      "request": {
+        "clauses": [],
+        "search": [
+          "acme",
+          "widgets"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": [
+          "Search matches one word at a time: showing results for \"acme\"."
+        ]
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "search with a contains clause",
+      "request": {
+        "clauses": [
+          {
+            "field": "displayName",
+            "op": "contains",
+            "value": "widget"
+          }
+        ],
+        "search": [
+          "acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [
+          {
+            "clause": {
+              "field": "displayName",
+              "op": "contains",
+              "value": "widget"
+            },
+            "reason": "cannot be combined with the search — clear the search to use it"
+          }
+        ],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "an unknown field is refused",
+      "request": {
+        "clauses": [
+          {
+            "field": "nope",
+            "op": "equals",
+            "value": "x"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [
+          {
+            "clause": {
+              "field": "nope",
+              "op": "equals",
+              "value": "x"
+            },
+            "reason": "this list does not filter by that"
+          }
+        ],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "no clauses",
+      "request": {
+        "clauses": []
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "from contains",
+      "request": {
+        "clauses": [
+          {
+            "field": "from",
+            "op": "contains",
+            "value": "Acme Widgets"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "senderTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "from",
+            "op": "contains",
+            "value": "Acme Widgets"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "read equals",
+      "request": {
+        "clauses": [
+          {
+            "field": "read",
+            "op": "equals",
+            "value": "true"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "read",
+            "op": "==",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "read",
+            "op": "equals",
+            "value": "true"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "formId equals",
+      "request": {
+        "clauses": [
+          {
+            "field": "formId",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "formId",
+            "op": "==",
+            "value": "alpha"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "formId",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "sort createdAt desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "desc",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "sort createdAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "asc",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "an undeclared sort is ignored",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "path": "undeclared",
+          "direction": "asc"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "search one word",
+      "request": {
+        "clauses": [],
+        "search": [
+          "Acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "search two words",
+      "request": {
+        "clauses": [],
+        "search": [
+          "acme",
+          "widgets"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": [
+          "Search matches one word at a time: showing results for \"acme\"."
+        ]
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "search with an exact clause",
+      "request": {
+        "clauses": [
+          {
+            "field": "formId",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "search": [
+          "acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          },
+          {
+            "path": "formId",
+            "op": "==",
+            "value": "alpha"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "formId",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "searched": "acme",
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "search with a contains clause",
+      "request": {
+        "clauses": [
+          {
+            "field": "from",
+            "op": "contains",
+            "value": "widget"
+          }
+        ],
+        "search": [
+          "acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [
+          {
+            "clause": {
+              "field": "from",
+              "op": "contains",
+              "value": "widget"
+            },
+            "reason": "cannot be combined with the search — clear the search to use it"
+          }
+        ],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "an unknown field is refused",
+      "request": {
+        "clauses": [
+          {
+            "field": "nope",
+            "op": "equals",
+            "value": "x"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [
+          {
+            "clause": {
+              "field": "nope",
+              "op": "equals",
+              "value": "x"
+            },
+            "reason": "this list does not filter by that"
+          }
+        ],
+        "notices": []
+      }
     }
   ]
 }

@@ -2459,6 +2459,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Zapier (AGL-3643): a site's REST hooks — the URL Zapier minted for each
+    // Zap, the events it takes and the API key that subscribed it — and the
+    // markers saying an event already reached a hook. Written and read by the
+    // zapier plugin's server half through the Admin SDK only. Deny ALL client
+    // access, staff and the owner included: a hook's URL is a capability
+    // (whoever holds it can post into the merchant's Zap), and a client that
+    // could write a hook could send a site's orders, bookings and contacts to
+    // a URL of its choosing, or mark an event delivered that never was. Org
+    // erasure destroys both by the `orgId` field.
+    match /zapierHooks/{hookId} {
+      allow read, write: if false;
+    }
+    match /zapierHookDeliveries/{deliveryId} {
+      allow read, write: if false;
+    }
+
     // Fulfillment networks (AGL-3634): a site's connection to the merchant's
     // OWN ShipBob or Amazon Multi-Channel Fulfillment account — its grant
     // sealed, its webhook token's hash, its settings, stock count and log —
@@ -2523,6 +2539,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /inventorySyncProducts/{linkId} {
+      allow read, write: if false;
+    }
+
+    // Delivery apps (AGL-3644): a site's link to the merchant's OWN DoorDash,
+    // Uber Eats or Grubhub store — its settings, item matches and menu — and
+    // each order the service sent, with where it stands at the counter and
+    // with the service. Written and read by the delivery-apps plugin's
+    // webhooks, register routes and job through the Admin SDK only. Deny ALL
+    // client access, staff and the owner included: a client that could write
+    // a store link could route another merchant's orders to its own register,
+    // and one that could write an order could have the service told it was
+    // accepted or ready. Org erasure destroys both by the `orgId` field.
+    match /deliveryAppStores/{deliveryAppStoreId} {
+      allow read, write: if false;
+    }
+    match /deliveryAppOrders/{deliveryAppOrderId} {
       allow read, write: if false;
     }
 

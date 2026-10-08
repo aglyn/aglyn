@@ -25,6 +25,7 @@ kotlin {
       api(project(":native-plugin-host"))
       api(project(":native-screens"))
       implementation(project(":native-webview"))
+      api(project(":native-site"))
       implementation(libs.compose.ui.backhandler)
     }
     androidMain.dependencies {

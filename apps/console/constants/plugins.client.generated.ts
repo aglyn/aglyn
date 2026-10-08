@@ -188,6 +188,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-marketing-platforms'),
   },
   {
+    id: 'zapier',
+    apiPrefixes: ["zapier"],
+    register: {"console":"registerZapierConsole"},
+    contributes: {"console":{"slots":["hostSettings"]}},
+    load: () => import('@aglyn/plugins-zapier'),
+  },
+  {
     id: 'fulfillment-networks',
     apiPrefixes: ["fulfillment-networks"],
     register: {"console":"registerFulfillmentNetworksConsole"},
@@ -214,6 +221,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     register: {"console":"registerInventorySyncConsole"},
     contributes: {"console":{"slots":["commerceSettings","orderDetail"]}},
     load: () => import('@aglyn/plugins-inventory-sync'),
+  },
+  {
+    id: 'delivery-apps',
+    apiPrefixes: ["delivery-apps"],
+    register: {"console":"registerDeliveryAppsConsole"},
+    contributes: {"console":{"slots":["commerceSettings","posOrders"]}},
+    load: () => import('@aglyn/plugins-delivery-apps'),
   },
   {
     id: 'sales-channels',

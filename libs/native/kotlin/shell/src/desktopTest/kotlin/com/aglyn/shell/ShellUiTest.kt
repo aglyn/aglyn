@@ -98,7 +98,7 @@ class ShellUiTest {
       api = ConsoleApiClient(config.consoleOrigin, HttpClient(MockEngine { respondOk() }), auth::idToken),
       workspace = WorkspaceStore(CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), auth, firestore, prefs),
       prefs = prefs,
-      registry = NativePluginRegistry(),
+      registry = NativePluginRegistry().also { it.load(PLATFORM_ENTRIES) },
       besigner = { _, _, _ -> },
       writer = writer,
     )
@@ -125,7 +125,7 @@ class ShellUiTest {
     onNodeWithTag("site-status").assertIsDisplayed()
     onNodeWithText("Live").assertIsDisplayed()
     onNodeWithText("shop.aglyn.app").assertIsDisplayed()
-    onNodeWithTag("quick-action-pages").assertIsDisplayed()
+    onNodeWithTag("quick-action-site.pages-open").assertIsDisplayed()
     onNodeWithText("New order #1042").assertIsDisplayed()
     onNodeWithText("5 min ago").assertIsDisplayed()
   }
@@ -191,7 +191,7 @@ class ShellUiTest {
     onNodeWithTag("sign-in-submit").performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("site-header") > 0 }
     runOnIdle { navigator.select(ShellNavigator.SETTINGS) }
-    onNodeWithTag("settings-notifications").performClick()
+    onNodeWithTag("settings-notifications").performScrollTo().performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("notification-settings") > 0 }
   }
 }

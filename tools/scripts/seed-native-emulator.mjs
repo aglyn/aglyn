@@ -134,6 +134,7 @@ const areas = [
   ['store', 'seedCommerce'],
   ['pos', 'seedPos'],
   ['notifications', 'seedNotifications'],
+  ['content', 'seedContent'],
   ['account', 'seedAccount'],
 ]
 let staff = null

@@ -132,6 +132,26 @@ public struct FirstPartyPluginSiteOffPages: Codable, Hashable, Sendable {
   }
 }
 
+public struct FormLeadRoutingOptionsItem: Codable, Hashable, Sendable {
+  public var label: String
+  public var value: String
+
+  public init(label: String, value: String) {
+    self.label = label
+    self.value = value
+  }
+}
+
+public struct FormStatusOptionsItem: Codable, Hashable, Sendable {
+  public var label: String
+  public var value: String
+
+  public init(label: String, value: String) {
+    self.label = label
+    self.value = value
+  }
+}
+
 public struct HostOrder: Codable, Hashable, Sendable {
   public var amountCents: Double?
   public var billingAddress: OrderAddress?
@@ -722,6 +742,34 @@ public enum ListQuerySortDirection: String, Codable, CaseIterable, Hashable, Sen
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum MediaKind: String, Codable, CaseIterable, Hashable, Sendable {
+  case document = "document"
+  case image = "image"
+  case pdf = "pdf"
+  case video = "video"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum MediaSort: String, Codable, CaseIterable, Hashable, Sendable {
+  case name = "name"
+  case newest = "newest"
+  case oldest = "oldest"
+  case size = "size"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct MobileDevice: Codable, Hashable, Sendable {
   public var apnsEnvironment: ApnsEnvironment?
   public var app: MobileDeviceApp
@@ -848,10 +896,12 @@ public struct OrderChannelSource: Codable, Hashable, Sendable {
   public var externalRef: String
   public var fees: [OrderChannelSourceFeesItem]?
   public var feesTotalCents: Double?
+  public var handoff: OrderChannelSourceHandoff?
   public var lines: [OrderChannelSourceLinesItem]
+  public var refundIds: [String]?
   public var taxRemittedByChannel: Bool
 
-  public init(channelId: String, channelLabel: String, currency: String, externalOrderId: String, externalRef: String, fees: [OrderChannelSourceFeesItem]? = nil, feesTotalCents: Double? = nil, lines: [OrderChannelSourceLinesItem], taxRemittedByChannel: Bool) {
+  public init(channelId: String, channelLabel: String, currency: String, externalOrderId: String, externalRef: String, fees: [OrderChannelSourceFeesItem]? = nil, feesTotalCents: Double? = nil, handoff: OrderChannelSourceHandoff? = nil, lines: [OrderChannelSourceLinesItem], refundIds: [String]? = nil, taxRemittedByChannel: Bool) {
     self.channelId = channelId
     self.channelLabel = channelLabel
     self.currency = currency
@@ -859,7 +909,9 @@ public struct OrderChannelSource: Codable, Hashable, Sendable {
     self.externalRef = externalRef
     self.fees = fees
     self.feesTotalCents = feesTotalCents
+    self.handoff = handoff
     self.lines = lines
+    self.refundIds = refundIds
     self.taxRemittedByChannel = taxRemittedByChannel
   }
 }
@@ -871,6 +923,18 @@ public struct OrderChannelSourceFeesItem: Codable, Hashable, Sendable {
   public init(amountCents: Double, label: String) {
     self.amountCents = amountCents
     self.label = label
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum OrderChannelSourceHandoff: String, Codable, CaseIterable, Hashable, Sendable {
+  case courier = "courier"
+  case ship = "ship"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
@@ -1523,11 +1587,51 @@ public struct ReceiptTender: Codable, Hashable, Sendable {
   }
 }
 
+public struct SiteFilterOptions: Codable, Hashable, Sendable {
+  public var hasCustomDomain: [SiteFilterOptionsHasCustomDomainItem]
+
+  public init(hasCustomDomain: [SiteFilterOptionsHasCustomDomainItem]) {
+    self.hasCustomDomain = hasCustomDomain
+  }
+}
+
+public struct SiteFilterOptionsHasCustomDomainItem: Codable, Hashable, Sendable {
+  public var label: String
+  public var value: String
+
+  public init(label: String, value: String) {
+    self.label = label
+    self.value = value
+  }
+}
+
 /// The values in contracts.generated.json, keyed as the TypeScript exports are.
 public struct ContractValues: Codable, Hashable, Sendable {
   public let firstPartyPlugins: [FirstPartyPlugin]
+  public let formInUse: ListQueryFilter
+  public let formLeadRoutingOptions: [FormLeadRoutingOptionsItem]
+  public let formListFilterHeaders: [String: String]
+  public let formListQuery: ListQueryDeclaration
+  public let formScopedSubmissionListQuery: ListQueryDeclaration
+  public let formStatusOptions: [FormStatusOptionsItem]
   public let listQueryDisjunctions: Int
   public let listQueryIdPath: String
+  public let mediaAltMaxLength: Int
+  public let mediaAltOptions: [ListFilterOption]
+  public let mediaDisjunctionLimit: Int
+  public let mediaFilterHeaders: [String: String]
+  public let mediaFolderMaxDepth: Int
+  public let mediaFolderNameMaxLength: Int
+  public let mediaKinds: [MediaKind]
+  public let mediaListQuery: ListQueryDeclaration
+  public let mediaOrientationOptions: [ListFilterOption]
+  public let mediaScopedSearchNotice: String
+  public let mediaSortLabels: [String: String]
+  public let mediaSortOrder: [String: ListQuerySort]
+  public let mediaSorts: [MediaSort]
+  public let mediaTagMaxCount: Int
+  public let mediaTagMaxLength: Int
+  public let mediaTypeOptions: [ListFilterOption]
   public let nameTokenLimit: Int
   public let nameTokenMaxPrefix: Int
   public let openDisputeClause: ListFilterClause
@@ -1540,17 +1644,47 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let orderStatusColor: [String: OrderStatusColorValue]
   public let orderStatusLabels: [String: String]
   public let orderStatusOptions: [ListFilterOption]
+  public let orgSubmissionListQuery: ListQueryDeclaration
   public let productListBase: [ListQueryFilter]
   public let productListHeaders: [String: String]
   public let productListOptions: [String: [ListFilterOption]]
   public let productListQuery: ListQueryDeclaration
   public let productListSelectFields: [String]
   public let scopedSearchJoin: String
+  public let siteCardsPageSize: Int
+  public let siteFilterHeaders: [String: String]
+  public let siteFilterOptions: SiteFilterOptions
+  public let siteListDeclaration: ListQueryDeclaration
+  public let submissionFilterHeaders: [String: String]
+  public let submissionListQuery: ListQueryDeclaration
+  public let submissionReadOptions: [ListFilterOption]
 
   enum CodingKeys: String, CodingKey {
     case firstPartyPlugins = "FIRST_PARTY_PLUGINS"
+    case formInUse = "FORM_IN_USE"
+    case formLeadRoutingOptions = "FORM_LEAD_ROUTING_OPTIONS"
+    case formListFilterHeaders = "FORM_LIST_FILTER_HEADERS"
+    case formListQuery = "FORM_LIST_QUERY"
+    case formScopedSubmissionListQuery = "FORM_SCOPED_SUBMISSION_LIST_QUERY"
+    case formStatusOptions = "FORM_STATUS_OPTIONS"
     case listQueryDisjunctions = "LIST_QUERY_DISJUNCTIONS"
     case listQueryIdPath = "LIST_QUERY_ID_PATH"
+    case mediaAltMaxLength = "MEDIA_ALT_MAX_LENGTH"
+    case mediaAltOptions = "MEDIA_ALT_OPTIONS"
+    case mediaDisjunctionLimit = "MEDIA_DISJUNCTION_LIMIT"
+    case mediaFilterHeaders = "MEDIA_FILTER_HEADERS"
+    case mediaFolderMaxDepth = "MEDIA_FOLDER_MAX_DEPTH"
+    case mediaFolderNameMaxLength = "MEDIA_FOLDER_NAME_MAX_LENGTH"
+    case mediaKinds = "MEDIA_KINDS"
+    case mediaListQuery = "MEDIA_LIST_QUERY"
+    case mediaOrientationOptions = "MEDIA_ORIENTATION_OPTIONS"
+    case mediaScopedSearchNotice = "MEDIA_SCOPED_SEARCH_NOTICE"
+    case mediaSortLabels = "MEDIA_SORT_LABELS"
+    case mediaSortOrder = "MEDIA_SORT_ORDER"
+    case mediaSorts = "MEDIA_SORTS"
+    case mediaTagMaxCount = "MEDIA_TAG_MAX_COUNT"
+    case mediaTagMaxLength = "MEDIA_TAG_MAX_LENGTH"
+    case mediaTypeOptions = "MEDIA_TYPE_OPTIONS"
     case nameTokenLimit = "NAME_TOKEN_LIMIT"
     case nameTokenMaxPrefix = "NAME_TOKEN_MAX_PREFIX"
     case openDisputeClause = "OPEN_DISPUTE_CLAUSE"
@@ -1563,11 +1697,19 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case orderStatusColor = "ORDER_STATUS_COLOR"
     case orderStatusLabels = "ORDER_STATUS_LABELS"
     case orderStatusOptions = "ORDER_STATUS_OPTIONS"
+    case orgSubmissionListQuery = "ORG_SUBMISSION_LIST_QUERY"
     case productListBase = "PRODUCT_LIST_BASE"
     case productListHeaders = "PRODUCT_LIST_HEADERS"
     case productListOptions = "PRODUCT_LIST_OPTIONS"
     case productListQuery = "PRODUCT_LIST_QUERY"
     case productListSelectFields = "PRODUCT_LIST_SELECT_FIELDS"
     case scopedSearchJoin = "SCOPED_SEARCH_JOIN"
+    case siteCardsPageSize = "SITE_CARDS_PAGE_SIZE"
+    case siteFilterHeaders = "SITE_FILTER_HEADERS"
+    case siteFilterOptions = "SITE_FILTER_OPTIONS"
+    case siteListDeclaration = "SITE_LIST_DECLARATION"
+    case submissionFilterHeaders = "SUBMISSION_FILTER_HEADERS"
+    case submissionListQuery = "SUBMISSION_LIST_QUERY"
+    case submissionReadOptions = "SUBMISSION_READ_OPTIONS"
   }
 }

@@ -197,6 +197,10 @@ const PLUGIN_TOPICS = {
   // section (AGL-3638). Unlisted until the deployment offers a marketplace;
   // see PLUGIN_UNLISTED_TOPICS.
   marketplaces: '/commerce-and-bookings/commerce/marketplaces',
+  // The Delivery apps cards under the store's Settings and the register's
+  // delivery orders (AGL-3644). Unlisted until the deployment offers a
+  // service; see PLUGIN_UNLISTED_TOPICS.
+  deliveryApps: '/commerce-and-bookings/commerce/delivery-apps',
   events: '/content-and-data/events/overview',
   forms: '/content-and-data/forms/overview',
   funnels: '/marketing-and-automation/analytics/funnels',
@@ -251,6 +255,9 @@ const PLUGIN_TOPICS = {
   salesChannels: '/commerce-and-bookings/commerce/sales-channels',
   sequences: '/content-and-data/crm/sequences',
   webhooks: '/marketing-and-automation/workflows-and-actions/webhooks',
+  // The Zapier card on a site's setup page (AGL-3643). Unlisted until the
+  // deployment sets ZAPIER_APP_URL; see PLUGIN_UNLISTED_TOPICS.
+  zapier: '/marketing-and-automation/workflows-and-actions/zapier',
 }
 
 // The PLUGIN_TOPICS keys allowed to name an `unlisted: true` page. Such a page
@@ -288,6 +295,13 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // The Print on demand card draws nothing until the deployment holds
   // PRINT_ON_DEMAND_TOKEN_KEY, the same gate the guide waits on (AGL-3641).
   'printOnDemand',
+  // The Delivery apps cards and the register's queue draw nothing until the
+  // console holds a service's partner credentials, the gate the guide waits
+  // on (AGL-3644).
+  'deliveryApps',
+  // The Zapier card draws nothing until the console holds ZAPIER_APP_URL, the
+  // published app's link, which the guide waits on too (AGL-3643).
+  'zapier',
 ])
 
 // ── Docs parsing ──────────────────────────────────────────────────────────

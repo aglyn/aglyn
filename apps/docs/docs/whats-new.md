@@ -10,7 +10,15 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — a font picker, your own fonts, and faster fonts on every site (newest)
+## October 2026 — bookings in the API (newest)
+
+- **[Bookings over the API](/api/resources/bookings)** — read a site's bookings with
+  a key that has the new `bookings:read` scope: the service, the time and time zone,
+  the guest, what they paid and refunded, and whether they checked in. List them by
+  status or service, or read one by id, to copy appointments into a calendar, a CRM
+  or a spreadsheet.
+
+## October 2026 — a font picker, your own fonts, and faster fonts on every site
 
 - **[Font picker](building-sites/theme-builder/edit-your-theme.md#fonts)** — browse every
   Google font in the theme editor, with search, style filters, previews in your own
@@ -143,6 +151,20 @@ for the how-to.
   follow whichever side you say is right, products come into your store from it (or go
   the other way), and paid orders arrive there as sales orders, each once, with
   anything it could not take listed for you to send again.
+  AGL-3644 — Delivery apps are built and hidden until a deployment holds a partner
+  account with DoorDash, Uber Eats or Grubhub and sets its DELIVERY_APPS_* variables
+  on the console. This entry is held unpublished, like the guide it links
+  (`unlisted: true`): once a service is configured on aglyn.com, remove this
+  comment's markers, move "(newest)" here from the top heading, and delete
+  `unlisted: true` and the "Rolling out" note from
+  commerce-and-bookings/commerce/delivery-apps.md.
+
+## October 2026 — DoorDash, Uber Eats and Grubhub orders at your register
+
+- **[Delivery apps](commerce-and-bookings/commerce/delivery-apps.md)** — link your own
+  DoorDash, Uber Eats or Grubhub store and take its orders at your POS register: accept
+  or reject, mark ready and picked up, and each accepted order takes its items off the
+  same shelf as every other sale. Send your menu from your products in one step.
 -->
 
 <!--

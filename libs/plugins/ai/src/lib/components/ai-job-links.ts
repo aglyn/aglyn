@@ -55,6 +55,13 @@ export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | 
     // the workflows plugin's list of actions, or no link where it is not loaded.
     return pluginRecordListHref('action', { orgSlug, host })
   }
+  if (output.resource === 'entry') {
+    // A post a guided start wrote (AGL-3676) opens in its blog's list in Content.
+    const collectionSlug = output.proposal?.['collectionSlug']
+    return typeof collectionSlug === 'string' && collectionSlug
+      ? buildRoute(Route.HOST_CONTENT_COLLECTION, { orgSlug, host, collectionSlug })
+      : buildRoute(Route.HOST_CONTENT, { orgSlug, host })
+  }
   if (output.resource === 'theme') {
     return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
   }
