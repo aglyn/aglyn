@@ -326,6 +326,20 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Each order a delivery service sent a site’s register (AGL-3644): the service and its order id and short code, the items with their options and instructions, the totals and refunds, where it stood at the counter, and the store order it became. The buyer appears by first name and last initial only. The merchant’s own record of a delivery BUYER’s order, so disclosed to the ORG only.',
   },
   {
+    collection: 'zapierHooks',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each Zapier REST hook a site’s API key subscribed (AGL-3643): the site, the events, the API key’s public id and name, delivery counts and dates. EXISTENCE ONLY for the URL — `targetUrl` is the capability Zapier minted for the Zap, a bearer URL whose secret is in its path, so it is redacted by name (see redactSecrets).',
+  },
+  {
+    collection: 'zapierHookDeliveries',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Markers that one event reached one Zapier hook, so a retry does not post it twice (AGL-3643): the hook, the status and the time. The document id is a SHA-256 of the event and hook, an identifier rather than a verifier of any credential; no customer data, and a TTL policy removes each row.',
+  },
+  {
     collection: 'ssoDomains',
     keyedBy: 'field',
     subjects: ['org'],
@@ -559,6 +573,10 @@ const SECRET_WORD_PAIRS = new Set([
   // A Stripe payment link is a live bearer URL: whoever holds it can pay.
   // Named in the AGL-1443 inventory of what the old dump actually carried.
   'payment link',
+  // A Zapier REST hook's `targetUrl` (AGL-3643) is the same kind of bearer
+  // URL: whoever holds it can post into the Zap, and its secret is in the
+  // path, which the URL scrub does not read.
+  'target url',
   'auth code',
   'recovery code',
   'backup code',
