@@ -979,7 +979,9 @@ async function runOnce(context, index) {
     )
     const plan = job?.plan ?? null
     const planScreens = plan?.screens ?? []
-    const live = host.screens.filter((screen) => screen.data.deletedAt == null)
+    // An email design is a screen with no address; on a paid run the welcome
+    // email's would otherwise answer for the page at "/" (AGL-3676).
+    const live = host.screens.filter((screen) => screen.data.deletedAt == null && screen.data.kind !== 'email')
     const slugOf = (value) =>
       `/${String(value ?? '')
         .trim()
@@ -1162,8 +1164,11 @@ async function checkFirstContent({ context, run, runDir, check, browser, firesto
     const response = await page.goto(`${origin}${path}`, { waitUntil: 'load', timeout: 180_000 }).catch(() => null)
     await page.waitForTimeout(1000)
     const text = response ? ((await page.locator('body').textContent({ timeout: 5_000 }).catch(() => '')) ?? '') : ''
+    // What a visitor reads: a price is judged here, never in the page's
+    // inline script payloads, where \`$1\`-style references are not prices.
+    const visible = response ? await page.locator('body').innerText({ timeout: 5_000 }).catch(() => '') : ''
     if (shotName) run.shots.push(await shoot(page, join(runDir, `${shotName}.png`), { fullPage: true }).catch(() => null))
-    return { status: response?.status() ?? 0, text }
+    return { status: response?.status() ?? 0, text, visible }
   }
   const pageTexts = []
   for (const entry of run.publish?.published ?? []) pageTexts.push({ path: entry.path, ...(await visit(entry.path)) })
@@ -1209,7 +1214,7 @@ async function checkFirstContent({ context, run, runDir, check, browser, firesto
       )
       const named = products.filter((product) => pageTexts.some((one) => one.text.includes(product.name))).map((product) => product.name)
       check('pages feature the real product names', named.length > 0, `${named.length} of ${products.length} names on a page: ${named.join(', ') || 'none'}`)
-      const prices = pageTexts.flatMap((one) => (one.text.match(/[$€£]\s?\d[\d,]*(?:\.\d{1,2})?/g) ?? []).map((price) => `${one.path} ${price}`))
+      const prices = pageTexts.flatMap((one) => (one.visible.match(/[$€£]\s?\d[\d,]*(?:\.\d{1,2})?/g) ?? []).map((price) => `${one.path} ${price}`))
       check('no page states a price', prices.length === 0, prices.join('; ') || 'none')
     }
   } finally {
