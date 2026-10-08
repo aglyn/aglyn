@@ -30,7 +30,7 @@ public let commerceSalesScreen = "commerce.sales"
 @MainActor
 public func registerCommerceNative(_ r: NativePluginRegistrar) {
   r.screen(
-    commerceRegisterScreen, title: "Register", requiresSite: true, apps: [.pos], icon: "cashregister",
+    commerceRegisterScreen, title: "Register", requiresSite: true, apps: [.pos], icon: "dollarsign.circle",
     placement: .register
   ) { context, _ in
     RegisterScreen(context: context)

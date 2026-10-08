@@ -102,7 +102,8 @@ struct RegisterScreen: View {
         Button("Clear basket", systemImage: "xmark.bin", role: .destructive) { model.clearCart() }
           .disabled(model.cart.isEmpty)
       } label: {
-        Label(model.register?.name ?? "Register", systemImage: "cashregister")
+        Label(model.register?.name ?? "Register", systemImage: "dollarsign.circle")
+          .labelStyle(.titleAndIcon)
       }
       .accessibilityIdentifier("register-menu")
     }
