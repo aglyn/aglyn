@@ -28,6 +28,8 @@ struct SubmissionsScreen: View {
   @State private var exporting: TransferExportRequest?
   @State private var deleting: Submission?
   @State private var replying: Submission?
+  @State private var site = ObservedDocument()
+  @State private var forms = LiveQueryList(pageSize: 50) { (id: $0.id, name: inboxFormName($0)) }
 
   init(context: NativePluginContext, formID: String?, formName: String?, initialSubmissionID: String?) {
     self.context = context
@@ -50,6 +52,8 @@ struct SubmissionsScreen: View {
       SubmissionsAPI(api: context.api, writer: context.writer, firestore: context.firestore, hostID: $0)
     }
   }
+
+  private var siteName: String? { site.document?.string("displayName") ?? site.document?.string("name") }
 
   private var title: String { formName.map { "Submissions · \($0)" } ?? "Submissions" }
 
@@ -81,8 +85,9 @@ struct SubmissionsScreen: View {
           runner.clear()
           exporting = TransferExportRequest(
             resource: "forms.submissions", title: formName.map { "Export \($0) submissions" } ?? "Export submissions",
-            hostID: context.hostID, scope: submissionsExportScope(formID: formID, read: model.read),
-            fileStem: "submissions", filter: formID.map { ["formId": .string($0)] })
+            hostID: context.hostID,
+            scope: submissionsExportScope(formID: formID ?? model.pickedForm, read: model.read),
+            fileStem: "submissions", filter: (formID ?? model.pickedForm).map { ["formId": .string($0)] })
         } label: {
           Label("Export", systemImage: "square.and.arrow.down")
         }
@@ -107,7 +112,7 @@ struct SubmissionsScreen: View {
       }
     }
     .sheet(item: $replying) { submission in
-      if let api { ReplySheet(submission: submission, api: api, runner: runner) { replying = nil } }
+      if let api { ReplySheet(submission: submission, siteName: siteName, api: api, runner: runner) { replying = nil } }
     }
     .confirmationDialog(
       "Delete this submission?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
@@ -120,6 +125,10 @@ struct SubmissionsScreen: View {
     .task(id: context.hostID) {
       role.start(context)
       model.start(context.firestore, hostID: context.hostID)
+      if let hostID = context.hostID {
+        site.start(context.firestore, ["hosts", hostID])
+        if formID == nil { forms.show(context.firestore) { _ in formsQuery(hostID) } }
+      }
       if let initialSubmissionID {
         selection = initialSubmissionID
         if !isWide { pushed = initialSubmissionID }
@@ -128,6 +137,8 @@ struct SubmissionsScreen: View {
     .onDisappear {
       model.stop()
       role.stop()
+      site.stop()
+      forms.stop()
     }
   }
 
@@ -139,6 +150,18 @@ struct SubmissionsScreen: View {
         ForEach(readChoices(), id: \.label) { choice in
           AglynChoiceChip(choice.label, selected: model.read == choice.value) { model.read = choice.value }
             .accessibilityIdentifier("submissions-read-\(choice.value ?? "all")")
+        }
+        if formID == nil && forms.rows.count > 1 {
+          Divider().frame(height: 24)
+          Menu {
+            Button("Every form") { model.pickedForm = nil }
+            ForEach(forms.rows.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }, id: \.id) { form in
+              Button(form.name) { model.pickedForm = form.id }
+            }
+          } label: {
+            Label(forms.rows.first { $0.id == model.pickedForm }?.name ?? "Every form", systemImage: "doc.text")
+          }
+          .accessibilityIdentifier("inbox-form-pick")
         }
       }
       .padding(.horizontal, AglynSpace.two)
@@ -161,7 +184,7 @@ struct SubmissionsScreen: View {
     .background(AglynColor.page)
   }
 
-  private var filtered: Bool { !model.search.isEmpty || model.read != nil }
+  private var filtered: Bool { !model.search.isEmpty || model.read != nil || model.pickedForm != nil }
 
   @ViewBuilder
   private func content(selectable: Bool) -> some View {
@@ -248,7 +271,7 @@ struct SubmissionsScreen: View {
 
   private func detail(_ id: String, titled: Bool) -> some View {
     SubmissionDetailView(
-      context: context, submissionID: id, runner: runner, role: role, titled: titled,
+      context: context, submissionID: id, runner: runner, role: role, siteName: siteName, titled: titled,
       onRead: { model.patch($0, read: $1) }, toggleRead: toggleRead, reply: { replying = $0 }, delete: ask(delete:))
   }
 
