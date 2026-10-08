@@ -918,7 +918,7 @@ with its `AGLYN_API_URL` environment variable there.
 | --- | --- | --- | --- |
 | `ZAPIER_APP_URL` | Optional | Runtime, console | The `https://` link to your published Zapier app (its public page or invite link). Set it once the app is published; the card's **Open in Zapier** button goes there. |
 
-### Fulfillment networks: ShipBob and Amazon Multi-Channel Fulfillment {#fulfillment-networks}
+### Fulfillment networks: ShipBob, ShipMonk and Amazon Multi-Channel Fulfillment {#fulfillment-networks}
 
 A store can send its paid orders to the merchant's **own** ShipBob or Amazon
 Multi-Channel Fulfillment account, read the shipments and tracking back onto
@@ -942,11 +942,17 @@ never opens a grant.
 | `AMAZON_SP_API_REGION` | Optional | Runtime, console | `na` (default), `eu` or `fe`: the Selling Partner API region the deployment's sellers are in. |
 | `AMAZON_SP_API_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to Amazon's sandbox. Unset is production. |
 | `AMAZON_SP_API_DRAFT_APP` | Optional | Runtime, console | `true` while the app is a draft, so the consent page is asked for with `version=beta`. |
+| `SHIPMONK_ENABLED` | Optional | Runtime, console | `true` offers ShipMonk. It needs no app: each merchant pastes their own ShipMonk API key and store id, sealed with the token key. |
+| `SHIPMONK_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to ShipMonk's sandbox (`sandbox.shipmonk.dev`), which takes test orders only and needs sandbox keys. Unset is production. |
 
 Register `https://<console>/api/fulfillment-networks/oauth/callback` as the
 redirect URI in both apps. ShipBob's webhooks are subscribed for each
 connection at `https://<console>/api/fulfillment-networks/webhooks/shipbob`
-with a token of their own; nothing needs registering for them.
+with a token of their own; nothing needs registering for them. ShipMonk's
+webhooks are set up by each merchant in their ShipMonk account, at the
+address and with the signing secret the card shows once, and are answered at
+`https://<console>/api/fulfillment-networks/webhooks/shipmonk`; each is
+verified by its HMAC-SHA512 `X-Sm-Signature`.
 
 ### Inventory sync: Cin7 Core, inFlow and Brightpearl {#inventory-sync}
 

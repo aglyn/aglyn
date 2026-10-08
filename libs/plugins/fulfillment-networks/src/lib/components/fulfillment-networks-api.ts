@@ -34,6 +34,12 @@ export interface NetworkOffer {
   sandbox: boolean
 }
 
+/** Where an API-key network's webhooks go, and the secret they are signed with: answered once. */
+export interface NetworkWebhookSetup {
+  url: string | null
+  secret: string
+}
+
 /** Where one order stands, and the connections that could take it. */
 export interface NetworkOrderAnswer {
   connections: Array<{ provider: NetworkProviderId; status: NetworkConnectionStatus; sandbox: boolean }>
@@ -48,6 +54,13 @@ export interface NetworkOrderAnswer {
 export interface FulfillmentNetworksApi {
   list(): Promise<{ offered: NetworkOffer[]; connections: NetworkConnectionView[] }>
   connect(provider: NetworkProviderId, returnTo: string): Promise<string>
+  /** Connects a network with the merchant's own API key (ShipMonk, AGL-3697). */
+  connectKey(
+    provider: NetworkProviderId,
+    input: { apiKey: string; storeId: string },
+  ): Promise<{ connection: NetworkConnectionView | null; webhook: NetworkWebhookSetup | null }>
+  /** A new webhook signing secret, shown once. */
+  rotateWebhookSecret(provider: NetworkProviderId): Promise<NetworkWebhookSetup>
   update(provider: NetworkProviderId, settings: NetworkConnectionSettings): Promise<NetworkConnectionView>
   disconnect(provider: NetworkProviderId): Promise<void>
   syncNow(provider: NetworkProviderId): Promise<NetworkConnectionView | null>
@@ -84,6 +97,9 @@ export function useFulfillmentNetworksApi(hostId: string): FulfillmentNetworksAp
     return {
       list: () => call(routes.connections, 'GET'),
       connect: async (provider, returnTo) => (await call<{ url: string }>(routes.connect, 'POST', { provider, returnTo })).url,
+      connectKey: (provider, input) => call(routes.connectKey, 'POST', { provider, apiKey: input.apiKey, storeId: input.storeId }),
+      rotateWebhookSecret: async (provider) =>
+        (await call<{ webhook: NetworkWebhookSetup }>(routes.webhookSecret, 'POST', { provider })).webhook,
       update: async (provider, settings) =>
         (await call<{ connection: NetworkConnectionView }>(routes.connection, 'PATCH', { provider, ...settings })).connection,
       disconnect: async (provider) => {
