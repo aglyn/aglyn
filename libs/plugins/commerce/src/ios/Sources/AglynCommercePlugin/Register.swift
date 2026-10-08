@@ -23,9 +23,10 @@ public let commerceSalesScreen = "commerce.sales"
 /// card readers screen.
 ///
 /// Aglyn: the store, natively: orders (list, detail, fulfill, deliver,
-/// cancel), products (list, detail), a barcode scan that finds a product,
+/// cancel), products (list, detail, New product, Edit and Adjust stock
+/// through commerce's product routes), a barcode scan that finds a product,
 /// and sales (today, the week); Home's to-ship and sales cards, and the
-/// ship-orders and scan quick actions.
+/// ship-orders, new-product and scan quick actions.
 @MainActor
 public func registerCommerceNative(_ r: NativePluginRegistrar) {
   r.screen(
@@ -51,7 +52,11 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
     ProductsScreen(context: context)
   }
   r.screen(commerceProductScreen, title: "Product", requiresSite: true, icon: "shippingbox") { context, params in
-    ProductScreen(context: context, productID: params["productId"] ?? "")
+    if params["new"] == "1" {
+      ProductsScreen(context: context, startNew: true)
+    } else {
+      ProductScreen(context: context, productID: params["productId"] ?? "")
+    }
   }
   r.screen(commerceScanScreen, title: "Scan", requiresSite: true, icon: "barcode.viewfinder") { context, _ in
     ScanScreen(context: context)
@@ -76,10 +81,9 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   r.quickAction(
     "commerce.orders-to-ship", title: "Ship orders", icon: "shippingbox", order: 100, screen: commerceOrdersScreen,
     params: ["filter": OrderFilter.unfulfilled.rawValue], requiresSite: true)
-  // Hidden until product creation lands natively; the list has no create form above it.
   r.quickAction(
     "commerce.new-product", title: "New product", icon: "plus.square", order: 110, screen: commerceProductScreen,
-    requiresSite: true, apps: [])
+    params: ["new": "1"], requiresSite: true)
   r.quickAction(
     "commerce.scan", title: "Scan stock", icon: "barcode.viewfinder", order: 120, screen: commerceScanScreen,
     requiresSite: true)
