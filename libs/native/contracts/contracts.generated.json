@@ -308,6 +308,118 @@
       {
         "direction": "asc",
         "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "asc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "desc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "slug",
+        "direction": "asc",
+        "label": "Slug",
+        "path": "slug"
+      },
+      {
+        "alone": true,
+        "column": "slug",
+        "direction": "desc",
+        "label": "Slug",
+        "path": "slug"
+      },
+      {
+        "alone": true,
+        "column": "submissions",
+        "direction": "asc",
+        "label": "Submissions",
+        "path": "stats.submissions"
+      },
+      {
+        "alone": true,
+        "column": "submissions",
+        "direction": "desc",
+        "label": "Submissions",
+        "path": "stats.submissions"
+      },
+      {
+        "alone": true,
+        "column": "leads",
+        "direction": "asc",
+        "label": "Leads",
+        "path": "stats.leads"
+      },
+      {
+        "alone": true,
+        "column": "leads",
+        "direction": "desc",
+        "label": "Leads",
+        "path": "stats.leads"
+      },
+      {
+        "alone": true,
+        "column": "lastSubmission",
+        "direction": "desc",
+        "label": "Last submission",
+        "path": "stats.lastSubmissionAtMs"
+      },
+      {
+        "alone": true,
+        "column": "lastSubmission",
+        "direction": "asc",
+        "label": "Last submission",
+        "path": "stats.lastSubmissionAtMs"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "desc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "asc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "leadRouting",
+        "direction": "asc",
+        "label": "Lead routing",
+        "path": "routing.lead"
+      },
+      {
+        "alone": true,
+        "column": "leadRouting",
+        "direction": "desc",
+        "label": "Lead routing",
+        "path": "routing.lead"
+      },
+      {
+        "alone": true,
+        "column": "inCampaign",
+        "direction": "asc",
+        "label": "In a campaign",
+        "path": "inCampaign"
+      },
+      {
+        "alone": true,
+        "column": "inCampaign",
+        "direction": "desc",
+        "label": "In a campaign",
+        "path": "inCampaign"
       }
     ]
   },
@@ -336,8 +448,31 @@
     },
     "sorts": [
       {
+        "column": "createdAt",
         "direction": "desc",
+        "label": "Received",
         "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Received",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "asc",
+        "label": "Read",
+        "path": "read"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "desc",
+        "label": "Read",
+        "path": "read"
       }
     ]
   },
@@ -929,8 +1064,31 @@
     },
     "sorts": [
       {
+        "column": "createdAt",
         "direction": "desc",
+        "label": "Received",
         "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Received",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "asc",
+        "label": "Read",
+        "path": "read"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "desc",
+        "label": "Read",
+        "path": "read"
       }
     ]
   },
@@ -1160,8 +1318,31 @@
     },
     "sorts": [
       {
+        "column": "createdAt",
         "direction": "desc",
+        "label": "Received",
         "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Received",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "asc",
+        "label": "Read",
+        "path": "read"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "desc",
+        "label": "Read",
+        "path": "read"
       }
     ]
   },
