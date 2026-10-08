@@ -49,6 +49,7 @@ import {
   COMPONENT_LIST_HEADERS,
   COMPONENT_LIST_QUERY,
   LAYOUT_LIST_HEADERS,
+  LAYOUT_LIST_BASE,
   LAYOUT_LIST_QUERY,
   TEMPLATE_LIST_BASE,
   TEMPLATE_LIST_HEADERS,
@@ -72,13 +73,15 @@ const LISTS: Array<{
   base?: Array<{ path: string }>
   composites: number
 }> = [
-  // nameTokens, nameLower — each beside `updatedAt desc`.
+  // The live-layout scope (`deletedAt == null`, AGL-3680) beside nameTokens,
+  // nameLower and every header order.
   {
     name: 'layouts',
     collection: 'layouts',
     declaration: LAYOUT_LIST_QUERY,
     headers: LAYOUT_LIST_HEADERS,
-    composites: 2,
+    base: [...LAYOUT_LIST_BASE],
+    composites: 10,
   },
   // …and kind.
   {
