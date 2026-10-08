@@ -107,6 +107,17 @@ tasks.register<JavaExec>("snapshots") {
   (findProperty("aglyn.snapshotDir") as String?)?.let { systemProperty("aglyn.snapshotDir", it) }
 }
 
+// Named plugin screens at phone, tablet and desktop widths, offscreen (a
+// development tool for the screen lanes; see LaneSnapshots.kt).
+tasks.register<JavaExec>("laneSnapshots") {
+  val test = kotlin.jvm("desktop").compilations.getByName("test")
+  dependsOn(test.compileTaskProvider)
+  classpath = files(test.output.allOutputs, test.runtimeDependencyFiles)
+  mainClass.set("com.aglyn.desktop.LaneSnapshotsKt")
+  jvmArgs((findProperty("aglyn.jvmArgs") as String?)?.split(' ')?.filter { it.isNotBlank() } ?: emptyList<String>())
+  (findProperty("aglyn.snapshotDir") as String?)?.let { systemProperty("aglyn.snapshotDir", it) }
+}
+
 // The register's screens on the desktop, driven like a cashier would (a
 // development tool; see PosSnapshots.kt).
 tasks.register<JavaExec>("posSnapshots") {
