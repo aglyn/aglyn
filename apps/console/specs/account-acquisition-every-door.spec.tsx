@@ -45,7 +45,7 @@ import SignUp from '../app/(auth)/signup/page'
 /** What happened, in order: `acquisition:<uid>` and `signOut`. */
 const mockSteps: string[] = []
 const mockRememberAcquisition = jest.fn(
-  async (user: { uid: string } | null | undefined) => {
+  async (user: { uid: string } | null | undefined, _options?: { door?: string }) => {
     mockSteps.push(`acquisition:${user?.uid}`)
   },
 )
@@ -71,8 +71,10 @@ const googleCredential = {
 }
 
 jest.mock('../utils/account-acquisition', () => ({
-  rememberAccountAcquisition: (user: { uid: string } | null | undefined) =>
-    mockRememberAcquisition(user),
+  rememberAccountAcquisition: (
+    user: { uid: string } | null | undefined,
+    options?: { door?: string },
+  ) => mockRememberAcquisition(user, options),
 }))
 jest.mock('firebase/auth', () => ({
   browserLocalPersistence: {},
@@ -279,7 +281,9 @@ describe('/signup asks for the bounced account whatever the credential says', ()
       await mockRedirectCallback?.(googleCredential)
     })
 
-    expect(mockRememberAcquisition).toHaveBeenCalledWith(googleCredential.user)
+    expect(mockRememberAcquisition).toHaveBeenCalledWith(googleCredential.user, {
+      door: 'signup-google-redirect',
+    })
   })
 
   it('still records on the mobile redirect door for a brand-new account', async () => {
@@ -289,6 +293,9 @@ describe('/signup asks for the bounced account whatever the credential says', ()
       await mockRedirectCallback?.(googleCredential)
     })
 
-    expect(mockRememberAcquisition).toHaveBeenCalledWith(googleCredential.user)
+    expect(mockRememberAcquisition).toHaveBeenCalledWith(googleCredential.user, {
+      door: 'signup-google-redirect',
+    })
   })
 })
+

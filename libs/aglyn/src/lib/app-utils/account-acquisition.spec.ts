@@ -21,6 +21,7 @@ import {
   organizationAcquisition,
   providerLabel,
   readAccountAcquisition,
+  signUpDoorFor,
   unknownAccountAcquisition,
 } from './account-acquisition'
 
@@ -87,6 +88,30 @@ describe('building the record at account creation', () => {
     expect(record.door).toBe('signup-google')
     expect(describeAccountAcquisition(record)).toBe(
       'Source unknown — nothing was captured → signed up with Google',
+    )
+  })
+
+  it('takes the sign-up door from the verified provider, the page choosing only among its doors', () => {
+    expect(signUpDoorFor('password')).toBe('signup-password')
+    expect(signUpDoorFor('password', 'signup-google-redirect')).toBe('signup-password')
+    expect(signUpDoorFor('google.com')).toBe('signup-google')
+    expect(signUpDoorFor('google.com', 'signup-google-redirect')).toBe('signup-google-redirect')
+    expect(signUpDoorFor('google.com', 'invite')).toBe('signup-google')
+    expect(signUpDoorFor('saml.acme', 'signup-google')).toBeNull()
+    expect(signUpDoorFor(null)).toBeNull()
+  })
+
+  it('says a Google redirect sign-up was one', () => {
+    const record = buildAccountAcquisition({
+      touch: null,
+      door: 'signup-google-redirect',
+      provider: 'google.com',
+      recordedBy: 'signup',
+      nowMs: NOW,
+    })
+    expect(record.door).toBe('signup-google-redirect')
+    expect(describeAccountAcquisition(record)).toBe(
+      'Source unknown — nothing was captured → signed up with Google, by redirect',
     )
   })
 

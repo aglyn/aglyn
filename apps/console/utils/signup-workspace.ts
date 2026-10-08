@@ -25,6 +25,7 @@ import {
   authorizedFetch,
   type MaybeTokenSource,
 } from '@aglyn/shared-util-http/authorized-token'
+import { firstTouchField } from './account-acquisition'
 
 /**
  * The workspace a sign-up asked for, held until the address is proven
@@ -243,7 +244,10 @@ export async function createSignUpWorkspace(
     const response = await authorizedFetch(user, '/api/orgs/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name.trim() }),
+      // The first touch rides along for the server's acquisition backstop:
+      // the workspace copies its creator's record, and this is the one
+      // request every sign-up's workspace is born from.
+      body: JSON.stringify({ name: name.trim(), ...firstTouchField() }),
     })
     const payload = await response.json().catch(() => null)
     if (!response.ok) {

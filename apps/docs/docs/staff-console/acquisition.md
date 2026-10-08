@@ -36,13 +36,18 @@ Below it, the parts that line is built from:
 | **Referrer** | The external site that sent them — its host only, never the page. |
 | **Arrived from** | One of our own hosts the visitor came from before anything recorded them. It means a surface that does not include the capture yet; see [Adding a first-party surface](first-party-surfaces.md). |
 | **Ad click ids** | Whether the landing URL carried `gclid`, `fbclid` or `msclkid`. Only their presence is kept, never their values. |
-| **Door** | How the account was created: the sign-up form with a password or with Google, accepting an invitation, or single sign-on. |
+| **Door** | How the account was created: the sign-up form with a password, with Google in a popup, or with Google by redirect (the full-page sign-in phones use); accepting an invitation; or single sign-on. |
 | **First visit / account created** | When the first visit landed, and when the account was created. Weeks apart is normal. |
 | **Signed up from** | Where the account-creating request came from, as the network edge reported it. Country for every staff role; region and city for `super`. |
 | **Latest sign-in** | The newest sign-in in the account's sign-in history, with the same rule for city-level detail. |
 
 On an organization's page the card shows the record of the account that **created** the
 workspace, copied onto the workspace when it was created, and links to that account.
+
+Every sign-up door records the same record the moment the account exists. If the sign-up
+page is closed or navigated away before its record goes out, creating the account's first
+workspace records it instead, from the first-visit cookie, so the workspace's copy is not
+lost. A record is never written twice and never replaced.
 
 ## Did the sales workspace already know them? {#cross-check}
 
