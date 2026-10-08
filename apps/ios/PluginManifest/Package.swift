@@ -14,6 +14,7 @@ let package = Package(
     .package(path: "../../../libs/native/apple"),
     .package(path: "Plugins/AglynCommercePlugin"),
     .package(path: "Plugins/AglynCrmPlugin"),
+    .package(path: "Plugins/AglynEmailPlugin"),
     .package(path: "Plugins/AglynInboxPlugin"),
     .package(path: "Plugins/AglynRedirectsPlugin"),
   ],
@@ -24,6 +25,7 @@ let package = Package(
         .product(name: "AglynPluginHost", package: "apple"),
         .product(name: "AglynCommercePlugin", package: "AglynCommercePlugin"),
         .product(name: "AglynCrmPlugin", package: "AglynCrmPlugin"),
+        .product(name: "AglynEmailPlugin", package: "AglynEmailPlugin"),
         .product(name: "AglynInboxPlugin", package: "AglynInboxPlugin"),
         .product(name: "AglynRedirectsPlugin", package: "AglynRedirectsPlugin"),
       ]

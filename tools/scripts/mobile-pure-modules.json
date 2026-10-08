@@ -276,6 +276,26 @@
     {
       "path": "libs/plugins/marketing/src/lib/model/native-vocabulary.ts",
       "why": "The site-level Emails and Campaigns declarations as values for the native contracts; no web code imports it (AGL-3669)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/screen-kind.ts",
+      "why": "Reached by email-design-document: the email screen kind, a leaf."
+    },
+    {
+      "path": "libs/aglyn/src/lib/foundation/constants/canvas.ts",
+      "why": "Reached by email-design-document: the canvas root element id, a leaf."
+    },
+    {
+      "path": "libs/plugins/email/src/lib/model/email-design-document.ts",
+      "why": "A new email design's screen and first version (emailDesignDocuments, emailDesignStarterNodes), replayed by the apps' Templates (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/model/experiments.ts",
+      "why": "A/B experiments' rules and results (validateExperiment, experimentResultRows, describeVariantComparison), replayed by the apps' A/B testing (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/model/experiment-list-query.ts",
+      "why": "The A/B testing list declaration the apps plan (AGL-3669)."
     }
   ]
 }

@@ -1547,6 +1547,7 @@ public struct ReceiptTender: Codable, Hashable, Sendable {
 
 /// The values in contracts.generated.json, keyed as the TypeScript exports are.
 public struct ContractValues: Codable, Hashable, Sendable {
+  public let campaignEmailsQuery: ListQueryDeclaration
   public let companyListDeclaration: ListQueryDeclaration
   public let contactLifecycleStageLabels: [String: String]
   public let contactListDeclaration: ListQueryDeclaration
@@ -1563,6 +1564,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let defaultDealStages: [CrmDealStage]
   public let emailListQuery: ListQueryDeclaration
   public let emailTemplateQuery: ListQueryDeclaration
+  public let experimentListQuery: ListQueryDeclaration
+  public let formScopedSubmissionListQuery: ListQueryDeclaration
   public let leadListDeclaration: ListQueryDeclaration
   public let leadListQuery: ListQueryDeclaration
   public let leadSourceOptions: [ListFilterOption]
@@ -1593,6 +1596,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let orderStatusColor: [String: OrderStatusColorValue]
   public let orderStatusLabels: [String: String]
   public let orderStatusOptions: [ListFilterOption]
+  public let orgSubmissionListQuery: ListQueryDeclaration
   public let productListBase: [ListQueryFilter]
   public let productListHeaders: [String: String]
   public let productListOptions: [String: [ListFilterOption]]
@@ -1608,6 +1612,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let taskListDeclaration: ListQueryDeclaration
 
   enum CodingKeys: String, CodingKey {
+    case campaignEmailsQuery = "CAMPAIGN_EMAILS_QUERY"
     case companyListDeclaration = "COMPANY_LIST_DECLARATION"
     case contactLifecycleStageLabels = "CONTACT_LIFECYCLE_STAGE_LABELS"
     case contactListDeclaration = "CONTACT_LIST_DECLARATION"
@@ -1624,6 +1629,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case defaultDealStages = "DEFAULT_DEAL_STAGES"
     case emailListQuery = "EMAIL_LIST_QUERY"
     case emailTemplateQuery = "EMAIL_TEMPLATE_QUERY"
+    case experimentListQuery = "EXPERIMENT_LIST_QUERY"
+    case formScopedSubmissionListQuery = "FORM_SCOPED_SUBMISSION_LIST_QUERY"
     case leadListDeclaration = "LEAD_LIST_DECLARATION"
     case leadListQuery = "LEAD_LIST_QUERY"
     case leadSourceOptions = "LEAD_SOURCE_OPTIONS"
@@ -1654,6 +1661,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case orderStatusColor = "ORDER_STATUS_COLOR"
     case orderStatusLabels = "ORDER_STATUS_LABELS"
     case orderStatusOptions = "ORDER_STATUS_OPTIONS"
+    case orgSubmissionListQuery = "ORG_SUBMISSION_LIST_QUERY"
     case productListBase = "PRODUCT_LIST_BASE"
     case productListHeaders = "PRODUCT_LIST_HEADERS"
     case productListOptions = "PRODUCT_LIST_OPTIONS"

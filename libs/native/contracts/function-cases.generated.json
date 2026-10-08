@@ -1518,6 +1518,329 @@
         }
       ]
     },
+    "describeVariantComparison": {
+      "module": "libs/plugins/marketing/src/lib/model/experiments.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": "control"
+        },
+        {
+          "args": [
+            {
+              "lift": 0.6,
+              "confidence": 0.987
+            }
+          ],
+          "result": "+60% · 99% conf."
+        },
+        {
+          "args": [
+            {
+              "lift": null,
+              "confidence": null
+            }
+          ],
+          "result": "— · needs data"
+        },
+        {
+          "args": [
+            {
+              "lift": -0.125,
+              "confidence": 0.2
+            }
+          ],
+          "result": "-13% · 20% conf."
+        }
+      ]
+    },
+    "emailDesignDocuments": {
+      "module": "libs/plugins/email/src/lib/model/email-design-document.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "screenId": "screen-1",
+              "versionId": "version-1",
+              "displayName": "Untitled email",
+              "nodes": {
+                "a": {
+                  "$id": "a"
+                }
+              }
+            }
+          ],
+          "result": {
+            "screen": {
+              "displayName": "Untitled email",
+              "kind": "email",
+              "versionId": "version-1"
+            },
+            "version": {
+              "nodes": {
+                "a": {
+                  "$id": "a"
+                }
+              },
+              "screenId": "screen-1"
+            }
+          }
+        }
+      ]
+    },
+    "emailDesignStarterNodes": {
+      "module": "libs/plugins/email/src/lib/model/email-design-document.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "sectionId": "section-1",
+              "textId": "text-1"
+            }
+          ],
+          "result": {
+            "_@_": {
+              "$id": "_@_",
+              "componentId": "div",
+              "nodes": [
+                "section-1"
+              ]
+            },
+            "section-1": {
+              "$id": "section-1",
+              "componentId": "emailSection",
+              "nodes": [
+                "text-1"
+              ],
+              "parentId": "_@_",
+              "pluginId": "email"
+            },
+            "text-1": {
+              "$id": "text-1",
+              "componentId": "emailText",
+              "parentId": "section-1",
+              "pluginId": "email",
+              "props": {
+                "children": "Hello {{contact.firstName}},",
+                "variant": "body"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "experimentResultRows": {
+      "module": "libs/plugins/marketing/src/lib/model/experiments.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "variants": [
+                {
+                  "id": "a",
+                  "name": "A (control)",
+                  "weight": 1
+                },
+                {
+                  "id": "b",
+                  "name": "B",
+                  "weight": 1
+                }
+              ]
+            },
+            {}
+          ],
+          "result": [
+            {
+              "comparison": null,
+              "leader": false,
+              "summary": {
+                "conversions": 0,
+                "exposures": 0,
+                "rate": 0
+              },
+              "variant": {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              "winner": false
+            },
+            {
+              "comparison": {
+                "confidence": null,
+                "lift": null
+              },
+              "leader": false,
+              "summary": {
+                "conversions": 0,
+                "exposures": 0,
+                "rate": 0
+              },
+              "variant": {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              },
+              "winner": false
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "variants": [
+                {
+                  "id": "a",
+                  "name": "A (control)",
+                  "weight": 1
+                },
+                {
+                  "id": "b",
+                  "name": "B",
+                  "weight": 1
+                }
+              ],
+              "winnerVariantId": "b"
+            },
+            {
+              "a": {
+                "exposures": 1000,
+                "conversions": 50
+              },
+              "b": {
+                "exposures": 1000,
+                "conversions": 80
+              }
+            }
+          ],
+          "result": [
+            {
+              "comparison": null,
+              "leader": false,
+              "summary": {
+                "conversions": 50,
+                "exposures": 1000,
+                "rate": 0.05
+              },
+              "variant": {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              "winner": false
+            },
+            {
+              "comparison": {
+                "confidence": 0.9967466491584387,
+                "lift": 0.6
+              },
+              "leader": true,
+              "summary": {
+                "conversions": 80,
+                "exposures": 1000,
+                "rate": 0.08
+              },
+              "variant": {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              },
+              "winner": true
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "variants": [
+                {
+                  "id": "a",
+                  "name": "A (control)",
+                  "weight": 1
+                },
+                {
+                  "id": "b",
+                  "name": "B",
+                  "weight": 1
+                },
+                {
+                  "id": "c",
+                  "name": "C"
+                }
+              ]
+            },
+            {
+              "a": {
+                "exposures": 10,
+                "conversions": 0
+              },
+              "b": {
+                "exposures": 10,
+                "conversions": 1
+              },
+              "c": {
+                "exposures": 0
+              }
+            }
+          ],
+          "result": [
+            {
+              "comparison": null,
+              "leader": false,
+              "summary": {
+                "conversions": 0,
+                "exposures": 10,
+                "rate": 0
+              },
+              "variant": {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              "winner": false
+            },
+            {
+              "comparison": {
+                "confidence": 0.8475490861700101,
+                "lift": null
+              },
+              "leader": true,
+              "summary": {
+                "conversions": 1,
+                "exposures": 10,
+                "rate": 0.1
+              },
+              "variant": {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              },
+              "winner": false
+            },
+            {
+              "comparison": {
+                "confidence": null,
+                "lift": null
+              },
+              "leader": false,
+              "summary": {
+                "conversions": 0,
+                "exposures": 0,
+                "rate": 0
+              },
+              "variant": {
+                "id": "c",
+                "name": "C"
+              },
+              "winner": false
+            }
+          ]
+        }
+      ]
+    },
     "formatOrderMoney": {
       "module": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
       "cases": [
@@ -4183,6 +4506,218 @@
             "initials": "JL",
             "label": "Jean-Luc Picard"
           }
+        }
+      ]
+    },
+    "validateExperiment": {
+      "module": "libs/plugins/marketing/src/lib/model/experiments.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "name": "",
+              "status": "draft",
+              "target": "screen",
+              "variants": [
+                {
+                  "id": "a",
+                  "name": "A (control)",
+                  "weight": 1
+                },
+                {
+                  "id": "b",
+                  "name": "B",
+                  "weight": 1
+                }
+              ]
+            }
+          ],
+          "result": "Name the experiment"
+        },
+        {
+          "args": [
+            {
+              "name": "Hero",
+              "status": "draft",
+              "target": "screen",
+              "variants": [
+                {
+                  "id": "a",
+                  "name": "A (control)",
+                  "weight": 1
+                },
+                {
+                  "id": "b",
+                  "name": "B",
+                  "weight": 1
+                }
+              ]
+            }
+          ],
+          "result": "Pick the page under test"
+        },
+        {
+          "args": [
+            {
+              "name": "Hero",
+              "status": "draft",
+              "target": "screen",
+              "screenId": "s1",
+              "variants": [
+                {
+                  "id": "a",
+                  "name": "A (control)",
+                  "weight": 1
+                }
+              ]
+            }
+          ],
+          "result": "Add at least two variants"
+        },
+        {
+          "args": [
+            {
+              "name": "Hero",
+              "status": "draft",
+              "target": "section",
+              "screenId": "s1",
+              "variants": [
+                {
+                  "id": "a",
+                  "name": "A (control)",
+                  "weight": 1
+                },
+                {
+                  "id": "b",
+                  "name": "B",
+                  "weight": 1
+                }
+              ]
+            }
+          ],
+          "result": "Section experiments need the canvas element id"
+        },
+        {
+          "args": [
+            {
+              "name": "Hero",
+              "status": "draft",
+              "target": "screen",
+              "screenId": "s1",
+              "variants": [
+                {
+                  "id": "a",
+                  "name": "A (control)",
+                  "weight": 1
+                },
+                {
+                  "id": "a",
+                  "name": "A (control)",
+                  "weight": 1
+                }
+              ]
+            }
+          ],
+          "result": "Variant ids must be unique"
+        },
+        {
+          "args": [
+            {
+              "name": "Hero",
+              "status": "draft",
+              "target": "screen",
+              "screenId": "s1",
+              "variants": [
+                {
+                  "id": "a",
+                  "name": "A (control)",
+                  "weight": 1
+                },
+                {
+                  "id": "b",
+                  "name": "B",
+                  "weight": 1
+                }
+              ],
+              "autoWinner": {
+                "minExposures": 0,
+                "confidence": 0.95
+              }
+            }
+          ],
+          "result": "Auto-winner needs a minimum exposure count of at least 1"
+        },
+        {
+          "args": [
+            {
+              "name": "Hero",
+              "status": "draft",
+              "target": "screen",
+              "screenId": "s1",
+              "variants": [
+                {
+                  "id": "a",
+                  "name": "A (control)",
+                  "weight": 1
+                },
+                {
+                  "id": "b",
+                  "name": "B",
+                  "weight": 1
+                }
+              ],
+              "autoWinner": {
+                "minExposures": 200,
+                "confidence": 1
+              }
+            }
+          ],
+          "result": "Auto-winner confidence must be between 0.5 and 1"
+        },
+        {
+          "args": [
+            {
+              "name": "Hero",
+              "status": "draft",
+              "target": "email",
+              "variants": [
+                {
+                  "id": "a",
+                  "name": "A (control)",
+                  "weight": 1
+                },
+                {
+                  "id": "b",
+                  "name": "B",
+                  "weight": 1
+                }
+              ]
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "name": "Hero",
+              "status": "draft",
+              "target": "screen",
+              "screenId": "s1",
+              "variants": [
+                {
+                  "id": "a",
+                  "name": "A (control)",
+                  "weight": 1
+                },
+                {
+                  "id": "b",
+                  "name": "B",
+                  "weight": 1
+                }
+              ]
+            }
+          ],
+          "result": null
         }
       ]
     }

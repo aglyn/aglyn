@@ -97,6 +97,8 @@
     "libs/plugins/inbox/src/lib/constants/list-queries.ts": {
       "values": [
         "SUBMISSION_LIST_QUERY",
+        "FORM_SCOPED_SUBMISSION_LIST_QUERY",
+        "ORG_SUBMISSION_LIST_QUERY",
         "SITE_MEMBER_LIST_QUERY",
         "LEAD_LIST_QUERY",
         "SUBMISSION_READ_OPTIONS",
@@ -186,6 +188,16 @@
         "LIST_MEMBER_QUERY",
         "EMAIL_TEMPLATE_QUERY",
         "SUPPRESSION_LIST_QUERY"
+      ]
+    },
+    "libs/plugins/marketing/src/lib/model/campaign-list-query.ts": {
+      "values": [
+        "CAMPAIGN_EMAILS_QUERY"
+      ]
+    },
+    "libs/plugins/marketing/src/lib/model/experiment-list-query.ts": {
+      "values": [
+        "EXPERIMENT_LIST_QUERY"
       ]
     }
   },
@@ -2637,6 +2649,327 @@
             },
             "overflowClicks": 2,
             "unattributedClicks": 1
+          }
+        ]
+      ]
+    },
+    "emailDesignStarterNodes": {
+      "module": "libs/plugins/email/src/lib/model/email-design-document.ts",
+      "args": [
+        [
+          {
+            "sectionId": "section-1",
+            "textId": "text-1"
+          }
+        ]
+      ]
+    },
+    "emailDesignDocuments": {
+      "module": "libs/plugins/email/src/lib/model/email-design-document.ts",
+      "args": [
+        [
+          {
+            "screenId": "screen-1",
+            "versionId": "version-1",
+            "displayName": "Untitled email",
+            "nodes": {
+              "a": {
+                "$id": "a"
+              }
+            }
+          }
+        ]
+      ]
+    },
+    "validateExperiment": {
+      "module": "libs/plugins/marketing/src/lib/model/experiments.ts",
+      "args": [
+        [
+          {
+            "name": "",
+            "status": "draft",
+            "target": "screen",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "section",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ],
+            "autoWinner": {
+              "minExposures": 0,
+              "confidence": 0.95
+            }
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ],
+            "autoWinner": {
+              "minExposures": 200,
+              "confidence": 1
+            }
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "email",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "experimentResultRows": {
+      "module": "libs/plugins/marketing/src/lib/model/experiments.ts",
+      "args": [
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          },
+          {}
+        ],
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ],
+            "winnerVariantId": "b"
+          },
+          {
+            "a": {
+              "exposures": 1000,
+              "conversions": 50
+            },
+            "b": {
+              "exposures": 1000,
+              "conversions": 80
+            }
+          }
+        ],
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              },
+              {
+                "id": "c",
+                "name": "C"
+              }
+            ]
+          },
+          {
+            "a": {
+              "exposures": 10,
+              "conversions": 0
+            },
+            "b": {
+              "exposures": 10,
+              "conversions": 1
+            },
+            "c": {
+              "exposures": 0
+            }
+          }
+        ]
+      ]
+    },
+    "describeVariantComparison": {
+      "module": "libs/plugins/marketing/src/lib/model/experiments.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "lift": 0.6,
+            "confidence": 0.987
+          }
+        ],
+        [
+          {
+            "lift": null,
+            "confidence": null
+          }
+        ],
+        [
+          {
+            "lift": -0.125,
+            "confidence": 0.2
           }
         ]
       ]

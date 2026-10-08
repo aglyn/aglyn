@@ -285,6 +285,9 @@ class CampaignSendApi(private val api: ConsoleApiClient, private val hostId: Str
     post(message + mapOf("action" to "test", "to" to to, "personaEmail" to personaEmail))
   }
 
+  /** Posts [fields] as given (a send carries no `action`); the route's answer. */
+  suspend fun composeRaw(fields: Map<String, Any?>): JsonObject? = post(fields)
+
   /** Saves the composer's copy as a draft, schedules it, or sends it now. */
   suspend fun compose(action: String, message: Map<String, Any?>): String? {
     val answer = post(message + ("action" to action))

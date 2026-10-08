@@ -1710,6 +1710,16 @@
       "apiPrefixes": [
         "email"
       ],
+      "mobile": {
+        "$comment": "AGL-3669: the Emails page natively. Messages (a site's sends with their reports; write, edit, test, send, schedule, send to more, stop, rename), Templates (Besigner email designs: new, open in the Besigner, duplicate, delete), Audiences (lists: new, rename, delete; members: search, add people with the consent check, remove), Topics (add, retire, restore), Sending (senders, domains) and Suppressions (add, put back).",
+        "ios": { "module": "AglynEmailPlugin", "register": "registerEmailNative" },
+        "android": { "package": "com.aglyn.plugins.email", "register": "registerEmailNative" },
+        "contributes": {
+          "screens": ["email.messages", "email.templates", "email.audiences", "email.topics", "email.sending", "email.suppressions"],
+          "quickActions": ["email.open"],
+          "deepLinks": ["email.page", "email.messages-page", "email.templates-page", "email.audiences-page", "email.topics-page", "email.sending-page", "email.suppressions-page", "email.message-page", "email.list-page"]
+        }
+      },
       "transferResources": [
         {
           "$comment": "One list's members (AGL-3529): imported INTO a list and exported FROM one, one list at a time as email.list-members:<listId>, opened from the list's page. Every address goes through the gate a typed one does; the statement of permission is the plugin's own wizard step; 50,000 rows a file is LIST_IMPORT_MAX_ADDRESSES (list-import.ts).",
@@ -1924,11 +1934,11 @@
         "inbox"
       ],
       "mobile": {
-        "$comment": "AGL-3669: the site's form submissions natively (search, read and form picks, read, unread, delete, reply, add to a marketing list) and its members and leads; a Home card of unread messages.",
+        "$comment": "AGL-3669: the site's form submissions natively (search, read and form picks, a form's own submissions by `formId`, one message as `inbox.submission`, read, unread, delete, reply, add to a marketing list) and its members and leads; a Home card of unread messages.",
         "ios": { "module": "AglynInboxPlugin", "register": "registerInboxNative" },
         "android": { "package": "com.aglyn.plugins.inbox", "register": "registerInboxNative" },
         "contributes": {
-          "screens": ["inbox.submissions", "inbox.people"],
+          "screens": ["inbox.submissions", "inbox.submission", "inbox.people"],
           "widgets": ["inbox.glance"],
           "quickActions": ["inbox.open", "inbox.people"],
           "deepLinks": ["inbox.page", "inbox.submissions-page", "inbox.people-page"]

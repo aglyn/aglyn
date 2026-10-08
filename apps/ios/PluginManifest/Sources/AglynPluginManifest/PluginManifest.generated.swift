@@ -6,6 +6,7 @@
 import AglynPluginHost
 import AglynCommercePlugin
 import AglynCrmPlugin
+import AglynEmailPlugin
 import AglynInboxPlugin
 import AglynRedirectsPlugin
 
@@ -22,8 +23,13 @@ public enum NativePluginManifest {
       register: AglynCrmPlugin.registerCrmNative
     ),
     NativePluginManifestEntry(
+      id: "email",
+      contributes: ["screens": ["email.audiences", "email.messages", "email.sending", "email.suppressions", "email.templates", "email.topics"], "quickActions": ["email.open"], "deepLinks": ["email.audiences-page", "email.list-page", "email.message-page", "email.messages-page", "email.page", "email.sending-page", "email.suppressions-page", "email.templates-page", "email.topics-page"]],
+      register: AglynEmailPlugin.registerEmailNative
+    ),
+    NativePluginManifestEntry(
       id: "inbox",
-      contributes: ["screens": ["inbox.people", "inbox.submissions"], "widgets": ["inbox.glance"], "quickActions": ["inbox.open", "inbox.people"], "deepLinks": ["inbox.page", "inbox.people-page", "inbox.submissions-page"]],
+      contributes: ["screens": ["inbox.people", "inbox.submission", "inbox.submissions"], "widgets": ["inbox.glance"], "quickActions": ["inbox.open", "inbox.people"], "deepLinks": ["inbox.page", "inbox.people-page", "inbox.submissions-page"]],
       register: AglynInboxPlugin.registerInboxNative
     ),
     NativePluginManifestEntry(

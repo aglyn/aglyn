@@ -9,6 +9,7 @@ import com.aglyn.pluginhost.NativePluginManifestEntry
 import com.aglyn.plugins.bookings.registerBookingsNative
 import com.aglyn.plugins.commerce.registerCommerceNative
 import com.aglyn.plugins.crm.registerCrmNative
+import com.aglyn.plugins.email.registerEmailNative
 import com.aglyn.plugins.inbox.registerInboxNative
 import com.aglyn.plugins.redirects.registerRedirectsNative
 
@@ -30,8 +31,13 @@ object NativePluginManifest {
             register = ::registerCrmNative,
         ),
         NativePluginManifestEntry(
+            id = "email",
+            contributes = mapOf("screens" to listOf("email.audiences", "email.messages", "email.sending", "email.suppressions", "email.templates", "email.topics"), "quickActions" to listOf("email.open"), "deepLinks" to listOf("email.audiences-page", "email.list-page", "email.message-page", "email.messages-page", "email.page", "email.sending-page", "email.suppressions-page", "email.templates-page", "email.topics-page")),
+            register = ::registerEmailNative,
+        ),
+        NativePluginManifestEntry(
             id = "inbox",
-            contributes = mapOf("screens" to listOf("inbox.people", "inbox.submissions"), "widgets" to listOf("inbox.glance"), "quickActions" to listOf("inbox.open", "inbox.people"), "deepLinks" to listOf("inbox.page", "inbox.people-page", "inbox.submissions-page")),
+            contributes = mapOf("screens" to listOf("inbox.people", "inbox.submission", "inbox.submissions"), "widgets" to listOf("inbox.glance"), "quickActions" to listOf("inbox.open", "inbox.people"), "deepLinks" to listOf("inbox.page", "inbox.people-page", "inbox.submissions-page")),
             register = ::registerInboxNative,
         ),
         NativePluginManifestEntry(
