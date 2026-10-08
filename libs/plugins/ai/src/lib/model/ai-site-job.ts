@@ -175,6 +175,70 @@ export function aiFreeSiteCreditEstimate(
 export const AI_SITE_MAX_SECTIONS = 8
 
 /**
+ * The fewest sections a site start's home page is planned with (AGL-3660).
+ * A new site is a full website (Zach, 2026-10-04): its home reads as one — a
+ * hero, then bands such as the offer, why us, social proof, and a closing
+ * call to action. A plan is an outline and nothing asked for more than a
+ * ceiling, so a live Free yoga start (2026-10-07) planned its home with two
+ * sections. The plan step names this count in the plan's turn and re-asks a
+ * first answer whose home is under it (`aiSiteThinHomeViolations`).
+ */
+export const AI_SITE_HOME_MIN_SECTIONS = 5
+
+/** The violation a site plan whose home page is under its fewest sections is re-asked under. */
+export const AI_SITE_THIN_HOME_CODE = 'plan-thin-home'
+
+/** What a site plan's home is composed of, in the words the plan's turn and its re-ask both use. */
+export const AI_SITE_HOME_BANDS =
+  'a hero first, then bands such as services or the offer, about or why us, and testimonials or other social proof, and a closing call to action or contact band last'
+
+/**
+ * The fewest sections this site start's home is held to (AGL-3660): five,
+ * lowered only where the Free wall leaves fewer — `across` is the sections
+ * the Free taste fits across `pages` pages, each other page keeping at least
+ * one. `null` across is a paid start, which no wall shares out.
+ */
+export function aiSiteHomeMinSections(input: { pages: number; across: number | null }): number {
+  if (input.across === null) return AI_SITE_HOME_MIN_SECTIONS
+  const others = Math.max(0, Math.floor(input.pages) - 1)
+  return Math.max(1, Math.min(AI_SITE_HOME_MIN_SECTIONS, input.across - others))
+}
+
+/** Whether a planned page is the site's home: the one at `/`. */
+export function aiSitePlanIsHome(screen: { slug: string }): boolean {
+  const slug = screen.slug.trim()
+  return slug === '/' || slug === ''
+}
+
+/**
+ * A site plan's home page under its fewest sections (AGL-3660), as the plan
+ * step's re-ask names it. A plan with no page at `/` — the owner's own home
+ * stays — has no home to hold. `across` is the Free wall's section count, so
+ * the re-ask says where the sections come from rather than tripping the wall.
+ */
+export function aiSiteThinHomeViolations(
+  plan: Pick<AiBuildPlan, 'screens'>,
+  options: { min: number; across: number | null },
+): Array<{ rule: null; code: string; message: string; paths: string[] }> {
+  const index = plan.screens.findIndex(aiSitePlanIsHome)
+  if (index < 0) return []
+  const count = plan.screens[index].sections.length
+  if (count >= options.min) return []
+  const within =
+    options.across === null
+      ? ''
+      : ` Keep the whole plan within ${options.across} sections: take them from the other page where you must.`
+  return [
+    {
+      rule: null,
+      code: AI_SITE_THIN_HOME_CODE,
+      message: `The home page has ${count} ${count === 1 ? 'section' : 'sections'}, and a new site's home page reads as a full website with at least ${options.min}: ${AI_SITE_HOME_BANDS}.${within}`,
+      paths: [`screens[${index}].sections`],
+    },
+  ]
+}
+
+/**
  * Sections a page is assumed to hold before a plan names them, for the
  * estimate a member reads when they ask for a scaffold. A declared
  * assumption, not a measurement: the plan's own section counts replace it

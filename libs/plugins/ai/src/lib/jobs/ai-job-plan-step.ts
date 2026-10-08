@@ -46,10 +46,15 @@ import {
   AI_SITE_CREATE_KINDS,
   AI_SITE_FREE_PAGES,
   AI_SITE_PLAN_MAX_TOKENS,
+  AI_SITE_HOME_BANDS,
   aiFreeSiteSectionsWithin,
+  aiSiteHomeMinSections,
   aiSiteNameSentence,
+  aiSitePlanIsHome,
   aiSitePlanShapeRefusal,
+  aiSiteThinHomeViolations,
 } from '../model/ai-site-job'
+import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { aiPlanFailureCopy, aiPlanRetryRefusal } from '../model/ai-job-failure-copy'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import { aiDoctrineSystemBlocks, runValidatedGeneration } from '../runtime/ai-doctrine'
@@ -249,14 +254,16 @@ export function aiPlanSiteLines(
     }
   }
   const cap = capabilities?.freeSitePages
+  const home = aiSitePlanHomeRule(inventory, capabilities)
   if (cap !== undefined) {
-    const sections = aiFreeSiteSectionsWithin(
-      { layouts: (inventory?.layouts.length ?? 0) ? 0 : 1, pages: cap },
-      FREE_AI_TASTE_CREDITS_PER_MONTH,
-    )
     lines.push(
-      `This is a Free workspace: plan at most ${cap} ${cap === 1 ? 'page' : 'pages'} — the home page at / and the one page the brief most needs, such as services, booking or contact — with at most ${sections} sections across them.${aiPlanCanPlaceForm(inventory, capabilities) ? ' Put the contact form on one of them.' : ''}`,
+      `This is a Free workspace: plan at most ${cap} ${cap === 1 ? 'page' : 'pages'} — the home page at / and the one page the brief most needs, such as services, booking or contact — with at most ${home.across} sections across them.${aiPlanCanPlaceForm(inventory, capabilities) ? ' Put the contact form on one of them.' : ''}`,
     )
+  }
+  // A new site is a full website (AGL-3660): its home is planned as one, not
+  // left to a ceiling the outline is free to stay far under.
+  if (!pages.some((page) => !page.replaceable && aiSitePlanIsHome(page))) {
+    lines.push(`The home page at / reads as a full website: at least ${home.min} sections — ${AI_SITE_HOME_BANDS}.`)
   }
   // The kind of site the person picked (AGL-3660): the pages it usually has.
   const kind = aiSiteKindOfInputs(job.inputs)
@@ -265,6 +272,42 @@ export function aiPlanSiteLines(
     "Keep the plan an outline: each page's title, address, a short search title and description, and its sections named in a few words. The build writes the copy.",
   )
   return lines
+}
+
+/**
+ * What a site start's home page is held to (AGL-3660): its fewest sections,
+ * and on the Free taste the sections the wall fits across the pages, which
+ * the home's count is shared out of. The plan's turn and its re-ask read this
+ * one figure, so the sentence the model is told is the check it is held to.
+ */
+export function aiSitePlanHomeRule(
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null,
+): { min: number; across: number | null } {
+  const cap = capabilities?.freeSitePages
+  if (cap === undefined) return { min: aiSiteHomeMinSections({ pages: 1, across: null }), across: null }
+  const across = aiFreeSiteSectionsWithin(
+    { layouts: (inventory?.layouts.length ?? 0) ? 0 : 1, pages: cap },
+    FREE_AI_TASTE_CREDITS_PER_MONTH,
+  )
+  return { min: aiSiteHomeMinSections({ pages: cap, across }), across }
+}
+
+/**
+ * A site plan's thin home, asked about on the FIRST answer only (AGL-3660).
+ * The re-ask names the count; an answer that still plans a thinner home is
+ * kept, since a home with four sections is a site and a stopped start is
+ * none — the same trade a language page makes with its last answer's gaps.
+ */
+export function aiSiteThinHomeCheck(
+  rule: { min: number; across: number | null },
+): (plan: AiBuildPlan) => AiDoctrineViolation[] {
+  let answers = 0
+  return (plan) => {
+    answers += 1
+    if (answers >= AI_GENERATION_MAX_ATTEMPTS) return []
+    return aiSiteThinHomeViolations(plan, rule)
+  }
 }
 
 /**
@@ -342,7 +385,9 @@ function planViolations(
   brief: string,
   freeTaste = false,
   ops: AiBuildOps | null = null,
+  home: { min: number; across: number | null } | null = null,
 ): (plan: AiBuildPlan) => AiDoctrineViolation[] {
+  const thinHome = home ? aiSiteThinHomeCheck(home) : null
   return (plan) => {
     // A build's plan is held to the operations this site has (AGL-3616):
     // an unknown op, arguments its schema refuses, a cycle or a reference
@@ -353,6 +398,7 @@ function planViolations(
     return [
       ...aiPlanEmbedBriefViolations(plan, brief),
       ...(message ? [{ rule: null, code: 'plan-job-shape', message }] : []),
+      ...(thinHome ? thinHome(plan) : []),
     ]
   }
 }
@@ -741,7 +787,13 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       ...(route.effort ? { effort: route.effort } : {}),
       ...(signal ? { signal } : {}),
       capabilities,
-      extend: planViolations(scope, job.brief, freeTaste, ops),
+      extend: planViolations(
+        scope,
+        job.brief,
+        freeTaste,
+        ops,
+        site ? aiSitePlanHomeRule(inventory, capabilities) : null,
+      ),
     })
     const spent: AiJobStepOutcome = {
       outputs: [],

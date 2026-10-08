@@ -89,10 +89,14 @@ import {
 import {
   AI_FREE_SITE_WORST_CASE_CREDITS,
   AI_SITE_FREE_PAGES,
+  AI_SITE_HOME_MIN_SECTIONS,
   AI_SITE_PAGES,
   AI_SITE_PLAN_MAX_TOKENS,
+  AI_SITE_THIN_HOME_CODE,
   aiFreeSiteCreditEstimate,
   aiFreeSiteSectionsWithin,
+  aiSiteHomeMinSections,
+  aiSiteThinHomeViolations,
   aiSitePagesRefusal,
   aiSitePlanShapeRefusal,
   type AiFreeSiteWorstCase,
@@ -108,7 +112,12 @@ import {
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
-import { aiPlanSiteLines, aiSitePlanCapabilities, createAiJobPlanStep } from './ai-job-plan-step'
+import {
+  aiPlanSiteLines,
+  aiSitePlanCapabilities,
+  aiSitePlanHomeRule,
+  createAiJobPlanStep,
+} from './ai-job-plan-step'
 import { aiRunSiteLook } from './ai-job-site-look'
 import { AI_SITE_LOOK_TOOL_NAME } from '../model/ai-site-look'
 import { generateAiBlogPost } from '../runtime/ai-blog-post-generation'
@@ -174,7 +183,7 @@ const page = (
   sections: sections.map((name) => ({ name, uses: [], items: 0 })),
 })
 
-const HOME = page('Home', '/', ['hero', 'what we groom', 'reviews'], {
+const HOME = page('Home', '/', ['hero', 'what we groom', 'why owners trust us', 'reviews', 'book a groom'], {
   title: 'Dog grooming in your neighborhood',
   description: 'Baths, trims and nail care for dogs of every size, booked online in a minute.',
 })
@@ -391,6 +400,130 @@ describe('a Free workspace’s site start is one or two pages', () => {
     expect(request.maxTokens).toBe(AI_SITE_PLAN_MAX_TOKENS.paid)
     expect(String(request.messages[0].content)).not.toContain('Free workspace')
     expect((outcome.plan as AiJobPlan).screens).toHaveLength(5)
+  })
+})
+
+// ── A full home ──────────────────────────────────────────────────────────
+
+/**
+ * The shape of the thin plan the local Free yoga start of 2026-10-07 built
+ * (AGL-3660): a home of two sections beside a classes page. Written by hand
+ * from what that run showed — the plan itself was not kept — so the step's
+ * re-ask is proven offline, with no model.
+ */
+const YOGA_SEO = {
+  title: 'Yoga classes in your neighborhood',
+  description: 'Gentle, vinyasa and restorative yoga for every level, booked online.',
+}
+const YOGA_THIN_HOME = page('Home', '/', ['hero', 'book a class'], YOGA_SEO)
+const YOGA_FULL_HOME = page(
+  'Home',
+  '/',
+  ['hero', 'classes we teach', 'why practice with us', 'what students say', 'book your first class'],
+  YOGA_SEO,
+)
+const YOGA_CLASSES = page('Classes', '/classes', ['class schedule', 'book a class'], {
+  title: 'Yoga class schedule',
+  description: 'Every class this week, its level and its teacher, with a booking form.',
+})
+const YOGA_THIN: AiBuildPlan = { reuse: reuseLayout, create: [], screens: [YOGA_THIN_HOME, YOGA_CLASSES] }
+const YOGA_FULL: AiBuildPlan = { reuse: reuseLayout, create: [], screens: [YOGA_FULL_HOME, YOGA_CLASSES] }
+const yogaJob = () => siteJob({ businessType: 'a yoga studio' })
+
+describe('a site start’s home page reads as a full website (AGL-3660)', () => {
+  it('holds a home to five sections, lowered only where the Free wall shares out fewer', () => {
+    expect(AI_SITE_HOME_MIN_SECTIONS).toBe(5)
+    expect(aiSiteHomeMinSections({ pages: 5, across: null })).toBe(5)
+    // A provisioned site keeps its layout: the wall fits 8 across two pages.
+    expect(aiSiteHomeMinSections({ pages: 2, across: 8 })).toBe(5)
+    // A site with no layout builds one first, and the wall fits 4: the other page keeps one.
+    expect(aiSiteHomeMinSections({ pages: 2, across: 4 })).toBe(3)
+    expect(aiSiteHomeMinSections({ pages: 1, across: 9 })).toBe(5)
+    expect(aiSiteHomeMinSections({ pages: 2, across: 0 })).toBe(1)
+  })
+
+  it('reads the home rule from the same wall figure the Free sentence quotes', () => {
+    const free = aiSitePlanCapabilities(yogaJob(), FREE) as AiPlanCapabilities
+    const across = aiFreeSiteSectionsWithin({ layouts: 0, pages: 2 }, FREE_AI_TASTE_CREDITS_PER_MONTH)
+    expect(aiSitePlanHomeRule(NEW_SITE, free)).toEqual({ min: 5, across })
+    const bare = { ...NEW_SITE, layouts: [] }
+    const acrossBare = aiFreeSiteSectionsWithin({ layouts: 1, pages: 2 }, FREE_AI_TASTE_CREDITS_PER_MONTH)
+    expect(aiSitePlanHomeRule(bare, free)).toEqual({ min: Math.min(5, acrossBare - 1), across: acrossBare })
+    const paid = aiSitePlanCapabilities(siteJob({ pages: 5 }), PAID)
+    expect(aiSitePlanHomeRule(NEW_SITE, paid)).toEqual({ min: 5, across: null })
+  })
+
+  it('a full home fits the Free wall beside the other page, so the minimum never forces a wall refusal', () => {
+    const free = aiSitePlanCapabilities(yogaJob(), FREE) as AiPlanCapabilities
+    expect(codes(YOGA_FULL, NEW_SITE, free)).not.toContain('plan-over-free-wall')
+  })
+
+  it('tells a new site’s plan its home is at least five sections — a hero first and a closing call to action — and says nothing where the owner’s home stays', () => {
+    const free = aiSitePlanCapabilities(yogaJob(), FREE) as AiPlanCapabilities
+    const lines = aiPlanSiteLines(yogaJob(), NEW_SITE, free).join('\n')
+    expect(lines).toContain('The home page at / reads as a full website: at least 5 sections — a hero first')
+    expect(lines).toContain('a closing call to action or contact band last')
+    const paid = aiPlanSiteLines(siteJob({ pages: 5 }), NEW_SITE, aiSitePlanCapabilities(siteJob({ pages: 5 }), PAID)).join('\n')
+    expect(paid).toContain('at least 5 sections')
+    expect(aiPlanSiteLines(yogaJob(), EDITED_SITE, free).join('\n')).not.toContain('reads as a full website')
+  })
+
+  it('names a thin home, and no home where the plan builds none at /', () => {
+    expect(aiSiteThinHomeViolations(YOGA_THIN, { min: 5, across: 8 })).toEqual([
+      expect.objectContaining({
+        code: AI_SITE_THIN_HOME_CODE,
+        paths: ['screens[0].sections'],
+        message: expect.stringMatching(/^The home page has 2 sections, .* at least 5: a hero first.*Keep the whole plan within 8 sections/),
+      }),
+    ])
+    expect(aiSiteThinHomeViolations(YOGA_FULL, { min: 5, across: 8 })).toEqual([])
+    expect(aiSiteThinHomeViolations({ screens: [YOGA_CLASSES] }, { min: 5, across: 8 })).toEqual([])
+    expect(aiSiteThinHomeViolations(YOGA_THIN, { min: 5, across: null })[0].message).not.toContain('Keep the whole plan')
+  })
+
+  it('re-asks a Free plan whose home is thin once, on the fast tier at the same ceiling, and keeps the full home it gets back', async () => {
+    mockRunAiRequest.mockReset()
+    mockRunAiRequest.mockResolvedValueOnce(toolAnswer(YOGA_THIN)).mockResolvedValueOnce(toolAnswer(YOGA_FULL))
+    const outcome = await planStepFor(FREE_ORG, FREE, yogaJob())
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    const [first, second] = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
+    expect([first.model, second.model]).toEqual(['claude-haiku-4-5', 'claude-haiku-4-5'])
+    expect([first.maxTokens, second.maxTokens]).toEqual([AI_SITE_PLAN_MAX_TOKENS.free, AI_SITE_PLAN_MAX_TOKENS.free])
+    expect(String(second.messages.at(-1)?.content)).toContain('The home page has 2 sections')
+    const plan = outcome.plan as AiJobPlan
+    expect(plan.screens[0].sections.map((section) => section.name)).toEqual(YOGA_FULL_HOME.sections.map((section) => section.name))
+    expect(outcome.uncredited).toBeUndefined()
+  })
+
+  it('keeps a second answer whose home is still thin rather than stopping the start', async () => {
+    mockRunAiRequest.mockReset()
+    mockRunAiRequest.mockResolvedValueOnce(toolAnswer(YOGA_THIN)).mockResolvedValueOnce(toolAnswer(YOGA_THIN))
+    const outcome = await planStepFor(FREE_ORG, FREE, yogaJob())
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    expect((outcome.plan as AiJobPlan).screens[0].sections).toHaveLength(2)
+    expect(outcome.uncredited).toBeUndefined()
+  })
+
+  it('asks nothing again of a first answer whose home is already full', async () => {
+    mockRunAiRequest.mockReset()
+    mockRunAiRequest.mockResolvedValueOnce(toolAnswer(YOGA_FULL))
+    const outcome = await planStepFor(FREE_ORG, FREE, yogaJob())
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect((outcome.plan as AiJobPlan).screens[0].sections).toHaveLength(5)
+  })
+
+  it('holds a paid start’s home to the same five, with no wall to share them out of', async () => {
+    mockRunAiRequest.mockReset()
+    const thin: AiBuildPlan = { ...TWO_PAGES, screens: [YOGA_THIN_HOME, BOOK, ABOUT, YOGA_CLASSES] }
+    const full: AiBuildPlan = { ...TWO_PAGES, screens: [YOGA_FULL_HOME, BOOK, ABOUT, YOGA_CLASSES] }
+    mockRunAiRequest.mockResolvedValueOnce(toolAnswer(thin)).mockResolvedValueOnce(toolAnswer(full))
+    const outcome = await planStepFor(PAID_ORG, PAID, siteJob({ pages: 4 }))
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    const [, second] = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
+    const reask = String(second.messages.at(-1)?.content)
+    expect(reask).toContain('The home page has 2 sections')
+    expect(reask).not.toContain('Keep the whole plan within')
+    expect((outcome.plan as AiJobPlan).screens[0].sections).toHaveLength(5)
   })
 })
 

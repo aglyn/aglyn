@@ -2794,6 +2794,17 @@ the element budget its request asks for.
   tier — its answer at the `copy.blog` ceiling and its re-ask — is 23, so a Free
   blog writes no first posts (AGL-3676). On a paid workspace a site plan's one answer comes to at most 84 credits
   for five pages, where the routing table's ceiling with thinking spent 227.
+- **A site start's home reads as a full website (AGL-3660).** A plan is an outline, and
+  the only section figure a site plan was told was the Free wall's ceiling, so a local
+  Free yoga start (2026-10-07) planned its home with two sections. The site plan's turn
+  now asks for a home at `/` of at least `AI_SITE_HOME_MIN_SECTIONS` (5) — a hero first,
+  bands such as the offer, why us and social proof, and a closing call to action — and
+  the plan step re-asks a FIRST answer whose home is under it (`plan-thin-home`,
+  `aiSiteThinHomeCheck`). A second answer still under it is kept: a four-section home
+  is a site, a stopped start is none. On the Free taste the minimum is shared out of the
+  wall's own section count (`aiSitePlanHomeRule`): 5 of the 8 a provisioned site fits
+  across its two pages, lowered only where the wall fits fewer, so the wall's worst case
+  does not move. No home is held where the owner's own home at `/` stays.
 - **Every device width, and an axe audit.** `libs/plugins/ai/scripts/record-ai-page-axe.mts`
   (AGL-3020) assembles each golden page the page step builds from a site — the ten
   briefs, both Free pages and the two-person page — through the step's own section
