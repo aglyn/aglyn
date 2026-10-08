@@ -144,12 +144,12 @@ fun ActionsSection(context: NativePluginContext, hostId: String, entitlements: E
         )
       },
       actions = buildList {
-        add(MenuAction("Edit", "edit") { open(AutomationTarget.Action(row.id)) })
+        add(MenuAction("edit", "Edit", "edit") { open(AutomationTarget.Action(row.id)) })
         if (isSiteEventType(row.event)) {
-          add(MenuAction("Test", "play_arrow") { run(null) { notice = api.testRun(hostId, row.id) to StatusTone.SUCCESS } })
+          add(MenuAction("test", "Test", "play_arrow") { run(null) { notice = api.testRun(hostId, row.id) to StatusTone.SUCCESS } })
         }
-        add(MenuAction("Runs", "history") { open(AutomationTarget.Runs(row.id, row.name, siteScope = false)) })
-        add(MenuAction("Delete", "delete", destructive = true) { deleting = row })
+        add(MenuAction("runs", "Runs", "history") { open(AutomationTarget.Runs(row.id, row.name, siteScope = false)) })
+        add(MenuAction("delete", "Delete", "delete", destructive = true) { deleting = row })
       },
     )
   }
@@ -222,7 +222,7 @@ fun SiteOrgAutomationsPanel(context: NativePluginContext, orgId: String, hostId:
           )
         },
         actions = listOf(
-          MenuAction(if (paused) "Resume here" else "Pause here", if (paused) "play_arrow" else "pause", enabled = busy != row.id) {
+          MenuAction("pause", if (paused) "Resume here" else "Pause here", if (paused) "play_arrow" else "pause", enabled = busy != row.id) {
             busy = row.id
             scope.launch {
               notice = try {
@@ -236,7 +236,7 @@ fun SiteOrgAutomationsPanel(context: NativePluginContext, orgId: String, hostId:
               busy = null
             }
           },
-          MenuAction("Runs", "history") { open(AutomationTarget.Runs(row.id, row.name, siteScope = true)) },
+          MenuAction("runs", "Runs", "history") { open(AutomationTarget.Runs(row.id, row.name, siteScope = true)) },
         ),
       )
     }

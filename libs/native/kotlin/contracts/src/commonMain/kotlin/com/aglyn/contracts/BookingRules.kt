@@ -81,15 +81,6 @@ fun bookingPriceDisplay(value: Any?): BookingPriceDisplay = when (value) {
   else -> BookingPriceDisplay.FIXED
 }
 
-/** A JavaScript `Number(value)`: numbers as they are, numeric text read, anything else not a number. */
-private fun jsNumber(value: Any?): Double = when (value) {
-  null -> 0.0
-  is Number -> value.toDouble()
-  is Boolean -> if (value) 1.0 else 0.0
-  is String -> value.trim().let { if (it.isEmpty()) 0.0 else it.toDoubleOrNull() ?: Double.NaN }
-  else -> Double.NaN
-}
-
 /** What booking the service charges, in dollars: its price when it states one, else 0. */
 fun bookingChargeUsd(priceUsd: Any?, priceDisplay: Any?): Double {
   if (bookingPriceDisplay(priceDisplay) != BookingPriceDisplay.FIXED) return 0.0

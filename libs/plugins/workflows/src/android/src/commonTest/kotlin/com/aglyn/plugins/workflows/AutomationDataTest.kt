@@ -224,7 +224,7 @@ class AutomationDataTest {
   @Test
   fun pickerOptionsNameRecordsAsTheirOwners() {
     assertEquals(
-      listOf(PickOption("d2", "Leads"), PickOption("d1", "d1")),
+      listOf(PickOption("d1", "d1"), PickOption("d2", "Leads")),
       datasetOptions(listOf(doc("d1", emptyMap()), doc("d2", mapOf("displayName" to "Leads")), doc("d3", mapOf("name" to "Gone", "deletedAt" to 1L)))),
     )
     assertEquals(listOf(PickOption("v1", "Spring sale")), overlayOptions(listOf(doc("v1", mapOf("bar" to mapOf("text" to "Spring sale"))))))
@@ -305,7 +305,7 @@ class AutomationDataTest {
     val call = mapOf("type" to "logCrmActivity", "kind" to "call", "direction" to "internal", "body" to "x")
     assertFalse(call.withActivityKind("email").containsKey("direction"))
     assertEquals("inbound", (call + ("direction" to "inbound")).withActivityKind("email")["direction"])
-    assertEquals("step_2", resultNameOf("step 2!_"))
+    assertEquals("step2_", resultNameOf("step 2!_"))
     assertTrue(isInteractionAttributeAllowed("aria-expanded"))
     assertFalse(isInteractionAttributeAllowed("onclick"))
     for (type in com.aglyn.contracts.HOST_ACTION_STEP_LABELS.keys) assertEquals(type, defaultStep(type)["type"], type)

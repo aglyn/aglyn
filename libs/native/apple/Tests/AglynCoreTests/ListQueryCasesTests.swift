@@ -48,6 +48,9 @@ final class ListQueryCasesTests: XCTestCase {
     switch name {
     case "ORDER_LIST_QUERY": return ContractValues.shared.orderListQuery
     case "PRODUCT_LIST_QUERY": return ContractValues.shared.productListQuery
+    case "FORM_LIST_QUERY": return ContractValues.shared.formListQuery
+    case "SITE_LIST_DECLARATION": return ContractValues.shared.siteListDeclaration
+    case "SUBMISSION_LIST_QUERY": return ContractValues.shared.submissionListQuery
     default: return nil
     }
   }

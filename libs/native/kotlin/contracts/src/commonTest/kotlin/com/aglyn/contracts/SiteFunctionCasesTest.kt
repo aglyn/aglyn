@@ -74,7 +74,7 @@ class SiteFunctionCasesTest {
     val extra = args.getOrNull(3)?.let(::scopeOf) ?: emptyMap()
     val actual = when (val run = runWorkflow(workflow, functions, variables, extra)) {
       is WorkflowRunResult.Ok -> mapOf("ok" to true, "results" to run.results.toMap(), "value" to run.value)
-      is WorkflowRunResult.Failed -> buildMap {
+      is WorkflowRunResult.Failed -> buildMap<String, Any> {
         put("error", run.error)
         put("ok", false)
         run.step?.let { put("step", it) }

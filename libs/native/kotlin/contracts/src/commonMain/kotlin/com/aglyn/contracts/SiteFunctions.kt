@@ -110,7 +110,7 @@ private fun digitsOf(value: Any?, present: Boolean): Int {
 /** Half away from zero on the DECIMAL value: `round(1.005, 2)` is 1.01. */
 private fun roundTo(value: Double, digits: Int): Double {
   val scaled = jsStringToNumber("${jsNumberString(abs(value))}e$digits")
-  val magnitude = jsStringToNumber("${jsNumberString(jsRound(scaled))}e-$digits")
+  val magnitude = jsStringToNumber("${jsNumberString(jsMathRound(scaled))}e-$digits")
   return if (value < 0) -magnitude else magnitude
 }
 

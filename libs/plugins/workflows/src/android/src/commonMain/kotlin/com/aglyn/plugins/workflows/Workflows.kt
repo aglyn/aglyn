@@ -119,7 +119,7 @@ fun WorkflowsSection(context: NativePluginContext, hostId: String, entitlements:
       onClick = { open(AutomationTarget.Workflow(row.id)) },
       testTag = "workflow-${row.id}",
       actions = listOf(
-        com.aglyn.ui.MenuAction(if (scanning == row.id) "Scanning…" else "Usage", "insights", enabled = scanning != row.id) {
+        com.aglyn.ui.MenuAction("usage", if (scanning == row.id) "Scanning…" else "Usage", "insights", enabled = scanning != row.id) {
           scanning = row.id
           scope.launch {
             val scan = api.whereUsed(hostId, row.id, row.name)
@@ -127,10 +127,10 @@ fun WorkflowsSection(context: NativePluginContext, hostId: String, entitlements:
             notice = workflowUsageLine(row.name, scan) to StatusTone.INFO
           }
         },
-        com.aglyn.ui.MenuAction("Runs", "history") { open(AutomationTarget.Runs(row.id, row.name, siteScope = false)) },
-        com.aglyn.ui.MenuAction("Edit", "edit") { open(AutomationTarget.Workflow(row.id)) },
-        com.aglyn.ui.MenuAction("Duplicate…", "file_copy") { duplicating = row },
-        com.aglyn.ui.MenuAction("Delete", "delete", destructive = true) {
+        com.aglyn.ui.MenuAction("runs", "Runs", "history") { open(AutomationTarget.Runs(row.id, row.name, siteScope = false)) },
+        com.aglyn.ui.MenuAction("edit", "Edit", "edit") { open(AutomationTarget.Workflow(row.id)) },
+        com.aglyn.ui.MenuAction("duplicate", "Duplicate…", "file_copy") { duplicating = row },
+        com.aglyn.ui.MenuAction("delete", "Delete", "delete", destructive = true) {
           scope.launch { deleting = row to api.whereUsed(hostId, row.id, row.name) }
         },
       ),

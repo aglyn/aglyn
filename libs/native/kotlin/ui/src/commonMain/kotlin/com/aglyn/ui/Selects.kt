@@ -187,34 +187,6 @@ fun SectionNav(
   }
 }
 
-/** An overflow ("more") menu of a row's actions. */
-data class MenuAction(val label: String, val icon: String? = null, val destructive: Boolean = false, val enabled: Boolean = true, val onClick: () -> Unit)
-
-@Composable
-fun OverflowMenu(actions: List<MenuAction>, modifier: Modifier = Modifier, contentDescription: String = "More actions") {
-  var open by remember { mutableStateOf(false) }
-  Box(modifier) {
-    IconButton(onClick = { open = true }, modifier = Modifier.testTag("overflow")) {
-      Icon(AglynIcons.named("more_vert"), contentDescription = contentDescription)
-    }
-    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-      for (action in actions) {
-        val tint = if (action.destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-        DropdownMenuItem(
-          text = { Text(action.label, color = tint) },
-          leadingIcon = action.icon?.let { { Icon(AglynIcons.named(it), contentDescription = null, tint = tint) } },
-          enabled = action.enabled,
-          onClick = {
-            open = false
-            action.onClick()
-          },
-          modifier = Modifier.testTag("menu-${action.label.lowercase().replace(' ', '-')}"),
-        )
-      }
-    }
-  }
-}
-
 /** Puts [text] on the platform clipboard. */
 @Composable
 fun rememberCopyToClipboard(): (String) -> Unit {

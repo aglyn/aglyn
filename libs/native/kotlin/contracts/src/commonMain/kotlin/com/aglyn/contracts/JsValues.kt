@@ -101,7 +101,7 @@ fun jsNumberString(value: Double): String {
 }
 
 /** `Math.round`: half toward +∞. */
-fun jsRound(value: Double): Double {
+fun jsMathRound(value: Double): Double {
   if (value.isNaN() || value.isInfinite()) return value
   val down = floor(value)
   return if (value - down >= 0.5) down + 1 else down

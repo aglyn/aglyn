@@ -81,16 +81,16 @@ fun WebhooksSection(context: NativePluginContext, hostId: String, entitlements: 
       testTag = "webhook-${hook.id}",
       actions = buildList {
         if (hook.inbound) {
-          add(MenuAction("Copy URL", "link") {
+          add(MenuAction("copy-url", "Copy URL", "link") {
             copy(hook.endpoint(siteBase, hostId))
             notice = "Endpoint URL copied — send the secret in x-aglyn-secret" to StatusTone.SUCCESS
           })
         }
-        add(MenuAction("Secret", "key") {
+        add(MenuAction("secret", "Secret", "key") {
           copy(hook.secret)
           notice = "Secret copied" to StatusTone.SUCCESS
         })
-        add(MenuAction("Delete", "delete", destructive = true) { deleting = hook })
+        add(MenuAction("delete", "Delete", "delete", destructive = true) { deleting = hook })
       },
     )
   }

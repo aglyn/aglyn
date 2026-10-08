@@ -234,9 +234,9 @@ fun OrgAutomationsCard(
             },
             actions = if (canEdit) {
               listOf(
-                MenuAction("Edit", "edit") { open(AutomationTarget.OrgAutomation(row.id)) },
-                MenuAction("Pause on…", "pause", enabled = pausable.isNotEmpty()) { pauseFor = row },
-                MenuAction("Delete", "delete", destructive = true) { deleting = row },
+                MenuAction("edit", "Edit", "edit") { open(AutomationTarget.OrgAutomation(row.id)) },
+                MenuAction("pause-on", "Pause on…", "pause", enabled = pausable.isNotEmpty()) { pauseFor = row },
+                MenuAction("delete", "Delete", "delete", destructive = true) { deleting = row },
               )
             } else {
               emptyList()
@@ -332,7 +332,7 @@ private fun SiteRows(context: NativePluginContext, kind: SiteListKind, site: Org
   val window = windowOf(docs, ORG_SITE_LIST_ROWS)
   fun openSite() {
     PendingSection.key = kind.key
-    if (!context.openSite(site.id)) PendingSection.key = null
+    context.selectSite(site.id)
   }
   for (row in siteListRows(kind, window.rows)) {
     Row(

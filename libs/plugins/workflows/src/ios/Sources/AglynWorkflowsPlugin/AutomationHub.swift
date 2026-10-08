@@ -358,7 +358,7 @@ struct WorkflowsSection: View {
     .sheet(item: $duplicating) { row in
       DuplicateWorkflowSheet(row: row) { name in
         let key = createResourceUID()
-        try await api.duplicateWorkflow(hostID: hostID, sourceID: row.id, name: name, attemptKey: key)
+        return try await api.duplicateWorkflow(hostID: hostID, sourceID: row.id, name: name, attemptKey: key)
       }
     }
     .task(id: hostID) {
