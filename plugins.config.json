@@ -2958,6 +2958,37 @@
       }
     },
     {
+      "id": "review-platforms",
+      "package": "@aglyn/plugins-review-platforms",
+      "register": {
+        "console": "registerReviewPlatformsConsole",
+        "consoleApi": "registerReviewPlatformsConsoleApi",
+        "serverDeclarations": "registerReviewPlatformsServerDeclarations",
+        "subprocessors": "reviewPlatformsSubprocessors"
+      },
+      "apiPrefixes": ["review-platforms"],
+      "catalog": {
+        "order": 32,
+        "$comment": "Trustpilot and Yotpo Reviews invitations for the commerce plugin's orders (AGL-3699), each with the merchant's own account, through core's order-email-copies seam and commerce's order events by name; it never imports commerce, and commerce's built-in product reviews stay the reviews a store shows. No `requires` edge, for shipping's reason: a workspace cannot switch it off, so it runs only on a site where commerce is on (site-context.ts). On for every workspace, off for a site only when that site says so, and no release flag: Trustpilot's BCC invitation address needs nothing of the deployment, and the API connections hide themselves until it sets REVIEW_PLATFORMS_TOKEN_KEY.",
+        "label": "Review platforms",
+        "alwaysOnForWorkspace": true,
+        "description": "Trustpilot and Yotpo review invitations.",
+        "siteOff": {
+          "stops": "Stops review invitations for new orders.",
+          "keeps": "Reviews already collected stay in your Trustpilot and Yotpo accounts."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "orderDetail"
+          ]
+        }
+      }
+    },
+    {
       "id": "loyalty",
       "package": "@aglyn/plugins-loyalty",
       "register": {

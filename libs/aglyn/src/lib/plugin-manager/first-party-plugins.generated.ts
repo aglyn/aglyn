@@ -296,6 +296,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "keeps": "Members keep their points and store credit."
     }
   },
+  {
+    "id": "review-platforms",
+    "label": "Review platforms",
+    "alwaysOnForWorkspace": true,
+    "description": "Trustpilot and Yotpo review invitations.",
+    "siteOff": {
+      "stops": "Stops review invitations for new orders.",
+      "keeps": "Reviews already collected stay in your Trustpilot and Yotpo accounts."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -331,6 +341,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "inventory-sync": "console-only",
   "delivery-apps": "console-only",
   "loyalty": "console-only",
+  "review-platforms": "console-only",
 }
 
 /**

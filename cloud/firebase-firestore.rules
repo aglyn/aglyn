@@ -920,6 +920,20 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Review platforms (AGL-3699): one site's Trustpilot and Yotpo
+      // settings — the invitation address every order email may be copied
+      // to, and API credentials sealed under REVIEW_PLATFORMS_TOKEN_KEY — and
+      // whether each service was asked to invite one order's buyer. Server-
+      // written AND server-read: the plugin's routes serve what the console
+      // shows. A client that could write the settings could copy a store's
+      // order emails to an inbox of its choosing.
+      match /reviewPlatformsHostSettings/{hostId} {
+        allow read, write: if false;
+      }
+      match /reviewPlatformsInvitations/{recordId} {
+        allow read, write: if false;
+      }
+
       // Rewards (AGL-3640): one store's loyalty program, its members' points,
       // store credit and live checkout holds, the rewards and referral codes
       // that spend them, every movement of a balance, what each sale took

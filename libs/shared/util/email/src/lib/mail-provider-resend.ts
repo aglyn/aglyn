@@ -146,6 +146,7 @@ export function resendSendPayload(message: MailProviderMessage): ResendSendPaylo
       : {}),
     ...(message.tags?.length ? { tags: message.tags } : {}),
     ...(message.replyTo ? { reply_to: message.replyTo } : {}),
+    ...(message.bcc?.length ? { bcc: message.bcc } : {}),
   }
 }
 

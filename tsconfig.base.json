@@ -115,6 +115,8 @@
       "@aglyn/plugins-loyalty/*": ["./libs/plugins/loyalty/src/lib/*"],
       "@aglyn/plugins-post-purchase": ["./libs/plugins/post-purchase/src/index.ts"],
       "@aglyn/plugins-post-purchase/*": ["./libs/plugins/post-purchase/src/lib/*"],
+      "@aglyn/plugins-review-platforms": ["./libs/plugins/review-platforms/src/index.ts"],
+      "@aglyn/plugins-review-platforms/*": ["./libs/plugins/review-platforms/src/lib/*"],
       "@aglyn/plugins-shipping": ["./libs/plugins/shipping/src/index.ts"],
       "@aglyn/plugins-shipping/*": ["./libs/plugins/shipping/src/lib/*"],
       "@aglyn/plugins-themes": ["./libs/plugins/themes/src/index.ts"],

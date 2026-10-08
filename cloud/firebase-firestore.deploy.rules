@@ -927,6 +927,20 @@ allow read, write: if false;
 
 
 
+match /reviewPlatformsHostSettings/{hostId} {
+allow read, write: if false;
+}
+match /reviewPlatformsInvitations/{recordId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
 
 
 
