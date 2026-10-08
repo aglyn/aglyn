@@ -17,7 +17,7 @@
 
 'use client'
 
-import { pluginDocsHelp } from '@aglyn/aglyn'
+import { aiAddonName, pluginDocsHelp } from '@aglyn/aglyn'
 import type { ConsoleHostBusinessProfileZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
@@ -32,6 +32,9 @@ import {
   aiSitePreferenceOf,
   type AiSitePreference,
 } from '../model/ai-site-memory'
+
+/** The configured brand's AI, never ours by literal (AGL-2153). */
+const AI_NAME = aiAddonName()
 
 /** A close mark, drawn inline so the card ships no icon set. */
 const ForgetIcon = () => (
@@ -78,7 +81,7 @@ export function AiSiteMemoryCard(props: ConsoleHostBusinessProfileZoneProps) {
       setBusy(true)
       try {
         await deleteDoc(doc(firestore, 'hosts', hostId, AI_SITE_MEMORY_SUBCOLLECTION, preference.id))
-        enqueueSnackbar('Aglyn AI will no longer use that preference', { variant: 'success' })
+        enqueueSnackbar(`${AI_NAME} will no longer use that preference`, { variant: 'success' })
       } catch (error) {
         console.error('ai memory forget failed', error)
         enqueueSnackbar('That preference was not removed. Try again.', { variant: 'error' })
@@ -91,9 +94,9 @@ export function AiSiteMemoryCard(props: ConsoleHostBusinessProfileZoneProps) {
 
   const forgetAll = useCallback(async () => {
     const confirmed = await confirm({
-      title: 'Forget everything Aglyn AI learned here?',
+      title: `Forget everything ${AI_NAME} learned here?`,
       description:
-        'Later AI jobs for this site stop using these preferences. Aglyn AI learns again from the edits you apply next.',
+        `Later AI jobs for this site stop using these preferences. ${AI_NAME} learns again from the edits you apply next.`,
       confirmationText: 'Forget all',
       confirmationButtonProps: { color: 'error' },
     })
@@ -107,7 +110,7 @@ export function AiSiteMemoryCard(props: ConsoleHostBusinessProfileZoneProps) {
         batch.delete(doc(firestore, 'hosts', hostId, AI_SITE_MEMORY_SUBCOLLECTION, preference.id))
       }
       await batch.commit()
-      enqueueSnackbar('Aglyn AI forgot what it learned on this site', { variant: 'success' })
+      enqueueSnackbar(`${AI_NAME} forgot what it learned on this site`, { variant: 'success' })
     } catch (error) {
       console.error('ai memory clear failed', error)
       enqueueSnackbar('The preferences were not cleared. Try again.', { variant: 'error' })
@@ -118,11 +121,11 @@ export function AiSiteMemoryCard(props: ConsoleHostBusinessProfileZoneProps) {
 
   return (
     <CardDisplay
-      header="What Aglyn AI learned"
+      header={`What ${AI_NAME} learned`}
       subheader="Short preferences from the edits you applied with Assist. Every AI job for this site reads them."
       help={pluginDocsHelp('aiBusinessProfile', {
         anchor: '#what-aglyn-ai-learned',
-        excerpt: 'Preferences Aglyn AI took from the edits you applied. Forget one, or all, at any time.',
+        excerpt: `Preferences ${AI_NAME} took from the edits you applied. Forget one, or all, at any time.`,
       })}
       actions={
         preferences.length ? (

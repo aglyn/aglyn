@@ -17,7 +17,7 @@
 
 'use client'
 
-import { buildRoute, Route } from '@aglyn/aglyn'
+import { aiAddonName, buildRoute, Route } from '@aglyn/aglyn'
 import {
   resolveBusinessProfile,
   type BusinessProfileHost,
@@ -83,7 +83,7 @@ export function BusinessFactsCard(props: BusinessFactsCardProps) {
   return (
     <CardDisplay
       header="From your site settings"
-      subheader="Aglyn AI uses these exactly as entered. It never makes up a name, an email, a phone number, an address or opening hours."
+      subheader={`${aiAddonName()} uses these exactly as entered. It never makes up a name, an email, a phone number, an address or opening hours.`}
       help={docsHelp('businessProfile', {
         anchor: '#contact-details-are-never-invented',
         excerpt: 'Contact details come only from Setup → Basic details and SEO. A detail that is not entered is left out.',

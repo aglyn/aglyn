@@ -17,6 +17,7 @@
 
 'use client'
 
+import { aiAddonName } from '@aglyn/aglyn'
 import {
   BUSINESS_PROFILE_FIELDS,
   BUSINESS_PROFILE_MAX_CHARS,
@@ -106,7 +107,7 @@ export function originLine(
     const value = Array.isArray(used.value) ? used.value.join(', ') : String(used.value)
     const shown =
       field === 'tone' ? BUSINESS_TONE_LABELS[used.value as keyof typeof BUSINESS_TONE_LABELS] : value
-    return `Empty here, so Aglyn AI uses “${shown.length > 80 ? `${shown.slice(0, 79)}…` : shown}” from ${
+    return `Empty here, so ${aiAddonName()} uses “${shown.length > 80 ? `${shown.slice(0, 79)}…` : shown}” from ${
       used.origin === 'site' ? 'your SEO settings' : 'the workspace defaults'
     }.`
   }
@@ -133,12 +134,12 @@ function profileSchema(
     CardDisplayProps: {
       subheader:
         level === 'site'
-          ? 'What this business does and how it speaks. Aglyn AI reads it on every job for this site, and never replaces what you write here.'
+          ? `What this business does and how it speaks. ${aiAddonName()} reads it on every job for this site, and never replaces what you write here.`
           : 'What every site in this workspace starts from. A site’s own profile wins wherever it says something.',
       help: docsHelp('businessProfile', {
         excerpt:
           level === 'site'
-            ? 'The services, area, audience and tone Aglyn AI writes for. Contact details come only from your site settings.'
+            ? `The services, area, audience and tone ${aiAddonName()} writes for. Contact details come only from your site settings.`
             : 'Defaults a site inherits where its own business profile is empty.',
       }),
     },

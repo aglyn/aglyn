@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { PLATFORM_BRAND_NAME, registerConsoleExtension } from '@aglyn/aglyn'
+import { PLATFORM_BRAND_NAME, aiAddonName, registerConsoleExtension } from '@aglyn/aglyn'
 import { LinearProgress } from '@mui/material'
 import { createElement } from 'react'
 import { AiAssistProviderOnHost } from './components/ai-assist-provider-on-host.component'
@@ -929,7 +929,7 @@ export function registerAiConsole(): void {
       {
         slot: 'hostBusinessProfile',
         widgetId: 'ai-site-memory',
-        title: 'What Aglyn AI learned',
+        title: `What ${aiAddonName()} learned`,
         featureFlag: 'aiGenerative',
         Component: AiSiteMemoryCard,
       },

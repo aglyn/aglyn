@@ -17,6 +17,7 @@
 
 import { siteProfileUrls, type HostSeoEntity } from './content-authors'
 import { normalizeAreaServed } from './local-business'
+import { PLATFORM_BRAND_NAME } from './platform-brand'
 
 /**
  * A site's BUSINESS PROFILE (AGL-3661): what the business is, as everything
@@ -366,6 +367,6 @@ export const BUSINESS_PROFILE_ORIGIN_LABELS: Readonly<Record<BusinessProfileOrig
   owner: 'You',
   site: 'Site settings',
   start: 'Your answers when the site was started',
-  ai: 'Suggested by Aglyn AI',
+  ai: `Suggested by ${PLATFORM_BRAND_NAME} AI`,
   workspace: 'Workspace default',
 }
