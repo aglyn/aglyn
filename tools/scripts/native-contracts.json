@@ -176,6 +176,26 @@
       "types": [
         "ScreenTrafficRow"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/functions.ts": {
+      "values": [
+        "FUNCTION_BUILTIN_NAMES",
+        "FUNCTION_MAX_OPERATIONS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/host-events.ts": {
+      "types": [
+        "HostEventDeclaration"
+      ],
+      "values": [
+        "HOST_EVENTS"
+      ]
+    },
+    "libs/plugins/workflows/src/lib/model/workflows.ts": {
+      "values": [
+        "WORKFLOW_MAX_STEPS",
+        "CROSS_MAX_DEPTH"
+      ]
     }
   },
   "ints": [
@@ -3476,6 +3496,1713 @@
             "devices": {},
             "referrers": {}
           }
+        ]
+      ]
+    },
+    "evaluateExpression": {
+      "module": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "args": [
+        [
+          "1 + 2 * 3",
+          {}
+        ],
+        [
+          "(1 + 2) * 3",
+          {}
+        ],
+        [
+          "10 / 4",
+          {}
+        ],
+        [
+          "-3 + 5",
+          {}
+        ],
+        [
+          "- -2",
+          {}
+        ],
+        [
+          "price * qty",
+          {
+            "price": 2.5,
+            "qty": 4
+          }
+        ],
+        [
+          "'a' + 1",
+          {}
+        ],
+        [
+          "\"x\" + name",
+          {
+            "name": "y"
+          }
+        ],
+        [
+          "1 + true",
+          {}
+        ],
+        [
+          "flag",
+          {
+            "flag": true
+          }
+        ],
+        [
+          "n + 1",
+          {
+            "n": "41"
+          }
+        ],
+        [
+          "min(3, 1, 2)",
+          {}
+        ],
+        [
+          "max(1, 7)",
+          {}
+        ],
+        [
+          "round(2.345, 2)",
+          {}
+        ],
+        [
+          "round(2.5)",
+          {}
+        ],
+        [
+          "floor(2.9)",
+          {}
+        ],
+        [
+          "ceil(2.1)",
+          {}
+        ],
+        [
+          "abs(-4)",
+          {}
+        ],
+        [
+          "format(1234.5, 2)",
+          {}
+        ],
+        [
+          "format(1234567)",
+          {}
+        ],
+        [
+          "format(0.125, 2)",
+          {}
+        ],
+        [
+          "plan.monthly * 12",
+          {
+            "plan": "{\"monthly\": 29, \"annual\": 290, \"name\": \"Pro\", \"on\": true, \"nested\": {\"x\": 1}}"
+          }
+        ],
+        [
+          "plan.name",
+          {
+            "plan": "{\"monthly\": 29, \"annual\": 290, \"name\": \"Pro\", \"on\": true, \"nested\": {\"x\": 1}}"
+          }
+        ],
+        [
+          "plan.on",
+          {
+            "plan": "{\"monthly\": 29, \"annual\": 290, \"name\": \"Pro\", \"on\": true, \"nested\": {\"x\": 1}}"
+          }
+        ],
+        [
+          "min",
+          {
+            "min": 3
+          }
+        ],
+        [
+          ".5 + 1",
+          {}
+        ],
+        [
+          "1.5 * 2",
+          {}
+        ],
+        [
+          "7 - 2 - 1",
+          {}
+        ],
+        [
+          "8 / 2 / 2",
+          {}
+        ],
+        [
+          "round(1.005, 2)",
+          {}
+        ],
+        [
+          "round(-2.5)",
+          {}
+        ]
+      ]
+    },
+    "expressionSyntaxError": {
+      "module": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "args": [
+        [
+          "subscribe"
+        ],
+        [
+          "a + b"
+        ],
+        [
+          "(a + b"
+        ],
+        [
+          "a +"
+        ],
+        [
+          "a b"
+        ],
+        [
+          "'open"
+        ],
+        [
+          "a == b"
+        ],
+        [
+          "nope(1)"
+        ],
+        [
+          "min(1,)"
+        ],
+        [
+          "min()"
+        ],
+        [
+          "1 # 2"
+        ],
+        [
+          "a.b.c"
+        ],
+        [
+          "a."
+        ],
+        [
+          ""
+        ],
+        [
+          "max(1, (2 + 3))"
+        ],
+        [
+          ")"
+        ],
+        [
+          "a,b"
+        ]
+      ]
+    },
+    "evaluateHostFunction": {
+      "module": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "args": [
+        [
+          {
+            "name": "price",
+            "parameters": [
+              {
+                "name": "qty",
+                "type": "number",
+                "required": true
+              },
+              {
+                "name": "vip",
+                "type": "boolean"
+              },
+              {
+                "name": "note",
+                "type": "text",
+                "defaultValue": "hi"
+              }
+            ],
+            "variables": [
+              {
+                "name": "total",
+                "type": "number"
+              },
+              {
+                "name": "label",
+                "type": "text"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "vip",
+                  "comparator": "==",
+                  "right": "true"
+                },
+                "then": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 8"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 10"
+                  }
+                ]
+              },
+              {
+                "if": {
+                  "left": "total",
+                  "comparator": ">=",
+                  "right": "50"
+                },
+                "then": [
+                  {
+                    "set": "label",
+                    "expression": "'big ' + note"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "label",
+                    "expression": "note"
+                  }
+                ]
+              }
+            ],
+            "returnValue": "total"
+          },
+          {
+            "qty": 3
+          }
+        ],
+        [
+          {
+            "name": "price",
+            "parameters": [
+              {
+                "name": "qty",
+                "type": "number",
+                "required": true
+              },
+              {
+                "name": "vip",
+                "type": "boolean"
+              },
+              {
+                "name": "note",
+                "type": "text",
+                "defaultValue": "hi"
+              }
+            ],
+            "variables": [
+              {
+                "name": "total",
+                "type": "number"
+              },
+              {
+                "name": "label",
+                "type": "text"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "vip",
+                  "comparator": "==",
+                  "right": "true"
+                },
+                "then": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 8"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 10"
+                  }
+                ]
+              },
+              {
+                "if": {
+                  "left": "total",
+                  "comparator": ">=",
+                  "right": "50"
+                },
+                "then": [
+                  {
+                    "set": "label",
+                    "expression": "'big ' + note"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "label",
+                    "expression": "note"
+                  }
+                ]
+              }
+            ],
+            "returnValue": "total"
+          },
+          {
+            "qty": "6",
+            "vip": "true"
+          }
+        ],
+        [
+          {
+            "name": "price",
+            "parameters": [
+              {
+                "name": "qty",
+                "type": "number",
+                "required": true
+              },
+              {
+                "name": "vip",
+                "type": "boolean"
+              },
+              {
+                "name": "note",
+                "type": "text",
+                "defaultValue": "hi"
+              }
+            ],
+            "variables": [
+              {
+                "name": "total",
+                "type": "number"
+              },
+              {
+                "name": "label",
+                "type": "text"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "vip",
+                  "comparator": "==",
+                  "right": "true"
+                },
+                "then": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 8"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 10"
+                  }
+                ]
+              },
+              {
+                "if": {
+                  "left": "total",
+                  "comparator": ">=",
+                  "right": "50"
+                },
+                "then": [
+                  {
+                    "set": "label",
+                    "expression": "'big ' + note"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "label",
+                    "expression": "note"
+                  }
+                ]
+              }
+            ],
+            "returnValue": "total"
+          },
+          {}
+        ],
+        [
+          {
+            "name": "price",
+            "parameters": [
+              {
+                "name": "qty",
+                "type": "number",
+                "required": true
+              },
+              {
+                "name": "vip",
+                "type": "boolean"
+              },
+              {
+                "name": "note",
+                "type": "text",
+                "defaultValue": "hi"
+              }
+            ],
+            "variables": [
+              {
+                "name": "total",
+                "type": "number"
+              },
+              {
+                "name": "label",
+                "type": "text"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "vip",
+                  "comparator": "==",
+                  "right": "true"
+                },
+                "then": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 8"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 10"
+                  }
+                ]
+              },
+              {
+                "if": {
+                  "left": "total",
+                  "comparator": ">=",
+                  "right": "50"
+                },
+                "then": [
+                  {
+                    "set": "label",
+                    "expression": "'big ' + note"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "label",
+                    "expression": "note"
+                  }
+                ]
+              }
+            ],
+            "returnValue": "total"
+          },
+          {
+            "qty": "abc"
+          }
+        ],
+        [
+          {
+            "name": "price",
+            "parameters": [
+              {
+                "name": "qty",
+                "type": "number",
+                "required": true
+              },
+              {
+                "name": "vip",
+                "type": "boolean"
+              },
+              {
+                "name": "note",
+                "type": "text",
+                "defaultValue": "hi"
+              }
+            ],
+            "variables": [
+              {
+                "name": "total",
+                "type": "number"
+              },
+              {
+                "name": "label",
+                "type": "text"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "vip",
+                  "comparator": "==",
+                  "right": "true"
+                },
+                "then": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 8"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 10"
+                  }
+                ]
+              },
+              {
+                "if": {
+                  "left": "total",
+                  "comparator": ">=",
+                  "right": "50"
+                },
+                "then": [
+                  {
+                    "set": "label",
+                    "expression": "'big ' + note"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "label",
+                    "expression": "note"
+                  }
+                ]
+              }
+            ],
+            "returnValue": "label"
+          },
+          {
+            "qty": 10,
+            "note": "x"
+          }
+        ],
+        [
+          {
+            "name": "g",
+            "parameters": [],
+            "variables": [],
+            "operations": [
+              {
+                "if": {
+                  "left": "1",
+                  "comparator": "<",
+                  "right": "2"
+                },
+                "then": [
+                  {
+                    "set": "rate",
+                    "expression": "1"
+                  }
+                ],
+                "otherwise": []
+              }
+            ]
+          },
+          {}
+        ],
+        [
+          {
+            "name": "g",
+            "parameters": [],
+            "variables": [
+              {
+                "name": "v",
+                "type": "number"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "1",
+                  "comparator": "==",
+                  "right": "1"
+                },
+                "then": [
+                  {
+                    "set": "v",
+                    "expression": "rate * 2"
+                  }
+                ],
+                "otherwise": []
+              }
+            ],
+            "returnValue": "v"
+          },
+          {},
+          {
+            "globals": {
+              "rate": 21
+            }
+          }
+        ],
+        [
+          {
+            "name": "g",
+            "parameters": [],
+            "variables": [],
+            "operations": [
+              {
+                "if": {
+                  "left": "1",
+                  "comparator": "==",
+                  "right": "1"
+                },
+                "then": [
+                  {
+                    "set": "rate",
+                    "expression": "1"
+                  }
+                ],
+                "otherwise": []
+              }
+            ]
+          },
+          {},
+          {
+            "globals": {
+              "rate": 21
+            }
+          }
+        ],
+        [
+          {
+            "name": "g",
+            "parameters": [],
+            "variables": [
+              {
+                "name": "v",
+                "type": "number"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "1",
+                  "comparator": "==",
+                  "right": "1"
+                },
+                "then": [
+                  {
+                    "set": "v",
+                    "workflow": "w"
+                  }
+                ],
+                "otherwise": []
+              }
+            ],
+            "returnValue": "v"
+          },
+          {}
+        ],
+        [
+          {
+            "name": "g",
+            "parameters": [],
+            "variables": [
+              {
+                "name": "v",
+                "type": "text"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "'a'",
+                  "comparator": "!=",
+                  "right": "'b'"
+                },
+                "then": [
+                  {
+                    "set": "v",
+                    "expression": "bad +"
+                  }
+                ],
+                "otherwise": []
+              }
+            ],
+            "returnValue": "v"
+          },
+          {}
+        ]
+      ]
+    },
+    "runWorkflow": {
+      "module": "libs/plugins/workflows/src/lib/model/workflows.ts",
+      "args": [
+        [
+          {
+            "name": "w",
+            "steps": [
+              {
+                "functionName": "double",
+                "args": [
+                  "base"
+                ],
+                "resultName": "d"
+              },
+              {
+                "functionName": "double",
+                "args": [
+                  "d + 1"
+                ]
+              }
+            ]
+          },
+          {
+            "price": {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            "double": {
+              "name": "double",
+              "parameters": [
+                {
+                  "name": "x",
+                  "type": "number",
+                  "required": true
+                }
+              ],
+              "variables": [
+                {
+                  "name": "out",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "out",
+                      "expression": "x * 2"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "out"
+            }
+          },
+          {
+            "v1": {
+              "name": "base",
+              "type": "number",
+              "value": "5"
+            },
+            "v2": {
+              "name": "flag",
+              "type": "boolean",
+              "value": "true"
+            }
+          }
+        ],
+        [
+          {
+            "name": "w",
+            "steps": [
+              {
+                "functionName": "price",
+                "args": [
+                  "3",
+                  "flag"
+                ]
+              }
+            ],
+            "returnValue": "step1"
+          },
+          {
+            "price": {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            "double": {
+              "name": "double",
+              "parameters": [
+                {
+                  "name": "x",
+                  "type": "number",
+                  "required": true
+                }
+              ],
+              "variables": [
+                {
+                  "name": "out",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "out",
+                      "expression": "x * 2"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "out"
+            }
+          },
+          {
+            "v1": {
+              "name": "base",
+              "type": "number",
+              "value": "5"
+            },
+            "v2": {
+              "name": "flag",
+              "type": "boolean",
+              "value": "true"
+            }
+          }
+        ],
+        [
+          {
+            "name": "w",
+            "steps": [
+              {
+                "functionName": "missing",
+                "args": []
+              }
+            ]
+          },
+          {
+            "price": {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            "double": {
+              "name": "double",
+              "parameters": [
+                {
+                  "name": "x",
+                  "type": "number",
+                  "required": true
+                }
+              ],
+              "variables": [
+                {
+                  "name": "out",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "out",
+                      "expression": "x * 2"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "out"
+            }
+          },
+          {
+            "v1": {
+              "name": "base",
+              "type": "number",
+              "value": "5"
+            },
+            "v2": {
+              "name": "flag",
+              "type": "boolean",
+              "value": "true"
+            }
+          }
+        ],
+        [
+          {
+            "name": "w",
+            "steps": [
+              {
+                "functionName": "double",
+                "args": [
+                  "nope"
+                ]
+              }
+            ]
+          },
+          {
+            "price": {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            "double": {
+              "name": "double",
+              "parameters": [
+                {
+                  "name": "x",
+                  "type": "number",
+                  "required": true
+                }
+              ],
+              "variables": [
+                {
+                  "name": "out",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "out",
+                      "expression": "x * 2"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "out"
+            }
+          },
+          {
+            "v1": {
+              "name": "base",
+              "type": "number",
+              "value": "5"
+            },
+            "v2": {
+              "name": "flag",
+              "type": "boolean",
+              "value": "true"
+            }
+          }
+        ],
+        [
+          {
+            "name": "w",
+            "steps": [
+              {
+                "functionName": "double",
+                "args": [
+                  "qty"
+                ],
+                "resultName": "r"
+              }
+            ],
+            "returnValue": "r"
+          },
+          {
+            "price": {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            "double": {
+              "name": "double",
+              "parameters": [
+                {
+                  "name": "x",
+                  "type": "number",
+                  "required": true
+                }
+              ],
+              "variables": [
+                {
+                  "name": "out",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "out",
+                      "expression": "x * 2"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "out"
+            }
+          },
+          {},
+          {
+            "qty": 7
+          }
+        ],
+        [
+          {
+            "name": "w",
+            "steps": []
+          },
+          {
+            "price": {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            "double": {
+              "name": "double",
+              "parameters": [
+                {
+                  "name": "x",
+                  "type": "number",
+                  "required": true
+                }
+              ],
+              "variables": [
+                {
+                  "name": "out",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "out",
+                      "expression": "x * 2"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "out"
+            }
+          },
+          {}
+        ],
+        [
+          {
+            "name": "w",
+            "steps": [
+              {
+                "functionName": "double",
+                "args": [
+                  "1"
+                ],
+                "resultName": "a"
+              },
+              {
+                "functionName": "double",
+                "args": [
+                  "a"
+                ],
+                "resultName": "b"
+              }
+            ],
+            "returnValue": "a"
+          },
+          {
+            "price": {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            "double": {
+              "name": "double",
+              "parameters": [
+                {
+                  "name": "x",
+                  "type": "number",
+                  "required": true
+                }
+              ],
+              "variables": [
+                {
+                  "name": "out",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "out",
+                      "expression": "x * 2"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "out"
+            }
+          },
+          {}
+        ]
+      ]
+    },
+    "hostEventLabel": {
+      "module": "libs/aglyn/src/lib/app-utils/host-events.ts",
+      "args": [
+        [
+          "formSubmission"
+        ],
+        [
+          "pageView"
+        ],
+        [
+          "booking"
+        ],
+        [
+          "dealWon"
+        ],
+        [
+          "orderRefunded"
+        ],
+        [
+          "returnRequested"
+        ],
+        [
+          "funnelLeft"
+        ],
+        [
+          "myCustom"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "hostEventPayloadHint": {
+      "module": "libs/aglyn/src/lib/app-utils/host-events.ts",
+      "args": [
+        [
+          "formSubmission"
+        ],
+        [
+          "pageView"
+        ],
+        [
+          "booking"
+        ],
+        [
+          "lead"
+        ],
+        [
+          "dealWon"
+        ],
+        [
+          "myCustom"
+        ]
+      ]
+    },
+    "hostEventRecipientActed": {
+      "module": "libs/aglyn/src/lib/app-utils/host-events.ts",
+      "args": [
+        [
+          "formSubmission"
+        ],
+        [
+          "booking"
+        ],
+        [
+          "memberSignUp"
+        ],
+        [
+          "lead"
+        ],
+        [
+          "pageView"
+        ],
+        [
+          "dealWon"
         ]
       ]
     }

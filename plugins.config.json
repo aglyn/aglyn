@@ -2358,6 +2358,33 @@
         "planEntitlements": "workflowsPlanEntitlements",
         "usageAxes": "workflowsUsageAxes"
       },
+      "mobile": {
+        "$comment": "AGL-3670: Automation natively — the site's workflows, actions and webhooks, each one's run history and test run, the run allowances, the org automations a site runs (paused or resumed here), and the organization's own automations and every site's lists; the Automation pages opening natively from a link.",
+        "ios": {
+          "module": "AglynWorkflowsPlugin",
+          "register": "registerWorkflowsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.workflows",
+          "register": "registerWorkflowsNative"
+        },
+        "contributes": {
+          "screens": [
+            "workflows.automation",
+            "workflows.workflow",
+            "workflows.action",
+            "workflows.webhook",
+            "workflows.runs",
+            "workflows.org-automation"
+          ],
+          "quickActions": [
+            "workflows.open"
+          ],
+          "deepLinks": [
+            "workflows.page"
+          ]
+        }
+      },
       "transferResources": [
         {
           "$comment": "AGL-3548: org automations' plan feature (`actions`) gates both directions, as their section and their create route do.",

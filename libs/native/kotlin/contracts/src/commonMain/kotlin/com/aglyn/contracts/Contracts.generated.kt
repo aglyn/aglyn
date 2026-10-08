@@ -245,6 +245,16 @@ data class EventWriteInput(
 )
 
 @Serializable
+data class HostEventDeclaration(
+    val label: String,
+    val order: Double,
+    val payloadKeys: List<String>? = null,
+    val pluginId: String? = null,
+    val recipientActed: Boolean? = null,
+    val type: String,
+)
+
+@Serializable
 data class HostOrder(
     val amountCents: Double? = null,
     val billingAddress: OrderAddress? = null,
@@ -1156,12 +1166,16 @@ data class ContractValues(
     @SerialName("BOOKING_SERVICE_NAME_MAX") val bookingServiceNameMax: Long,
     @SerialName("BOOKING_STATE_LABELS") val bookingStateLabels: Map<String, String>,
     @SerialName("BOOKING_WEEKDAYS") val bookingWeekdays: List<String>,
+    @SerialName("CROSS_MAX_DEPTH") val crossMaxDepth: Long,
     @SerialName("EVENT_COVER_ALT_MAX_LENGTH") val eventCoverAltMaxLength: Long,
     @SerialName("EVENT_DEFAULT_DURATION_MS") val eventDefaultDurationMs: Double,
     @SerialName("EVENT_DESCRIPTION_MAX_LENGTH") val eventDescriptionMaxLength: Long,
     @SerialName("EVENT_LOCATION_MAX_LENGTH") val eventLocationMaxLength: Long,
     @SerialName("EVENT_ORGANIZER_MAX_LENGTH") val eventOrganizerMaxLength: Long,
     @SerialName("EVENT_TITLE_MAX_LENGTH") val eventTitleMaxLength: Long,
+    @SerialName("FUNCTION_BUILTIN_NAMES") val functionBuiltinNames: List<String>,
+    @SerialName("FUNCTION_MAX_OPERATIONS") val functionMaxOperations: Long,
+    @SerialName("HOST_EVENTS") val hostEvents: List<HostEventDeclaration>,
     @SerialName("LIST_QUERY_DISJUNCTIONS") val listQueryDisjunctions: Long,
     @SerialName("LIST_QUERY_ID_PATH") val listQueryIdPath: String,
     @SerialName("NAME_TOKEN_LIMIT") val nameTokenLimit: Long,
@@ -1184,4 +1198,5 @@ data class ContractValues(
     @SerialName("REMINDER_WINDOW_END_HOURS") val reminderWindowEndHours: Long,
     @SerialName("REMINDER_WINDOW_START_HOURS") val reminderWindowStartHours: Long,
     @SerialName("SCOPED_SEARCH_JOIN") val scopedSearchJoin: String,
+    @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
 )

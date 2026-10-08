@@ -6,6 +6,18 @@
       "why": "The site traffic card's figures: the window comparison, device split and top lists the Analytics page and the native screens show (AGL-3670)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/crm-kinds.ts",
+      "why": "Reached by the automation step vocabulary: the CRM lifecycle stages, task and activity kinds, plain lists."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "why": "The site functions' expression language: the evaluator, its syntax check and the function runner, which the native Automation screens replay for a trigger filter and a workflow's test run (AGL-3670)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/host-events.ts",
+      "why": "The host events an automation triggers on: their labels, payload keys and whether the recipient acted (AGL-3670)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/host-naming.ts",
       "why": "Reached by organizations: site naming and slug rules over strings."
     },
@@ -32,6 +44,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/platform-brand.ts",
       "why": "Reached by payment-risk: the platform brand name constants, no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/plugin-host-events.generated.ts",
+      "why": "Reached by host-events: each plugin's declared host events, generated data with no imports."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
@@ -156,6 +172,14 @@
     {
       "path": "libs/plugins/redirects/src/lib/model/redirects.ts",
       "why": "The redirect rule's shape and evaluation order, shared by the console page, the tenant serve path and the Redirects mobile screen."
+    },
+    {
+      "path": "libs/plugins/workflows/src/lib/model/webhooks.ts",
+      "why": "A webhook's shape and the delivery URL hint the native webhook form shows (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/workflows/src/lib/model/workflows.ts",
+      "why": "A workflow's shape and its pure runner over site functions and variables, the native test run's (AGL-3670)."
     },
     {
       "path": "libs/shared/ui/jsx/src/lib/const/list-query-plan.ts",

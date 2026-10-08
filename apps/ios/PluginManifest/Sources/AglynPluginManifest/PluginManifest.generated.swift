@@ -8,6 +8,7 @@ import AglynBookingsPlugin
 import AglynCommercePlugin
 import AglynEventsCalendarPlugin
 import AglynRedirectsPlugin
+import AglynWorkflowsPlugin
 
 public enum NativePluginManifest {
   public static let entries: [NativePluginManifestEntry] = [
@@ -30,6 +31,11 @@ public enum NativePluginManifest {
       id: "redirects",
       contributes: ["screens": ["redirects.list"], "widgets": ["redirects.summary"], "quickActions": ["redirects.open"], "deepLinks": ["redirects.page"]],
       register: AglynRedirectsPlugin.registerRedirectsNative
+    ),
+    NativePluginManifestEntry(
+      id: "workflows",
+      contributes: ["screens": ["workflows.action", "workflows.automation", "workflows.org-automation", "workflows.runs", "workflows.webhook", "workflows.workflow"], "quickActions": ["workflows.open"], "deepLinks": ["workflows.page"]],
+      register: AglynWorkflowsPlugin.registerWorkflowsNative
     ),
   ]
 }

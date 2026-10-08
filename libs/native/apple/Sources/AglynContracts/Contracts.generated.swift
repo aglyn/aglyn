@@ -358,6 +358,24 @@ public struct EventWriteInput: Codable, Hashable, Sendable {
   }
 }
 
+public struct HostEventDeclaration: Codable, Hashable, Sendable {
+  public var label: String
+  public var order: Double
+  public var payloadKeys: [String]?
+  public var pluginId: String?
+  public var recipientActed: Bool?
+  public var type: String
+
+  public init(label: String, order: Double, payloadKeys: [String]? = nil, pluginId: String? = nil, recipientActed: Bool? = nil, type: String) {
+    self.label = label
+    self.order = order
+    self.payloadKeys = payloadKeys
+    self.pluginId = pluginId
+    self.recipientActed = recipientActed
+    self.type = type
+  }
+}
+
 public struct HostOrder: Codable, Hashable, Sendable {
   public var amountCents: Double?
   public var billingAddress: OrderAddress?
@@ -1748,12 +1766,16 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let bookingServiceNameMax: Int
   public let bookingStateLabels: [String: String]
   public let bookingWeekdays: [String]
+  public let crossMaxDepth: Int
   public let eventCoverAltMaxLength: Int
   public let eventDefaultDurationMs: Double
   public let eventDescriptionMaxLength: Int
   public let eventLocationMaxLength: Int
   public let eventOrganizerMaxLength: Int
   public let eventTitleMaxLength: Int
+  public let functionBuiltinNames: [String]
+  public let functionMaxOperations: Int
+  public let hostEvents: [HostEventDeclaration]
   public let listQueryDisjunctions: Int
   public let listQueryIdPath: String
   public let nameTokenLimit: Int
@@ -1776,6 +1798,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let reminderWindowEndHours: Int
   public let reminderWindowStartHours: Int
   public let scopedSearchJoin: String
+  public let workflowMaxSteps: Int
 
   enum CodingKeys: String, CodingKey {
     case bookingFieldAsks = "BOOKING_FIELD_ASKS"
@@ -1788,12 +1811,16 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case bookingServiceNameMax = "BOOKING_SERVICE_NAME_MAX"
     case bookingStateLabels = "BOOKING_STATE_LABELS"
     case bookingWeekdays = "BOOKING_WEEKDAYS"
+    case crossMaxDepth = "CROSS_MAX_DEPTH"
     case eventCoverAltMaxLength = "EVENT_COVER_ALT_MAX_LENGTH"
     case eventDefaultDurationMs = "EVENT_DEFAULT_DURATION_MS"
     case eventDescriptionMaxLength = "EVENT_DESCRIPTION_MAX_LENGTH"
     case eventLocationMaxLength = "EVENT_LOCATION_MAX_LENGTH"
     case eventOrganizerMaxLength = "EVENT_ORGANIZER_MAX_LENGTH"
     case eventTitleMaxLength = "EVENT_TITLE_MAX_LENGTH"
+    case functionBuiltinNames = "FUNCTION_BUILTIN_NAMES"
+    case functionMaxOperations = "FUNCTION_MAX_OPERATIONS"
+    case hostEvents = "HOST_EVENTS"
     case listQueryDisjunctions = "LIST_QUERY_DISJUNCTIONS"
     case listQueryIdPath = "LIST_QUERY_ID_PATH"
     case nameTokenLimit = "NAME_TOKEN_LIMIT"
@@ -1816,5 +1843,6 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case reminderWindowEndHours = "REMINDER_WINDOW_END_HOURS"
     case reminderWindowStartHours = "REMINDER_WINDOW_START_HOURS"
     case scopedSearchJoin = "SCOPED_SEARCH_JOIN"
+    case workflowMaxSteps = "WORKFLOW_MAX_STEPS"
   }
 }

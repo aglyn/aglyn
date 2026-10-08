@@ -10,6 +10,7 @@ import com.aglyn.plugins.bookings.registerBookingsNative
 import com.aglyn.plugins.commerce.registerCommerceNative
 import com.aglyn.plugins.eventscalendar.registerEventsCalendarNative
 import com.aglyn.plugins.redirects.registerRedirectsNative
+import com.aglyn.plugins.workflows.registerWorkflowsNative
 
 object NativePluginManifest {
     val entries: List<NativePluginManifestEntry> = listOf(
@@ -32,6 +33,11 @@ object NativePluginManifest {
             id = "redirects",
             contributes = mapOf("screens" to listOf("redirects.list"), "widgets" to listOf("redirects.summary"), "quickActions" to listOf("redirects.open"), "deepLinks" to listOf("redirects.page")),
             register = ::registerRedirectsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "workflows",
+            contributes = mapOf("screens" to listOf("workflows.action", "workflows.automation", "workflows.org-automation", "workflows.runs", "workflows.webhook", "workflows.workflow"), "quickActions" to listOf("workflows.open"), "deepLinks" to listOf("workflows.page")),
+            register = ::registerWorkflowsNative,
         ),
     )
 }
