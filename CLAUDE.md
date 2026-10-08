@@ -1,5 +1,29 @@
 # Working in this repository
 
+## A fix for a sign-up or access blocker ships to production the same hour
+
+If a bug stops anyone from signing up, signing in, verifying, getting a
+workspace, loading the console or a site, publishing, or paying, its fix goes
+to production IMMEDIATELY. Getting it there is part of the fix (AGL-3690: the
+fix for a phone sign-up loop merged to main and then sat there unpromoted).
+The session that fixes it owns the whole path, in the same turn:
+
+1. Merge the fix to main as soon as it is green. Never leave it as a draft.
+2. If a promotion PR is open, `git merge origin/main` into it. If none is,
+   cut `release/v…` with `npm run release:prepare -- --write`, adding
+   `--hotfix` and the `hotfix` label when the day's cap is reached, and push
+   the same head to `main`.
+3. Merge the promotion as soon as it is green. Enable auto-merge, or merge it
+   yourself. This class is the exception to "never merge a promotion". A red
+   check gets fixed, never overridden.
+4. Do the tail in the same hour: aliases serve the merge, the owed rules and
+   indexes are deployed (`check-promotion-deploys --list`), `release:tag`,
+   then reproduce the broken flow in production and confirm it works.
+
+⛔ "It rides the next promotion" is not an acceptable state for this class.
+A fix that is on main and missing from production counts as the bug still
+being live.
+
 ## Verify in the cheapest tier that can see the mistake
 
 Four tiers exist. They are not interchangeable, and collapsing them is the
