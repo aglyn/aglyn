@@ -273,13 +273,23 @@ function fieldsOf(literal: string): string[] {
 const MEDIA_COLLECTION = "collection('media')"
 const MINTS_AN_ID = 'createResourceUid'
 
+/**
+ * `media/folders` mints a FOLDER id for `create-folder` (the native apps' New
+ * folder, AGL-3668): a `mediaFolders` document, never a media one. Only that
+ * exact chain is set aside, as `media-create-shape.spec.ts` does; any other
+ * CALL of `createResourceUid(` left in a file still makes it a creator.
+ */
+const MINTS_A_FOLDER_ID = 'foldersRef.doc(createResourceUid())'
+const mintsAMediaId = (source: string) =>
+  source.split(MINTS_A_FOLDER_ID).join('').includes(`${MINTS_AN_ID}(`)
+
 const CREATORS = [
   ...walk(resolve(REPO_ROOT, CONSOLE_API), (name) => name === 'route.ts'),
   resolve(REPO_ROOT, V1_RESOURCES),
 ]
   .filter((file) => {
     const source = readFileSync(file, 'utf8')
-    return source.includes(MEDIA_COLLECTION) && source.includes(MINTS_AN_ID)
+    return source.includes(MEDIA_COLLECTION) && mintsAMediaId(source)
   })
   .map((file) => relative(REPO_ROOT, file))
   .sort()
