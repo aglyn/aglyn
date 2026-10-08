@@ -39,7 +39,12 @@
 // headline — a test that reads as an incident anywhere has false-alarmed.
 import { readFileSync } from 'node:fs'
 
-import { shouldReport, slackPayload } from './lib/uptime-red-report.mjs'
+import {
+  recoveryPayload,
+  shouldReport,
+  shouldReportRecovery,
+  slackPayload,
+} from './lib/uptime-red-report.mjs'
 
 // Matching the sibling reporters. Without it a hung request stalls the job
 // for its whole timeout, which is worse than a missed notification.
@@ -81,7 +86,29 @@ if (!TEST) {
   }
 }
 
-if (!TEST && !shouldReport(results)) {
+/**
+ * The previous run's results (AGL-3690), which the workflow downloads from
+ * that run's artifact. Missing is normal: a first run, an expired artifact, or
+ * a previous run that died before writing. It means no recovery can be
+ * claimed, and nothing else changes.
+ */
+let previous = []
+const previousPath = flag('previous')
+if (!TEST && previousPath) {
+  try {
+    previous = JSON.parse(readFileSync(previousPath, 'utf8'))
+  } catch {
+    say(`no previous results at ${previousPath}; no recovery can be claimed`)
+  }
+}
+
+const messages = []
+if (!TEST && shouldReportRecovery(previous, results)) {
+  messages.push(
+    recoveryPayload({ previous, results, runUrl: flag('run-url') }),
+  )
+}
+if (!TEST && !shouldReport(results) && messages.length === 0) {
   say('every target is up (or pending promotion); nothing to send')
   process.exit(0)
 }
@@ -95,6 +122,7 @@ if (!webhook) {
 }
 
 const payload = slackPayload({ results, runUrl: flag('run-url') })
+if (TEST || shouldReport(results)) messages.push(payload)
 if (TEST) {
   payload.text = `[TEST — not a real alert] ${payload.text}`
   payload.blocks = [
@@ -108,20 +136,29 @@ if (TEST) {
   ]
 }
 
-try {
-  const response = await fetch(webhook, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  })
-  if (!response.ok) {
-    say(`Slack refused the message (HTTP ${response.status})`)
-  } else {
-    say(TEST ? 'test message sent' : 'red announced to #ci')
+for (const message of messages) {
+  const recovery = message !== payload
+  try {
+    const response = await fetch(webhook, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(message),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    if (!response.ok) {
+      say(`Slack refused the message (HTTP ${response.status})`)
+    } else {
+      say(
+        TEST
+          ? 'test message sent'
+          : recovery
+            ? 'recovery announced to #ci'
+            : 'red announced to #ci',
+      )
+    }
+  } catch (error) {
+    say(`could not reach Slack: ${error?.message ?? error}`)
   }
-} catch (error) {
-  say(`could not reach Slack: ${error?.message ?? error}`)
 }
 
 process.exit(0)
