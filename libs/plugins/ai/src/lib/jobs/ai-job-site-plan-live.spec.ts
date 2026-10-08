@@ -67,7 +67,14 @@ import { createAiJobPlanStep } from './ai-job-plan-step'
 
 const LIVE = process.env['AGLYN_LIVE_AI'] === '1' && Boolean(process.env['ANTHROPIC_API_KEY'])
 const NOW = new Date()
-const FREE_ORG: Partial<AglynOrgBilling> & { ownerUid: string } = { plan: 'free', ownerUid: 'owner-1' }
+/**
+ * The workspace the plans are made on: Free, as a guided start makes most of
+ * them, or a paid one with `AGLYN_LIVE_AI_ORG_PLAN=business` (AGL-3660) — a
+ * Free site plans on the fast tier, so only a paid one exercises the balanced
+ * default's plan.
+ */
+const ORG_PLAN = process.env['AGLYN_LIVE_AI_ORG_PLAN'] === 'business' ? 'business' : 'free'
+const ORG: Partial<AglynOrgBilling> & { ownerUid: string } = { plan: ORG_PLAN, ownerUid: 'owner-1' }
 
 /**
  * Briefs as people answer the guided start: a business, who it is for, a look,
@@ -111,8 +118,8 @@ const describeLive = LIVE ? describe : describe.skip
 describeLive("a guided start's plan from the real model", () => {
   jest.setTimeout(10 * 60_000)
 
-  it('keeps the plan rules for every brief, on a Free workspace’s empty site', async () => {
-    const capabilities = aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] })
+  it(`keeps the plan rules for every brief, on a ${ORG_PLAN} workspace’s empty site`, async () => {
+    const capabilities = aiPlanCapabilitiesFrom(ORG, { layout: [], template: [] })
     const results = await Promise.all(
       BRIEFS.map(async (brief, index) => {
         const outcome = (await createAiJobPlanStep({
@@ -125,7 +132,7 @@ describeLive("a guided start's plan from the real model", () => {
           stepIndex: 0,
           now: NOW,
           firestore: aiEvalMemoryFirestore({}).firestore,
-          org: FREE_ORG,
+          org: ORG,
         })) as unknown as Record<string, unknown>
         const review = outcome['review'] as { reason?: string; findings?: Array<{ code: string; message: string }> } | undefined
         return {
@@ -141,7 +148,7 @@ describeLive("a guided start's plan from the real model", () => {
     )
     // The whole table, every run, so a red run shows every brief's outcome.
     // Live against replayed (AGL-3660): a run with live 0 asked nothing new.
-    console.log(JSON.stringify({ run: aiLiveRunLedger(), results }, null, 1))
+    console.log(JSON.stringify({ run: aiLiveRunLedger(), orgPlan: ORG_PLAN, results }, null, 1))
     expect(results.filter((result) => !result.planned || result.refused)).toEqual([])
   })
 })
