@@ -17,7 +17,10 @@
 'use client'
 
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListQueryNotices } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -30,6 +33,10 @@ import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import { type StaffListPage, useStaffListPagination } from '../hooks/use-staff-list-pagination'
 import StaffListPaginationControls from './staff-list-pagination.component'
 import StaffEmailMessageDialog from './staff-email-message-dialog.component'
+import {
+  EMAIL_DELIVERIES_COLUMN_SORTS,
+  EMAIL_DELIVERIES_SORT,
+} from '../utils/email-deliveries-list-query'
 import type { StaffEmailDeliveryRow } from './staff-user-email-history-card.component'
 
 /**
@@ -48,6 +55,10 @@ const STATUS_COLOR: Record<string, 'success' | 'warning' | 'error' | undefined> 
   complained: 'error',
   failed: 'error',
 }
+
+const DELIVERY_PAGE_SORT_HEADERS = { hostId: 'Site' }
+/** The table has no filters, so nothing is ever refused. */
+const NO_REFUSALS: ReadonlyArray<{ label: string; reason: string }> = []
 
 export interface StaffEmailDeliveriesCardProps {
   /** One site's mail… */
@@ -75,12 +86,21 @@ export function StaffEmailDeliveriesCard(props: StaffEmailDeliveriesCardProps) {
   const [open, setOpen] = useState<DeliveryRow | null>(null)
   const scope = hostId ? `hostId=${encodeURIComponent(hostId)}` : orgId ? `orgId=${encodeURIComponent(orgId)}` : ''
   const uid = (user as { uid?: string } | null)?.uid ?? null
+  /*
+   * EVERY HEADER SORTS (AGL-3680), on the route's query
+   * (`EMAIL_DELIVERIES_COLUMN_SORTS`); the Site name sorts the page. A new
+   * order is a new walk from page one.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
+  const sortParam = askedSort
+    ? `&sort=${encodeURIComponent(`${askedSort.path}:${askedSort.direction}`)}`
+    : ''
 
   const fetchPage = useCallback(
     async (cursor: string | null, _index: number, pageSize: number): Promise<StaffListPage<DeliveryRow>> => {
       const response = await authorizedFetch(
         userRef.current,
-        `/api/admin/email-deliveries?${scope}&pageSize=${pageSize}` +
+        `/api/admin/email-deliveries?${scope}&pageSize=${pageSize}${sortParam}` +
           (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''),
       )
       const payload = await response.json().catch(() => ({}))
@@ -88,7 +108,7 @@ export function StaffEmailDeliveriesCard(props: StaffEmailDeliveriesCardProps) {
       setSitesOmitted(Number(payload.sitesOmitted ?? 0))
       return { rows: payload.rows ?? [], hasMore: payload.hasMore, nextCursor: payload.nextCursor }
     },
-    [scope],
+    [scope, sortParam],
   )
   const reportError = useCallback(
     (error: unknown) => {
@@ -101,6 +121,21 @@ export function StaffEmailDeliveriesCard(props: StaffEmailDeliveriesCardProps) {
     fetchPage,
     onError: reportError,
     enabled: Boolean(scope && uid),
+  })
+  const pageSorts = useMemo(
+    () => ({
+      hostId: (row: DeliveryRow) => (row.hostId && siteNames?.[row.hostId]) || row.hostId || null,
+    }),
+    [siteNames],
+  )
+  const columnSort = useListColumnSort<DeliveryRow>({
+    sorts: EMAIL_DELIVERIES_COLUMN_SORTS,
+    defaultSort: EMAIL_DELIVERIES_SORT,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    rows: pagination.rows,
+    pageSorts,
+    headers: DELIVERY_PAGE_SORT_HEADERS,
   })
 
   const columns: GridColDef[] = useMemo(
@@ -218,11 +253,13 @@ export function StaffEmailDeliveriesCard(props: StaffEmailDeliveriesCardProps) {
             {`This organization has more than 30 sites; the log covers the first 30 by id and leaves out ${sitesOmitted}. Open a site to read its mail.`}
           </Alert>
         ) : null}
+        <ListQueryNotices refused={NO_REFUSALS} notices={columnSort.notices} />
         <ListTable
-          rows={pagination.rows}
+          rows={columnSort.rows}
           columns={columns}
           loading={pagination.loading}
-          disableColumnSorting
+          // A header orders the route's query; the Site name sorts this page.
+          columnSort={columnSort}
           noRowsLabel="No email recorded for this scope"
           hideFooter
           rowHeight={TABLE_ROW_HEIGHT}
