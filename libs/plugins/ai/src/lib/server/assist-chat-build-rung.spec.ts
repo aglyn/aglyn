@@ -94,6 +94,14 @@ function mockMakeFirestore() {
   })
   const makeCollection = (prefix: string) => ({
     doc: (id?: string) => makeDoc(`${prefix}/${id ?? `auto-${++mockAutoId}`}`),
+    // A site's remembered preferences (AGL-3661), listed whole.
+    limit: () => ({
+      get: async () => ({
+        docs: [...mockDocs.entries()]
+          .filter(([path]) => path.startsWith(`${prefix}/`) && !path.slice(prefix.length + 1).includes('/'))
+          .map(([path, data]) => ({ id: path.slice(prefix.length + 1), data: () => data })),
+      }),
+    }),
   })
   return {
     collection: (name: string) => makeCollection(name),
@@ -388,6 +396,32 @@ describe('on the build rung (AGL-3616)', () => {
     expect(intents).toBeGreaterThan(protocol)
     expect(system[intents].cache_control).toBeUndefined()
     expect(system[intents].text).toContain('a contact form')
+  })
+
+  it('tells the build which business it is for, cached per site after the protocol, inventing no contact details (AGL-3661)', async () => {
+    mockDocs.set('hosts/host-1', { orgId: FREE_ORG, name: 'Groomers', displayName: 'Paws & Co' })
+    mockDocs.set('hosts/host-1/businessProfile/profile', { services: ['Bath and brush'], sources: { services: 'owner' } })
+    mockDocs.set('hosts/host-1/aiMemory/length-short', {
+      group: 'length',
+      text: 'Prefers short, concise copy',
+      count: 3,
+      lastSeenAtMs: 1,
+      source: 'assist-edit',
+    })
+    armStream([OPENING, text('I will plan that.'), ...closing()])
+    await (await POST(post(buildBody(FREE_ORG)))).text()
+    const system = providerRequest().system as SystemBlock[]
+    const protocol = system.findIndex((block) => block.text.startsWith('Building on this site:'))
+    const site = system.findIndex((block) => block.text.startsWith('About this site'))
+    expect(site).toBe(protocol + 1)
+    expect(system[site].cache_control).toEqual({ type: 'ephemeral' })
+    expect(system[site].text).toContain('Business name: Paws & Co')
+    expect(system[site].text).toContain('Services: Bath and brush')
+    expect(system[site].text).toContain('Prefers short, concise copy')
+    expect(system[site].text).toContain('Contact details: none entered yet.')
+    expect(system[site].text).toContain('Never invent')
+    // Nothing cached after it: the site's block closes the span.
+    expect(system.slice(site + 1).every((block) => block.cache_control === undefined)).toBe(true)
   })
 
   it('a tool call comes back as an inert build on the request’s own site, and nothing is built', async () => {

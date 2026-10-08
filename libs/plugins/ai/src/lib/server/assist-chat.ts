@@ -115,8 +115,11 @@ import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token
 // failing loudly. Nothing replaces the entry point, so the spec exercises
 // the real request shape, the real SSE parser and the real error boundary.
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
+import { aiSiteContextSystemBlock } from '../model/ai-site-context'
+import { readAiSiteContext } from '../runtime/site-context'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
+  AI_MAX_CACHE_BREAKPOINTS,
   AiUpstreamError,
   aiProviderReady,
   runAiRequest,
@@ -223,6 +226,11 @@ import {
  *   3. product brand                      the org's name for the product
  *   4. request facts                      workspace, plan, host, path
  *   5. docs retrieval                     follows the question
+ *
+ * On the edit and build rungs a SITE block (AGL-3661) follows the stable
+ * blocks: the business profile, status and remembered preferences of the
+ * site being changed, cached per site as the span's last breakpoint, or
+ * volatile when the stable blocks already hold the runtime's four.
  *
  * Caching is a prefix match, so breakpoint 2 covers blocks 1+2 together. The
  * split between 2 and 3 is the whole design and it is easy to get wrong:
@@ -1363,6 +1371,17 @@ async function handler(request: Request): Promise<Response> {
         ? buildViewBlock(body.context, org as Record<string, unknown>, { edit: Boolean(editRung) })
         : null
 
+    // The site's business profile, status and memory (AGL-3661), for a turn
+    // that may change the site: the edit and build rungs, whose host was
+    // checked for `ai.generate` above. Free and paid read the same block. A
+    // site breakpoint when the stable blocks leave one, volatile otherwise.
+    const siteHostId = buildRung?.hostId ?? editRung?.target.hostId ?? null
+    const siteContext = siteHostId
+      ? await readAiSiteContext(firestore, { orgId: body.orgId, hostId: siteHostId })
+      : null
+    const stableBreakpoints = 1 + (guide?.screen ? 1 : 0) + (editRung ? 1 : 0) + (buildRung ? 1 : 0)
+    const siteBlock = aiSiteContextSystemBlock(siteContext, { cache: stableBreakpoints < AI_MAX_CACHE_BREAKPOINTS })
+
     const messages = [
       ...body.history.map((turn) => ({
         role: turn.role,
@@ -1392,6 +1411,9 @@ async function handler(request: Request): Promise<Response> {
         : []),
       // The build protocol (AGL-3616): the same for every site, so cached.
       ...(buildRung ? [{ text: assistBuildBlock(), cacheBreakpoint: true as const }] : []),
+      // The site's own block closes the cached span (AGL-3661): every block
+      // above is shared by every workspace, this one is cached per site.
+      ...siteBlock,
       // Per-org, and therefore AFTER every breakpoint — see
       // `assistBrandBlock`. Unconditional: a free workspace assembles no
       // view block, and it must still be told what the product is called.
