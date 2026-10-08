@@ -11,6 +11,7 @@ public let siteSitesScreen = "site.sites"
 public let siteSiteScreen = "site.site"
 public let sitePagesScreen = "site.pages"
 public let siteMediaScreen = "site.media"
+public let siteContentScreen = "site.content"
 public let siteSetupScreen = "site.setup"
 /// The site's theme page (`/theme`): the Theme section on its own.
 public let siteThemeScreen = "site.theme"
@@ -23,18 +24,20 @@ enum SiteSymbols {
   static let group = "folder"
   static let media = "photo.on.rectangle"
   static let error = "exclamationmark.triangle"
+  static let content = "doc.richtext"
   static let setup = "gearshape"
   static let theme = "paintpalette"
 }
 
 /// The picked site's areas, as its overview lists them, in the console's order.
 public enum SiteAreas: CaseIterable, Sendable {
-  case pages, media, setup
+  case pages, media, content, setup
 
   public var screen: String {
     switch self {
     case .pages: sitePagesScreen
     case .media: siteMediaScreen
+    case .content: siteContentScreen
     case .setup: siteSetupScreen
     }
   }
@@ -43,6 +46,7 @@ public enum SiteAreas: CaseIterable, Sendable {
     switch self {
     case .pages: "Pages"
     case .media: "Media"
+    case .content: "Content"
     case .setup: "Setup"
     }
   }
@@ -51,6 +55,7 @@ public enum SiteAreas: CaseIterable, Sendable {
     switch self {
     case .pages: "Publish, organize and open pages in the Besigner"
     case .media: "Photos, videos and documents for your pages"
+    case .content: "Blog posts and articles, by collection"
     case .setup: "Details, SEO, tracking, theme and emails"
     }
   }
@@ -59,6 +64,7 @@ public enum SiteAreas: CaseIterable, Sendable {
     switch self {
     case .pages: SiteSymbols.page
     case .media: SiteSymbols.media
+    case .content: SiteSymbols.content
     case .setup: SiteSymbols.setup
     }
   }
@@ -66,10 +72,11 @@ public enum SiteAreas: CaseIterable, Sendable {
 
 /// Every id this registration adds, by kind, the way a plugin's `mobile.contributes` declares them.
 public let sitePlatformContributes: [String: [String]] = [
-  "screens": [siteSitesScreen, siteSiteScreen, sitePagesScreen, siteMediaScreen, siteSetupScreen, siteThemeScreen],
+  "screens": [siteSitesScreen, siteSiteScreen, sitePagesScreen, siteMediaScreen, siteSetupScreen, siteThemeScreen, siteContentScreen],
   "quickActions": ["site.sites-open", "site.pages-open", "site.media-open"],
   "deepLinks": ["site.sites-page", "site.pages-page", "site.page-view", "site.page-besigner-list", "site.media-page",
     "site.setup-page", "site.setup-section-page", "site.theme-page",
+    "site.content-page", "site.collection-page", "site.entry-page",
   ],
 ]
 
@@ -99,6 +106,10 @@ public func registerSitePlatformNative(_ r: NativePluginRegistrar) {
   r.screen(siteThemeScreen, title: "Theme", requiresSite: true, icon: SiteSymbols.theme) { context, _ in
     SetupScreen(context: context, initialSection: "theme")
   }
+  // Content: the collections, one collection's entries, and one entry.
+  r.screen(siteContentScreen, title: "Content", requiresSite: true, icon: SiteSymbols.content) { context, params in
+    ContentScreen(context: context, initialCollection: params["collectionSlug"], initialEntry: params["entryId"])
+  }
   r.quickAction("site.media-open", title: "Media", icon: SiteSymbols.media, order: 20, screen: siteMediaScreen)
   r.quickAction(
     "site.pages-open", title: "Pages", icon: SiteSymbols.page, order: 10, screen: sitePagesScreen, requiresSite: true)
@@ -113,6 +124,9 @@ public func registerSitePlatformNative(_ r: NativePluginRegistrar) {
   r.deepLink("site.setup-page", path: "/setup", screen: siteSetupScreen)
   r.deepLink("site.setup-section-page", path: "/setup/:section", screen: siteSetupScreen)
   r.deepLink("site.theme-page", path: "/theme", screen: siteThemeScreen)
+  r.deepLink("site.content-page", path: "/content", screen: siteContentScreen)
+  r.deepLink("site.collection-page", path: "/content/:collectionSlug", screen: siteContentScreen)
+  r.deepLink("site.entry-page", path: "/content/:collectionSlug/entries/:entryId", screen: siteContentScreen)
   r.deepLink("site.page-view", path: "/screens/:screenId/versions/:versionId/view", screen: sitePagesScreen)
 }
 
