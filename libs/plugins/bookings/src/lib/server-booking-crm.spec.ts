@@ -64,6 +64,14 @@ const fileBookingOnCrm = jest.fn(
     reason: 'no-record' as const,
   }),
 )
+// The booking events (AGL-3643) are staged into the outbox in the booking's
+// own transaction; this double's transaction records every `set` as a
+// booking row, so the stage is observed here rather than written.
+const stageBookingEvent = jest.fn()
+jest.mock('./server/booking-events', () => ({
+  stageBookingEvent: (...args: unknown[]) => stageBookingEvent(...args),
+  raiseBookingEvent: async () => undefined,
+}))
 jest.mock('./server/booking-crm', () => ({
   fileBookingOnCrm: (firestore: unknown, input: Record<string, unknown>) =>
     fileBookingOnCrm(firestore, input),
@@ -206,6 +214,7 @@ beforeEach(() => {
   state.bookings.clear()
   state.notices.length = 0
   fileBookingOnCrm.mockClear()
+  stageBookingEvent.mockClear()
   captured = standInRecordSystem()
 })
 
@@ -234,6 +243,15 @@ describe('a free booking made through a CRM booking link', () => {
         crmRef: 'contact:contact-1',
       },
       service: { name: 'Intro call', crmFollowUpTask: true },
+    })
+    // Confirmed as it is made, so `booking.created` is staged in the same
+    // transaction (AGL-3643), naming the row it describes.
+    expect(stageBookingEvent).toHaveBeenCalledTimes(1)
+    expect(stageBookingEvent.mock.calls[0][2]).toMatchObject({
+      event: 'booking.created',
+      hostId: 'host-1',
+      bookingId: id,
+      booking: { status: 'confirmed', email: 'dana@example.com', serviceId: 'service-1' },
     })
   })
 

@@ -127,6 +127,14 @@ export const API_SCOPES = [
   // takes, so the API can never write a status the console forbids.
   'orders:write',
   'products:read',
+  // AGL-3643. A site's bookings were the one record an integration could not
+  // read at all — not a booking app's sync, not a Zapier trigger's sample —
+  // though a booking is as much a customer's record as an order. Read-only
+  // on purpose, and its own scope for the reason `orders:read` is: a key
+  // handed to a scheduling or calendar tool needs the appointments and
+  // nothing else. Writes (moving or canceling one, which tells the guest and
+  // can refund them) want their own decision, in the change that ships them.
+  'bookings:read',
   'media:read',
   // AGL-2463. `media:read` was the only media scope, so an agency onboarding a
   // client site could automate everything about that site except putting its

@@ -10,7 +10,15 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — a font picker, your own fonts, and faster fonts on every site (newest)
+## October 2026 — bookings in the API (newest)
+
+- **[Bookings over the API](/api/resources/bookings)** — read a site's bookings with
+  a key that has the new `bookings:read` scope: the service, the time and time zone,
+  the guest, what they paid and refunded, and whether they checked in. List them by
+  status or service, or read one by id, to copy appointments into a calendar, a CRM
+  or a spreadsheet.
+
+## October 2026 — a font picker, your own fonts, and faster fonts on every site
 
 - **[Font picker](building-sites/theme-builder/edit-your-theme.md#fonts)** — browse every
   Google font in the theme editor, with search, style filters, previews in your own

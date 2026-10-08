@@ -50,6 +50,7 @@ import {
 import { sendEmail } from '@aglyn/shared-util-email'
 import { pluginTaxProfile } from '@aglyn/aglyn/plugin-manager/plugin-tax-profile'
 import { fileBookingOnCrm } from './booking-crm'
+import { stageBookingEvent } from './booking-events'
 import { bookingTimeZoneFor } from './booking-time-zone'
 import { formatBookingWhen } from '../model/booking-time'
 import {
@@ -420,6 +421,21 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
               },
               { merge: true },
             )
+            // The booking is confirmed now, in this transaction (AGL-3643).
+            const nowMs = Date.now()
+            stageBookingEvent(transaction, firestore, {
+              event: 'booking.created',
+              hostId: String(hostId),
+              bookingId: String(bookingId),
+              booking: {
+                ...booking,
+                status: 'confirmed',
+                paidAmountCents,
+                ...(taxCents > 0 ? { taxCents } : {}),
+                expiresAtMs: null,
+              },
+              nowMs,
+            })
             return true
           },
         )
