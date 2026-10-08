@@ -50,10 +50,15 @@ const plan = (request: Parameters<typeof planListQuery>[1]) =>
   planListQuery(AUTHOR_LIST_QUERY, request, nameSearchNormalizers)
 
 describe('the Authors table query (AGL-3321)', () => {
-  it('THE CONTROL: one order, and a composite per predicate field against it', () => {
-    expect(AUTHOR_LIST_QUERY.sorts).toEqual([
-      { path: 'name', direction: 'asc', column: 'name' },
-    ])
+  it('THE CONTROL: one default order, and a composite per predicate field against it', () => {
+    expect(AUTHOR_LIST_QUERY.sorts[0]).toEqual({
+      path: 'name',
+      direction: 'asc',
+      column: 'name',
+      label: 'Author',
+    })
+    // The header orders (AGL-3680) are `alone`: no composite on this list.
+    expect(AUTHOR_LIST_QUERY.sorts.slice(1).every((sort) => sort.alone)).toBe(true)
     // nameTokens (the search and Name contains), nameLower (Name is),
     // schemaType (Type).
     expect(NEEDED).toHaveLength(3)
@@ -78,7 +83,7 @@ describe('the Authors table query (AGL-3321)', () => {
       { path: 'schemaType', op: '==', value: 'Person' },
       { path: 'nameLower', op: '==', value: 'dana smith' },
     ])
-    expect(served.orderBy).toEqual({ path: 'name', direction: 'asc', column: 'name' })
+    expect(served.orderBy).toMatchObject({ path: 'name', direction: 'asc', column: 'name' })
     expect(served.refused).toEqual([])
   })
 

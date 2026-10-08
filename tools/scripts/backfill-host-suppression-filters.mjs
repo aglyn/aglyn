@@ -37,11 +37,20 @@
  * else — see `describeSuppressionReason`). A row with no address (an erasure)
  * carries no tokens: a stale token array there is cleared.
  *
+ * ## `email` on every row (AGL-3680)
+ *
+ * The list's Address header orders the QUERY by `email`, and `orderBy` drops
+ * a document that lacks the field. Every writer stamps it — the address, or
+ * `null` for an erasure — but a row from before addresses were stored holds
+ * only its hash key. Such a row is stamped `email: null`: it has no address
+ * to recover, and null keeps it in the sorted list (it reads "(address not
+ * recorded)" either way).
+ *
  * ## Idempotence and interruption
  *
- * A row whose tokens already match its address and which carries a reason is
- * never written, so a re-run is a no-op and an interrupted run is finished by
- * the next. Writes touch only those two fields, in batches of 400. Nothing is
+ * A row whose tokens already match its address and which carries a reason
+ * and an `email` (an address or null) is never written, so a re-run is a
+ * no-op and an interrupted run is finished by the next. Writes touch only those three fields, in batches of 400. Nothing is
  * deleted. Only `hosts/{hostId}/suppressions/{id}` is touched; any other
  * collection named `suppressions` is counted and left alone.
  *
@@ -72,7 +81,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const args = parseDeployArgs({
   command: 'backfill-host-suppression-filters',
   summary:
-    'Stamp `emailTokens` and `reason` onto site suppressions that predate them. ' +
+    'Stamp `emailTokens`, `reason` and `email` onto site suppressions that predate them. ' +
     'Writes to the live project with --apply.',
   effect: { gerund: 'writing', past: 'WRITTEN', failure: 'could not run' },
   flags: [
@@ -108,6 +117,7 @@ function planHostSuppression(path, data) {
     update.emailTokens = []
   }
   if (typeof data.reason !== 'string' || !data.reason) update.reason = 'unsubscribe'
+  if (data.email === undefined) update.email = null
   return Object.keys(update).length ? { update } : { skip: 'current' }
 }
 
@@ -139,6 +149,8 @@ function selfTest() {
     ['stale tokens', P, { email: 'dana@example.com', reason: 'bounce', emailTokens: ['x'] }, { update: { emailTokens: TOKENS } }],
     ['an erasure with stale tokens', P, { email: null, reason: 'erasure', emailTokens: ['dana'] }, { update: { emailTokens: [] } }],
     ['an erasure', P, { email: null, reason: 'erasure' }, { skip: 'current' }],
+    ['a hash-only row', P, { reason: 'bounce' }, { update: { email: null } }],
+    ['a hash-only pre-AGL-2408 row', P, {}, { update: { reason: 'unsubscribe', email: null } }],
     ['not a site suppression', 'emailSuppressions/k1', { email: 'dana@example.com' }, { skip: 'not-a-site-suppression' }],
   ]
   for (const [name, path, data, expected] of cases) {
@@ -156,7 +168,7 @@ async function main() {
   if (args.selfTest) return selfTest()
   initializeApp({ credential: applicationDefault() })
   const firestore = getFirestore()
-  const counts = { scanned: 0, current: 0, tokens: 0, reason: 0, other: 0, written: 0 }
+  const counts = { scanned: 0, current: 0, tokens: 0, reason: 0, email: 0, other: 0, written: 0 }
   let cursor = null
   let batch = firestore.batch()
   let pending = 0
@@ -175,6 +187,7 @@ async function main() {
       }
       if ('emailTokens' in plan.update) counts.tokens += 1
       if ('reason' in plan.update) counts.reason += 1
+      if ('email' in plan.update) counts.email += 1
       if (!args.apply) continue
       batch.update(doc.ref, plan.update)
       pending += 1
@@ -201,6 +214,7 @@ async function main() {
   console.log(`  already current         ${counts.current}`)
   console.log(`  stamp emailTokens       ${counts.tokens}`)
   console.log(`  stamp reason            ${counts.reason}`)
+  console.log(`  stamp email: null       ${counts.email}`)
   console.log(`  not hosts/*/suppressions (left alone) ${counts.other}`)
   if (args.apply) console.log(`  written                 ${counts.written}`)
 }

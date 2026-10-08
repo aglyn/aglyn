@@ -73,6 +73,8 @@ import { collection, deleteDoc, doc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   SUPPRESSION_FILTER_HEADERS,
@@ -212,6 +214,14 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
    * field rather than mis-sorting them.
    */
   const gridFilter = useListGridFilter({ selectFields: SUPPRESSION_SELECT_FIELDS })
+  /*
+   * EVERY HEADER SORTS ON THE QUERY (AGL-3680): Since, Address and Reason
+   * are stored on every entry (see `SUPPRESSION_LIST_QUERY`). Newest first
+   * until a header is clicked.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(
+    SUPPRESSION_LIST_QUERY.sorts[0],
+  )
   const {
     rows: entries,
     hasMore,
@@ -223,9 +233,21 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
   } = useListQuery<SuppressionRow>({
     collection: collection(firestore, 'hosts', hostId, 'suppressions'),
     declaration: SUPPRESSION_LIST_QUERY,
-    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords },
+    request: {
+      clauses: gridFilter.clauses,
+      search: gridFilter.searchWords,
+      sort: askedSort,
+    },
     deps: [firestore, hostId],
     idField: '$id',
+  })
+  const columnSort = useListColumnSort<SuppressionRow>({
+    sorts: SUPPRESSION_LIST_QUERY.sorts,
+    defaultSort: SUPPRESSION_LIST_QUERY.sorts[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows: entries,
   })
   const filtering =
     gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
@@ -654,10 +676,14 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
               onChange={gridFilter.setClauses}
               options={SUPPRESSION_FILTER_OPTIONS}
             />
-            <ListQueryNotices refused={refusals} notices={plan.notices} />
+            <ListQueryNotices
+              refused={refusals}
+              notices={[...plan.notices, ...columnSort.notices]}
+            />
             <ListTable
               aria-label="Suppressed addresses"
-              rows={entries}
+              rows={columnSort.rows}
+              columnSort={columnSort}
               columns={listFilterGridColumns(
                 columns as GridColDef[],
                 SUPPRESSION_LIST_QUERY.fields,
@@ -667,13 +693,12 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
               rowHeight={TABLE_ROW_HEIGHT}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
-              // The panel and the search go to the query; the grid neither
-              // filters nor sorts the page it holds.
+              // The panel, the search and the headers go to the query; the
+              // grid neither filters nor sorts the page it holds.
               filterMode="server"
               filterModel={gridFilter.filterModel}
               onFilterModelChange={gridFilter.onFilterModelChange}
               quickFilter
-              disableColumnSorting
               noRowsLabel="No suppressions match these filters"
             />
             <ListPagination

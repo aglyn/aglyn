@@ -77,7 +77,11 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import type { GridColDef } from '@mui/x-data-grid'
+import type { GridColDef, GridSortModel } from '@mui/x-data-grid'
+import {
+  type ListPageSort,
+  sortListRows,
+} from '@aglyn/shared-util-tools/list-query/list-column-sort'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -149,6 +153,14 @@ export function orgTemplateSiteScope(
   if (!named.length) return null
   // Several Site clauses all hold: a site must be named by each.
   return named.reduce((kept, next) => kept.filter((id) => next.includes(id)))
+}
+
+/** How each header orders the matches in hand (AGL-3680). */
+const ORG_TEMPLATE_SORTS: Readonly<Record<string, ListPageSort<Record<string, any>>>> = {
+  displayName: (row) => String(row['displayName'] ?? 'Untitled template'),
+  site: (row) => row['siteName'],
+  origin: (row) =>
+    templateProvenance(row).origin === 'installed' ? 'installed' : 'local',
 }
 
 /** One site's read, as the table assembles it. */
@@ -351,15 +363,28 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
     }),
     [mount],
   )
+  /*
+   * EVERY HEADER SORTS (AGL-3680), over EVERY match in hand rather than the
+   * page on screen: the rows are all loaded (each site capped, and the cap
+   * says so above), so the sort is exact and the footer pages the sorted
+   * whole. Site sorts by the name the column shows, not the site id.
+   */
+  const [sortModel, setSortModel] = useState<GridSortModel>([])
+  const sorted = useMemo(() => {
+    const [first] = sortModel
+    const value = first?.sort ? ORG_TEMPLATE_SORTS[first.field] : undefined
+    return value && first?.sort ? sortListRows(rows, value, first.sort) : rows
+  }, [rows, sortModel])
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const planKey = JSON.stringify({ filters: plan.filters, orderBy: plan.orderBy })
   const siteKey = sites.map((site) => site.id).join(',')
-  // A new answer starts again at its first page.
-  useEffect(() => setPage(0), [siteKey, planKey])
+  const sortKey = JSON.stringify(sortModel)
+  // A new answer, or a new order, starts again at its first page.
+  useEffect(() => setPage(0), [siteKey, planKey, sortKey])
   const shown = useMemo(
-    () => rows.slice(page * pageSize, page * pageSize + pageSize),
-    [rows, page, pageSize],
+    () => sorted.slice(page * pageSize, page * pageSize + pageSize),
+    [sorted, page, pageSize],
   )
   const sitePageCount = Math.ceil(sitePage.count / sitePage.pageSize)
 
@@ -638,13 +663,15 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
               rowHeight={TABLE_ROW_HEIGHT}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
-              // The panel and the search go to every site's query; the grid
-              // neither filters nor sorts the rows it holds.
+              // The panel and the search go to every site's query; a header
+              // sorts every match in hand before the footer pages it.
               filterMode="server"
               filterModel={gridFilter.filterModel}
               onFilterModelChange={gridFilter.onFilterModelChange}
               quickFilter
-              disableColumnSorting
+              sortingMode="server"
+              sortModel={sortModel}
+              onSortModelChange={setSortModel}
               noRowsLabel="No templates match these filters"
               onOpen={(_id, row) => {
                 const href = templateHref(row)
