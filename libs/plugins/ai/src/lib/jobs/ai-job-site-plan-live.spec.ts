@@ -58,8 +58,9 @@ jest.mock('./ai-jobs', () => ({
 }))
 
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
-import type { AiJob } from '../model/ai-jobs.types'
+import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory } from '../model/ai-site-inventory'
+import { aiSitePlanIsHome } from '../model/ai-site-job'
 import { aiLiveRunLedger } from '../runtime/ai-dev-replay'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
@@ -145,6 +146,10 @@ describeLive("a guided start's plan from the real model", () => {
           estCostUsd: Number(outcome['estCostUsd'] ?? 0),
           // Reported, not held: whether the plan's own words carry the name (AGL-3596).
           named: JSON.stringify(outcome['plan'] ?? null).includes(brief.businessName),
+          // Reported, not held: how many sections the home at / was planned with (AGL-3660).
+          home:
+            (outcome['plan'] as AiJobPlan | undefined)?.screens.find((screen) => aiSitePlanIsHome(screen))?.sections
+              .length ?? null,
         }
       }),
     )
