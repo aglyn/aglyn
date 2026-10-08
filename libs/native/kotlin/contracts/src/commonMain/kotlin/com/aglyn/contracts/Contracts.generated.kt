@@ -445,7 +445,25 @@ data class ListQueryPlan(
     val refused: List<ListQueryRefusal>,
     val searched: String? = null,
     val served: List<ListFilterRequest>,
+    val sortFallback: ListQueryPlanSortFallback? = null,
 )
+
+@Serializable
+data class ListQueryPlanSortFallback(
+    val asked: ListQuerySort,
+    val reason: ListQueryPlanSortFallbackReason,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = ListQueryPlanSortFallbackReasonSerializer::class)
+enum class ListQueryPlanSortFallbackReason(val raw: String) {
+    ALONE("alone"),
+    RANGE("range"),
+    UNKNOWN(""),
+}
+
+internal object ListQueryPlanSortFallbackReasonSerializer :
+    RawEnumSerializer<ListQueryPlanSortFallbackReason>("com.aglyn.contracts.ListQueryPlanSortFallbackReason", ListQueryPlanSortFallbackReason.entries, ListQueryPlanSortFallbackReason.UNKNOWN, { it.raw })
 
 @Serializable
 data class ListQueryRefusal(
@@ -463,8 +481,10 @@ data class ListQueryRequest(
 
 @Serializable
 data class ListQuerySort(
+    val alone: Boolean? = null,
     val column: String? = null,
     val direction: ListQuerySortDirection,
+    val label: String? = null,
     val path: String,
 )
 

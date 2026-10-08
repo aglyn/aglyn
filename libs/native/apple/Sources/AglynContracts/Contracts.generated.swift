@@ -671,14 +671,38 @@ public struct ListQueryPlan: Codable, Hashable, Sendable {
   public var refused: [ListQueryRefusal]
   public var searched: String?
   public var served: [ListFilterRequest]
+  public var sortFallback: ListQueryPlanSortFallback?
 
-  public init(filters: [ListQueryFilter], notices: [String], orderBy: ListQuerySort, refused: [ListQueryRefusal], searched: String? = nil, served: [ListFilterRequest]) {
+  public init(filters: [ListQueryFilter], notices: [String], orderBy: ListQuerySort, refused: [ListQueryRefusal], searched: String? = nil, served: [ListFilterRequest], sortFallback: ListQueryPlanSortFallback? = nil) {
     self.filters = filters
     self.notices = notices
     self.orderBy = orderBy
     self.refused = refused
     self.searched = searched
     self.served = served
+    self.sortFallback = sortFallback
+  }
+}
+
+public struct ListQueryPlanSortFallback: Codable, Hashable, Sendable {
+  public var asked: ListQuerySort
+  public var reason: ListQueryPlanSortFallbackReason
+
+  public init(asked: ListQuerySort, reason: ListQueryPlanSortFallbackReason) {
+    self.asked = asked
+    self.reason = reason
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum ListQueryPlanSortFallbackReason: String, Codable, CaseIterable, Hashable, Sendable {
+  case alone = "alone"
+  case range = "range"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
@@ -707,13 +731,17 @@ public struct ListQueryRequest: Codable, Hashable, Sendable {
 }
 
 public struct ListQuerySort: Codable, Hashable, Sendable {
+  public var alone: Bool?
   public var column: String?
   public var direction: ListQuerySortDirection
+  public var label: String?
   public var path: String
 
-  public init(column: String? = nil, direction: ListQuerySortDirection, path: String) {
+  public init(alone: Bool? = nil, column: String? = nil, direction: ListQuerySortDirection, label: String? = nil, path: String) {
+    self.alone = alone
     self.column = column
     self.direction = direction
+    self.label = label
     self.path = path
   }
 }
