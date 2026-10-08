@@ -793,14 +793,25 @@ export function aiSitePlanCapabilities(
       left: null,
       reason: 'a site start designs its own look before its pages',
     },
+    // A site start builds its look, one layout and one form, never a
+    // component (`AI_SITE_CREATE_KINDS`), so a paid workspace's plan draws
+    // repeated items in their sections, as a Free one's does. Held to rule 1
+    // instead, every paid plan was refused: for the component it left out,
+    // or, re-asked, for the one it could not build (AGL-3660).
+    component: {
+      allowed: false,
+      left: null,
+      reason: 'a site start draws its repeated items in their sections',
+    },
   }
-  if (!capabilities.freeTaste) return { ...capabilities, create }
+  const site = { ...capabilities, reusableComponents: false, create }
+  if (!capabilities.freeTaste) return site
   const asked = Number((job.inputs ?? {})['pages'])
   const pages =
     Number.isInteger(asked) && asked >= AI_SITE_FREE_PAGES.min
       ? Math.min(asked, AI_SITE_FREE_PAGES.max)
       : AI_SITE_FREE_PAGES.max
-  return { ...capabilities, freeSitePages: pages, create }
+  return { ...site, freeSitePages: pages }
 }
 
 /**
