@@ -1096,6 +1096,17 @@
       "apiPrefixes": [
         "crm"
       ],
+      "mobile": {
+        "$comment": "AGL-3669: the CRM hub natively. Contacts, leads, companies and deals (search, the console's chips, a record beside its list on wide windows; create, edit, delete, lead status, unqualify and convert, contact stage, deal stage moves, won and lost, notes, calls and email on the record), the deals pipeline as a board, tasks by view, reports, custom fields and picklists, and the CRM settings; the glance and tasks-due Home cards.",
+        "ios": { "module": "AglynCrmPlugin", "register": "registerCrmNative" },
+        "android": { "package": "com.aglyn.plugins.crm", "register": "registerCrmNative" },
+        "contributes": {
+          "screens": ["crm.contacts", "crm.leads", "crm.companies", "crm.deals", "crm.tasks", "crm.reports", "crm.fields", "crm.settings", "crm.contact", "crm.lead", "crm.company", "crm.deal"],
+          "widgets": ["crm.glance", "crm.tasks-due"],
+          "quickActions": ["crm.open", "crm.deals-action", "crm.tasks-action"],
+          "deepLinks": ["crm.page", "crm.legacy-contacts", "crm.contacts-page", "crm.leads-page", "crm.companies-page", "crm.deals-page", "crm.tasks-page", "crm.reports-page", "crm.fields-page", "crm.settings-page", "crm.contact-page", "crm.lead-page", "crm.company-page", "crm.deal-page"]
+        }
+      },
       "consoleRedirects": [
         {
           "$comment": "The organization's address book, before it became the contacts section of the organization-level CRM (AGL-2630). Permanent, so a link kept from before — a bookmark, a docs page, an email — is corrected by the browser rather than followed twice; a reader the hub refuses is refused there, with the reason.",
@@ -1912,6 +1923,17 @@
       "apiPrefixes": [
         "inbox"
       ],
+      "mobile": {
+        "$comment": "AGL-3669: the site's form submissions natively (search, read and form picks, read, unread, delete, reply, add to a marketing list) and its members and leads; a Home card of unread messages.",
+        "ios": { "module": "AglynInboxPlugin", "register": "registerInboxNative" },
+        "android": { "package": "com.aglyn.plugins.inbox", "register": "registerInboxNative" },
+        "contributes": {
+          "screens": ["inbox.submissions", "inbox.people"],
+          "widgets": ["inbox.glance"],
+          "quickActions": ["inbox.open", "inbox.people"],
+          "deepLinks": ["inbox.page", "inbox.submissions-page", "inbox.people-page"]
+        }
+      },
       "catalog": {
         "order": 14,
         "label": "Inbox",
