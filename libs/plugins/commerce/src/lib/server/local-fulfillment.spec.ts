@@ -377,6 +377,14 @@ describe('the cart’s question', () => {
     expect((await ask({})).body).toEqual({ pickup: [], delivery: null })
   })
 
+  it('answers a product’s Buy button for that product, not the cart', async () => {
+    docs.delete('hosts/host-1/carts/cart-1')
+    docs.set('hosts/host-1/products/pdf', { name: 'PDF', status: 'active', type: 'digital', variants: [{ id: 'v', priceUsd: 5 }] })
+    expect((await ask({ productId: 'p1', quantity: 1 })).body.pickup.map((location: any) => location.id)).toEqual(['main'])
+    expect((await ask({ productId: 'pdf' })).body).toEqual({ pickup: [], delivery: null })
+    expect((await ask({ productId: 'a/b' })).status).toBe(400)
+  })
+
   it('refuses a host id that is a path', async () => {
     expect((await ask({ hostId: 'a/b' })).status).toBe(400)
   })

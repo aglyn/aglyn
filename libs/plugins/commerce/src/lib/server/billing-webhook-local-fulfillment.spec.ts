@@ -326,3 +326,34 @@ describe('a paid buy-now order records where it ships (AGL-3688)', () => {
     expect((docs.get('hosts/host-1/orders/cs_buynow') as any).shippingAddress).toBeUndefined()
   })
 })
+
+describe('a paid buy-now pickup (AGL-3624)', () => {
+  it('records the pickup and takes the stock off that location', async () => {
+    await deliver({
+      id: 'cs_buynow_pickup',
+      payment_status: 'paid',
+      payment_intent: 'pi_bp',
+      amount_total: 1500,
+      customer_details: { email: 'buyer@example.com', name: 'Ada' },
+      total_details: { amount_tax: 0, amount_shipping: 0, amount_discount: 0 },
+      metadata: {
+        type: 'commerce-order',
+        hostId: 'host-1',
+        productId: 'bread',
+        variantId: 'loaf',
+        quantity: '3',
+        feeCents: '45',
+        fulfillment: 'pickup',
+        pickupLocationId: 'main',
+      },
+    })
+    const order = docs.get('hosts/host-1/orders/cs_buynow_pickup') as any
+    expect(order).toMatchObject({
+      fulfillmentMethod: 'pickup',
+      locationId: 'main',
+      fulfillmentKey: 'pickup_preparing',
+      requiresShipping: false,
+    })
+    expect((docs.get('hosts/host-1/products/bread') as any).variants[0].inventoryByLocation).toEqual({ main: 1, back: 6 })
+  })
+})

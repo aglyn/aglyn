@@ -6,7 +6,8 @@ description: Let buyers pick up orders at your locations or have your own driver
 
 # Pickup & local delivery
 
-Besides shipping, your storefront cart can offer two more ways to get an order:
+Besides shipping, your storefront cart and a product's **Buy now** button can offer
+two more ways to get an order:
 
 - **Pick up in store** — the buyer chooses one of your locations, and you email
   them when the order is ready to collect.

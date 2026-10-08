@@ -76,7 +76,16 @@ export type CartFulfillmentMethod = 'shipping' | 'pickup' | 'local_delivery'
 
 const EMPTY: CartFulfillmentOptions = { pickup: [], delivery: null }
 
-export function useCartFulfillment(hostId: string | undefined, cartSignature: string) {
+export function useCartFulfillment(
+  hostId: string | undefined,
+  cartSignature: string,
+  /**
+   * A product's Buy button asks for that product rather than the cart; `null`
+   * asks nothing (a subscription, a download).
+   */
+  buyNow?: { productId: string; variantId?: string; quantity: number } | null,
+) {
+  const buyNowKey = buyNow === undefined ? '' : JSON.stringify(buyNow)
   const [options, setOptions] = useState<CartFulfillmentOptions>(EMPTY)
   const [method, setMethod] = useState<CartFulfillmentMethod>('shipping')
   const [locationId, setLocationId] = useState('')
@@ -94,7 +103,7 @@ export function useCartFulfillment(hostId: string | undefined, cartSignature: st
   }, [postalCode, line1])
 
   useEffect(() => {
-    if (!hostId || cartSignature === '[]') {
+    if (!hostId || cartSignature === '[]' || buyNow === null) {
       setOptions(EMPTY)
       return
     }
@@ -105,6 +114,7 @@ export function useCartFulfillment(hostId: string | undefined, cartSignature: st
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         hostId,
+        ...(buyNow ? buyNow : {}),
         ...(wantsQuote ? { postalCode: asked.postalCode } : {}),
         ...(wantsQuote && asked.line1 ? { address: { line1: asked.line1, postalCode: asked.postalCode } } : {}),
       }),
@@ -135,7 +145,9 @@ export function useCartFulfillment(hostId: string | undefined, cartSignature: st
     return () => {
       live = false
     }
-  }, [hostId, cartSignature, round, method, asked])
+    // `buyNow` is read through its key.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hostId, cartSignature, round, method, asked, buyNowKey])
 
   const offered = options.pickup.length > 0 || Boolean(options.delivery)
   const quote = options.delivery?.quote

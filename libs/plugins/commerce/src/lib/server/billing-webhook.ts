@@ -4839,6 +4839,23 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // The number the merchant knows this order by, for the notices below
         // (AGL-3432).
         let buyNowOrderNumber: number | undefined
+        // Picked up or brought by the store's own driver (AGL-3624), as the
+        // cart branch reads it.
+        const buyNowLocalFulfillment = await orderLocalFulfillmentFromSession({
+          hostId: String(hostId),
+          hostRef,
+          metadata: object?.metadata,
+          shippingAddress: object?.shipping_details?.address
+            ? {
+                postalCode: object.shipping_details.address.postal_code ?? null,
+                country: object.shipping_details.address.country ?? null,
+              }
+            : null,
+          createdAtMs: Date.now(),
+        }).catch((error) => {
+          console.error('commerce buy-now local fulfillment unreadable', String(object.id), error)
+          return null
+        })
         const created = await firestore.runTransaction(async (transaction) => {
           const [existing, counter] = await Promise.all([
             transaction.get(orderRef),
@@ -4897,6 +4914,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   },
                 }
               : {}),
+            // How it reaches the buyer, and the queue fields (AGL-3624).
+            ...(buyNowLocalFulfillment?.fields ?? {}),
             createdAtMs: Date.now(),
             // Legacy Commerce Starter fields (AGL-90).
             productId,
@@ -4915,6 +4934,17 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           { number: buyNowOrderNumber },
           String(object.id),
         )
+        if (buyNowLocalFulfillment?.outsideZone) {
+          void notifyHostManagers(String(hostId), {
+            type: 'content.order',
+            title: `Check the delivery address on order ${buyNowOrderLabel}`,
+            body:
+              `Order ${buyNowOrderLabel} on {site} was booked for local delivery, but the ` +
+              'address entered at payment is outside your delivery zones. Contact the ' +
+              'buyer, or refund the delivery.',
+            link: `/${hostId}/products`,
+          })
+        }
         // In-app order notification (wave v6): host managers see sales
         // in the bell, not just the owner's email: what came in, from whom
         // and where (AGL-3432).
@@ -5159,6 +5189,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               productId: String(productId),
               variantId: soldVariantId,
               quantity: soldQuantity,
+              // Off the pickup or delivery location's shelf (AGL-3624).
+              ...(buyNowLocalFulfillment?.fields.locationId
+                ? { locationId: buyNowLocalFulfillment.fields.locationId }
+                : {}),
               ledger: { reason: 'sale', orderId: String(object.id) },
             })
             if (moved.before && moved.after) {
@@ -5216,7 +5250,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             )
             // The quantity with the name (AGL-3432), so a three-unit sale
             // does not read as one item at the whole total.
-            const receiptLine = `${soldQuantity}× ${productName}`
+            const receiptLine =
+              `${soldQuantity}× ${productName}` +
+              // Where to collect it, or when it is coming (AGL-3624).
+              (buyNowLocalFulfillment?.summary ? `\n\n${buyNowLocalFulfillment.summary}` : '')
             const fallbackText =
               `Thanks for your purchase!\n\n${receiptLine} — $${amount}` +
               `\nOrder reference: ${object.id}` +

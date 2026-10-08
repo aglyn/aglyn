@@ -555,10 +555,26 @@ export const localFulfillmentOptionsHandler: PluginApiHandler = async (req, res)
     if (!ownerOrg?.org || !Aglyn.checkEntitlement(ownerOrg.org as any, 'commerce')) {
       return res.status(200).json(nothing)
     }
-    // The visitor's own basket decides whether there is anything to collect.
-    const cartId = readCartId(req.cookies, hostId)
-    const cartSnapshot = cartId ? await hostRef.collection('carts').doc(cartId).get().catch(() => null) : null
-    const cart = (cartSnapshot?.data?.() as CommerceModel.HostCart | undefined) ?? { lines: [] }
+    // The visitor's own basket decides whether there is anything to collect
+    // — or, from a product's Buy button, that one product (AGL-3624).
+    const buyNowProductId = typeof body.productId === 'string' ? body.productId : ''
+    let cart: Pick<CommerceModel.HostCart, 'lines'>
+    if (buyNowProductId) {
+      if (!isDocumentId(buyNowProductId)) return res.status(400).json({ error: 'Invalid productId' })
+      cart = {
+        lines: [
+          {
+            productId: buyNowProductId,
+            ...(typeof body.variantId === 'string' && body.variantId ? { variantId: body.variantId } : {}),
+            quantity: Math.min(99, Math.max(1, Math.round(Number(body.quantity) || 1))),
+          },
+        ],
+      }
+    } else {
+      const cartId = readCartId(req.cookies, hostId)
+      const cartSnapshot = cartId ? await hostRef.collection('carts').doc(cartId).get().catch(() => null) : null
+      cart = (cartSnapshot?.data?.() as CommerceModel.HostCart | undefined) ?? { lines: [] }
+    }
     const productIds = [...new Set((cart.lines ?? []).map((line) => line.productId))].slice(0, 50)
     const products = await Promise.all(
       productIds.map((id) =>
