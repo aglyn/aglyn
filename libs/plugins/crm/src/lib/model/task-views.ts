@@ -21,7 +21,7 @@ import {
   type CrmTaskPriority,
   type TaskDueState,
   taskDueState,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/crm'
 import type { ListFilterField } from '@aglyn/shared-util-tools/list-query/list-filter'
 import type {
   ListQueryDeclaration,

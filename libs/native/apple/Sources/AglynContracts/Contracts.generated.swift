@@ -84,6 +84,52 @@ public enum ApnsEnvironment: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+public struct CrmDealStage: Codable, Hashable, Sendable {
+  public var forecastCategory: CrmForecastCategory?
+  public var id: String
+  public var kind: CrmDealStatus
+  public var name: String
+  public var order: Double
+  public var probability: Double
+
+  public init(forecastCategory: CrmForecastCategory? = nil, id: String, kind: CrmDealStatus, name: String, order: Double, probability: Double) {
+    self.forecastCategory = forecastCategory
+    self.id = id
+    self.kind = kind
+    self.name = name
+    self.order = order
+    self.probability = probability
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum CrmDealStatus: String, Codable, CaseIterable, Hashable, Sendable {
+  case lost = "lost"
+  case `open` = "open"
+  case won = "won"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum CrmForecastCategory: String, Codable, CaseIterable, Hashable, Sendable {
+  case bestCase = "bestCase"
+  case closed = "closed"
+  case commit = "commit"
+  case omitted = "omitted"
+  case pipeline = "pipeline"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct HostOrder: Codable, Hashable, Sendable {
   public var amountCents: Double?
   public var billingAddress: OrderAddress?
@@ -752,6 +798,30 @@ public struct ModifierSelection: Codable, Hashable, Sendable {
   public init(groupId: String, optionId: String) {
     self.groupId = groupId
     self.optionId = optionId
+  }
+}
+
+public struct NativeCampaignSendStatusesItem: Codable, Hashable, Sendable {
+  public var label: String
+  public var value: String
+
+  public init(label: String, value: String) {
+    self.label = label
+    self.value = value
+  }
+}
+
+public struct NativeCrmPicklist: Codable, Hashable, Sendable {
+  public var id: String
+  public var label: String
+  public var object: String
+  public var standardLabels: [String]
+
+  public init(id: String, label: String, object: String, standardLabels: [String]) {
+    self.id = id
+    self.label = label
+    self.object = object
+    self.standardLabels = standardLabels
   }
 }
 
@@ -1477,10 +1547,42 @@ public struct ReceiptTender: Codable, Hashable, Sendable {
 
 /// The values in contracts.generated.json, keyed as the TypeScript exports are.
 public struct ContractValues: Codable, Hashable, Sendable {
+  public let companyListDeclaration: ListQueryDeclaration
+  public let contactLifecycleStageLabels: [String: String]
+  public let contactListDeclaration: ListQueryDeclaration
+  public let crmActivitiesPerRecordCeiling: Int
+  public let crmActivityDirectionLabels: [String: String]
+  public let crmActivityKindLabels: [String: String]
+  public let crmEmailBodyMax: Int
+  public let crmEmailSubjectMax: Int
+  public let crmFieldObjectLabels: [String: String]
+  public let crmLeadStatusLabels: [String: String]
+  public let crmReportPeriodLabels: [String: String]
+  public let crmTaskKindLabels: [String: String]
+  public let dealListDeclaration: ListQueryDeclaration
+  public let defaultDealStages: [CrmDealStage]
+  public let emailListQuery: ListQueryDeclaration
+  public let emailTemplateQuery: ListQueryDeclaration
+  public let leadListDeclaration: ListQueryDeclaration
+  public let leadListQuery: ListQueryDeclaration
+  public let leadSourceOptions: [ListFilterOption]
+  public let listMemberQuery: ListQueryDeclaration
   public let listQueryDisjunctions: Int
   public let listQueryIdPath: String
   public let nameTokenLimit: Int
   public let nameTokenMaxPrefix: Int
+  public let nativeCampaignSendStatuses: [NativeCampaignSendStatusesItem]
+  public let nativeContactLifecycleStages: [String]
+  public let nativeCrmActivityDirections: [String: [String]]
+  public let nativeCrmActivityKinds: [String]
+  public let nativeCrmFieldObjects: [String]
+  public let nativeCrmLeadOpenStatuses: [String]
+  public let nativeCrmLeadStatuses: [String]
+  public let nativeCrmPicklists: [NativeCrmPicklist]
+  public let nativeCrmReportPeriods: [String]
+  public let nativeCrmTaskKinds: [String]
+  public let nativeSiteCampaignsQuery: ListQueryDeclaration
+  public let nativeSiteEmailsQuery: ListQueryDeclaration
   public let openDisputeClause: ListFilterClause
   public let orderChannelLabels: [String: String]
   public let orderChannelOptions: [ListFilterOption]
@@ -1496,13 +1598,52 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let productListOptions: [String: [ListFilterOption]]
   public let productListQuery: ListQueryDeclaration
   public let productListSelectFields: [String]
+  public let replyBodyMax: Int
+  public let replySubjectMax: Int
   public let scopedSearchJoin: String
+  public let siteMemberListQuery: ListQueryDeclaration
+  public let submissionListQuery: ListQueryDeclaration
+  public let submissionReadOptions: [ListFilterOption]
+  public let suppressionListQuery: ListQueryDeclaration
+  public let taskListDeclaration: ListQueryDeclaration
 
   enum CodingKeys: String, CodingKey {
+    case companyListDeclaration = "COMPANY_LIST_DECLARATION"
+    case contactLifecycleStageLabels = "CONTACT_LIFECYCLE_STAGE_LABELS"
+    case contactListDeclaration = "CONTACT_LIST_DECLARATION"
+    case crmActivitiesPerRecordCeiling = "CRM_ACTIVITIES_PER_RECORD_CEILING"
+    case crmActivityDirectionLabels = "CRM_ACTIVITY_DIRECTION_LABELS"
+    case crmActivityKindLabels = "CRM_ACTIVITY_KIND_LABELS"
+    case crmEmailBodyMax = "CRM_EMAIL_BODY_MAX"
+    case crmEmailSubjectMax = "CRM_EMAIL_SUBJECT_MAX"
+    case crmFieldObjectLabels = "CRM_FIELD_OBJECT_LABELS"
+    case crmLeadStatusLabels = "CRM_LEAD_STATUS_LABELS"
+    case crmReportPeriodLabels = "CRM_REPORT_PERIOD_LABELS"
+    case crmTaskKindLabels = "CRM_TASK_KIND_LABELS"
+    case dealListDeclaration = "DEAL_LIST_DECLARATION"
+    case defaultDealStages = "DEFAULT_DEAL_STAGES"
+    case emailListQuery = "EMAIL_LIST_QUERY"
+    case emailTemplateQuery = "EMAIL_TEMPLATE_QUERY"
+    case leadListDeclaration = "LEAD_LIST_DECLARATION"
+    case leadListQuery = "LEAD_LIST_QUERY"
+    case leadSourceOptions = "LEAD_SOURCE_OPTIONS"
+    case listMemberQuery = "LIST_MEMBER_QUERY"
     case listQueryDisjunctions = "LIST_QUERY_DISJUNCTIONS"
     case listQueryIdPath = "LIST_QUERY_ID_PATH"
     case nameTokenLimit = "NAME_TOKEN_LIMIT"
     case nameTokenMaxPrefix = "NAME_TOKEN_MAX_PREFIX"
+    case nativeCampaignSendStatuses = "NATIVE_CAMPAIGN_SEND_STATUSES"
+    case nativeContactLifecycleStages = "NATIVE_CONTACT_LIFECYCLE_STAGES"
+    case nativeCrmActivityDirections = "NATIVE_CRM_ACTIVITY_DIRECTIONS"
+    case nativeCrmActivityKinds = "NATIVE_CRM_ACTIVITY_KINDS"
+    case nativeCrmFieldObjects = "NATIVE_CRM_FIELD_OBJECTS"
+    case nativeCrmLeadOpenStatuses = "NATIVE_CRM_LEAD_OPEN_STATUSES"
+    case nativeCrmLeadStatuses = "NATIVE_CRM_LEAD_STATUSES"
+    case nativeCrmPicklists = "NATIVE_CRM_PICKLISTS"
+    case nativeCrmReportPeriods = "NATIVE_CRM_REPORT_PERIODS"
+    case nativeCrmTaskKinds = "NATIVE_CRM_TASK_KINDS"
+    case nativeSiteCampaignsQuery = "NATIVE_SITE_CAMPAIGNS_QUERY"
+    case nativeSiteEmailsQuery = "NATIVE_SITE_EMAILS_QUERY"
     case openDisputeClause = "OPEN_DISPUTE_CLAUSE"
     case orderChannelLabels = "ORDER_CHANNEL_LABELS"
     case orderChannelOptions = "ORDER_CHANNEL_OPTIONS"
@@ -1518,6 +1659,13 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case productListOptions = "PRODUCT_LIST_OPTIONS"
     case productListQuery = "PRODUCT_LIST_QUERY"
     case productListSelectFields = "PRODUCT_LIST_SELECT_FIELDS"
+    case replyBodyMax = "REPLY_BODY_MAX"
+    case replySubjectMax = "REPLY_SUBJECT_MAX"
     case scopedSearchJoin = "SCOPED_SEARCH_JOIN"
+    case siteMemberListQuery = "SITE_MEMBER_LIST_QUERY"
+    case submissionListQuery = "SUBMISSION_LIST_QUERY"
+    case submissionReadOptions = "SUBMISSION_READ_OPTIONS"
+    case suppressionListQuery = "SUPPRESSION_LIST_QUERY"
+    case taskListDeclaration = "TASK_LIST_DECLARATION"
   }
 }

@@ -58,6 +58,42 @@ internal object ApnsEnvironmentSerializer :
     RawEnumSerializer<ApnsEnvironment>("com.aglyn.contracts.ApnsEnvironment", ApnsEnvironment.entries, ApnsEnvironment.UNKNOWN, { it.raw })
 
 @Serializable
+data class CrmDealStage(
+    val forecastCategory: CrmForecastCategory? = null,
+    val id: String,
+    val kind: CrmDealStatus,
+    val name: String,
+    val order: Double,
+    val probability: Double,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = CrmDealStatusSerializer::class)
+enum class CrmDealStatus(val raw: String) {
+    LOST("lost"),
+    OPEN("open"),
+    WON("won"),
+    UNKNOWN(""),
+}
+
+internal object CrmDealStatusSerializer :
+    RawEnumSerializer<CrmDealStatus>("com.aglyn.contracts.CrmDealStatus", CrmDealStatus.entries, CrmDealStatus.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = CrmForecastCategorySerializer::class)
+enum class CrmForecastCategory(val raw: String) {
+    BEST_CASE("bestCase"),
+    CLOSED("closed"),
+    COMMIT("commit"),
+    OMITTED("omitted"),
+    PIPELINE("pipeline"),
+    UNKNOWN(""),
+}
+
+internal object CrmForecastCategorySerializer :
+    RawEnumSerializer<CrmForecastCategory>("com.aglyn.contracts.CrmForecastCategory", CrmForecastCategory.entries, CrmForecastCategory.UNKNOWN, { it.raw })
+
+@Serializable
 data class HostOrder(
     val amountCents: Double? = null,
     val billingAddress: OrderAddress? = null,
@@ -498,6 +534,20 @@ internal object MobilePushTransportSerializer :
 data class ModifierSelection(
     val groupId: String,
     val optionId: String,
+)
+
+@Serializable
+data class NativeCampaignSendStatusesItem(
+    val label: String,
+    val value: String,
+)
+
+@Serializable
+data class NativeCrmPicklist(
+    val id: String,
+    val label: String,
+    val `object`: String,
+    val standardLabels: List<String>,
 )
 
 @Serializable
@@ -967,10 +1017,42 @@ data class ReceiptTender(
 /** The values in contracts.generated.json, keyed as the TypeScript exports are. */
 @Serializable
 data class ContractValues(
+    @SerialName("COMPANY_LIST_DECLARATION") val companyListDeclaration: ListQueryDeclaration,
+    @SerialName("CONTACT_LIFECYCLE_STAGE_LABELS") val contactLifecycleStageLabels: Map<String, String>,
+    @SerialName("CONTACT_LIST_DECLARATION") val contactListDeclaration: ListQueryDeclaration,
+    @SerialName("CRM_ACTIVITIES_PER_RECORD_CEILING") val crmActivitiesPerRecordCeiling: Long,
+    @SerialName("CRM_ACTIVITY_DIRECTION_LABELS") val crmActivityDirectionLabels: Map<String, String>,
+    @SerialName("CRM_ACTIVITY_KIND_LABELS") val crmActivityKindLabels: Map<String, String>,
+    @SerialName("CRM_EMAIL_BODY_MAX") val crmEmailBodyMax: Long,
+    @SerialName("CRM_EMAIL_SUBJECT_MAX") val crmEmailSubjectMax: Long,
+    @SerialName("CRM_FIELD_OBJECT_LABELS") val crmFieldObjectLabels: Map<String, String>,
+    @SerialName("CRM_LEAD_STATUS_LABELS") val crmLeadStatusLabels: Map<String, String>,
+    @SerialName("CRM_REPORT_PERIOD_LABELS") val crmReportPeriodLabels: Map<String, String>,
+    @SerialName("CRM_TASK_KIND_LABELS") val crmTaskKindLabels: Map<String, String>,
+    @SerialName("DEAL_LIST_DECLARATION") val dealListDeclaration: ListQueryDeclaration,
+    @SerialName("DEFAULT_DEAL_STAGES") val defaultDealStages: List<CrmDealStage>,
+    @SerialName("EMAIL_LIST_QUERY") val emailListQuery: ListQueryDeclaration,
+    @SerialName("EMAIL_TEMPLATE_QUERY") val emailTemplateQuery: ListQueryDeclaration,
+    @SerialName("LEAD_LIST_DECLARATION") val leadListDeclaration: ListQueryDeclaration,
+    @SerialName("LEAD_LIST_QUERY") val leadListQuery: ListQueryDeclaration,
+    @SerialName("LEAD_SOURCE_OPTIONS") val leadSourceOptions: List<ListFilterOption>,
+    @SerialName("LIST_MEMBER_QUERY") val listMemberQuery: ListQueryDeclaration,
     @SerialName("LIST_QUERY_DISJUNCTIONS") val listQueryDisjunctions: Long,
     @SerialName("LIST_QUERY_ID_PATH") val listQueryIdPath: String,
     @SerialName("NAME_TOKEN_LIMIT") val nameTokenLimit: Long,
     @SerialName("NAME_TOKEN_MAX_PREFIX") val nameTokenMaxPrefix: Long,
+    @SerialName("NATIVE_CAMPAIGN_SEND_STATUSES") val nativeCampaignSendStatuses: List<NativeCampaignSendStatusesItem>,
+    @SerialName("NATIVE_CONTACT_LIFECYCLE_STAGES") val nativeContactLifecycleStages: List<String>,
+    @SerialName("NATIVE_CRM_ACTIVITY_DIRECTIONS") val nativeCrmActivityDirections: Map<String, List<String>>,
+    @SerialName("NATIVE_CRM_ACTIVITY_KINDS") val nativeCrmActivityKinds: List<String>,
+    @SerialName("NATIVE_CRM_FIELD_OBJECTS") val nativeCrmFieldObjects: List<String>,
+    @SerialName("NATIVE_CRM_LEAD_OPEN_STATUSES") val nativeCrmLeadOpenStatuses: List<String>,
+    @SerialName("NATIVE_CRM_LEAD_STATUSES") val nativeCrmLeadStatuses: List<String>,
+    @SerialName("NATIVE_CRM_PICKLISTS") val nativeCrmPicklists: List<NativeCrmPicklist>,
+    @SerialName("NATIVE_CRM_REPORT_PERIODS") val nativeCrmReportPeriods: List<String>,
+    @SerialName("NATIVE_CRM_TASK_KINDS") val nativeCrmTaskKinds: List<String>,
+    @SerialName("NATIVE_SITE_CAMPAIGNS_QUERY") val nativeSiteCampaignsQuery: ListQueryDeclaration,
+    @SerialName("NATIVE_SITE_EMAILS_QUERY") val nativeSiteEmailsQuery: ListQueryDeclaration,
     @SerialName("OPEN_DISPUTE_CLAUSE") val openDisputeClause: ListFilterClause,
     @SerialName("ORDER_CHANNEL_LABELS") val orderChannelLabels: Map<String, String>,
     @SerialName("ORDER_CHANNEL_OPTIONS") val orderChannelOptions: List<ListFilterOption>,
@@ -986,5 +1068,12 @@ data class ContractValues(
     @SerialName("PRODUCT_LIST_OPTIONS") val productListOptions: Map<String, List<ListFilterOption>>,
     @SerialName("PRODUCT_LIST_QUERY") val productListQuery: ListQueryDeclaration,
     @SerialName("PRODUCT_LIST_SELECT_FIELDS") val productListSelectFields: List<String>,
+    @SerialName("REPLY_BODY_MAX") val replyBodyMax: Long,
+    @SerialName("REPLY_SUBJECT_MAX") val replySubjectMax: Long,
     @SerialName("SCOPED_SEARCH_JOIN") val scopedSearchJoin: String,
+    @SerialName("SITE_MEMBER_LIST_QUERY") val siteMemberListQuery: ListQueryDeclaration,
+    @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
+    @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
+    @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
+    @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
 )

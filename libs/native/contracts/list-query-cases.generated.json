@@ -2072,6 +2072,374 @@
         ],
         "notices": []
       }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "no clauses",
+      "request": {
+        "clauses": []
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "from contains",
+      "request": {
+        "clauses": [
+          {
+            "field": "from",
+            "op": "contains",
+            "value": "Acme Widgets"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "senderTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "from",
+            "op": "contains",
+            "value": "Acme Widgets"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "read equals",
+      "request": {
+        "clauses": [
+          {
+            "field": "read",
+            "op": "equals",
+            "value": "true"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "read",
+            "op": "==",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "read",
+            "op": "equals",
+            "value": "true"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "formId equals",
+      "request": {
+        "clauses": [
+          {
+            "field": "formId",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "formId",
+            "op": "==",
+            "value": "alpha"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "formId",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "sort createdAt desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "desc",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "sort createdAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "asc",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "an undeclared sort is ignored",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "path": "undeclared",
+          "direction": "asc"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "search one word",
+      "request": {
+        "clauses": [],
+        "search": [
+          "Acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "search two words",
+      "request": {
+        "clauses": [],
+        "search": [
+          "acme",
+          "widgets"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": [
+          "Search matches one word at a time: showing results for \"acme\"."
+        ]
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "search with an exact clause",
+      "request": {
+        "clauses": [
+          {
+            "field": "formId",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "search": [
+          "acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          },
+          {
+            "path": "formId",
+            "op": "==",
+            "value": "alpha"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "formId",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "searched": "acme",
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "search with a contains clause",
+      "request": {
+        "clauses": [
+          {
+            "field": "from",
+            "op": "contains",
+            "value": "widget"
+          }
+        ],
+        "search": [
+          "acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [
+          {
+            "clause": {
+              "field": "from",
+              "op": "contains",
+              "value": "widget"
+            },
+            "reason": "cannot be combined with the search — clear the search to use it"
+          }
+        ],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "an unknown field is refused",
+      "request": {
+        "clauses": [
+          {
+            "field": "nope",
+            "op": "equals",
+            "value": "x"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [
+          {
+            "clause": {
+              "field": "nope",
+              "op": "equals",
+              "value": "x"
+            },
+            "reason": "this list does not filter by that"
+          }
+        ],
+        "notices": []
+      }
     }
   ]
 }

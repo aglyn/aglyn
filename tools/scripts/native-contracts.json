@@ -93,6 +93,100 @@
         "HostProduct",
         "ProductVariant"
       ]
+    },
+    "libs/plugins/inbox/src/lib/constants/list-queries.ts": {
+      "values": [
+        "SUBMISSION_LIST_QUERY",
+        "SITE_MEMBER_LIST_QUERY",
+        "LEAD_LIST_QUERY",
+        "SUBMISSION_READ_OPTIONS",
+        "LEAD_SOURCE_OPTIONS"
+      ]
+    },
+    "libs/plugins/inbox/src/lib/model/reply-policy.ts": {
+      "values": [
+        "REPLY_SUBJECT_MAX",
+        "REPLY_BODY_MAX"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/crm.ts": {
+      "types": [
+        "CrmDealStage",
+        "CrmForecastCategory"
+      ],
+      "values": [
+        "CONTACT_LIFECYCLE_STAGE_LABELS",
+        "DEFAULT_DEAL_STAGES",
+        "CRM_TASK_KIND_LABELS",
+        "CRM_ACTIVITY_KIND_LABELS",
+        "CRM_ACTIVITY_DIRECTION_LABELS",
+        "CRM_FIELD_OBJECT_LABELS",
+        "CRM_LEAD_STATUS_LABELS",
+        "CRM_ACTIVITIES_PER_RECORD_CEILING",
+        "CRM_EMAIL_SUBJECT_MAX",
+        "CRM_EMAIL_BODY_MAX"
+      ]
+    },
+    "libs/plugins/crm/src/lib/constants/contact-filters.ts": {
+      "values": [
+        "CONTACT_LIST_DECLARATION"
+      ]
+    },
+    "libs/plugins/crm/src/lib/constants/company-filters.ts": {
+      "values": [
+        "COMPANY_LIST_DECLARATION"
+      ]
+    },
+    "libs/plugins/crm/src/lib/constants/deal-filters.ts": {
+      "values": [
+        "DEAL_LIST_DECLARATION"
+      ]
+    },
+    "libs/plugins/crm/src/lib/model/lead-filters.ts": {
+      "values": [
+        "LEAD_LIST_DECLARATION"
+      ]
+    },
+    "libs/plugins/crm/src/lib/model/task-views.ts": {
+      "values": [
+        "TASK_LIST_DECLARATION"
+      ]
+    },
+    "libs/plugins/crm/src/lib/model/crm-reports.ts": {
+      "values": [
+        "CRM_REPORT_PERIOD_LABELS"
+      ]
+    },
+    "libs/plugins/crm/src/lib/model/native-vocabulary.ts": {
+      "types": [
+        "NativeCrmPicklist"
+      ],
+      "values": [
+        "NATIVE_CRM_LEAD_STATUSES",
+        "NATIVE_CRM_LEAD_OPEN_STATUSES",
+        "NATIVE_CONTACT_LIFECYCLE_STAGES",
+        "NATIVE_CRM_TASK_KINDS",
+        "NATIVE_CRM_FIELD_OBJECTS",
+        "NATIVE_CRM_REPORT_PERIODS",
+        "NATIVE_CRM_ACTIVITY_DIRECTIONS",
+        "NATIVE_CRM_PICKLISTS",
+        "NATIVE_CRM_ACTIVITY_KINDS"
+      ]
+    },
+    "libs/plugins/marketing/src/lib/model/native-vocabulary.ts": {
+      "values": [
+        "NATIVE_SITE_EMAILS_QUERY",
+        "NATIVE_SITE_CAMPAIGNS_QUERY",
+        "NATIVE_CAMPAIGN_SEND_STATUSES"
+      ]
+    },
+    "libs/plugins/email/src/lib/constants/list-queries.ts": {
+      "values": [
+        "EMAIL_LIST_QUERY",
+        "LIST_MEMBER_QUERY",
+        "EMAIL_TEMPLATE_QUERY",
+        "SUPPRESSION_LIST_QUERY"
+      ]
     }
   },
   "ints": [],
@@ -113,7 +207,8 @@
     "ORDER_LIST_QUERY": {},
     "PRODUCT_LIST_QUERY": {
       "base": "PRODUCT_LIST_BASE"
-    }
+    },
+    "SUBMISSION_LIST_QUERY": {}
   },
   "functionCases": {
     "formatOrderNumber": {
@@ -1856,6 +1951,693 @@
         ],
         [
           "text"
+        ]
+      ]
+    },
+    "messageSender": {
+      "module": "libs/aglyn/src/lib/app-utils/message-search.ts",
+      "args": [
+        [
+          {
+            "Full Name": "Ada Lovelace",
+            "Email Address": "ada@example.com",
+            "message": "Hi"
+          }
+        ],
+        [
+          {
+            "first_name": "Grace",
+            "email": "grace@example.com"
+          }
+        ],
+        [
+          {
+            "email": "only@example.com"
+          }
+        ],
+        [
+          {
+            "Your Name": "  ",
+            "name": "Alan",
+            "E-mail": "x"
+          }
+        ],
+        [
+          {
+            "name": [
+              "Ada",
+              "L"
+            ],
+            "email": 42
+          }
+        ],
+        [
+          {
+            "message": "no sender"
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "submissionSender": {
+      "module": "libs/plugins/inbox/src/lib/model/submission-presenter.ts",
+      "args": [
+        [
+          {
+            "name": "Ada Lovelace",
+            "email": "ada@example.com"
+          }
+        ],
+        [
+          {
+            "email": "priya@lumen.co"
+          }
+        ],
+        [
+          {},
+          "Contact form"
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "name": "cher"
+          }
+        ],
+        [
+          {
+            "name": "Jean-Luc Picard"
+          }
+        ]
+      ]
+    },
+    "routingChips": {
+      "module": "libs/plugins/inbox/src/lib/model/submission-presenter.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "dataset": {
+              "id": "d",
+              "name": "Leads",
+              "recordId": "r"
+            }
+          }
+        ],
+        [
+          {
+            "dataset": {
+              "id": "d",
+              "recordId": "r"
+            }
+          }
+        ],
+        [
+          {
+            "datasetRefused": {
+              "name": "Leads",
+              "errors": {
+                "a": "Email is not valid",
+                "b": "Phone is too long"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "datasetRefused": {}
+          }
+        ]
+      ]
+    },
+    "defaultReplySubject": {
+      "module": "libs/plugins/inbox/src/lib/model/reply-policy.ts",
+      "args": [
+        [
+          "Lumen Studio",
+          "Contact"
+        ],
+        [
+          null,
+          "Contact"
+        ],
+        [
+          "",
+          ""
+        ],
+        [
+          null,
+          null
+        ],
+        [
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          null
+        ]
+      ]
+    },
+    "consentGroupForHost": {
+      "module": "libs/aglyn/src/lib/app-utils/consent-groups.ts",
+      "args": [
+        [
+          null,
+          "h1"
+        ],
+        [
+          {
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            },
+            "consentGroups": {
+              "brand": {
+                "name": "Brand",
+                "hostIds": [
+                  "h2",
+                  "h1"
+                ]
+              },
+              "solo": {
+                "name": "Solo",
+                "hostIds": [
+                  "h3"
+                ]
+              },
+              "bad": {
+                "hostIds": [
+                  "h4",
+                  "h5"
+                ]
+              }
+            }
+          },
+          "h1"
+        ],
+        [
+          {
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            },
+            "consentGroups": {
+              "brand": {
+                "name": "Brand",
+                "hostIds": [
+                  "h2",
+                  "h1"
+                ]
+              },
+              "solo": {
+                "name": "Solo",
+                "hostIds": [
+                  "h3"
+                ]
+              },
+              "bad": {
+                "hostIds": [
+                  "h4",
+                  "h5"
+                ]
+              }
+            }
+          },
+          "h3"
+        ],
+        [
+          {
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            },
+            "consentGroups": {
+              "brand": {
+                "name": "Brand",
+                "hostIds": [
+                  "h2",
+                  "h1"
+                ]
+              },
+              "solo": {
+                "name": "Solo",
+                "hostIds": [
+                  "h3"
+                ]
+              },
+              "bad": {
+                "hostIds": [
+                  "h4",
+                  "h5"
+                ]
+              }
+            }
+          },
+          "h4"
+        ],
+        [
+          {
+            "consentGroups": {
+              "a": {
+                "name": "A",
+                "hostIds": [
+                  "h1",
+                  "h2"
+                ]
+              },
+              "b": {
+                "name": "B",
+                "hostIds": [
+                  "h2",
+                  "h3"
+                ]
+              }
+            }
+          },
+          "h1"
+        ],
+        [
+          {
+            "consentGroups": {
+              "h1": {
+                "name": "X",
+                "hostIds": [
+                  "h1",
+                  "h2"
+                ]
+              }
+            }
+          },
+          "h2"
+        ]
+      ]
+    },
+    "crmScopeTokens": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          null,
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org"
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host"
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "defaultResourceScope": "org"
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ]
+      ]
+    },
+    "crmReadTokens": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ]
+      ]
+    },
+    "crmFieldListFields": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          {
+            "key": "shoe_size",
+            "label": "Shoe size",
+            "required": true,
+            "object": "contact"
+          }
+        ],
+        [
+          {
+            "key": "tier",
+            "label": "Tier",
+            "object": "company"
+          }
+        ],
+        [
+          {
+            "key": "a.b-c",
+            "label": ""
+          }
+        ]
+      ]
+    },
+    "pipelineTotals": {
+      "module": "libs/plugins/crm/src/lib/model/crm-reports.ts",
+      "args": [
+        [
+          [
+            {
+              "status": "open",
+              "stageId": "s1",
+              "amountCents": 1000
+            },
+            {
+              "status": "open",
+              "stageId": "s2",
+              "amountCents": 2001,
+              "probability": 75
+            },
+            {
+              "status": "won",
+              "stageId": "won",
+              "amountCents": 500
+            },
+            {
+              "status": "open",
+              "stageId": "gone",
+              "amountCents": 300
+            },
+            {
+              "status": "open",
+              "stageId": "s2"
+            }
+          ],
+          {
+            "stages": [
+              {
+                "id": "s1",
+                "name": "One",
+                "order": 0,
+                "probability": 10,
+                "kind": "open"
+              },
+              {
+                "id": "s2",
+                "name": "Two",
+                "order": 1,
+                "probability": 50,
+                "kind": "open"
+              },
+              {
+                "id": "won",
+                "name": "Won",
+                "order": 2,
+                "probability": 100,
+                "kind": "won"
+              }
+            ]
+          }
+        ],
+        [
+          [],
+          {
+            "stages": [
+              {
+                "id": "s1",
+                "name": "One",
+                "order": 0,
+                "probability": 10,
+                "kind": "open"
+              },
+              {
+                "id": "s2",
+                "name": "Two",
+                "order": 1,
+                "probability": 50,
+                "kind": "open"
+              },
+              {
+                "id": "won",
+                "name": "Won",
+                "order": 2,
+                "probability": 100,
+                "kind": "won"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "leadFunnel": {
+      "module": "libs/plugins/crm/src/lib/model/crm-reports.ts",
+      "args": [
+        [
+          [
+            {
+              "status": "new"
+            },
+            {
+              "status": "working"
+            },
+            {
+              "status": "unqualified",
+              "unqualifiedReason": "Too small"
+            },
+            {
+              "status": "unqualified",
+              "unqualifiedReason": "too  small"
+            },
+            {
+              "status": "unqualified"
+            },
+            {
+              "status": "bogus"
+            },
+            {
+              "status": "qualified"
+            }
+          ]
+        ],
+        [
+          []
+        ]
+      ]
+    },
+    "campaignSendDisplay": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "status": "draft"
+          }
+        ],
+        [
+          {
+            "status": "scheduled",
+            "staffReview": {
+              "state": "held"
+            }
+          }
+        ],
+        [
+          {
+            "status": "scheduled"
+          }
+        ],
+        [
+          {
+            "status": "scheduled",
+            "stats": {
+              "sent": 1200,
+              "audienceSize": 5000
+            },
+            "resume": {
+              "remaining": 3800,
+              "batch": 2,
+              "nextAtMs": 1790000000000
+            }
+          }
+        ],
+        [
+          {
+            "status": "canceled",
+            "stats": {
+              "sent": 10,
+              "audienceSize": 40
+            },
+            "resume": {
+              "remaining": 30
+            }
+          }
+        ],
+        [
+          {
+            "status": "failed",
+            "stats": {
+              "sent": 10
+            },
+            "resume": {
+              "remaining": 3
+            }
+          }
+        ],
+        [
+          {
+            "status": "sent",
+            "stats": {
+              "sent": 2400,
+              "audienceSize": 2400
+            },
+            "resume": {
+              "batch": 3
+            }
+          }
+        ],
+        [
+          {
+            "status": "sent",
+            "stats": {
+              "sent": 12
+            }
+          }
+        ],
+        [
+          {
+            "status": "sending"
+          }
+        ]
+      ]
+    },
+    "campaignReport": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-report.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "sent": 1000,
+            "recipients": 1100,
+            "delivered": 980,
+            "opens": 700,
+            "uniqueOpens": 420,
+            "clicks": 90,
+            "uniqueClicks": 60,
+            "bounced": 20,
+            "complained": 1,
+            "unsubscribes": 4,
+            "clickTracked": true,
+            "audienceSize": 1200,
+            "consented": 1150,
+            "suppressed": 30,
+            "deferred": 5
+          }
+        ],
+        [
+          {
+            "sent": 50,
+            "recipients": 50,
+            "opens": 3,
+            "audienceSizeTruncated": true
+          }
+        ]
+      ]
+    },
+    "sendLinkReport": {
+      "module": "libs/shared/ui/email-campaigns/src/lib/model/send-report.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "links": {
+              "a": {
+                "url": "https://x.test/b",
+                "clicks": 3
+              },
+              "b": {
+                "url": "https://x.test/a",
+                "clicks": 3
+              },
+              "c": {
+                "url": "https://x.test/c",
+                "clicks": 10
+              }
+            },
+            "overflowClicks": 2,
+            "unattributedClicks": 1
+          }
         ]
       ]
     }

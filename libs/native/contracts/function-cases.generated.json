@@ -281,6 +281,436 @@
         }
       ]
     },
+    "campaignReport": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-report.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "bounced": 0,
+            "caveats": [
+              {
+                "id": "delivery-unrecorded",
+                "message": "No delivery events have been recorded for this campaign, so open, click, complaint and unsubscribe rates cannot be computed — every one of them is taken over delivered. Counts below are still real."
+              },
+              {
+                "id": "click-tracking-unrecorded",
+                "message": "This send did not record carrying an HTML part. Click tracking rewrites links in the HTML, so a send without one reports zero clicks whatever recipients did. The click count is shown; no click rate is computed from it."
+              }
+            ],
+            "clicks": 0,
+            "complained": 0,
+            "delivered": null,
+            "opens": 0,
+            "populations": [],
+            "rates": {
+              "bounce": null,
+              "click": null,
+              "clickToOpen": null,
+              "complaint": null,
+              "delivery": null,
+              "open": null,
+              "unsubscribe": null
+            },
+            "recipients": 0,
+            "sent": 0,
+            "uniqueClicks": null,
+            "uniqueOpens": null,
+            "unsubscribes": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "sent": 1000,
+              "recipients": 1100,
+              "delivered": 980,
+              "opens": 700,
+              "uniqueOpens": 420,
+              "clicks": 90,
+              "uniqueClicks": 60,
+              "bounced": 20,
+              "complained": 1,
+              "unsubscribes": 4,
+              "clickTracked": true,
+              "audienceSize": 1200,
+              "consented": 1150,
+              "suppressed": 30,
+              "deferred": 5
+            }
+          ],
+          "result": {
+            "bounced": 20,
+            "caveats": [
+              {
+                "id": "send-deferred",
+                "message": "5 recipients were held back by the hourly send governor and never received this campaign. They are counted in addressed, not in sent."
+              }
+            ],
+            "clicks": 90,
+            "complained": 1,
+            "delivered": 980,
+            "opens": 700,
+            "populations": [
+              {
+                "count": 1150,
+                "id": "consented",
+                "label": "Had a consent basis",
+                "of": 1200,
+                "ofLabel": "audience"
+              },
+              {
+                "count": 30,
+                "id": "suppressed",
+                "label": "Already suppressed",
+                "of": 1100,
+                "ofLabel": "addressed"
+              }
+            ],
+            "rates": {
+              "bounce": {
+                "denominator": 1000,
+                "denominatorLabel": "sent",
+                "numerator": 20,
+                "value": 0.02
+              },
+              "click": {
+                "denominator": 980,
+                "denominatorLabel": "delivered",
+                "numerator": 60,
+                "value": 0.061224489795918366
+              },
+              "clickToOpen": {
+                "denominator": 420,
+                "denominatorLabel": "unique openers",
+                "numerator": 60,
+                "value": 0.14285714285714285
+              },
+              "complaint": {
+                "denominator": 980,
+                "denominatorLabel": "delivered",
+                "numerator": 1,
+                "value": 0.0010204081632653062
+              },
+              "delivery": {
+                "denominator": 1000,
+                "denominatorLabel": "sent",
+                "numerator": 980,
+                "value": 0.98
+              },
+              "open": {
+                "denominator": 980,
+                "denominatorLabel": "delivered",
+                "numerator": 420,
+                "value": 0.42857142857142855
+              },
+              "unsubscribe": {
+                "denominator": 980,
+                "denominatorLabel": "delivered",
+                "numerator": 4,
+                "value": 0.004081632653061225
+              }
+            },
+            "recipients": 1100,
+            "sent": 1000,
+            "uniqueClicks": 60,
+            "uniqueOpens": 420,
+            "unsubscribes": 4
+          }
+        },
+        {
+          "args": [
+            {
+              "sent": 50,
+              "recipients": 50,
+              "opens": 3,
+              "audienceSizeTruncated": true
+            }
+          ],
+          "result": {
+            "bounced": 0,
+            "caveats": [
+              {
+                "id": "delivery-unrecorded",
+                "message": "No delivery events have been recorded for this campaign, so open, click, complaint and unsubscribe rates cannot be computed — every one of them is taken over delivered. Counts below are still real."
+              },
+              {
+                "id": "click-tracking-unrecorded",
+                "message": "This send did not record carrying an HTML part. Click tracking rewrites links in the HTML, so a send without one reports zero clicks whatever recipients did. The click count is shown; no click rate is computed from it."
+              },
+              {
+                "id": "audience-truncated",
+                "message": "Audience resolution stopped at its read ceiling, so the audience size is a floor — the real audience is at least this large, and every share taken over it is at most the figure shown."
+              }
+            ],
+            "clicks": 0,
+            "complained": 0,
+            "delivered": null,
+            "opens": 3,
+            "populations": [],
+            "rates": {
+              "bounce": {
+                "denominator": 50,
+                "denominatorLabel": "sent",
+                "numerator": 0,
+                "value": 0
+              },
+              "click": null,
+              "clickToOpen": null,
+              "complaint": null,
+              "delivery": null,
+              "open": null,
+              "unsubscribe": null
+            },
+            "recipients": 50,
+            "sent": 50,
+            "uniqueClicks": null,
+            "uniqueOpens": null,
+            "unsubscribes": 0
+          }
+        }
+      ]
+    },
+    "campaignSendDisplay": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "label": "Sent to 0",
+            "progress": {
+              "audience": null,
+              "batch": 0,
+              "label": "Sent to 0",
+              "nextAtMs": 0,
+              "reached": 0,
+              "remaining": 0,
+              "state": "sent"
+            },
+            "state": "sent"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "draft"
+            }
+          ],
+          "result": {
+            "label": "Draft",
+            "progress": {
+              "audience": null,
+              "batch": 0,
+              "label": "Sent to 0",
+              "nextAtMs": 0,
+              "reached": 0,
+              "remaining": 0,
+              "state": "sent"
+            },
+            "state": "draft"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "scheduled",
+              "staffReview": {
+                "state": "held"
+              }
+            }
+          ],
+          "result": {
+            "label": "Held for review",
+            "progress": {
+              "audience": null,
+              "batch": 0,
+              "label": "Scheduled",
+              "nextAtMs": 0,
+              "reached": 0,
+              "remaining": 0,
+              "state": "pending"
+            },
+            "state": "held"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "scheduled"
+            }
+          ],
+          "result": {
+            "label": "Scheduled",
+            "progress": {
+              "audience": null,
+              "batch": 0,
+              "label": "Scheduled",
+              "nextAtMs": 0,
+              "reached": 0,
+              "remaining": 0,
+              "state": "pending"
+            },
+            "state": "pending"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "scheduled",
+              "stats": {
+                "sent": 1200,
+                "audienceSize": 5000
+              },
+              "resume": {
+                "remaining": 3800,
+                "batch": 2,
+                "nextAtMs": 1790000000000
+              }
+            }
+          ],
+          "result": {
+            "label": "Sending — reached 1,200 of 5,000",
+            "progress": {
+              "audience": 5000,
+              "batch": 2,
+              "label": "Sending — reached 1,200 of 5,000",
+              "nextAtMs": 1790000000000,
+              "reached": 1200,
+              "remaining": 3800,
+              "state": "sending"
+            },
+            "state": "sending"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "canceled",
+              "stats": {
+                "sent": 10,
+                "audienceSize": 40
+              },
+              "resume": {
+                "remaining": 30
+              }
+            }
+          ],
+          "result": {
+            "label": "Reached 10 of 40 — canceled with 30 not addressed",
+            "progress": {
+              "audience": 40,
+              "batch": 0,
+              "label": "Reached 10 of 40 — canceled with 30 not addressed",
+              "nextAtMs": 0,
+              "reached": 10,
+              "remaining": 30,
+              "state": "stopped"
+            },
+            "state": "stopped"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "failed",
+              "stats": {
+                "sent": 10
+              },
+              "resume": {
+                "remaining": 3
+              }
+            }
+          ],
+          "result": {
+            "label": "Reached 10 — stopped by an error with 3 not addressed",
+            "progress": {
+              "audience": null,
+              "batch": 0,
+              "label": "Reached 10 — stopped by an error with 3 not addressed",
+              "nextAtMs": 0,
+              "reached": 10,
+              "remaining": 3,
+              "state": "stopped"
+            },
+            "state": "stopped"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "sent",
+              "stats": {
+                "sent": 2400,
+                "audienceSize": 2400
+              },
+              "resume": {
+                "batch": 3
+              }
+            }
+          ],
+          "result": {
+            "label": "Sent to 2,400 of 2,400 over 3 runs",
+            "progress": {
+              "audience": 2400,
+              "batch": 3,
+              "label": "Sent to 2,400 of 2,400 over 3 runs",
+              "nextAtMs": 0,
+              "reached": 2400,
+              "remaining": 0,
+              "state": "sent"
+            },
+            "state": "sent"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "sent",
+              "stats": {
+                "sent": 12
+              }
+            }
+          ],
+          "result": {
+            "label": "Sent to 12",
+            "progress": {
+              "audience": null,
+              "batch": 0,
+              "label": "Sent to 12",
+              "nextAtMs": 0,
+              "reached": 12,
+              "remaining": 0,
+              "state": "sent"
+            },
+            "state": "sent"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "sending"
+            }
+          ],
+          "result": {
+            "label": "Sending",
+            "progress": {
+              "audience": null,
+              "batch": 0,
+              "label": "Sending",
+              "nextAtMs": 0,
+              "reached": 0,
+              "remaining": 0,
+              "state": "pending"
+            },
+            "state": "pending"
+          }
+        }
+      ]
+    },
     "canTransitionOrder": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "cases": [
@@ -629,6 +1059,465 @@
         }
       ]
     },
+    "consentGroupForHost": {
+      "module": "libs/aglyn/src/lib/app-utils/consent-groups.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            "h1"
+          ],
+          "result": {
+            "awaitsConfirmation": false,
+            "declared": false,
+            "groupId": "h1",
+            "hostId": "h1",
+            "hostIds": [
+              "h1"
+            ],
+            "name": null
+          }
+        },
+        {
+          "args": [
+            {
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              },
+              "consentGroups": {
+                "brand": {
+                  "name": "Brand",
+                  "hostIds": [
+                    "h2",
+                    "h1"
+                  ]
+                },
+                "solo": {
+                  "name": "Solo",
+                  "hostIds": [
+                    "h3"
+                  ]
+                },
+                "bad": {
+                  "hostIds": [
+                    "h4",
+                    "h5"
+                  ]
+                }
+              }
+            },
+            "h1"
+          ],
+          "result": {
+            "awaitsConfirmation": false,
+            "declared": true,
+            "groupId": "brand",
+            "hostId": "h1",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "name": "Brand"
+          }
+        },
+        {
+          "args": [
+            {
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              },
+              "consentGroups": {
+                "brand": {
+                  "name": "Brand",
+                  "hostIds": [
+                    "h2",
+                    "h1"
+                  ]
+                },
+                "solo": {
+                  "name": "Solo",
+                  "hostIds": [
+                    "h3"
+                  ]
+                },
+                "bad": {
+                  "hostIds": [
+                    "h4",
+                    "h5"
+                  ]
+                }
+              }
+            },
+            "h3"
+          ],
+          "result": {
+            "awaitsConfirmation": false,
+            "declared": false,
+            "groupId": "h3",
+            "hostId": "h3",
+            "hostIds": [
+              "h3"
+            ],
+            "name": null
+          }
+        },
+        {
+          "args": [
+            {
+              "hosts": {
+                "h1": true,
+                "h2": true,
+                "h3": true,
+                "h4": true
+              },
+              "consentGroups": {
+                "brand": {
+                  "name": "Brand",
+                  "hostIds": [
+                    "h2",
+                    "h1"
+                  ]
+                },
+                "solo": {
+                  "name": "Solo",
+                  "hostIds": [
+                    "h3"
+                  ]
+                },
+                "bad": {
+                  "hostIds": [
+                    "h4",
+                    "h5"
+                  ]
+                }
+              }
+            },
+            "h4"
+          ],
+          "result": {
+            "awaitsConfirmation": false,
+            "declared": false,
+            "groupId": "h4",
+            "hostId": "h4",
+            "hostIds": [
+              "h4"
+            ],
+            "name": null
+          }
+        },
+        {
+          "args": [
+            {
+              "consentGroups": {
+                "a": {
+                  "name": "A",
+                  "hostIds": [
+                    "h1",
+                    "h2"
+                  ]
+                },
+                "b": {
+                  "name": "B",
+                  "hostIds": [
+                    "h2",
+                    "h3"
+                  ]
+                }
+              }
+            },
+            "h1"
+          ],
+          "result": {
+            "awaitsConfirmation": false,
+            "declared": false,
+            "groupId": "h1",
+            "hostId": "h1",
+            "hostIds": [
+              "h1"
+            ],
+            "name": null
+          }
+        },
+        {
+          "args": [
+            {
+              "consentGroups": {
+                "h1": {
+                  "name": "X",
+                  "hostIds": [
+                    "h1",
+                    "h2"
+                  ]
+                }
+              }
+            },
+            "h2"
+          ],
+          "result": {
+            "awaitsConfirmation": false,
+            "declared": false,
+            "groupId": "h2",
+            "hostId": "h2",
+            "hostIds": [
+              "h2"
+            ],
+            "name": null
+          }
+        }
+      ]
+    },
+    "crmFieldListFields": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "key": "shoe_size",
+              "label": "Shoe size",
+              "required": true,
+              "object": "contact"
+            }
+          ],
+          "result": {
+            "object": "contact",
+            "required": true,
+            "searchTokens": [
+              "s",
+              "sh",
+              "sho",
+              "shoe",
+              "si",
+              "siz",
+              "size",
+              "shoe_",
+              "shoe_s",
+              "shoe_si",
+              "shoe_siz",
+              "shoe_size"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "key": "tier",
+              "label": "Tier",
+              "object": "company"
+            }
+          ],
+          "result": {
+            "object": "company",
+            "required": false,
+            "searchTokens": [
+              "t",
+              "ti",
+              "tie",
+              "tier"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "key": "a.b-c",
+              "label": ""
+            }
+          ],
+          "result": {
+            "object": "contact",
+            "required": false,
+            "searchTokens": [
+              "a",
+              "a.",
+              "a.b",
+              "a.b-",
+              "a.b-c",
+              "b",
+              "c"
+            ]
+          }
+        }
+      ]
+    },
+    "crmReadTokens": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "org",
+            "host:h1"
+          ]
+        },
+        {
+          "args": [
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "org",
+            "host:h1",
+            "host:h2"
+          ]
+        }
+      ]
+    },
+    "crmScopeTokens": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "host:h1"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "org"
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "org"
+          ]
+        },
+        {
+          "args": [
+            {
+              "crm": {
+                "defaultRecordScope": "host"
+              }
+            },
+            {
+              "hostId": "h1",
+              "groupId": "brand",
+              "name": "Brand",
+              "hostIds": [
+                "h1",
+                "h2"
+              ],
+              "declared": true,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "host:h1",
+            "host:h2"
+          ]
+        },
+        {
+          "args": [
+            {
+              "defaultResourceScope": "org"
+            },
+            {
+              "hostId": "h1",
+              "groupId": "h1",
+              "name": null,
+              "hostIds": [
+                "h1"
+              ],
+              "declared": false,
+              "awaitsConfirmation": false
+            }
+          ],
+          "result": [
+            "org"
+          ]
+        }
+      ]
+    },
+    "defaultReplySubject": {
+      "module": "libs/plugins/inbox/src/lib/model/reply-policy.ts",
+      "cases": [
+        {
+          "args": [
+            "Lumen Studio",
+            "Contact"
+          ],
+          "result": "Re: your message to Lumen Studio"
+        },
+        {
+          "args": [
+            null,
+            "Contact"
+          ],
+          "result": "Re: your message to Contact"
+        },
+        {
+          "args": [
+            "",
+            ""
+          ],
+          "result": "Re: your message to your message"
+        },
+        {
+          "args": [
+            null,
+            null
+          ],
+          "result": "Re: your message to your message"
+        },
+        {
+          "args": [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            null
+          ],
+          "result": "Re: your message to xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
     "formatOrderMoney": {
       "module": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
       "cases": [
@@ -875,6 +1764,84 @@
         }
       ]
     },
+    "leadFunnel": {
+      "module": "libs/plugins/crm/src/lib/model/crm-reports.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "status": "new"
+              },
+              {
+                "status": "working"
+              },
+              {
+                "status": "unqualified",
+                "unqualifiedReason": "Too small"
+              },
+              {
+                "status": "unqualified",
+                "unqualifiedReason": "too  small"
+              },
+              {
+                "status": "unqualified"
+              },
+              {
+                "status": "bogus"
+              },
+              {
+                "status": "qualified"
+              }
+            ]
+          ],
+          "result": {
+            "byStatus": {
+              "new": 2,
+              "nurturing": 0,
+              "qualified": 1,
+              "unqualified": 3,
+              "working": 1
+            },
+            "open": 3,
+            "qualifiedRate": 0.14285714285714285,
+            "reasons": [
+              {
+                "count": 2,
+                "key": "too small",
+                "label": "Too small"
+              },
+              {
+                "count": 1,
+                "key": "$none",
+                "label": "No reason given"
+              }
+            ],
+            "total": 7,
+            "unqualifiedRate": 0.42857142857142855
+          }
+        },
+        {
+          "args": [
+            []
+          ],
+          "result": {
+            "byStatus": {
+              "new": 0,
+              "nurturing": 0,
+              "qualified": 0,
+              "unqualified": 0,
+              "working": 0
+            },
+            "open": 0,
+            "qualifiedRate": null,
+            "reasons": [],
+            "total": 0,
+            "unqualifiedRate": null
+          }
+        }
+      ]
+    },
     "liftLegacyOrder": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "cases": [
@@ -1105,6 +2072,94 @@
               }
             ]
           }
+        }
+      ]
+    },
+    "messageSender": {
+      "module": "libs/aglyn/src/lib/app-utils/message-search.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "Full Name": "Ada Lovelace",
+              "Email Address": "ada@example.com",
+              "message": "Hi"
+            }
+          ],
+          "result": {
+            "email": "ada@example.com",
+            "name": "Ada Lovelace"
+          }
+        },
+        {
+          "args": [
+            {
+              "first_name": "Grace",
+              "email": "grace@example.com"
+            }
+          ],
+          "result": {
+            "email": "grace@example.com",
+            "name": "Grace"
+          }
+        },
+        {
+          "args": [
+            {
+              "email": "only@example.com"
+            }
+          ],
+          "result": {
+            "email": "only@example.com"
+          }
+        },
+        {
+          "args": [
+            {
+              "Your Name": "  ",
+              "name": "Alan",
+              "E-mail": "x"
+            }
+          ],
+          "result": {
+            "email": "x",
+            "name": "Alan"
+          }
+        },
+        {
+          "args": [
+            {
+              "name": [
+                "Ada",
+                "L"
+              ],
+              "email": 42
+            }
+          ],
+          "result": {
+            "email": "42",
+            "name": "Ada L"
+          }
+        },
+        {
+          "args": [
+            {
+              "message": "no sender"
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": {}
         }
       ]
     },
@@ -2372,6 +3427,167 @@
         }
       ]
     },
+    "pipelineTotals": {
+      "module": "libs/plugins/crm/src/lib/model/crm-reports.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "status": "open",
+                "stageId": "s1",
+                "amountCents": 1000
+              },
+              {
+                "status": "open",
+                "stageId": "s2",
+                "amountCents": 2001,
+                "probability": 75
+              },
+              {
+                "status": "won",
+                "stageId": "won",
+                "amountCents": 500
+              },
+              {
+                "status": "open",
+                "stageId": "gone",
+                "amountCents": 300
+              },
+              {
+                "status": "open",
+                "stageId": "s2"
+              }
+            ],
+            {
+              "stages": [
+                {
+                  "id": "s1",
+                  "name": "One",
+                  "order": 0,
+                  "probability": 10,
+                  "kind": "open"
+                },
+                {
+                  "id": "s2",
+                  "name": "Two",
+                  "order": 1,
+                  "probability": 50,
+                  "kind": "open"
+                },
+                {
+                  "id": "won",
+                  "name": "Won",
+                  "order": 2,
+                  "probability": 100,
+                  "kind": "won"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "amountCents": 3301,
+            "count": 4,
+            "stages": [
+              {
+                "amountCents": 1000,
+                "count": 1,
+                "stage": {
+                  "id": "s1",
+                  "kind": "open",
+                  "name": "One",
+                  "order": 0,
+                  "probability": 10
+                },
+                "weightedCents": 100
+              },
+              {
+                "amountCents": 2001,
+                "count": 2,
+                "stage": {
+                  "id": "s2",
+                  "kind": "open",
+                  "name": "Two",
+                  "order": 1,
+                  "probability": 50
+                },
+                "weightedCents": 1501
+              }
+            ],
+            "unplaced": {
+              "amountCents": 300,
+              "count": 1
+            },
+            "weightedCents": 1601
+          }
+        },
+        {
+          "args": [
+            [],
+            {
+              "stages": [
+                {
+                  "id": "s1",
+                  "name": "One",
+                  "order": 0,
+                  "probability": 10,
+                  "kind": "open"
+                },
+                {
+                  "id": "s2",
+                  "name": "Two",
+                  "order": 1,
+                  "probability": 50,
+                  "kind": "open"
+                },
+                {
+                  "id": "won",
+                  "name": "Won",
+                  "order": 2,
+                  "probability": 100,
+                  "kind": "won"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "amountCents": 0,
+            "count": 0,
+            "stages": [
+              {
+                "amountCents": 0,
+                "count": 0,
+                "stage": {
+                  "id": "s1",
+                  "kind": "open",
+                  "name": "One",
+                  "order": 0,
+                  "probability": 10
+                },
+                "weightedCents": 0
+              },
+              {
+                "amountCents": 0,
+                "count": 0,
+                "stage": {
+                  "id": "s2",
+                  "kind": "open",
+                  "name": "Two",
+                  "order": 1,
+                  "probability": 50
+                },
+                "weightedCents": 0
+              }
+            ],
+            "unplaced": {
+              "amountCents": 0,
+              "count": 0
+            },
+            "weightedCents": 0
+          }
+        }
+      ]
+    },
     "productInventory": {
       "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
       "cases": [
@@ -2722,6 +3938,251 @@
             "text"
           ],
           "result": null
+        }
+      ]
+    },
+    "routingChips": {
+      "module": "libs/plugins/inbox/src/lib/model/submission-presenter.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": [
+            {
+              "color": "success",
+              "label": "Saved to Inbox"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "dataset": {
+                "id": "d",
+                "name": "Leads",
+                "recordId": "r"
+              }
+            }
+          ],
+          "result": [
+            {
+              "color": "success",
+              "label": "Saved to Inbox"
+            },
+            {
+              "color": "info",
+              "label": "Added to “Leads” dataset"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "dataset": {
+                "id": "d",
+                "recordId": "r"
+              }
+            }
+          ],
+          "result": [
+            {
+              "color": "success",
+              "label": "Saved to Inbox"
+            },
+            {
+              "color": "info",
+              "label": "Added to a dataset"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "datasetRefused": {
+                "name": "Leads",
+                "errors": {
+                  "a": "Email is not valid",
+                  "b": "Phone is too long"
+                }
+              }
+            }
+          ],
+          "result": [
+            {
+              "color": "success",
+              "label": "Saved to Inbox"
+            },
+            {
+              "color": "warning",
+              "label": "Not added to “Leads” dataset: Email is not valid; Phone is too long"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "datasetRefused": {}
+            }
+          ],
+          "result": [
+            {
+              "color": "success",
+              "label": "Saved to Inbox"
+            },
+            {
+              "color": "warning",
+              "label": "Not added to the dataset"
+            }
+          ]
+        }
+      ]
+    },
+    "sendLinkReport": {
+      "module": "libs/shared/ui/email-campaigns/src/lib/model/send-report.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "attributedClicks": 0,
+            "overflowClicks": 0,
+            "rows": [],
+            "truncated": false,
+            "unattributedClicks": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "links": {
+                "a": {
+                  "url": "https://x.test/b",
+                  "clicks": 3
+                },
+                "b": {
+                  "url": "https://x.test/a",
+                  "clicks": 3
+                },
+                "c": {
+                  "url": "https://x.test/c",
+                  "clicks": 10
+                }
+              },
+              "overflowClicks": 2,
+              "unattributedClicks": 1
+            }
+          ],
+          "result": {
+            "attributedClicks": 16,
+            "overflowClicks": 2,
+            "rows": [
+              {
+                "clicks": 10,
+                "share": {
+                  "denominator": 16,
+                  "denominatorLabel": "link clicks counted",
+                  "numerator": 10,
+                  "value": 0.625
+                },
+                "url": "https://x.test/c"
+              },
+              {
+                "clicks": 3,
+                "share": {
+                  "denominator": 16,
+                  "denominatorLabel": "link clicks counted",
+                  "numerator": 3,
+                  "value": 0.1875
+                },
+                "url": "https://x.test/a"
+              },
+              {
+                "clicks": 3,
+                "share": {
+                  "denominator": 16,
+                  "denominatorLabel": "link clicks counted",
+                  "numerator": 3,
+                  "value": 0.1875
+                },
+                "url": "https://x.test/b"
+              }
+            ],
+            "truncated": true,
+            "unattributedClicks": 1
+          }
+        }
+      ]
+    },
+    "submissionSender": {
+      "module": "libs/plugins/inbox/src/lib/model/submission-presenter.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "name": "Ada Lovelace",
+              "email": "ada@example.com"
+            }
+          ],
+          "result": {
+            "email": "ada@example.com",
+            "initials": "AL",
+            "label": "Ada Lovelace"
+          }
+        },
+        {
+          "args": [
+            {
+              "email": "priya@lumen.co"
+            }
+          ],
+          "result": {
+            "email": "priya@lumen.co",
+            "initials": "P",
+            "label": "priya@lumen.co"
+          }
+        },
+        {
+          "args": [
+            {},
+            "Contact form"
+          ],
+          "result": {
+            "initials": "CF",
+            "label": "Contact form"
+          }
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": {
+            "initials": "S",
+            "label": "Someone"
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "cher"
+            }
+          ],
+          "result": {
+            "initials": "C",
+            "label": "cher"
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Jean-Luc Picard"
+            }
+          ],
+          "result": {
+            "initials": "JL",
+            "label": "Jean-Luc Picard"
+          }
         }
       ]
     }
