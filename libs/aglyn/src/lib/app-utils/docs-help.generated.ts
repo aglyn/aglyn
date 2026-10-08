@@ -245,7 +245,7 @@ export const PLUGIN_DOCS = {
   emailPlatforms: {
     path: '/marketing-and-automation/email-campaigns/email-platforms',
     title: 'Email platforms (Mailchimp, Klaviyo, Omnisend)',
-    excerpt: 'Keep your contacts and their unsubscribes in step with your own Mailchimp, Klaviyo or Omnisend account, both ways, and send your orders to Klaviyo and Omnisend for their abandoned-cart and post-purchase flows. Rolling out.',
+    excerpt: 'Keep your contacts and their unsubscribes in step with your own Mailchimp, Klaviyo or Omnisend account, both ways, and send your orders to Klaviyo and Omnisend for their abandoned-cart and post-purchase flows.',
   },
   events: {
     path: '/content-and-data/events/overview',
@@ -395,7 +395,7 @@ export const PLUGIN_DOCS = {
   taxServices: {
     path: '/commerce-and-bookings/commerce/tax-services',
     title: 'Tax services (Avalara AvaTax and TaxJar)',
-    excerpt: 'Connect your own Avalara AvaTax or TaxJar account so checkout and the register charge the sales tax it calculates, and your paid orders and refunds are recorded there. Rolling out.',
+    excerpt: 'Connect your own Avalara AvaTax or TaxJar account so checkout and the register charge the sales tax it calculates, and your paid orders and refunds are recorded there.',
   },
   webhooks: {
     path: '/marketing-and-automation/workflows-and-actions/webhooks',
