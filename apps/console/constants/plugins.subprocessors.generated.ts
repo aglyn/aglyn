@@ -611,6 +611,48 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'print-on-demand',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "api.printful.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Printful API of the merchant’s own Printful store, connected with a private token the merchant made (`libs/plugins/print-on-demand/src/lib/providers/printful.ts`): listing and reading the store’s products and their catalog costs for import, sending, confirming, reading and canceling the merchant’s orders, and setting the store’s notice address.",
+        dataReceived: "For each paid order whose products the merchant imported from the service: the buyer’s name, shipping address, phone number and email address as the recipient, the order number, and each line’s service variant, quantity and the price the buyer paid. A test-mode order is sent as a draft that is never confirmed. Cancellations and reads of the orders sent. The merchant’s own token authenticates each call. No card or payment details are sent. When the notice address is set: the console’s webhook address, carrying the connection’s secret.",
+      },
+      {
+        host: "api.printify.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Printify API of the merchant’s own Printify shop, connected with a personal access token the merchant made (`libs/plugins/print-on-demand/src/lib/providers/printify.ts`): listing and reading the shop’s products for import, sending, sending to production, reading and canceling the merchant’s orders, and registering the shop’s webhooks.",
+        dataReceived: "For each paid order whose products the merchant imported from the service: the buyer’s name, shipping address, phone number and email address as the recipient, the order number, and each line’s service variant, quantity and the price the buyer paid. A test-mode order is sent as a draft that is never confirmed. Cancellations and reads of the orders sent. The merchant’s own token authenticates each call. No card or payment details are sent. When webhooks are registered: the console’s webhook address and the connection’s signing secret.",
+      },
+      {
+        host: "files.cdn.printful.com",
+        disposition: "not-a-subprocessor",
+        reason: "The service’s own image host. When a member imports a product, its photos are fetched from here once and copied into the site’s media library (`libs/plugins/print-on-demand/src/lib/server/media.ts`), because a published page loads images only from the site’s own addresses.",
+        dataReceived: "Nothing but a plain GET of the photo’s address the service itself gave: no customer data, no personal data and no credential.",
+      },
+      {
+        host: "images-api.printify.com",
+        disposition: "not-a-subprocessor",
+        reason: "The service’s own image host. When a member imports a product, its photos are fetched from here once and copied into the site’s media library (`libs/plugins/print-on-demand/src/lib/server/media.ts`), because a published page loads images only from the site’s own addresses.",
+        dataReceived: "Nothing but a plain GET of the photo’s address the service itself gave: no customer data, no personal data and no credential.",
+      },
+      {
+        host: "developers.printful.com",
+        disposition: "no-request",
+        reason: "A help link on the Print on demand card, to the page where a merchant makes the token they paste. Opened by the member’s own browser; no server of ours requests it.",
+        dataReceived: "Nothing from our servers.",
+      },
+      {
+        host: "printify.com",
+        disposition: "no-request",
+        reason: "A help link on the Print on demand card, to the page where a merchant makes the token they paste. Opened by the member’s own browser; no server of ours requests it.",
+        dataReceived: "Nothing from our servers.",
+      },
+    ],
+  },
+  {
     pluginId: 'sales-channels',
     subprocessors: [],
     hosts: [

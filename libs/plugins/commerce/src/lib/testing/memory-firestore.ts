@@ -25,7 +25,8 @@
  * interleave, which is what a race spec needs.
  *
  * Supports: `collection().doc()`, `get`, `set` (with `merge`), `create`,
- * `update`, `delete`; queries with `==`, `in` and `array-contains`, `orderBy`, `limit`;
+ * `update`, `delete`; queries with `==`, `in` and `array-contains`, `orderBy`, `limit`,
+ * and a collection's `count()`;
  * `runTransaction` with `get` (document or query), `set`, `update`;
  * `batch()`. Field paths are top-level only.
  */
@@ -149,6 +150,11 @@ export class MemoryCollection {
 
   limit(count: number): MemoryQuery {
     return new MemoryQuery(this.store, this.path).limit(count)
+  }
+
+  /** The aggregate: its result's `data().count`. */
+  count(): MemoryQuery {
+    return new MemoryQuery(this.store, this.path)
   }
 
   get() {
@@ -296,7 +302,8 @@ export class MemoryQuery {
     const docs = rows
       .slice(0, this.max)
       .map(([path]) => new MemoryDoc(this.store, path).snapshot())
-    return { docs, size: docs.length, empty: docs.length === 0 }
+    // `data()` answers a `count()` aggregate read through the same query.
+    return { docs, size: docs.length, empty: docs.length === 0, data: () => ({ count: docs.length }) }
   }
 
   /** The paths and versions this query matches now, to detect a changed result. */

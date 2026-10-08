@@ -2986,6 +2986,58 @@
       }
     },
     {
+      "id": "print-on-demand",
+      "package": "@aglyn/plugins-print-on-demand",
+      "register": {
+        "console": "registerPrintOnDemandConsole",
+        "consoleApi": "registerPrintOnDemandConsoleApi",
+        "serverDeclarations": "registerPrintOnDemandServerDeclarations",
+        "consoleServerDeclarations": "registerPrintOnDemandConsoleServerDeclarations",
+        "subprocessors": "printOnDemandSubprocessors"
+      },
+      "apiPrefixes": [
+        "print-on-demand"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's connection to the merchant's OWN Printful store or Printify shop, the token and webhook secret sealed (AGL-3641). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "podConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "A product imported from a service: the store product and variants it became, and what the service charges for each (AGL-3641).",
+          "name": "podProductLinks",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "The part of a paid order a service makes and ships: its status there, its costs and its parcels. No buyer address or email is kept (AGL-3641).",
+          "name": "podOrders",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 28,
+        "$comment": "Print on demand (AGL-3641): a merchant connects their OWN Printful store or Printify shop with a token made there (neither needs a developer app or partnership of Aglyn's), imports its products through core's core.product-writer, and paid orders are sent to it through commerce's order events; parcels come back through core's core.shipment-records. It never imports commerce. No `requires` edge, for the reason shipping gives; it runs only on a site where commerce is on (site-context.ts). On for every workspace, off for a site only when that site says so, and no release flag: every surface hides itself until the deployment sets PRINT_ON_DEMAND_TOKEN_KEY, the key merchants' tokens are sealed under. Aglyn holds no account with either service and adds nothing to their prices. Spocket is not offered: it has no API a merchant can connect without a partnership.",
+        "label": "Print on demand",
+        "alwaysOnForWorkspace": true,
+        "description": "Sell products your own Printful or Printify account makes and ships, with orders sent and tracking returned automatically.",
+        "siteOff": {
+          "stops": "Switching Print on demand off for this site stops new paid orders being sent to Printful or Printify, and stops imported products updating.",
+          "keeps": "The connections, the imported products and the orders already sent are kept, and parcels already on their way still reach the orders."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "orderDetail",
+            "productEditor"
+          ]
+        }
+      }
+    },
+    {
       "id": "sales-channels",
       "package": "@aglyn/plugins-sales-channels",
       "register": {

@@ -174,7 +174,7 @@ describe('org Plugins page reads the stored set (AGL-2486)', () => {
       .map(([label]) => label)
     // Not one: `forms`, `ai`, `theme-presets`, `funnels`, `shipping`,
     // `tax-engines`, `sales-channels`, `marketing-platforms`, `post-purchase`,
-    // `fulfillment-networks` and `marketplaces` are locked on for the workspace like the
+    // `fulfillment-networks`, `marketplaces` and `print-on-demand` are locked on for the workspace like the
     // component library, so they are unioned into every org's resolved set
     // and their workspace switches are on and inert.
     expect(on).toEqual([
@@ -191,6 +191,7 @@ describe('org Plugins page reads the stored set (AGL-2486)', () => {
       'Toggle Tracking and protection',
       'Toggle Fulfillment networks',
       'Toggle Marketplaces',
+      'Toggle Print on demand',
     ])
   })
 

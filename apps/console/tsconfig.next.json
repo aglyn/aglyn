@@ -200,6 +200,12 @@
       "@aglyn/plugins-workflows/*": [
         "../../libs/plugins/workflows/src/lib/*"
       ],
+      "@aglyn/plugins-print-on-demand": [
+        "../../libs/plugins/print-on-demand/src/index.ts"
+      ],
+      "@aglyn/plugins-print-on-demand/*": [
+        "../../libs/plugins/print-on-demand/src/lib/*"
+      ],
       "@aglyn/plugins-redirects": [
         "../../libs/plugins/redirects/src/index.ts"
       ],

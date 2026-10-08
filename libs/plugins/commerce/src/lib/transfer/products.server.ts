@@ -135,7 +135,7 @@ function categoryIdsBy(names: ReadonlyMap<string, string>) {
 }
 
 /** The smart collections a product's write answers (AGL-3321). */
-async function readSmartCollections(firestore: Firestore, ctx: TransferResourceContext): Promise<SmartCollectionRules[]> {
+export async function readSmartCollections(firestore: Firestore, ctx: TransferResourceContext): Promise<SmartCollectionRules[]> {
   const snapshot = await hostRefOf(firestore, ctx)
     .collection('collections')
     .where('kind', '==', 'catalog')
@@ -145,7 +145,7 @@ async function readSmartCollections(firestore: Firestore, ctx: TransferResourceC
 }
 
 /** The keys every product write derives, from the product as it will stand. */
-function derivedKeys(product: HostProduct, smart: readonly SmartCollectionRules[]): Record<string, unknown> {
+export function derivedKeys(product: HostProduct, smart: readonly SmartCollectionRules[]): Record<string, unknown> {
   return {
     ...productSearchFields(product),
     ...productStockFields(product),

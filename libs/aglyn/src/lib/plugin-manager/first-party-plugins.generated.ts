@@ -256,6 +256,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "keeps": "The connections and every order already imported are kept, and switching it back on resumes from where the orders were last read."
     }
   },
+  {
+    "id": "print-on-demand",
+    "label": "Print on demand",
+    "alwaysOnForWorkspace": true,
+    "description": "Sell products your own Printful or Printify account makes and ships, with orders sent and tracking returned automatically.",
+    "siteOff": {
+      "stops": "Switching Print on demand off for this site stops new paid orders being sent to Printful or Printify, and stops imported products updating.",
+      "keeps": "The connections, the imported products and the orders already sent are kept, and parcels already on their way still reach the orders."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -287,6 +297,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "post-purchase": "console-only",
   "fulfillment-networks": "console-only",
   "marketplaces": "console-only",
+  "print-on-demand": "console-only",
 }
 
 /**
@@ -2270,6 +2281,21 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "marketplaces",
     "name": "marketplaceOrders",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "print-on-demand",
+    "name": "podConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "print-on-demand",
+    "name": "podProductLinks",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "print-on-demand",
+    "name": "podOrders",
     "orgField": "orgId"
   },
 ]

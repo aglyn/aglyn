@@ -2419,6 +2419,26 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Print on demand (AGL-3641): a site's connection to the merchant's OWN
+    // Printful store or Printify shop, its token and webhook secret sealed;
+    // each product imported from it with its variants' costs; and the part
+    // of each paid order sent to it. Written and read by the print-on-demand
+    // plugin's server half through the Admin SDK only. Deny ALL client
+    // access, staff and the owner included: a client that could read a
+    // connection could carry off a sealed token, one that could write a link
+    // could have another product's orders made at the merchant's expense,
+    // and one that could write an order's part could mark an unsent order
+    // sent. Org erasure destroys all three by the `orgId` field.
+    match /podConnections/{connectionId} {
+      allow read, write: if false;
+    }
+    match /podProductLinks/{linkId} {
+      allow read, write: if false;
+    }
+    match /podOrders/{partId} {
+      allow read, write: if false;
+    }
+
     // Email platforms (AGL-3639): a site's connection to the merchant's OWN
     // Mailchimp, Klaviyo, Omnisend or Attentive account — its credential
     // sealed, its sync cursors and its log — and the commerce events owed to

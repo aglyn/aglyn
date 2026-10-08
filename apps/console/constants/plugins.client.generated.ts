@@ -202,6 +202,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-marketplaces'),
   },
   {
+    id: 'print-on-demand',
+    apiPrefixes: ["print-on-demand"],
+    register: {"console":"registerPrintOnDemandConsole"},
+    contributes: {"console":{"slots":["commerceSettings","orderDetail","productEditor"]}},
+    load: () => import('@aglyn/plugins-print-on-demand'),
+  },
+  {
     id: 'sales-channels',
     apiPrefixes: ["sales-channels"],
     register: {"console":"registerSalesChannelsConsole"},
