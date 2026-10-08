@@ -502,6 +502,9 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var fulfillmentMethod: OrderFulfillmentMethod?
   public var fulfillments: [OrderFulfillment]?
   public var invoiceId: String?
+  public var kioskDeviceId: String?
+  public var kioskQueuedAtMs: Double?
+  public var kioskQueueRegisterId: String?
   public var lineItems: [OrderLineItem]?
   public var localDelivery: OrderLocalDelivery?
   public var locationId: String?
@@ -513,6 +516,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var paymentRisk: PaymentRisk?
   public var payments: [OrderPayment]?
   public var pickup: OrderPickup?
+  public var posSource: String?
   public var productId: String?
   public var receiptRequest: HostOrderReceiptRequest?
   public var refundedCents: Double?
@@ -528,7 +532,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var totals: OrderTotals?
   public var unresolvedLines: [OrderUnresolvedLine]?
 
-  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, credits: [OrderCredit]? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillmentMethod: OrderFulfillmentMethod? = nil, fulfillments: [OrderFulfillment]? = nil, invoiceId: String? = nil, lineItems: [OrderLineItem]? = nil, localDelivery: OrderLocalDelivery? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, offline: PosOfflineOrderStamp? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, pickup: OrderPickup? = nil, productId: String? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: HostOrderTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil) {
+  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, credits: [OrderCredit]? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillmentMethod: OrderFulfillmentMethod? = nil, fulfillments: [OrderFulfillment]? = nil, invoiceId: String? = nil, kioskDeviceId: String? = nil, kioskQueuedAtMs: Double? = nil, kioskQueueRegisterId: String? = nil, lineItems: [OrderLineItem]? = nil, localDelivery: OrderLocalDelivery? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, offline: PosOfflineOrderStamp? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, pickup: OrderPickup? = nil, posSource: String? = nil, productId: String? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: HostOrderTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil) {
     self.amountCents = amountCents
     self.billingAddress = billingAddress
     self.buyerNotifications = buyerNotifications
@@ -552,6 +556,9 @@ public struct HostOrder: Codable, Hashable, Sendable {
     self.fulfillmentMethod = fulfillmentMethod
     self.fulfillments = fulfillments
     self.invoiceId = invoiceId
+    self.kioskDeviceId = kioskDeviceId
+    self.kioskQueuedAtMs = kioskQueuedAtMs
+    self.kioskQueueRegisterId = kioskQueueRegisterId
     self.lineItems = lineItems
     self.localDelivery = localDelivery
     self.locationId = locationId
@@ -563,6 +570,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
     self.paymentRisk = paymentRisk
     self.payments = payments
     self.pickup = pickup
+    self.posSource = posSource
     self.productId = productId
     self.receiptRequest = receiptRequest
     self.refundedCents = refundedCents
@@ -2007,6 +2015,228 @@ public struct PickupLocationSettings: Codable, Hashable, Sendable {
 }
 
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PosDeviceMode: String, Codable, CaseIterable, Hashable, Sendable {
+  case display = "display"
+  case kiosk = "kiosk"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct PosKioskCatalog: Codable, Hashable, Sendable {
+  public var categories: [PosKioskCategory]
+  public var currency: String
+  public var products: [PosKioskProduct]
+
+  public init(categories: [PosKioskCategory], currency: String, products: [PosKioskProduct]) {
+    self.categories = categories
+    self.currency = currency
+    self.products = products
+  }
+}
+
+public struct PosKioskCategory: Codable, Hashable, Sendable {
+  public var id: String
+  public var name: String
+
+  public init(id: String, name: String) {
+    self.id = id
+    self.name = name
+  }
+}
+
+public struct PosKioskContext: Codable, Hashable, Sendable {
+  public var branding: PosKioskContextBranding
+  public var currency: String
+  public var idleSeconds: Int
+  public var offerMarketing: Bool
+  public var payments: PosKioskContextPayments
+  public var receipts: [PosReceiptChannel]
+  public var testMode: Bool
+  public var tipping: PosKioskContextTipping
+
+  public init(branding: PosKioskContextBranding, currency: String, idleSeconds: Int, offerMarketing: Bool, payments: PosKioskContextPayments, receipts: [PosReceiptChannel], testMode: Bool, tipping: PosKioskContextTipping) {
+    self.branding = branding
+    self.currency = currency
+    self.idleSeconds = idleSeconds
+    self.offerMarketing = offerMarketing
+    self.payments = payments
+    self.receipts = receipts
+    self.testMode = testMode
+    self.tipping = tipping
+  }
+}
+
+public struct PosKioskContextBranding: Codable, Hashable, Sendable {
+  public var logoDarkUrl: String?
+  public var logoUrl: String?
+  public var message: String
+  public var name: String
+
+  public init(logoDarkUrl: String? = nil, logoUrl: String? = nil, message: String, name: String) {
+    self.logoDarkUrl = logoDarkUrl
+    self.logoUrl = logoUrl
+    self.message = message
+    self.name = name
+  }
+}
+
+public struct PosKioskContextPayments: Codable, Hashable, Sendable {
+  public var cardPresent: Bool
+  public var payAtCounter: Bool
+  public var reader: Bool
+
+  public init(cardPresent: Bool, payAtCounter: Bool, reader: Bool) {
+    self.cardPresent = cardPresent
+    self.payAtCounter = payAtCounter
+    self.reader = reader
+  }
+}
+
+public struct PosKioskContextTipping: Codable, Hashable, Sendable {
+  public var enabled: Bool
+  public var percentages: [Double]
+
+  public init(enabled: Bool, percentages: [Double]) {
+    self.enabled = enabled
+    self.percentages = percentages
+  }
+}
+
+public struct PosKioskLine: Codable, Hashable, Sendable {
+  public var modifiers: [ModifierSelection]?
+  public var productId: String
+  public var quantity: Int
+  public var variantId: String?
+
+  public init(modifiers: [ModifierSelection]? = nil, productId: String, quantity: Int, variantId: String? = nil) {
+    self.modifiers = modifiers
+    self.productId = productId
+    self.quantity = quantity
+    self.variantId = variantId
+  }
+}
+
+public struct PosKioskProduct: Codable, Hashable, Sendable {
+  public var categoryIds: [String]
+  public var description: String?
+  public var id: String
+  public var imageUrl: String?
+  public var modifierGroups: [ProductModifierGroup]
+  public var name: String
+  public var options: [PosKioskProductOptionsItem]
+  public var variants: [PosKioskVariant]
+
+  public init(categoryIds: [String], description: String? = nil, id: String, imageUrl: String? = nil, modifierGroups: [ProductModifierGroup], name: String, options: [PosKioskProductOptionsItem], variants: [PosKioskVariant]) {
+    self.categoryIds = categoryIds
+    self.description = description
+    self.id = id
+    self.imageUrl = imageUrl
+    self.modifierGroups = modifierGroups
+    self.name = name
+    self.options = options
+    self.variants = variants
+  }
+}
+
+public struct PosKioskProductOptionsItem: Codable, Hashable, Sendable {
+  public var name: String
+  public var values: [String]
+
+  public init(name: String, values: [String]) {
+    self.name = name
+    self.values = values
+  }
+}
+
+public struct PosKioskSale: Codable, Hashable, Sendable {
+  public var discountCents: Int
+  public var dueCents: Int
+  public var itemsCents: Int
+  public var lines: [PosKioskSaleLine]
+  public var number: Int
+  public var orderId: String
+  public var paidCents: Int
+  public var payment: PosKioskSalePayment?
+  public var status: PosKioskSaleStatus
+  public var taxCents: Int
+  public var tipCents: Int
+  public var totalCents: Int
+
+  public init(discountCents: Int, dueCents: Int, itemsCents: Int, lines: [PosKioskSaleLine], number: Int, orderId: String, paidCents: Int, payment: PosKioskSalePayment? = nil, status: PosKioskSaleStatus, taxCents: Int, tipCents: Int, totalCents: Int) {
+    self.discountCents = discountCents
+    self.dueCents = dueCents
+    self.itemsCents = itemsCents
+    self.lines = lines
+    self.number = number
+    self.orderId = orderId
+    self.paidCents = paidCents
+    self.payment = payment
+    self.status = status
+    self.taxCents = taxCents
+    self.tipCents = tipCents
+    self.totalCents = totalCents
+  }
+}
+
+public struct PosKioskSaleLine: Codable, Hashable, Sendable {
+  public var amountCents: Int
+  public var name: String
+  public var quantity: Int
+  public var variantLabel: String?
+
+  public init(amountCents: Int, name: String, quantity: Int, variantLabel: String? = nil) {
+    self.amountCents = amountCents
+    self.name = name
+    self.quantity = quantity
+    self.variantLabel = variantLabel
+  }
+}
+
+public struct PosKioskSalePayment: Codable, Hashable, Sendable {
+  public var failureMessage: String?
+  public var id: String
+  public var status: String
+
+  public init(failureMessage: String? = nil, id: String, status: String) {
+    self.failureMessage = failureMessage
+    self.id = id
+    self.status = status
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PosKioskSaleStatus: String, Codable, CaseIterable, Hashable, Sendable {
+  case `open` = "open"
+  case paid = "paid"
+  case queued = "queued"
+  case voided = "voided"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct PosKioskVariant: Codable, Hashable, Sendable {
+  public var id: String
+  public var options: [String: String]
+  public var priceCents: Int
+  public var soldOut: Bool
+
+  public init(id: String, options: [String: String], priceCents: Int, soldOut: Bool) {
+    self.id = id
+    self.options = options
+    self.priceCents = priceCents
+    self.soldOut = soldOut
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum PosOfflineFlag: String, Codable, CaseIterable, Hashable, Sendable {
   case cashShort = "cash-short"
   case cashierUnverified = "cashier-unverified"
@@ -2712,6 +2942,17 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let outreachSequenceNameMax: Int
   public let outreachTaskTitleMax: Int
   public let paymentAcceptedMaxLength: Int
+  public let posKioskCatalogLimit: Int
+  public let posKioskDoneSeconds: Int
+  public let posKioskIdleSecondsDefault: Int
+  public let posKioskIdleSecondsMax: Int
+  public let posKioskIdleSecondsMin: Int
+  public let posKioskIdleWarningSeconds: Int
+  public let posKioskMaxLines: Int
+  public let posKioskMaxQuantity: Int
+  public let posKioskUnlockLockoutMs: Double
+  public let posKioskUnlockMaxAttempts: Int
+  public let posKioskUnlockTtlMs: Double
   public let posOfflineClockSkewMs: Double
   public let posOfflineDisabledTenders: [String: String]
   public let posOfflineFlagLabels: [String: String]
@@ -2870,6 +3111,17 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case outreachSequenceNameMax = "OUTREACH_SEQUENCE_NAME_MAX"
     case outreachTaskTitleMax = "OUTREACH_TASK_TITLE_MAX"
     case paymentAcceptedMaxLength = "PAYMENT_ACCEPTED_MAX_LENGTH"
+    case posKioskCatalogLimit = "POS_KIOSK_CATALOG_LIMIT"
+    case posKioskDoneSeconds = "POS_KIOSK_DONE_SECONDS"
+    case posKioskIdleSecondsDefault = "POS_KIOSK_IDLE_SECONDS_DEFAULT"
+    case posKioskIdleSecondsMax = "POS_KIOSK_IDLE_SECONDS_MAX"
+    case posKioskIdleSecondsMin = "POS_KIOSK_IDLE_SECONDS_MIN"
+    case posKioskIdleWarningSeconds = "POS_KIOSK_IDLE_WARNING_SECONDS"
+    case posKioskMaxLines = "POS_KIOSK_MAX_LINES"
+    case posKioskMaxQuantity = "POS_KIOSK_MAX_QUANTITY"
+    case posKioskUnlockLockoutMs = "POS_KIOSK_UNLOCK_LOCKOUT_MS"
+    case posKioskUnlockMaxAttempts = "POS_KIOSK_UNLOCK_MAX_ATTEMPTS"
+    case posKioskUnlockTtlMs = "POS_KIOSK_UNLOCK_TTL_MS"
     case posOfflineClockSkewMs = "POS_OFFLINE_CLOCK_SKEW_MS"
     case posOfflineDisabledTenders = "POS_OFFLINE_DISABLED_TENDERS"
     case posOfflineFlagLabels = "POS_OFFLINE_FLAG_LABELS"

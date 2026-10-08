@@ -220,6 +220,15 @@ export function posDisplayCall<T = any>(
   return call<T>(user, '/api/commerce/pos-display', body, { method })
 }
 
+/** The register's side of the self-service kiosk (AGL-3623): its queue of "pay at counter" orders. */
+export function posKioskCall<T = any>(
+  user: User,
+  body: Record<string, unknown>,
+  method: 'GET' | 'POST' = 'POST',
+) {
+  return call<T>(user, '/api/commerce/pos-kiosk', body, { method })
+}
+
 export function posReadersCall<T = any>(user: User, body: Record<string, unknown>) {
   return call<T>(user, '/api/commerce/pos-readers', body)
 }

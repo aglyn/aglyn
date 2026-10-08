@@ -10,7 +10,16 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — buy online, pick up in store, and local delivery (newest)
+## October 2026 — a self-service kiosk (newest)
+
+- **[Self-service kiosk](commerce-and-bookings/commerce/pos-and-reservations.md#self-service-kiosk)** —
+  pair a tablet to a register and let customers order themselves: products by
+  category with their sizes and modifiers, the total with tax, a tip, and payment on
+  the register's card reader, or an order number to pay at the counter. Orders sent
+  to the counter wait on the register under **Kiosk orders**. An idle kiosk clears the
+  customer's order and details, and staff unlock it with their register PIN.
+
+## October 2026 — buy online, pick up in store, and local delivery
 
 - **[Pick up in store](commerce-and-bookings/commerce/pickup-and-local-delivery.md#set-up-pickup)** —
   turn on pickup for any of your locations, with its hours and arrival instructions,

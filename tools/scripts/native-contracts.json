@@ -487,6 +487,33 @@
         "LOCAL_FULFILLMENT_QUEUE_LIMIT",
         "LOCAL_FULFILLMENT_QUEUE_FIELDS"
       ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-pos-kiosk.ts": {
+      "types": [
+        "PosDeviceMode",
+        "PosKioskProduct",
+        "PosKioskVariant",
+        "PosKioskCategory",
+        "PosKioskCatalog",
+        "PosKioskContext",
+        "PosKioskLine",
+        "PosKioskSaleLine",
+        "PosKioskSaleStatus",
+        "PosKioskSale"
+      ],
+      "values": [
+        "POS_KIOSK_IDLE_SECONDS_DEFAULT",
+        "POS_KIOSK_IDLE_SECONDS_MIN",
+        "POS_KIOSK_IDLE_SECONDS_MAX",
+        "POS_KIOSK_IDLE_WARNING_SECONDS",
+        "POS_KIOSK_DONE_SECONDS",
+        "POS_KIOSK_MAX_LINES",
+        "POS_KIOSK_MAX_QUANTITY",
+        "POS_KIOSK_CATALOG_LIMIT",
+        "POS_KIOSK_UNLOCK_MAX_ATTEMPTS",
+        "POS_KIOSK_UNLOCK_LOCKOUT_MS",
+        "POS_KIOSK_UNLOCK_TTL_MS"
+      ]
     }
   },
   "ints": [
@@ -507,7 +534,20 @@
     "EventStoredFields.endsAtMs",
     "DeviceSplitEntry.count",
     "DeviceSplitEntry.percent",
-    "ScreenTrafficRow.total"
+    "ScreenTrafficRow.total",
+    "PosKioskContext.idleSeconds",
+    "PosKioskLine.quantity",
+    "PosKioskSale.discountCents",
+    "PosKioskSale.dueCents",
+    "PosKioskSale.itemsCents",
+    "PosKioskSale.number",
+    "PosKioskSale.paidCents",
+    "PosKioskSale.taxCents",
+    "PosKioskSale.tipCents",
+    "PosKioskSale.totalCents",
+    "PosKioskSaleLine.amountCents",
+    "PosKioskSaleLine.quantity",
+    "PosKioskVariant.priceCents"
   ],
   "json": [
     "ListQueryFilter.value",
@@ -526,7 +566,12 @@
     "TenantEmailEntry",
     "OrderPickup",
     "OrderLocalDelivery",
-    "PickupLocationSettings"
+    "PickupLocationSettings",
+    "PosKioskProduct.description",
+    "PosKioskProduct.imageUrl",
+    "PosKioskLine.variantId",
+    "PosKioskLine.modifiers",
+    "PosKioskSaleLine.variantLabel"
   ],
   "listQueryCases": {
     "ORDER_LIST_QUERY": {},

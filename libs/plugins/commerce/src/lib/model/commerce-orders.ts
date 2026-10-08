@@ -453,6 +453,18 @@ export interface HostOrder {
   /** How the customer asked for their receipt at the register (AGL-3608). */
   receiptRequest?: { channel: 'email' | 'sms' | 'print' | 'none'; to?: string; atMs: number }
   /**
+   * A register sale a customer built at a self-service kiosk (AGL-3623), and
+   * the kiosk (its device token's hash prefix).
+   */
+  posSource?: 'kiosk'
+  kioskDeviceId?: string
+  /**
+   * Set while a kiosk order waits in its register's queue for a cashier to
+   * take payment ("Pay at counter"), and when it joined.
+   */
+  kioskQueueRegisterId?: string
+  kioskQueuedAtMs?: number
+  /**
    * The register discount that was applied, and the member who applied it
    * (AGL-2161). Present only on a POS order that carries a discount.
    *

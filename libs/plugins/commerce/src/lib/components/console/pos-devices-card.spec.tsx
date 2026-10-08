@@ -103,7 +103,7 @@ describe('the POS devices card', () => {
     await waitFor(() => expect(calls.some((call) => call.body?.action === 'list')).toBe(true))
     expect(screen.queryByText('Add card reader')).toBeNull()
     expect(screen.queryByText('Card readers')).toBeNull()
-    expect(screen.getByText('Customer displays')).toBeTruthy()
+    expect(screen.getByText('Customer displays and kiosks')).toBeTruthy()
   })
 
   it('adds a reader with its code, register and the store address the first time', async () => {
