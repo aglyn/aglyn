@@ -251,7 +251,7 @@ data class SendingView(
 
 /** The Emails hub: the console's sections as chips over the chosen one. */
 @Composable
-fun EmailHubScreen(context: NativePluginContext, initialSection: EmailSection, initial: String? = null) {
+fun EmailHubScreen(context: NativePluginContext, initialSection: EmailSection, initial: String? = null, composeCampaign: String? = null) {
   val orgId = context.orgId ?: return
   val hostId = context.hostId ?: return
   var section by rememberSaveable { mutableStateOf(initialSection) }
@@ -264,7 +264,7 @@ fun EmailHubScreen(context: NativePluginContext, initialSection: EmailSection, i
       Modifier.padding(horizontal = space(2f), vertical = space(1f)).testTag("email-sections"),
     )
     when (section) {
-      EmailSection.MESSAGES -> EmailsScreen(context, initial)
+      EmailSection.MESSAGES -> EmailsScreen(context, initial, composeCampaign)
       EmailSection.TEMPLATES -> TemplatesSection(context, actions)
       EmailSection.AUDIENCES -> AudiencesSection(context, actions, initial)
       EmailSection.TOPICS -> TopicsSection(context, actions)

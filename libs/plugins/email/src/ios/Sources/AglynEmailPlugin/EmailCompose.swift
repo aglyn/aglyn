@@ -208,6 +208,7 @@ struct ComposeSheet: View {
   let context: NativePluginContext
   let send: EmailSend?
   let siteName: String?
+  var campaignID: String?
   @Environment(\.dismiss) private var dismiss
   @State private var draft = ComposeDraft()
   @State private var options = ComposeOptions()
@@ -323,7 +324,7 @@ struct ComposeSheet: View {
       .task {
         guard !seeded, let orgID = context.orgID, let hostID = context.hostID else { return }
         seeded = true
-        if let send { draft = ComposeDraft(send) }
+        if let send { draft = ComposeDraft(send) } else if let campaignID { draft.campaignID = campaignID }
         if draft.fromName.isEmpty, let siteName { draft.fromName = siteName }
         options.start(context.firestore, orgID: orgID, hostID: hostID)
         options.senders = SendingView(try? await context.api.request(sendingIdentityRoute, query: [("hostId", hostID)])).senders

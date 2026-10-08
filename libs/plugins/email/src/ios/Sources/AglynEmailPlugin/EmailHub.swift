@@ -240,6 +240,8 @@ struct EmailHubScreen: View {
   let context: NativePluginContext
   @State var section: EmailSection
   var initial: String?
+  /// Opens the composer on arrival, filing the new email under this campaign (a campaign's "Write an email").
+  var composeCampaign: String?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -248,7 +250,7 @@ struct EmailHubScreen: View {
         if let orgID = context.orgID, let hostID = context.hostID {
           let actions = EmailActions(context: context, orgID: orgID, hostID: hostID)
           switch section {
-          case .messages: EmailsScreen(context: context, initial: initial)
+          case .messages: EmailsScreen(context: context, initial: initial, composeCampaign: composeCampaign)
           case .templates: TemplatesSection(context: context, actions: actions)
           case .audiences: AudiencesSection(context: context, actions: actions, initial: initial)
           case .topics: TopicsSection(context: context, actions: actions)

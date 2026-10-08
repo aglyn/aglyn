@@ -42,6 +42,7 @@ final class SiteRoleModel {
 struct EmailsScreen: View {
   let context: NativePluginContext
   var initial: String?
+  var composeCampaign: String?
   @State private var list = LiveQueryList(pageSize: emailsPageSize, map: emailSend)
   @State private var role = SiteRoleModel()
   @State private var status = "all"
@@ -86,7 +87,8 @@ struct EmailsScreen: View {
         }
       }
     }
-    .sheet(isPresented: $composing) { ComposeSheet(context: context, send: nil, siteName: role.siteName) }
+    .sheet(isPresented: $composing) { ComposeSheet(context: context, send: nil, siteName: role.siteName, campaignID: composeCampaign) }
+    .task(id: composeCampaign) { if composeCampaign != nil { composing = true } }
     .task(id: "\(status)|\(search)|\(context.hostID ?? "")") {
       role.start(context)
       if selection == nil { selection = initial }

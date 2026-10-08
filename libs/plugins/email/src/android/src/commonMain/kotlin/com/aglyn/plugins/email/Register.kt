@@ -13,7 +13,7 @@ import com.aglyn.pluginhost.NativePluginRegistrar
 fun registerEmailNative(r: NativePluginRegistrar) {
   for (section in EmailSection.entries) {
     r.screen(section.screen, title = if (section == EmailSection.MESSAGES) "Emails" else section.label, requiresSite = true, icon = section.icon) { context, params ->
-      EmailHubScreen(context, section, params["message"] ?: params["list"] ?: params["id"])
+      EmailHubScreen(context, section, params["message"] ?: params["list"] ?: params["id"], params["campaign"])
     }
   }
   r.quickAction("email.open", "Emails", "mail", 64, requiresSite = true, screen = EmailSection.MESSAGES.screen)

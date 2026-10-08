@@ -89,7 +89,7 @@ internal fun rememberCanSend(context: NativePluginContext): Boolean {
 
 /** A site's emails: Status chips and a subject search, newest first; the picked email beside the list on wide windows. */
 @Composable
-fun EmailsScreen(context: NativePluginContext, initial: String? = null) {
+fun EmailsScreen(context: NativePluginContext, initial: String? = null, composeCampaign: String? = null) {
   val orgId = context.orgId ?: return
   val hostId = context.hostId ?: return
   val coroutines = rememberCoroutineScope()
@@ -97,7 +97,7 @@ fun EmailsScreen(context: NativePluginContext, initial: String? = null) {
   var status by rememberSaveable { mutableStateOf("all") }
   var search by rememberSaveable { mutableStateOf("") }
   var asked by rememberSaveable { mutableStateOf("") }
-  var composing by remember { mutableStateOf(false) }
+  var composing by remember(composeCampaign) { mutableStateOf(composeCampaign != null) }
   val canSend = rememberCanSend(context)
   LaunchedEffect(list, status, asked) { list.show { emailsQuery(orgId, hostId, status, asked, it) } }
   val now = remember { nowMillis() }
@@ -140,7 +140,7 @@ fun EmailsScreen(context: NativePluginContext, initial: String? = null) {
       else EmailDetail(context, orgId, hostId, selected, canSend)
     },
   )
-  if (composing) ComposeDialog(context, null, onDismiss = { composing = false })
+  if (composing) ComposeDialog(context, null, onDismiss = { composing = false }, campaignId = composeCampaign)
 }
 
 private enum class SendDialog { SEND_NOW, FOLLOW_UP, CANCEL, TEST, RENAME, EDIT }

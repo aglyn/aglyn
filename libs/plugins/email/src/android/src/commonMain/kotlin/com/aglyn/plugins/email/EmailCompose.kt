@@ -201,14 +201,14 @@ private fun nameOf(doc: FirestoreDoc, key: String): String = doc.string(key)?.ta
 
 /** Writes a new email, or edits a draft or scheduled one, the way the console's composer does. */
 @Composable
-fun ComposeDialog(context: NativePluginContext, send: EmailSend?, onDismiss: () -> Unit, siteName: String? = null) {
+fun ComposeDialog(context: NativePluginContext, send: EmailSend?, onDismiss: () -> Unit, siteName: String? = null, campaignId: String? = null) {
   val orgId = context.orgId ?: return
   val hostId = context.hostId ?: return
   val coroutines = rememberCoroutineScope()
   val busy = remember { Busy() }
   val api = remember(hostId, context.api) { CampaignSendApi(context.api, hostId) }
   var draft by remember {
-    mutableStateOf(send?.let(ComposeDraft::of) ?: ComposeDraft(fromName = siteName.orEmpty()))
+    mutableStateOf(send?.let(ComposeDraft::of) ?: ComposeDraft(fromName = siteName.orEmpty(), campaignId = campaignId.orEmpty()))
   }
   var preview by remember { mutableStateOf<AudiencePreview?>(null) }
   var confirming by remember { mutableStateOf(false) }
