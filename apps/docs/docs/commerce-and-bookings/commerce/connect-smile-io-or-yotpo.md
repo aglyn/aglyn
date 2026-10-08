@@ -42,8 +42,10 @@ credit you gave by hand stays spendable.
 3. Select **Connect**. Aglyn checks the credentials with the service before it keeps
    them, and stores the API key encrypted.
 
-If members already hold points in the built-in program, Aglyn asks before it replaces
-them: from then on each member's balance is the one in your Smile.io or Yotpo account.
+If members already hold points in the built-in program, Aglyn asks you to confirm
+first. While the account is connected, each member's balance is the one in your
+Smile.io or Yotpo account; their built-in points are set aside, not spent or erased, and
+come back exactly if you disconnect. Store credit is never changed.
 
 Your store's **Points per dollar spent**, **Points for $1 off** and **Points needed to
 redeem** still decide what each order earns and what points are worth at checkout.
@@ -69,6 +71,7 @@ them, the balance goes to zero and the rest is noted on the movement.
 
 ## Disconnect
 
-Select **Disconnect** on the card. Rewards turns off, and members keep their points in
-your Smile.io or Yotpo account. If you turn the built-in program on again later, every
-member starts at zero points.
+Select **Disconnect** on the card and confirm. Rewards turns off. Points members earned
+in your Smile.io or Yotpo account stay there, each member's built-in points go back to
+exactly what they were when you connected, and store credit is unchanged. Turn Rewards
+on again to run the built-in program with those balances.

@@ -50,6 +50,11 @@ is found again by the reference it left in the vendor's own history. A member's
 balance is the vendor's, refreshed into the member document whenever a code or
 a cashier names them. Test-mode sales move no real points.
 
+Connecting never spends or erases built-in points: each member's are parked on
+their own document (`parked`, `parkedPoints`) while `points` mirrors the
+account, and disconnecting (a confirm step) restores exactly what was parked.
+Store credit is never touched by either.
+
 ## Storage
 
 Server-only, under `orgs/{orgId}`: `loyaltyPrograms/{hostId}`,

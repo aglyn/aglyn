@@ -65,6 +65,11 @@ export function normalizeStoredMember(
     createdAtMs: Number(source['createdAtMs']) || 0,
     updatedAtMs: Number(source['updatedAtMs']) || 0,
     lastOrderAtMs: Number(source['lastOrderAtMs']) || null,
+    // Built-in points set aside while a connected account owns the balance
+    // (AGL-3677): carried through every whole-document write, never dropped.
+    ...(source['parked'] === true
+      ? { parked: true, parkedPoints: Math.trunc(Number(source['parkedPoints']) || 0) }
+      : {}),
   }
 }
 

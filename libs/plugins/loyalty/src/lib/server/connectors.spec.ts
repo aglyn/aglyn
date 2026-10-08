@@ -408,7 +408,8 @@ describe('connecting an account (AGL-3677)', () => {
     expect(program()?.['connected']).toBeNull()
 
     expect((await connect('yotpo', { replaceBalances: true })).status).toBe(200)
-    expect(memberDoc('pat@example.com')).toMatchObject({ points: 0 })
+    // Set aside, not spent: the mirror starts at zero, the built-in points are parked.
+    expect(memberDoc('pat@example.com')).toMatchObject({ points: 0, parked: true, parkedPoints: 800 })
     expect(program()?.['connected']).toBe('yotpo')
   })
 
@@ -628,7 +629,11 @@ describe('disconnecting and erasure (AGL-3677)', () => {
     authOk = false
     await earnForOrder(envelope({ order: order() }))
     authOk = true
-    const answer = await (await call({ action: 'disconnect' })).json()
+    const refused = await call({ action: 'disconnect' })
+    expect(refused.status).toBe(409)
+    await expect(refused.json()).resolves.toMatchObject({ confirmRequired: true })
+    expect(program()?.['connected']).toBe('yotpo')
+    const answer = await (await call({ action: 'disconnect', confirm: true })).json()
     expect(answer.connection).toBeNull()
     expect(db.docs.get(`orgs/${ORG}/loyaltyConnections/${HOST}`)).toBeUndefined()
     expect(program()).toMatchObject({ connected: null, enabled: false })
@@ -637,6 +642,49 @@ describe('disconnecting and erasure (AGL-3677)', () => {
     calls = []
     expect(await sendLoyaltySync({ orgId: ORG, hostId: HOST, force: true })).toEqual({ sent: 0, failed: 0 })
     expect(calls).toHaveLength(0)
+  })
+
+  it('never destroys built-in balances: connect → earn at the vendor → disconnect gives back exactly what members held, and store credit is untouched', async () => {
+    await seedMember('pat@example.com', { points: 800, creditCents: 2_500, lifetimePoints: 900 })
+    await seedMember('sam@example.com', { points: -20, creditCents: 0, rewardsCode: 'RW-SSSS-SSSS-SSSS' })
+    members.set('pat@example.com', { id: '1', email: 'pat@example.com', points: 3_000, history: [] })
+    expect((await connect('yotpo', { replaceBalances: true })).status).toBe(200)
+
+    // While connected the balance is the account's, and an order earns there.
+    const account = await resolveLoyaltyCredit({ hostId: HOST, code: 'RW-AAAA-BBBB-CCCC', channel: 'online', customerEmail: null, staff: false })
+    expect(account).toMatchObject({ ok: true })
+    expect(memberDoc('pat@example.com')).toMatchObject({ points: 3_000, parkedPoints: 800, creditCents: 2_500 })
+    await earnForOrder(envelope({ order: order() }))
+    expect(members.get('pat@example.com')?.points).toBe(3_450)
+
+    // Switching accounts keeps what was parked at the first connect.
+    await connect('smile', { replaceBalances: true })
+    expect(memberDoc('pat@example.com')).toMatchObject({ points: 0, parkedPoints: 800 })
+
+    await call({ action: 'disconnect', confirm: true })
+    const pat = memberDoc('pat@example.com')!
+    expect(pat).toMatchObject({ points: 800, creditCents: 2_500 })
+    expect(pat).not.toHaveProperty('parked')
+    expect(pat).not.toHaveProperty('parkedPoints')
+    expect(memberDoc('sam@example.com')).toMatchObject({ points: -20, creditCents: 0 })
+    // What was earned at the vendor stays at the vendor.
+    expect(members.get('pat@example.com')?.points).toBe(3_450)
+  })
+
+  it('a member written whole while parked keeps what was parked', async () => {
+    await seedMember('pat@example.com', { points: 800 })
+    await connect('yotpo', { replaceBalances: true })
+    members.set('pat@example.com', { id: '1', email: 'pat@example.com', points: 0, history: [] })
+    await memberRoute(
+      new Request(`https://console.test/api/loyalty/member`, {
+        method: 'POST',
+        headers: { authorization: 'Bearer tok-admin', 'content-type': 'application/json', 'idempotency-key': 'p' },
+        body: JSON.stringify({ hostId: HOST, memberId: memberKeyFor(HOST, 'pat@example.com'), points: 10, creditCents: 100 }),
+      }),
+    )
+    expect(memberDoc('pat@example.com')).toMatchObject({ parked: true, parkedPoints: 800, creditCents: 100 })
+    await call({ action: 'disconnect', confirm: true })
+    expect(memberDoc('pat@example.com')).toMatchObject({ points: 800, creditCents: 100 })
   })
 
   it('erasing a person erases the movements that name their address', async () => {

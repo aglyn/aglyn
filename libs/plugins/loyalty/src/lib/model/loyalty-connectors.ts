@@ -196,6 +196,10 @@ export function loyaltyOrderIsTestMode(
   return /^cs_test_/.test(id)
 }
 
+/** What disconnecting does, in the words the card's confirm step and the route's refusal both say. */
+export const LOYALTY_DISCONNECT_EXPLANATION =
+  'Disconnecting turns Rewards off. Points members earned in your connected account stay there. Each member’s built-in points go back to exactly what they were when you connected, and store credit is unchanged.'
+
 /** The last four characters of a secret, for the card. */
 export function secretLast4(secret: string): string {
   const value = String(secret ?? '')

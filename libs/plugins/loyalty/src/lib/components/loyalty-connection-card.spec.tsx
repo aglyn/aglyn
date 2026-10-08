@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { LOYALTY_PROGRAM_DEFAULTS } from '../model/loyalty-program'
 import { LoyaltyConnectionCard } from './loyalty-connection-card.component'
 import { LoyaltyProgramCard } from './loyalty-program-card.component'
@@ -111,7 +111,7 @@ describe('LoyaltyConnectionCard', () => {
     render(<LoyaltyConnectionCard hostId="host-1" />)
     const connect = (await screen.findByRole('button', { name: 'Connect' })) as HTMLButtonElement
     expect(connect.disabled).toBe(true)
-    fireEvent.click(screen.getByLabelText(/Replace the 2,500 built-in points/))
+    fireEvent.click(screen.getByLabelText(/The 2,500 built-in points members hold are set aside/))
     expect(connect.disabled).toBe(false)
   })
 
@@ -126,8 +126,18 @@ describe('LoyaltyConnectionCard', () => {
       expect(request).toHaveBeenLastCalledWith('loyalty/connection', { body: { hostId: 'host-1', action: 'retry' } }),
     )
     expect(await screen.findByText('Everything has been sent.')).toBeTruthy()
-    request.mockResolvedValueOnce({ configured: true, connection: null, attention: [], builtInPoints: 0 })
     fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }))
+    // A confirm step says what happens before anything is sent.
+    expect(await screen.findByText(/built-in points go back to exactly what they were/)).toBeTruthy()
+    expect(request).toHaveBeenCalledTimes(2)
+    request.mockResolvedValueOnce({ configured: true, connection: null, attention: [], builtInPoints: 0 })
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Disconnect' }))
+    await waitFor(() =>
+      expect(request).toHaveBeenLastCalledWith('loyalty/connection', {
+        body: { hostId: 'host-1', action: 'disconnect', confirm: true },
+      }),
+    )
     expect(await screen.findByText('Rewards account')).toBeTruthy()
   })
 })

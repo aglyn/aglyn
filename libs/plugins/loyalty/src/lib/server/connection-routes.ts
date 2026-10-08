@@ -19,6 +19,7 @@ import { logHostActivity } from '@aglyn/tenant-data-admin'
 import { LoyaltyVendorError } from '../connectors/types'
 import {
   isLoyaltyConnectorId,
+  LOYALTY_DISCONNECT_EXPLANATION,
   LOYALTY_CONNECTOR_LABELS,
   loyaltyConnectorCredentialsProblem,
   secretLast4,
@@ -53,14 +54,17 @@ import { programTotals } from './routes'
  *                                      one, the connection (never its key), and
  *                                      the movements waiting or refused
  *   POST {hostId, action: 'connect', provider, credentials, replaceBalances}
- *   POST {hostId, action: 'disconnect'}
+ *   POST {hostId, action: 'disconnect', confirm: true}
  *   POST {hostId, action: 'retry', rowIds?}         admin
  *
- * Connecting checks the credentials with the vendor before anything is kept,
- * and refuses to replace built-in points members already hold unless the
- * merchant says so: the account owns every balance from then on. Disconnecting
- * turns the program off, so nothing earns twice while the merchant decides
- * what runs next.
+ * Connecting checks the credentials with the vendor before anything is kept.
+ * Built-in points members already hold are SET ASIDE, never spent or erased:
+ * the merchant confirms that first, and disconnecting gives every member
+ * exactly the built-in points they had at connect, while what was earned at
+ * the vendor stays there. Store credit is never touched by either.
+ * Disconnecting needs `confirm: true` — the card shows what it does first —
+ * and turns the program off, so nothing earns twice while the merchant
+ * decides what runs next.
  */
 
 const NOT_CONFIGURED =
@@ -93,14 +97,20 @@ async function answer(scope: LoyaltyScope): Promise<LoyaltyConnectionAnswer> {
   }
 }
 
-/** Every member's points to zero: the account owns the balances from here, or no longer does. Store credit is untouched. */
-async function clearMemberPoints(
+/**
+ * CONNECTING SETS BUILT-IN POINTS ASIDE; IT NEVER SPENDS THEM. Each member's
+ * built-in points are parked (`parked`, `parkedPoints`) on their own document
+ * and `points` starts mirroring the connected account from zero. A member
+ * already parked (the store is switching accounts) keeps what was parked.
+ * Store credit and live checkout holds are not touched.
+ */
+async function parkBuiltInPoints(
   scope: LoyaltyScope,
   nowMs: number,
 ): Promise<number> {
-  let cleared = 0
+  let parked = 0
   for (const sign of ['>', '<'] as const) {
-    for (let page = 0; page < 50; page += 1) {
+    for (let page = 0; page < 200; page += 1) {
       const snapshot = await loyaltyRefs
         .members(scope.orgId)
         .where('hostId', '==', scope.hostId)
@@ -110,18 +120,78 @@ async function clearMemberPoints(
       if (snapshot.empty) break
       const batch = loyaltyDb().batch()
       for (const doc of snapshot.docs) {
+        const data = doc.data()
+        const already = data['parked'] === true
         batch.set(doc.ref, {
-          ...doc.data(),
+          ...data,
+          ...(already
+            ? {}
+            : {
+                parked: true,
+                parkedPoints: Math.trunc(Number(data['points']) || 0),
+              }),
           points: 0,
-          holds: {},
           updatedAtMs: nowMs,
         })
-        cleared += 1
+        if (!already) parked += 1
       }
       await batch.commit()
     }
   }
-  return cleared
+  return parked
+}
+
+/**
+ * DISCONNECTING GIVES BUILT-IN POINTS BACK EXACTLY. The mirror of the account
+ * is cleared (those points stay at the vendor), then every parked member's
+ * built-in points are restored to what they were at connect. Store credit and
+ * holds are not touched.
+ */
+async function restoreBuiltInPoints(
+  scope: LoyaltyScope,
+  nowMs: number,
+): Promise<number> {
+  for (const sign of ['>', '<'] as const) {
+    for (let page = 0; page < 200; page += 1) {
+      const snapshot = await loyaltyRefs
+        .members(scope.orgId)
+        .where('hostId', '==', scope.hostId)
+        .where('points', sign, 0)
+        .limit(400)
+        .get()
+      if (snapshot.empty) break
+      const batch = loyaltyDb().batch()
+      for (const doc of snapshot.docs)
+        batch.set(doc.ref, { ...doc.data(), points: 0, updatedAtMs: nowMs })
+      await batch.commit()
+    }
+  }
+  let restored = 0
+  for (let page = 0; page < 200; page += 1) {
+    const snapshot = await loyaltyRefs
+      .members(scope.orgId)
+      .where('hostId', '==', scope.hostId)
+      .where('parked', '==', true)
+      .limit(400)
+      .get()
+    if (snapshot.empty) break
+    const batch = loyaltyDb().batch()
+    for (const doc of snapshot.docs) {
+      const {
+        parked: _parked,
+        parkedPoints,
+        ...rest
+      } = doc.data() as Record<string, unknown>
+      batch.set(doc.ref, {
+        ...rest,
+        points: Math.trunc(Number(parkedPoints) || 0),
+        updatedAtMs: nowMs,
+      })
+      restored += 1
+    }
+    await batch.commit()
+  }
+  return restored
 }
 
 async function setConnected(
@@ -195,7 +265,7 @@ export async function connectionRoute(request: Request): Promise<Response> {
       if (held > 0 && gate.body['replaceBalances'] !== true) {
         return Response.json(
           {
-            error: `Members hold ${formatPoints(held)} built-in points. Connecting ${label} replaces them with each member’s ${label} balance.`,
+            error: `Members hold ${formatPoints(held)} built-in points. While ${label} is connected, each member’s ${label} balance is used instead; their built-in points are set aside and come back exactly if you disconnect.`,
             builtInPoints: held,
           },
           { status: 409, headers: { 'Cache-Control': 'no-store' } },
@@ -228,7 +298,7 @@ export async function connectionRoute(request: Request): Promise<Response> {
         previous?.provider === provider ? previous.lastSyncedAtMs : null,
       updatedAtMs: nowMs,
     })
-    if (program.connected !== provider) await clearMemberPoints(scope, nowMs)
+    if (program.connected !== provider) await parkBuiltInPoints(scope, nowMs)
     await setConnected(scope, provider, gate.uid, nowMs)
     await logHostActivity(
       gate.hostId,
@@ -250,6 +320,12 @@ export async function connectionRoute(request: Request): Promise<Response> {
     const program = await readLoyaltyProgram(scope.orgId, scope.hostId)
     const connection = await readLoyaltyConnection(scope.orgId, scope.hostId)
     if (!program.connected && !connection) return json(await answer(scope))
+    if (gate.body['confirm'] !== true) {
+      return Response.json(
+        { error: LOYALTY_DISCONNECT_EXPLANATION, confirmRequired: true },
+        { status: 409, headers: { 'Cache-Control': 'no-store' } },
+      )
+    }
     const label =
       LOYALTY_CONNECTOR_LABELS[
         (program.connected ?? connection?.provider) as LoyaltyConnectorId
@@ -260,7 +336,7 @@ export async function connectionRoute(request: Request): Promise<Response> {
       nowMs,
     )
     await loyaltyRefs.connection(scope.orgId, scope.hostId).delete()
-    await clearMemberPoints(scope, nowMs)
+    await restoreBuiltInPoints(scope, nowMs)
     await setConnected(scope, null, gate.uid, nowMs)
     await logHostActivity(
       gate.hostId,

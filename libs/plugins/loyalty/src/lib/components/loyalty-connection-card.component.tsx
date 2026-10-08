@@ -24,6 +24,11 @@ import {
   Alert,
   Button,
   Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   FormControlLabel,
   List,
   ListItem,
@@ -39,6 +44,7 @@ import {
   LOYALTY_CONNECTOR_FIELDS,
   LOYALTY_CONNECTOR_IDS,
   LOYALTY_CONNECTOR_LABELS,
+  LOYALTY_DISCONNECT_EXPLANATION,
   type LoyaltyConnectionAnswer,
   type LoyaltyConnectorId,
   type LoyaltySyncRowView,
@@ -80,6 +86,7 @@ export function LoyaltyConnectionCard(props: {
   const [provider, setProvider] = useState<LoyaltyConnectorId>('smile')
   const [fields, setFields] = useState<Record<string, string>>({})
   const [replace, setReplace] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -148,12 +155,7 @@ export function LoyaltyConnectionCard(props: {
               <Button
                 color="error"
                 disabled={busy}
-                onClick={() =>
-                  act(
-                    { action: 'disconnect' },
-                    `${connection.label} disconnected`,
-                  )
-                }
+                onClick={() => setConfirming(true)}
               >
                 {'Disconnect'}
               </Button>
@@ -194,12 +196,31 @@ export function LoyaltyConnectionCard(props: {
               {'Everything has been sent.'}
             </Typography>
           )}
-          <Typography variant="body2" color="text.secondary">
-            {
-              'Disconnecting turns Rewards off. Members keep their points in your account; the built-in program starts every member at zero points if you turn it on again.'
-            }
-          </Typography>
         </Stack>
+        <Dialog open={confirming} onClose={() => setConfirming(false)}>
+          <DialogTitle>{`Disconnect ${connection.label}?`}</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              {LOYALTY_DISCONNECT_EXPLANATION}
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setConfirming(false)}>{'Cancel'}</Button>
+            <Button
+              color="error"
+              disabled={busy}
+              onClick={() => {
+                setConfirming(false)
+                void act(
+                  { action: 'disconnect', confirm: true },
+                  `${connection.label} disconnected`,
+                )
+              }}
+            >
+              {'Disconnect'}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </CardDisplay>
     )
   }
@@ -290,7 +311,7 @@ export function LoyaltyConnectionCard(props: {
                 onChange={(event) => setReplace(event.target.checked)}
               />
             }
-            label={`Replace the ${formatPoints(held)} built-in points members hold with their ${label} balances`}
+            label={`Use ${label} balances while connected. The ${formatPoints(held)} built-in points members hold are set aside and come back exactly if you disconnect.`}
           />
         ) : null}
       </Stack>
