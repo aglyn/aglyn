@@ -31,7 +31,7 @@ import {
   type AiInsightTable,
 } from '../model/ai-insight'
 import { aiHostPublishContext, aiSiteStatusTable } from '../model/ai-host-publish-context'
-import { aiSiteContextSystemBlock } from '../model/ai-site-context'
+import { aiInstructionsWithSiteContext } from '../model/ai-site-context'
 import { readAiSiteContext } from '../runtime/site-context'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
@@ -262,8 +262,10 @@ export const runAiJobInsightStep: AiJobStepRunner = async (context: AiJobStepCon
   // table's to say, and the rules send the model there.
   const siteContext = await readAiSiteContext(firestore, { orgId: job.orgId, hostId, host: site.host ?? null })
   const system = [
-    ...AI_JOB_INSIGHT_SYSTEM,
-    ...aiSiteContextSystemBlock(siteContext ? { ...siteContext, publish: null, contact: false } : null),
+    ...aiInstructionsWithSiteContext(
+      AI_JOB_INSIGHT_SYSTEM,
+      siteContext ? { ...siteContext, publish: null, contact: false } : null,
+    ),
   ]
   const ask = (messages: AiMessage[], tool: 'read' | 'answer', ceiling: number) =>
     runAiRequest({

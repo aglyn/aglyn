@@ -272,7 +272,7 @@ describe('the plan step', () => {
     expect(request.system).toEqual([
       AI_DOCTRINE_SYSTEM_BLOCK,
       { ...AI_JOB_PLAN_INSTRUCTIONS[0], cacheBreakpoint: true },
-      { text: expect.stringContaining('Business name: Paws & Co'), cacheBreakpoint: true },
+      { text: expect.stringContaining('Business name: Paws & Co'), cacheBreakpoint: true, site: true },
       expect.objectContaining({ volatile: true }),
     ])
     expect(request.system[2].text).toContain('Never invent')

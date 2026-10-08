@@ -77,6 +77,12 @@ import {
 import { aiAutomationTool, aiWorkflowExplanationTool } from '../tools/ai-workflow-tool'
 import { AI_SEO_FIXES_INSTRUCTIONS, AI_SEO_SITE_INSTRUCTIONS } from '../jobs/ai-job-seo-step'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
+import { resolveBusinessProfile } from '@aglyn/aglyn/app-utils/business-profile'
+import {
+  AI_SITE_CONTEXT_MAX_CHARS,
+  aiInstructionsWithSiteContext,
+  type AiSiteContextInput,
+} from '../model/ai-site-context'
 import { aiComponentTool } from '../tools/ai-component-tool'
 import { aiExperimentExplainTool, aiExperimentVariantsTool } from '../tools/ai-experiment-tool'
 import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool'
@@ -984,3 +990,66 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     }
   })
 })
+
+/**
+ * THE PER-SITE BLOCK (AGL-3661). A site's business profile, status and
+ * remembered preferences ride as one cached block AFTER every platform-wide
+ * block, so the doors that read it hold two cache entries: the platform's,
+ * shared by every workspace and measured in the ledger above, and the
+ * site's, read by every request of a job on that site. Each row below is a
+ * ledger row's request with the context added the way its door adds it.
+ */
+describe('a site’s context block extends the shared prefix, never enters it (AGL-3661)', () => {
+  const context = (name: string, email: string): AiSiteContextInput => ({
+    profile: resolveBusinessProfile({
+      host: { displayName: name, business: { supportEmail: email } },
+      site: { services: ['Repairs', 'Inspections'], tone: 'friendly', sources: { services: 'owner', tone: 'owner' } },
+    }),
+    preferences: ['Prefers short, concise copy'],
+  })
+  const CONTEXT_A = context('Acme Roofing', 'hello@acme.test')
+  const CONTEXT_B = context('Bakery', 'orders@bakery.test')
+  const SITE_REQUESTS: Record<string, { base: string; blocks: (site: AiSiteInventory, ctx: AiSiteContextInput | null) => AiSystemBlock[] }> = {
+    plan: {
+      base: 'plan',
+      blocks: (site, ctx) =>
+        aiDoctrineSystemBlocks(site, { instructions: aiInstructionsWithSiteContext(AI_JOB_PLAN_INSTRUCTIONS, ctx) }),
+    },
+    'insight-answer': {
+      base: 'insight-answer',
+      blocks: (_site, ctx) => [...aiInstructionsWithSiteContext(AI_JOB_INSIGHT_SYSTEM, ctx)],
+    },
+  }
+  /** Every block through the last breakpoint that is NOT a site's: what every workspace shares. */
+  const platformPrefix = (blocks: readonly AiSystemBlock[]) =>
+    cachedPrefix(blocks.filter((block) => !block.site))
+
+  it.each(Object.keys(SITE_REQUESTS))('%s shares its platform prefix byte for byte across two sites', (name) => {
+    const row = SITE_REQUESTS[name]
+    const a = row.blocks(SITE_A, CONTEXT_A)
+    const b = row.blocks(SITE_B, CONTEXT_B)
+    expect(platformPrefix(a)).toBe(platformPrefix(b))
+    expect(platformPrefix(a)).not.toContain('Acme Roofing')
+    expect(platformPrefix(a)).toBe(cachedPrefix(REQUESTS[row.base].blocks(SITE_A)))
+    expect(() => validateAiSystemBlocks(a)).not.toThrow()
+    expect(() => validateAiSystemBlocks(b)).not.toThrow()
+  })
+
+  it.each(Object.keys(SITE_REQUESTS))('%s caches the site block last, at most 400 tokens, and only the site’s', (name) => {
+    const blocks = SITE_REQUESTS[name].blocks(SITE_A, CONTEXT_A)
+    const last = blocks.map((block) => Boolean(block.cacheBreakpoint)).lastIndexOf(true)
+    const site = blocks.filter((block) => block.site)
+    expect(site).toHaveLength(1)
+    expect(blocks[last]).toBe(site[0])
+    expect(site[0].text).toContain('Acme Roofing')
+    expect(site[0].text).toContain('hello@acme.test')
+    expect(site[0].text.length).toBeLessThanOrEqual(AI_SITE_CONTEXT_MAX_CHARS)
+    expect(blocks.slice(last + 1).filter((block) => !block.volatile)).toEqual([])
+  })
+
+  it.each(Object.keys(SITE_REQUESTS))('%s is byte-identical to its ledger row for a site with no context', (name) => {
+    const row = SITE_REQUESTS[name]
+    expect(row.blocks(SITE_A, null)).toEqual(REQUESTS[row.base].blocks(SITE_A))
+  })
+})
+

@@ -220,7 +220,7 @@ export function aiSiteContextSystemBlock(
 ): AiSystemBlock[] {
   const text = input ? aiSiteContextBlock(input) : ''
   if (!text) return []
-  return [options.cache === false ? { text, volatile: true } : { text, cacheBreakpoint: true }]
+  return [options.cache === false ? { text, volatile: true, site: true } : { text, cacheBreakpoint: true, site: true }]
 }
 
 /**

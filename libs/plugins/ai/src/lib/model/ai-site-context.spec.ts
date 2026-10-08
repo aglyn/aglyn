@@ -144,8 +144,8 @@ describe('aiSiteContextBlock (AGL-3661)', () => {
 describe('aiSiteContextSystemBlock (AGL-3661)', () => {
   it('is a cached breakpoint of its own, or volatile for a door out of breakpoints', () => {
     const input = { profile: fullProfile }
-    expect(aiSiteContextSystemBlock(input)).toEqual([{ text: expect.any(String), cacheBreakpoint: true }])
-    expect(aiSiteContextSystemBlock(input, { cache: false })).toEqual([{ text: expect.any(String), volatile: true }])
+    expect(aiSiteContextSystemBlock(input)).toEqual([{ text: expect.any(String), cacheBreakpoint: true, site: true }])
+    expect(aiSiteContextSystemBlock(input, { cache: false })).toEqual([{ text: expect.any(String), volatile: true, site: true }])
   })
 })
 
