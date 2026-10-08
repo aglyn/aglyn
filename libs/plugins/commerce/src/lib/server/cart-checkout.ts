@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { randomUUID } from 'crypto'
 import { readSiteReturnHost, siteReturnUrl } from '@aglyn/aglyn/app-utils/site-return-url'
 import type { AttemptClaim, PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
@@ -62,6 +63,16 @@ import {
   readChosenCheckoutExtras,
 } from '@aglyn/aglyn/plugin-manager/plugin-checkout-extras'
 import { quoteCartExtras, type CheckoutExtrasLine } from './checkout-extras'
+import {
+  boundedCreditCents,
+  checkoutCreditProviderForCode,
+  encodeCheckoutCreditMetadata,
+  normalizeCheckoutCreditAccount,
+  normalizeCheckoutCreditCode,
+} from '@aglyn/aglyn/plugin-manager/plugin-checkout-credits'
+
+/** A rewards or credit code no provider on this site takes (AGL-3640). */
+export const CHECKOUT_CREDIT_INVALID_MESSAGE = 'That rewards code is not valid.'
 
 /** An option the buyer ticked is no longer offered (AGL-3635). */
 export const CHECKOUT_EXTRA_UNAVAILABLE_MESSAGE =
@@ -97,6 +108,8 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     .trim()
     .toUpperCase()
     .slice(0, 40)
+  // A rewards or referral code another plugin keeps the account for (AGL-3640).
+  const creditCode = normalizeCheckoutCreditCode(body.creditCode)
   if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
   // AGL-1769: validated here even though this handler only READS the cart,
   // because it is where the raw cookie left the request — `:342` stamps it
@@ -866,6 +879,82 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       }
     }
 
+    // STORE CREDIT ANOTHER PLUGIN KEEPS (AGL-3640) — a rewards balance, a
+    // friend's referral credit — by its code, through core's checkout-credits
+    // seam; this plugin never reads the account. Held exactly like the gift
+    // card above: against what is LEFT after every other reduction, BEFORE
+    // Stripe is contacted, keyed by this attempt so a retry re-places the same
+    // hold. The webhook takes it in the transaction that writes the order, and
+    // a session that expires lets it go.
+    let releaseCreditHold: () => Promise<void> = async () => undefined
+    let creditHeldCents = 0
+    if (creditCode) {
+      const refuseCredit = async (status: number, error: string) => {
+        await releaseGiftCardHold()
+        await releasePromotionHolds()
+        await releaseStock()
+        await claim?.release()
+        return res.status(status).json({ error, creditCodeInvalid: true })
+      }
+      const entry = checkoutCreditProviderForCode(creditCode)
+      const offered = entry
+        ? await entry.provider.offered({ hostId, channel: 'online' }).catch(() => false)
+        : false
+      if (!entry || !offered) return refuseCredit(400, CHECKOUT_CREDIT_INVALID_MESSAGE)
+      const account = normalizeCheckoutCreditAccount(
+        await entry.provider
+          .resolve({ hostId, code: creditCode, channel: 'online', customerEmail: email || null, staff: false })
+          .catch((error: unknown) => {
+            console.error('Checkout credit resolve failed', entry.providerId, error)
+            return null
+          }),
+      )
+      if ('error' in account) return refuseCredit(account.status, account.error)
+      const maxCents = Math.max(0, itemsCents - totalOffCents)
+      // The attempt's key, so a retry re-places the same hold; a request
+      // that sent none (an older client) still needs a key of its own.
+      const holdKey = claim.stripeKey || `cart:${cartId}:${randomUUID()}`
+      const held = await entry.provider
+        .hold({
+          hostId,
+          reference: account.reference,
+          holdKey,
+          maxCents,
+          currency: 'usd',
+          customerEmail: email || null,
+          nowMs: Date.now(),
+        })
+        .catch((error: unknown) => {
+          console.error('Checkout credit hold failed', entry.providerId, error)
+          return { ok: false as const, status: 409, error: 'That rewards code cannot be used right now. Try again.' }
+        })
+      if ('error' in held) {
+        return refuseCredit(held.status >= 400 && held.status < 500 ? held.status : 409, held.error)
+      }
+      const release = async () => {
+        await entry.provider.release({ hostId, reference: account.reference, holdKey })
+      }
+      creditHeldCents = boundedCreditCents((held as { cents: number }).cents, maxCents)
+      if (creditHeldCents > 0) {
+        totalOffCents += creditHeldCents
+        for (const [key, value] of Object.entries(
+          encodeCheckoutCreditMetadata({
+            providerId: entry.providerId,
+            reference: account.reference,
+            holdKey,
+            amountCents: creditHeldCents,
+            label: account.label,
+            last4: account.last4,
+          }),
+        )) {
+          params.set(`metadata[${key}]`, value)
+        }
+        releaseCreditHold = release
+      } else {
+        await release()
+      }
+    }
+
     if (totalOffCents > 0) {
       const stripeCoupon = await fetch('https://api.stripe.com/v1/coupons', {
         method: 'POST',
@@ -873,8 +962,10 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
           'Content-Type': 'application/x-www-form-urlencoded',
           // ONE derived object key now, because there is one coupon. The
-          // three old keys existed only because there were three mints.
-          ...stripeKeyHeader('coupon'),
+          // three old keys existed only because there were three mints. A
+          // store-credit share names itself (AGL-3640): a balance that moved
+          // between two tries is a different coupon, never a mismatch.
+          ...stripeKeyHeader(creditHeldCents > 0 ? `coupon-c${creditHeldCents}` : 'coupon'),
         },
         body: new URLSearchParams({
           amount_off: String(Math.min(totalOffCents, itemsCents)),
@@ -890,6 +981,18 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
             Math.max(1, itemsCents),
         )
         chargedItemsCents = Math.max(0, itemsCents - totalOffCents)
+      } else if (creditHeldCents > 0) {
+        // A rewards balance that did not reach the price must not be taken
+        // from the member when the session is paid (AGL-3640): refuse, and
+        // hand back everything this attempt held, rather than sell at full
+        // price with their credit spent.
+        console.error('Stripe coupon error', stripeCoupon?.error)
+        await releaseGiftCardHold()
+        await releaseCreditHold()
+        await releasePromotionHolds()
+        await releaseStock()
+        await claim.release()
+        return res.status(502).json({ error: 'Checkout failed' })
       }
     }
     // THE FLOOR (AGL-2232). A rate above zero on goods the shopper actually
@@ -1041,6 +1144,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // BELOW the claim on this path, so release it: the merchant fixes the
       // setting and the shopper retries under the same key (AGL-1697).
       await releaseGiftCardHold()
+      await releaseCreditHold()
       await releasePromotionHolds()
       await releaseStock()
       await claim.release()
@@ -1057,6 +1161,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // the undecided case above.
       // Below the claim here too, so release it for the same reason.
       await releaseGiftCardHold()
+      await releaseCreditHold()
       await releasePromotionHolds()
       await releaseStock()
       await claim.release()
@@ -1090,6 +1195,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           // The same visible refusal as the store's own rate: never an
           // untaxed session.
           await releaseGiftCardHold()
+          await releaseCreditHold()
           await releasePromotionHolds()
           await releaseStock()
           await claim.release()
@@ -1131,6 +1237,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           // (AGL-1697); the retry re-derives the same digest, so Stripe
           // replays any rate the first run did mint.
           await releaseGiftCardHold()
+          await releaseCreditHold()
           await releasePromotionHolds()
           await releaseStock()
           await claim.release()
@@ -1295,7 +1402,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
               engineTax.stamp
                 ? `session-tax-${engineTax.quote?.taxCents ?? 'own'}-${engineTax.stamp.status}`
                 : 'session'
-            }${extrasCents > 0 ? `-x${extrasCents}` : ''}`,
+            }${extrasCents > 0 ? `-x${extrasCents}` : ''}${creditHeldCents > 0 ? `-c${creditHeldCents}` : ''}`,
           ),
           // Empty on the hosted path (AGL-1944).
           ...nativeCheckoutStripeHeaders(nativeMode),
@@ -1327,6 +1434,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // does not lock this cart out. The retry re-derives the same derived
       // keys, so Stripe replays whatever objects the first run did create.
       await releaseGiftCardHold()
+      await releaseCreditHold()
       await releasePromotionHolds()
       await releaseStock()
       await claim.release()

@@ -78,7 +78,16 @@ export interface OrderListFields {
    * open-dispute banner ask.
    */
   disputeKey: OrderDisputeTone | null
-  /** The buyer's address, lower-cased — the Customer filter's `equals`. */
+  /**
+   * The order number, or null on an order that has none (POS, draft and
+   * channel orders are unnumbered) — the Order header's sort (AGL-3680),
+   * which an absent field would drop the order from.
+   */
+  number: number | null
+  /**
+   * The buyer's address, lower-cased — the Customer filter's `equals` and the
+   * Customer header's sort; null with no address, never absent.
+   */
   customerEmailLower: string | null
   /** The address's search prefixes (`emailSearchTokens`) — its `contains`. */
   customerEmailTokens: string[]
@@ -158,6 +167,10 @@ export function orderListFields(
     channel: (text(source.channel) || 'online') as OrderChannel,
     productIds,
     disputeKey: orderDisputeKey(source.dispute),
+    number:
+      typeof source.number === 'number' && Number.isFinite(source.number)
+        ? source.number
+        : null,
     customerEmailLower: nameSearchKey(email) || null,
     customerEmailTokens: emailTokens,
     orderLabelTokens: labelTokens,

@@ -43,3 +43,23 @@ export interface HostWebhook {
  */
 export const WEBHOOK_URL_PATTERN =
   /^https:\/\/(?!localhost)(?!127\.)(?!0\.)(?!10\.)(?!172\.(1[6-9]|2\d|3[01])\.)(?!192\.168\.)(?!169\.254\.)[^\s]+$/i
+
+/**
+ * An outbound URL as the webhooks list shows it: its host, never its path or
+ * query (AGL-3684). A Slack, Discord or Teams incoming-webhook URL carries
+ * its credential in the path — anyone holding `hooks.slack.com/services/…`
+ * can post to the channel — so the list names where it delivers and nothing
+ * that would let a screenshot or a shoulder replay it. The edit dialog still
+ * holds the whole URL for whoever changes it.
+ */
+export function maskedWebhookUrl(url: string | undefined): string {
+  const raw = String(url ?? '').trim()
+  if (!raw) return ''
+  try {
+    const parsed = new URL(raw)
+    const hidden = parsed.pathname.length > 1 || parsed.search || parsed.hash
+    return `${parsed.protocol}//${parsed.host}${hidden ? '/…' : ''}`
+  } catch {
+    return '…'
+  }
+}

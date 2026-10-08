@@ -254,7 +254,13 @@ describe('every shape the till asks has its index (AGL-3321)', () => {
     )
     const hub = listQueryIndexes(PRODUCT_LIST_QUERY, PRODUCT_LIST_INDEX_BASE)
     const used = new Set(['deletedAt', 'status', 'nameTokens', 'barcodes', 'skus'])
-    const needed = hub.filter((index) => used.has(index.fields[0].fieldPath))
+    // The till asks in the table's default order, A to Z — not its header orders (AGL-3680).
+    const needed = hub.filter(
+      (index) =>
+        used.has(index.fields[0].fieldPath) &&
+        index.fields[1]?.fieldPath === 'nameLower' &&
+        index.fields[1]?.order === 'ASCENDING',
+    )
     expect(needed).toHaveLength(used.size)
     expect(missingListQueryIndexes(indexFile, 'products', needed)).toEqual([])
   })

@@ -21,6 +21,10 @@ import {
   quotePluginCheckoutExtras,
   type QuotedPluginCheckoutExtra,
 } from '@aglyn/aglyn/plugin-manager/plugin-checkout-extras'
+import {
+  hasPluginCheckoutCredits,
+  offeredCheckoutCredits,
+} from '@aglyn/aglyn/plugin-manager/plugin-checkout-credits'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import * as CommerceModel from '../model'
@@ -116,9 +120,17 @@ export const cartExtrasHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
   const hostId = String(req.query.hostId ?? '')
   if (!isDocumentId(hostId)) return res.status(400).json({ error: 'Missing or invalid hostId' })
-  if (!hasPluginCheckoutExtras()) return res.status(200).json({ extras: [] })
+  // Which store-credit codes the cart takes (AGL-3640) — rewards, referral
+  // credit — by provider and name only, so the cart draws the field.
+  const credits = hasPluginCheckoutCredits()
+    ? (await offeredCheckoutCredits({ hostId, channel: 'online' })).map((credit) => ({
+        providerId: credit.providerId,
+        label: credit.label,
+      }))
+    : []
+  if (!hasPluginCheckoutExtras()) return res.status(200).json({ extras: [], credits })
   const cartId = readCartId(req.cookies, hostId)
-  if (!cartId) return res.status(200).json({ extras: [] })
+  if (!cartId) return res.status(200).json({ extras: [], credits })
   try {
     const hostRef = firebaseAdmin.app().firestore().collection('hosts').doc(hostId)
     const cart = ((await hostRef.collection('carts').doc(cartId).get()).data() as CommerceModel.HostCart | undefined) ?? {
@@ -133,11 +145,11 @@ export const cartExtrasHandler: PluginApiHandler = async (req, res) => {
         postalCode: String(req.query.postalCode ?? ''),
       },
     })
-    return res.status(200).json({ extras: extras.map(cartExtraView) })
+    return res.status(200).json({ extras: extras.map(cartExtraView), credits })
   } catch (error) {
     console.error('cart extras failed', error)
     // An offer is never worth a broken cart.
-    return res.status(200).json({ extras: [] })
+    return res.status(200).json({ extras: [], credits })
   }
 }
 

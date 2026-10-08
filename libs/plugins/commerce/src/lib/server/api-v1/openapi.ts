@@ -97,6 +97,7 @@ export const ORDERS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
     lineItems: { type: 'array', description: 'What was bought.', items: { type: 'object', additionalProperties: true } },
     totals: objectOf('Money totals, in the smallest unit of `currency`. `extrasCents` is the optional lines the buyer added at checkout, inside `totalCents` and outside `itemsCents`.'),
     extras: { type: 'array', description: 'Optional lines the buyer added at checkout, such as package protection: `[{ id, pluginId, key, label, amountCents, quoteRef }]`. Empty when there were none.', items: { type: 'object', additionalProperties: true } },
+    credits: { type: 'array', description: 'Store credit another plugin kept that paid part of the sale, such as rewards: `[{ providerId, pluginId, reference, label, last4, amountCents, appliedAs }]`. `appliedAs` is `discount` for a checkout redemption and `tender` for a register payment. Empty when there were none.', items: { type: 'object', additionalProperties: true } },
     refundedCents: int('Amount refunded so far.'),
     disputed: bool('Whether a chargeback is open.'),
     taxMode: nullable(str('The tax regime: `stripe-automatic` (Stripe Tax, collected and remitted by the platform as marketplace facilitator), `manual` (your own rate) or `none`. `null` on an order from before it was recorded.')),
