@@ -109,4 +109,31 @@ describe('useListColumnSort', () => {
     expect(result.current.pageSortedBy).toBeNull()
     expect(result.current.sort).toBe(SORTS[2])
   })
+
+  it('over a list loaded whole, a value header orders every row and claims no page (complete)', () => {
+    const { result } = renderHook(() =>
+      useListColumnSort<Row>({
+        sorts: [],
+        rows: ROWS,
+        pageSorts: { name: (row) => row.name, seats: (row) => row.seats },
+        complete: true,
+      }),
+    )
+    expect(result.current.columns['name']).toEqual({
+      mode: 'loaded',
+      sortingOrder: ['asc', 'desc', null],
+    })
+    act(() => result.current.onSortModelChange([{ field: 'name', sort: 'asc' }]))
+    expect(result.current.rows.map((row) => row.$id)).toEqual(['b', 'a', 'c'])
+    expect(result.current.sortModel).toEqual([{ field: 'name', sort: 'asc' }])
+    expect(result.current.notices).toEqual([])
+    // A comparator from a plugin column's header replaces it: one order.
+    act(() => result.current.sortPage('w1', (a, b) => (b.seats ?? 0) - (a.seats ?? 0)))
+    expect(result.current.rows.map((row) => row.$id)).toEqual(['c', 'a', 'b'])
+    expect(result.current.sortModel).toEqual([])
+    expect(result.current.pageSortedBy).toBe('w1')
+    act(() => result.current.onSortModelChange([{ field: 'seats', sort: 'asc' }]))
+    expect(result.current.pageSortedBy).toBeNull()
+    expect(result.current.rows.map((row) => row.$id)).toEqual(['a', 'c', 'b'])
+  })
 })

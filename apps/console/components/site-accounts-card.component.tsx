@@ -28,7 +28,9 @@ import ListQueryNotices, {
 } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { Box, Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { collection } from 'firebase/firestore'
@@ -44,7 +46,10 @@ import {
   SITE_MEMBER_LIST_FILTER_HEADERS,
   SITE_MEMBER_LIST_FILTER_OPTIONS,
 } from '../utils/list-filters'
-import { SITE_ACCOUNT_LIST_QUERY } from '../utils/site-account-query'
+import {
+  SITE_ACCOUNT_LIST_COLUMN_SORTS,
+  SITE_ACCOUNT_LIST_QUERY,
+} from '../utils/site-account-query'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 
 import SiteMemberDrawer from './site-member-drawer.component'
@@ -84,9 +89,17 @@ export function SiteAccountsCard(props: { hostId: string }) {
   const filtering =
     gridFilter.clauses.length > 0 ||
     gridFilter.searchWords.some((word) => word.trim() !== '')
+  /*
+   * The header the reader picked (AGL-3680): every column orders the QUERY,
+   * so the whole list is in that order, not only the page on screen. See
+   * `SITE_ACCOUNT_LIST_COLUMN_SORTS` for which hold under a filter.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(
+    SITE_ACCOUNT_LIST_COLUMN_SORTS[0],
+  )
   const listRequest = useMemo(
-    () => ({ clauses: gridFilter.clauses, search: gridFilter.searchWords }),
-    [gridFilter.clauses, gridFilter.searchWords],
+    () => ({ clauses: gridFilter.clauses, search: gridFilter.searchWords, sort: askedSort }),
+    [gridFilter.clauses, gridFilter.searchWords, askedSort],
   )
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /*
@@ -112,7 +125,15 @@ export function SiteAccountsCard(props: { hostId: string }) {
     idField: '$id',
   })
 
-  const visible = memberDocs
+  const columnSort = useListColumnSort<any>({
+    sorts: SITE_ACCOUNT_LIST_COLUMN_SORTS,
+    defaultSort: SITE_ACCOUNT_LIST_COLUMN_SORTS[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows: memberDocs,
+  })
+  const visible = columnSort.rows
 
   /*
    * Where an account's CONTACT is (AGL-2622). A sign-up updated a person by
@@ -279,6 +300,8 @@ export function SiteAccountsCard(props: { hostId: string }) {
             aria-label="Site users"
             rows={visible}
             columns={memberColumns}
+            // Every header orders the query (`columnSort`).
+            columnSort={columnSort}
             onOpen={(id) => setSelectedId(id)}
             /*
              * The grid must NOT also filter. The query answers it, so a
@@ -294,9 +317,6 @@ export function SiteAccountsCard(props: { hostId: string }) {
             noRowsLabel="No site users match these filters"
             // Paged by the footer below, so the grid must not also slice.
             hideFooter
-            // The rows keep the query's newest-first order; a header sort
-            // would order only the page on screen.
-            disableColumnSorting
             rowHeight={TABLE_ROW_HEIGHT}
             initialState={{
               columns: {
