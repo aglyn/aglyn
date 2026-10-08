@@ -410,7 +410,8 @@ async function main(): Promise<void> {
       if (data.page) {
         await shoot(light, 1440, 900, 'page-desktop-light', ['full'])
         // The words the page shows, for a grep that proves what a visitor reads.
-        writeFileSync(join(out, `${key}-page.txt`), await tab.evaluate(() => document.body.innerText))        await shoot(light, 375, 812, 'page-phone-light', ['full'])
+        writeFileSync(join(out, `${key}-page.txt`), await tab.evaluate(() => document.body.innerText))
+        await shoot(light, 375, 812, 'page-phone-light', ['full'])
         if (pageOnly) {
           console.log(`WROTE     ${key} → ${out}`)
           continue
