@@ -147,8 +147,9 @@ final class SiteTests: XCTestCase {
     XCTAssertTrue(has(scoped, "visibleTo", .arrayContainsAny, ["org", "host:h"]))
     XCTAssertTrue(has(scoped, "folderId", .equal, nil))
     XCTAssertFalse(scoped.filters.contains { $0.path == "nameTokens" })
-    XCTAssertEqual(scoped.order.first?.field, "createdAt")
-    XCTAssertEqual(scoped.order.first?.descending, true)
+    // A prefix range must lead the order (the contract's rule), so the name orders it, ascending.
+    XCTAssertEqual(scoped.order.first?.field, "nameLower")
+    XCTAssertEqual(scoped.order.first?.descending, false)
   }
 
   func testWritesTheScopeIntoEveryMediaRoute() {
