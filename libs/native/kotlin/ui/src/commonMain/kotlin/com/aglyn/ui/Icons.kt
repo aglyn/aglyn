@@ -4,6 +4,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AltRoute
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.WebAsset
+import androidx.compose.material.icons.outlined.Science
+import androidx.compose.material.icons.outlined.PersonRemove
+import androidx.compose.material.icons.outlined.HourglassEmpty
+import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -217,6 +226,14 @@ object AglynIcons {
     "merge" to Icons.Outlined.CallMerge,
     "drafts" to Icons.Outlined.Drafts,
     "play" to Icons.Outlined.PlayCircle,
+    "brush" to Icons.Outlined.Brush,
+    "block" to Icons.Outlined.Block,
+    "verified" to Icons.Outlined.Verified,
+    "hourglass" to Icons.Outlined.HourglassEmpty,
+    "person_remove" to Icons.Outlined.PersonRemove,
+    "science" to Icons.Outlined.Science,
+    "web_asset" to Icons.Outlined.WebAsset,
+    "archive" to Icons.Outlined.Archive,
   )
 
   fun named(name: String?): ImageVector = byName[name] ?: Icons.Outlined.Extension

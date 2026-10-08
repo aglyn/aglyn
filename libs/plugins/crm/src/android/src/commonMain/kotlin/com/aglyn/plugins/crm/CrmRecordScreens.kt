@@ -51,6 +51,8 @@ import com.aglyn.core.Live
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.ui.FormSheet
+import com.aglyn.ui.Busy
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
@@ -81,28 +83,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 internal fun problemText(error: Throwable) = error.message?.takeIf { it.isNotBlank() } ?: "Something went wrong. Try again."
-
-/** Runs [block] with a busy flag and an error, as every CRM dialog does. */
-class Busy {
-  var busy by mutableStateOf(false)
-  var error by mutableStateOf<String?>(null)
-
-  fun run(scope: CoroutineScope, onDone: () -> Unit = {}, block: suspend () -> Unit) {
-    busy = true
-    error = null
-    scope.launch {
-      try {
-        block()
-        onDone()
-      } catch (failure: Throwable) {
-        if (failure is CancellationException) throw failure
-        error = problemText(failure)
-      } finally {
-        busy = false
-      }
-    }
-  }
-}
 
 /**
  * One object's list (search, the console's chips, a page at a time) beside
@@ -648,33 +628,19 @@ internal fun EditSheet(
   var values by remember { mutableStateOf(initial) }
   var tried by remember { mutableStateOf(false) }
   val problems = fieldProblems(fields.map { it.spec }, values)
-  Dialog(onDismissRequest = { if (!busy.busy) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-    Surface(
-      Modifier.widthIn(max = 640.dp).fillMaxWidth(0.96f).heightIn(max = 860.dp).testTag("crm-edit-sheet"),
-      shape = MaterialTheme.shapes.extraLarge,
-      color = MaterialTheme.colorScheme.surface,
-    ) {
-      Column {
-        Row(Modifier.padding(horizontal = space(2f), vertical = space(1.5f)), verticalAlignment = Alignment.CenterVertically) {
-          Text(title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
-          TextButton(onClick = onDismiss, enabled = !busy.busy) { Text("Cancel") }
-          Button(
-            onClick = {
-              tried = true
-              if (problems.isEmpty()) onSave(values)
-            },
-            enabled = !busy.busy,
-            modifier = Modifier.testTag("crm-edit-save"),
-          ) { Text(if (busy.busy) "Saving…" else confirmLabel) }
-        }
-        HorizontalDivider()
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
-          busy.error?.let { NoticeBanner(it, StatusTone.ERROR) }
-          header?.invoke()
-          FieldForm(fields.map { it.spec }, values, { key, value -> values = values + (key to value) }, errors = if (tried) problems else emptyMap(), enabled = !busy.busy)
-        }
-      }
-    }
+  FormSheet(
+    title = title,
+    busy = busy,
+    onDismiss = onDismiss,
+    confirmLabel = confirmLabel,
+    modifier = Modifier.testTag("crm-edit-sheet"),
+    onConfirm = {
+      tried = true
+      if (problems.isEmpty()) onSave(values)
+    },
+  ) {
+    header?.invoke()
+    FieldForm(fields.map { it.spec }, values, { key, value -> values = values + (key to value) }, errors = if (tried) problems else emptyMap(), enabled = !busy.busy)
   }
 }
 

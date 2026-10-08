@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.DatePicker
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -42,12 +45,12 @@ import androidx.compose.ui.unit.dp
  * the detail pane it edits never disagree about what a field is.
  *
  * Values travel as strings, the way a text field holds them: a date is
- * `yyyy-MM-dd`, a switch is `true` / `false`, a choice is its stored value,
+ * `yyyy-MM-dd`, a time of day `HH:mm`, a switch is `true` / `false`, a choice is its stored value,
  * a choice of several is its values joined with `,`. The plugin turns them
  * into its own stored shape.
  */
 
-enum class FieldKind { TEXT, MULTILINE, EMAIL, PHONE, URL, NUMBER, MONEY, DATE, SELECT, MULTI_SELECT, TOGGLE }
+enum class FieldKind { TEXT, MULTILINE, EMAIL, PHONE, URL, NUMBER, MONEY, DATE, TIME, SELECT, MULTI_SELECT, TOGGLE }
 
 data class FieldOption(val value: String, val label: String)
 
@@ -75,6 +78,7 @@ fun fieldProblems(specs: List<FieldSpec>, values: Map<String, String>): Map<Stri
       spec.kind == FieldKind.NUMBER && value.toDoubleOrNull() == null -> put(spec.key, "Enter a number")
       spec.kind == FieldKind.MONEY && value.removePrefix("$").replace(",", "").toDoubleOrNull() == null -> put(spec.key, "Enter an amount")
       spec.kind == FieldKind.DATE && !Regex("""^\d{4}-\d{2}-\d{2}$""").matches(value) -> put(spec.key, "Pick a date")
+      spec.kind == FieldKind.TIME && isoTimeMinutes(value) == null -> put(spec.key, "Pick a time")
     }
   }
 }
@@ -134,6 +138,7 @@ fun FieldEditor(
     FieldKind.TOGGLE -> SwitchRow(spec.label, value == "true", { onChange(it.toString()) }, modifier.then(tag), supporting = spec.help, enabled = enabled)
     FieldKind.SELECT, FieldKind.MULTI_SELECT -> ChoiceField(spec, label, value, onChange, modifier.then(tag), error, enabled)
     FieldKind.DATE -> DateField(spec, label, value, onChange, modifier.then(tag), error, enabled)
+    FieldKind.TIME -> TimeField(spec, label, value, onChange, modifier.then(tag), error, enabled)
     else -> OutlinedTextField(
       value = value,
       onValueChange = onChange,
@@ -263,6 +268,58 @@ private fun DateField(
       dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } },
     ) { DatePicker(state) }
   }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimeField(
+  spec: FieldSpec,
+  label: String,
+  value: String,
+  onChange: (String) -> Unit,
+  modifier: Modifier,
+  error: String?,
+  enabled: Boolean,
+) {
+  var open by remember { mutableStateOf(false) }
+  OutlinedTextField(
+    value = value,
+    onValueChange = onChange,
+    enabled = enabled,
+    label = { Text(label) },
+    placeholder = { Text("HH:MM") },
+    isError = error != null,
+    supportingText = (error ?: spec.help)?.let { { Text(it) } },
+    singleLine = true,
+    trailingIcon = {
+      IconButton(onClick = { open = true }, enabled = enabled) { Icon(AglynIcons.named("schedule"), contentDescription = "Pick ${spec.label}") }
+    },
+    modifier = modifier.fillMaxWidth(),
+  )
+  if (open) {
+    val minutes = isoTimeMinutes(value) ?: (9 * 60)
+    val state = rememberTimePickerState(initialHour = minutes / 60, initialMinute = minutes % 60)
+    AlertDialog(
+      onDismissRequest = { open = false },
+      confirmButton = {
+        TextButton(onClick = {
+          onChange("${state.hour.toString().padStart(2, '0')}:${state.minute.toString().padStart(2, '0')}")
+          open = false
+        }) { Text("Done") }
+      },
+      dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } },
+      text = { TimePicker(state) },
+    )
+  }
+}
+
+/** `HH:mm` (24-hour) as minutes after midnight, or null. */
+fun isoTimeMinutes(time: String): Int? {
+  val match = Regex("""^(\d{1,2}):(\d{2})$""").matchEntire(time.trim()) ?: return null
+  val (h, m) = match.destructured
+  val hour = h.toInt()
+  val minute = m.toInt()
+  return if (hour in 0..23 && minute in 0..59) hour * 60 + minute else null
 }
 
 /** `yyyy-MM-dd` as UTC midnight in epoch ms (the date picker's own day), or null. */
