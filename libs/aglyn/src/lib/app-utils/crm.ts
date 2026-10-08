@@ -5060,10 +5060,12 @@ const SEARCH_KEY = nameSearchKey
 export function crmSearchTokens(values: readonly unknown[]): string[] {
   const tokens = new Set<string>()
   const addWord = (word: string) => {
-    const capped = word.slice(0, NAME_TOKEN_MAX_PREFIX)
+    // By codepoint, as `nameSearchTokens` cuts: a UTF-16 slice leaves a lone
+    // surrogate of an emoji, and Firestore refuses the write.
+    const capped = [...word].slice(0, NAME_TOKEN_MAX_PREFIX)
     for (let end = 1; end <= capped.length; end += 1) {
       if (tokens.size >= CRM_SEARCH_TOKENS_MAX) return
-      tokens.add(capped.slice(0, end))
+      tokens.add(capped.slice(0, end).join(''))
     }
   }
   const addText = (text: string) => {
