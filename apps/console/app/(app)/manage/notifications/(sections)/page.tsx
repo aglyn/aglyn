@@ -21,6 +21,7 @@ import ListQueryNotices, {
   listQueryRefusals,
 } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Button, Stack } from '@mui/material'
 import {
@@ -57,6 +58,7 @@ import {
   NOTIFICATION_FILTER_FIELDS,
   NOTIFICATION_FILTER_HEADERS,
   NOTIFICATION_FILTER_OPTIONS,
+  NOTIFICATION_DEFAULT_SORT,
   planNotificationFilters,
 } from '../../../../../utils/notification-filters'
 
@@ -108,11 +110,16 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
    * reader starts on its first page.
    */
   const gridFilter = useListGridFilter({ selectFields: ['type', 'readAt'] })
+  /*
+   * The header order (AGL-3680), on the same query: a new order is a new
+   * feed too, so it starts again at page one.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(NOTIFICATION_DEFAULT_SORT)
   const filterPlan = useMemo(
-    () => planNotificationFilters(gridFilter.clauses),
-    [gridFilter.clauses],
+    () => planNotificationFilters(gridFilter.clauses, askedSort),
+    [gridFilter.clauses, askedSort],
   )
-  const { wheres } = filterPlan
+  const { wheres, orderBy: feedOrder } = filterPlan
 
   const loadPage = useCallback(
     async (targetPage: number, cursor?: QueryDocumentSnapshot) => {
@@ -144,7 +151,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
           query(
             collection(firestore, 'users', uid, 'notifications'),
             ...wheres.map(([path, op, value]) => where(path, op, value)),
-            orderBy('createdAt', 'desc'),
+            orderBy(feedOrder.path, feedOrder.direction),
             ...(cursor ? [startAfter(cursor)] : []),
             limit(pageSize + 1),
           ),
@@ -167,7 +174,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
         if (requestRef.current === requestId) setLoading(false)
       }
     },
-    [firestore, uid, pageSize, wheres],
+    [firestore, uid, pageSize, wheres, feedOrder],
   )
 
   useEffect(() => {
@@ -318,6 +325,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
             headers: NOTIFICATION_FILTER_HEADERS,
             options: NOTIFICATION_FILTER_OPTIONS,
           })}
+          notices={filterPlan.notices}
         />
         <NotificationsTable
           rows={rows}
@@ -335,6 +343,9 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
           }
           onPageSizeChange={setPageSize}
           gridFilter={gridFilter}
+          sort={askedSort}
+          onSortChange={setAskedSort}
+          orderBy={feedOrder}
         />
       </Stack>
     </CardDisplay>

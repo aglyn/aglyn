@@ -63,22 +63,16 @@ const switchesSortingOff = (source: string): boolean => /\bdisableColumnSorting\
  * line here — convert the list instead of adding one.
  */
 const NOT_YET_CONVERTED: readonly string[] = [
-  'apps/console/app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
   'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
   'apps/console/app/(app)/admin/audit/page.tsx',
   'apps/console/app/(app)/admin/coupons/page.tsx',
   'apps/console/app/(app)/admin/health/page.tsx',
   'apps/console/app/(app)/admin/media-quarantine/page.tsx',
-  'apps/console/components/activity-table.component.tsx',
-  'apps/console/components/actor-activity-table.component.tsx',
   'apps/console/components/content/collection-entries-page.component.tsx',
-  'apps/console/components/host-activity-table.component.tsx',
   'apps/console/components/host-components-card.component.tsx',
   'apps/console/components/host-members-card.component.tsx',
   'apps/console/components/idempotency-claims-card.component.tsx',
   'apps/console/components/mail-gateway-ledger-card.component.tsx',
-  'apps/console/components/notifications-table.component.tsx',
-  'apps/console/components/org-activity-card.component.tsx',
   'apps/console/components/org-members-card.component.tsx',
   'apps/console/components/pending-erasures-card.component.tsx',
   'apps/console/components/site-accounts-card.component.tsx',
