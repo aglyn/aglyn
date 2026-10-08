@@ -28,6 +28,8 @@ import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin/ser
 import { AI_TEMPLATE_SUBJECTS } from '../model/ai-template-subjects'
 import { AI_SITE_PASS_CREDITS } from '../model/ai-site-job'
 import type { AiBuildOps } from '../model/ai-build-job'
+import { AI_LOGIC_FUNCTION_RESOURCE } from '../model/ai-logic-job'
+import { aiPluginDraftOwner, type AiPluginDraftOwnerLookup } from './ai-job-plugin-drafts'
 import { aiJobStepRunnerFor } from './ai-jobs'
 
 /**
@@ -39,7 +41,9 @@ import { aiJobStepRunnerFor } from './ai-jobs'
  * pages, layouts, forms, components and email designs are the plan's
  * creations and screens; templates, campaigns and automations are items with
  * arguments. A campaign and an automation are still WRITTEN by the marketing
- * and workflows plugins, through the writers their runners already call.
+ * and workflows plugins, through the writers their runners already call, and
+ * a site function by the logic plugin's `function` writer, which the `logic`
+ * runner calls when its job is a build's unit.
  */
 
 /** This plugin's id, as its registrations name their owner. */
@@ -169,7 +173,34 @@ export const AI_OWNED_CAPABILITIES: readonly PluginAiCapability[] = [
     estimateCredits: passes(1),
     degrade: 'omit',
   },
+  {
+    // A function needs a model, so it is this plugin's operation; the logic
+    // plugin owns the record and writes it (AGL-3616). New functions only: a
+    // build never changes one the site already has.
+    op: 'function',
+    noun: 'site function',
+    where: 'Logic → Functions',
+    intents: ['a site function that works a value out from what it is given: a price, a total, a quote'],
+    argsSchema: NO_ARGS,
+    maxPerPlan: 2,
+    // Free includes one function (`functionsPerHost: 1`), and Logic no feature.
+    freeAllowed: true,
+    quota: 'functionsPerHost',
+    runnerKind: 'logic',
+    estimateCredits: passes(1),
+    degrade: 'omit',
+  },
 ]
+
+/**
+ * The resource another plugin writes for each operation of this plugin's that
+ * cannot be built without it. The operation runs where that writer's owner
+ * runs — registered, switched on for the workspace and the site, and past its
+ * release flag — exactly as an operation that owner registered would.
+ */
+export const AI_OWNED_OP_WRITERS: Readonly<Partial<Record<string, string>>> = {
+  function: AI_LOGIC_FUNCTION_RESOURCE,
+}
 
 /** Registers this plugin's build operations; the console surface calls it. */
 export function registerAiBuildCapabilities(): void {
@@ -195,12 +226,16 @@ export interface AiBuildOpsDeps {
   releasedPlugins?: (pluginIds: string[], orgId: string) => Promise<string[]>
   /** Whether a runner is registered for a kind; the machine's otherwise. */
   hasRunner?: (kind: string) => boolean
+  /** Which plugin writes a resource; the core's registry otherwise. */
+  writerOwner?: AiPluginDraftOwnerLookup
 }
 
 /**
  * The operations a build may plan on this site, by op (AGL-3616): every
  * registered capability whose owner runs here — switched on for the
- * workspace and the site, past its release flag — whose entitlement the plan
+ * workspace and the site, past its release flag; for one of this plugin's
+ * operations another plugin writes (`AI_OWNED_OP_WRITERS`), that writer's
+ * owner, and a writer registered at all — whose entitlement the plan
  * holds, which the Free taste may use where the workspace is on it, and,
  * for an AI-run operation, whose runner this process loaded. One release-flag
  * read for every owner at once. What a member may do and what an allowance
@@ -209,7 +244,20 @@ export interface AiBuildOpsDeps {
 export async function aiBuildOps(context: AiBuildOpsContext, deps: AiBuildOpsDeps = {}): Promise<AiBuildOps> {
   const all = (deps.capabilities ?? pluginAiCapabilities)()
   const hasRunner = deps.hasRunner ?? ((kind: string) => aiJobStepRunnerFor(kind as never) !== null)
-  const owners = [...new Set(all.map((one) => one.pluginId).filter((id) => id !== AI_PLUGIN_ID))]
+  const writerOwner = deps.writerOwner ?? aiPluginDraftOwner
+  // The plugin each of this plugin's operations depends on, by op; `null` where its writer is not registered.
+  const writtenBy = new Map<string, string | null>()
+  for (const { pluginId, capability } of all) {
+    const resource = pluginId === AI_PLUGIN_ID ? AI_OWNED_OP_WRITERS[capability.op] : undefined
+    if (resource) writtenBy.set(capability.op, writerOwner(resource))
+  }
+  const owners = [
+    ...new Set(
+      [...all.map((one) => one.pluginId), ...writtenBy.values()].filter(
+        (id): id is string => !!id && id !== AI_PLUGIN_ID,
+      ),
+    ),
+  ]
   const released = new Set(
     owners.length
       ? await (deps.releasedPlugins ??
@@ -218,9 +266,13 @@ export async function aiBuildOps(context: AiBuildOpsContext, deps: AiBuildOpsDep
   )
   const ops = new Map<string, PluginAiCapability>()
   for (const { pluginId, capability } of all) {
-    if (pluginId !== AI_PLUGIN_ID) {
-      if (!released.has(pluginId)) continue
-      if (!isHostPluginEnabled(context.org as { enabledPlugins?: string[] } | null, context.host, pluginId)) continue
+    // The plugin that must run here: the owner, or for one of this plugin's
+    // operations, the plugin that writes what it makes.
+    const runsOn = pluginId === AI_PLUGIN_ID ? writtenBy.get(capability.op) : pluginId
+    if (runsOn === null) continue
+    if (runsOn !== undefined && runsOn !== AI_PLUGIN_ID) {
+      if (!released.has(runsOn)) continue
+      if (!isHostPluginEnabled(context.org as { enabledPlugins?: string[] } | null, context.host, runsOn)) continue
     }
     if (capability.feature && !checkEntitlement(context.org, capability.feature)) continue
     if (context.freeTaste && !capability.freeAllowed) continue
