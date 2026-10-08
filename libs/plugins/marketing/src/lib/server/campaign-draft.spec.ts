@@ -167,6 +167,7 @@ describe('the campaign draft writer', () => {
     const email = store.get(`orgs/org-1/campaigns/${campaignDraftEmailId('job-1')}`) as Record<string, unknown>
     expect(email).toEqual({
       subject: CONTENT.subject,
+      subjectLower: 'cardamom buns are back',
       subjectTokens: nameSearchTokens(CONTENT.subject),
       preheader: CONTENT.preheader,
       templateScreenId: 'design-1',

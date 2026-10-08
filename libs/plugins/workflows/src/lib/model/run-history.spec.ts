@@ -104,7 +104,7 @@ describe('every Filters-panel clause and the search are on the query', () => {
     expect(served.refused).toEqual([])
     expect(served.served).toEqual(clauses)
     expect(served.searched).toBe('webhook')
-    expect(served.orderBy).toEqual({ path: 'createdAt', direction: 'desc', column: 'createdAtMs' })
+    expect(served.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc', column: 'createdAtMs' })
     expect(served.filters).toEqual(
       expect.arrayContaining([
         { path: 'summaryTokens', op: 'array-contains', value: 'webhook' },
@@ -158,5 +158,32 @@ describe('run entries carry what the query asks for', () => {
         patch: one.expected,
       })
     }
+  })
+})
+
+describe('every header sorts (AGL-3680)', () => {
+  const sorted = (
+    sort: { path: string; direction: 'asc' | 'desc' },
+    clauses: Array<{ field: string; op: string; value: string }> = [],
+  ) =>
+    planListQuery(
+      RUN_HISTORY_QUERY,
+      { clauses, search: [], base: runHistoryBase('wf-1', clauses), sort },
+      nameSearchNormalizers,
+    )
+
+  it('orders the history by Trigger with nothing narrowing it', () => {
+    expect(sorted({ path: 'trigger', direction: 'asc' }).orderBy).toMatchObject({
+      path: 'trigger',
+      direction: 'asc',
+    })
+  })
+
+  it('falls back to newest first under a filter, and says so', () => {
+    const answer = sorted({ path: 'summary', direction: 'asc' }, [
+      { field: 'result', op: 'equals', value: 'failed' },
+    ])
+    expect(answer.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
+    expect(answer.notices).toEqual(['Sorted by Time: What happened sorts only with no filter or search on.'])
   })
 })

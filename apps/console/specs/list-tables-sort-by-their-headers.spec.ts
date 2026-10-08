@@ -98,20 +98,6 @@ const NOT_YET_CONVERTED: readonly string[] = [
   'libs/plugins/forms/src/lib/components/host-forms-card.component.tsx',
   'libs/plugins/inbox/src/lib/components/contacts-card.component.tsx',
   'libs/plugins/inbox/src/lib/components/submissions-card.component.tsx',
-  'libs/plugins/marketing/src/lib/components/campaign-conversions-card.tsx',
-  'libs/plugins/marketing/src/lib/components/campaign-detail-card.tsx',
-  'libs/plugins/marketing/src/lib/components/campaign-members-section.tsx',
-  'libs/plugins/marketing/src/lib/components/campaigns-card.tsx',
-  'libs/plugins/marketing/src/lib/components/email-recipients-card.tsx',
-  'libs/plugins/marketing/src/lib/components/emails-list-card.tsx',
-  'libs/plugins/marketing/src/lib/components/host-experiments-card.component.tsx',
-  'libs/plugins/marketing/src/lib/components/staff-org-email-card.component.tsx',
-  'libs/plugins/marketplace/src/lib/components/org-licences-panel.component.tsx',
-  'libs/plugins/outreach/src/lib/components/do-not-contact-domains.tsx',
-  'libs/plugins/outreach/src/lib/components/enrollments-table.tsx',
-  'libs/plugins/outreach/src/lib/components/sequences-section.tsx',
-  'libs/plugins/workflows/src/lib/components/host-run-history-card.component.tsx',
-  'libs/plugins/workflows/src/lib/components/staff-automations-card.component.tsx',
 ]
 
 describe('every table sorts by its column headers (AGL-3680)', () => {
