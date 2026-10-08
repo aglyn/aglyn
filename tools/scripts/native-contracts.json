@@ -93,6 +93,64 @@
         "HostProduct",
         "ProductVariant"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/site-list-query.ts": {
+      "values": [
+        "SITE_LIST_DECLARATION",
+        "SITE_FILTER_OPTIONS",
+        "SITE_FILTER_HEADERS",
+        "SITE_CARDS_PAGE_SIZE"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/media-filter.ts": {
+      "values": [
+        "MEDIA_LIST_QUERY",
+        "MEDIA_TYPE_OPTIONS",
+        "MEDIA_ORIENTATION_OPTIONS",
+        "MEDIA_ALT_OPTIONS",
+        "MEDIA_FILTER_HEADERS",
+        "MEDIA_SORTS",
+        "MEDIA_SORT_ORDER",
+        "MEDIA_SORT_LABELS",
+        "MEDIA_DISJUNCTION_LIMIT",
+        "MEDIA_SCOPED_SEARCH_NOTICE"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/media-metadata.ts": {
+      "values": [
+        "MEDIA_KINDS",
+        "MEDIA_TAG_MAX_COUNT",
+        "MEDIA_TAG_MAX_LENGTH"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/media-alt.ts": {
+      "values": [
+        "MEDIA_ALT_MAX_LENGTH"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/media-folders.ts": {
+      "values": [
+        "MEDIA_FOLDER_MAX_DEPTH",
+        "MEDIA_FOLDER_NAME_MAX_LENGTH"
+      ]
+    },
+    "libs/plugins/forms/src/lib/components/form-list-query.ts": {
+      "values": [
+        "FORM_LIST_QUERY",
+        "FORM_IN_USE",
+        "FORM_STATUS_OPTIONS",
+        "FORM_LEAD_ROUTING_OPTIONS",
+        "FORM_LIST_FILTER_HEADERS"
+      ]
+    },
+    "libs/plugins/inbox/src/lib/constants/list-queries.ts": {
+      "values": [
+        "SUBMISSION_LIST_QUERY",
+        "FORM_SCOPED_SUBMISSION_LIST_QUERY",
+        "ORG_SUBMISSION_LIST_QUERY",
+        "SUBMISSION_READ_OPTIONS",
+        "SUBMISSION_FILTER_HEADERS"
+      ]
     }
   },
   "ints": [],
@@ -113,7 +171,10 @@
     "ORDER_LIST_QUERY": {},
     "PRODUCT_LIST_QUERY": {
       "base": "PRODUCT_LIST_BASE"
-    }
+    },
+    "SITE_LIST_DECLARATION": {},
+    "FORM_LIST_QUERY": {},
+    "SUBMISSION_LIST_QUERY": {}
   },
   "functionCases": {
     "formatOrderNumber": {
@@ -1856,6 +1917,93 @@
         ],
         [
           "text"
+        ]
+      ]
+    },
+    "mediaSearchToken": {
+      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "args": [
+        [
+          "Hero-Banner_2024.final.JPG"
+        ],
+        [
+          "  café  à la carte "
+        ],
+        [
+          "IMG_0042.png"
+        ],
+        [
+          ""
+        ],
+        [
+          "Ünïcødé—name (copy)"
+        ]
+      ]
+    },
+    "mediaKindOf": {
+      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "args": [
+        [
+          "image/png"
+        ],
+        [
+          "VIDEO/MP4"
+        ],
+        [
+          "application/pdf"
+        ],
+        [
+          "application/zip"
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "messageSender": {
+      "module": "libs/aglyn/src/lib/app-utils/message-search.ts",
+      "args": [
+        [
+          {
+            "name": "Priya Shah",
+            "email": "priya@example.com",
+            "message": "Hi"
+          }
+        ],
+        [
+          {
+            "Full Name": "Marcus Lee",
+            "E-mail": "marcus@example.com"
+          }
+        ],
+        [
+          {
+            "first_name": "Ana",
+            "Email Address": "ana@example.com"
+          }
+        ],
+        [
+          {
+            "message": "no sender"
+          }
+        ],
+        [
+          {
+            "name": "  ",
+            "email": "x@example.com"
+          }
+        ],
+        [
+          {
+            "contact-name": "Bo",
+            "email": [
+              "a@example.com",
+              "b@example.com"
+            ]
+          }
+        ],
+        [
+          null
         ]
       ]
     }

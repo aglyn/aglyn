@@ -134,6 +134,7 @@ const areas = [
   ['store', 'seedCommerce'],
   ['pos', 'seedPos'],
   ['notifications', 'seedNotifications'],
+  ['content', 'seedContent'],
 ]
 for (const [file, name] of areas) {
   const area = await import(`./seed-native/${file}.mjs`)
