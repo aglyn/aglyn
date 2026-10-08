@@ -30,6 +30,7 @@ import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { sendGa4SitePublished } from '@aglyn/tenant-data-admin/server/ga4-measurement-protocol'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
 import type { AiJob, AiJobOutput, AiJobSitePublish } from '../model/ai-jobs.types'
+import { AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
 
 /**
  * A guided site start publishes what it built (AGL-3596).
@@ -128,6 +129,16 @@ type MutableNode = {
 }
 
 /**
+ * The blog paths a start's layout links and must not publish (AGL-3660): its
+ * header, phone menu and footer link the blog by path while the posts part is
+ * still owed, so a start whose posts part then failed or was skipped drops
+ * every address the blog could have taken. None while the blog was written.
+ */
+export function aiSiteUnwrittenBlogHrefs(blogUnwritten: boolean | undefined): string[] {
+  return blogUnwritten ? AI_SITE_BLOG_SLUGS.map((slug) => `/${slug}`) : []
+}
+
+/**
  * The layout's nodes with its links to the retired starter home pointed at
  * the new home, and a link for each proposed entry the header does not
  * already carry, placed in the header's toolbar after its existing links.
@@ -136,13 +147,37 @@ type MutableNode = {
  */
 export function aiLayoutWithNavigation(
   nodes: NodesMap,
-  input: { entries: readonly NavEntry[]; retiredHomeId?: string | null; homeId?: string | null },
+  input: {
+    entries: readonly NavEntry[]
+    retiredHomeId?: string | null
+    homeId?: string | null
+    /** Paths whose links come out: a blog the start linked and never wrote (AGL-3660). */
+    droppedHrefs?: readonly string[]
+  },
 ): NodesMap | null {
   const map: Record<string, MutableNode> = {}
   for (const [id, node] of Object.entries(nodes as unknown as Record<string, MutableNode>)) {
     map[id] = { ...node, ...(node.props ? { props: { ...node.props } } : {}), ...(node.nodes ? { nodes: [...node.nodes] } : {}) }
   }
   let changed = false
+  // The header, the phone menu and the footer link a blog by its path before
+  // its posts are written (AGL-3660); a start whose posts were not written
+  // publishes none of those links to a page that does not exist.
+  const dropped = new Set(input.droppedHrefs ?? [])
+  if (dropped.size) {
+    const gone = new Set(
+      Object.entries(map)
+        .filter(([, node]) => node.componentId === 'muiScreenLink' && dropped.has(String(node.props?.['href'] ?? '')))
+        .map(([id]) => id),
+    )
+    if (gone.size) {
+      for (const id of gone) delete map[id]
+      for (const node of Object.values(map)) {
+        if (node.nodes?.some((child) => gone.has(child))) node.nodes = node.nodes.filter((child) => !gone.has(child))
+      }
+      changed = true
+    }
+  }
   const links = Object.values(map).filter((node) => node.componentId === 'muiScreenLink')
   if (input.retiredHomeId && input.homeId) {
     for (const link of links) {
@@ -189,7 +224,13 @@ export function aiLayoutWithNavigation(
  */
 export async function aiPublishGuidedSite(
   firestore: Firestore,
-  input: { job: Pick<AiJob, '$id' | 'orgId' | 'hostId'>; outputs: readonly AiJobOutput[]; now: Date },
+  input: {
+    job: Pick<AiJob, '$id' | 'orgId' | 'hostId'>
+    outputs: readonly AiJobOutput[]
+    now: Date
+    /** The start owed its blog's posts and wrote none (AGL-3660): its links to the blog come out. */
+    blogUnwritten?: boolean
+  },
   deps: AiSitePublishDeps = {},
 ): Promise<AiJobSitePublish> {
   const sendSitePublished = deps.sendSitePublished ?? sendGa4SitePublished
@@ -256,6 +297,7 @@ export async function aiPublishGuidedSite(
     hostId,
     pageIds: accepted.map((page) => page.id),
     entries: navEntriesOf(pages).filter((entry) => entries[entry.screenId]),
+    droppedHrefs: aiSiteUnwrittenBlogHrefs(input.blogUnwritten),
     retiredHomeId: releases,
     homeId: home?.id ?? null,
     jobId: job.$id,
@@ -344,13 +386,14 @@ async function aiNavigationLayoutWrite(
     hostId: string
     pageIds: readonly string[]
     entries: readonly NavEntry[]
+    droppedHrefs: readonly string[]
     retiredHomeId: string | null
     homeId: string | null
     jobId: string
     now: Date
   },
 ): Promise<LayoutWrite | null> {
-  if (!input.entries.length && !input.retiredHomeId) return null
+  if (!input.entries.length && !input.retiredHomeId && !input.droppedHrefs.length) return null
   const hostRef = firestore.collection('hosts').doc(input.hostId)
   const layoutIds = new Set<string>()
   for (const id of input.pageIds) {

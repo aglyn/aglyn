@@ -72,12 +72,42 @@ export interface AiLayoutPicturePhoto {
 const PEOPLE =
   /\b(about|team|story|owner|owners|founder|founders|staff|crew|people|person|portrait|meet|family|families|who we are|our (?:team|crew|people|story)|therapist|counsel(?:l)?or|coach|doctor|dentist|stylist|trainer|smil(?:e|es|ing)|headshot)\b/i
 
-/** A frame's `aspectRatio` (`'16 / 9'`) as a number. */
-function aspectOf(value: unknown): number {
+/**
+ * An `aspectRatio` (`'16 / 9'`) as a number, or `null` where none is named.
+ * A responsive one (`{ xs: '4 / 3', md: '4 / 5' }`, as a designed page's
+ * pictures carry, AGL-3660) reads at the desktop breakpoint first: one photo
+ * serves every width, and the wide screen is where its shape shows most.
+ */
+function aspectOf(value: unknown): number | null {
+  if (value && typeof value === 'object') {
+    const byBreakpoint = value as Record<string, unknown>
+    for (const breakpoint of ['md', 'lg', 'xl', 'sm', 'xs']) {
+      const ratio = aspectOf(byBreakpoint[breakpoint])
+      if (ratio !== null) return ratio
+    }
+    return null
+  }
   const match = /^\s*(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*$/.exec(String(value ?? ''))
-  if (!match) return 1
+  if (!match) return null
   const ratio = Number(match[1]) / Number(match[2])
-  return Number.isFinite(ratio) && ratio > 0 ? ratio : 1
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : null
+}
+
+/** The shape a full-bleed cover's photo is searched for: it fills a wide band. */
+const COVER_ASPECT = 16 / 9
+
+/**
+ * A slot's shape (AGL-3660): the image's own `aspectRatio` (a designed
+ * picture card sets it on the image), else its frame's, else — for a frame
+ * laid absolutely over its whole section, a designed photo cover — a wide
+ * band's. 1 where nothing says.
+ */
+function slotAspect(image: { sx?: Record<string, unknown> } | undefined, frame: { sx?: Record<string, unknown> } | undefined): number {
+  const own = aspectOf(image?.sx?.['aspectRatio']) ?? aspectOf(frame?.sx?.['aspectRatio'])
+  if (own !== null) return own
+  const sx = frame?.sx
+  if (sx?.['position'] === 'absolute' && sx['width'] === '100%' && sx['height'] === '100%') return COVER_ASPECT
+  return 1
 }
 
 /** A slot's role: the first section's picture is the hero; people make an about picture. */
@@ -126,7 +156,7 @@ export function aiLayoutPictureSlots(
           frameId: frame ? parentId : null,
           iconId,
           alt,
-          aspect: aspectOf(frame?.sx?.['aspectRatio']),
+          aspect: slotAspect(node, frame),
           sectionIndex: here,
           role: aiLayoutPictureRole({
             sectionIndex: here,

@@ -23,6 +23,7 @@
 import { registerPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import { registerPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { registerPluginTrustSigner } from '@aglyn/aglyn/plugin-manager/plugin-trust-signing'
+import { registerPluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
 
 /**
  * Server-side error reporting for the console runtime (AGL-1921).
@@ -132,6 +133,28 @@ export async function register(): Promise<void> {
           './utils/server/plugin-trust-signer'
         )
         return await consolePluginTrustSigner.sign(sha256)
+      },
+    },
+    { pluginId: 'console' },
+  )
+
+  /*
+   * And the media library's server door (AGL-3660): a plugin that holds a
+   * picture on the server — an AI job copying a stock photo — stores it in a
+   * site's library through the same checks an upload passes, as the member
+   * it names. This app holds the ingress (lockdown, quarantine, storage
+   * band, variants), so it registers the one implementation; deferred by
+   * RELATIVE path for the reason the cache above is.
+   */
+  registerPluginMediaIngest(
+    {
+      ingest: async (request) => {
+        const { consoleMediaIngest } = await import('./utils/server/media-ingest')
+        return await consoleMediaIngest.ingest(request)
+      },
+      findStockPhoto: async (input) => {
+        const { consoleMediaIngest } = await import('./utils/server/media-ingest')
+        return await consoleMediaIngest.findStockPhoto(input)
       },
     },
     { pluginId: 'console' },

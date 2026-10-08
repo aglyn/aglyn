@@ -619,18 +619,36 @@ const SCALE_SHARE: Partial<Record<HostThemeTypographyVariantKey, { size: number;
 
 const rem = (value: number) => `${Math.round(value * 1000) / 1000}rem`
 
+/**
+ * The kinds whose titles are their design (AGL-3660): a portfolio's or a
+ * studio's statement, a photographer's name over a cover, a publication's
+ * masthead are set larger than a business site's, the way the designer
+ * templates set them. The display line grows most, the page title a little,
+ * and nothing under it; a phone still steps every size down
+ * (`responsiveFontSizes`).
+ */
+export const AI_SITE_DISPLAY_BOOST: Readonly<Record<string, { display: number; title: number }>> = {
+  portfolio: { display: 1.25, title: 1.1 },
+  studio: { display: 1.3, title: 1.1 },
+  photography: { display: 1.2, title: 1.08 },
+  blog: { display: 1.25, title: 1.1 },
+}
+
 /** The type a style sets: headings at its scale, weight and tracking, and the eyebrow and button styles. */
 function typographyFor(style: AiSiteStyle): HostTheme['typography'] {
   const pairing = aiSiteFontPairing(style.fonts) ?? (AI_SITE_FONT_PAIRINGS[0] as NonNullable<ReturnType<typeof aiSiteFontPairing>>)
   const variants: Partial<Record<HostThemeTypographyVariantKey, HostThemeTypographyVariant>> = {
     ...(DEFAULT_SITE_THEME.typography?.variants ?? {}),
   }
+  const boost = AI_SITE_DISPLAY_BOOST[style.kind]
   for (const [key, { size, share }] of Object.entries(SCALE_SHARE) as Array<[HostThemeTypographyVariantKey, { size: number; share: number }]>) {
     const big = key === 'displayXl' || key === 'h1' || key === 'h2'
+    const boosted = key === 'displayXl' ? (boost?.display ?? 1) : key === 'h1' ? (boost?.title ?? 1) : 1
     const variant: HostThemeTypographyVariant = {
-      fontSize: rem(size * (1 + (style.headingScale - 1) * share) * (pairing.caps && big ? 0.92 : 1)),
+      fontSize: rem(size * (1 + (style.headingScale - 1) * share) * (pairing.caps && big ? 0.92 : 1) * boosted),
       fontWeight: big ? pairing.heading.weight : pairing.heading.sub,
-      lineHeight: big ? (pairing.caps ? 1.05 : 1.1) : 1.25,
+      // A display line set larger sets tighter.
+      lineHeight: big ? (pairing.caps ? 1.05 : key === 'displayXl' && boost ? 1.02 : 1.1) : 1.25,
     }
     if (pairing.tracking !== undefined && (big || key === 'h3')) variant.letterSpacing = `${pairing.tracking}em`
     if (pairing.caps && (big || key === 'h3')) variant.textTransform = 'uppercase'

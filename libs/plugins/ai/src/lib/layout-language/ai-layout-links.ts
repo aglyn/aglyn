@@ -31,6 +31,12 @@ export interface AiLayoutPage {
   id: string
   label: string
   slug: string
+  /**
+   * A destination on the site that is no page of its own, linked by its path:
+   * the blog a guided start writes its posts into (AGL-3660), whose `id` is
+   * no screen. Absent for every page.
+   */
+  href?: string
 }
 
 /** Everything a page's links resolve against. */
@@ -60,6 +66,8 @@ export type AiLayoutDestination =
   | { kind: 'page'; screenId: string }
   | { kind: 'section'; index: number }
   | { kind: 'href'; href: string }
+  /** A path on this site that is no page of its own, such as the blog (AGL-3660). */
+  | { kind: 'path'; href: string }
 
 /** The words of a label or a name, as they are compared. */
 function wordsOf(text: string): string[] {
@@ -123,6 +131,7 @@ function pageDestination(
   )
     return null
   if (isHomeSlug(page.slug) && !HOME_WORDS.test(label)) return null
+  if (page.href) return { kind: 'path', href: page.href }
   return { kind: 'page', screenId: page.id }
 }
 

@@ -27,7 +27,9 @@ import {
   aiLayoutSpans,
   type AiLayoutPagePlan,
 } from './ai-layout-compiler'
+import type { AiLayoutDesign } from './ai-layout-design'
 import { aiCompileLayoutFrame } from './ai-layout-frame'
+import { AI_SITE_KINDS } from '../model/ai-site-kinds'
 import {
   AI_LAYOUT_ALIGNS,
   AI_LAYOUT_BANDS,
@@ -92,6 +94,7 @@ function checkContext(
     pageSections: plan.sections.map((section) => section.name),
     scrollTargetIds: sectionIds,
     ...(reusableComponents ? {} : { reusableComponents: false }),
+    repeatsCompiled: true,
     codeBuilt: true,
   }
 }
@@ -102,11 +105,13 @@ function build(
   plan: AiLayoutPagePlan,
   reusableComponents: boolean,
   targets = TARGETS,
+  design?: AiLayoutDesign,
 ) {
   const sectionIds = plan.sections.map((_, index) => `sec-${index + 1}`)
   const compiled = aiCompileLayoutPage(sections, plan, targets, {
     reusableComponents,
     sectionIds,
+    ...(design ? { design } : {}),
   })
   const stored = aiLayoutStoredTree(
     compiled.tree,
@@ -895,6 +900,28 @@ describe('the frame', () => {
     })
   })
 
+  it('links a blog a start writes by its path — header, phone menu and footer — and the doctrine admits it (AGL-3660)', () => {
+    const blog = { id: 'aiSiteBlog', label: 'Blog', slug: '/blog', href: '/blog' }
+    const navPages = [nav[0], blog, ...nav.slice(1)]
+    const read = aiReadLayoutFrame({
+      header: { band: 'plain', blocks: [] },
+      footer: { band: 'soft', blocks: [{ kind: 'text', text: 'Slow travel by train.' }] },
+    })
+    const compiled = aiCompileLayoutFrame(read, { siteName: 'Slow Roads', homeId: HOME, navPages }, { ...TARGETS, pages: navPages })
+    const stored = aiLayoutStoredTree(compiled.tree, 'layout', layoutContext)
+    if (stored.ok === false) throw new Error(stored.error)
+    const report = validateAiDoctrineTree({ rootId: stored.rootId, nodes: stored.nodes }, 'layout', layoutContext)
+    expect(report.violations).toEqual([])
+    const toBlog = Object.values(stored.nodes).filter((node) => (node as { props?: Record<string, unknown> }).props?.['href'] === '/blog')
+    // The header row, the phone menu and the footer's list.
+    expect(toBlog.length).toBeGreaterThanOrEqual(3)
+    for (const node of toBlog) {
+      const props = (node as { props: Record<string, unknown> }).props
+      expect(props['screenId']).toBeUndefined()
+      expect(props['target']).toBeUndefined()
+    }
+  })
+
   it('prints one copyright line, the bottom bar\'s, whatever the answer adds', () => {
     const block = (kind: string, text: string) => ({ kind, col: 0, text })
     const { compiled, report } = frame({
@@ -995,4 +1022,26 @@ it('a compiled page has no node outside its tree', () => {
     (visit) => visit.id,
   )
   expect(new Set(walked)).toEqual(new Set(Object.keys(compiled.tree.nodes)))
+})
+
+describe('every page drawn with a site design (AGL-3660) compiles into a page the doctrine admits', () => {
+  const RUNS = 600
+  it.each([
+    ['Free', false],
+    ['paid', true],
+  ])(`%s: ${RUNS} random documents, every kind and many seeds, with no violation and no repair`, (_label, paid) => {
+    const failures: string[] = []
+    for (let seed = 1; seed <= RUNS; seed += 1) {
+      const { sections, plan: pagePlan } = draw(seed * (paid ? 6151 : 92_821), paid)
+      const design: AiLayoutDesign = { kind: AI_SITE_KINDS[seed % AI_SITE_KINDS.length].id, seed: seed * 2_654_435_761, home: seed % 3 !== 0 }
+      try {
+        const { report, stored } = build(sections, pagePlan, paid, TARGETS, design)
+        if (stored.ok && stored.repairs.length) failures.push(`seed ${seed}: repairs ${stored.repairs.slice(0, 3).join(' | ')}`)
+        if (report.violations.length) failures.push(`seed ${seed} (${design.kind}): ${report.violations.map((violation) => `${violation.code}: ${violation.message}`).join(' | ')}`)
+      } catch (error) {
+        failures.push(`seed ${seed}: threw ${(error as Error).message}`)
+      }
+    }
+    expect(failures.slice(0, 5)).toEqual([])
+  })
 })
