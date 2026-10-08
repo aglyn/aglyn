@@ -63,11 +63,7 @@ const switchesSortingOff = (source: string): boolean => /\bdisableColumnSorting\
  * line here — convert the list instead of adding one.
  */
 const NOT_YET_CONVERTED: readonly string[] = [
-  'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
   'apps/console/components/content/collection-entries-page.component.tsx',
-  'apps/console/components/host-components-card.component.tsx',
-  'apps/console/components/staff-doc-table.component.tsx',
-  'apps/console/components/templates/host-templates-card.component.tsx',
   'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
   'libs/plugins/email/src/lib/components/email-screens-card.tsx',
   'libs/plugins/email/src/lib/components/list-members-panel.tsx',

@@ -40,6 +40,13 @@
  *                 leaves tombstones out with `deletedAt == null`, which
  *                 matches only a document that holds the field. A deleted
  *                 screen's time is never touched.
+ *   description   a layout or component with none: `null`, STORED — the
+ *                 lists' Description header orders by it (AGL-3680), and an
+ *                 `orderBy` drops every document that lacks the field.
+ *   createdAt,    any of the four with neither or one of them: the other
+ *   updatedAt     when it has it, else the document's own create / update
+ *                 time — the Created and Updated headers order by them
+ *                 (AGL-3680), and the staff Content tabs by `updatedAt`.
  *
  * A document without them still exists and still opens; it is only the
  * lists' search and filters that cannot see it.
@@ -67,8 +74,8 @@
  *
  * `hosts/{hostId}/{screens,layouts,components,templates}/{id}` and
  * `marketplaceListings/{id}`, and on each only the keys above that differ
- * from what it holds — never `displayName`, `updatedAt` or anything a reader
- * shows. No document is deleted. A DELETED screen is the one exception to
+ * from what it holds — never `displayName`, and `createdAt`/`updatedAt` only
+ * where the field is missing altogether. No document is deleted. A DELETED screen is the one exception to
  * stamping: it carries no name keys (a delete clears them, so the email
  * templates list, ordered by `nameLower`, drops the tombstone), and one
  * deleted before that rule has its keys removed rather than stamped.
@@ -128,13 +135,17 @@ const READ_FIELDS = [
   'nameLower',
   'nameTokens',
   'nameReversed',
+  'description',
+  'createdAt',
+  'updatedAt',
 ]
 
 const args = parseDeployArgs({
   command: 'backfill-artifacts-list-keys',
   summary:
     'Stamp the list keys (name keys, kind, source, library row, a live ' +
-    'screen\'s deletedAt: null) onto ' +
+    'screen\'s deletedAt: null, a layout or component\'s description: null, ' +
+    'a missing createdAt/updatedAt) onto ' +
     'site artifacts and marketplace listings written before them, so the ' +
     'console lists can filter and search them. Writes to the named project with --apply.',
   effect: { gerund: 'writing', past: 'WRITTEN', failure: 'could not run' },
@@ -174,6 +185,9 @@ export function createKeys(collection, doc) {
   const keys = { ...displayNameSearchFields(searchName(collection, doc)) }
   if (collection === 'screens') keys.deletedAt = null
   if (collection === 'components' && doc.kind !== 'email') keys.kind = 'site'
+  if ((collection === 'layouts' || collection === 'components') && doc.description == null) {
+    keys.description = null
+  }
   if (collection === 'templates') {
     if (!TEMPLATE_KINDS.includes(String(doc.kind))) keys.kind = 'page'
     const sourceType = record(doc.source).type
@@ -233,24 +247,43 @@ const NAME_KEYS = ['nameLower', 'nameTokens', 'nameReversed']
 /** In a plan, a field to delete; written as `FieldValue.delete()`. */
 export const CLEAR = '__clear__'
 
-export function planArtifact(collection, data, libraryRow) {
+/**
+ * The `createdAt` / `updatedAt` a document missing one should hold: the
+ * other, when it has it, else the document's own create / update time
+ * (`times`, from the snapshot). Nothing for a document holding both. Pure.
+ */
+export function planTimes(data, times = {}) {
+  const update = {}
+  if (data.createdAt === undefined) {
+    const value = data.updatedAt ?? times.createTime
+    if (value !== undefined) update.createdAt = value
+  }
+  if (data.updatedAt === undefined) {
+    const value = data.createdAt ?? times.updateTime
+    if (value !== undefined) update.updatedAt = value
+  }
+  return update
+}
+
+export function planArtifact(collection, data, libraryRow, times) {
   // A deleted screen carries NO name keys, the way a delete now leaves it:
   // the email templates list orders by `nameLower`, so a tombstone that kept
   // its key would still be listed. One deleted before that is cleared here.
   if (collection === 'screens' && data.deletedAt != null) {
     const stale = NAME_KEYS.filter((key) => data[key] !== undefined)
-    return stale.length
-      ? { update: Object.fromEntries(stale.map((key) => [key, CLEAR])) }
-      : { skip: 'deleted' }
+    const update = { ...Object.fromEntries(stale.map((key) => [key, CLEAR])), ...planTimes(data, times) }
+    return Object.keys(update).length ? { update } : { skip: 'deleted' }
   }
   const keys = createKeys(collection, data)
-  const update = {}
+  const update = { ...planTimes(data, times) }
   if (data.nameLower !== keys.nameLower) update.nameLower = keys.nameLower
   if (!sameSearchTokens(data.nameTokens, keys.nameTokens)) update.nameTokens = keys.nameTokens
   if (data.nameReversed !== keys.nameReversed) update.nameReversed = keys.nameReversed
   // A live screen stores its null; one that holds no `deletedAt` at all is
   // stamped. `select()` returns an absent field as absent, never as null.
   if ('deletedAt' in keys && data.deletedAt === undefined) update.deletedAt = null
+  // Likewise a layout's or component's missing description (AGL-3680).
+  if ('description' in keys && data.description === undefined) update.description = null
   if ('kind' in keys && data.kind !== keys.kind) update.kind = keys.kind
   if ('source' in keys) update['source.type'] = keys.source.type
   if (collection === 'templates') {
@@ -306,13 +339,18 @@ function selfTest() {
     ['a keyed screen missing its stored null', 'screens', { displayName: 'Home', ...HOME }, undefined, { update: { deletedAt: null } }],
     ['a deleted email template with no keys', 'screens', { displayName: 'Old', kind: 'email', deletedAt: 1 }, undefined, { skip: 'deleted' }],
     ['a deleted screen still keyed, its keys cleared', 'screens', { displayName: 'Old', kind: 'email', deletedAt: 1, nameLower: 'old', nameTokens: ['o'] }, undefined, { update: { nameLower: CLEAR, nameTokens: CLEAR } }],
-    ['a renamed layout with stale keys', 'layouts', { displayName: 'Home', ...HOME, nameLower: 'old' }, undefined, { update: { nameLower: 'home' } }],
-    ['a legacy component', 'components', { displayName: 'Home' }, undefined, { update: { ...HOME, kind: 'site' } }],
+    ['a renamed layout with stale keys', 'layouts', { displayName: 'Home', ...HOME, nameLower: 'old', description: null }, undefined, { update: { nameLower: 'home' } }],
+    ['a layout with no stored description', 'layouts', { displayName: 'Home', ...HOME }, undefined, { update: { description: null } }],
+    ['a layout whose description is written is never touched', 'layouts', { displayName: 'Home', ...HOME, description: 'Rail' }, undefined, { skip: 'current' }],
+    ['a legacy component', 'components', { displayName: 'Home' }, undefined, { update: { ...HOME, description: null, kind: 'site' } }],
+    ['a layout with no createdAt takes its updatedAt', 'layouts', { displayName: 'Home', ...HOME, description: null, updatedAt: 7 }, undefined, { update: { createdAt: 7 } }, { createTime: 1, updateTime: 9 }],
+    ['a template with neither time takes its document times', 'templates', { displayName: 'Home', ...HOME, kind: 'page', source: { type: 'authored' }, libraryRow: true }, true, { update: { createdAt: 1, updatedAt: 9 } }, { createTime: 1, updateTime: 9 }],
+    ['a deleted screen missing its updatedAt takes its createdAt', 'screens', { displayName: 'Old', deletedAt: 1, createdAt: 3 }, undefined, { update: { updatedAt: 3 } }, { createTime: 1, updateTime: 9 }],
     ['a legacy template', 'templates', { displayName: 'Home' }, true, { update: { ...HOME, kind: 'page', 'source.type': 'authored', libraryRow: true } }],
     ['a starter page that does not lead', 'templates', { displayName: 'Home', kind: 'page', source: { type: 'starter', starterId: 's', starterName: 'Home', starterOrder: 1 }, ...HOME, libraryRow: true }, false, { update: { libraryRow: false } }],
   ]
-  for (const [name, collection, data, libraryRow, expected] of cases) {
-    const got = planArtifact(collection, data, libraryRow)
+  for (const [name, collection, data, libraryRow, expected, times] of cases) {
+    const got = planArtifact(collection, data, libraryRow, times)
     check(`${name}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(got)}`, JSON.stringify(got) === JSON.stringify(expected))
     // Idempotent: what the plan stamped plans nothing the second time.
     const stamped = 'update' in got ? { ...data } : data
@@ -357,7 +395,12 @@ async function main() {
       const count = tally(collection)
       const rows = []
       for await (const snapshot of everyDocument(hostRef.collection(collection).select(...READ_FIELDS))) {
-        rows.push({ id: snapshot.id, ref: snapshot.ref, data: snapshot.data() ?? {} })
+        rows.push({
+          id: snapshot.id,
+          ref: snapshot.ref,
+          data: snapshot.data() ?? {},
+          times: { createTime: snapshot.createTime, updateTime: snapshot.updateTime },
+        })
       }
       const leads = collection === 'templates' ? libraryRowLeads(rows) : null
       for (const row of rows) {
@@ -367,7 +410,7 @@ async function main() {
         if (collection === 'screens' && row.data.deletedAt != null && row.data.nameLower != null) {
           keyedTombstones += 1
         }
-        const plan = planArtifact(collection, row.data, leads ? leads.has(row.id) : undefined)
+        const plan = planArtifact(collection, row.data, leads ? leads.has(row.id) : undefined, row.times)
         if ('skip' in plan) {
           if (plan.skip === 'current') count.current += 1
           continue
