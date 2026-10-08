@@ -78,6 +78,80 @@ data class ContentSchemaTypeOptionsItem(
 )
 
 @Serializable
+data class DatasetFieldDefinition(
+    val customType: String? = null,
+    val default: JsonElement? = null,
+    val description: String? = null,
+    val name: String? = null,
+    val reference: DatasetFieldDefinitionReference? = null,
+    val required: Boolean? = null,
+    val slugFrom: String? = null,
+    val type: DatasetFieldType? = null,
+    val validation: DatasetFieldValidation? = null,
+)
+
+@Serializable
+data class DatasetFieldDefinitionReference(
+    val datasetId: String,
+    val displayFieldId: String? = null,
+    val multiple: Boolean? = null,
+    val onDelete: DatasetFieldDefinitionReferenceOnDelete? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = DatasetFieldDefinitionReferenceOnDeleteSerializer::class)
+enum class DatasetFieldDefinitionReferenceOnDelete(val raw: String) {
+    RESTRICT("restrict"),
+    SET_NULL("setNull"),
+    UNKNOWN(""),
+}
+
+internal object DatasetFieldDefinitionReferenceOnDeleteSerializer :
+    RawEnumSerializer<DatasetFieldDefinitionReferenceOnDelete>("com.aglyn.contracts.DatasetFieldDefinitionReferenceOnDelete", DatasetFieldDefinitionReferenceOnDelete.entries, DatasetFieldDefinitionReferenceOnDelete.UNKNOWN, { it.raw })
+
+@Serializable
+data class DatasetFieldEntry(
+    val id: String,
+    val name: String,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = DatasetFieldTypeSerializer::class)
+enum class DatasetFieldType(val raw: String) {
+    BOOL("bool"),
+    BYTES("bytes"),
+    COORDINATES("coordinates"),
+    FLOAT("float"),
+    INT32("int32"),
+    INT64("int64"),
+    MAP("map"),
+    NIL("nil"),
+    REFERENCE("reference"),
+    SORTED("sorted"),
+    TEXT("text"),
+    TIMESTAMP("timestamp"),
+    UNKNOWN(""),
+}
+
+internal object DatasetFieldTypeSerializer :
+    RawEnumSerializer<DatasetFieldType>("com.aglyn.contracts.DatasetFieldType", DatasetFieldType.entries, DatasetFieldType.UNKNOWN, { it.raw })
+
+@Serializable
+data class DatasetFieldValidation(
+    val max: Double? = null,
+    val min: Double? = null,
+    val options: List<String>? = null,
+    val regex: String? = null,
+    val required: Boolean? = null,
+)
+
+@Serializable
+data class DatasetModel(
+    val fields: Map<String, DatasetFieldDefinition>? = null,
+    val order: List<String>? = null,
+)
+
+@Serializable
 data class EntryStatusOptionsItem(
     val label: String,
     val value: String,
@@ -1111,6 +1185,9 @@ data class ContractValues(
     @SerialName("COMPONENT_LIST_QUERY") val componentListQuery: ListQueryDeclaration,
     @SerialName("CONTENT_SCHEMA_TYPE_DEFAULT") val contentSchemaTypeDefault: ContentSchemaType,
     @SerialName("CONTENT_SCHEMA_TYPE_OPTIONS") val contentSchemaTypeOptions: List<ContentSchemaTypeOptionsItem>,
+    @SerialName("DATASET_FIELD_TYPE_LABELS") val datasetFieldTypeLabels: Map<String, String>,
+    @SerialName("DATASET_FIELD_TYPES") val datasetFieldTypes: List<DatasetFieldType>,
+    @SerialName("DATASET_FILTER_PREFIX_MAX") val datasetFilterPrefixMax: Long,
     @SerialName("DEFAULT_TITLE_PATTERN") val defaultTitlePattern: String,
     @SerialName("ENTRY_LIST_FILTER_HEADERS") val entryListFilterHeaders: Map<String, String>,
     @SerialName("ENTRY_LIST_QUERY") val entryListQuery: ListQueryDeclaration,

@@ -86,6 +86,7 @@ import {
 } from './dataset-record-filter'
 import { coerceDocumentValues, datasetIntegrityUpdate, datasetValueToInput, effectiveDatasetModel, formatDatasetValue, modelFromFieldEntries, validateDocument } from '../model/dataset-models'
 import { fillRecordAddresses } from '../record-pages/record-pages'
+import { planReferenceFixups, referencingFieldIds, restrictedDeleteMessage } from '../model/dataset-record-delete-plan'
 import { datasetDisplayName, parseDatasetFieldEntries } from '../model/datasets'
 import { datasetTransferResourceKey } from '../transfer/dataset-transfer-key'
 
@@ -982,12 +983,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
        */
       for (const other of datasets) {
         const otherModel = effectiveDatasetModel(other)
-        const referencing = otherModel.order.filter(
-          (fieldId) =>
-            otherModel.fields[fieldId]?.type === 'reference' &&
-            otherModel.fields[fieldId]?.reference?.datasetId === selected.$id,
-        )
-        if (!referencing.length) continue
+        if (!referencingFieldIds(otherModel, selected.$id).length) continue
         let snapshot
         try {
           snapshot = await getDocs(
@@ -1011,46 +1007,33 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             { variant: 'error' },
           )
         }
-        const hits = snapshot.docs.filter((docSnapshot) =>
-          referencing.some((fieldId) => {
-            const stored = docSnapshot.get('values')?.[fieldId]
-            return Array.isArray(stored)
-              ? stored.includes(record.$id)
-              : stored === record.$id
-          }),
+        // The verdict is shared with `/api/orgs/datasets` `delete-record`
+        // (`planReferenceFixups`): the per-field test keeps the query EXACT,
+        // since `referencedIds` is the union across every reference field.
+        const plan = planReferenceFixups(
+          otherModel,
+          selected.$id,
+          record.$id,
+          snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, values: docSnapshot.get('values') })),
         )
-        if (!hits.length) continue
-        const restricted = referencing.some(
-          (fieldId) =>
-            otherModel.fields[fieldId]?.reference?.onDelete === 'restrict',
-        )
-        if (restricted) {
+        if (plan.kind === 'none') continue
+        if (plan.kind === 'restricted') {
           return void enqueueSnackbar(
-            `Cannot delete: referenced by ${hits.length} document` +
-              `${hits.length === 1 ? '' : 's'} in "${datasetDisplayName(other)}"`,
+            restrictedDeleteMessage(plan.holders, datasetDisplayName(other)),
             { variant: 'warning', persist: false },
           )
         }
         // Chunked under Firestore's 500-writes-per-batch cap. The query is no
         // longer bounded by a page size, so the number of holders is whatever
         // the collection really holds.
-        for (let start = 0; start < hits.length; start += 400) {
+        for (let start = 0; start < plan.updates.length; start += 400) {
           const batch = writeBatch(firestore)
-          for (const hit of hits.slice(start, start + 400)) {
-            const values = { ...(hit.get('values') ?? {}) }
-            for (const fieldId of referencing) {
-              const stored = values[fieldId]
-              if (Array.isArray(stored)) {
-                values[fieldId] = stored.filter(
-                  (id: string) => id !== record.$id,
-                )
-              } else if (stored === record.$id) {
-                delete values[fieldId]
-              }
-            }
-            batch.update(hit.ref, {
-              values,
-              ...datasetIntegrityUpdate(otherModel, values, deleteField()),
+          for (const update of plan.updates.slice(start, start + 400)) {
+            const holder = snapshot.docs.find((docSnapshot) => docSnapshot.id === update.id)
+            if (!holder) continue
+            batch.update(holder.ref, {
+              values: update.values,
+              ...datasetIntegrityUpdate(otherModel, update.values, deleteField()),
             })
           }
           await batch.commit()

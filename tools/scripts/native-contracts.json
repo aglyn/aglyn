@@ -202,12 +202,27 @@
         "TENANT_EMAILS",
         "TENANT_EMAIL_COLLECTION"
       ]
+    },
+    "libs/plugins/data/src/lib/model/dataset-model-core.ts": {
+      "types": [
+        "DatasetModel",
+        "DatasetFieldDefinition",
+        "DatasetFieldType",
+        "DatasetFieldValidation",
+        "DatasetFieldEntry"
+      ],
+      "values": [
+        "DATASET_FIELD_TYPES",
+        "DATASET_FIELD_TYPE_LABELS",
+        "DATASET_FILTER_PREFIX_MAX"
+      ]
     }
   },
   "ints": [],
   "json": [
     "ListQueryFilter.value",
-    "ListQueryRefusal.clause"
+    "ListQueryRefusal.clause",
+    "DatasetFieldDefinition.default"
   ],
   "omit": [
     "HostProduct.deletedAt",
@@ -219,7 +234,10 @@
     "OrderTotals",
     "HostProduct",
     "ProductVariant",
-    "TenantEmailEntry"
+    "TenantEmailEntry",
+    "DatasetFieldDefinition",
+    "DatasetFieldValidation",
+    "DatasetModel"
   ],
   "listQueryCases": {
     "ORDER_LIST_QUERY": {},
@@ -2140,6 +2158,1367 @@
         ],
         [
           "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ]
+      ]
+    },
+    "formatDatasetValue": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          {
+            "name": "T",
+            "type": "text"
+          },
+          "Sourdough"
+        ],
+        [
+          {
+            "name": "T",
+            "type": "text"
+          },
+          ""
+        ],
+        [
+          {
+            "name": "T",
+            "type": "text"
+          },
+          null
+        ],
+        [
+          {
+            "name": "B",
+            "type": "bool"
+          },
+          true
+        ],
+        [
+          {
+            "name": "B",
+            "type": "bool"
+          },
+          false
+        ],
+        [
+          {
+            "name": "B",
+            "type": "bool"
+          },
+          "maybe"
+        ],
+        [
+          {
+            "name": "D",
+            "type": "timestamp"
+          },
+          1767225600000
+        ],
+        [
+          {
+            "name": "D",
+            "type": "timestamp"
+          },
+          1700000000123
+        ],
+        [
+          {
+            "name": "D",
+            "type": "timestamp"
+          },
+          "soon"
+        ],
+        [
+          {
+            "name": "C",
+            "type": "coordinates"
+          },
+          {
+            "latitude": 45.52,
+            "longitude": -122.68
+          }
+        ],
+        [
+          {
+            "name": "C",
+            "type": "coordinates"
+          },
+          "x"
+        ],
+        [
+          {
+            "name": "L",
+            "type": "sorted"
+          },
+          [
+            "a",
+            "b c"
+          ]
+        ],
+        [
+          {
+            "name": "L",
+            "type": "sorted"
+          },
+          "one"
+        ],
+        [
+          {
+            "name": "M",
+            "type": "map"
+          },
+          {
+            "a": 1,
+            "b": "two"
+          }
+        ],
+        [
+          {
+            "name": "N",
+            "type": "float"
+          },
+          8.5
+        ],
+        [
+          {
+            "name": "I",
+            "type": "int32"
+          },
+          12
+        ],
+        [
+          {
+            "name": "R",
+            "type": "reference"
+          },
+          "rec-1"
+        ]
+      ]
+    },
+    "datasetValueToInput": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          {
+            "name": "T",
+            "type": "text"
+          },
+          "Sourdough"
+        ],
+        [
+          {
+            "name": "T",
+            "type": "text"
+          },
+          null
+        ],
+        [
+          {
+            "name": "B",
+            "type": "bool"
+          },
+          true
+        ],
+        [
+          {
+            "name": "B",
+            "type": "bool"
+          },
+          false
+        ],
+        [
+          {
+            "name": "D",
+            "type": "timestamp"
+          },
+          1767225600000
+        ],
+        [
+          {
+            "name": "D",
+            "type": "timestamp"
+          },
+          1700000000123
+        ],
+        [
+          {
+            "name": "C",
+            "type": "coordinates"
+          },
+          {
+            "latitude": 45.52,
+            "longitude": -122.68
+          }
+        ],
+        [
+          {
+            "name": "L",
+            "type": "sorted"
+          },
+          [
+            "a",
+            "b"
+          ]
+        ],
+        [
+          {
+            "name": "M",
+            "type": "map"
+          },
+          {
+            "a": 1
+          }
+        ],
+        [
+          {
+            "name": "N",
+            "type": "float"
+          },
+          8.5
+        ],
+        [
+          {
+            "name": "R",
+            "type": "reference",
+            "reference": {
+              "datasetId": "d",
+              "multiple": true
+            }
+          },
+          [
+            "x",
+            "y"
+          ]
+        ]
+      ]
+    },
+    "parseDatasetFieldEntries": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          "Title, Unit price"
+        ],
+        [
+          "roast_preference\nOrigin country, origin-country"
+        ],
+        [
+          "  , 123, Ünïcode name, a-b"
+        ],
+        [
+          ""
+        ],
+        [
+          "name, Name, NAME, email_2"
+        ]
+      ]
+    },
+    "slugifyDatasetFieldId": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          "Roast preference"
+        ],
+        [
+          "  Unit-price  "
+        ],
+        [
+          "2nd place"
+        ],
+        [
+          "__x__"
+        ],
+        [
+          "Ünïcode"
+        ],
+        [
+          "already_ok"
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "datasetDisplayName": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          {
+            "displayName": " Menu "
+          }
+        ],
+        [
+          {
+            "name": "Legacy"
+          }
+        ],
+        [
+          {
+            "displayName": "  ",
+            "name": "Old"
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "effectiveDatasetModel": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          {
+            "model": {
+              "order": [
+                "name",
+                "price",
+                "inStock",
+                "category",
+                "tags",
+                "launched",
+                "where",
+                "ref"
+              ],
+              "fields": {
+                "name": {
+                  "name": "Name",
+                  "type": "text",
+                  "required": true
+                },
+                "price": {
+                  "name": "Price",
+                  "type": "float"
+                },
+                "inStock": {
+                  "name": "In stock",
+                  "type": "bool"
+                },
+                "category": {
+                  "name": "Category",
+                  "type": "text",
+                  "validation": {
+                    "options": [
+                      "Bread",
+                      "Pastry",
+                      "Cake"
+                    ]
+                  }
+                },
+                "tags": {
+                  "name": "Tags",
+                  "type": "sorted"
+                },
+                "launched": {
+                  "name": "Launched",
+                  "type": "timestamp"
+                },
+                "where": {
+                  "name": "Where",
+                  "type": "coordinates"
+                },
+                "ref": {
+                  "name": "Supplier",
+                  "type": "reference",
+                  "reference": {
+                    "datasetId": "ds",
+                    "multiple": true
+                  }
+                }
+              }
+            }
+          }
+        ],
+        [
+          {
+            "fields": [
+              "city",
+              "roast_preference"
+            ]
+          }
+        ],
+        [
+          {
+            "model": {
+              "fields": {},
+              "order": []
+            },
+            "fields": [
+              "a"
+            ]
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "planDatasetRecordQuery": {
+      "module": "libs/plugins/data/src/lib/components/dataset-record-filter.ts",
+      "args": [
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [],
+          [
+            "sour"
+          ]
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [],
+          [
+            "Sourdough loaf"
+          ]
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.category",
+              "op": "equals",
+              "value": "Bread"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.category",
+              "op": "isAnyOf",
+              "value": "Bread,Cake"
+            }
+          ],
+          [
+            "rye"
+          ]
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.inStock",
+              "op": "equals",
+              "value": "true"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.price",
+              "op": "=",
+              "value": "8.5"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.name",
+              "op": "contains",
+              "value": "Seeded rye bread"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.name",
+              "op": "contains",
+              "value": "rye"
+            }
+          ],
+          [
+            "seeded"
+          ]
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.name",
+              "op": "equals",
+              "value": "Seeded Rye"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.tags",
+              "op": "contains",
+              "value": "vegan"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.tags",
+              "op": "contains",
+              "value": "vegan"
+            },
+            {
+              "field": "values.name",
+              "op": "contains",
+              "value": "rye"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.launched",
+              "op": "after",
+              "value": "2026-01-01"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [],
+          [
+            "supercalifragilistic"
+          ]
+        ],
+        [
+          {
+            "order": [
+              "a.b"
+            ],
+            "fields": {
+              "a.b": {
+                "name": "Dotted",
+                "type": "text"
+              }
+            }
+          },
+          [
+            {
+              "field": "values.a.b",
+              "op": "contains",
+              "value": "x"
+            }
+          ],
+          []
         ]
       ]
     }

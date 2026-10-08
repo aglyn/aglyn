@@ -77,6 +77,35 @@
       "value": "TechArticle"
     }
   ],
+  "DATASET_FIELD_TYPE_LABELS": {
+    "bool": "Boolean",
+    "bytes": "Bytes",
+    "coordinates": "Coordinates",
+    "float": "Number",
+    "int32": "Integer",
+    "int64": "Big integer",
+    "map": "Map",
+    "nil": "Null",
+    "reference": "Reference",
+    "sorted": "List",
+    "text": "Text",
+    "timestamp": "Date & time"
+  },
+  "DATASET_FIELD_TYPES": [
+    "text",
+    "bool",
+    "int32",
+    "int64",
+    "float",
+    "timestamp",
+    "coordinates",
+    "map",
+    "sorted",
+    "bytes",
+    "nil",
+    "reference"
+  ],
+  "DATASET_FILTER_PREFIX_MAX": 12,
   "DEFAULT_TITLE_PATTERN": "{{page.name}} {{site.separator}} {{site.name}}",
   "ENTRY_LIST_FILTER_HEADERS": {
     "authorId": "Author",

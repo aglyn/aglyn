@@ -110,6 +110,114 @@ public struct ContentSchemaTypeOptionsItem: Codable, Hashable, Sendable {
   }
 }
 
+public struct DatasetFieldDefinition: Codable, Hashable, Sendable {
+  public var customType: String?
+  public var `default`: ContractJSON?
+  public var description: String?
+  public var name: String?
+  public var reference: DatasetFieldDefinitionReference?
+  public var required: Bool?
+  public var slugFrom: String?
+  public var type: DatasetFieldType?
+  public var validation: DatasetFieldValidation?
+
+  public init(customType: String? = nil, `default`: ContractJSON? = nil, description: String? = nil, name: String? = nil, reference: DatasetFieldDefinitionReference? = nil, required: Bool? = nil, slugFrom: String? = nil, type: DatasetFieldType? = nil, validation: DatasetFieldValidation? = nil) {
+    self.customType = customType
+    self.default = `default`
+    self.description = description
+    self.name = name
+    self.reference = reference
+    self.required = required
+    self.slugFrom = slugFrom
+    self.type = type
+    self.validation = validation
+  }
+}
+
+public struct DatasetFieldDefinitionReference: Codable, Hashable, Sendable {
+  public var datasetId: String
+  public var displayFieldId: String?
+  public var multiple: Bool?
+  public var onDelete: DatasetFieldDefinitionReferenceOnDelete?
+
+  public init(datasetId: String, displayFieldId: String? = nil, multiple: Bool? = nil, onDelete: DatasetFieldDefinitionReferenceOnDelete? = nil) {
+    self.datasetId = datasetId
+    self.displayFieldId = displayFieldId
+    self.multiple = multiple
+    self.onDelete = onDelete
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum DatasetFieldDefinitionReferenceOnDelete: String, Codable, CaseIterable, Hashable, Sendable {
+  case restrict = "restrict"
+  case setNull = "setNull"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct DatasetFieldEntry: Codable, Hashable, Sendable {
+  public var id: String
+  public var name: String
+
+  public init(id: String, name: String) {
+    self.id = id
+    self.name = name
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum DatasetFieldType: String, Codable, CaseIterable, Hashable, Sendable {
+  case bool = "bool"
+  case bytes = "bytes"
+  case coordinates = "coordinates"
+  case float = "float"
+  case int32 = "int32"
+  case int64 = "int64"
+  case map = "map"
+  case `nil` = "nil"
+  case reference = "reference"
+  case sorted = "sorted"
+  case text = "text"
+  case timestamp = "timestamp"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct DatasetFieldValidation: Codable, Hashable, Sendable {
+  public var max: Double?
+  public var min: Double?
+  public var options: [String]?
+  public var regex: String?
+  public var required: Bool?
+
+  public init(max: Double? = nil, min: Double? = nil, options: [String]? = nil, regex: String? = nil, required: Bool? = nil) {
+    self.max = max
+    self.min = min
+    self.options = options
+    self.regex = regex
+    self.required = required
+  }
+}
+
+public struct DatasetModel: Codable, Hashable, Sendable {
+  public var fields: [String: DatasetFieldDefinition]?
+  public var order: [String]?
+
+  public init(fields: [String: DatasetFieldDefinition]? = nil, order: [String]? = nil) {
+    self.fields = fields
+    self.order = order
+  }
+}
+
 public struct EntryStatusOptionsItem: Codable, Hashable, Sendable {
   public var label: String
   public var value: String
@@ -1676,6 +1784,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let componentListQuery: ListQueryDeclaration
   public let contentSchemaTypeDefault: ContentSchemaType
   public let contentSchemaTypeOptions: [ContentSchemaTypeOptionsItem]
+  public let datasetFieldTypeLabels: [String: String]
+  public let datasetFieldTypes: [DatasetFieldType]
+  public let datasetFilterPrefixMax: Int
   public let defaultTitlePattern: String
   public let entryListFilterHeaders: [String: String]
   public let entryListQuery: ListQueryDeclaration
@@ -1747,6 +1858,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case componentListQuery = "COMPONENT_LIST_QUERY"
     case contentSchemaTypeDefault = "CONTENT_SCHEMA_TYPE_DEFAULT"
     case contentSchemaTypeOptions = "CONTENT_SCHEMA_TYPE_OPTIONS"
+    case datasetFieldTypeLabels = "DATASET_FIELD_TYPE_LABELS"
+    case datasetFieldTypes = "DATASET_FIELD_TYPES"
+    case datasetFilterPrefixMax = "DATASET_FILTER_PREFIX_MAX"
     case defaultTitlePattern = "DEFAULT_TITLE_PATTERN"
     case entryListFilterHeaders = "ENTRY_LIST_FILTER_HEADERS"
     case entryListQuery = "ENTRY_LIST_QUERY"

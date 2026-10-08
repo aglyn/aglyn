@@ -162,6 +162,14 @@
       "why": "The print layout as plain text, for the app's share sheet (AGL-3621)."
     },
     {
+      "path": "libs/plugins/data/src/lib/components/dataset-record-filter.ts",
+      "why": "The records table query a dataset model plans (`planDatasetRecordQuery`): the native records list asks the same Firestore query for a filter or a search (AGL-3668); type-only imports beside the pure planner and dataset-model-core."
+    },
+    {
+      "path": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "why": "The dataset model and field types, a stored value as the records table shows it and as its input reads, the field-id rules and the records filter grammar; the native Data screens read, show and filter records from it (AGL-3668). No imports."
+    },
+    {
       "path": "libs/plugins/forms/src/lib/components/form-list-query.ts",
       "why": "The forms list query declaration and its options; the native Forms screens plan the same query (AGL-3668); type-only imports."
     },

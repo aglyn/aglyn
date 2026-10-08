@@ -45,6 +45,7 @@ import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { announceDatasetRecords as announceDatasetChange } from './announce-dataset-records'
 import { coerceDocumentValues, datasetIntegrityFields, datasetIntegrityUpdate, effectiveDatasetModel, validateDocument } from '../model/dataset-models'
 import { defaultDatasetFieldId } from '../model/datasets'
+import { planReferenceFixups, referencingFieldIds, restrictedDeleteMessage } from '../model/dataset-record-delete-plan'
 import {
   RECORD_PAGE_ADDRESS_FIELD_TYPE,
   fillRecordAddresses,
@@ -114,6 +115,9 @@ const ADDRESS_FILL_MAX = 5000
  * - `import-records`: batch create with the whole batch fitting the cap.
  * - `add-address-field`: a "Page address" field that fills in from a text
  *   field, and a unique address on every record that has none (AGL-3475).
+ * - `update-record` / `delete-record`: the Data card's record edit and
+ *   delete (with its reference integrity) for the native apps, which have no
+ *   browser to write from (AGL-3668).
  *
  * Since AGL-2163 both record actions ALSO enforce `checkDataStorageQuota`.
  * See {@link refuseIfDataStorageBlocked}: that check's `allowed` field had no
@@ -350,7 +354,9 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
       action === 'create-record' ||
       action === 'import-records' ||
       action === 'announce-records' ||
-      action === 'add-address-field'
+      action === 'add-address-field' ||
+      action === 'update-record' ||
+      action === 'delete-record'
     ) {
       const datasetId = String(body?.datasetId ?? '')
       if (!datasetId) {
@@ -497,6 +503,113 @@ export const datasetsHandler: PluginWebApiHandler = async (request) => {
       // once its plugin's server entry has registered it.
       await ensureDeclaredCustomFieldTypes(model)
       const recordsRef = datasetRef.collection('records')
+
+      /**
+       * A record edit (AGL-3668): the Data card's Save on an existing record,
+       * for a caller that is not a browser. The card writes it straight to
+       * Firestore — it consumes no quota — with the values coerced, filled
+       * and validated against the model and the integrity and filter index
+       * moved with them; the native apps reach the same write here, under
+       * the same role, `data.manage` and visibility gates as a create.
+       * `values` is replaced whole, so a removed field's value strips here,
+       * as it does on the card (the AGL-178 policy).
+       */
+      if (action === 'update-record') {
+        const recordId = String(body?.recordId ?? '')
+        if (!recordId) {
+          return Response.json({ error: 'Missing recordId' }, { status: 400 })
+        }
+        const recordRef = recordsRef.doc(recordId)
+        if (!(await recordRef.get()).exists) {
+          return Response.json({ error: 'Unknown record' }, { status: 404 })
+        }
+        const coerced = fillRecordAddresses(
+          model,
+          coerceDocumentValues(model, body?.values ?? {}),
+        )
+        const errors = validateDocument(model, coerced)
+        if (Object.keys(errors).length) {
+          return Response.json({ error: 'Record failed validation', errors }, { status: 400 })
+        }
+        await recordRef.update({
+          values: coerced,
+          ...datasetIntegrityUpdate(model, coerced, FieldValue.delete()),
+          updatedAt: Timestamp.now(),
+        })
+        const announced = await announceDatasetChange({ firestore, orgId, datasetId })
+        return Response.json({ ok: true, id: recordId, announced }, { status: 200 })
+      }
+
+      /**
+       * A record delete (AGL-3668), with the card's delete integrity
+       * (AGL-180): every dataset the caller can see whose model references
+       * this one is asked, by its `referencedIds` index, whether it still
+       * points at the record. `restrict` refuses the delete and writes
+       * nothing; `setNull` strips the reference from each holder first. The
+       * verdict is `planReferenceFixups`, the one the card applies. The
+       * datasets consulted are the ones the caller can see, exactly the set
+       * the card reads, so the app is refused exactly when the console is.
+       */
+      if (action === 'delete-record') {
+        const recordId = String(body?.recordId ?? '')
+        if (!recordId) {
+          return Response.json({ error: 'Missing recordId' }, { status: 400 })
+        }
+        const recordRef = recordsRef.doc(recordId)
+        if (!(await recordRef.get()).exists) {
+          return Response.json({ error: 'Unknown record' }, { status: 404 })
+        }
+        const others = (await orgRef.collection('datasets').get()).docs.filter(
+          (other) =>
+            decoded['staff'] === true ||
+            memberCanSee(member, (other.data() as { visibleTo?: string[] }).visibleTo),
+        )
+        const fixups: Array<{ datasetId: string; model: ReturnType<typeof effectiveDatasetModel>; updates: Array<{ id: string; values: Record<string, unknown> }> }> = []
+        for (const other of others) {
+          const otherModel = effectiveDatasetModel(other.data() as any)
+          if (!referencingFieldIds(otherModel, datasetId).length) continue
+          const holders = await other.ref
+            .collection('records')
+            .where('referencedIds', 'array-contains', recordId)
+            .get()
+          const plan = planReferenceFixups(
+            otherModel,
+            datasetId,
+            recordId,
+            holders.docs.map((holder) => ({ id: holder.id, values: holder.get('values') })),
+          )
+          if (plan.kind === 'restricted') {
+            const name = String((other.data() as any)?.displayName ?? (other.data() as any)?.name ?? '').trim()
+            return Response.json(
+              { error: restrictedDeleteMessage(plan.holders, name) },
+              { status: 409 },
+            )
+          }
+          if (plan.kind === 'strip') fixups.push({ datasetId: other.id, model: otherModel, updates: plan.updates })
+        }
+        for (const fixup of fixups) {
+          const holdersRef = orgRef.collection('datasets').doc(fixup.datasetId).collection('records')
+          for (let start = 0; start < fixup.updates.length; start += IMPORT_CHUNK) {
+            const batch = firestore.batch()
+            for (const update of fixup.updates.slice(start, start + IMPORT_CHUNK)) {
+              batch.update(holdersRef.doc(update.id), {
+                values: update.values,
+                ...datasetIntegrityUpdate(fixup.model, update.values, FieldValue.delete()),
+              })
+            }
+            await batch.commit()
+          }
+        }
+        await recordRef.delete()
+        for (const changed of [datasetId, ...fixups.map((fixup) => fixup.datasetId)]) {
+          await announceDatasetChange({ firestore, orgId, datasetId: changed })
+        }
+        return Response.json(
+          { ok: true, id: recordId, fixed: fixups.reduce((total, fixup) => total + fixup.updates.length, 0) },
+          { status: 200 },
+        )
+      }
+
       const recordCount = (await recordsRef.count().get()).data().count
       const overRecordQuota = (limit: number) =>
         `Record limit reached (${limit}) — upgrade in Billing`
