@@ -644,6 +644,7 @@ private struct ThemeSection: View {
     ThemeLibraryCard(
       context: context, hostID: hostID, host: doc.data, api: api, presets: load.value?.presets ?? [],
       canManage: themeLibraryRoles.contains(context.siteRole ?? ""), reloadKey: reloadKey, reload: { await reload() })
+    FontInstallerCard(context: context, hostID: hostID, canEdit: canEdit)
     ThemeEditorCard(
       api: api, canEdit: canEdit, load: load, retry: { attempt += 1 },
       saved: { values in
