@@ -55,6 +55,8 @@ import { AI_JOB_EMAIL_INSTRUCTIONS, AI_JOB_EMAIL_TOOL } from '../jobs/ai-job-ema
 import { AI_JOB_FORM_INSTRUCTIONS, AI_JOB_FORM_TOOL } from '../jobs/ai-job-form-step'
 import { AI_JOB_EXPERIMENT_SYSTEM } from '../jobs/ai-job-experiment-step'
 import { AI_JOB_LOGIC_INSTRUCTIONS } from '../jobs/ai-job-logic-step'
+import { aiJobEditInstructions } from '../jobs/ai-job-edit-step'
+import { assistEditTool } from '../server/assist-edit'
 import { aiLogicFunctionTool, aiLogicVariableTool } from '../tools/ai-logic-tool'
 import { AI_JOB_INSIGHT_SYSTEM } from '../jobs/ai-job-insight-step'
 import { AI_JOB_LAYOUT_INSTRUCTIONS } from '../jobs/ai-job-layout-step'
@@ -270,6 +272,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     step: 'job.logic',
     caches: true,
     why: "one rules block — the grammar, a variable's stored forms and how to explain — so every tool's prefix clears the balanced tier's minimum; the site's variables and the request ride uncached",
+  },
+  'jobs/ai-job-edit-step.ts': {
+    step: 'job.edit',
+    caches: true,
+    why: "the document doctrine, the job's own rules and the edit rung's protocol and catalog for the document's kind, one prefix a kind; the outline of the page and the request ride uncached (AGL-3616)",
   },
   'jobs/ai-job-experiment-step.ts': {
     step: 'job.experiment',
@@ -628,6 +635,28 @@ const REQUESTS: Record<string, Composed> = {
       }),
     tools: () => [aiWorkflowExplanationTool()],
   },
+  // An edit to a page or a layout (AGL-3616): the rung's tool and catalog per
+  // kind, a page's tool also offering its search fields.
+  'edit-screen': {
+    door: 'jobs/ai-job-edit-step.ts',
+    step: 'job.edit',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: aiJobEditInstructions('screen'),
+        scope: aiDoctrineScopeFor('edit'),
+      }),
+    tools: () => [assistEditTool('screen')],
+  },
+  'edit-layout': {
+    door: 'jobs/ai-job-edit-step.ts',
+    step: 'job.edit',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: aiJobEditInstructions('layout'),
+        scope: aiDoctrineScopeFor('edit'),
+      }),
+    tools: () => [assistEditTool('layout')],
+  },
   'experiment-explain': {
     door: 'jobs/ai-job-experiment-step.ts',
     step: 'job.experiment',
@@ -869,6 +898,11 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'logic-function': { prefixTokens: 1_556, minimum: 512, caches: true, toolsStable: true },
       'logic-variable': { prefixTokens: 1_087, minimum: 512, caches: true, toolsStable: true },
       'logic-explain': { prefixTokens: 1_077, minimum: 512, caches: true, toolsStable: true },
+      // An edit to a page or a layout (AGL-3616): the document doctrine, the
+      // job's rules, and the edit rung's protocol and element catalog for the
+      // kind, so a page's and a layout's prefix each cache.
+      'edit-screen': { prefixTokens: 5_970, minimum: 512, caches: true, toolsStable: true },
+      'edit-layout': { prefixTokens: 5_958, minimum: 512, caches: true, toolsStable: true },
       // Both insight requests are up 60 or 61 at AGL-3663: a site's published
       // state comes only from its Site status table, never from its traffic.
       'insight-read': { prefixTokens: 944, minimum: 512, caches: true, toolsStable: true },

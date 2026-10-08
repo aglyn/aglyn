@@ -81,7 +81,7 @@ That means:
   first, noticeably fewer.
 - **Recording starts with your first funnel.** A site with no funnels records nothing.
   Saving the first funnel turns recording on, and earlier visits cannot be measured.
-  Deleting the last funnel turns it off.
+  Deleting the last funnel turns it off. A [draft funnel](#drafts) never turns recording on.
 - **Up to 60 steps per visit** are recorded; a very long visit stops adding steps after that.
 - **Visits are kept for 90 days** and then deleted automatically.
 - **Very busy sites:** a result reads at most the 20,000 most recent visits in the range and
@@ -116,6 +116,19 @@ When Aglyn AI is available to your workspace, **Create with AI** turns a descrip
 uses only the pages, forms, services, products and bars or popups your site has; a step the
 model suggests that your site does not have is left out and listed. Nothing is saved until
 you review the draft and select **Save**. It uses AI credits like other generation.
+
+### Draft funnels {#drafts}
+
+When Aglyn AI builds part of your site from one request, it can set a funnel up too. That
+funnel arrives as a **draft**, marked *Draft* on the Funnels card, and changes nothing on your
+live site: it does not turn recording on, it has no results, Insights does not read it, and
+it cannot be followed up on. Its steps use only pages your site already publishes, and forms,
+services, products or bars and popups your site has — including ones the same request made.
+
+Select the draft to review its steps, edit it if you like (it stays a draft), then select
+**Activate**. Activating checks every step against your site again, makes the funnel live and
+turns recording on if it was off, so it counts visits from then on. Activating needs a site
+admin or editor. A draft counts towards the 20 funnels a site keeps.
 
 ## Act on a drop-off {#act-on-drop-off}
 

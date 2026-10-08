@@ -31,6 +31,7 @@ import { announceSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/hel
 import {
   Alert,
   Button,
+  Chip,
   IconButton,
   LinearProgress,
   MenuItem,
@@ -48,6 +49,7 @@ import {
   FUNNEL_FEATURE,
   FUNNELS_COLLECTION,
   FUNNELS_MAX_PER_SITE,
+  isFunnelDraft,
   type FunnelDefinition,
   type FunnelResult,
   type StoredFunnel,
@@ -58,6 +60,7 @@ import { FunnelEditorDialog } from './funnel-editor.dialog'
 import { FunnelResults } from './funnel-results.component'
 import { FUNNEL_INSIGHT_ZONE, FUNNELS_CREATE_ZONE } from './funnel-zones'
 import {
+  activateFunnel,
   deleteFunnel,
   draftDropOffAutomation,
   fetchFunnelInventory,
@@ -75,6 +78,10 @@ import {
  *
  * Paid analytics: a workspace without the tier sees the card with one line
  * saying which plan includes it, and nothing it would have to buy to read.
+ *
+ * A DRAFT funnel (AGL-3616) — one an AI build made — is listed and editable,
+ * shows its steps for review instead of a result, and is put live by
+ * Activate, which is when it is measured and the site starts recording.
  */
 
 export const FUNNEL_RANGES = [7, 14, 30, 90] as const
@@ -144,7 +151,10 @@ export function FunnelsCard({ hostId, orgId }: FunnelsCardProps) {
       ? pluginRecordHref('action', { orgSlug: params.orgSlug, host: params.host }, automationId)
       : null
 
-  const selectedKey = selected ? `${selected.$id}` : null
+  const selectedDraft = isFunnelDraft(selected)
+  const [activating, setActivating] = useState(false)
+  // A draft is not measured: there is no result to ask for until it is active.
+  const selectedKey = selected && !selectedDraft ? `${selected.$id}` : null
   useEffect(() => {
     if (!entitled || !selectedKey || !user) return
     let active = true
@@ -218,6 +228,21 @@ export function FunnelsCard({ hostId, orgId }: FunnelsCardProps) {
       setSaveError((error as Error).message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const activate = async () => {
+    if (!selected) return
+    setActivating(true)
+    setResultError(null)
+    try {
+      const activated = await activateFunnel(user, hostId, selected.$id)
+      afterRecordingChange(activated.recordingChanged)
+      setResult(null)
+    } catch (error) {
+      setResultError((error as Error).message)
+    } finally {
+      setActivating(false)
     }
   }
 
@@ -333,7 +358,7 @@ export function FunnelsCard({ hostId, orgId }: FunnelsCardProps) {
             >
               {funnels.map((one) => (
                 <MenuItem key={one.$id} value={one.$id}>
-                  {one.name}
+                  {isFunnelDraft(one) ? `${one.name} (draft)` : one.name}
                 </MenuItem>
               ))}
             </TextField>
@@ -351,9 +376,13 @@ export function FunnelsCard({ hostId, orgId }: FunnelsCardProps) {
                 <MenuItem key={range} value={range}>{`Last ${range} days`}</MenuItem>
               ))}
             </TextField>
-            <IconButton aria-label="Refresh" onClick={() => setRefreshKey((key) => key + 1)}>
-              <MdiIcon path={mdiRefresh.path} />
-            </IconButton>
+            {selectedDraft ? (
+              <Chip label="Draft" size="small" />
+            ) : (
+              <IconButton aria-label="Refresh" onClick={() => setRefreshKey((key) => key + 1)}>
+                <MdiIcon path={mdiRefresh.path} />
+              </IconButton>
+            )}
             {canManage && selected ? (
               <>
                 <IconButton
@@ -373,15 +402,40 @@ export function FunnelsCard({ hostId, orgId }: FunnelsCardProps) {
               </>
             ) : null}
           </Stack>
+          {selected && selectedDraft ? (
+            <Alert
+              severity="info"
+              action={
+                canManage ? (
+                  <Button color="inherit" size="small" disabled={activating} onClick={() => void activate()}>
+                    {'Activate'}
+                  </Button>
+                ) : undefined
+              }
+            >
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                {'A draft, set up for you to review. It is not measured, and the site does not record visits ' +
+                  'for it, until ' +
+                  (canManage ? 'you activate it.' : 'a site admin or editor activates it.')}
+              </Typography>
+              <ol aria-label="Draft steps" style={{ margin: 0, paddingInlineStart: 20 }}>
+                {selected.steps.map((step, index) => (
+                  <li key={index}>
+                    <Typography variant="body2">{funnelStepTitle(step)}</Typography>
+                  </li>
+                ))}
+              </ol>
+            </Alert>
+          ) : null}
           {loading && !result ? <LinearProgress /> : null}
           {resultError ? <Alert severity="error">{resultError}</Alert> : null}
-          {result ? (
+          {result && !selectedDraft ? (
             <FunnelResults
               result={result}
               onActOnDropOff={canManage ? (reached) => setDropOffStep(reached) : undefined}
             />
           ) : null}
-          {result && Zone && selected ? (
+          {result && !selectedDraft && Zone && selected ? (
             <Zone
               slot={FUNNEL_INSIGHT_ZONE.id}
               hostId={hostId}

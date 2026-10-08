@@ -1503,6 +1503,151 @@ the `theme` kind's proposal, and no site plan may propose one.
   every step — the look, the plan, the layout, each page — runs on it, and the
   estimate is priced by the pick's multiplier. A Free start offers none.
 
+## The `build` kind: Assist builds from one request
+
+`build` (AGL-3616) turns one request typed into Assist — "create a few new
+pages and add forms for bookings and a contact form, and then an about
+page" — into ONE plan card and ONE job. It is a generalized `site`: it builds
+nothing itself, and hands every unit to what already builds that kind of
+thing.
+
+- **From the chat.** On a site, with `aiGenerative`, `release_ai_generative`,
+  `ai.generate` and the `ai-generate` switch, `/api/assist/chat` offers the
+  strict `propose_build` tool (`assistBuildRung`, `src/lib/server/assist-build.ts`).
+  The model restates the whole request as a brief; it never plans. The panel
+  then creates one `build` job through `POST /api/ai/jobs`, whose plan step
+  plans against the site's real inventory and stops with the plan card and
+  its one price (`assist-build-card.component.tsx`). Nothing is built until
+  the person confirms it.
+- **The plan.** `create` and `screens` carry layouts, forms, components,
+  email designs and pages, as for a page or a site. Everything else is an
+  ITEM: an operation (`op`) with flat arguments (`src/lib/model/ai-build-job.ts`).
+  An item may depend on another with `new:<name>`, and a page section places
+  an item the same way.
+- **Capabilities, not names.** Every item operation is a capability its OWNER
+  registers on core's contract
+  (`libs/aglyn/src/lib/plugin-manager/plugin-ai-capabilities.ts`): the noun,
+  where the draft is found, the intents the chat may promise, its arguments'
+  schema, its plan limits, entitlement and allowance, and how it is executed —
+  `runnerKind`, one of this plugin's job runners under a job derived for the
+  unit, or `draftResource`, the owner's writer on `plugin-resource-drafts`,
+  with the content its `draftContent` derives from the arguments and no model
+  asked. `aiBuildOps` (`src/lib/jobs/ai-build-capabilities.ts`) keeps only the
+  operations whose owner is released and switched on for the site, whose
+  entitlement the plan holds, which the Free taste may use where it is on it,
+  and whose runner or writer this process loaded; the planner, the gates, the
+  estimate and the chat's list of intents all read that one map.
+
+| op | owner | executed by | arguments | credits | Free |
+| --- | --- | --- | --- | --- | --- |
+| `template` | ai | `template` runner | `subject`, `collectionId` | 6 passes | no |
+| `campaign` | ai | `campaign` runner → marketing's campaign writer | `name` | 2 passes | no |
+| `workflow` | ai | `workflow` runner → workflows' automation writer | none | 1 pass | no |
+| `function` | ai | `logic` runner → logic's `function` writer | none | 1 pass | yes |
+| `product` | commerce | `product` writer | name, type, description, tags, one option, SEO, price only when stated | 0 | no |
+| `booking-service` | bookings | `booking-service` writer | name, length, days, hours, time zone, price display | 0 | no |
+| `overlay` | marketing | overlay writer | bar or popup copy and trigger | 0 | no |
+| `experiment` | marketing | A/B test writer | name, target (page, section or email), the page, goal, variant names | 0 | no |
+| `variable` | logic | `variable` writer | `name`, `type`, `value` | 0 | yes |
+| `funnel` | funnels | `funnel` writer | `name`, `steps`, `stepLabels` | 0 | no |
+| `edit` | ai | `edit` runner | `target` (an inventory page or layout id), `targetKind` | 1 pass | no |
+
+  A pass is `AI_SITE_PASS_CREDITS`. Pages, layouts, forms, components and
+  email designs are built by their own runners, a page at its sections and its
+  listing.
+
+- **Drafts, every one.** Each owner's writer writes what nothing publishes:
+  a product with no price unless the request stated one and no photo, a
+  booking service and a funnel born `status: 'draft'` (no bookings, no visitor
+  recording, until a person activates them), an overlay switched off, an A/B
+  test stopped, an automation switched off. A variable or a function has no
+  draft state: the writer refuses a name the site already uses rather than
+  overwrite it, and a new, unreferenced one changes nothing a visitor sees.
+  A funnel's steps name only pages the site already publishes — a page the
+  same build makes is not published yet — and may name the form, booking
+  service, product or overlay the build makes by `new:<name>`. Pages go live
+  only when the request asked to publish AND the person ticked the plan card's
+  box; then the build's pages are published once, on its last pass.
+- **Settled item by item.** The job keeps an ITEM LEDGER (`items`), written
+  only in `recordStep`'s transaction. One unit runs a pass. A failed unit is a
+  failed row, not a failed job: its own spend is given back where the failure
+  was ours (`aiJobItemRefundKey`), and the next unit runs. What depended on it
+  degrades (`aiBuildDegradation`): a page whose layout failed renders in the
+  site's own; a page whose form or booking service failed is built without
+  that block, never with loose inputs, and says so; any other unit whose
+  `omit` dependency failed is skipped, spending nothing. The job is `done`
+  when anything was delivered, and `failed` — its planning given back too —
+  when nothing was. Try again (`retry: 'failed-items'` on the resume door)
+  re-runs only the failed rows and what they held back.
+- **A follow-up on what it built.** "Make the about page shorter", asked away
+  from that page, opens the draft in the Besigner and asks again there
+  (`src/lib/model/assist-follow-up.ts`). The panel sends the drafts its builds
+  made as refs and labels only (`drafts: [{ ref: 'd1', label: 'About', noun:
+  'page' }]`); the chat may propose `open.build.draft` for a listed ref, whose
+  server-built destination is the site's Pages list; the panel resolves the
+  ref to the draft's own Besigner from its record of the build, and once that
+  version's canvas is open it asks the same request again, where the edit
+  rung answers it with an edit card. Nothing is written by the proposal, and
+  a turn that lists drafts is never answered from the docs or the answer
+  cache.
+- **The canonical request, offline.** `src/lib/jobs/ai-build-canonical-request.spec.ts`
+  runs an AUTHORED plan answer for the founder's example through the real plan
+  step and the real build step (fake runners and a fake booking writer): one
+  layout reused, a contact form, a booking service, three pages, the form and
+  the service built before the pages that place them, and a refused service
+  leaving the booking page built without its block while everything else is
+  delivered.
+
+### The `edit` kind: a change to what the site already has
+
+`edit` (`src/lib/jobs/ai-job-edit-step.ts`, model `src/lib/model/ai-edit-job.ts`)
+changes an existing page or layout from a description, without the Besigner
+open. It speaks the Assist edit rung's own protocol — `propose_canvas_edit`,
+the closed world of element ids, `checkAssistEditAnswer` and the canvas
+mutators of `applyAssistEdit` — against the STORED version, loaded into a
+headless `CanvasManager` whose child rules answer from the AI palette, so the
+server canvas refuses exactly what the validator refuses. Inputs: `target`
+(a page or layout id on the job's site), optional `targetKind` and
+`versionId` (the version to start from; the current one otherwise).
+
+- **Where the change lands, decided before anything is spent.** With the
+  `versioning` entitlement, a NEW version beside the one it started from; it
+  becomes the page's current version only when the page is not published, so
+  no visitor ever sees it. A published page's and a layout's current version
+  never move. Without `versioning`, only a version no visitor reaches — an
+  unpublished page's, or one that is not current — is changed in place;
+  anything else is refused with the plan sentence, and nothing is charged.
+- **Idempotent.** The written version is named by the job's id (a build
+  unit's is its item's id), so a pass run again finds it and spends nothing.
+- **What it cannot do server-side** — save a reusable component, or write a
+  published page's search listing — is left out and named on the output.
+- **Routing.** `job.edit`, balanced tier, adaptive thinking, 6,144 tokens:
+  the edit rung's tool-call ceiling with half as much again to think in. Its
+  cached prefix is 5,970 tokens for a page and 5,958 for a layout. Evals:
+  `tools/ai-eval/cases/edit`.
+
+| step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |
+| --- | --- | --- | --- | --- |
+| `edit` | balanced | 0 | 6,144 / 6,144 / 4,096 | 2 × 3 s + 2 × 102,400 ms + 3 s + 2 s = 215,800 ms |
+
+- **In a build.** The `edit` operation names an inventory page or layout;
+  "…and make the home page's hero shorter" becomes one item beside the new
+  pages. Not offered on Free: without version history only an unpublished
+  page could take the change, which is rarely the page meant, so the item
+  would be skipped after the plan was confirmed.
+
+### Live runs this needs (founder's go only)
+
+No agent runs these without the founder's explicit OK (one approved batch per
+round). Estimates are at the routed model's billed rates.
+
+| run | what it proves | about |
+| --- | --- | --- |
+| Plan step, the canonical request, `AGLYN_LIVE_AI=1` | the live model plans the reuse, the form, the service and three pages | $0.05–$0.15 |
+| One full build of the canonical request on a fresh staging site | three pages, a form and a draft service, each in its place | $1.50–$3.00 |
+| One `propose_build` chat turn and one `open.build.draft` follow-up | the chat proposes, and the follow-up opens the draft | $0.02–$0.05 |
+| One `edit` job on a staging page, `AGLYN_LIVE_AI=1` | the stored-version edit lands as a new version and reads right | $0.05–$0.15 |
+
 ## The doors
 
 Registered under `/api/ai/jobs` by the plugin's console API surface:

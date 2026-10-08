@@ -22,6 +22,8 @@
  *  - A function or a variable is PROPOSED, never written: it rides on a
  *    `logic` output for the editor to open, after the grammar, the names and
  *    a first run have passed; an answer that fails is re-asked, naming why.
+ *    The one exception is a new function a confirmed build asked for, which
+ *    is written through the logic plugin's `function` writer (AGL-3616).
  *  - A change or an explanation reads the saved function by id on the job's
  *    own site, as an outline of its definition.
  *  - A site of another org, a site with Logic off, or a function that is gone
@@ -54,7 +56,14 @@ jest.mock('./ai-jobs', () => ({
 
 import type { HostFunction } from '@aglyn/aglyn/app-utils/functions'
 import type { AiJob } from '../model/ai-jobs.types'
-import { AI_LOGIC_GONE_COPY, AI_LOGIC_NO_FUNCTION_COPY, AI_LOGIC_NO_SITE_COPY, AI_LOGIC_UNAVAILABLE_COPY } from '../model/ai-logic-job'
+import {
+  AI_LOGIC_FUNCTION_UNAVAILABLE_COPY,
+  AI_LOGIC_FUNCTION_WRITTEN_NOTE,
+  AI_LOGIC_GONE_COPY,
+  AI_LOGIC_NO_FUNCTION_COPY,
+  AI_LOGIC_NO_SITE_COPY,
+  AI_LOGIC_UNAVAILABLE_COPY,
+} from '../model/ai-logic-job'
 import { AI_ROUTING_TABLE } from '../providers/routing'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import {
@@ -268,6 +277,140 @@ describe('proposing a variable, and explaining a function', () => {
     docs.set('hosts/host-1', { orgId: 'org-2' })
     expect((await runStep()).failure).toBe(AI_LOGIC_NO_SITE_COPY)
     expect(mockRunAiRequest).not.toHaveBeenCalled()
+  })
+})
+
+describe('writing a function a build asked for (AGL-3616)', () => {
+  const written = { id: 'item-7', name: 'shippingQuote', versionId: null, facts: { operations: 1 } }
+  const writer = {
+    check: jest.fn(() => ({ ok: true as const, facts: {} })),
+    refusal: jest.fn(async (): Promise<{ status: 403 | 404; error: string } | null> => null),
+    read: jest.fn(async (): Promise<typeof written | null> => null),
+    write: jest.fn(async (request: { id: string; name: string }): Promise<Record<string, unknown>> => ({
+      ok: true,
+      replayed: false,
+      ...written,
+      id: request.id,
+      name: request.name,
+    })),
+  }
+  const writerFor = jest.fn((resource: string) => (resource === 'function' ? writer : null))
+  /** The job a build derives for its `function` item: named by the item's id, carrying its origin. */
+  const unit = (patch: Partial<AiJob> = {}) => job({ $id: 'item-7', inputs: { originJobId: 'build-1' }, steps: [], ...patch })
+  const runUnit = (patch: Partial<AiJob> = {}, lookup: (resource: string) => unknown = writerFor) =>
+    createAiJobLogicStep({ readRecords, readFunction, writerFor: lookup as never })({
+      job: unit(patch),
+      stepIndex: 0,
+      now: NOW,
+      firestore,
+      org: PRO,
+    } as never)
+
+  beforeEach(() => {
+    for (const fn of Object.values(writer)) fn.mockClear()
+    writerFor.mockClear()
+  })
+
+  it('writes the checked function through the logic plugin’s writer, under the unit’s id, for the ledger', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+    const outcome = await runUnit()
+    expect(outcome.failure).toBeUndefined()
+    expect(writerFor).toHaveBeenCalledWith('function')
+    // Asked before the model ran.
+    expect(writer.refusal.mock.invocationCallOrder[0]).toBeLessThan(mockRunAiRequest.mock.invocationCallOrder[0])
+    expect(writer.refusal).toHaveBeenCalledWith({ orgId: 'org-1', hostId: 'host-1', uid: 'uid-1', org: PRO, now: NOW })
+    const definition = {
+      name: 'shippingQuote',
+      parameters: [{ name: 'order_total', type: 'number', required: true, label: 'Order total' }],
+      variables: [{ name: 'quote', type: 'number' }],
+      operations: ANSWER.operations,
+      returnValue: 'quote',
+    }
+    expect(writer.check).toHaveBeenCalledWith(definition, { hostId: 'host-1' })
+    expect(writer.write).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      hostId: 'host-1',
+      uid: 'uid-1',
+      org: PRO,
+      now: NOW,
+      id: 'item-7',
+      name: 'shippingQuote',
+      content: definition,
+    })
+    expect(outcome.outputs).toEqual([
+      {
+        resource: 'draft',
+        id: 'item-7',
+        versionId: null,
+        hostId: 'host-1',
+        hostSubdomain: 'brightside',
+        label: 'shippingQuote',
+        draftResource: 'function',
+        note: AI_LOGIC_FUNCTION_WRITTEN_NOTE,
+      },
+    ])
+    expect(outcome.usage).not.toEqual(AI_JOB_ZERO_USAGE)
+  })
+
+  it('reports the function an earlier run wrote, without spending', async () => {
+    writer.read.mockResolvedValueOnce(written)
+    const outcome = await runUnit()
+    expect(writer.read).toHaveBeenCalledWith({ hostId: 'host-1', id: 'item-7' })
+    expect(outcome.usage).toEqual(AI_JOB_ZERO_USAGE)
+    expect(outcome.outputs).toEqual([expect.objectContaining({ resource: 'draft', id: 'item-7', draftResource: 'function' })])
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(writer.write).not.toHaveBeenCalled()
+  })
+
+  it('asks a person, without spending, when the plan has no room for another function', async () => {
+    writer.refusal.mockResolvedValueOnce({ status: 403, error: 'Your plan includes 1 function — upgrade in Billing for more' })
+    const outcome = await runUnit()
+    expect(outcome.review).toEqual({
+      reason: 'limit',
+      message: 'Your plan includes 1 function — upgrade in Billing for more',
+      findings: [],
+    })
+    expect(outcome.usage).toEqual(AI_JOB_ZERO_USAGE)
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+  })
+
+  it('fails without spending where no plugin writes functions', async () => {
+    const outcome = await runUnit({}, jest.fn(() => null))
+    expect(outcome.failure).toBe(AI_LOGIC_FUNCTION_UNAVAILABLE_COPY)
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+  })
+
+  it('fails, having spent, with the writer’s own sentence when the name was taken meanwhile', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+    writer.write.mockResolvedValueOnce({ ok: false, status: 409, error: 'This site already has a function named shippingQuote.' })
+    const outcome = await runUnit()
+    expect(outcome.failure).toBe('This site already has a function named shippingQuote.')
+    expect(outcome.usage).not.toEqual(AI_JOB_ZERO_USAGE)
+  })
+
+  it('does not write what the owner’s check refuses', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+    writer.check.mockReturnValueOnce({ ok: false, problems: ['A function has at most 20 parameters'] } as never)
+    const outcome = await runUnit()
+    expect(outcome.failure).toBe('A function has at most 20 parameters')
+    expect(writer.write).not.toHaveBeenCalled()
+  })
+
+  it('still only proposes for a job a person started, and for a change to a saved function', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+    const started = await createAiJobLogicStep({ readRecords, readFunction, writerFor: writerFor as never })({
+      job: job(),
+      stepIndex: 0,
+      now: NOW,
+      firestore,
+      org: PRO,
+    } as never)
+    expect(started.outputs[0].resource).toBe('logic')
+    saved = SAVED
+    mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+    const change = await runUnit({ inputs: { originJobId: 'build-1', mode: 'function', functionId: 'fn-1' } })
+    expect(change.outputs[0].resource).toBe('logic')
+    expect(writerFor).not.toHaveBeenCalled()
   })
 })
 
