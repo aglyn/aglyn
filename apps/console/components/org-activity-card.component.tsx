@@ -30,8 +30,14 @@ import {
   listFilterGridColumns,
   upsertListFilterClause,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import {
+  type ListQueryRefusal,
+  type ListQuerySort,
+  planListQuery,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import type { GridColDef } from '@mui/x-data-grid'
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
 import { useParams } from 'next/navigation'
@@ -48,9 +54,12 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT, TABLE_ROW_HEIGHT } from '../constants/shared'
 import {
+  ACTIVITY_LIST_SORT,
   ACTIVITY_SEARCH_HINT,
   ORG_ACTIVITY_FILTER_FIELDS,
   ORG_ACTIVITY_SELECT_FIELDS,
+  SUBJECT_ACTIVITY_QUERY,
+  SUBJECT_ACTIVITY_SORTS,
 } from '../utils/activity-list-query'
 import {
   ACTIVITY_LIST_FILTER_FIELDS,
@@ -77,6 +86,10 @@ export interface OrgActivityCardProps {
    */
   orgWide?: boolean
 }
+
+/** Only the default order: the feeds whose query keeps newest first. */
+const NEWEST_FIRST_ONLY: readonly ListQuerySort[] = [ACTIVITY_LIST_SORT]
+const ORG_ACTIVITY_SORT_HEADERS = { action: 'Action', actorId: 'Who (then)', scopeId: 'Where' }
 
 /** The choices the route lists for Who and Where, with the first page. */
 interface OrgActivityFacets {
@@ -107,6 +120,15 @@ interface OrgActivityFacets {
  * and the card shows (`ListQueryNotices`) rather than narrowing the page. A
  * change to any of them is a different query, so the walk starts again at
  * page one with no cursor.
+ *
+ * ## Every header sorts (AGL-3680)
+ *
+ * The organization's own feed asks the route for When either way and for
+ * Action (`SUBJECT_ACTIVITY_SORTS`: one collection, no base, single-field
+ * indexes). The changes to one member and the org-wide merge keep newest
+ * first — a target base would cost a composite per order, and the merge
+ * pages by the clock — so their Action sorts the page. Who and Where are
+ * resolved per row and always sort the page, saying so.
  */
 export function OrgActivityCard(props: OrgActivityCardProps) {
   const { orgId, header = 'Recent Activity', targetId, orgWide } = props
@@ -132,6 +154,27 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
     search: { words: searchWords, onChange: setSearchWords },
   })
   const search = searchWords.join(' ').trim()
+  /*
+   * The header order: asked of the route on the organization's own feed,
+   * the one read whose declaration offers more than newest first.
+   */
+  const querySorted = !orgWide && !targetId
+  const sorts = querySorted ? SUBJECT_ACTIVITY_SORTS : NEWEST_FIRST_ONLY
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(ACTIVITY_LIST_SORT)
+  const routeSort = querySorted ? askedSort : null
+  // Which order the route will read in — a filter or the search sets an
+  // `alone` order aside — so the header shows the rows' real order.
+  const orderBy = useMemo(
+    () =>
+      querySorted
+        ? planListQuery(
+            SUBJECT_ACTIVITY_QUERY,
+            { clauses, search: searchWords, sort: askedSort },
+            nameSearchNormalizers,
+          ).orderBy
+        : ACTIVITY_LIST_SORT,
+    [querySorted, clauses, searchWords, askedSort],
+  )
   const [facets, setFacets] = useState<OrgActivityFacets | null>(null)
   const facetsRef = useRef(facets)
   facetsRef.current = facets
@@ -192,6 +235,9 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
           )
         }
         if (search) url.searchParams.set('search', search)
+        if (routeSort && routeSort !== ACTIVITY_LIST_SORT) {
+          url.searchParams.set('sort', `${routeSort.path}:${routeSort.direction}`)
+        }
         // The Who and Where choices, once.
         if (orgWide && !facetsRef.current) url.searchParams.set('facets', '1')
         if (cursor) url.searchParams.set('cursor', cursor)
@@ -229,7 +275,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
         if (current()) setLoading(false)
       }
     },
-    [orgId, orgWide, pageSize, targetId, clauses, search],
+    [orgId, orgWide, pageSize, targetId, clauses, search, routeSort],
   )
 
   // A new filter, search or page size is a different query: page one, no
@@ -337,6 +383,24 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
   }, [orgSlug, orgWide, siteLabel, fields, options])
 
   const rows = entries ?? []
+  const pageSorts = useMemo(
+    () => ({
+      ...(querySorted ? {} : { action: (row: any) => activityPrimaryText(row) || null }),
+      actorId: (row: any) => activityActorLabel(row) || null,
+      ...(orgWide ? { scopeId: (row: any) => siteLabel(row) } : {}),
+    }),
+    [querySorted, orgWide, siteLabel],
+  )
+  const columnSort = useListColumnSort<any>({
+    sorts,
+    defaultSort: ACTIVITY_LIST_SORT,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy,
+    rows,
+    pageSorts,
+    headers: ORG_ACTIVITY_SORT_HEADERS,
+  })
   const filtering = clauses.length > 0 || Boolean(search)
   // A pager on a single-page feed is furniture. It appears once there is
   // somewhere to go.
@@ -399,7 +463,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
             headers: ACTIVITY_LIST_FILTER_HEADERS,
             options,
           })}
-          notices={notices}
+          notices={[...notices, ...columnSort.notices]}
         />
         {search ? (
           <Typography variant="caption" color="text.secondary">
@@ -426,7 +490,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
         ) : (
           <ListTable
             aria-label={header}
-            rows={rows}
+            rows={columnSort.rows}
             columns={columns}
             getRowId={(row: any) => `${row.scopePath ?? ''}:${row.$id}`}
             hideFooter
@@ -435,13 +499,14 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
              * The grid holds ONE page of a cursor feed, so it must not filter,
              * search or re-sort that page and call it the answer: the panel's
              * clauses and the search words go to the route, which puts them
-             * on its query, and the feed keeps its one order.
+             * on its query, and a header asks the route for its order or
+             * sorts the page and says so (`columnSort`).
              */
             filterMode="server"
             filterModel={gridFilter.filterModel}
             onFilterModelChange={gridFilter.onFilterModelChange}
             quickFilter
-            disableColumnSorting
+            columnSort={columnSort}
             loading={loading}
             noRowsLabel="No activity matches these filters"
           />

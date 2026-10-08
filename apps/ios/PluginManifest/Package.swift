@@ -12,20 +12,26 @@ let package = Package(
   products: [.library(name: "AglynPluginManifest", targets: ["AglynPluginManifest"])],
   dependencies: [
     .package(path: "../../../libs/native/apple"),
+    .package(path: "Plugins/AglynBookingsPlugin"),
     .package(path: "Plugins/AglynCommercePlugin"),
+    .package(path: "Plugins/AglynEventsCalendarPlugin"),
     .package(path: "Plugins/AglynFormsPlugin"),
     .package(path: "Plugins/AglynInboxPlugin"),
     .package(path: "Plugins/AglynRedirectsPlugin"),
+    .package(path: "Plugins/AglynWorkflowsPlugin"),
   ],
   targets: [
     .target(
       name: "AglynPluginManifest",
       dependencies: [
         .product(name: "AglynPluginHost", package: "apple"),
+        .product(name: "AglynBookingsPlugin", package: "AglynBookingsPlugin"),
         .product(name: "AglynCommercePlugin", package: "AglynCommercePlugin"),
+        .product(name: "AglynEventsCalendarPlugin", package: "AglynEventsCalendarPlugin"),
         .product(name: "AglynFormsPlugin", package: "AglynFormsPlugin"),
         .product(name: "AglynInboxPlugin", package: "AglynInboxPlugin"),
         .product(name: "AglynRedirectsPlugin", package: "AglynRedirectsPlugin"),
+        .product(name: "AglynWorkflowsPlugin", package: "AglynWorkflowsPlugin"),
       ]
     ),
   ]

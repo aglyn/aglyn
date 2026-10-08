@@ -34,7 +34,7 @@ import {
   rollUp,
   splitTrafficWindows,
   trafficDeltaPct,
-} from '../utils/analytics-summary'
+} from '@aglyn/aglyn/app-utils/analytics-summary'
 
 const day = (
   id: string,
