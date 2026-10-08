@@ -77,20 +77,38 @@ function collection(orgId: string, name: string) {
   return loyaltyDb().collection('orgs').doc(orgId).collection(name)
 }
 
+/**
+ * The document ids, one scheme each. Every one is DERIVED on purpose: a member
+ * is one document per site and customer, a code resolves straight to its row,
+ * and a ledger entry, a redemption or a referral claim is keyed by what caused
+ * it, so a retried webhook or a double-submitted register sale lands on the
+ * row it already wrote instead of crediting twice.
+ */
+export const loyaltyDocIds = {
+  member: (hostId: string, memberKey: string): string => `${hostId}__${memberKey}`,
+  code: (hostId: string, code: string): string => `${hostId}__${code}`,
+  ledger: (hostId: string, entryKey: string): string => `${hostId}__${entryKey}`,
+  redemption: (hostId: string, orderId: string, memberKey: string): string =>
+    `${hostId}__${orderId}__${memberKey}`,
+  referralClaim: (hostId: string, memberKey: string): string => `${hostId}__${memberKey}`,
+}
+
 export const loyaltyRefs = {
   program: (orgId: string, hostId: string) => collection(orgId, LOYALTY_COLLECTIONS.programs).doc(hostId),
   members: (orgId: string) => collection(orgId, LOYALTY_COLLECTIONS.members),
   member: (orgId: string, hostId: string, memberKey: string) =>
-    collection(orgId, LOYALTY_COLLECTIONS.members).doc(`${hostId}__${memberKey}`),
+    collection(orgId, LOYALTY_COLLECTIONS.members).doc(loyaltyDocIds.member(hostId, memberKey)),
   code: (orgId: string, hostId: string, code: string) =>
-    collection(orgId, LOYALTY_COLLECTIONS.codes).doc(`${hostId}__${code}`),
+    collection(orgId, LOYALTY_COLLECTIONS.codes).doc(loyaltyDocIds.code(hostId, code)),
   ledgerCollection: (orgId: string) => collection(orgId, LOYALTY_COLLECTIONS.ledger),
   ledger: (orgId: string, hostId: string, entryKey: string) =>
-    collection(orgId, LOYALTY_COLLECTIONS.ledger).doc(`${hostId}__${entryKey}`),
+    collection(orgId, LOYALTY_COLLECTIONS.ledger).doc(loyaltyDocIds.ledger(hostId, entryKey)),
   redemption: (orgId: string, hostId: string, orderId: string, memberKey: string) =>
-    collection(orgId, LOYALTY_COLLECTIONS.redemptions).doc(`${hostId}__${orderId}__${memberKey}`),
+    collection(orgId, LOYALTY_COLLECTIONS.redemptions).doc(
+      loyaltyDocIds.redemption(hostId, orderId, memberKey),
+    ),
   referralClaim: (orgId: string, hostId: string, memberKey: string) =>
-    collection(orgId, LOYALTY_COLLECTIONS.referralClaims).doc(`${hostId}__${memberKey}`),
+    collection(orgId, LOYALTY_COLLECTIONS.referralClaims).doc(loyaltyDocIds.referralClaim(hostId, memberKey)),
 }
 
 /** The member a `m:` reference names, or the referral an `r:` one does. */
