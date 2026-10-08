@@ -19,6 +19,8 @@ import { aiModelIdsForProvider, estimateAiBilledUsd, aiCatalogEntry } from './ca
 import {
   AiUpstreamError,
   type AiAccountProblem,
+  type AiBatchOptions,
+  type AiEffort,
   aiRawOutputOf,
   aiStoppedAtCeiling,
   aiTokenCount,
@@ -57,6 +59,7 @@ export const ANTHROPIC_PROVIDER_ID = 'anthropic'
 export const ANTHROPIC_API_KEY_ENV = 'ANTHROPIC_API_KEY'
 const ANTHROPIC_HOST = 'api.anthropic.com'
 const ANTHROPIC_URL = `https://${ANTHROPIC_HOST}/v1/messages`
+const ANTHROPIC_BATCHES_URL = `https://${ANTHROPIC_HOST}/v1/messages/batches`
 const ANTHROPIC_VERSION = '2023-06-01'
 
 /** The Messages API accepts at most this many `cache_control` markers. */
@@ -149,6 +152,27 @@ export function anthropicUsageFrom(usage: unknown): AiUsage {
 }
 
 /**
+ * How "thinking off" is said to a model that refuses `{type: "disabled"}`.
+ * Claude Sonnet 5.5 turns it off only through `between_tools` (accepted at
+ * effort high or below, which is every effort the contract names); Claude
+ * Opus 5.5 cannot turn it off at all, so the field is left out and the
+ * model's adaptive thinking runs. Every other model takes `disabled`.
+ */
+const ANTHROPIC_THINKING_OFF: Readonly<Record<string, 'between_tools' | 'omit'>> = {
+  'claude-sonnet-5-5': 'between_tools',
+  'claude-opus-5-5': 'omit',
+}
+
+/**
+ * The effort a request that names none is sent, for a model whose own
+ * default is lower than its siblings': Claude Opus 5.5 defaults to medium,
+ * where Claude Opus 5 defaults to high.
+ */
+const ANTHROPIC_DEFAULT_EFFORT: Readonly<Record<string, AiEffort>> = {
+  'claude-opus-5-5': 'high',
+}
+
+/**
  * The Messages API body for a request. Exported so a spec can assert the
  * wire shape without a network. The cache-prefix rule is enforced by the
  * runtime before the request reaches any adapter; this maps the surviving
@@ -164,10 +188,13 @@ export function buildAnthropicRequestBody(
       `${breakpoints.length} cache breakpoints; the Messages API allows ${ANTHROPIC_MAX_CACHE_BREAKPOINTS}`,
     )
   }
+  // One lifetime for every breakpoint: the API refuses a longer-lived entry
+  // after a shorter one, and a request asks for one or the other.
+  const cacheControl = input.cacheTtl === '1h' ? { type: 'ephemeral', ttl: '1h' } : { type: 'ephemeral' }
   const system = input.system.map((block) => ({
     type: 'text',
     text: block.text,
-    ...(block.cacheBreakpoint ? { cache_control: { type: 'ephemeral' } } : {}),
+    ...(block.cacheBreakpoint ? { cache_control: cacheControl } : {}),
   }))
   const tools = input.tools?.map((tool) => ({
     name: tool.name,
@@ -180,13 +207,16 @@ export function buildAnthropicRequestBody(
   // (see the contract), and the catalog says which models those are.
   const settable = aiCatalogEntry(input.model)?.capabilities.thinking !== false
   const thinking = settable ? input.thinking : undefined
-  const effort = settable ? input.effort : undefined
+  const effort = settable ? (input.effort ?? ANTHROPIC_DEFAULT_EFFORT[input.model]) : undefined
+  const thinkingOff = ANTHROPIC_THINKING_OFF[input.model] ?? 'disabled'
   return {
     model: input.model,
     max_tokens: input.maxTokens,
     ...(input.stream ? { stream: true } : {}),
     ...(thinking === 'off'
-      ? { thinking: { type: 'disabled' } }
+      ? thinkingOff === 'omit'
+        ? {}
+        : { thinking: { type: thinkingOff } }
       : thinking === 'adaptive'
         ? { thinking: { type: 'adaptive' } }
         : {}),
@@ -258,11 +288,20 @@ async function send(
 
 async function complete(input: AiProviderRequest): Promise<AiResult> {
   const response = await send(input, false)
-  const payload = (await response.json()) as {
+  return anthropicResultFrom(await response.json(), input.model)
+}
+
+/**
+ * A Messages API answer as the contract's result: the shape `complete` reads
+ * off the wire and a batch's succeeded entry carries. `priceFactor` is what a
+ * discount leaves of the price (a batch's half).
+ */
+export function anthropicResultFrom(raw: unknown, model: string, priceFactor = 1): AiResult {
+  const payload = raw as {
     content?: Array<Record<string, unknown>>
     stop_reason?: unknown
     usage?: unknown
-  }
+  } | null
   const blocks = Array.isArray(payload?.content) ? payload.content : []
   const text = blocks
     .filter((block) => block?.['type'] === 'text')
@@ -275,7 +314,7 @@ async function complete(input: AiProviderRequest): Promise<AiResult> {
       input: aiToolInputOf(block['input']),
     }))
   const usage = anthropicUsageFrom(payload?.usage)
-  const estCostUsd = estimateAiBilledUsd(usage, input.model)
+  const estCostUsd = Math.round(estimateAiBilledUsd(usage, model) * priceFactor * 1_000_000) / 1_000_000
   const stopReason =
     typeof payload?.stop_reason === 'string' && payload.stop_reason
       ? payload.stop_reason
@@ -453,6 +492,104 @@ async function* streamEvents(
   }
 }
 
+/** What a batch's discount leaves of a request's price. */
+export const ANTHROPIC_BATCH_PRICE_FACTOR = 0.5
+
+function batchHeaders(apiKey: string): Record<string, string> {
+  return {
+    'x-api-key': apiKey,
+    'anthropic-version': ANTHROPIC_VERSION,
+    'Content-Type': 'application/json',
+  }
+}
+
+/** A batch call that did not answer 2xx, as the contract's error. */
+async function batchFailure(response: Response, model: string): Promise<AiUpstreamError> {
+  const requestId = requestIdOf(response)
+  const payload = (await response.json().catch(() => null)) as {
+    error?: { type?: string; message?: string }
+  } | null
+  console.error('ai upstream batch error', {
+    provider: ANTHROPIC_PROVIDER_ID,
+    status: response.status,
+    requestId,
+    model,
+    error: payload?.error ?? null,
+  })
+  return new AiUpstreamError(
+    response.status,
+    anthropicFailureIsRetryable(response.status, payload?.error?.type),
+    requestId,
+    anthropicAccountProblem(response.status, payload?.error),
+  )
+}
+
+/**
+ * Many requests through the Message Batches API (AGL-3660): created as one
+ * batch, polled until it has ended, its results read by `custom_id` — they
+ * come back in any order — and each turned into the result `complete` would
+ * have returned, at half the price. Development only: the live evals' batch
+ * mode is the one caller, and no door waits minutes for an answer.
+ */
+async function completeBatch(
+  requests: readonly AiProviderRequest[],
+  options: AiBatchOptions = {},
+): Promise<Array<AiResult | Error>> {
+  if (!requests.length) return []
+  const apiKey = requests[0].apiKey
+  const model = requests[0].model
+  const pollMs = options.pollMs ?? 10_000
+  const timeoutMs = options.timeoutMs ?? 60 * 60_000
+  const created = await fetch(ANTHROPIC_BATCHES_URL, {
+    method: 'POST',
+    headers: batchHeaders(apiKey),
+    body: JSON.stringify({
+      requests: requests.map((request, index) => {
+        const { apiKey: _key, signal: _signal, ...rest } = request
+        return { custom_id: `r${index}`, params: buildAnthropicRequestBody({ ...rest, stream: false }) }
+      }),
+    }),
+  })
+  if (!created.ok) throw await batchFailure(created, model)
+  let batch = (await created.json()) as { id: string; processing_status?: string; results_url?: string | null }
+  const deadline = Date.now() + timeoutMs
+  while (batch.processing_status !== 'ended') {
+    if (Date.now() > deadline) {
+      await fetch(`${ANTHROPIC_BATCHES_URL}/${batch.id}/cancel`, { method: 'POST', headers: batchHeaders(apiKey) }).catch(
+        () => undefined,
+      )
+      throw new Error(`batch ${batch.id} did not end within ${timeoutMs} ms; it was canceled`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollMs))
+    const polled = await fetch(`${ANTHROPIC_BATCHES_URL}/${batch.id}`, { headers: batchHeaders(apiKey) })
+    if (!polled.ok) throw await batchFailure(polled, model)
+    batch = (await polled.json()) as typeof batch
+  }
+  if (!batch.results_url) throw new Error(`batch ${batch.id} ended with no results`)
+  const results = await fetch(batch.results_url, { headers: batchHeaders(apiKey) })
+  if (!results.ok) throw await batchFailure(results, model)
+  const byId = new Map<string, { type?: string; message?: unknown; error?: unknown }>()
+  for (const line of (await results.text()).split('\n')) {
+    if (!line.trim()) continue
+    const entry = JSON.parse(line) as { custom_id: string; result?: { type?: string; message?: unknown; error?: unknown } }
+    byId.set(entry.custom_id, entry.result ?? {})
+  }
+  return requests.map((request, index) => {
+    const result = byId.get(`r${index}`)
+    if (result?.type === 'succeeded') {
+      return anthropicResultFrom(result.message, request.model, ANTHROPIC_BATCH_PRICE_FACTOR)
+    }
+    console.error('ai batch request not answered', {
+      provider: ANTHROPIC_PROVIDER_ID,
+      batchId: batch.id,
+      customId: `r${index}`,
+      result: result?.type ?? 'missing',
+      error: result?.error ?? null,
+    })
+    return new AiUpstreamError(null, result?.type === 'expired' || result?.type === 'errored', batch.id, null)
+  })
+}
+
 export const anthropicProvider: AiProvider = {
   id: ANTHROPIC_PROVIDER_ID,
   label: 'Anthropic',
@@ -467,4 +604,5 @@ export const anthropicProvider: AiProvider = {
   },
   complete,
   stream,
+  completeBatch,
 }

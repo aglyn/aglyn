@@ -25,6 +25,7 @@ import { readFile } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { readAiEvalCase, type AiEvalCase } from './ai-eval'
 import { aiEvalCasesNamed, aiEvalLiveAllowed, recordAiEvalLive } from './ai-eval-live'
+import { aiLiveRunLedger } from './ai-dev-replay'
 import { aiActiveProvider, aiProviderReady } from './ai-runtime'
 
 /**
@@ -34,6 +35,22 @@ import { aiActiveProvider, aiProviderReady } from './ai-runtime'
  * written under `tools/ai-eval/recordings/<kind>/`, where the offline
  * harness scores it beside the authored answers. `AI_EVAL_CASES` names the
  * briefs to record by id, so one brief can be recorded alone.
+ *
+ * THE CHEAP VERIFICATION LADDER (AGL-3660; docs/AI_JOBS.md, "Verifying a
+ * prompt change"). Climb it in order and stop at the first rung that can
+ * see the mistake:
+ *
+ *   1. unit tests — the step's own spec on golden answers, and
+ *      `runtime/ai-prompt-cache.spec.ts` for the cached bytes: free;
+ *   2. replay — this run again: under the launcher every request whose
+ *      bytes were answered before is replayed from `.cache/ai-replay` for
+ *      nothing, and only a CHANGED prompt goes to the provider;
+ *   3. one live run per plan (Free, then `AGLYN_LIVE_AI_ORG_PLAN=business`)
+ *      for the prompts you changed — read `run.live` in the table: 0 means
+ *      nothing new was asked and the run proves nothing;
+ *   4. the full live sweep, only before landing: `AGLYN_AI_REPLAY=refresh`
+ *      asks every request again, and `AGLYN_LIVE_AI_BATCH=1` sends the round
+ *      as one Message Batch at half price (minutes, not seconds).
  */
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
@@ -83,6 +100,9 @@ const live = aiEvalLiveAllowed(process.env)
           `${JSON.stringify({ caseId, candidate }, null, 2)}\n`,
         )
       }
+      // Live against replayed (AGL-3660): a recording whose request was
+      // replayed is the answer an earlier run already got, not a new sample.
+      console.log(`run: ${JSON.stringify(aiLiveRunLedger())}`)
       console.log(
         `recorded ${report.recorded.length}; skipped ${report.skipped.length}: ${report.skipped
           .map((entry) => `${entry.caseId} (${entry.why})`)

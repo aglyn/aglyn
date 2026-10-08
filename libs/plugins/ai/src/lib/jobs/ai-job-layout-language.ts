@@ -50,7 +50,10 @@ import {
   aiLayoutIsHomeSlug,
   aiLayoutSitePages,
 } from './ai-job-layout-site-pages'
-import { aiLayoutPageTargets } from './ai-job-page-language'
+import {
+  AI_LAYOUT_FRAME_THINKING_TOKENS,
+  aiLayoutPageTargets,
+} from './ai-job-page-language'
 import { AI_SITE_NAME_TOKEN } from './ai-layout-site-facts'
 
 /**
@@ -64,8 +67,11 @@ import { AI_SITE_NAME_TOKEN } from './ai-layout-site-facts'
  * (`ai-layout-frame.ts`).
  */
 
-/** The most a frame's answer asks for: two sections of a few blocks each. */
-export const AI_JOB_LAYOUT_LANGUAGE_TOKENS = 1_200
+/**
+ * The most a frame's answer asks for: two sections of a few blocks each (the
+ * live runs of 2026-10-07 wrote 442 to 583), and the thinking before them.
+ */
+export const AI_JOB_LAYOUT_LANGUAGE_TOKENS = 1_200 + AI_LAYOUT_FRAME_THINKING_TOKENS
 
 /** A language layout pass's time, on the tier the layout step is served from. */
 export const AI_JOB_LAYOUT_LANGUAGE_BUDGET = aiJobStepBudget({

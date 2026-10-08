@@ -86,7 +86,7 @@ import {
   aiLayoutSiteName,
   type AiLayoutFrameBuilt,
 } from './ai-job-layout-language'
-import { aiJobUsesLayoutLanguage } from './ai-job-page-language'
+import { AI_LAYOUT_LANGUAGE_THINKING, aiJobUsesLayoutLanguage } from './ai-job-page-language'
 import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
 
@@ -409,7 +409,7 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
         messages: [{ role: 'user', content: aiLayoutFramePrompt({ job, siteName, pages, targets }) }],
         tool: AI_LAYOUT_FRAME_TOOL,
         maxTokens: AI_JOB_LAYOUT_LANGUAGE_BUDGET.maxTokens(model),
-        thinking: 'off',
+        ...AI_LAYOUT_LANGUAGE_THINKING,
         check: aiLayoutFrameCheck({
           ...aiSiteStyleTokens(job.inputs),
           siteName,

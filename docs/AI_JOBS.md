@@ -309,6 +309,65 @@ per-token money can cost more per request; and on a door that cannot cache,
 every static byte is billed at full input rate on every attempt AND on every
 re-ask, so its prompt is worth shortening rather than enriching.
 
+## Verifying a prompt change
+
+Nearly all of the provider bill is development, not customers (AGL-3660):
+in October 2026, $20.56 on the provider's console against about $1.05
+metered to workspaces. Most of it was live evals re-run whole on every
+iteration, on Free and on a paid workspace, at $0.35–0.80 a plan a run. So a
+change is verified on the cheapest rung that can see its mistake:
+
+1. **Unit tests** (free). The step's own spec on golden answers, and
+   `src/lib/runtime/ai-prompt-cache.spec.ts`, which holds every request's
+   cached bytes to one value across briefs and sites — the tools and the
+   system blocks through the last breakpoint, as the adapter writes them.
+2. **Replay** (free for what did not change). A live spec run under the
+   launcher's mark (`AI_EVAL_LIVE_LAUNCHER`) replays every request whose
+   bytes were answered before from `.cache/ai-replay/` (gitignored), and
+   sends only the requests whose prompt changed.
+3. **One live run per plan, for the prompts you changed**: the spec once on
+   Free and once with `AGLYN_LIVE_AI_ORG_PLAN=business`. Every live table
+   carries `run`: `live` and `replayed` counts and what the live calls cost
+   at list. `live: 0` means nothing new was asked; it is not a live pass.
+4. **The full live sweep, only before landing**: `AGLYN_AI_REPLAY=refresh`
+   asks every request again, and `AGLYN_LIVE_AI_BATCH=1` sends each round as
+   one Message Batch at half price.
+
+### The development layers
+
+All three live in `runAiRequest` (`src/lib/runtime/ai-runtime.ts`), are read
+from the environment by `src/lib/runtime/ai-dev-env.ts`, and are OFF in any
+deployed server — `NODE_ENV=production`, `VERCEL_ENV` of `production` or
+`preview`, or `K_SERVICE` — whatever the variables say.
+
+- **Replay** (`ai-dev-replay.ts`). A request's key is a SHA-256 of the
+  provider, model, system text, tools, messages, ceiling, thinking and
+  effort, as canonical JSON. `AGLYN_AI_REPLAY=1` replays and records,
+  `refresh` sends every request and records over the old answer, `off`
+  does neither; unset, it is on under the launcher and off elsewhere.
+  `AGLYN_AI_REPLAY_DIR` moves the store. A replayed answer is one the same
+  model gave to the same bytes, so a run that passes on replays has still
+  had every changed prompt answered live. A prompt that carries something
+  per run — a fresh job id, a random seed — never replays; a spec that wants
+  replays builds its ids from its briefs.
+- **Batch** (`ai-live-batch.ts`). `AGLYN_LIVE_AI_BATCH=1` turns every
+  non-streaming request into an entry of a Message Batch: requests that
+  arrive within `AGLYN_LIVE_AI_BATCH_WINDOW_MS` (2 s) of each other — a
+  `Promise.all` over the briefs — go as one batch, and the re-asks, asked
+  only once their answers are read, gather into the next. Half price, in
+  minutes rather than seconds; the adapter waits up to an hour.
+- **The first request over a prefix goes alone.** A cache entry is readable
+  only once the request writing it has started answering, so a `Promise.all`
+  over N briefs on one prompt wrote the prefix N times and read it none.
+  In a development run the first request over a cached prefix is sent
+  alone and the others follow it. Production's beat runs one step at a
+  time, so it never needed this and never gets it.
+- **The hour-long cache.** Under the launcher every breakpoint asks for
+  `ttl: "1h"` (`AGLYN_AI_CACHE_TTL=5m` turns it back), since an agent re-runs
+  an eval every ten to forty minutes, past the default five. Production
+  keeps five minutes: a job's steps run a beat apart, and a one-call step
+  with no re-ask would pay the hour's dearer write for nothing.
+
 ## Rules a kind can actually break
 
 The seventeen building rules are written for a kind that composes a document.
@@ -484,6 +543,34 @@ Every door reads its row rather than a constant of its own.
 - **A model that takes no setting gets none.** The Anthropic adapter sends
   neither `thinking` nor `effort` to a catalog model whose
   `capabilities.thinking` is false, whatever the door asked for.
+- **The balanced tier is Claude Sonnet 5.5 (AGL-3660).** The first balanced
+  row of `AI_MODEL_CATALOG` is the tier's default, so Free, "Auto" and every
+  step on the balanced tier run on `claude-sonnet-5-5`; `claude-sonnet-5`
+  stays listed so a workspace's earlier choice and every recording still
+  resolve. Both bill at the same rates. Sonnet 5.5 refuses
+  `thinking: {type: "disabled"}`, so the adapter says a step's `thinking:
+  'off'` to it as `{type: "between_tools"}` (accepted at effort high or below,
+  every effort the contract names); Claude Opus 5.5 cannot turn thinking off,
+  so it is sent no `thinking` and `effort: high` where a step names none. No
+  door forces a tool: every request sends `tool_choice: auto`. Its cache
+  minimum is 512 tokens, so the insight, A/B test, overlay and copy-section
+  prompts now cache where they did not on Sonnet 5's 1,024.
+- **A Free site's plan still runs on the fast tier** (`aiSitePlanModel`,
+  AGL-3594). Moving it to the balanced default puts the plan's derived
+  worst case at 105 credits rather than 35, and the Free site wall
+  (`AI_FREE_SITE_WORST_CASE_CREDITS`, still priced on section passes rather
+  than the layout language's one answer a page) then fits no section at all,
+  so every Free plan would be refused. The wall has to be re-derived for the
+  layout language first.
+- **The layout language thinks.** A page's answer and a site's header and
+  footer are asked with adaptive thinking at `effort: medium`
+  (`AI_LAYOUT_LANGUAGE_THINKING`), and each ceiling carries room for it above
+  the answer's own: 2,000 tokens on a page (5,000 in all; the live answers
+  ran 683–1,745) and 4,000 on a frame (5,200). The page's room is bounded by
+  time, not money: the answer, its re-ask and the follow-up must fit the
+  least time a beat gives a step, and `aiJobStepBudget` lowers a ceiling that
+  does not — at 5,000 of room it cut the page ceiling to 879. The theme step already thought
+  adaptively, at the model's default effort, and is unchanged.
 
 ## Planning, and a job that waits for a person
 

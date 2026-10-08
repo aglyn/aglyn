@@ -373,7 +373,7 @@ describe('a Free workspace’s site start is one or two pages', () => {
     mockRunAiRequest.mockResolvedValueOnce(toolAnswer(five))
     const outcome = await planStepFor(PAID_ORG, PAID, siteJob({ pages: 5 }))
     const [request] = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
-    expect(request.model).toBe('claude-sonnet-5')
+    expect(request.model).toBe('claude-sonnet-5-5')
     expect(request.thinking).toBe('off')
     expect(request.maxTokens).toBe(AI_SITE_PLAN_MAX_TOKENS.paid)
     expect(String(request.messages[0].content)).not.toContain('Free workspace')

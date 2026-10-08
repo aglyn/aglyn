@@ -27,6 +27,13 @@
 // the provider, so without AI_EVAL_LIVE=1 it refuses before anything runs. The recording itself is the plugin spec
 // `ai-eval.live.spec.ts`, which reuses the production step runners.
 //
+// The launcher's mark (AI_EVAL_LIVE_LAUNCHER) also turns on the development
+// replay cache (AGL-3660, docs/AI_JOBS.md "Verifying a prompt change"): a
+// brief whose request was answered before is replayed from .cache/ai-replay
+// for nothing, and only a changed prompt reaches the provider. The run prints
+// how many requests went live. AGLYN_AI_REPLAY=refresh asks every one again;
+// AGLYN_LIVE_AI_BATCH=1 sends the round as one Message Batch at half price.
+//
 // The run keeps the environment it is started with, the provider key included
 // (AGL-3038). The shared jest setup removes every value the repo-root .env
 // also defines, which on a machine whose .env holds the key removes the key

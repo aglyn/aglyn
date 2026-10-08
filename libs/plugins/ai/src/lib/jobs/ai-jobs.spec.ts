@@ -813,7 +813,7 @@ describe('runAiJobStep — the text step end to end', () => {
     expect(signals[0][1]).toMatchObject({
       route: 'ai/jobs',
       hostId: 'host-1',
-      model: 'claude-sonnet-5',
+      model: 'claude-sonnet-5-5',
       tier: 'entitled',
       stopReason: 'end_turn',
     })
@@ -835,7 +835,7 @@ describe('runAiJobStep — the text step end to end', () => {
     await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
     const request = mockRunAiRequest.mock.calls[0][0] as Record<string, unknown>
     expect(request).toMatchObject({
-      model: 'claude-sonnet-5',
+      model: 'claude-sonnet-5-5',
       thinking: 'adaptive',
       stream: false,
     })
