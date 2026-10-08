@@ -2606,6 +2606,7 @@
             "funnelInsight",
             "funnelsCreate",
             "hostAutomations",
+            "hostBusinessProfile",
             "hostCampaigns",
             "hostComponents",
             "hostEmailTemplates",

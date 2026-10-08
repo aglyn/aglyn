@@ -247,6 +247,12 @@ const MOUNTS: Record<
       proposeDraft: mockProposeDraft,
     },
   },
+  // AGL-3661: what a plugin keeps about the business, on Setup → Business profile.
+  hostBusinessProfile: {
+    file: 'apps/console/app/(app)/[orgSlug]/hosts/[host]/setup/(sections)/business/page.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1', orgId: 'org-1', orgSlug: 'acme', host: 'shop' },
+  },
   besignerToolbar: {
     file: 'apps/console/components/besigner-plugin-zones.component.tsx',
     how: 'slot',
