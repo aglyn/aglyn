@@ -1029,6 +1029,7 @@ export function destinationProps(
   if (destination.kind === 'page') return { screenId: destination.screenId }
   if (destination.kind === 'href')
     return { href: destination.href, target: '_blank' }
+  if (destination.kind === 'path') return { href: destination.href }
   return {}
 }
 

@@ -2820,6 +2820,17 @@ the element budget its request asks for.
   fit 4 on an empty site, and told "at least 3" the live yoga start of 2026-10-08 planned
   4 + 3, then 4 + 2, and stopped on the wall twice. A minimum the wall cannot pay for is
   a start that fails. No home is held where the owner's own home at `/` stays.
+- **A paid blog start's blog is the blog (AGL-3660, AGL-3676).** Its first posts are
+  written into a collection at /blog, and the live Slow Roads start (2026-10-08) also
+  planned an "Articles" page of featured cards that the header linked while it never
+  linked the blog. The plan's turn now says the blog is written and linked, and the
+  plan step re-asks a FIRST answer holding a page whose address is one of
+  `AI_SITE_BLOG_SLUGS` or whose name says it lists posts (`plan-blog-page-duplicate`,
+  `aiSiteBlogStandInViolations`); a second answer that keeps one is kept, and the posts
+  take the next free address (`aiSiteBlogSlug`). Whenever the ledger owes the posts part,
+  the layout is handed the blog as a nav entry by its path, second after Home
+  (`aiSiteBlogNavPage`), and the header, the phone menu and the footer link it with a
+  Page Link carrying `href`, not a `screenId`.
 - **Every device width, and an axe audit.** `libs/plugins/ai/scripts/record-ai-page-axe.mts`
   (AGL-3020) assembles each golden page the page step builds from a site — the ten
   briefs, both Free pages and the two-person page — through the step's own section

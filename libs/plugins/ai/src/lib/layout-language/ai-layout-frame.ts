@@ -176,7 +176,8 @@ export function aiCompileLayoutFrame(
       {
         children:
           aiLayoutFitText(entry.label, 'label') || entry.label.slice(0, 28),
-        screenId: entry.id,
+        // The blog is a path, not a page (AGL-3660).
+        ...(entry.href ? { href: entry.href } : { screenId: entry.id }),
         renderAs: 'link',
         color: 'inherit',
       },

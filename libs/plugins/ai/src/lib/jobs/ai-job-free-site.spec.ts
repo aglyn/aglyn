@@ -128,6 +128,8 @@ import { generateAiBlogPost } from '../runtime/ai-blog-post-generation'
 import { AI_BLOG_POST_TOOL_NAME } from '../tools/ai-blog-post-tool'
 import { aiSiteContentPart } from './ai-job-site-content'
 import { AI_YOGA_SITE_PLAN_FIRST_ANSWER, AI_YOGA_SITE_PLAN_REDO_ANSWER } from './fixtures/ai-yoga-site-plan-recording'
+import { AI_SLOW_ROADS_SITE_PLAN_FIRST_ANSWER } from './fixtures/ai-slow-roads-site-plan-recording'
+import { AI_SITE_BLOG_PAGE_CODE, aiSiteBlogSlug, aiSiteBlogStandInViolations } from '../model/ai-site-job'
 import { aiDoctrineScopeFor, aiDoctrineSystemBlocks } from '../runtime/ai-doctrine'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_LAYOUT_FRAME_TOOL, AI_LAYOUT_PAGE_TOOL } from '../layout-language/ai-layout-language'
@@ -637,6 +639,100 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
     expect(reask).toContain('The home page has 2 sections')
     expect(reask).not.toContain('Keep the whole plan within')
     expect((outcome.plan as AiJobPlan).screens[0].sections).toHaveLength(5)
+  })
+})
+
+describe('a paid blog start plans no page that stands in for its blog (AGL-3660)', () => {
+  const empty = emptyAiSiteInventory('host-1')
+  const paidEmpty = aiPlanCapabilitiesFrom(PAID_ORG, { layout: [], template: [] })
+  const blogJob = (org: 'paid' | 'free' = 'paid') =>
+    siteJob({
+      businessType: 'Slow Roads, a personal travel blog about long train journeys through Europe, written by one person',
+      businessName: 'Slow Roads',
+      siteKind: 'blog',
+      pages: org === 'paid' ? 4 : 2,
+    })
+  /**
+   * The recorded plan as its redo should come back: the Articles page traded
+   * for a Routes page (a paid start builds four to eight), and the home's
+   * closing band linking the contact page, as the live redo wrote it.
+   */
+  const [recordedHome, , ...recordedRest] = AI_SLOW_ROADS_SITE_PLAN_FIRST_ANSWER.screens
+  const withoutArticles: AiBuildPlan = {
+    ...AI_SLOW_ROADS_SITE_PLAN_FIRST_ANSWER,
+    screens: [
+      {
+        ...recordedHome,
+        sections: recordedHome.sections.map((section, index) =>
+          index === recordedHome.sections.length - 1 ? { ...section, name: 'Closing call to action linking to the contact page' } : section,
+        ),
+      },
+      {
+        ...recordedRest[0],
+        title: 'Routes',
+        slug: '/routes',
+        seoTitle: 'Routes | Slow Roads',
+        seoDescription: 'The long train routes through Europe that Slow Roads rides, and what each one is like.',
+        sections: [
+          { name: 'Routes introduction', uses: [], items: 0 },
+          { name: 'Route cards', uses: [], items: 4 },
+        ],
+      },
+      ...recordedRest,
+    ],
+  }
+
+  it('names the recorded Articles page as standing in for the blog, and nothing in a plan without it', () => {
+    expect(aiSiteBlogStandInViolations(AI_SLOW_ROADS_SITE_PLAN_FIRST_ANSWER)).toEqual([
+      expect.objectContaining({
+        code: AI_SITE_BLOG_PAGE_CODE,
+        paths: ['screens[1]'],
+        message: expect.stringContaining('"Articles" at /articles stands in for the blog'),
+      }),
+    ])
+    expect(aiSiteBlogStandInViolations(withoutArticles)).toEqual([])
+    // By name or by address; the home page never does.
+    const journal = { ...withoutArticles.screens[1], title: 'Journal', slug: '/notes' }
+    const atPosts = { ...withoutArticles.screens[1], title: 'Reading', slug: '/posts/2026' }
+    expect(aiSiteBlogStandInViolations({ screens: [journal, atPosts] })[0].paths).toEqual(['screens[0]', 'screens[1]'])
+    expect(aiSiteBlogStandInViolations({ screens: [{ ...withoutArticles.screens[0], title: 'Home: a travel blog' }] })).toEqual([])
+    // The blog answers at /blog beside the plan without it, and at the next free address beside one with a page there.
+    expect(aiSiteBlogSlug(withoutArticles.screens)).toBe('blog')
+    expect(aiSiteBlogSlug([...withoutArticles.screens, { ...journal, slug: '/blog' }])).toBe('posts')
+  })
+
+  it('tells a paid blog start’s plan the blog is written and linked, and tells a Free one — which writes no posts — nothing', () => {
+    const paidLines = aiPlanSiteLines(blogJob(), empty, aiSitePlanCapabilities(blogJob(), paidEmpty)).join('\n')
+    expect(paidLines).toContain("This site's blog is written for it with its first posts at /blog, and the header links it.")
+    const free = aiSitePlanCapabilities(blogJob('free'), aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] }))
+    expect(aiPlanSiteLines(blogJob('free'), empty, free).join('\n')).not.toContain('first posts at /blog')
+    expect(aiPlanSiteLines(siteJob({ pages: 4 }), empty, aiSitePlanCapabilities(siteJob({ pages: 4 }), paidEmpty)).join('\n')).not.toContain('first posts at /blog')
+  })
+
+  it('re-asks the recorded first answer for its Articles page through the plan step, and keeps the plan that comes back without it', async () => {
+    mockRunAiRequest.mockReset()
+    mockRunAiRequest.mockResolvedValueOnce(toolAnswer(AI_SLOW_ROADS_SITE_PLAN_FIRST_ANSWER)).mockResolvedValueOnce(toolAnswer(withoutArticles))
+    const outcome = await planStepFor(PAID_ORG, paidEmpty, blogJob(), empty)
+    const sent = mockRunAiRequest.mock.calls.map((call) => String((call[0] as SentRequest).messages.at(-1)?.content))
+    expect(sent).toHaveLength(2)
+    expect(sent[1]).toContain('"Articles" at /articles stands in for the blog')
+    expect([outcome.review?.findings, outcome.failure, (outcome.plan as AiJobPlan | undefined)?.screens.map((screen) => screen.slug)]).toEqual([[], undefined, ['/', '/routes', '/about', '/contact']])
+  })
+
+  it('keeps a second answer that still holds the page rather than stopping the start', async () => {
+    mockRunAiRequest.mockReset()
+    // The redo mends the home's closing band (rule 3, its own finding) and keeps Articles.
+    const keptArticles: AiBuildPlan = {
+      ...AI_SLOW_ROADS_SITE_PLAN_FIRST_ANSWER,
+      screens: [withoutArticles.screens[0], ...AI_SLOW_ROADS_SITE_PLAN_FIRST_ANSWER.screens.slice(1)],
+    }
+    mockRunAiRequest
+      .mockResolvedValueOnce(toolAnswer(AI_SLOW_ROADS_SITE_PLAN_FIRST_ANSWER))
+      .mockResolvedValueOnce(toolAnswer(keptArticles))
+    const outcome = await planStepFor(PAID_ORG, paidEmpty, blogJob(), empty)
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(AI_GENERATION_MAX_ATTEMPTS)
+    expect(outcome.uncredited).toBeUndefined()
+    expect((outcome.plan as AiJobPlan).screens.map((screen) => screen.slug)).toContain('/articles')
   })
 })
 

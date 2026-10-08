@@ -52,8 +52,10 @@ import {
   aiSiteNameSentence,
   aiSitePlanIsHome,
   aiSitePlanShapeRefusal,
+  aiSiteBlogStandInViolations,
   aiSiteThinHomeViolations,
 } from '../model/ai-site-job'
+import { aiSiteContentPart } from './ai-job-site-content'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { aiPlanFailureCopy, aiPlanRetryRefusal } from '../model/ai-job-failure-copy'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
@@ -265,6 +267,13 @@ export function aiPlanSiteLines(
   if (home.min > 0 && !pages.some((page) => !page.replaceable && aiSitePlanIsHome(page))) {
     lines.push(`The home page at / reads as a full website: at least ${home.min} sections — ${AI_SITE_HOME_BANDS}.`)
   }
+  // A paid blog's first posts are written at /blog and linked from the
+  // header (AGL-3660, AGL-3676), so the plan plans no page standing in for it.
+  if (aiSiteContentPart(job.inputs ?? null, capabilities?.freeTaste === true) === 'posts') {
+    lines.push(
+      "This site's blog is written for it with its first posts at /blog, and the header links it. Plan no page that stands in for it (no Blog, Articles, Journal, Posts or Stories page); feature the posts in a section of the home page instead.",
+    )
+  }
   // The kind of site the person picked (AGL-3660): the pages it usually has.
   const kind = aiSiteKindOfInputs(job.inputs)
   if (kind) lines.push(`This is a ${kind.label.toLowerCase()} site. ${kind.pages}`)
@@ -308,6 +317,21 @@ export function aiSiteThinHomeCheck(
     answers += 1
     if (answers >= AI_GENERATION_MAX_ATTEMPTS) return []
     return aiSiteThinHomeViolations(plan, rule)
+  }
+}
+
+/**
+ * A site plan's page standing in for the blog its start writes (AGL-3660),
+ * asked about on the FIRST answer only, like a thin home: the re-ask names
+ * the page, and an answer that keeps it is kept — the posts then take the
+ * next address the page leaves free, and the header links them all the same.
+ */
+export function aiSiteBlogStandInCheck(): (plan: AiBuildPlan) => AiDoctrineViolation[] {
+  let answers = 0
+  return (plan) => {
+    answers += 1
+    if (answers >= AI_GENERATION_MAX_ATTEMPTS) return []
+    return aiSiteBlogStandInViolations(plan)
   }
 }
 
@@ -387,8 +411,10 @@ function planViolations(
   freeTaste = false,
   ops: AiBuildOps | null = null,
   home: { min: number; across: number | null } | null = null,
+  blog = false,
 ): (plan: AiBuildPlan) => AiDoctrineViolation[] {
   const thinHome = home && home.min > 0 ? aiSiteThinHomeCheck(home) : null
+  const blogStandIn = blog ? aiSiteBlogStandInCheck() : null
   return (plan) => {
     // A build's plan is held to the operations this site has (AGL-3616):
     // an unknown op, arguments its schema refuses, a cycle or a reference
@@ -400,6 +426,7 @@ function planViolations(
       ...aiPlanEmbedBriefViolations(plan, brief),
       ...(message ? [{ rule: null, code: 'plan-job-shape', message }] : []),
       ...(thinHome ? thinHome(plan) : []),
+      ...(blogStandIn ? blogStandIn(plan) : []),
     ]
   }
 }
@@ -794,6 +821,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         freeTaste,
         ops,
         site ? aiSitePlanHomeRule(inventory, capabilities) : null,
+        site && aiSiteContentPart(job.inputs ?? null, freeTaste) === 'posts',
       ),
     })
     const spent: AiJobStepOutcome = {

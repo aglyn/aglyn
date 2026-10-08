@@ -25,6 +25,7 @@ import {
 import { aiProductsProposalOf } from '../model/ai-products'
 import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
+import { AI_SITE_BLOG_NAME, AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import { aiModelForStep } from '../providers/routing'
 import {
@@ -86,9 +87,8 @@ export const AI_SITE_PRODUCTS = { min: 3, max: 6 } as const
 export const AI_SITE_POSTS_LABEL = 'Writing your first posts'
 export const AI_SITE_PRODUCTS_LABEL = 'Adding your first products'
 
-/** The blog the posts go in, and the addresses it may answer at, in order of preference. */
-export const AI_SITE_BLOG_NAME = 'Blog'
-export const AI_SITE_BLOG_SLUGS = ['blog', 'posts', 'journal', 'articles', 'writing', 'stories'] as const
+/** The blog the posts go in, and the addresses it may answer at (`model/ai-site-job.ts`). */
+export { AI_SITE_BLOG_NAME, AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
 
 /** The input a site unit's own job carries what the part needs in. */
 export const AI_SITE_CONTENT_INPUT = 'siteContent'

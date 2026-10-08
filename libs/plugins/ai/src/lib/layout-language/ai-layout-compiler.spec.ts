@@ -895,6 +895,28 @@ describe('the frame', () => {
     })
   })
 
+  it('links a blog a start writes by its path — header, phone menu and footer — and the doctrine admits it (AGL-3660)', () => {
+    const blog = { id: 'aiSiteBlog', label: 'Blog', slug: '/blog', href: '/blog' }
+    const navPages = [nav[0], blog, ...nav.slice(1)]
+    const read = aiReadLayoutFrame({
+      header: { band: 'plain', blocks: [] },
+      footer: { band: 'soft', blocks: [{ kind: 'text', text: 'Slow travel by train.' }] },
+    })
+    const compiled = aiCompileLayoutFrame(read, { siteName: 'Slow Roads', homeId: HOME, navPages }, { ...TARGETS, pages: navPages })
+    const stored = aiLayoutStoredTree(compiled.tree, 'layout', layoutContext)
+    if (stored.ok === false) throw new Error(stored.error)
+    const report = validateAiDoctrineTree({ rootId: stored.rootId, nodes: stored.nodes }, 'layout', layoutContext)
+    expect(report.violations).toEqual([])
+    const toBlog = Object.values(stored.nodes).filter((node) => (node as { props?: Record<string, unknown> }).props?.['href'] === '/blog')
+    // The header row, the phone menu and the footer's list.
+    expect(toBlog.length).toBeGreaterThanOrEqual(3)
+    for (const node of toBlog) {
+      const props = (node as { props: Record<string, unknown> }).props
+      expect(props['screenId']).toBeUndefined()
+      expect(props['target']).toBeUndefined()
+    }
+  })
+
   it('prints one copyright line, the bottom bar\'s, whatever the answer adds', () => {
     const block = (kind: string, text: string) => ({ kind, col: 0, text })
     const { compiled, report } = frame({

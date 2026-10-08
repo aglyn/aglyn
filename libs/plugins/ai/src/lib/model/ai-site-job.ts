@@ -234,6 +234,71 @@ export const AI_SITE_MAX_SECTIONS = 8
  */
 export const AI_SITE_HOME_MIN_SECTIONS = 5
 
+/**
+ * The blog a paid guided start writes its first posts into (AGL-3676), and
+ * the addresses it may answer at, in order of preference: the first one no
+ * planned page takes.
+ */
+export const AI_SITE_BLOG_NAME = 'Blog'
+export const AI_SITE_BLOG_SLUGS = ['blog', 'posts', 'journal', 'articles', 'writing', 'stories'] as const
+
+/** A planned page's first path segment, lower-cased: `/journal/2026` → `journal`. */
+const firstSegment = (slug: string) => slug.trim().replace(/^\/+/, '').split('/')[0].toLowerCase()
+
+/** The address the blog answers at, beside these planned pages: the first of `AI_SITE_BLOG_SLUGS` none of them takes. */
+export function aiSiteBlogSlug(screens: ReadonlyArray<{ slug: string }>): string {
+  const taken = new Set(screens.map((screen) => firstSegment(screen.slug)).filter(Boolean))
+  return AI_SITE_BLOG_SLUGS.find((slug) => !taken.has(slug)) ?? AI_SITE_BLOG_SLUGS[0]
+}
+
+/** The header's link to the blog (AGL-3660): a path, not a page, since the blog is the posts collection. */
+export const AI_SITE_BLOG_NAV_ID = 'aiSiteBlog'
+
+/** The nav entry a site whose start writes posts links its blog by. */
+export function aiSiteBlogNavPage(screens: ReadonlyArray<{ slug: string }>): {
+  id: string
+  label: string
+  slug: string
+  href: string
+} {
+  const slug = aiSiteBlogSlug(screens)
+  return { id: AI_SITE_BLOG_NAV_ID, label: AI_SITE_BLOG_NAME, slug: `/${slug}`, href: `/${slug}` }
+}
+
+/** The code a planned page that stands in for the written blog is re-asked under. */
+export const AI_SITE_BLOG_PAGE_CODE = 'plan-blog-page-duplicate'
+
+/** A page's name that says it lists the posts. */
+const BLOG_PAGE_WORDS = /\b(blog|posts?|articles?|journal|writing|stories|news)\b/i
+
+/**
+ * A site plan's pages that stand in for the blog its start writes (AGL-3660):
+ * the live Slow Roads start (2026-10-08) planned an "Articles" page of
+ * featured cards beside the posts it wrote at /blog, and the header linked
+ * Articles and never the blog. A page whose address is one of the blog's, or
+ * whose name says it lists posts, duplicates it; the home page never does.
+ */
+export function aiSiteBlogStandInViolations(
+  plan: Pick<AiBuildPlan, 'screens'>,
+): Array<{ rule: null; code: string; message: string; paths: string[] }> {
+  const blogSlugs = new Set<string>(AI_SITE_BLOG_SLUGS)
+  const standIns = plan.screens.flatMap((screen, index) => {
+    if (aiSitePlanIsHome(screen)) return []
+    const segment = firstSegment(screen.slug)
+    return blogSlugs.has(segment) || BLOG_PAGE_WORDS.test(screen.title) ? [{ screen, index }] : []
+  })
+  if (!standIns.length) return []
+  const names = standIns.map(({ screen }) => `"${screen.title}" at ${screen.slug}`).join(', ')
+  return [
+    {
+      rule: null,
+      code: AI_SITE_BLOG_PAGE_CODE,
+      message: `${names} ${standIns.length === 1 ? 'stands' : 'stand'} in for the blog this site already gets: its first posts are written at /blog, and the header links it. Take ${standIns.length === 1 ? 'that page' : 'those pages'} out, and plan another page the brief needs, or feature the posts in a section of the home page.`,
+      paths: standIns.map(({ index }) => `screens[${index}]`),
+    },
+  ]
+}
+
 /** The violation a site plan whose home page is under its fewest sections is re-asked under. */
 export const AI_SITE_THIN_HOME_CODE = 'plan-thin-home'
 
