@@ -4,7 +4,8 @@
 requests are processed" (the default `global` Vertex AI endpoint, which makes
 no processing-location promise) and the purpose worded as images rather than
 photos. The final text is below.** SUB-1
-and PP-1 are published together as legal **v12** with re-acceptance (v11 was
+and PP-1 are published together as legal **v12** with re-acceptance (Zach,
+2026-10-07; v11 was
 taken on 2026-10-07 by the commerce subprocessors, AGL-3666); SUB-2 is not
 applied (see below). The AI catalog declares the SUB-1 row dated 2026-10-07
 (`AI_IMAGE_CATALOG_PROVIDERS` in `libs/plugins/ai/src/lib/providers/catalog.ts`),
@@ -105,7 +106,7 @@ unchanged):
 > description, the kind and shape of picture, and your site's theme colors or
 > the colors you choose.
 
-**§2 "AI features"** (consequential, needs Zach's yes): the paragraph opens
+**§2 "AI features"** (APPROVED by Zach 2026-10-07): the paragraph opens
 "Some features use a third-party AI provider — currently Anthropic — to
 generate assistance or content", which the sentence above would contradict.
 Proposed:
