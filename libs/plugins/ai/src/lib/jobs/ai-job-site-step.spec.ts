@@ -1357,6 +1357,35 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
     expect(publishPosts).not.toHaveBeenCalled()
   })
 
+  it('tells the publish the blog went unwritten when its posts part failed, so its links come out (AGL-3660)', async () => {
+    const units = aiSiteJobUnits(confirmedPlan(), { content: 'posts' })
+    const pages = ['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id))
+    const ledger = (posts: Record<string, unknown>) =>
+      aiSiteInitialLedger(units, [LOOK, ...pages]).map((row) => (row.slot === 'posts' ? { ...row, ...posts } : row))
+    const publish = jest.fn(async () => ({ liveUrl: null, published: [], drafts: [] }))
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })) },
+      { publish, publishPosts: jest.fn(async () => null) as never, dropCache: jest.fn(async () => ({ complete: true })) as never },
+    )
+    await step(context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...pages], items: ledger({ status: 'failed', outputs: [] }) as never })))
+    expect(publish).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ blogUnwritten: true }))
+    const posts = [entry('job-1-posts-0', 'One')]
+    await step(
+      context(
+        siteJob({
+          inputs: { ...blogInputs, autoConfirm: true },
+          outputs: [LOOK, ...posts, ...pages],
+          items: ledger({ status: 'succeeded', outputs: posts.map((post) => post.id) }) as never,
+        }),
+      ),
+    )
+    expect(publish).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ blogUnwritten: false }))
+    // A site that owes no posts says nothing about a blog.
+    const plain = aiSiteInitialLedger(aiSiteJobUnits(confirmedPlan()), [LOOK, ...pages])
+    await step(context(siteJob({ inputs: { ...siteJob().inputs, autoConfirm: true }, outputs: [LOOK, ...pages], items: plain })))
+    expect(publish).toHaveBeenLastCalledWith(expect.anything(), expect.not.objectContaining({ blogUnwritten: expect.anything() }))
+  })
+
   it('gives a post’s pass the time a post needs, and bounds the passes with every post in them', () => {
     expect(aiSiteJobRunMinimumMs(siteJob({ inputs: blogInputs }))).toBe(AI_SITE_POST_BUDGET.minimumMs)
     expect(AI_SITE_MAX_PASSES).toBe(AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + 3 + AI_SITE_POSTS + 1)

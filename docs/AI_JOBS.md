@@ -2830,7 +2830,11 @@ the element budget its request asks for.
   take the next free address (`aiSiteBlogSlug`). Whenever the ledger owes the posts part,
   the layout is handed the blog as a nav entry by its path, second after Home
   (`aiSiteBlogNavPage`), and the header, the phone menu and the footer link it with a
-  Page Link carrying `href`, not a `screenId`.
+  Page Link carrying `href`, not a `screenId`. The header is built before the posts, so
+  a start whose posts part then fails or is skipped tells its publish so
+  (`blogUnwritten`), and the publish takes every link to a blog address out of the
+  layout it puts live (`aiSiteUnwrittenBlogHrefs`): no header, menu or footer link to a
+  /blog that does not exist.
 - **Every device width, and an axe audit.** `libs/plugins/ai/scripts/record-ai-page-axe.mts`
   (AGL-3020) assembles each golden page the page step builds from a site — the ten
   briefs, both Free pages and the two-person page — through the step's own section

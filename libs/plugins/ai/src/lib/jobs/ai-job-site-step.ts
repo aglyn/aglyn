@@ -907,10 +907,14 @@ export function createAiJobSiteStep(
     /** A guided start's last pass puts what it built on the site, once (AGL-3596): only its pages that were built. */
     const finish = async (outcome: AiJobStepOutcome, pages: readonly AiJobOutput[]): Promise<AiJobStepOutcome> => {
       if (!aiJobPublishesSite(job) || job.sitePublish || !job.hostId || !pages.length) return outcome
+      // A blog the header links by path before its posts exist (AGL-3660):
+      // owed and not delivered, its links come out of what is published.
+      const postsRow = rows.get('posts')
       const sitePublish = await publish(context.firestore, {
         job,
         outputs: pages,
         now: context.now,
+        ...(postsRow ? { blogUnwritten: !aiBuildItemDelivered(postsRow) || !postsRow.outputs?.length } : {}),
       }).catch((error: unknown) => {
         // The site is built either way; the pages stay drafts and say so.
         console.error('ai site publish threw', { orgId: job.orgId, jobId: job.$id, error })
