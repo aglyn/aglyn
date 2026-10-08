@@ -1,5 +1,7 @@
-// The Inbox plugin's native screens (Android + JVM desktop). Reached only
-// through the generated native plugin manifest; the app shells never import it.
+// The Inbox plugin's native screens (Android + JVM desktop): a site's form
+// submissions (read, reply, add to a marketing list, delete) and its members
+// and leads. Reached only through the generated native plugin manifest; the
+// app shells never import it.
 plugins {
   alias(libs.plugins.kotlin.multiplatform)
   alias(libs.plugins.android.kmp.library)
@@ -22,15 +24,11 @@ kotlin {
       implementation(project(":native-plugin-host"))
       implementation(project(":native-ui"))
       implementation(project(":native-contracts"))
+      implementation(libs.kotlinx.serialization.json)
     }
     commonTest.dependencies {
       implementation(kotlin("test"))
       implementation(libs.kotlinx.coroutines.test)
     }
   }
-}
-
-// The sender rule replays the console's own answers from libs/native/contracts.
-tasks.withType<Test>().configureEach {
-  systemProperty("aglyn.contractsDir", file("../../../../native/contracts").absolutePath)
 }

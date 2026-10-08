@@ -8,9 +8,13 @@ package com.aglyn.plugins.manifest
 import com.aglyn.pluginhost.NativePluginManifestEntry
 import com.aglyn.plugins.bookings.registerBookingsNative
 import com.aglyn.plugins.commerce.registerCommerceNative
+import com.aglyn.plugins.crm.registerCrmNative
+import com.aglyn.plugins.email.registerEmailNative
 import com.aglyn.plugins.eventscalendar.registerEventsCalendarNative
 import com.aglyn.plugins.forms.registerFormsNative
 import com.aglyn.plugins.inbox.registerInboxNative
+import com.aglyn.plugins.marketing.registerMarketingNative
+import com.aglyn.plugins.outreach.registerOutreachNative
 import com.aglyn.plugins.redirects.registerRedirectsNative
 import com.aglyn.plugins.workflows.registerWorkflowsNative
 
@@ -27,6 +31,16 @@ object NativePluginManifest {
             register = ::registerCommerceNative,
         ),
         NativePluginManifestEntry(
+            id = "crm",
+            contributes = mapOf("screens" to listOf("crm.companies", "crm.company", "crm.contact", "crm.contacts", "crm.deal", "crm.deals", "crm.fields", "crm.lead", "crm.leads", "crm.reports", "crm.settings", "crm.tasks"), "widgets" to listOf("crm.glance", "crm.tasks-due"), "quickActions" to listOf("crm.deals-action", "crm.open", "crm.tasks-action"), "deepLinks" to listOf("crm.companies-page", "crm.company-page", "crm.contact-page", "crm.contacts-page", "crm.deal-page", "crm.deals-page", "crm.fields-page", "crm.lead-page", "crm.leads-page", "crm.legacy-contacts", "crm.page", "crm.reports-page", "crm.settings-page", "crm.tasks-page")),
+            register = ::registerCrmNative,
+        ),
+        NativePluginManifestEntry(
+            id = "email",
+            contributes = mapOf("screens" to listOf("email.audiences", "email.messages", "email.sending", "email.suppressions", "email.templates", "email.topics"), "quickActions" to listOf("email.open"), "deepLinks" to listOf("email.audiences-page", "email.list-page", "email.message-page", "email.messages-page", "email.page", "email.sending-page", "email.suppressions-page", "email.templates-page", "email.topics-page")),
+            register = ::registerEmailNative,
+        ),
+        NativePluginManifestEntry(
             id = "events-calendar",
             contributes = mapOf("screens" to listOf("events-calendar.events"), "quickActions" to listOf("events-calendar.open"), "deepLinks" to listOf("events-calendar.page")),
             register = ::registerEventsCalendarNative,
@@ -38,8 +52,18 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "inbox",
-            contributes = mapOf("screens" to listOf("inbox.submission", "inbox.submissions"), "deepLinks" to listOf("inbox.submissions-page")),
+            contributes = mapOf("screens" to listOf("inbox.people", "inbox.submission", "inbox.submissions"), "widgets" to listOf("inbox.glance"), "quickActions" to listOf("inbox.open", "inbox.people"), "deepLinks" to listOf("inbox.page", "inbox.people-page", "inbox.submissions-page")),
             register = ::registerInboxNative,
+        ),
+        NativePluginManifestEntry(
+            id = "marketing",
+            contributes = mapOf("screens" to listOf("marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview"), "quickActions" to listOf("marketing.open"), "deepLinks" to listOf("marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page")),
+            register = ::registerMarketingNative,
+        ),
+        NativePluginManifestEntry(
+            id = "outreach",
+            contributes = mapOf("screens" to listOf("outreach.compliance", "outreach.mailboxes", "outreach.sequences"), "widgets" to listOf("outreach.glance"), "deepLinks" to listOf("outreach.compliance-page", "outreach.mailboxes-page", "outreach.page", "outreach.sequence-page", "outreach.sequences-page")),
+            register = ::registerOutreachNative,
         ),
         NativePluginManifestEntry(
             id = "redirects",
