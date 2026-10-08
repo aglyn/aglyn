@@ -15,6 +15,9 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **business-profile:** a site's business profile in Setup, and workspace defaults in Settings ([AGL-3661](https://linear.app/aglyn/issue/AGL-3661))
+- **ai:** every AI job reads the site's business profile, and remembers the edits you keep ([AGL-3661](https://linear.app/aglyn/issue/AGL-3661))
+- **ai:** the assist edit and build turns read the site's business context ([AGL-3661](https://linear.app/aglyn/issue/AGL-3661))
 - **ai:** a build can change a page or layout the site already has ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
 - **ai:** an edit job changes an existing page or layout into a version no visitor sees ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
 - **zapier:** REST hooks plugin and the Aglyn Zapier app ([AGL-3643](https://linear.app/aglyn/issue/AGL-3643))
@@ -55,6 +58,10 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **commerce:** the products write gate answers 401 only for a refused token ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **zapier:** the console hooks route answers 401 only for a refused token ([AGL-3643](https://linear.app/aglyn/issue/AGL-3643))
+- **console,ai:** the business profile names the configured brand's AI ([AGL-3661](https://linear.app/aglyn/issue/AGL-3661))
+- **export:** a Zapier hook's URL is withheld from a data export, its hooks and deliveries disclosed ([AGL-3643](https://linear.app/aglyn/issue/AGL-3643))
 - **ai:** the edit step's least time is documented, and a function pass timed as logic ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
 - **ai:** a build offers a campaign or an automation only where its writer's plugin runs ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
 - **zapier:** the hook origin is a URL the egress sweep reads ([AGL-3643](https://linear.app/aglyn/issue/AGL-3643))

@@ -248,6 +248,7 @@ describe('a submission from a recorded visit', () => {
     expect((await submit({ journey: VISIT })).status).toBe(200)
     expect(submitted()?.context).toEqual({
       actor: { kind: 'visitor', email: 'visitor@example.com' },
+      recordId: 'submission-1',
       journeyId: VISIT,
     })
     expect(submitted()?.payload).not.toHaveProperty('journey')
@@ -260,6 +261,10 @@ describe('a submission from a recorded visit', () => {
     ['a visit id of the wrong length', 'a'.repeat(23)],
   ])('names no visit for %s', async (_case, journey) => {
     await submit(journey === undefined ? {} : { journey })
-    expect(submitted()?.context).toEqual({ actor: { kind: 'visitor', email: 'visitor@example.com' } })
+    expect(submitted()?.context).toEqual({
+      actor: { kind: 'visitor', email: 'visitor@example.com' },
+      // The stored submission rides every event (AGL-3643); only the visit is conditional.
+      recordId: 'submission-1',
+    })
   })
 })
