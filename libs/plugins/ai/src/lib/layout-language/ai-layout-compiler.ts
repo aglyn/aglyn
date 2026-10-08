@@ -41,6 +41,13 @@ import {
   type AiLayoutSettlement,
 } from './ai-layout-language'
 import {
+  aiLayoutDesignChoices,
+  aiLayoutGroupVariant,
+  type AiLayoutDesign,
+  type AiLayoutDesignChoices,
+  type AiLayoutGroupVariant,
+} from './ai-layout-design'
+import {
   aiLayoutResolveLink,
   type AiLayoutDestination,
   type AiLayoutLinkScope,
@@ -112,6 +119,13 @@ export interface AiLayoutCompileOptions {
    * a link to a section scrolls to it. Absent, `section-<n>`.
    */
   sectionIds?: readonly string[]
+  /**
+   * The site the page belongs to — its kind, its seed and whether this is its
+   * home — which the designer layer draws the page's sections for
+   * (`ai-layout-design.ts`): a photo hero, pictures beside words, work as an
+   * uneven grid of pictures. Absent, the compiler's first design.
+   */
+  design?: AiLayoutDesign
 }
 
 /** A section root's id where the caller gives none. */
@@ -162,6 +176,14 @@ export interface PageScope {
   formsPlaced: Set<string>
   /** Each section's repeated items, by the id of the element that draws each (AGL-3660). */
   itemIds: string[][]
+  /** The site's design and the choices its seed made, where the page is drawn with one. */
+  design: { input: AiLayoutDesign; choices: AiLayoutDesignChoices } | null
+  /** Stand-in pictures the design placed beside the model's own (`images`). */
+  pictures: number
+  /** Sections of words the design set beside a picture. */
+  features: number
+  /** The last section whose heading the design set beside its items: never two in a row. */
+  splitAt: number
 }
 
 /** Everything one section's compile shares. */
@@ -184,6 +206,14 @@ export interface SectionScope {
   link: AiLayoutLinkScope
   /** Like items the section may still show (rule 8), across its groups. */
   itemsLeft: number
+  /** What the section is about — its plan name and its headings — which picks how its groups are drawn. */
+  words?: string
+  /** Whether the section's words sit over a photo, where they take the band's own color. */
+  overPhoto?: boolean
+  /** The section's first heading as the model wrote it: what a stand-in picture is of. */
+  heading?: string
+  /** A group style the section's arrangement settled, over the one its words would pick. */
+  groupStyle?: AiLayoutGroupVariant
 }
 
 const formIdsOf = (targets: AiLayoutTargets): Set<string> =>
@@ -236,6 +266,10 @@ export function aiCompileLayoutPage(
     pageIcon: pageIconOf(sections),
     formsPlaced: new Set(),
     itemIds: plan.sections.map(() => []),
+    design: options.design ? { input: options.design, choices: aiLayoutDesignChoices(options.design) } : null,
+    pictures: 0,
+    features: 0,
+    splitAt: -2,
   }
   const roots = plan.sections.map((_, index) => {
     const section = sections[index] ?? { blocks: [] }
@@ -296,6 +330,11 @@ function compileSection(
       from: index,
       formSection: page.formSection,
     },
+    heading: raw.blocks.find((block) => block.kind === 'heading')?.text,
+    words: [
+      page.plan.sections[index]?.name ?? '',
+      ...raw.blocks.filter((block) => block.kind === 'heading' || block.kind === 'eyebrow').map((block) => block.text ?? ''),
+    ].join(' '),
   }
   // A quote is a gap the owner fills, and a published page shows no gap (AGL-3660).
   const blocks = placePlanned(scope, raw).filter((block) => {
@@ -303,6 +342,11 @@ function compileSection(
     page.settled.push({ at, what: 'a quotes group left out: a published page shows no customer words the brief did not give' })
     return false
   })
+  // The site's design draws the sections it has an arrangement for (AGL-3660).
+  if (page.design) {
+    const designed = designSection(scope, raw, blocks)
+    if (designed) return designed
+  }
   const cols = raw.cols && raw.cols.length >= 2 ? raw.cols : null
   // Above the row, the row's columns, and below it.
   const head: AiLayoutBlock[] = []
@@ -868,12 +912,12 @@ function compileBlock(
 
 /** Secondary words' color: muted text, or the band's own on a brand band. */
 function muted(scope: SectionScope): Record<string, unknown> | null {
-  return scope.band === 'brand' ? null : { color: 'text.secondary' }
+  return scope.band === 'brand' || scope.overPhoto ? null : { color: 'text.secondary' }
 }
 
 /** An accent's color: the brand's, or the band's own on a brand band. */
 function accent(scope: SectionScope): Record<string, unknown> | null {
-  return scope.band === 'brand' ? null : { color: 'primary.main' }
+  return scope.band === 'brand' || scope.overPhoto ? null : { color: 'primary.main' }
 }
 
 function align(scope: SectionScope): Record<string, unknown> {
@@ -976,7 +1020,8 @@ function compileButton(
     return null
   }
   const style = block.style ?? 'primary'
-  const onBrand = scope.band === 'brand'
+  // Over a photo, a quiet or outlined button takes the words' own color, as on a brand band.
+  const onBrand = scope.band === 'brand' || (!!scope.overPhoto && style !== 'primary')
   const look =
     style === 'quiet'
       ? { variant: 'text', color: onBrand ? 'inherit' : 'primary' }
@@ -1029,6 +1074,7 @@ export function destinationProps(
   if (destination.kind === 'page') return { screenId: destination.screenId }
   if (destination.kind === 'href')
     return { href: destination.href, target: '_blank' }
+  if (destination.kind === 'path') return { href: destination.href }
   return {}
 }
 
@@ -1320,7 +1366,22 @@ function group(
   const perRow = across(items.length, room, block.kind)
   const placed = componentOf(scope.page.targets, block.to)
   if (placed) return instances(scope, placed, items, perRow)
-  if (rule1(scope)) return compactGroup(scope, block, items, perRow)
+  const design = scope.page.design
+  if (rule1(scope)) {
+    // Picture cards the design draws are the compiler's, not a block typed out
+    // by hand (`repeatsCompiled`, AGL-3660); every other repeat stays compact.
+    const variant = design && block.kind === 'cards' && block.style !== 'quiet' ? aiLayoutGroupVariant(design.input, design.choices, scope.words ?? '') : null
+    const pictured = (variant === 'pictures' || variant === 'articles') && room === 'full' && picturesLeft(scope.page) >= items.length
+    return (pictured && designedGroup(scope, variant, items, room)) || compactGroup(scope, block, items, perRow)
+  }
+  if (design && block.kind === 'steps' && (design.choices.steps === 'timeline' || room !== 'full')) {
+    return timeline(scope, items)
+  }
+  if (design && block.kind === 'cards' && block.style !== 'quiet') {
+    const variant = scope.groupStyle ?? aiLayoutGroupVariant(design.input, design.choices, scope.words ?? '')
+    const drawn = designedGroup(scope, variant, items, room)
+    if (drawn) return drawn
+  }
   switch (block.kind) {
     case 'steps':
       return layOut(
@@ -1789,6 +1850,512 @@ function faq(scope: SectionScope, block: AiLayoutBlock): string | null {
     ),
   )
   return tree.add('muiStack', { spacing: '1.5' }, null, noted(scope, panels), 'faq')
+}
+
+// ── The designer layer (AGL-3660) ─────────────────────────────────────────
+//
+// What `ai-layout-design.ts` chose for the site, drawn: the hero, a section
+// of words beside a picture, a closing band over a photo, a heading beside
+// its items, and groups drawn as pictures, articles, a menu or open ruled
+// columns. Every variant is built from the same palette elements and theme
+// tokens as the rest of the compiler, so the doctrine holds by construction.
+
+/** The most pictures a designed page carries, the model's and the stand-ins together. */
+export const AI_LAYOUT_MAX_DESIGN_PICTURES = 8
+
+/** The block kinds a section of words holds. */
+const WORD_KINDS: ReadonlySet<AiLayoutBlock['kind']> = new Set(['eyebrow', 'heading', 'lede', 'text', 'note', 'button'])
+
+/** How many more pictures the page has room for. */
+function picturesLeft(page: PageScope): number {
+  return AI_LAYOUT_MAX_DESIGN_PICTURES - page.images - page.pictures
+}
+
+/** Whether a heading block has words left once fitted: one with none is no heading. */
+function speaksHeading(scope: SectionScope, block: AiLayoutBlock): boolean {
+  return block.kind === 'heading' && !!aiLayoutWords(block.text, 'heading', scope.page.targets.facts)
+}
+
+/** The section root every designed section is written under, as `compileSection` writes its own. */
+function designedRoot(
+  scope: SectionScope,
+  children: readonly string[],
+  sx: Record<string, unknown> | null,
+  dark: boolean,
+): string {
+  const { page, index } = scope
+  const name = page.plan.sections[index]?.name?.trim() || `Section ${index + 1}`
+  return page.tree.add(
+    'section',
+    {
+      element: 'section',
+      ariaLabel: aiLayoutFitText(name, 'note') || `Section ${index + 1}`,
+      ...(dark ? { colorScheme: 'dark' } : {}),
+      // A photo cover that opens the page runs up under the header, which sits over it.
+      ...(index === 0 && scope.overPhoto ? { underHeader: true } : {}),
+    },
+    sx,
+    children,
+    'section',
+    page.options.sectionIds?.[index] ?? sectionIdOf(index),
+  )
+}
+
+/**
+ * A picture the design places: the model's own where it described one, else
+ * a stand-in — marked decorative, since no one described it, with the
+ * section's words as what a stock search looks for. Either is filled by
+ * `ai-layout-pictures.ts` after the page is checked, as any slot is.
+ */
+function designPicture(
+  scope: SectionScope,
+  picture: { alt: string; given: boolean },
+  frameSx: Record<string, unknown>,
+  role = 'designFrame',
+  imageSx: Record<string, unknown> = {},
+): string {
+  const tree = scope.page.tree
+  // The picture fills its frame by its own size props, so the frame alone
+  // carries a style: a page of many pictures repeats no inline style (rule 16).
+  const image = designImage(scope, picture, { width: '100%', height: '100%' }, Object.keys(imageSx).length ? imageSx : null)
+  return tree.add('muiBox', null, { position: 'relative', overflow: 'hidden', bgcolor: 'action.hover', ...frameSx }, [image], role)
+}
+
+/**
+ * The `image` a designed picture is: its alt, its fit and, for a stand-in,
+ * decorative. Its slot is filled after the page is checked.
+ */
+function designImage(
+  scope: SectionScope,
+  picture: { alt: string; given: boolean },
+  props: Record<string, unknown>,
+  sx: Record<string, unknown> | null,
+): string {
+  const { page } = scope
+  if (picture.given) page.images += 1
+  else page.pictures += 1
+  return page.tree.add(
+    'image',
+    { alt: picture.alt, objectFit: 'cover', ...(picture.given ? {} : { decorative: true }), ...props },
+    sx,
+    null,
+    'image',
+  )
+}
+
+/** What a stand-in picture is of, for a stock search: the section's subject, else the site's. */
+function standInAlt(scope: SectionScope, words?: string): string {
+  return (
+    aiLayoutFitText(words, 'alt') ||
+    aiLayoutFitText(scope.heading, 'alt') ||
+    aiLayoutFitText(scope.page.plan.sections[scope.index]?.name, 'alt') ||
+    aiLayoutFitText(scope.page.plan.title, 'alt') ||
+    'A photo'
+  )
+}
+
+/** A grid row of sized cells, as `compileRow` writes one, from ids already compiled. */
+function designRow(
+  scope: SectionScope,
+  cells: ReadonlyArray<{ id: string; size: string; sx?: Record<string, unknown> }>,
+  spacing: string,
+  alignItems = 'center',
+): string {
+  const tree = scope.page.tree
+  return tree.add(
+    'muiGrid',
+    { container: true, spacing },
+    { alignItems },
+    cells.map((cell) => tree.add('muiGrid', { size: cell.size }, cell.sx ?? null, [cell.id], 'column')),
+    'row',
+  )
+}
+
+/** A section's own arrangement where the design has one; `null` to draw it the compiler's first way. */
+function designSection(scope: SectionScope, raw: AiLayoutSection, blocks: readonly AiLayoutBlock[]): string | null {
+  const { page, index } = scope
+  const design = page.design
+  if (!design) return null
+  const images = blocks.filter((block) => block.kind === 'image')
+  const words = blocks.filter((block) => block.kind !== 'image')
+  const ofWords = words.length > 0 && words.every((block) => WORD_KINDS.has(block.kind))
+  if (index === 0) {
+    if (!ofWords || images.length > 1 || picturesLeft(page) < 1) return null
+    const flow = [...words]
+    if (!flow.some((block) => speaksHeading(scope, block))) {
+      flow.unshift({ kind: 'heading', text: page.plan.title })
+      page.settled.push({ at: scope.at, what: "no heading; the page's title written as its h1" })
+    }
+    // A designed hero's title is display-sized; beside a photo, in half the
+    // page, it is the page's title size, so a long one still reads in a few lines.
+    const lead = flow.findIndex((block) => speaksHeading(scope, block))
+    const { style: _style, ...title } = flow[lead]
+    flow[lead] = design.choices.hero === 'split' ? title : { ...title, style: 'large' }
+    const given = images[0] ? aiLayoutFitText(images[0].text, 'alt') : ''
+    return hero(
+      scope,
+      raw,
+      flow,
+      given ? { alt: given, given: true } : { alt: standInAlt(scope, words.find((block) => speaksHeading(scope, block))?.text), given: false },
+    )
+  }
+  if (ofWords && !images.length && words.some((block) => speaksHeading(scope, block))) {
+    const last = index === page.plan.sections.length - 1
+    const asks = words.some((block) => block.kind === 'button')
+    const strong = scope.band === 'brand' || scope.band === 'dark'
+    const told = words.some((block) => block.kind === 'text' || block.kind === 'lede')
+    if (last && asks && (strong || scope.centered) && design.choices.coverClose && picturesLeft(page) >= 1) {
+      return coverBand(scope, words)
+    }
+    if (design.choices.features && told && page.features < 2 && picturesLeft(page) >= 1 && !(last && asks && strong)) {
+      return feature(scope, words)
+    }
+    return null
+  }
+  // A heading over one group of items: the heading beside them.
+  if (!design.choices.splitHeads || images.length || page.splitAt === index - 1) return null
+  const at = words.findIndex((block) => block.kind === 'cards' || block.kind === 'steps')
+  if (at <= 0) return null
+  const head = words.slice(0, at)
+  const group = words[at]
+  const tail = words.slice(at + 1)
+  const variant = aiLayoutGroupVariant(design.input, design.choices, scope.words ?? '')
+  if (
+    !head.every((block) => WORD_KINDS.has(block.kind) && block.kind !== 'button') ||
+    !head.some((block) => speaksHeading(scope, block)) ||
+    !tail.every((block) => WORD_KINDS.has(block.kind)) ||
+    (group.items?.length ?? 0) < 2 ||
+    (group.items?.length ?? 0) > 6 ||
+    group.to ||
+    (group.kind === 'cards' && variant !== 'cards' && variant !== 'ruled')
+  ) {
+    return null
+  }
+  return splitSection(scope, head, group, tail)
+}
+
+/** The first section, in the site's hero arrangement. */
+function hero(
+  scope: SectionScope,
+  raw: AiLayoutSection,
+  flow: readonly AiLayoutBlock[],
+  picture: { alt: string; given: boolean },
+): string {
+  const { page } = scope
+  const tree = page.tree
+  const design = page.design as NonNullable<PageScope['design']>
+  const home = design.input.home
+  const variant = design.choices.hero
+  page.settled.push({ at: scope.at, what: `drawn as a ${variant} hero` })
+  if (variant === 'cover') {
+    scope.band = 'dark'
+    scope.centered = raw.align === 'center'
+    return cover(scope, flow, picture, home ? { xs: '78vh', md: '86vh' } : { xs: '46vh', md: '54vh' })
+  }
+  const band = scope.band
+  scope.centered = false
+  if (variant === 'split') {
+    const words = compileFlow(scope, flow, 'half') as string
+    const photo = designPicture(scope, picture, {
+      aspectRatio: home ? { xs: '4 / 3', md: '4 / 5' } : { xs: '4 / 3', md: '1 / 1' },
+      borderRadius: 2,
+    })
+    const right = design.choices.featureLeft
+    const row = designRow(
+      scope,
+      [
+        { id: words, size: 'xs:12 md:6', ...(right ? { sx: { order: { xs: 0, md: 1 } } } : {}) },
+        { id: photo, size: 'xs:12 md:6' },
+      ],
+      '8',
+    )
+    const container = tree.add('muiContainer', { maxWidth: 'lg' }, { py: { xs: 6, md: 10 } }, [row], 'container')
+    return designedRoot(scope, [container], bandSx(band), band === 'dark')
+  }
+  // Editorial: display type across the page, the rest in a row under it, a wide photo below.
+  const top = flow.filter((block) => block.kind === 'eyebrow' || block.kind === 'heading')
+  const rest = flow.filter((block) => block.kind !== 'eyebrow' && block.kind !== 'heading')
+  const lede = rest.filter((block) => block.kind !== 'button')
+  const actions = rest.filter((block) => block.kind === 'button')
+  const headId = compileFlow(scope, top, 'full')
+  const ledeId = compileFlow(scope, lede, 'half')
+  const actionsId = compileFlow(scope, actions, 'half')
+  const under =
+    ledeId && actionsId
+      ? designRow(
+          scope,
+          [
+            { id: ledeId, size: 'xs:12 md:7' },
+            { id: actionsId, size: 'xs:12 md:5', sx: { display: 'flex', justifyContent: { xs: 'flex-start', md: 'flex-end' } } },
+          ],
+          '4',
+          'flex-end',
+        )
+      : (ledeId ?? actionsId)
+  const photo = designPicture(scope, picture, {
+    aspectRatio: home ? { xs: '4 / 3', md: '21 / 9' } : { xs: '16 / 9', md: '3 / 1' },
+    borderRadius: 2,
+  })
+  const stack = tree.add('muiStack', { spacing: '6', useFlexGap: true }, null, [headId, under, photo], 'content')
+  const container = tree.add('muiContainer', { maxWidth: 'lg' }, { pt: { xs: 8, md: 12 }, pb: { xs: 6, md: 10 } }, [stack], 'container')
+  return designedRoot(scope, [container], bandSx(band), band === 'dark')
+}
+
+/** Words over a full-bleed photo, on a scrim that keeps them readable, in the site's dark scheme. */
+function cover(
+  scope: SectionScope,
+  flow: readonly AiLayoutBlock[],
+  picture: { alt: string; given: boolean },
+  minHeight: Record<string, string>,
+): string {
+  const tree = scope.page.tree
+  // The photo dimmed over black: the scrim that keeps the words over it readable.
+  const photo = designPicture(
+    scope,
+    picture,
+    { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', bgcolor: 'common.black' },
+    'coverPhoto',
+    { opacity: 0.42 },
+  )
+  scope.overPhoto = true
+  const words = compileFlow(scope, flow, 'full') as string
+  const measure = tree.add(
+    'muiBox',
+    null,
+    scope.centered ? { maxWidth: { xs: '100%', md: '75%' }, mx: 'auto' } : { maxWidth: { xs: '100%', md: '62%' } },
+    [words],
+    'measure',
+  )
+  const container = tree.add(
+    'muiContainer',
+    { maxWidth: 'lg' },
+    { position: 'relative', zIndex: 1, py: { xs: 10, md: 14 } },
+    [measure],
+    'container',
+  )
+  return designedRoot(
+    scope,
+    [photo, container],
+    { position: 'relative', overflow: 'hidden', display: 'flex', alignItems: { xs: 'flex-end', md: 'center' }, minHeight },
+    true,
+  )
+}
+
+/** A closing section of words over a photo. */
+function coverBand(scope: SectionScope, words: readonly AiLayoutBlock[]): string {
+  scope.band = 'dark'
+  scope.centered = true
+  scope.page.settled.push({ at: scope.at, what: 'drawn over a photo' })
+  return cover(scope, words, { alt: standInAlt(scope), given: false }, { xs: '56vh', md: '64vh' })
+}
+
+/** A section of words beside a picture, the side turning section by section. */
+function feature(scope: SectionScope, words: readonly AiLayoutBlock[]): string {
+  const { page } = scope
+  const design = page.design as NonNullable<PageScope['design']>
+  const left = design.choices.featureLeft !== (page.features % 2 === 1)
+  page.features += 1
+  page.settled.push({ at: scope.at, what: `set beside a picture on the ${left ? 'left' : 'right'}` })
+  scope.centered = false
+  const flow = compileFlow(scope, words, 'half') as string
+  const photo = designPicture(scope, { alt: standInAlt(scope), given: false }, {
+    aspectRatio: { xs: '4 / 3', md: page.features === 1 ? '4 / 5' : '1 / 1' },
+    borderRadius: 2,
+  })
+  const row = designRow(
+    scope,
+    left
+      ? [
+          { id: photo, size: 'xs:12 md:6' },
+          { id: flow, size: 'xs:12 md:6' },
+        ]
+      : [
+          { id: flow, size: 'xs:12 md:6' },
+          { id: photo, size: 'xs:12 md:6' },
+        ],
+    '8',
+  )
+  const container = page.tree.add('muiContainer', { maxWidth: 'lg' }, { py: { ...SECTION_PADDING } }, [row], 'container')
+  return designedRoot(scope, [container], bandSx(scope.band), scope.band === 'dark')
+}
+
+/** A heading beside its items: the words in a narrow column, the items ruled in the wide one. */
+function splitSection(
+  scope: SectionScope,
+  head: readonly AiLayoutBlock[],
+  group: AiLayoutBlock,
+  tail: readonly AiLayoutBlock[],
+): string {
+  const { page } = scope
+  scope.centered = false
+  scope.groupStyle = 'ruled'
+  page.splitAt = scope.index
+  page.settled.push({ at: scope.at, what: 'the heading set beside its items' })
+  const words = compileFlow(scope, [...head, ...tail], 'half')
+  const items = compileFlow(scope, [group], 'half')
+  if (!words || !items) {
+    const flow = [words, items].filter((id): id is string => !!id)
+    const container = page.tree.add('muiContainer', { maxWidth: 'lg' }, { py: { ...SECTION_PADDING } }, flow, 'container')
+    return designedRoot(scope, [container], bandSx(scope.band), scope.band === 'dark')
+  }
+  const row = designRow(
+    scope,
+    [
+      { id: words, size: 'xs:12 md:5' },
+      { id: items, size: 'xs:12 md:7' },
+    ],
+    '8',
+    'flex-start',
+  )
+  const container = page.tree.add('muiContainer', { maxWidth: 'lg' }, { py: { ...SECTION_PADDING } }, [row], 'container')
+  return designedRoot(scope, [container], bandSx(scope.band), scope.band === 'dark')
+}
+
+/**
+ * Items under rules, one a line, each opening under a thin rule in the
+ * text's own color. One style key an element, so a long list repeats no
+ * multi-key inline style (rule 16); and no Stack `divider`, which a
+ * published page's renderer hands a Stack as one child and so never draws.
+ */
+function ruledList(scope: SectionScope, ids: readonly string[], role: string): string {
+  const tree = scope.page.tree
+  return tree.add(
+    'muiStack',
+    { spacing: '2' },
+    null,
+    ids.map((id) => tree.add('muiBox', null, { borderTop: 1 }, [tree.add('muiBox', null, { pt: 2 }, [id], 'ruledWords')], 'ruledLine')),
+    role,
+  )
+}
+
+/** Numbered items as a ruled list: each number beside its title and words. */
+function timeline(scope: SectionScope, items: readonly AiLayoutItem[]): string {
+  const tree = scope.page.tree
+  const facts = scope.page.targets.facts
+  const rows = items.map((item, position) =>
+    tree.add(
+      'muiStack',
+      { direction: 'row', spacing: '3', alignItems: 'baseline' },
+      null,
+      [
+        // The numbers keep one column, so every title starts at the same line.
+        tree.add(
+          'muiBox',
+          null,
+          { flex: '0 0 3.5rem' },
+          [tree.add('muiTypography', { children: String(position + 1).padStart(2, '0'), variant: 'h4', component: 'p' }, accent(scope), null, 'number')],
+          'numberColumn',
+        ),
+        tree.add(
+          'muiStack',
+          { spacing: '1' },
+          null,
+          [
+            item.title.trim()
+              ? tree.add('muiTypography', { children: aiLayoutWords(item.title, 'itemTitle', facts), variant: 'h5', component: itemElement(scope) }, null, null, 'title')
+              : null,
+            item.text.trim()
+              ? tree.add('muiTypography', { children: aiLayoutWords(item.text, 'itemText', facts), variant: 'body1' }, muted(scope), null, 'text')
+              : null,
+          ],
+          'stepWords',
+        ),
+      ],
+      'step',
+    ),
+  )
+  return ruledList(scope, noted(scope, rows), 'timeline')
+}
+
+/** A group drawn the design's way; `null` to draw it as the theme's cards. */
+function designedGroup(
+  scope: SectionScope,
+  variant: AiLayoutGroupVariant,
+  items: readonly AiLayoutItem[],
+  room: Room,
+): string | null {
+  const { page } = scope
+  const tree = page.tree
+  const facts = page.targets.facts
+  const title = (item: AiLayoutItem, type = 'h5') =>
+    item.title.trim()
+      ? tree.add('muiTypography', { children: aiLayoutWords(item.title, 'itemTitle', facts), variant: type, component: itemElement(scope) }, null, null, 'title')
+      : null
+  const words = (item: AiLayoutItem, type = 'body1') =>
+    item.text.trim()
+      ? tree.add('muiTypography', { children: aiLayoutWords(item.text, 'itemText', facts), variant: type }, muted(scope), null, 'text')
+      : null
+  if (variant === 'cards') return null
+  const pictured = variant === 'pictures' || variant === 'articles'
+  if (variant === 'ruled' || (pictured && (room !== 'full' || picturesLeft(page) < items.length))) {
+    const perRow = across(items.length, room, 'cards')
+    if (perRow <= 1) {
+      // Stacked, the rules run between the items.
+      const ids = items.map((item) => tree.add('muiStack', { spacing: '1' }, null, [title(item), words(item)], 'ruled'))
+      return ruledList(scope, noted(scope, ids), 'ruledItems')
+    }
+    // Side by side, each column opens under a rule in the text's own color.
+    const ids = items.map((item) =>
+      tree.add('muiBox', null, { borderTop: 1 }, [tree.add('muiStack', { spacing: '1' }, { pt: 2.5 }, [title(item), words(item)], 'ruledWords')], 'ruled'),
+    )
+    return layOut(scope, noted(scope, ids), perRow, '5', 'ruledItems')
+  }
+  if (variant === 'menu') {
+    const ids = items.map((item) => tree.add('muiStack', { spacing: '0.5' }, null, [title(item, 'h6'), words(item, 'body2')], 'dish'))
+    noted(scope, ids)
+    // Two columns of lines under rules, the first half and the second.
+    const half = room === 'full' && ids.length >= 4 ? Math.ceil(ids.length / 2) : ids.length
+    const lists = [ids.slice(0, half), ids.slice(half)].filter((list) => list.length).map((list) => ruledList(scope, list, 'menu'))
+    if (lists.length === 1) return lists[0]
+    // On a phone the two columns read as one list, the second opening under
+    // its own rule a line's gap below the first; side by side, a gutter.
+    const [first, second] = lists
+    return tree.add(
+      'muiGrid',
+      { container: true, rowSpacing: '2', columnSpacing: '8' },
+      { alignItems: 'flex-start' },
+      [
+        tree.add('muiGrid', { size: 'xs:12 md:6' }, null, [first], 'column'),
+        tree.add('muiGrid', { size: 'xs:12 md:6' }, null, [second], 'column'),
+      ],
+      'menuRow',
+    )
+  }
+  // Pictures over each item's title and words.
+  const design = page.design as NonNullable<PageScope['design']>
+  const mosaic = variant === 'pictures' && design.choices.pictures === 'mosaic' && items.length >= 2
+  const portrait = design.input.kind === 'photography'
+  const perRow = items.length === 4 || items.length === 2 ? 2 : Math.min(3, items.length)
+  page.settled.push({ at: scope.at, what: `${items.length} items drawn as ${mosaic ? 'a mosaic of pictures' : variant}` })
+  const cells = items.map((item, position) => {
+    // A mosaic's rows turn wide-narrow, narrow-wide; an odd one out spans the row.
+    const row = Math.floor(position / 2)
+    const lone = mosaic && position === items.length - 1 && items.length % 2 === 1
+    const wide = mosaic && !lone && position % 2 === row % 2
+    const span = !mosaic ? 12 / perRow : lone ? 12 : wide ? 7 : 5
+    const aspect = !mosaic ? (variant === 'articles' ? '3 / 2' : portrait ? '4 / 5' : '4 / 3') : lone ? '21 / 9' : wide ? '4 / 3' : '4 / 5'
+    // The picture is its own frame: its shape its one style, so a grid of them repeats no inline style.
+    const photo = designImage(scope, { alt: standInAlt(scope, item.title || item.text), given: false }, { width: '100%' }, { aspectRatio: { xs: '4 / 3', md: aspect } })
+    const id = tree.add(
+      'muiStack',
+      { spacing: '1.5' },
+      null,
+      [photo, title(item, variant === 'articles' ? 'h5' : 'h6'), words(item, 'body2')],
+      variant === 'articles' ? 'article' : 'work',
+    )
+    return { id, size: span === 12 ? 'xs:12 sm:12' : `xs:12 ${span === 6 ? 'sm' : 'md'}:${span}` }
+  })
+  noted(
+    scope,
+    cells.map((cell) => cell.id),
+  )
+  return tree.add(
+    'muiGrid',
+    { container: true, spacing: mosaic ? '5' : '4' },
+    { alignItems: 'flex-start' },
+    cells.map((cell) => tree.add('muiGrid', { size: cell.size }, null, [cell.id], 'cell')),
+    variant,
+  )
 }
 
 /** The id the compiled page's root is stored under. */
