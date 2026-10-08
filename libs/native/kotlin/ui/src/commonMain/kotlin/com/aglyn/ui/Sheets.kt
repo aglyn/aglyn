@@ -117,26 +117,3 @@ fun FormSheet(
   }
 }
 
-/** One entry of an [OverflowMenu]: its label, whether it destroys something (drawn in the error color), and what it does. */
-data class MenuAction(val label: String, val destructive: Boolean = false, val onClick: () -> Unit)
-
-/** A row's "more" button opening its actions; nothing is drawn when there are none. */
-@Composable
-fun OverflowMenu(actions: List<MenuAction>, modifier: Modifier = Modifier, description: String = "More actions") {
-  if (actions.isEmpty()) return
-  var open by remember { mutableStateOf(false) }
-  androidx.compose.foundation.layout.Box(modifier) {
-    IconButton(onClick = { open = true }) { Icon(AglynIcons.named("more_vert"), contentDescription = description) }
-    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-      for (action in actions) {
-        DropdownMenuItem(
-          text = { Text(action.label, color = if (action.destructive) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified) },
-          onClick = {
-            open = false
-            action.onClick()
-          },
-        )
-      }
-    }
-  }
-}

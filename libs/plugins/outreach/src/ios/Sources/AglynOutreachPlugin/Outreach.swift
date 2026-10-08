@@ -12,7 +12,7 @@ import Foundation
  * (`OutreachGate`): the `release_outreach` release flag, the workspace's
  * `outreach` feature, and the member's `outreach.use` permission. Reads are
  * the console's own list declarations over `orgs/{orgId}/outreach*`; every
- * write is an `/api/outreach/*` route, each naming its org.
+ * write is an `/api/outreach/...` route, each naming its org.
  */
 
 let outreachSequencesScreen = "outreach.sequences"

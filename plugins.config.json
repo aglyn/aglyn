@@ -101,6 +101,15 @@
       "apiPrefixes": [
         "forms"
       ],
+      "mobile": {
+        "$comment": "AGL-3668: a site's forms in the Aglyn app: search, in use or retired, create, duplicate, rename, retire, CRM routing, questions, versions (open in the Besigner, publish) and the form's submissions (the Inbox plugin's screens) with export; list and detail side by side on tablets and desktop.",
+        "android": { "package": "com.aglyn.plugins.forms", "register": "registerFormsNative" },
+        "contributes": {
+          "screens": ["forms.form", "forms.list"],
+          "quickActions": ["forms.open"],
+          "deepLinks": ["forms.page", "forms.record"]
+        }
+      },
       "modules": {
         "site": "site"
       },
@@ -3085,6 +3094,57 @@
             "commerceSettings",
             "orderDetail",
             "productEditor"
+          ]
+        }
+      }
+    },
+    {
+      "id": "inventory-sync",
+      "package": "@aglyn/plugins-inventory-sync",
+      "register": {
+        "console": "registerInventorySyncConsole",
+        "consoleApi": "registerInventorySyncConsoleApi",
+        "serverDeclarations": "registerInventorySyncServerDeclarations",
+        "consoleServerDeclarations": "registerInventorySyncConsoleServerDeclarations",
+        "subprocessors": "inventorySyncSubprocessors"
+      },
+      "apiPrefixes": [
+        "inventory-sync"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's connection to the merchant's OWN Cin7 Core, inFlow or Brightpearl account, its keys or grant sealed, with its sync settings, last stock count, cursors and log subcollection (AGL-3642). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "inventorySyncConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One paid order's hand-off to the connected system: the lines sent, the system's id for it, attempts and why it was not sent (AGL-3642). Written by the order-event intake and the console job.",
+          "name": "inventorySyncOrders",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One product linked between the store and the connected system by the system's id or the SKU, with the version last synced (AGL-3642). Written by the console job.",
+          "name": "inventorySyncProducts",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 29,
+        "$comment": "Inventory and ERP sync for the commerce plugin's stores (AGL-3642): stock counts kept in step in the direction each connection names (the system's counts set through core's stock-levels seam, or the store's catalog read through core's product-catalog seam and adjusted into the system), products imported through core's product-writer seam or made in the system, and paid orders sent through commerce's order events; it imports neither commerce nor any other plugin. Sold with commerce (`features.commerce`), no price of its own. On for every workspace, off for a site only when that site says so, and no release flag: nothing draws until the console holds INVENTORY_SYNC_TOKEN_KEY (Cin7 Core and inFlow, on the merchant's own keys), and Brightpearl also needs BRIGHTPEARL_APP_REF and BRIGHTPEARL_DEV_REF.",
+        "label": "Inventory sync",
+        "alwaysOnForWorkspace": true,
+        "description": "Stock, products and paid orders kept in step with your own Cin7 Core, inFlow or Brightpearl account.",
+        "siteOff": {
+          "stops": "Switching Inventory sync off for this site stops its stock counts, products and paid orders syncing with Cin7 Core, inFlow or Brightpearl.",
+          "keeps": "The connection and its settings are kept, and everything already synced stays on both sides."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "orderDetail"
           ]
         }
       }

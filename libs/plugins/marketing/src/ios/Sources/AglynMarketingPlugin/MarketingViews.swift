@@ -94,7 +94,7 @@ struct OverviewSection: View {
     let now = nowMs()
     let live = overlays.rows.filter { $0.data["deletedAt"] == nil && overlayStatus(enabled: $0.enabled, startAtMs: $0.startAtMs, endAtMs: $0.endAtMs, nowMs: now) == "live" }
     let stats = sends.rows.map { $0.data["stats"] as? [String: Any] ?? [:] }
-    func sum(_ key: String) -> Int { stats.reduce(0) { $0 + (($1[key] as? NSNumber)?.intValue ?? 0) } }
+    let sum: (String) -> Int = { key in stats.reduce(0) { $0 + (($1[key] as? NSNumber)?.intValue ?? 0) } }
     let scheduled = sends.rows.filter { $0.string("status") == "scheduled" }.count
     let more = sends.hasMore ? "+" : ""
     ScrollView {

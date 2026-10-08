@@ -5,6 +5,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
 import io.ktor.http.contentType
@@ -35,6 +36,9 @@ class ConsoleApiError(
 ) : Exception(message)
 
 enum class ApiMethod { GET, POST, PUT, PATCH, DELETE }
+
+/** A file a route answered with: its name (from `Content-Disposition`), type, bytes and headers. */
+class DownloadedFile(val name: String?, val contentType: String, val bytes: ByteArray, val headers: io.ktor.http.Headers)
 
 class ConsoleApiClient(
   origin: String,
@@ -124,6 +128,58 @@ class ConsoleApiClient(
       0,
       lastError?.message?.let { JsonPrimitive(it) },
     )
+  }
+
+  /**
+   * Calls a route that answers with a file (an export) and returns its bytes
+   * and the file name its `Content-Disposition` gives. A refusal is a
+   * [ConsoleApiError] with the route's own words, as [request] throws it.
+   */
+  suspend fun download(path: String, body: JsonElement): DownloadedFile {
+    val bearer = getIdToken(false) ?: throw ConsoleApiError("Sign in to continue.", 401, null)
+    val response = try {
+      http.request(urlFor(path)) {
+        this.method = HttpMethod.Post
+        header("Authorization", "Bearer $bearer")
+        contentType(ContentType.Application.Json)
+        setBody(body.toString())
+      }
+    } catch (error: CancellationException) {
+      throw error
+    } catch (error: Throwable) {
+      throw ConsoleApiError("$brandName could not be reached. Check the connection and try again.", 0, null)
+    }
+    val status = response.status.value
+    if (status !in 200..299) {
+      val parsed = runCatching { Json.parseToJsonElement(response.bodyAsText()) }.getOrNull()
+      throw ConsoleApiError(consoleErrorMessage(status, parsed, brandName), status, parsed)
+    }
+    val disposition = response.headers["Content-Disposition"].orEmpty()
+    val name = Regex("filename\\*?=\"?([^\";]+)\"?").find(disposition)?.groupValues?.get(1)
+    return DownloadedFile(name, response.headers["Content-Type"] ?: "application/octet-stream", response.readRawBytes(), response.headers)
+  }
+
+  /**
+   * Sends [bytes] to a signed upload URL a route handed out (the media
+   * library's large-file path): a plain `PUT` with the minted content type,
+   * no bearer, since the signature is the authority. Throws on a refusal.
+   */
+  suspend fun putSigned(url: String, contentType: String, bytes: ByteArray) {
+    require(url.startsWith("https://") || url.startsWith("http://")) { "A signed upload URL is absolute: $url" }
+    val response = try {
+      http.request(url) {
+        this.method = HttpMethod.Put
+        header("Content-Type", contentType)
+        setBody(bytes)
+      }
+    } catch (error: CancellationException) {
+      throw error
+    } catch (error: Throwable) {
+      throw ConsoleApiError("The upload did not reach storage. Check the connection and try again.", 0, null)
+    }
+    if (response.status.value !in 200..299) {
+      throw ConsoleApiError("Storage refused the upload (${response.status.value}).", response.status.value, null)
+    }
   }
 
   companion object {

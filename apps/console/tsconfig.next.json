@@ -170,6 +170,12 @@
       "@aglyn/plugins-marketplaces/*": [
         "../../libs/plugins/marketplaces/src/lib/*"
       ],
+      "@aglyn/plugins-inventory-sync": [
+        "../../libs/plugins/inventory-sync/src/index.ts"
+      ],
+      "@aglyn/plugins-inventory-sync/*": [
+        "../../libs/plugins/inventory-sync/src/lib/*"
+      ],
       "@aglyn/plugins-crm": [
         "../../libs/plugins/crm/src/index.ts"
       ],

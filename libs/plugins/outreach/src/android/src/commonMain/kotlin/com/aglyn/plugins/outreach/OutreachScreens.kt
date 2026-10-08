@@ -192,7 +192,7 @@ fun SequenceDetail(context: NativePluginContext, api: OutreachApi, sequenceId: S
     Row(verticalAlignment = Alignment.CenterVertically) {
       Text(row.name, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
       StatusChip(SEQUENCE_STATUS_LABELS[row.status] ?: row.status, if (row.status == "active") StatusTone.SUCCESS else StatusTone.NEUTRAL)
-      OverflowMenu(listOf(MenuAction("Edit") { editing = true }) + if (row.status == "draft") listOf(MenuAction("Delete", destructive = true) { confirm = "Delete this sequence?" to "delete" }) else emptyList())
+      OverflowMenu(listOf(MenuAction("edit", "Edit") { editing = true }) + if (row.status == "draft") listOf(MenuAction("delete", "Delete", destructive = true) { confirm = "Delete this sequence?" to "delete" }) else emptyList())
     }
     notice?.let { NoticeBanner(it.first, it.second) }
     SectionCard(null) {
@@ -225,10 +225,10 @@ fun SequenceDetail(context: NativePluginContext, api: OutreachApi, sequenceId: S
             Row(verticalAlignment = Alignment.CenterVertically) {
               StatusChip(ENROLLMENT_STATUS_LABELS[enrollment.status] ?: enrollment.status, StatusTone.NEUTRAL)
               OverflowMenu(buildList {
-                if (enrollment.status == "active") add(MenuAction("Pause") { act(enrollment.id, "pause") })
-                if (enrollment.status == "paused") add(MenuAction("Resume") { act(enrollment.id, "resume") })
-                if (enrollment.status in listOf("active", "paused")) add(MenuAction("Stop", destructive = true) { act(enrollment.id, "stop") })
-                add(MenuAction("Do not contact", destructive = true) { act(enrollment.id, "do_not_contact") })
+                if (enrollment.status == "active") add(MenuAction("pause", "Pause") { act(enrollment.id, "pause") })
+                if (enrollment.status == "paused") add(MenuAction("resume", "Resume") { act(enrollment.id, "resume") })
+                if (enrollment.status in listOf("active", "paused")) add(MenuAction("stop", "Stop", destructive = true) { act(enrollment.id, "stop") })
+                add(MenuAction("do-not-contact", "Do not contact", destructive = true) { act(enrollment.id, "do_not_contact") })
               })
             }
           },
@@ -420,11 +420,11 @@ fun MailboxesSection(context: NativePluginContext, api: OutreachApi) {
           Row(verticalAlignment = Alignment.CenterVertically) {
             StatusChip(mailbox.status.replace('_', ' ').replaceFirstChar { it.uppercase() }, if (mailbox.status == "connected") StatusTone.SUCCESS else StatusTone.WARNING)
             OverflowMenu(buildList {
-              if (mailbox.status == "connected") add(MenuAction("Pause") { run("Paused.") { api.mailboxStatus(mailbox.id, true); null } })
-              if (mailbox.status == "paused") add(MenuAction("Resume") { run("Resumed.") { api.mailboxStatus(mailbox.id, false); null } })
-              add(MenuAction("Settings") { editing = mailbox })
-              add(MenuAction("Send a test") { run("Sent.") { "A test went to ${api.mailboxTest(mailbox.id) ?: mailbox.email}." } })
-              add(MenuAction("Disconnect", destructive = true) { disconnecting = mailbox })
+              if (mailbox.status == "connected") add(MenuAction("pause", "Pause") { run("Paused.") { api.mailboxStatus(mailbox.id, true); null } })
+              if (mailbox.status == "paused") add(MenuAction("resume", "Resume") { run("Resumed.") { api.mailboxStatus(mailbox.id, false); null } })
+              add(MenuAction("settings", "Settings") { editing = mailbox })
+              add(MenuAction("send-a-test", "Send a test") { run("Sent.") { "A test went to ${api.mailboxTest(mailbox.id) ?: mailbox.email}." } })
+              add(MenuAction("disconnect", "Disconnect", destructive = true) { disconnecting = mailbox })
             })
           }
         },
@@ -526,8 +526,8 @@ fun ComplianceSection(context: NativePluginContext, api: OutreachApi) {
       for ((domain, status) in links) {
         AglynListItem(title = domain, supporting = status.replace('-', ' ').replaceFirstChar { it.uppercase() }, icon = AglynIcons.named("link"), trailing = {
           OverflowMenu(listOf(
-            MenuAction("Check") { run("Checked.") { api.linkDomain("check", domain); loadLinks() } },
-            MenuAction("Remove", destructive = true) { run("Removed.") { api.linkDomain("remove", domain); loadLinks() } },
+            MenuAction("check", "Check") { run("Checked.") { api.linkDomain("check", domain); loadLinks() } },
+            MenuAction("remove", "Remove", destructive = true) { run("Removed.") { api.linkDomain("remove", domain); loadLinks() } },
           ))
         })
       }

@@ -90,6 +90,15 @@ class FirebaseFirestoreWriter(private val db: FirebaseFirestore) : FirestoreWrit
     db.document(path).set(toSdkWrite(data), SetOptions.merge()).await()
   }
 
+  override suspend fun update(path: String, data: Map<String, Any?>) {
+    // FieldPath.of keeps each key one segment, as the shared contract names it.
+    val fields = toSdkWrite(data).entries.toList()
+    if (fields.isEmpty()) return
+    val first = fields.first()
+    val rest = fields.drop(1).flatMap { listOf(com.google.firebase.firestore.FieldPath.of(it.key), it.value) }.toTypedArray()
+    db.document(path).update(com.google.firebase.firestore.FieldPath.of(first.key), first.value, *rest).await()
+  }
+
   override suspend fun delete(path: String) {
     db.document(path).delete().await()
   }

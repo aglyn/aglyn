@@ -653,6 +653,30 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'inventory-sync',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "inventory.dearsystems.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Cin7 Core (formerly DEAR Inventory) API of the merchant's own Cin7 Core account, reached with the Account ID and application key the merchant made there and pasted into the store's settings (`libs/plugins/inventory-sync/src/lib/providers/cin7-core.ts`), to read its stock and products and to record the merchant's paid orders, count adjustments and products in it.",
+        dataReceived: "For each paid order the store sends to the system: its number and our reference, its date, the buyer's name and email address, the shipping address (name, street, city, state, postal code, country and phone), its items (SKU, name, quantity and unit price), shipping, discount, tax and total, under the customer the merchant chose. For stock kept in step from the store: each SKU's count adjustment at the merchant's chosen location. For products made in the system from the store: SKU, name, description, price, weight and barcode. Read back: the system's products (id, SKU, name, description, price, weight, barcode, status), its count of each SKU, its locations and customers, and the orders it recorded under our references. Also the merchant's own API key or access token, which authenticates each call. No payment details are sent.",
+      },
+      {
+        host: "cloudapi.inflowinventory.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The inFlow Cloud API of the merchant's own inFlow Inventory account, reached with the company id and API key the merchant made there and pasted into the store's settings (`libs/plugins/inventory-sync/src/lib/providers/inflow.ts`), to read its stock and products and to record the merchant's paid orders, count adjustments and products in it.",
+        dataReceived: "For each paid order the store sends to the system: its number and our reference, its date, the buyer's name and email address, the shipping address (name, street, city, state, postal code, country and phone), its items (SKU, name, quantity and unit price), shipping, discount, tax and total, under the customer the merchant chose. For stock kept in step from the store: each SKU's count adjustment at the merchant's chosen location. For products made in the system from the store: SKU, name, description, price, weight and barcode. Read back: the system's products (id, SKU, name, description, price, weight, barcode, status), its count of each SKU, its locations and customers, and the orders it recorded under our references. Also the merchant's own API key or access token, which authenticates each call. No payment details are sent.",
+      },
+      {
+        host: "oauth.brightpearlapp.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. Brightpearl's OAuth host, for a deployment that registered a Brightpearl app: its consent page, which the merchant's own browser opens to grant access to their own Brightpearl account, and its token endpoint, for the code exchange and each refresh (`libs/plugins/inventory-sync/src/lib/server/oauth.ts`). The grant names the account's own datacenter (a `brightpearl.com` or `brightpearlconnect.com` host), where every API call of `libs/plugins/inventory-sync/src/lib/providers/brightpearl.ts` then goes, with the same data as Cin7 Core and inFlow receive.",
+        dataReceived: "At this host: the deployment's app reference (and client secret, for an app with confidential OAuth), the merchant's account code, and the authorization code or refresh token Brightpearl itself issued — credentials, never orders. At the account's datacenter: For each paid order the store sends to the system: its number and our reference, its date, the buyer's name and email address, the shipping address (name, street, city, state, postal code, country and phone), its items (SKU, name, quantity and unit price), shipping, discount, tax and total, under the customer the merchant chose. For stock kept in step from the store: each SKU's count adjustment at the merchant's chosen location. For products made in the system from the store: SKU, name, description, price, weight and barcode. Read back: the system's products (id, SKU, name, description, price, weight, barcode, status), its count of each SKU, its locations and customers, and the orders it recorded under our references. Also the merchant's own API key or access token, which authenticates each call. No payment details are sent.",
+      },
+    ],
+  },
+  {
     pluginId: 'sales-channels',
     subprocessors: [],
     hosts: [

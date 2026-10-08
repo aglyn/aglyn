@@ -335,9 +335,9 @@ fun TemplatesSection(context: NativePluginContext, actions: EmailActions) {
         modifier = Modifier.testTag("template-${row.id}"),
         trailing = {
           OverflowMenu(
-            listOf(MenuAction("Open in the Besigner") { open(row) }) + if (canEdit) listOf(
-              MenuAction("Duplicate") { duplicating = row },
-              MenuAction("Delete", destructive = true) { deleting = row },
+            listOf(MenuAction("open-in-the-besigner", "Open in the Besigner") { open(row) }) + if (canEdit) listOf(
+              MenuAction("duplicate", "Duplicate") { duplicating = row },
+              MenuAction("delete", "Delete", destructive = true) { deleting = row },
             ) else emptyList(),
           )
         },
@@ -447,7 +447,7 @@ fun ListDetail(context: NativePluginContext, actions: EmailActions, listId: Stri
     Row(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalAlignment = Alignment.CenterVertically) {
       Text(row?.name ?: "List", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
       OutlinedButton(onClick = { adding = true }, modifier = Modifier.testTag("list-add-people")) { Text("Add people") }
-      OverflowMenu(listOf(MenuAction("Rename") { renaming = true }, MenuAction("Delete list", destructive = true) { deleting = true }))
+      OverflowMenu(listOf(MenuAction("rename", "Rename") { renaming = true }, MenuAction("delete-list", "Delete list", destructive = true) { deleting = true }))
     }
     notice?.let { NoticeBanner(it.first, it.second, Modifier.padding(horizontal = space(2f))) }
     if (row?.dynamic == true) {
@@ -465,7 +465,7 @@ fun ListDetail(context: NativePluginContext, actions: EmailActions, listId: Stri
         title = member.name?.takeIf { it.isNotEmpty() } ?: member.email,
         supporting = listOfNotNull(if (member.name.isNullOrEmpty()) null else member.email, if (member.via == "rule") "Rule" else "Added", member.joinedAtMs?.let { relativeTime(it, now) }).joinToString(" · "),
         icon = AglynIcons.named("person"),
-        trailing = { OverflowMenu(listOf(MenuAction("Remove from this list", destructive = true) { removing = member })) },
+        trailing = { OverflowMenu(listOf(MenuAction("remove-from-this-list", "Remove from this list", destructive = true) { removing = member })) },
       )
     }
   }
@@ -622,7 +622,7 @@ fun SuppressionsSection(context: NativePluginContext, actions: EmailActions) {
         title = row.email,
         supporting = listOfNotNull(row.reason?.replaceFirstChar { it.uppercase() }, row.sinceMs?.let { relativeTime(it, now) }).joinToString(" · "),
         icon = AglynIcons.named("block"),
-        trailing = { OverflowMenu(listOf(MenuAction("Put back on your list") { removing = row })) },
+        trailing = { OverflowMenu(listOf(MenuAction("put-back-on-your-list", "Put back on your list") { removing = row })) },
       )
     }
   }
@@ -701,9 +701,9 @@ fun SendingSection(actions: EmailActions) {
               icon = AglynIcons.named(if (sender.isDefault) "star" else "person"),
               trailing = {
                 OverflowMenu(
-                  listOf(MenuAction("Edit") { editing = sender }) + if (!sender.isDefault) listOf(
-                    MenuAction("Make default") { act(mapOf("action" to "makeDefaultSender", "senderId" to sender.id), "Default sender changed.") },
-                    MenuAction("Delete", destructive = true) { act(mapOf("action" to "deleteSender", "senderId" to sender.id), "Sender deleted.") },
+                  listOf(MenuAction("edit", "Edit") { editing = sender }) + if (!sender.isDefault) listOf(
+                    MenuAction("make-default", "Make default") { act(mapOf("action" to "makeDefaultSender", "senderId" to sender.id), "Default sender changed.") },
+                    MenuAction("delete", "Delete", destructive = true) { act(mapOf("action" to "deleteSender", "senderId" to sender.id), "Sender deleted.") },
                   ) else emptyList(),
                 )
               },
@@ -720,8 +720,8 @@ fun SendingSection(actions: EmailActions) {
               trailing = {
                 OverflowMenu(
                   buildList {
-                    if (status == "verified" && current.selected != domain) add(MenuAction("Send from this domain") { act(mapOf("domain" to domain), "This site now sends from $domain.") })
-                    if (status != "verified") add(MenuAction("Check again") {
+                    if (status == "verified" && current.selected != domain) add(MenuAction("send-from-this-domain", "Send from this domain") { act(mapOf("domain" to domain), "This site now sends from $domain.") })
+                    if (status != "verified") add(MenuAction("check-again", "Check again") {
                       Busy().run(coroutines) {
                         try {
                           actions.domainAction(domain, "verify")

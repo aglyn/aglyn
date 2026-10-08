@@ -99,6 +99,23 @@ class RestFirestoreReader(
     }
   }
 
+  /** A PATCH whose mask names each top-level key, with the document required to exist: `updateDoc`. */
+  override suspend fun update(path: String, data: Map<String, Any?>) {
+    val response = http.patch("$root/$path") {
+      header("Authorization", "Bearer ${bearer()}")
+      url {
+        for (field in data.keys) parameters.append("updateMask.fieldPaths", quoteFieldPathSegment(field))
+        parameters.append("currentDocument.exists", "true")
+      }
+      contentType(ContentType.Application.Json)
+      setBody(buildJsonObject { put("fields", JsonObject(data.filterValues { it != FirestoreDelete }.mapValues { encodeValue(withoutDeletesIn(it.value)) })) }.toString())
+    }
+    if (response.status.value !in 200..299) {
+      val body = runCatching { Json.parseToJsonElement(response.bodyAsText()) }.getOrNull()
+      throw IllegalStateException(body?.let(::errorOf) ?: "Could not save.")
+    }
+  }
+
   override suspend fun delete(path: String) {
     val response = http.delete("$root/$path") { header("Authorization", "Bearer ${bearer()}") }
     if (response.status.value !in 200..299 && response.status.value != 404) {
@@ -249,6 +266,9 @@ class RestFirestoreReader(
     fun withoutDeletes(data: Map<String, Any?>): Map<String, Any?> = data
       .filterValues { it != FirestoreDelete }
       .mapValues { (_, value) -> if (value is Map<*, *>) withoutDeletes(value as Map<String, Any?>) else value }
+
+    @Suppress("UNCHECKED_CAST")
+    internal fun withoutDeletesIn(value: Any?): Any? = if (value is Map<*, *>) withoutDeletes(value as Map<String, Any?>) else value
 
     fun encodeValue(value: Any?): JsonObject = when (value) {
       null -> buildJsonObject { put("nullValue", JsonNull) }

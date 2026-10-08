@@ -19,5 +19,5 @@ public func publishSiteWideChange(api: ConsoleAPIClient, reader: FirestoreReader
     staged = true
   } catch {}
   let answer = try? await api.request("/api/screens/revalidate", method: .post, body: jsonBody(["hostId": hostID, "entireHost": true]))
-  if staged, answer??["reason"]?.stringValue == "ok" { try? await reader.deleteDocument(path) }
+  if staged, answer?["reason"]?.stringValue == "ok" { try? await reader.deleteDocument(path) }
 }

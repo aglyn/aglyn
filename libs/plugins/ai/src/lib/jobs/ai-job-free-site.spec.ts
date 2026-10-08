@@ -333,6 +333,16 @@ describe('a Free workspace’s site start is one or two pages', () => {
     expect(aiSitePlanCapabilities({ kind: 'page', inputs: {} }, FREE)).toBe(FREE)
   })
 
+  // A site start builds no component, so a paid plan draws its repeated items
+  // in their sections, as a Free one does (AGL-3660): held to rule 1, every
+  // paid plan in the live business eval was refused.
+  it('plans a paid site start with no reusable component, as it builds none', () => {
+    const paid = aiSitePlanCapabilities({ kind: 'site', inputs: { pages: 5 } }, PAID)
+    expect(paid?.reusableComponents).toBe(false)
+    expect(paid?.create.component.allowed).toBe(false)
+    expect(aiSitePlanCapabilities({ kind: 'site', inputs: { pages: 2 } }, FREE)?.reusableComponents).toBe(false)
+  })
+
   it('refuses a Free site plan past its page cap on the Free wall, naming the cap', () => {
     const capped = aiSitePlanCapabilities({ kind: 'site', inputs: { pages: 2 } }, FREE)
     expect(codes(THREE_PAGES, NEW_SITE, capped)).toContain('plan-over-free-wall')

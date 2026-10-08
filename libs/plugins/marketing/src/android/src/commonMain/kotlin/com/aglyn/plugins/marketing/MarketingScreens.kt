@@ -247,7 +247,7 @@ fun CampaignDetail(context: NativePluginContext, actions: MarketingActions, acce
     Row(verticalAlignment = Alignment.CenterVertically) {
       Text(row.name, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
       StatusChip(row.window.label, if (row.window == CampaignWindow.RUNNING) StatusTone.SUCCESS else StatusTone.NEUTRAL)
-      if (access.canEdit) OverflowMenu(listOf(MenuAction("Edit") { editing = true }, MenuAction("Delete", destructive = true) { deleting = true }))
+      if (access.canEdit) OverflowMenu(listOf(MenuAction("edit", "Edit") { editing = true }, MenuAction("delete", "Delete", destructive = true) { deleting = true }))
     }
     SectionCard(null) {
       PropertyRow("Starts", row.startAtMs?.let { localDayAndTime(it).first })
@@ -419,11 +419,11 @@ fun OverlaysSection(context: NativePluginContext, actions: MarketingActions, acc
               Row(verticalAlignment = Alignment.CenterVertically) {
                 StatusChip(status.replaceFirstChar { it.uppercase() }, if (status == "live") StatusTone.SUCCESS else if (status == "scheduled") StatusTone.INFO else StatusTone.NEUTRAL)
                 if (access.canEdit) OverflowMenu(buildList {
-                  add(MenuAction(if (row.enabled) "Turn off" else "Turn on") { run { actions.toggleOverlay(row) } })
-                  add(MenuAction("Edit") { editing = row })
-                  if (index > 0) add(MenuAction("Move up") { run { actions.swapOverlays(row, rows[index - 1]) } })
-                  if (index < rows.size - 1) add(MenuAction("Move down") { run { actions.swapOverlays(row, rows[index + 1]) } })
-                  add(MenuAction("Delete", destructive = true) { deleting = row })
+                  add(MenuAction("turn-off", if (row.enabled) "Turn off" else "Turn on") { run { actions.toggleOverlay(row) } })
+                  add(MenuAction("edit", "Edit") { editing = row })
+                  if (index > 0) add(MenuAction("move-up", "Move up") { run { actions.swapOverlays(row, rows[index - 1]) } })
+                  if (index < rows.size - 1) add(MenuAction("move-down", "Move down") { run { actions.swapOverlays(row, rows[index + 1]) } })
+                  add(MenuAction("delete", "Delete", destructive = true) { deleting = row })
                 })
               }
             },
@@ -633,7 +633,7 @@ fun ExperimentDetail(context: NativePluginContext, actions: MarketingActions, ac
     Row(verticalAlignment = Alignment.CenterVertically) {
       Text(row.name, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
       StatusChip(experimentStatusLabel(row.status), if (row.status == "running") StatusTone.SUCCESS else StatusTone.NEUTRAL)
-      if (access.canEdit) OverflowMenu(listOf(MenuAction("Delete", destructive = true) { deleting = true }))
+      if (access.canEdit) OverflowMenu(listOf(MenuAction("delete", "Delete", destructive = true) { deleting = true }))
     }
     error?.let { NoticeBanner(it, StatusTone.ERROR) }
     SectionCard(null) {

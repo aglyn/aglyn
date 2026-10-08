@@ -37,6 +37,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-fulfillment-networks/declarations.server')).registerFulfillmentNetworksServerDeclarations()
     ;(await import('@aglyn/plugins-marketplaces/declarations.server')).registerMarketplacesServerDeclarations()
     ;(await import('@aglyn/plugins-print-on-demand/declarations.server')).registerPrintOnDemandServerDeclarations()
+    ;(await import('@aglyn/plugins-inventory-sync/declarations.server')).registerInventorySyncServerDeclarations()
     ;(await import('@aglyn/plugins-sales-channels/declarations.server')).registerSalesChannelsServerDeclarations()
     ;(await import('@aglyn/plugins-video-delivery/declarations.server')).registerVideoDeliveryServerDeclarations()
     ;(await import('@aglyn/plugins-funnels/declarations.server')).registerFunnelsServerDeclarations()

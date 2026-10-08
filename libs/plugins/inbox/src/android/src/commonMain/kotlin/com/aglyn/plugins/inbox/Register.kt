@@ -20,6 +20,7 @@ fun registerInboxNative(r: NativePluginRegistrar) {
       context,
       initialSubmission = params["submission"] ?: params["submissionId"],
       scopedForm = params["formId"] ?: params["form"],
+      scopedFormName = params["formName"],
     )
   }
   r.screen(INBOX_SUBMISSION_SCREEN, title = "Message", requiresSite = true, icon = "drafts") { context, params ->

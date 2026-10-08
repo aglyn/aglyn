@@ -130,6 +130,26 @@ public enum CrmForecastCategory: String, Codable, CaseIterable, Hashable, Sendab
   }
 }
 
+public struct FormLeadRoutingOptionsItem: Codable, Hashable, Sendable {
+  public var label: String
+  public var value: String
+
+  public init(label: String, value: String) {
+    self.label = label
+    self.value = value
+  }
+}
+
+public struct FormStatusOptionsItem: Codable, Hashable, Sendable {
+  public var label: String
+  public var value: String
+
+  public init(label: String, value: String) {
+    self.label = label
+    self.value = value
+  }
+}
+
 public struct HostOrder: Codable, Hashable, Sendable {
   public var amountCents: Double?
   public var billingAddress: OrderAddress?
@@ -712,6 +732,34 @@ public struct ListQuerySort: Codable, Hashable, Sendable {
 public enum ListQuerySortDirection: String, Codable, CaseIterable, Hashable, Sendable {
   case asc = "asc"
   case desc = "desc"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum MediaKind: String, Codable, CaseIterable, Hashable, Sendable {
+  case document = "document"
+  case image = "image"
+  case pdf = "pdf"
+  case video = "video"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum MediaSort: String, Codable, CaseIterable, Hashable, Sendable {
+  case name = "name"
+  case newest = "newest"
+  case oldest = "oldest"
+  case size = "size"
   case unknown = ""
 
   public init(from decoder: Decoder) throws {
@@ -1545,6 +1593,24 @@ public struct ReceiptTender: Codable, Hashable, Sendable {
   }
 }
 
+public struct SiteFilterOptions: Codable, Hashable, Sendable {
+  public var hasCustomDomain: [SiteFilterOptionsHasCustomDomainItem]
+
+  public init(hasCustomDomain: [SiteFilterOptionsHasCustomDomainItem]) {
+    self.hasCustomDomain = hasCustomDomain
+  }
+}
+
+public struct SiteFilterOptionsHasCustomDomainItem: Codable, Hashable, Sendable {
+  public var label: String
+  public var value: String
+
+  public init(label: String, value: String) {
+    self.label = label
+    self.value = value
+  }
+}
+
 /// The values in contracts.generated.json, keyed as the TypeScript exports are.
 public struct ContractValues: Codable, Hashable, Sendable {
   public let campaignEmailsQuery: ListQueryDeclaration
@@ -1565,13 +1631,34 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let emailListQuery: ListQueryDeclaration
   public let emailTemplateQuery: ListQueryDeclaration
   public let experimentListQuery: ListQueryDeclaration
+  public let formInUse: ListQueryFilter
+  public let formLeadRoutingOptions: [FormLeadRoutingOptionsItem]
+  public let formListFilterHeaders: [String: String]
+  public let formListQuery: ListQueryDeclaration
   public let formScopedSubmissionListQuery: ListQueryDeclaration
+  public let formStatusOptions: [FormStatusOptionsItem]
   public let leadListDeclaration: ListQueryDeclaration
   public let leadListQuery: ListQueryDeclaration
   public let leadSourceOptions: [ListFilterOption]
   public let listMemberQuery: ListQueryDeclaration
   public let listQueryDisjunctions: Int
   public let listQueryIdPath: String
+  public let mediaAltMaxLength: Int
+  public let mediaAltOptions: [ListFilterOption]
+  public let mediaDisjunctionLimit: Int
+  public let mediaFilterHeaders: [String: String]
+  public let mediaFolderMaxDepth: Int
+  public let mediaFolderNameMaxLength: Int
+  public let mediaKinds: [MediaKind]
+  public let mediaListQuery: ListQueryDeclaration
+  public let mediaOrientationOptions: [ListFilterOption]
+  public let mediaScopedSearchNotice: String
+  public let mediaSortLabels: [String: String]
+  public let mediaSortOrder: [String: ListQuerySort]
+  public let mediaSorts: [MediaSort]
+  public let mediaTagMaxCount: Int
+  public let mediaTagMaxLength: Int
+  public let mediaTypeOptions: [ListFilterOption]
   public let nameTokenLimit: Int
   public let nameTokenMaxPrefix: Int
   public let nativeCampaignSendStatuses: [NativeCampaignSendStatusesItem]
@@ -1615,7 +1702,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let replyBodyMax: Int
   public let replySubjectMax: Int
   public let scopedSearchJoin: String
+  public let siteCardsPageSize: Int
+  public let siteFilterHeaders: [String: String]
+  public let siteFilterOptions: SiteFilterOptions
+  public let siteListDeclaration: ListQueryDeclaration
   public let siteMemberListQuery: ListQueryDeclaration
+  public let submissionFilterHeaders: [String: String]
   public let submissionListQuery: ListQueryDeclaration
   public let submissionReadOptions: [ListFilterOption]
   public let suppressionListQuery: ListQueryDeclaration
@@ -1640,13 +1732,34 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case emailListQuery = "EMAIL_LIST_QUERY"
     case emailTemplateQuery = "EMAIL_TEMPLATE_QUERY"
     case experimentListQuery = "EXPERIMENT_LIST_QUERY"
+    case formInUse = "FORM_IN_USE"
+    case formLeadRoutingOptions = "FORM_LEAD_ROUTING_OPTIONS"
+    case formListFilterHeaders = "FORM_LIST_FILTER_HEADERS"
+    case formListQuery = "FORM_LIST_QUERY"
     case formScopedSubmissionListQuery = "FORM_SCOPED_SUBMISSION_LIST_QUERY"
+    case formStatusOptions = "FORM_STATUS_OPTIONS"
     case leadListDeclaration = "LEAD_LIST_DECLARATION"
     case leadListQuery = "LEAD_LIST_QUERY"
     case leadSourceOptions = "LEAD_SOURCE_OPTIONS"
     case listMemberQuery = "LIST_MEMBER_QUERY"
     case listQueryDisjunctions = "LIST_QUERY_DISJUNCTIONS"
     case listQueryIdPath = "LIST_QUERY_ID_PATH"
+    case mediaAltMaxLength = "MEDIA_ALT_MAX_LENGTH"
+    case mediaAltOptions = "MEDIA_ALT_OPTIONS"
+    case mediaDisjunctionLimit = "MEDIA_DISJUNCTION_LIMIT"
+    case mediaFilterHeaders = "MEDIA_FILTER_HEADERS"
+    case mediaFolderMaxDepth = "MEDIA_FOLDER_MAX_DEPTH"
+    case mediaFolderNameMaxLength = "MEDIA_FOLDER_NAME_MAX_LENGTH"
+    case mediaKinds = "MEDIA_KINDS"
+    case mediaListQuery = "MEDIA_LIST_QUERY"
+    case mediaOrientationOptions = "MEDIA_ORIENTATION_OPTIONS"
+    case mediaScopedSearchNotice = "MEDIA_SCOPED_SEARCH_NOTICE"
+    case mediaSortLabels = "MEDIA_SORT_LABELS"
+    case mediaSortOrder = "MEDIA_SORT_ORDER"
+    case mediaSorts = "MEDIA_SORTS"
+    case mediaTagMaxCount = "MEDIA_TAG_MAX_COUNT"
+    case mediaTagMaxLength = "MEDIA_TAG_MAX_LENGTH"
+    case mediaTypeOptions = "MEDIA_TYPE_OPTIONS"
     case nameTokenLimit = "NAME_TOKEN_LIMIT"
     case nameTokenMaxPrefix = "NAME_TOKEN_MAX_PREFIX"
     case nativeCampaignSendStatuses = "NATIVE_CAMPAIGN_SEND_STATUSES"
@@ -1690,7 +1803,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case replyBodyMax = "REPLY_BODY_MAX"
     case replySubjectMax = "REPLY_SUBJECT_MAX"
     case scopedSearchJoin = "SCOPED_SEARCH_JOIN"
+    case siteCardsPageSize = "SITE_CARDS_PAGE_SIZE"
+    case siteFilterHeaders = "SITE_FILTER_HEADERS"
+    case siteFilterOptions = "SITE_FILTER_OPTIONS"
+    case siteListDeclaration = "SITE_LIST_DECLARATION"
     case siteMemberListQuery = "SITE_MEMBER_LIST_QUERY"
+    case submissionFilterHeaders = "SUBMISSION_FILTER_HEADERS"
     case submissionListQuery = "SUBMISSION_LIST_QUERY"
     case submissionReadOptions = "SUBMISSION_READ_OPTIONS"
     case suppressionListQuery = "SUPPRESSION_LIST_QUERY"

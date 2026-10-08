@@ -45,6 +45,7 @@ import com.aglyn.core.Live
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.TransferExportDialog
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
@@ -56,6 +57,7 @@ import com.aglyn.ui.FieldEditor
 import com.aglyn.ui.FieldKind
 import com.aglyn.ui.FieldOption
 import com.aglyn.ui.FieldSpec
+import com.aglyn.ui.ListHeader
 import com.aglyn.ui.LiveListPane
 import com.aglyn.ui.LiveQueryList
 import com.aglyn.ui.MetricCard
@@ -97,10 +99,12 @@ private fun messageError(error: Throwable): String = error.message?.takeIf { it.
 /**
  * A site's form submissions: Unread / Read chips, a form pick and a search
  * over the list, newest first; the picked message beside the list on wide
- * windows. `submission` opens one, as a notification or a link does.
+ * windows. `submission` opens one, as a notification or a link does; a
+ * `formId` scopes it to one form's (the Forms screens open it so). Export
+ * hands the shown filter to the console's transfer route.
  */
 @Composable
-fun SubmissionsScreen(context: NativePluginContext, initialSubmission: String? = null, scopedForm: String? = null) {
+fun SubmissionsScreen(context: NativePluginContext, initialSubmission: String? = null, scopedForm: String? = null, scopedFormName: String? = null) {
   val hostId = context.hostId ?: return
   val scope = rememberCoroutineScope()
   val list = remember(hostId, context.firestore) { LiveQueryList(context.firestore, scope, SUBMISSIONS_PAGE_SIZE, ::submissionOf) }
@@ -108,6 +112,8 @@ fun SubmissionsScreen(context: NativePluginContext, initialSubmission: String? =
   var formId by rememberSaveable { mutableStateOf<String?>(null) }
   var search by rememberSaveable { mutableStateOf("") }
   var asked by rememberSaveable { mutableStateOf("") }
+  var exporting by remember { mutableStateOf(false) }
+  var exported by remember { mutableStateOf<String?>(null) }
   LaunchedEffect(list, read, formId, asked, scopedForm) {
     list.show { limit -> submissionsQuery(hostId, read, formId, asked, limit, scopedForm) }
   }
@@ -122,7 +128,14 @@ fun SubmissionsScreen(context: NativePluginContext, initialSubmission: String? =
     initialSelected = initialSubmission,
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize()) {
+        ListHeader(scopedFormName?.let { "Submissions · $it" } ?: "Inbox") {
+          OutlinedButton(onClick = { exporting = true }, modifier = Modifier.testTag("submissions-export")) {
+            Icon(AglynIcons.named("download"), contentDescription = null)
+            Text("Export", Modifier.padding(start = space(1f)))
+          }
+        }
         Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+          exported?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { exported = null }) { Text("Dismiss") } }) }
           SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search messages", onSearch = { asked = search })
           ChoiceChipRow(ReadFilter.entries.map { ChipOption(it.name, it.label) }, read.name, { read = ReadFilter.valueOf(it) })
           if (formOptions.size > 1) {
@@ -152,6 +165,28 @@ fun SubmissionsScreen(context: NativePluginContext, initialSubmission: String? =
       }
     },
   )
+
+  if (exporting) {
+    val form = scopedForm ?: formId
+    TransferExportDialog(
+      context,
+      resource = "forms.submissions",
+      title = scopedFormName?.let { "Export $it submissions" } ?: "Export submissions",
+      hostId = hostId,
+      scope = buildMap<String, Any?> {
+        val filter = buildMap<String, Any?> {
+          form?.let { put("formId", it) }
+          read.value?.let { put("read", it == "true") }
+        }
+        if (filter.isEmpty()) put("kind", "all") else { put("kind", "filter"); put("filter", filter) }
+      },
+      fileStem = "submissions",
+      filter = form?.let { mapOf("formId" to it) },
+    ) { message ->
+      exporting = false
+      if (message != null) exported = message
+    }
+  }
 }
 
 @Composable

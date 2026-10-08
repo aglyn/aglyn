@@ -49,6 +49,8 @@ final class ListQueryCasesTests: XCTestCase {
     case "ORDER_LIST_QUERY": return ContractValues.shared.orderListQuery
     case "PRODUCT_LIST_QUERY": return ContractValues.shared.productListQuery
     case "SUBMISSION_LIST_QUERY": return ContractValues.shared.submissionListQuery
+    case "SITE_LIST_DECLARATION": return ContractValues.shared.siteListDeclaration
+    case "FORM_LIST_QUERY": return ContractValues.shared.formListQuery
     default: return nil
     }
   }

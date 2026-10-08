@@ -30,7 +30,7 @@ import kotlinx.serialization.json.longOrNull
  * `release_outreach` release flag, the workspace's `outreach` feature, and the
  * member's `outreach.use` permission. Reads are the console's own list
  * declarations over `orgs/{orgId}/outreach*`; every write is an
- * `/api/outreach/*` route, each naming its org.
+ * `/api/outreach/...` route, each naming its org.
  */
 
 const val OUTREACH_SEQUENCES_SCREEN = "outreach.sequences"

@@ -128,6 +128,24 @@ for the how-to.
 -->
 
 <!--
+  AGL-3642 — Inventory sync is built and hidden until a deployment sets
+  INVENTORY_SYNC_TOKEN_KEY on the console (Brightpearl also needs
+  BRIGHTPEARL_APP_REF and BRIGHTPEARL_DEV_REF). This entry is held unpublished,
+  like the guide it links (`unlisted: true`): once it is configured on
+  aglyn.com, remove this comment's markers, move "(newest)" here from the top
+  heading, and delete `unlisted: true` and the "Rolling out" note from
+  commerce-and-bookings/commerce/inventory-and-erp-sync.md.
+
+## October 2026 — your stock system and your store, in step
+
+- **[Inventory and ERP sync](commerce-and-bookings/commerce/inventory-and-erp-sync.md)** —
+  connect your own Cin7 Core, inFlow Inventory or Brightpearl account. Stock counts
+  follow whichever side you say is right, products come into your store from it (or go
+  the other way), and paid orders arrive there as sales orders, each once, with
+  anything it could not take listed for you to send again.
+-->
+
+<!--
   AGL-3638 — Marketplaces are built and hidden until a deployment holds an app
   for at least one of Amazon, eBay, Etsy, TikTok Shop, Walmart or Faire and sets
   MARKETPLACES_TOKEN_KEY on the console. This entry is held unpublished, like the

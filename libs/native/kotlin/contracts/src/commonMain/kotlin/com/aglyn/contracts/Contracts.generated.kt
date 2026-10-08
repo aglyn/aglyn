@@ -94,6 +94,18 @@ internal object CrmForecastCategorySerializer :
     RawEnumSerializer<CrmForecastCategory>("com.aglyn.contracts.CrmForecastCategory", CrmForecastCategory.entries, CrmForecastCategory.UNKNOWN, { it.raw })
 
 @Serializable
+data class FormLeadRoutingOptionsItem(
+    val label: String,
+    val value: String,
+)
+
+@Serializable
+data class FormStatusOptionsItem(
+    val label: String,
+    val value: String,
+)
+
+@Serializable
 data class HostOrder(
     val amountCents: Double? = null,
     val billingAddress: OrderAddress? = null,
@@ -476,6 +488,32 @@ enum class ListQuerySortDirection(val raw: String) {
 
 internal object ListQuerySortDirectionSerializer :
     RawEnumSerializer<ListQuerySortDirection>("com.aglyn.contracts.ListQuerySortDirection", ListQuerySortDirection.entries, ListQuerySortDirection.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = MediaKindSerializer::class)
+enum class MediaKind(val raw: String) {
+    DOCUMENT("document"),
+    IMAGE("image"),
+    PDF("pdf"),
+    VIDEO("video"),
+    UNKNOWN(""),
+}
+
+internal object MediaKindSerializer :
+    RawEnumSerializer<MediaKind>("com.aglyn.contracts.MediaKind", MediaKind.entries, MediaKind.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = MediaSortSerializer::class)
+enum class MediaSort(val raw: String) {
+    NAME("name"),
+    NEWEST("newest"),
+    OLDEST("oldest"),
+    SIZE("size"),
+    UNKNOWN(""),
+}
+
+internal object MediaSortSerializer :
+    RawEnumSerializer<MediaSort>("com.aglyn.contracts.MediaSort", MediaSort.entries, MediaSort.UNKNOWN, { it.raw })
 
 @Serializable
 data class MobileDevice(
@@ -1014,6 +1052,17 @@ data class ReceiptTender(
     val label: String,
 )
 
+@Serializable
+data class SiteFilterOptions(
+    val hasCustomDomain: List<SiteFilterOptionsHasCustomDomainItem>,
+)
+
+@Serializable
+data class SiteFilterOptionsHasCustomDomainItem(
+    val label: String,
+    val value: String,
+)
+
 /** The values in contracts.generated.json, keyed as the TypeScript exports are. */
 @Serializable
 data class ContractValues(
@@ -1035,13 +1084,34 @@ data class ContractValues(
     @SerialName("EMAIL_LIST_QUERY") val emailListQuery: ListQueryDeclaration,
     @SerialName("EMAIL_TEMPLATE_QUERY") val emailTemplateQuery: ListQueryDeclaration,
     @SerialName("EXPERIMENT_LIST_QUERY") val experimentListQuery: ListQueryDeclaration,
+    @SerialName("FORM_IN_USE") val formInUse: ListQueryFilter,
+    @SerialName("FORM_LEAD_ROUTING_OPTIONS") val formLeadRoutingOptions: List<FormLeadRoutingOptionsItem>,
+    @SerialName("FORM_LIST_FILTER_HEADERS") val formListFilterHeaders: Map<String, String>,
+    @SerialName("FORM_LIST_QUERY") val formListQuery: ListQueryDeclaration,
     @SerialName("FORM_SCOPED_SUBMISSION_LIST_QUERY") val formScopedSubmissionListQuery: ListQueryDeclaration,
+    @SerialName("FORM_STATUS_OPTIONS") val formStatusOptions: List<FormStatusOptionsItem>,
     @SerialName("LEAD_LIST_DECLARATION") val leadListDeclaration: ListQueryDeclaration,
     @SerialName("LEAD_LIST_QUERY") val leadListQuery: ListQueryDeclaration,
     @SerialName("LEAD_SOURCE_OPTIONS") val leadSourceOptions: List<ListFilterOption>,
     @SerialName("LIST_MEMBER_QUERY") val listMemberQuery: ListQueryDeclaration,
     @SerialName("LIST_QUERY_DISJUNCTIONS") val listQueryDisjunctions: Long,
     @SerialName("LIST_QUERY_ID_PATH") val listQueryIdPath: String,
+    @SerialName("MEDIA_ALT_MAX_LENGTH") val mediaAltMaxLength: Long,
+    @SerialName("MEDIA_ALT_OPTIONS") val mediaAltOptions: List<ListFilterOption>,
+    @SerialName("MEDIA_DISJUNCTION_LIMIT") val mediaDisjunctionLimit: Long,
+    @SerialName("MEDIA_FILTER_HEADERS") val mediaFilterHeaders: Map<String, String>,
+    @SerialName("MEDIA_FOLDER_MAX_DEPTH") val mediaFolderMaxDepth: Long,
+    @SerialName("MEDIA_FOLDER_NAME_MAX_LENGTH") val mediaFolderNameMaxLength: Long,
+    @SerialName("MEDIA_KINDS") val mediaKinds: List<MediaKind>,
+    @SerialName("MEDIA_LIST_QUERY") val mediaListQuery: ListQueryDeclaration,
+    @SerialName("MEDIA_ORIENTATION_OPTIONS") val mediaOrientationOptions: List<ListFilterOption>,
+    @SerialName("MEDIA_SCOPED_SEARCH_NOTICE") val mediaScopedSearchNotice: String,
+    @SerialName("MEDIA_SORT_LABELS") val mediaSortLabels: Map<String, String>,
+    @SerialName("MEDIA_SORT_ORDER") val mediaSortOrder: Map<String, ListQuerySort>,
+    @SerialName("MEDIA_SORTS") val mediaSorts: List<MediaSort>,
+    @SerialName("MEDIA_TAG_MAX_COUNT") val mediaTagMaxCount: Long,
+    @SerialName("MEDIA_TAG_MAX_LENGTH") val mediaTagMaxLength: Long,
+    @SerialName("MEDIA_TYPE_OPTIONS") val mediaTypeOptions: List<ListFilterOption>,
     @SerialName("NAME_TOKEN_LIMIT") val nameTokenLimit: Long,
     @SerialName("NAME_TOKEN_MAX_PREFIX") val nameTokenMaxPrefix: Long,
     @SerialName("NATIVE_CAMPAIGN_SEND_STATUSES") val nativeCampaignSendStatuses: List<NativeCampaignSendStatusesItem>,
@@ -1085,7 +1155,12 @@ data class ContractValues(
     @SerialName("REPLY_BODY_MAX") val replyBodyMax: Long,
     @SerialName("REPLY_SUBJECT_MAX") val replySubjectMax: Long,
     @SerialName("SCOPED_SEARCH_JOIN") val scopedSearchJoin: String,
+    @SerialName("SITE_CARDS_PAGE_SIZE") val siteCardsPageSize: Long,
+    @SerialName("SITE_FILTER_HEADERS") val siteFilterHeaders: Map<String, String>,
+    @SerialName("SITE_FILTER_OPTIONS") val siteFilterOptions: SiteFilterOptions,
+    @SerialName("SITE_LIST_DECLARATION") val siteListDeclaration: ListQueryDeclaration,
     @SerialName("SITE_MEMBER_LIST_QUERY") val siteMemberListQuery: ListQueryDeclaration,
+    @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
     @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
     @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
     @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
