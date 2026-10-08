@@ -201,6 +201,13 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // the request ride uncached, and a function of a few operations is about
   // 1,200 characters of JSON with as much again to think in.
   'job.logic': { inputTokens: 700, outputTokens: 900, cacheReadTokens: 1_500, cacheWriteTokens: 0 },
+  // The edit step (AGL-3616): the document doctrine, the job's rules and the
+  // edit rung's protocol and catalog for the document's kind are the cached
+  // prefix (5,970 tokens for a page, as `runtime/ai-prompt-cache.spec.ts`
+  // measures it); the outline of up to sixty elements with their settings
+  // and the request ride uncached, and a change of a few operations is about
+  // 1,500 characters of tool call with as much again to think in.
+  'job.edit': { inputTokens: 2_500, outputTokens: 1_000, cacheReadTokens: 6_000, cacheWriteTokens: 0 },
 }
 
 /** The fewest measured exchanges a median is taken over. */

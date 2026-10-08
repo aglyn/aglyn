@@ -22,7 +22,10 @@ import {
   registerPluginTransferResource,
   type PluginTransferResource,
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import { declarePluginDomainEvents } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import { registerApiV1SiteResource } from '@aglyn/tenant-data-admin/server/api-v1-resources'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { BOOKING_EVENT_DECLARATIONS } from './model/booking-events'
 import {
   BOOKINGS_TRANSFER_MATCH_KEYS,
   BOOKINGS_TRANSFER_RESOURCE,
@@ -59,11 +62,28 @@ function bookingsTransferResource(): Promise<PluginTransferResource> {
  * Its `bookings` transfer resource: every booking of a site, exported and
  * never imported (`transfer/bookings-transfer.ts` says why).
  *
+ * Its bookings on the customer REST API, `/v1/sites/{siteId}/bookings`
+ * (AGL-3643), and the booking events it raises, declared.
+ *
  * Light at boot: the eraser, the export and the Admin SDK they bring load
  * with the first erasure or export. Registering again replaces this plugin's
  * own.
  */
 export function registerBookingsConsoleServerDeclarations(): void {
+  // The booking events this plugin raises (AGL-3643), named for the pickers
+  // and diagnostics that list what is declared; raising needs no declaration.
+  declarePluginDomainEvents(BOOKING_EVENT_DECLARATIONS, { pluginId: BUNDLE_ID })
+  // A site's bookings on the customer REST API (AGL-3643), read-only. The
+  // handler asks its scope and then the plan, so no `entitlement` is named
+  // here: the router would ask them the other way round.
+  registerApiV1SiteResource(
+    'bookings',
+    {
+      handle: async (...args) => (await import('./server/api-v1/bookings')).handleBookings(...args),
+      describe: async () => (await import('./server/api-v1/openapi')).BOOKINGS_API_V1_DESCRIPTION,
+    },
+    { pluginId: BUNDLE_ID },
+  )
   registerPluginPersonEraser(
     async (request) =>
       (await import('./server/person-eraser')).bookingsPersonEraser(request),

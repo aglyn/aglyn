@@ -76,7 +76,17 @@ function firestoreOf(docs: Record<string, Record<string, unknown>>, writes: Writ
     set: async (value: Record<string, unknown>) => {
       writes.push({ path, value })
     },
-    collection: (name: string) => ({ doc: (id: string) => doc(`${path}/${name}/${id}`) }),
+    collection: (name: string) => ({
+      doc: (id: string) => doc(`${path}/${name}/${id}`),
+      // A site's remembered preferences (AGL-3661), listed whole.
+      limit: () => ({
+        get: async () => ({
+          docs: Object.entries(docs)
+            .filter(([key]) => key.startsWith(`${path}/${name}/`))
+            .map(([key, data]) => ({ id: key.slice(path.length + name.length + 2), data: () => data })),
+        }),
+      }),
+    }),
   })
   return { collection: (name: string) => ({ doc: (id: string) => doc(`${name}/${id}`) }) } as unknown as FirebaseFirestore.Firestore
 }
@@ -168,6 +178,49 @@ beforeEach(() => {
 })
 
 describe('asking', () => {
+  it('reads the numbers for THIS business: its profile and memory after the rules, never its contact details (AGL-3661)', async () => {
+    mockRunAiRequest
+      .mockResolvedValueOnce(called(AI_INSIGHT_READ_TOOL_NAME, { reads: [{ reader: 'traffic.summary', days: 14, params: [] }] }))
+      .mockResolvedValueOnce(
+        called(AI_INSIGHT_ANSWER_TOOL_NAME, { insights: [{ text: 'Page views rose 14.7% to 1,204.', cites: [{ table: 't1', rows: [0] }] }], gap: '' }),
+      )
+    const writes: Written[] = []
+    await runAiJobInsightStep({
+      job: job(),
+      stepIndex: 0,
+      now: NOW,
+      firestore: firestoreOf(
+        {
+          'hosts/host-1': {
+            orgId: 'org-1',
+            subdomain: 'acme',
+            displayName: 'Acme Roofing',
+            business: { supportEmail: 'hello@acme.test' },
+          },
+          'hosts/host-1/businessProfile/profile': { services: ['Roof repair'], sources: { services: 'owner' } },
+          'hosts/host-1/aiMemory/tone-concise': {
+            group: 'length',
+            text: 'Prefers short, concise copy',
+            count: 2,
+            lastSeenAtMs: 1,
+            source: 'assist-edit',
+          },
+        },
+        writes,
+      ),
+      org: PRO,
+      modelFor: () => MODEL,
+    })
+    const { system } = mockRunAiRequest.mock.calls[0][0]
+    expect(system.slice(0, AI_JOB_INSIGHT_SYSTEM.length)).toEqual(AI_JOB_INSIGHT_SYSTEM)
+    const site = system[AI_JOB_INSIGHT_SYSTEM.length]
+    expect(site).toMatchObject({ cacheBreakpoint: true, site: true })
+    expect(site.text).toContain('Business name: Acme Roofing')
+    expect(site.text).toContain('Services: Roof repair')
+    expect(site.text).not.toContain('hello@acme.test')
+    expect(site.text).not.toContain('Site: ')
+  })
+
   it('lets the model choose among the readers offered, reads them, and keeps only what traces', async () => {
     mockRunAiRequest
       .mockResolvedValueOnce(

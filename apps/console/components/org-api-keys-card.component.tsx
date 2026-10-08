@@ -67,6 +67,7 @@ const SCOPE_OPTIONS: Array<{ scope: string; label: string; description: string }
   { scope: 'orders:read', label: 'Orders — read', description: 'Read a site’s store orders, their line items and totals.' },
   { scope: 'orders:write', label: 'Orders — record shipments', description: 'Mark a site’s orders fulfilled or delivered and attach a carrier and tracking number — what a 3PL or warehouse system needs. Cannot cancel or refund an order, and never moves stock or money.' },
   { scope: 'products:read', label: 'Products — read', description: 'Read a site’s products, variants, prices and stock.' },
+  { scope: 'bookings:read', label: 'Bookings — read', description: 'Read a site’s bookings: the service, the time, the guest and what they paid. Cannot move or cancel a booking.' },
   { scope: 'media:read', label: 'Media — read', description: 'List files in the organization library and a site’s media.' },
   { scope: 'media:write', label: 'Media — upload', description: 'Add files to the organization library and a site’s media. Counts against your storage allowance. Cannot replace or delete an existing file.' },
   { scope: 'crm:read', label: 'CRM — read', description: 'List and read companies, pipelines, deals, tasks and activities across the organization, and each site’s leads.' },

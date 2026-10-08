@@ -17,7 +17,7 @@
 
 import { funnelWatches, type WatchedFunnel } from '../model/drop-off'
 import { normalizeFunnelDefinition } from '../model/funnel-definition'
-import { FUNNELS_COLLECTION, FUNNELS_MAX_PER_SITE } from '../model/funnels.types'
+import { FUNNELS_COLLECTION, FUNNELS_MAX_PER_SITE, isFunnelDraft } from '../model/funnels.types'
 
 /**
  * What a site holds that the person-facing paths ask on every event (AGL-3605)
@@ -31,7 +31,7 @@ const CACHE_MAX = 5_000
 
 export interface FunnelHostState {
   recording: boolean
-  /** The site's funnels that have at least one watch. */
+  /** The site's ACTIVE funnels that have at least one watch. */
   watched: WatchedFunnel[]
 }
 
@@ -53,6 +53,8 @@ export async function funnelHostState(
     const rows = await hostRef.collection(FUNNELS_COLLECTION).limit(FUNNELS_MAX_PER_SITE).get()
     for (const row of rows.docs) {
       const data = row.data() ?? {}
+      // A draft follows nobody up until a person activates it (AGL-3616).
+      if (isFunnelDraft(data)) continue
       const normalized = normalizeFunnelDefinition(data)
       if ('error' in normalized) continue
       const watches = funnelWatches(data['dropOffWatches'], normalized.funnel.steps.length)

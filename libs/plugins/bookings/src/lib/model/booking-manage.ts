@@ -113,6 +113,21 @@ export function rescheduleRefusal(booking: ManagedBooking, startsAtMs: number, n
   return null
 }
 
+/**
+ * Why a booking cannot be canceled by the cancel route, or null (AGL-3643).
+ * A canceled booking is not refused: canceling it again changes nothing. A
+ * booking with money still paid on it cancels through the refund instead, so
+ * a guest is never left canceled and charged.
+ */
+export function cancelRefusal(booking: ManagedBooking, nowMs: number): string | null {
+  if (bookingState(booking, nowMs) === 'canceled') return null
+  if (Number(booking.checkedInAtMs ?? 0) > 0) return 'This guest is already checked in'
+  if (bookingOutstandingCents(booking) > 0) {
+    return 'This booking was paid. Cancel it with a refund so the guest gets their money back'
+  }
+  return null
+}
+
 /** The booking's length, kept when it moves: what the guest booked, not what the service says today. */
 export function bookingDurationMs(booking: ManagedBooking, fallbackMinutes: number): number {
   const stored = Number(booking.endsAtMs ?? 0) - Number(booking.startsAtMs ?? 0)

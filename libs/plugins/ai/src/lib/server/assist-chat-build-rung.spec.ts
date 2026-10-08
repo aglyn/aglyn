@@ -94,6 +94,14 @@ function mockMakeFirestore() {
   })
   const makeCollection = (prefix: string) => ({
     doc: (id?: string) => makeDoc(`${prefix}/${id ?? `auto-${++mockAutoId}`}`),
+    // A site's remembered preferences (AGL-3661), listed whole.
+    limit: () => ({
+      get: async () => ({
+        docs: [...mockDocs.entries()]
+          .filter(([path]) => path.startsWith(`${prefix}/`) && !path.slice(prefix.length + 1).includes('/'))
+          .map(([path, data]) => ({ id: path.slice(prefix.length + 1), data: () => data })),
+      }),
+    }),
   })
   return {
     collection: (name: string) => makeCollection(name),
@@ -193,6 +201,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 const { POST } = require('./assist-chat') as {
   POST: (request: Request) => Promise<Response>
 }
+const { ASSIST_ACTION_FENCE } = require('./assist-view-context') as typeof import('./assist-view-context')
 
 /** Free carries AI generation as its taste; Pro does not without the add-on. */
 const FREE_ORG = 'org-free'
@@ -390,6 +399,32 @@ describe('on the build rung (AGL-3616)', () => {
     expect(system[intents].text).toContain('a contact form')
   })
 
+  it('tells the build which business it is for, cached per site after the protocol, inventing no contact details (AGL-3661)', async () => {
+    mockDocs.set('hosts/host-1', { orgId: FREE_ORG, name: 'Groomers', displayName: 'Paws & Co' })
+    mockDocs.set('hosts/host-1/businessProfile/profile', { services: ['Bath and brush'], sources: { services: 'owner' } })
+    mockDocs.set('hosts/host-1/aiMemory/length-short', {
+      group: 'length',
+      text: 'Prefers short, concise copy',
+      count: 3,
+      lastSeenAtMs: 1,
+      source: 'assist-edit',
+    })
+    armStream([OPENING, text('I will plan that.'), ...closing()])
+    await (await POST(post(buildBody(FREE_ORG)))).text()
+    const system = providerRequest().system as SystemBlock[]
+    const protocol = system.findIndex((block) => block.text.startsWith('Building on this site:'))
+    const site = system.findIndex((block) => block.text.startsWith('About this site'))
+    expect(site).toBe(protocol + 1)
+    expect(system[site].cache_control).toEqual({ type: 'ephemeral' })
+    expect(system[site].text).toContain('Business name: Paws & Co')
+    expect(system[site].text).toContain('Services: Bath and brush')
+    expect(system[site].text).toContain('Prefers short, concise copy')
+    expect(system[site].text).toContain('Contact details: none entered yet.')
+    expect(system[site].text).toContain('Never invent')
+    // Nothing cached after it: the site's block closes the span.
+    expect(system.slice(site + 1).every((block) => block.cache_control === undefined)).toBe(true)
+  })
+
   it('a tool call comes back as an inert build on the request’s own site, and nothing is built', async () => {
     armStream([
       OPENING,
@@ -402,6 +437,35 @@ describe('on the build rung (AGL-3616)', () => {
     expect(done?.build).toMatchObject({ id: 'build', hostId: 'host-1', publish: false, summary: 'Plan pages and forms' })
     expect(String((done?.build as { brief: string }).brief)).toContain(BUILD_QUESTION)
     expect([...mockDocs.keys()].some((path) => /aiJobs|screens|forms/.test(path))).toBe(false)
+  })
+
+  it('a follow-up on a draft this thread built is offered as opening that draft, held to a listed ref', async () => {
+    const drafts = [
+      { ref: 'd1', label: 'Home', noun: 'page' },
+      { ref: 'd2', label: 'About', noun: 'page' },
+    ]
+    const fence = (ref: string) => `${ASSIST_ACTION_FENCE}\n${JSON.stringify({ id: 'open.build.draft', params: { draft: ref } })}\n\`\`\``
+    armStream([OPENING, text(`I can open the About draft for that.\n${fence('d2')}`), ...closing()])
+    const events = await readEvents(
+      await POST(post(buildBody(PRO_ORG, { question: 'Make the about page shorter', drafts }))),
+    )
+    const system = providerRequest().system as SystemBlock[]
+    const listed = system.find((block) => block.text.startsWith('Drafts a build in this chat made'))
+    expect(listed?.text).toContain('- d2: page “About”')
+    expect(listed?.cache_control).toBeUndefined()
+    const done = events.find((event) => event.type === 'done')
+    expect(done?.proposal).toMatchObject({
+      id: 'open.build.draft',
+      href: '/acme/hosts/host-1/screens',
+      draft: { ref: 'd2', label: 'About', noun: 'page' },
+    })
+
+    mockFetch.mockClear()
+    armStream([OPENING, text(`Opening it.\n${fence('d9')}`), ...closing()])
+    const ghost = await readEvents(
+      await POST(post(buildBody(PRO_ORG, { question: 'Make the about page shorter', drafts }))),
+    )
+    expect(ghost.find((event) => event.type === 'done')?.proposal ?? null).toBeNull()
   })
 
   it('stays closed off a site, without ai.generate, or with the switch off — and the provider never sees the tool', async () => {

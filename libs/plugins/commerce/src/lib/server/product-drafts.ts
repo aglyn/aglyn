@@ -319,17 +319,17 @@ function recordOf(product: FirebaseFirestore.DocumentSnapshot): PluginDraftRecor
   return { id: product.id, name: String(data.name ?? ''), versionId: null, facts: factsOf(data) }
 }
 
-function roleRefusal(host: FirebaseFirestore.DocumentSnapshot, uid: string): PluginDraftRefusal | null {
+export function roleRefusal(host: FirebaseFirestore.DocumentSnapshot, uid: string): PluginDraftRefusal | null {
   const role = (host.get('memberRoles') ?? {})[uid]
   return hostRoleCanWrite(role) ? null : { status: 403, error: PRODUCT_DRAFT_ROLE_REFUSAL }
 }
 
-function planRefusal(org: PluginDraftContext['org']): PluginDraftRefusal | null {
+export function planRefusal(org: PluginDraftContext['org']): PluginDraftRefusal | null {
   return checkEntitlement(org as never, 'commerce') ? null : { status: 403, error: PRODUCT_DRAFT_PLAN_REFUSAL }
 }
 
 /** The allowance, counted as the resources route and the importer count a product create. */
-function roomRefusal(org: PluginDraftContext['org'], used: number): PluginDraftRefusal | null {
+export function roomRefusal(org: PluginDraftContext['org'], used: number): PluginDraftRefusal | null {
   const quota = checkQuota(org as never, 'productsPerHost', used)
   return quota.allowed ? null : { status: 403, error: productDraftLimitRefusal(quota.limit) }
 }

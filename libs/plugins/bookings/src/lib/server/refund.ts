@@ -23,6 +23,7 @@ import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { createHash } from 'crypto'
 import { apiIdempotencyExpiry } from '@aglyn/aglyn/app-utils/api-idempotency'
+import { raiseBookingEvent } from './booking-events'
 
 /**
  * Refund a paid booking (AGL-2315), full or partial, site-admin only.
@@ -122,6 +123,8 @@ export const bookingRefundHandler: PluginApiHandler = async (req, res) => {
     if (!bookingSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown booking' })
     }
+    // As it stood before this refund, for the event a full refund raises.
+    const bookingBefore = (bookingSnapshot.data() ?? {}) as Record<string, unknown>
     const paymentIntentId = String(bookingSnapshot.get('paymentIntentId') ?? '')
     const paidCents = Math.max(
       0,
@@ -271,6 +274,20 @@ export const bookingRefundHandler: PluginApiHandler = async (req, res) => {
         { merge: true },
       )
       .catch(() => undefined)
+    // The full refund is what cancels a paid booking (AGL-3643). Keyed by the
+    // booking, so a booking canceled before is not announced again.
+    if (fullyRefunded && bookingBefore['status'] !== 'canceled') {
+      await raiseBookingEvent(firestore, {
+        event: 'booking.canceled',
+        hostId,
+        bookingId,
+        booking: {
+          ...bookingBefore,
+          refundedCents: totalRefunded,
+          status: 'canceled',
+        },
+      })
+    }
 
     const payload = {
       refundedCents: refundCents,

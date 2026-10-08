@@ -37,6 +37,8 @@ import {
   type AssistEditAppliedReport,
   type AssistEditDocumentKind,
 } from '../model/assist-edit'
+import { aiPreferencesFromEdit } from '../model/ai-site-memory'
+import { rememberAiSitePreferences } from '../runtime/site-context'
 import { sanitiseId } from './assist-view-context'
 
 /**
@@ -45,8 +47,9 @@ import { sanitiseId } from './assist-view-context'
  * `ai.edit.applied` row to the site's activity log, attributed to them.
  *
  * The edits were applied in the author's own editor, as unsaved changes;
- * nothing here can see them or repeat them, and nothing here writes a
- * document. What this door checks is that the report stands on a proposal
+ * nothing here can see them or repeat them, and nothing here writes the
+ * edited document. (It does remember what the edit showed about the owner's
+ * preferences, AGL-3661 — see `model/ai-site-memory.ts`.) What this door checks is that the report stands on a proposal
  * the server issued: the exchange exists under the named org, the same
  * member asked it about the same site, and its signal records edit
  * operations proposed from the besigner route of the same document. A
@@ -208,6 +211,14 @@ async function handler(request: Request): Promise<Response> {
             opCounts: report.opCounts,
           },
         )
+        // What the applied edit showed about the owner's preferences
+        // (AGL-3661), remembered for every later AI job on the site. Rules,
+        // no model call; a failure never fails the record it follows.
+        await rememberAiSitePreferences(
+          firestore,
+          report.hostId,
+          aiPreferencesFromEdit({ question: String(asked['question'] ?? ''), opCounts: report.opCounts }),
+        ).catch((error) => console.warn('ai site memory unwritten', { hostId: report.hostId, error }))
         return Response.json({ ok: true }, { status: 200 })
     }
   } catch (error) {

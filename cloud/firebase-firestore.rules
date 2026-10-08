@@ -1177,6 +1177,16 @@ service cloud.firestore {
           (canManageOrg() && isVerified() && orgNotSuspended());
       }
 
+      // The workspace's business profile defaults (AGL-3661): the services,
+      // audience and tone a site inherits where its own profile says
+      // nothing. Every member reads them, as a site's editors build from
+      // them; only a manager writes them, as they speak for every site.
+      match /businessProfile/{docId} {
+        allow read: if isStaff() || isOrgMember();
+        allow write: if isStaff() ||
+          (docId == 'defaults' && canManageOrg() && isVerified() && orgNotSuspended());
+      }
+
       // Org-shared data (AGL-237): datasets (records included), contacts
       // and segments are shared across every host in the org. Any member
       // reads; editors and up write; viewers stay read-only. Suspension
@@ -2459,6 +2469,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Zapier (AGL-3643): a site's REST hooks — the URL Zapier minted for each
+    // Zap, the events it takes and the API key that subscribed it — and the
+    // markers saying an event already reached a hook. Written and read by the
+    // zapier plugin's server half through the Admin SDK only. Deny ALL client
+    // access, staff and the owner included: a hook's URL is a capability
+    // (whoever holds it can post into the merchant's Zap), and a client that
+    // could write a hook could send a site's orders, bookings and contacts to
+    // a URL of its choosing, or mark an event delivered that never was. Org
+    // erasure destroys both by the `orgId` field.
+    match /zapierHooks/{hookId} {
+      allow read, write: if false;
+    }
+    match /zapierHookDeliveries/{deliveryId} {
+      allow read, write: if false;
+    }
+
     // Fulfillment networks (AGL-3634): a site's connection to the merchant's
     // OWN ShipBob or Amazon Multi-Channel Fulfillment account — its grant
     // sealed, its webhook token's hash, its settings, stock count and log —
@@ -2523,6 +2549,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /inventorySyncProducts/{linkId} {
+      allow read, write: if false;
+    }
+
+    // Delivery apps (AGL-3644): a site's link to the merchant's OWN DoorDash,
+    // Uber Eats or Grubhub store — its settings, item matches and menu — and
+    // each order the service sent, with where it stands at the counter and
+    // with the service. Written and read by the delivery-apps plugin's
+    // webhooks, register routes and job through the Admin SDK only. Deny ALL
+    // client access, staff and the owner included: a client that could write
+    // a store link could route another merchant's orders to its own register,
+    // and one that could write an order could have the service told it was
+    // accepted or ready. Org erasure destroys both by the `orgId` field.
+    match /deliveryAppStores/{deliveryAppStoreId} {
+      allow read, write: if false;
+    }
+    match /deliveryAppOrders/{deliveryAppOrderId} {
       allow read, write: if false;
     }
 
@@ -3744,6 +3786,12 @@ service cloud.firestore {
         //    token that is the only lock on the store's catalog feed, and a
         //    connection holds a sealed channel OAuth token. The sales-channels
         //    routes are the only reader and writer, so it joins the `!=`.
+        //  - `aiMemory`, CREATE and UPDATE (AGL-3661): the preferences Aglyn
+        //    AI distilled from the edits a site's owner applied, read into
+        //    every later AI prompt for the site. The assist edit route writes
+        //    them on the Admin SDK; a client write would put words of its
+        //    choosing into those prompts. DELETE stays open: the Business
+        //    profile page clears one, or all, with a client `deleteDoc`.
         allow create: if subcollection != 'siteMemberCredentials' &&
           subcollection != 'orderWebhookSecrets' &&
           subcollection != 'posStaffPins' &&
@@ -3765,7 +3813,8 @@ service cloud.firestore {
               'flowEnrollments', 'leads', 'siteMembers',
               'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
-              'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults']) &&
+              'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
+              'aiMemory']) &&
             // The org Inbox's collection-group read (AGL-3303) lists EVERY
             // `formSubmissions` collection, at any depth, filed under the org
             // a row names, so none may be minted beneath another name here.
@@ -3925,7 +3974,8 @@ service cloud.firestore {
               'flowEnrollments', 'leads', 'siteMembers',
               'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
-              'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
+              'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
+              'aiMemory'])));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.

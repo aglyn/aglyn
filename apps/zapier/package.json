@@ -1,0 +1,22 @@
+{
+  "name": "aglyn-zapier",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aglyn on Zapier: order, booking, contact and form triggers, and contact and order actions, on Aglyn's REST API.",
+  "license": "Apache-2.0",
+  "homepage": "https://aglyn.com",
+  "main": "index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "jest --config jest.config.js"
+  },
+  "dependencies": {
+    "zapier-platform-core": "19.2.0"
+  },
+  "devDependencies": {
+    "jest": "^30.0.0"
+  }
+}

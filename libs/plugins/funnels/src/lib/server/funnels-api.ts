@@ -51,10 +51,13 @@ import {
 import {
   FUNNEL_FEATURE,
   FUNNEL_JOURNEYS_COLLECTION,
+  FUNNEL_MANAGING_ROLES,
   FUNNEL_MAX_RANGE_DAYS,
   FUNNELS_COLLECTION,
   FUNNELS_MAX_PER_SITE,
+  isFunnelDraft,
 } from '../model/funnels.types'
+import { FUNNEL_PLAN_REFUSAL, FUNNEL_ROLE_REFUSAL, FUNNEL_ROOM_REFUSAL } from './funnel-drafts'
 import { forgetFunnelHostState } from './funnel-host-state'
 import { readFunnelInventory } from './funnel-inventory.server'
 import { funnelResult } from './funnel-results.server'
@@ -73,6 +76,13 @@ import { funnelResult } from './funnel-results.server'
  *   document) and deleting the last switches it off, and both answers say so,
  *   so the editor can drop the site's cached pages — the published page reads
  *   the switch from the host document it was rendered with.
+ * - `funnels/activate` — a site's admins and editors (AGL-3616): a DRAFT
+ *   funnel (`status: 'draft'`, what an AI build makes through this plugin's
+ *   `funnel` draft writer) becomes active, checked against the inventory as a
+ *   save is, and switches the site's recording on as a first save does. A
+ *   draft is never measured, never followed up on and never counts towards
+ *   recording: saving one keeps it a draft, the results and act doors refuse
+ *   it, and deleting the last ACTIVE funnel switches recording off.
  * - `funnels/propose` — "Create with AI": a description becomes a checked
  *   draft through the workspace's text generator (core's text-generation
  *   seam), which applies the AI plugin's own permission, plan, switch and
@@ -100,7 +110,6 @@ interface SiteCaller {
   firestore: any
 }
 
-const MANAGING_ROLES: ReadonlySet<string> = new Set(['admin', 'editor'])
 
 function bearer(req: PluginApiRequest): string | null {
   const header = req.headers['authorization']
@@ -155,15 +164,15 @@ export async function resolveSiteCaller(
     res.status(403).json({ error: 'You are not a member of this site' })
     return null
   }
-  if (options.manage && !staff && !MANAGING_ROLES.has(String(role))) {
-    res.status(403).json({ error: 'Only a site admin or editor can change its funnels' })
+  if (options.manage && !staff && !FUNNEL_MANAGING_ROLES.has(String(role))) {
+    res.status(403).json({ error: FUNNEL_ROLE_REFUSAL })
     return null
   }
   const owner = await getOrgForHost(hostId).catch(() => null)
   const org = (owner?.org as Record<string, unknown> | undefined) ?? null
   if (options.entitled && !checkEntitlement(org as never, FUNNEL_FEATURE)) {
     res.status(403).json({
-      error: "Funnels come with per-page analytics, which this workspace's plan does not include",
+      error: FUNNEL_PLAN_REFUSAL,
       reason: 'entitlement',
     })
     return null
@@ -210,15 +219,16 @@ export const funnelsSaveHandler: PluginApiHandler = async (req, res) => {
   const steps = normalized.funnel.steps.map((step) => labelStepFromInventory(step, inventory))
   const collection = funnelsRef(caller.firestore, hostId)
   const ref = collection.doc(funnelId || createResourceUid())
+  // An edit of a draft keeps it a draft: only Activate puts it live.
+  let draft = false
   if (funnelId) {
     const existing = await ref.get()
     if (!existing.exists) return res.status(404).json({ error: 'Unknown funnel' })
+    draft = isFunnelDraft(existing.data())
   } else {
     const count = await collection.count().get()
     if (Number(count.data().count ?? 0) >= FUNNELS_MAX_PER_SITE) {
-      return res
-        .status(409)
-        .json({ error: `A site keeps up to ${FUNNELS_MAX_PER_SITE} funnels. Delete one to add another.` })
+      return res.status(409).json({ error: FUNNEL_ROOM_REFUSAL })
     }
   }
   await ref.set(
@@ -230,9 +240,37 @@ export const funnelsSaveHandler: PluginApiHandler = async (req, res) => {
     },
     { merge: true },
   )
+  const recordingChanged = draft ? false : await setRecording(caller.firestore, hostId, caller.hostData, true)
+  forgetFunnelHostState(hostId)
+  res.status(200).json({ funnelId: ref.id, recordingChanged, ...(draft ? { status: 'draft' } : {}) })
+}
+
+/** The results and act doors' refusal of a draft. */
+const DRAFT_REFUSAL = 'This funnel is a draft. Activate it to start measuring it.'
+
+export const funnelsActivateHandler: PluginApiHandler = async (req, res) => {
+  const caller = await resolveSiteCaller(req, res, { manage: true, entitled: true })
+  if (!caller) return
+  const hostId = String(req.body.hostId)
+  const funnelId = String(req.body.funnelId ?? '').trim()
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(funnelId)) return res.status(400).json({ error: 'Unknown funnel' })
+  const ref = funnelsRef(caller.firestore, hostId).doc(funnelId)
+  const snapshot = await ref.get()
+  if (!snapshot.exists) return res.status(404).json({ error: 'Unknown funnel' })
+  if (isFunnelDraft(snapshot.data())) {
+    // Checked as a save is: the site may have lost a page or a form since the draft was made.
+    const normalized = normalizeFunnelDefinition(snapshot.data())
+    if ('error' in normalized) return res.status(422).json({ error: normalized.error })
+    const inventory = await readFunnelInventory(caller.firestore, hostId, caller.hostData)
+    for (const [index, step] of normalized.funnel.steps.entries()) {
+      const problem = stepInventoryProblem(step, inventory)
+      if (problem) return res.status(400).json({ error: `Step ${index + 1}: ${problem} Edit the step, then activate it.` })
+    }
+    await ref.update({ status: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() })
+  }
   const recordingChanged = await setRecording(caller.firestore, hostId, caller.hostData, true)
   forgetFunnelHostState(hostId)
-  res.status(200).json({ funnelId: ref.id, recordingChanged })
+  res.status(200).json({ funnelId, recordingChanged })
 }
 
 export const funnelsDeleteHandler: PluginApiHandler = async (req, res) => {
@@ -243,10 +281,12 @@ export const funnelsDeleteHandler: PluginApiHandler = async (req, res) => {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(funnelId)) return res.status(400).json({ error: 'Unknown funnel' })
   const collection = funnelsRef(caller.firestore, hostId)
   await collection.doc(funnelId).delete()
-  const left = await collection.limit(1).get()
-  const recordingChanged = left.empty
-    ? await setRecording(caller.firestore, hostId, caller.hostData, false)
-    : false
+  // Recording follows the ACTIVE funnels: drafts left behind measure nothing.
+  const left = await collection.limit(FUNNELS_MAX_PER_SITE).get()
+  const active = left.docs.some((one: { data(): unknown }) => !isFunnelDraft(one.data() as never))
+  const recordingChanged = active
+    ? false
+    : await setRecording(caller.firestore, hostId, caller.hostData, false)
   forgetFunnelHostState(hostId)
   res.status(200).json({ deleted: true, recordingChanged })
 }
@@ -261,6 +301,7 @@ export const funnelsResultsHandler: PluginApiHandler = async (req, res) => {
   if ('error' in range) return res.status(400).json({ error: range.error })
   const snapshot = await funnelsRef(caller.firestore, hostId).doc(funnelId).get()
   if (!snapshot.exists) return res.status(404).json({ error: 'Unknown funnel' })
+  if (isFunnelDraft(snapshot.data())) return res.status(409).json({ error: DRAFT_REFUSAL, reason: 'draft' })
   const normalized = normalizeFunnelDefinition(snapshot.data())
   if ('error' in normalized) return res.status(422).json({ error: normalized.error })
   const result = await funnelResult({
@@ -330,6 +371,7 @@ export const funnelsActHandler: PluginApiHandler = async (req, res) => {
   const ref = funnelsRef(caller.firestore, hostId).doc(funnelId)
   const snapshot = await ref.get()
   if (!snapshot.exists) return res.status(404).json({ error: 'Unknown funnel' })
+  if (isFunnelDraft(snapshot.data())) return res.status(409).json({ error: DRAFT_REFUSAL, reason: 'draft' })
   const normalized = normalizeFunnelDefinition(snapshot.data())
   if ('error' in normalized) return res.status(422).json({ error: normalized.error })
   const { funnel } = normalized
