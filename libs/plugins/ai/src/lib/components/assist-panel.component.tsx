@@ -80,6 +80,14 @@ import { applyAssistEdit, describeAssistEditCanvas } from './assist-edit-canvas'
 import { AssistEditCard } from './assist-edit-card.component'
 import { AssistBuildCard } from './assist-build-card.component'
 import { isAssistBuildProposal, type AssistBuildProposal } from '../model/assist-build'
+import {
+  assistBesignerVersionOf,
+  assistBuildDraftLinks,
+  isLiveAssistFollowUp,
+  type AssistBuildDraft,
+  type AssistBuildDraftLink,
+  type AssistPendingFollowUp,
+} from '../model/assist-follow-up'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import { startAssistBuildRequest } from './ai-job-requests'
 import { aiInsightSurfaceForPath } from '../model/ai-insight'
@@ -149,6 +157,14 @@ interface AssistProposal {
   href: string
   values: Array<{ name: string; value: string }>
   prefill: boolean
+  /** The draft an open-draft proposal names (AGL-3616), as the server held it. */
+  draft?: AssistBuildDraft
+  /**
+   * The request a confirmed open-draft proposal asks again once the draft's
+   * canvas is open; `href` is then that draft's own Besigner, from the
+   * panel's own record of its build.
+   */
+  followUp?: string
 }
 
 interface AssistMessage {
@@ -181,6 +197,45 @@ interface AssistMessage {
   buildJob?: AiJobSummary | null
   /** Why the build could not be planned or confirmed. */
   buildNotice?: string | null
+}
+
+/** The key a follow-up waiting for its canvas is kept under, per org (AGL-3616). */
+const followUpKey = (orgId: string) => `aglyn-assist-follow-up:${orgId}`
+
+function loadFollowUp(orgId: string | undefined): AssistPendingFollowUp | null {
+  if (!orgId || typeof sessionStorage === 'undefined') return null
+  try {
+    const parsed: unknown = JSON.parse(sessionStorage.getItem(followUpKey(orgId)) ?? 'null')
+    if (isLiveAssistFollowUp(parsed, Date.now())) return parsed
+    // One past its time is never asked: forget it.
+    if (parsed !== null) sessionStorage.removeItem(followUpKey(orgId))
+    return null
+  } catch {
+    return null
+  }
+}
+
+function saveFollowUp(orgId: string | undefined, followUp: AssistPendingFollowUp | null) {
+  if (!orgId || typeof sessionStorage === 'undefined') return
+  try {
+    if (followUp) sessionStorage.setItem(followUpKey(orgId), JSON.stringify(followUp))
+    else sessionStorage.removeItem(followUpKey(orgId))
+  } catch {
+    // Storage that refuses only loses the re-ask; the draft still opens.
+  }
+}
+
+/**
+ * The drafts this thread's builds made that open in the Besigner, newest
+ * build first (AGL-3616): what a follow-up such as "make the about page
+ * shorter" may open.
+ */
+export function assistThreadDraftLinks(
+  messages: ReadonlyArray<{ buildJob?: AiJobSummary | null }>,
+  orgSlug: string,
+): AssistBuildDraftLink[] {
+  const jobs = messages.flatMap((message) => (message.buildJob ? [message.buildJob] : [])).reverse()
+  return assistBuildDraftLinks(jobs, orgSlug)
 }
 
 /** What a stored build that never got its job says, rather than planning forever. */
@@ -435,6 +490,11 @@ function ProposalCard({
       <Typography variant="caption" color="text.secondary" component="div">
         Opens {proposal.outcome}.
       </Typography>
+      {proposal.followUp && (
+        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1 }}>
+          {`${brand} Assist asks “${proposal.followUp}” again there. Nothing changes until you apply the edit it proposes.`}
+        </Typography>
+      )}
       {proposal.values.length > 0 && (
         <Box sx={{ mt: 1 }}>
           <Typography variant="caption" color="text.secondary" component="div">
@@ -449,15 +509,17 @@ function ProposalCard({
           </Stack>
         </Box>
       )}
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        component="div"
-        sx={{ mt: 1 }}
-      >
-        {`${brand} Assist only opens the page. Nothing is saved until you `}
-        {'fill the form in and submit it yourself.'}
-      </Typography>
+      {!proposal.followUp && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          component="div"
+          sx={{ mt: 1 }}
+        >
+          {`${brand} Assist only opens the page. Nothing is saved until you `}
+          {'fill the form in and submit it yourself.'}
+        </Typography>
+      )}
       <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
         <AppLink
           componentVariant="button"
@@ -629,11 +691,14 @@ export function AssistPanelComponent(props: AssistDockProps) {
     if (jobId) openAiJobs({ jobId })
   }, [jobsVisible, pathname])
 
-  const send = useCallback(async () => {
-    const question = input.trim()
+  const send = useCallback(async (asked?: string) => {
+    const question = (asked ?? input).trim()
     if (!question || busy || !scopedOrgId || !ai.use) return
     setBusy(true)
-    setInput('')
+    if (asked === undefined) setInput('')
+    // The drafts this thread's builds made (AGL-3616): the chat sees refs and
+    // labels; the addresses stay here, for the card a follow-up raises.
+    const draftLinks = hostId ? assistThreadDraftLinks(messages, orgSlug) : []
     const history = messages
       .slice(-HISTORY_TURNS_SENT)
       .map(({ role, text }) => ({ role, text }))
@@ -691,6 +756,9 @@ export function AssistPanelComponent(props: AssistDockProps) {
           // A pick, when the reader made one; the server decides again.
           ...(modelChoice.model ? { model: modelChoice.model } : {}),
           ...(canvasOutline ? { canvas: canvasOutline } : {}),
+          ...(draftLinks.length
+            ? { drafts: draftLinks.map(({ ref, label, noun }) => ({ ref, label, noun })) }
+            : {}),
         }),
       })
       if (!response.ok || !response.body) {
@@ -760,7 +828,19 @@ export function AssistPanelComponent(props: AssistDockProps) {
             // to the view the question was asked from, plus a destination
             // this client did not choose. Null on every turn that proposed
             // nothing, which is most of them.
-            const proposal = (event.proposal as AssistProposal | null) ?? null
+            const resolved = (event.proposal as AssistProposal | null) ?? null
+            // An open-draft proposal goes to that draft's own Besigner, from
+            // this panel's record of its build, and asks the request again
+            // there; one naming a draft this panel does not hold is dropped.
+            const draftLink = resolved?.draft
+              ? draftLinks.find((link) => link.ref === resolved.draft?.ref)
+              : null
+            const proposal: AssistProposal | null =
+              resolved?.draft
+                ? draftLink
+                  ? { ...resolved, href: draftLink.href, followUp: question }
+                  : null
+                : resolved
             // The edit proposal (AGL-2906), shape-checked before it can reach
             // a card whose Apply drives the canvas.
             const edit = isAssistEditProposal(event.edit) ? event.edit : null
@@ -822,6 +902,40 @@ export function AssistPanelComponent(props: AssistDockProps) {
     pathname,
     user,
   ])
+
+  // A follow-up waiting for its draft's canvas (AGL-3616): kept per org, so a
+  // panel the Besigner's layout mounts afresh still asks it.
+  const [followUp, setFollowUp] = useState<AssistPendingFollowUp | null>(null)
+  useEffect(() => {
+    setFollowUp(loadFollowUp(scopedOrgId))
+  }, [scopedOrgId])
+  const followUpVersion = editorSession?.versionId ?? null
+  useEffect(() => {
+    if (!followUp) return
+    if (!isLiveAssistFollowUp(followUp, Date.now())) {
+      setFollowUp(null)
+      saveFollowUp(scopedOrgId, null)
+      return
+    }
+    // Asked once the draft's own canvas is open, so the edit rung reads it.
+    if (busy || !ai.use || pathname !== followUp.path) return
+    if (!followUpVersion || followUpVersion !== assistBesignerVersionOf(followUp.path)) return
+    setFollowUp(null)
+    saveFollowUp(scopedOrgId, null)
+    setOpen(true)
+    void send(followUp.question)
+  }, [ai.use, busy, followUp, followUpVersion, pathname, scopedOrgId, send])
+
+  /** Keep a confirmed open-draft proposal's request for the draft's canvas. */
+  const holdFollowUp = useCallback(
+    (proposal: AssistProposal) => {
+      if (!proposal.followUp) return
+      const pending = { path: proposal.href, question: proposal.followUp, at: Date.now() }
+      setFollowUp(pending)
+      saveFollowUp(scopedOrgId, pending)
+    },
+    [scopedOrgId],
+  )
 
   /**
    * Retire a card once it has been acted on or waved away. Local state only
@@ -1143,7 +1257,10 @@ export function AssistPanelComponent(props: AssistDockProps) {
                             action: message.proposal?.id ?? '',
                           })
                           resolveProposal(index)
-                          setOpen(false)
+                          // A follow-up keeps the panel open: its answer
+                          // arrives here once the draft's canvas is.
+                          if (message.proposal?.followUp) holdFollowUp(message.proposal)
+                          else setOpen(false)
                         }}
                         onDismiss={() => resolveProposal(index)}
                       />
