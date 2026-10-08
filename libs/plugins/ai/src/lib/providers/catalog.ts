@@ -98,6 +98,16 @@ export function aiRatesAtList(
   }
 }
 
+/** {@link aiRatesAtList} for a model whose cache read is not a tenth of its input price. */
+export function aiRatesAtListWithCacheRead(
+  inputPerMTok: number,
+  outputPerMTok: number,
+  cacheReadPerMTok: number,
+): AiCatalogRates {
+  const rates = { ...aiRatesPerMTok(inputPerMTok, outputPerMTok), cacheReadPerToken: cacheReadPerMTok / 1_000_000 }
+  return { providerRates: rates, billedRates: { ...rates } }
+}
+
 export interface AiCatalogEntry extends AiModelDescriptor, AiCatalogRates {
   /**
    * The tier a routing decision reads: `fast` for short, constrained
@@ -272,6 +282,22 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     cacheMinTokens: 1_024,
   },
   {
+    // Listed for a side-by-side comparison against claude-sonnet-5 (AGL-3660);
+    // no step routes here, and the balanced tier's default stays the row
+    // above. Rejects `thinking: {type: "disabled"}` and forced tool choice:
+    // the adapter sends thinking off as `between_tools` and every tool call
+    // with `tool_choice: auto`.
+    id: 'claude-sonnet-5-5',
+    provider: ANTHROPIC,
+    label: 'Claude Sonnet 5.5',
+    capabilities: anthropicCapabilities,
+    // The same markup as claude-sonnet-5, its sibling at the same list price.
+    providerRates: aiRatesPerMTok(2, 10),
+    billedRates: aiRatesPerMTok(3, 15),
+    tier: 'balanced',
+    cacheMinTokens: 512,
+  },
+  {
     id: 'claude-sonnet-4-6',
     provider: ANTHROPIC,
     label: 'Claude Sonnet 4.6',
@@ -299,6 +325,22 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     label: 'Claude Opus 5',
     capabilities: anthropicCapabilities,
     ...aiRatesAtList(5, 25),
+    tier: 'deep',
+    cacheMinTokens: 512,
+  },
+  {
+    // Listed for a side-by-side comparison (AGL-3660); the deep tier's
+    // default stays claude-opus-5 above. Thinking cannot be disabled and its
+    // effort defaults to medium, so the adapter omits thinking where a step
+    // asks for it off and names effort high where a step names none — Opus
+    // 5's own default. Forced tool choice is refused; the adapter sends auto.
+    id: 'claude-opus-5-5',
+    provider: ANTHROPIC,
+    label: 'Claude Opus 5.5',
+    capabilities: anthropicCapabilities,
+    // At list, like its deep-tier siblings. A cache read is $0.20/MTok, a
+    // twentieth of input rather than the usual tenth.
+    ...aiRatesAtListWithCacheRead(4, 20, 0.2),
     tier: 'deep',
     cacheMinTokens: 512,
   },

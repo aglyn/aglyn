@@ -111,12 +111,14 @@ describe('the catalog carries two rates, and they have not collapsed', () => {
     const marked = AI_MODEL_CATALOG.filter(
       (entry) => entry.billedRates.inputPerToken > entry.providerRates.inputPerToken,
     )
-    expect(marked.map((entry) => entry.id)).toEqual(['claude-sonnet-5'])
-    const [sonnet] = marked
-    // Pinned as list prices, so a change to either half has to be written
-    // here in the units the vendor publishes and the plan bands were sized in.
-    expect(perMTok(sonnet.providerRates)).toEqual({ input: 2, output: 10 })
-    expect(perMTok(sonnet.billedRates)).toEqual({ input: 3, output: 15 })
+    // Claude Sonnet 5.5 carries its sibling's markup at the same list price (AGL-3660).
+    expect(marked.map((entry) => entry.id)).toEqual(['claude-sonnet-5', 'claude-sonnet-5-5'])
+    for (const sonnet of marked) {
+      // Pinned as list prices, so a change to either half has to be written
+      // here in the units the vendor publishes and the plan bands were sized in.
+      expect(perMTok(sonnet.providerRates)).toEqual({ input: 2, output: 10 })
+      expect(perMTok(sonnet.billedRates)).toEqual({ input: 3, output: 15 })
+    }
   })
 
   it('never bills BELOW what a model costs, on any column', () => {
@@ -274,7 +276,7 @@ describe('every reader takes the figure it means', () => {
     {
       path: 'libs/plugins/ai/src/lib/providers/anthropic.ts',
       means: 'what the customer draws',
-      fragment: 'estimateAiBilledUsd(usage, input.model)',
+      fragment: 'estimateAiBilledUsd(usage, model)',
       why: "A result's `estCostUsd` travels the credit path and nothing else.",
     },
     {
