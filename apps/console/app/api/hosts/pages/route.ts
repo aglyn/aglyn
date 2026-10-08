@@ -32,7 +32,7 @@ import {
   wouldCreateScreenCycle,
   type ScreenRouteNode,
 } from '@aglyn/aglyn/app-utils/screen-route'
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { createResourceUid, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -261,14 +261,14 @@ async function handler(request: Request): Promise<Response> {
       batch.set(hostRef.collection('screens').doc(plan.placeholderUnpublished), { publishedAt: FieldValue.delete() }, { merge: true })
     }
     if (Object.keys(hostUpdates).length) batch.update(hostRef, hostUpdates)
-    const outboxRef = plan.paths.length ? firestore.collection(PUBLISH_OUTBOX_COLLECTION).doc() : null
+    const outboxRef = plan.paths.length ? firestore.collection(PUBLISH_OUTBOX_COLLECTION).doc(createResourceUid()) : null
     if (outboxRef) {
       batch.set(outboxRef, { hostId, paths: plan.paths, createdAt: FieldValue.serverTimestamp(), attempts: 0 })
     }
     if (activity) {
       const target = { type: isScreenGroup(screen) ? 'group' : 'screen', id: screenId, ...(screen.displayName ? { name: screen.displayName } : {}) }
       const actorEmail = (decoded.email as string | undefined) ?? null
-      batch.set(hostRef.collection('activity').doc(), {
+      batch.set(hostRef.collection('activity').doc(createResourceUid()), {
         actorId: decoded.uid,
         actorEmail,
         action: activity,

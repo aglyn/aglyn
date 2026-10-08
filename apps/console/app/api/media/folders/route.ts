@@ -55,6 +55,7 @@ import {
   newMediaFolderDoc,
 } from '@aglyn/aglyn/app-utils/media-folders'
 import {
+  createResourceUid,
   defaultMediaScopeOf,
   defaultScopeForNewResource,
 } from '@aglyn/aglyn/server'
@@ -690,7 +691,7 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ error: `Folders can nest at most ${MEDIA_FOLDER_MAX_DEPTH} levels` }, { status: 400 })
       }
       const forHostId = typeof body?.forHostId === 'string' && body.forHostId ? body.forHostId : null
-      const ref = foldersRef.doc()
+      const ref = foldersRef.doc(createResourceUid())
       await ref.set(
         newMediaFolderDoc({
           name,
