@@ -94,6 +94,9 @@ concurrency:
 
 permissions:
   contents: read
+  # Reads the previous run's results artifact, so a recovery can be told
+  # (AGL-3690).
+  actions: read
 
 jobs:
   probe:
@@ -143,6 +146,29 @@ jobs:
       # NO DEDUPE, unlike Main Gate's reporter, and that is the correct call
       # for a probe that grades a MOMENT rather than a sha — two consecutive
       # failing runs are two samples of an outage that is still happening.
+      #
+      # RECOVERY (AGL-3690): the red was the only thing ever said, so on
+      # 2026-10-08 the channel's last word stayed "creating or publishing may
+      # be refused for every customer" after the journey had recovered. Each
+      # run now keeps its results as an artifact, and the reporter compares
+      # against the previous run's results. A target that was down then and is
+      # up now gets a "RECOVERED" message, once. Best-effort like the rest: no
+      # previous artifact means no recovery claim and nothing else changes.
+      - name: Previous run's results
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          previous=$(gh run list --repo "${{ github.repository }}" \
+            --workflow uptime-probe.yml --status completed --limit 10 \
+            --json databaseId --jq '[.[] | select(.databaseId != ${{ github.run_id }})][0].databaseId' || true)
+          if [ -n "$previous" ] && [ "$previous" != "null" ]; then
+            gh run download "$previous" --repo "${{ github.repository }}" \
+              --name uptime-results --dir "${{ runner.temp }}/previous" \
+              || echo "no results artifact on run $previous"
+          fi
+
       - name: red -> Slack
         if: always()
         env:
@@ -151,7 +177,17 @@ jobs:
           set -uo pipefail
           node tools/scripts/report-uptime-red.mjs \
             --results="${{ runner.temp }}/uptime-results.json" \
+            --previous="${{ runner.temp }}/previous/uptime-results.json" \
             --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Keep this run's results for the next one
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: uptime-results
+          path: ${{ runner.temp }}/uptime-results.json
+          retention-days: 2
+          if-no-files-found: ignore
 
       # Proving the notifier without waiting for an outage (AGL-2586). A path
       # whose only test is a real incident is unverifiable until the day it

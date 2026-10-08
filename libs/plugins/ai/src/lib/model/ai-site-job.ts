@@ -58,7 +58,7 @@ export const AI_SITE_PAGES = { min: 4, max: 8 } as const
  * and the one page the brief most needs. A product decision, not a figure the
  * wall derives — the wall's proof (`jobs/ai-job-free-site.spec.ts`) shows a
  * plan and a build of this many pages fit the Free taste with room for one
- * retried section.
+ * retried page.
  */
 export const AI_SITE_FREE_PAGES = { min: 1, max: 2 } as const
 
@@ -95,64 +95,115 @@ export interface AiFreeSiteWorstCase {
   plan: number
   /** The site's look (AGL-3660): its one answer at its ceiling, on the fast tier. */
   look: number
-  /** The one layout a Free plan includes, built first on a site with none. */
+  /**
+   * The layout a site with none has built first (AGL-3660): its header and
+   * footer as ONE answer in the layout language, writing its cached prefix,
+   * at the most a live frame answer wrote, and never under what the live
+   * guided start's layout step metered.
+   */
   layout: number
-  /** A page's first section pass, which writes the cached prefix. */
-  firstSection: number
-  /** Each later section pass. */
-  laterSection: number
+  /** The saved form a guided start makes (AGL-3596), at what the live guided start's form step metered. */
+  form: number
+  /**
+   * A language page's answer before its sections (AGL-3660): its cached
+   * prefix written, its turn, and the whole room its ceiling keeps for
+   * thinking. A page is ONE answer, not a pass a section.
+   */
+  page: number
+  /** Each planned section's words in that answer, at the most a section is written in. */
+  section: number
+  /**
+   * Room for one page asked again: the answer once more, reading its cached
+   * prefix, with its thinking room and a full page of sections.
+   */
+  retry: number
   /** A page's listing. */
   listing: number
 }
 
 /**
- * The Free site start's wall at its worst (AGL-3594): the site plan as
- * `jobs/ai-job-free-site.spec.ts` derives it from the plan request as it
- * stands, on the model a Free site plans with, every answer at its ceiling;
- * the build's exchanges are the Free page's (`AI_FREE_PAGE_WORST_CASE_CREDITS`),
- * which the same spec holds these to. The spec fails when a figure it derives
+ * The Free site start's wall at its worst (AGL-3594, re-derived for the
+ * layout language in AGL-3660): the plan and the look as
+ * `jobs/ai-job-free-site.spec.ts` derives them from their requests at their
+ * ceilings; the layout, form and pages from the language requests as they
+ * stand, priced as each field says. The spec fails when a figure it derives
  * moves and this does not.
  */
 export const AI_FREE_SITE_WORST_CASE_CREDITS: Readonly<AiFreeSiteWorstCase> = {
   plan: 35,
   look: 7,
-  layout: 64,
-  firstSection: 44,
-  laterSection: 20,
+  layout: 23,
+  form: 29,
+  page: 43,
+  section: 4,
+  retry: 64,
   listing: 3,
 }
 
 /**
+ * The most sections a Free site plans across its pages (AGL-3660), whatever
+ * the wall leaves: a full home of five and a page of two or three. A product
+ * figure, so the spend a site EXPECTS stays near what it measured; the wall
+ * proves it fits.
+ */
+export const AI_FREE_SITE_MAX_SECTIONS = 8
+
+/** What a Free site start builds before its sections: the layouts it builds first, its forms and its pages. */
+export interface AiFreeSiteCreations {
+  layouts: number
+  pages: number
+  /** The saved forms it makes; a guided start makes one where it places a form. */
+  forms: number
+}
+
+/** A Free site start's credits at its worst for this many sections, its room for one retried page included. */
+export function aiFreeSiteWorstCaseCredits(
+  creations: AiFreeSiteCreations,
+  sections: number,
+  credits: Readonly<AiFreeSiteWorstCase> = AI_FREE_SITE_WORST_CASE_CREDITS,
+): number {
+  const pages = Math.max(1, Math.floor(creations.pages))
+  return (
+    credits.plan +
+    credits.look +
+    creations.layouts * credits.layout +
+    creations.forms * credits.form +
+    pages * (credits.page + credits.listing) +
+    sections * credits.section +
+    credits.retry
+  )
+}
+
+/**
  * The most sections a Free site's plan fits in the Free taste at its worst,
- * across all its pages: the plan, the look, the layouts it builds first, each page's
- * listing and first pass, and ROOM FOR ONE RETRIED SECTION, then as many later
- * passes as the rest pays for; none when that is already past the wall. Every
- * page's first pass is counted as a cache write, which errs dear.
+ * across all its pages (AGL-3660): the plan, the look, the layout and form it
+ * builds first, each page's answer and listing, ROOM FOR ONE RETRIED PAGE,
+ * and as many sections as the rest pays for — at most
+ * `AI_FREE_SITE_MAX_SECTIONS`, and at most what the pages hold. None when the
+ * rest is already past the wall.
  */
 export function aiFreeSiteSectionsWithin(
-  creations: { layouts: number; pages: number },
+  creations: AiFreeSiteCreations,
   taste: number,
   credits: Readonly<AiFreeSiteWorstCase> = AI_FREE_SITE_WORST_CASE_CREDITS,
 ): number {
   const pages = Math.max(1, Math.floor(creations.pages))
-  const before =
-    credits.plan +
-    credits.look +
-    creations.layouts * credits.layout +
-    pages * (credits.listing + credits.firstSection) +
-    credits.firstSection
+  const before = aiFreeSiteWorstCaseCredits(creations, 0, credits)
   if (before > taste) return 0
-  return pages + Math.floor((taste - before) / credits.laterSection)
+  const paid = credits.section > 0 ? Math.floor((taste - before) / credits.section) : Number.POSITIVE_INFINITY
+  return Math.min(AI_FREE_SITE_MAX_SECTIONS, pages * AI_SITE_MAX_SECTIONS, paid)
 }
 
 /** Sections a Free site's page is assumed to hold before its plan names them. */
-export const AI_FREE_SITE_NOMINAL_SECTIONS = 3
+export const AI_FREE_SITE_NOMINAL_SECTIONS = 4
 
 /**
  * About what a Free site start of this many pages costs at its worst, in
- * credits, for the dialog that asks for one: the site plan, its look, each page's
- * listing and its sections at the nominal count, from the figures the wall is
- * proven with rather than the nominal credits a paid estimate counts.
+ * credits, for the dialog that asks for one: the plan, its look, the layout
+ * and form a new site builds, each page's answer and listing, and its
+ * sections at the nominal count, from the figures the wall is proven with
+ * rather than the nominal credits a paid estimate counts. No retry room: the
+ * dialog says what a start costs, not what the wall holds back.
  */
 export function aiFreeSiteCreditEstimate(
   pages: number,
@@ -160,10 +211,8 @@ export function aiFreeSiteCreditEstimate(
 ): number {
   const count = Math.max(1, Math.floor(pages))
   return (
-    credits.plan +
-    credits.look +
-    count * (credits.listing + credits.firstSection) +
-    count * (AI_FREE_SITE_NOMINAL_SECTIONS - 1) * credits.laterSection
+    aiFreeSiteWorstCaseCredits({ layouts: 1, forms: 1, pages: count }, count * AI_FREE_SITE_NOMINAL_SECTIONS, credits) -
+    credits.retry
   )
 }
 
@@ -231,6 +280,226 @@ export function aiFreeSiteShortfallText(
  * section is a pass of its own.
  */
 export const AI_SITE_MAX_SECTIONS = 8
+
+/**
+ * The fewest sections a site start's home page is planned with (AGL-3660).
+ * A new site is a full website (Zach, 2026-10-04): its home reads as one — a
+ * hero, then bands such as the offer, why us, social proof, and a closing
+ * call to action. A plan is an outline and nothing asked for more than a
+ * ceiling, so a live Free yoga start (2026-10-07) planned its home with two
+ * sections. The plan step names this count in the plan's turn and re-asks a
+ * first answer whose home is under it (`aiSiteThinHomeViolations`).
+ */
+export const AI_SITE_HOME_MIN_SECTIONS = 5
+
+/**
+ * The blog a paid guided start writes its first posts into (AGL-3676), and
+ * the addresses it may answer at, in order of preference: the first one no
+ * planned page takes.
+ */
+export const AI_SITE_BLOG_NAME = 'Blog'
+export const AI_SITE_BLOG_SLUGS = ['blog', 'posts', 'journal', 'articles', 'writing', 'stories'] as const
+
+/** A planned page's first path segment, lower-cased: `/journal/2026` → `journal`. */
+const firstSegment = (slug: string) => slug.trim().replace(/^\/+/, '').split('/')[0].toLowerCase()
+
+/** The address the blog answers at, beside these planned pages: the first of `AI_SITE_BLOG_SLUGS` none of them takes. */
+export function aiSiteBlogSlug(screens: ReadonlyArray<{ slug: string }>): string {
+  const taken = new Set(screens.map((screen) => firstSegment(screen.slug)).filter(Boolean))
+  return AI_SITE_BLOG_SLUGS.find((slug) => !taken.has(slug)) ?? AI_SITE_BLOG_SLUGS[0]
+}
+
+/** The header's link to the blog (AGL-3660): a path, not a page, since the blog is the posts collection. */
+export const AI_SITE_BLOG_NAV_ID = 'aiSiteBlog'
+
+/** The nav entry a site whose start writes posts links its blog by. */
+export function aiSiteBlogNavPage(screens: ReadonlyArray<{ slug: string }>): {
+  id: string
+  label: string
+  slug: string
+  href: string
+} {
+  const slug = aiSiteBlogSlug(screens)
+  return { id: AI_SITE_BLOG_NAV_ID, label: AI_SITE_BLOG_NAME, slug: `/${slug}`, href: `/${slug}` }
+}
+
+/** The code a planned page that stands in for the written blog is re-asked under. */
+export const AI_SITE_BLOG_PAGE_CODE = 'plan-blog-page-duplicate'
+
+/** A page's name that says it lists the posts. */
+const BLOG_PAGE_WORDS = /\b(blog|posts?|articles?|journal|writing|stories|news)\b/i
+
+/**
+ * A site plan's pages that stand in for the blog its start writes (AGL-3660):
+ * the live Slow Roads start (2026-10-08) planned an "Articles" page of
+ * featured cards beside the posts it wrote at /blog, and the header linked
+ * Articles and never the blog. A page whose address is one of the blog's, or
+ * whose name says it lists posts, duplicates it; the home page never does.
+ */
+export function aiSiteBlogStandInViolations(
+  plan: Pick<AiBuildPlan, 'screens'>,
+): Array<{ rule: null; code: string; message: string; paths: string[] }> {
+  const blogSlugs = new Set<string>(AI_SITE_BLOG_SLUGS)
+  const standIns = plan.screens.flatMap((screen, index) => {
+    if (aiSitePlanIsHome(screen)) return []
+    const segment = firstSegment(screen.slug)
+    return blogSlugs.has(segment) || BLOG_PAGE_WORDS.test(screen.title) ? [{ screen, index }] : []
+  })
+  if (!standIns.length) return []
+  const names = standIns.map(({ screen }) => `"${screen.title}" at ${screen.slug}`).join(', ')
+  return [
+    {
+      rule: null,
+      code: AI_SITE_BLOG_PAGE_CODE,
+      message: `${names} ${standIns.length === 1 ? 'stands' : 'stand'} in for the blog this site already gets: its first posts are written at /blog, and the header links it. Take ${standIns.length === 1 ? 'that page' : 'those pages'} out, and plan another page the brief needs, or feature the posts in a section of the home page.`,
+      paths: standIns.map(({ index }) => `screens[${index}]`),
+    },
+  ]
+}
+
+/** The code a site plan's work section planned without its pieces is re-asked under. */
+export const AI_SITE_EMPTY_GALLERY_CODE = 'plan-empty-gallery'
+
+/** The pieces a section that shows the work is planned with (AGL-3660). */
+export const AI_SITE_GALLERY_MIN_ITEMS = 3
+export const AI_SITE_GALLERY_MAX_ITEMS = 6
+
+/**
+ * A planned section that shows the work: a gallery, a portfolio, a
+ * collection, selected or featured work. "Galleries" — an audience, as in
+ * "Why galleries choose us" — and "how we work" are not.
+ */
+const GALLERY_SECTION =
+  /\b(gallery|portfolio|collections?|lookbook|showcase|works|projects|(?:selected|featured|recent|our|past) (?:work|pieces|projects))\b/i
+
+/** A section that only opens, introduces or closes a page, whatever page it is on: "Portfolio Hero". */
+const FRAMING_SECTION = /\b(hero|intro(?:duction)?|banner|header|cta|call to action|contact|inquiry|enquiry|about)\b/i
+
+/** Whether a planned section's name says it shows the work. */
+export function aiSiteSectionShowsWork(name: string): boolean {
+  return GALLERY_SECTION.test(name) && !FRAMING_SECTION.test(name)
+}
+
+/** The sentence a site plan's turn states about a section that shows the work. */
+export const AI_SITE_GALLERY_SENTENCE = `A section that shows the work — a gallery, portfolio, collection or selected works — counts its pieces in its items: ${AI_SITE_GALLERY_MIN_ITEMS} to ${AI_SITE_GALLERY_MAX_ITEMS}.`
+
+/**
+ * A site plan's sections that show the work with fewer than three pieces
+ * (AGL-3660). The live Juniper Clay start (2026-10-08) planned its Portfolio
+ * page's "Works Gallery" with no items, and the page's works lost their place
+ * to an inquiry form: a page about the work showed none.
+ */
+export function aiSiteEmptyGalleryViolations(
+  plan: Pick<AiBuildPlan, 'screens'>,
+): Array<{ rule: null; code: string; message: string; paths: string[] }> {
+  const thin = plan.screens.flatMap((screen, screenIndex) =>
+    screen.sections.flatMap((section, sectionIndex) =>
+      aiSiteSectionShowsWork(section.name) && section.items < AI_SITE_GALLERY_MIN_ITEMS
+        ? [{ name: `"${section.name}" on ${screen.title}`, path: `screens[${screenIndex}].sections[${sectionIndex}].items` }]
+        : [],
+    ),
+  )
+  if (!thin.length) return []
+  const names = thin.map((entry) => entry.name).join(', ')
+  return [
+    {
+      rule: null,
+      code: AI_SITE_EMPTY_GALLERY_CODE,
+      message: `${names} ${thin.length === 1 ? 'shows' : 'show'} the work with fewer than ${AI_SITE_GALLERY_MIN_ITEMS} pieces. Plan ${thin.length === 1 ? 'it' : 'each'} with ${AI_SITE_GALLERY_MIN_ITEMS} to ${AI_SITE_GALLERY_MAX_ITEMS} items, one for each piece it shows.`,
+      paths: thin.map((entry) => entry.path),
+    },
+  ]
+}
+
+/** The violation a site plan whose home page is under its fewest sections is re-asked under. */
+export const AI_SITE_THIN_HOME_CODE = 'plan-thin-home'
+
+/** What a site plan's home is composed of, in the words the plan's turn and its re-ask both use. */
+export const AI_SITE_HOME_BANDS =
+  'a hero first, then bands such as services or the offer, about or why us, and testimonials or other social proof, and a closing call to action or contact band last'
+
+/**
+ * The fewest sections this site start's home is held to (AGL-3660): five, or
+ * 0 — no minimum — where the Free wall cannot pay for a full home beside the
+ * other pages. `across` is the sections the Free taste fits across `pages`
+ * pages, each other page keeping at least one; `null` is a paid start, which
+ * no wall shares out.
+ *
+ * ⛔ NEVER a lowered minimum. A Free guided start creates its site empty and
+ * plans its layout, and the wall then fits 4 sections across two pages. Told
+ * "a home of at least 3" beside that, the live yoga start of 2026-10-08
+ * planned 4 + 3 and then 4 + 2, was refused for the wall twice, and stopped:
+ * a home asked for in bands the wall cannot pay for is a start that fails.
+ */
+export function aiSiteHomeMinSections(input: { pages: number; across: number | null }): number {
+  if (input.across === null) return AI_SITE_HOME_MIN_SECTIONS
+  const others = Math.max(0, Math.floor(input.pages) - 1)
+  return input.across - others >= AI_SITE_HOME_MIN_SECTIONS ? AI_SITE_HOME_MIN_SECTIONS : 0
+}
+
+/**
+ * What a site start's plan is told to BUILD with (AGL-3660): the sections are
+ * a budget to use, never a ceiling to stay under. Told only "at most 8", the
+ * live prod start of 2026-10-08 planned a home of two sections, and Zach: "that
+ * didn't mean do as little as possible." On the Free taste the sentence shares
+ * the wall's sections out — a home of five or six, the other page two or
+ * three, about seven or eight in all; a paid start's home is asked to be rich.
+ * `min` is the home's fewest (`aiSiteHomeMinSections`), 0 where the plan
+ * plans no home or the wall cannot pay for a full one.
+ */
+export function aiSiteFullPlanSentence(input: { pages: number; across: number | null; min: number }): string {
+  const { across, min } = input
+  if (across === null) {
+    return min > 0
+      ? `Plan a full website, never a minimal one: a rich home page of ${min + 1} or more sections where the brief gives them, and every page with the sections it needs.`
+      : 'Plan a full website, never a minimal one: every page with the sections it needs.'
+  }
+  const lead = `The ${across} sections are the budget to use, not a ceiling to stay under: plan a full website, never a minimal one`
+  const others = Math.max(0, Math.floor(input.pages) - 1)
+  if (min <= 0 || across < min) return `${lead}.`
+  const homeHi = Math.max(min, Math.min(min + 1, across - others))
+  if (!others) return `${lead}: the home page at / with ${min} to ${homeHi} sections.`
+  const otherHi = Math.max(1, Math.min(3, Math.floor((across - min) / others)))
+  const otherLo = Math.max(1, Math.min(2, otherHi, Math.floor((across - homeHi) / others)))
+  const totalLo = Math.max(min + others, across - 1)
+  const range = (lo: number, hi: number) => (lo === hi ? `${lo}` : `${lo} to ${hi}`)
+  const pagesWord = others === 1 ? 'the other page' : 'each other page'
+  return `${lead}: the home page at / with ${range(min, homeHi)} sections, ${pagesWord} ${range(otherLo, otherHi)}, about ${range(totalLo, across)} in total.`
+}
+
+/** Whether a planned page is the site's home: the one at `/`. */
+export function aiSitePlanIsHome(screen: { slug: string }): boolean {
+  const slug = screen.slug.trim()
+  return slug === '/' || slug === ''
+}
+
+/**
+ * A site plan's home page under its fewest sections (AGL-3660), as the plan
+ * step's re-ask names it. A plan with no page at `/` — the owner's own home
+ * stays — has no home to hold. `across` is the Free wall's section count, so
+ * the re-ask says where the sections come from rather than tripping the wall.
+ */
+export function aiSiteThinHomeViolations(
+  plan: Pick<AiBuildPlan, 'screens'>,
+  options: { min: number; across: number | null },
+): Array<{ rule: null; code: string; message: string; paths: string[] }> {
+  const index = plan.screens.findIndex(aiSitePlanIsHome)
+  if (index < 0) return []
+  const count = plan.screens[index].sections.length
+  if (count >= options.min) return []
+  const within =
+    options.across === null
+      ? ''
+      : ` Keep the whole plan within ${options.across} sections: take them from the other page where you must.`
+  return [
+    {
+      rule: null,
+      code: AI_SITE_THIN_HOME_CODE,
+      message: `The home page has ${count} ${count === 1 ? 'section' : 'sections'}, and a new site's home page reads as a full website with at least ${options.min}: ${AI_SITE_HOME_BANDS}.${within}`,
+      paths: [`screens[${index}].sections`],
+    },
+  ]
+}
 
 /**
  * Sections a page is assumed to hold before a plan names them, for the

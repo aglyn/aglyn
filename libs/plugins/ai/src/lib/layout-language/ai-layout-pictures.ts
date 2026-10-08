@@ -72,12 +72,42 @@ export interface AiLayoutPicturePhoto {
 const PEOPLE =
   /\b(about|team|story|owner|owners|founder|founders|staff|crew|people|person|portrait|meet|family|families|who we are|our (?:team|crew|people|story)|therapist|counsel(?:l)?or|coach|doctor|dentist|stylist|trainer|smil(?:e|es|ing)|headshot)\b/i
 
-/** A frame's `aspectRatio` (`'16 / 9'`) as a number. */
-function aspectOf(value: unknown): number {
+/**
+ * An `aspectRatio` (`'16 / 9'`) as a number, or `null` where none is named.
+ * A responsive one (`{ xs: '4 / 3', md: '4 / 5' }`, as a designed page's
+ * pictures carry, AGL-3660) reads at the desktop breakpoint first: one photo
+ * serves every width, and the wide screen is where its shape shows most.
+ */
+function aspectOf(value: unknown): number | null {
+  if (value && typeof value === 'object') {
+    const byBreakpoint = value as Record<string, unknown>
+    for (const breakpoint of ['md', 'lg', 'xl', 'sm', 'xs']) {
+      const ratio = aspectOf(byBreakpoint[breakpoint])
+      if (ratio !== null) return ratio
+    }
+    return null
+  }
   const match = /^\s*(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*$/.exec(String(value ?? ''))
-  if (!match) return 1
+  if (!match) return null
   const ratio = Number(match[1]) / Number(match[2])
-  return Number.isFinite(ratio) && ratio > 0 ? ratio : 1
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : null
+}
+
+/** The shape a full-bleed cover's photo is searched for: it fills a wide band. */
+const COVER_ASPECT = 16 / 9
+
+/**
+ * A slot's shape (AGL-3660): the image's own `aspectRatio` (a designed
+ * picture card sets it on the image), else its frame's, else — for a frame
+ * laid absolutely over its whole section, a designed photo cover — a wide
+ * band's. 1 where nothing says.
+ */
+function slotAspect(image: { sx?: Record<string, unknown> } | undefined, frame: { sx?: Record<string, unknown> } | undefined): number {
+  const own = aspectOf(image?.sx?.['aspectRatio']) ?? aspectOf(frame?.sx?.['aspectRatio'])
+  if (own !== null) return own
+  const sx = frame?.sx
+  if (sx?.['position'] === 'absolute' && sx['width'] === '100%' && sx['height'] === '100%') return COVER_ASPECT
+  return 1
 }
 
 /** A slot's role: the first section's picture is the hero; people make an about picture. */
@@ -126,7 +156,7 @@ export function aiLayoutPictureSlots(
           frameId: frame ? parentId : null,
           iconId,
           alt,
-          aspect: aspectOf(frame?.sx?.['aspectRatio']),
+          aspect: slotAspect(node, frame),
           sectionIndex: here,
           role: aiLayoutPictureRole({
             sectionIndex: here,
@@ -177,30 +207,51 @@ function rotate<T>(list: readonly T[], by: number): T[] {
 }
 
 /**
- * A starter photo for each slot. The hero's and the gallery's pools are
- * rotated by the seed, so sites do not all open with the same photo, while an
- * about picture always leads with the owner; no photo repeats on a page
- * while one is still unused; and a page with more slots than photos starts
- * the round again from its role's pool.
+ * A starter photo for each slot (AGL-3660). No photo repeats on a page while
+ * an unused one remains, and every pool turns by the seed, so sites do not
+ * all open with the same photo while one job always picks the same.
+ *
+ * The slots are served by what they are for, not where they sit: the hero
+ * first, then the pictures of people (an about picture leads with the owner),
+ * then the rest. The live Juniper Clay start (2026-10-08) had six slots and
+ * five starters, and the owner's photo went to a stoneware card before the
+ * About section that described the artist asked for it. Only a page with more
+ * slots than starters repeats one: the photo placed longest ago, never the
+ * one in a slot beside it.
  */
 export function aiLayoutStarterPhotos(
   slots: readonly AiLayoutPictureSlot[],
   seed: string,
 ): AiLayoutPicturePhoto[] {
   const turn = aiLayoutSeedNumber(seed)
-  const used = new Set<StarterName>()
-  return slots.map((slot) => {
+  const order: AiLayoutPictureRole[] = ['hero', 'about', 'gallery']
+  const served = slots
+    .map((slot, index) => ({ slot, index }))
+    .sort((a, b) => order.indexOf(a.slot.role) - order.indexOf(b.slot.role) || a.index - b.index)
+  const names: Array<StarterName | undefined> = slots.map(() => undefined)
+  /** When each starter was last placed, by its turn in the serving order. */
+  const placedAt = new Map<StarterName, number>()
+  served.forEach(({ slot, index }, step) => {
     // An about picture leads with the owner on every site; the others turn.
-    const pool =
-      slot.role === 'about' ? [...STARTER_POOLS.about] : rotate(STARTER_POOLS[slot.role], turn)
+    const pool = slot.role === 'about' ? [...STARTER_POOLS.about] : rotate(STARTER_POOLS[slot.role], turn)
     const rest = rotate(
       ALL_STARTERS.filter((name) => !pool.includes(name)),
       turn,
     )
-    if (used.size >= ALL_STARTERS.length) used.clear()
-    const name = [...pool, ...rest].find((candidate) => !used.has(candidate)) ?? pool[0]
-    used.add(name)
-    const photo = AI_LAYOUT_STARTER_PHOTOS[name]
+    const candidates = [...pool, ...rest]
+    const unused = candidates.find((candidate) => !placedAt.has(candidate))
+    const beside = new Set([names[index - 1], names[index + 1]].filter(Boolean))
+    const name =
+      unused ??
+      [...candidates]
+        .sort((a, b) => (placedAt.get(a) ?? -1) - (placedAt.get(b) ?? -1))
+        .find((candidate) => !beside.has(candidate)) ??
+      candidates[0]
+    names[index] = name
+    placedAt.set(name, step)
+  })
+  return names.map((name) => {
+    const photo = AI_LAYOUT_STARTER_PHOTOS[name as StarterName]
     return { src: photo.src, width: photo.width, height: photo.height }
   })
 }

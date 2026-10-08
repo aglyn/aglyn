@@ -574,7 +574,7 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
     await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
-    const warning = screen.getByText(/Building this site can take up to about 216 AI credits, and only 70 are left/)
+    const warning = screen.getByText(/Building this site can take up to about 218 AI credits, and only 70 are left/)
     expect(warning.textContent).toMatch(/shared by all your Free workspaces and reset on November 1/)
     // 70 covers no one-page start either, so it offers none.
     expect(warning.textContent).not.toMatch(/choose 1 page/)

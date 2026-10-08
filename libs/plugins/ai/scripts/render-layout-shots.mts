@@ -20,7 +20,7 @@
  * sees them (AGL-3596), for judging a generated layout by its looks before it
  * ships.
  *
- *   node libs/plugins/ai/scripts/render-layout-shots.mts --out <dir> <layout.json> [<layout.json>…]
+ *   node libs/plugins/ai/scripts/render-layout-shots.mts --out <dir> [--page-only] <layout.json> [<layout.json>…]
  *
  * Each input is JSON: `{ "name": "Hillside Dog Grooming", "nodes": { …layout
  * node map… }, "theme"?: HostTheme }` — the node map as a layout version
@@ -69,7 +69,9 @@
  *                                    of their own, as dragged in from the drawer: they take the site's look
  *   <key>-short-phone-light.png
  *
- * and logs any width at which the document is wider than its window.
+ * and logs any width at which the document is wider than its window. With
+ * `--page-only`, an input with a `page` is shot whole and nothing else (the
+ * two `page-` shots and its words), for judging pages by the dozen.
  *
  * THE OPEN MENU is the one emulated part. A static render has no click to
  * open the Drawer, so for that shot the Drawer element is swapped for MUI's
@@ -90,12 +92,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
 const require = createRequire(join(ROOT, 'package.json'))
 type Dict = Record<string, any>
 
-function parseArgs(argv: string[]): { out: string; inputs: string[] } {
+function parseArgs(argv: string[]): { out: string; inputs: string[]; pageOnly: boolean } {
   const out = argv.indexOf('--out')
-  if (out === -1 || !argv[out + 1]) throw new Error('Usage: render-layout-shots.mts --out <dir> <layout.json>…')
-  const inputs = argv.filter((_, index) => index !== out && index !== out + 1)
+  if (out === -1 || !argv[out + 1]) throw new Error('Usage: render-layout-shots.mts --out <dir> [--page-only] <layout.json>…')
+  const inputs = argv.filter((arg, index) => index !== out && index !== out + 1 && arg !== '--page-only')
   if (!inputs.length) throw new Error('Name at least one layout JSON file.')
-  return { out: resolve(argv[out + 1]), inputs: inputs.map((input) => resolve(input)) }
+  return { out: resolve(argv[out + 1]), inputs: inputs.map((input) => resolve(input)), pageOnly: argv.includes('--page-only') }
 }
 
 /**
@@ -188,7 +190,7 @@ const CLOSE_ICON =
   'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'
 
 async function main(): Promise<void> {
-  const { out, inputs } = parseArgs(process.argv.slice(2))
+  const { out, inputs, pageOnly } = parseArgs(process.argv.slice(2))
   loadEmotionForServerRendering()
   installWindow()
   const { pluginBundleEntries } = await import(join(ROOT, 'tools/scripts/lib/plugin-bundle-entries.mjs'))
@@ -360,8 +362,15 @@ async function main(): Promise<void> {
         const composed = tokens.resolveNodesHostTokens(withForms(compose.composeLayoutAndScreenNodes(data.nodes, screen), data.forms), { displayName: data.name })
         core.canvas.setNodes(composed)
         const root = core.canvas.getNode('_@_')
+        // Both schemes' themes, as the tenant's HostThemeProvider gives them, so an
+        // "Always dark" band (a dark band, a photo cover) pins its scheme here too.
+        const schemeThemes = themes.createSiteSchemeThemes((pinned: 'light' | 'dark') => siteTheme.createAglynSiteTheme({ theme, scheme: pinned }))
         const markup = renderToStaticMarkup(
-          h(themes.ThemeProvider, { theme: siteTheme.createAglynSiteTheme({ theme, scheme }) }, h(CssBaseline, null), h(renderer.AglynNodeRenderer, { node: root })),
+          h(
+            themes.SiteSchemeThemesContext.Provider,
+            { value: schemeThemes },
+            h(themes.ThemeProvider, { theme: schemeThemes(scheme) }, h(CssBaseline, null), h(renderer.AglynNodeRenderer, { node: root })),
+          ),
         )
         return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${fonts}<title>${key}</title></head><body>${markup}</body></html>`
       }
@@ -369,6 +378,16 @@ async function main(): Promise<void> {
         html = page
         await tab.setViewportSize({ width, height })
         await tab.goto('https://site.test/', { waitUntil: 'networkidle' })
+        // A whole-page shot never scrolls, so a lazy picture below the window would shoot empty.
+        await tab.evaluate(async () => {
+          document.querySelectorAll('img[loading="lazy"]').forEach((image) => image.setAttribute('loading', 'eager'))
+          for (let y = 0; y < document.documentElement.scrollHeight; y += window.innerHeight / 2) {
+            window.scrollTo(0, y)
+            await new Promise((done) => setTimeout(done, 60))
+          }
+          window.scrollTo(0, 0)
+          await Promise.all([...document.images].map((image) => (image.complete ? null : new Promise((done) => image.addEventListener('load', done, { once: true }) || setTimeout(done, 3000)))))
+        })
         await tab.waitForTimeout(250)
         const overflow = await tab.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
         if (overflow > 0) console.log(`OVERFLOW  ${key} ${name}: ${overflow}px wider than the window`)
@@ -393,6 +412,10 @@ async function main(): Promise<void> {
         // The words the page shows, for a grep that proves what a visitor reads.
         writeFileSync(join(out, `${key}-page.txt`), await tab.evaluate(() => document.body.innerText))
         await shoot(light, 375, 812, 'page-phone-light', ['full'])
+        if (pageOnly) {
+          console.log(`WROTE     ${key} → ${out}`)
+          continue
+        }
       }
       await shoot(light, 1440, 900, 'desktop-light', ['header', 'footer'])
       await shoot(render(home, 'dark', false), 1440, 900, 'desktop-dark', ['header', 'footer'])

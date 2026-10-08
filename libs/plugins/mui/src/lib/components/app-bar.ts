@@ -30,6 +30,7 @@ import {
 import { FIELD_COLOR_ALT1, FIELD_POSITION } from '../constants/field-presets'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { UNDER_HEADER_ATTRIBUTE } from './section'
 import { ID as toolbarId } from './toolbar'
 
 export interface AglynAppBarProps extends AppBarProps {
@@ -44,6 +45,37 @@ export interface AglynAppBarProps extends AppBarProps {
    * the moment they scroll up. Meant for a pinned (sticky/fixed) bar.
    */
   hideOnScroll?: boolean
+  /**
+   * Sits over a photo hero (AGL-3660): on a page whose first band runs under
+   * the header (a Section with `underHeader`), the bar lies over that band
+   * with no background of its own and its words in white, and scrolls away
+   * with it; on every other page it is the bar it always was.
+   */
+  overHero?: boolean
+}
+
+/**
+ * Over a page that opens under the header, the bar lies on the photo. One
+ * rule the browser applies by what the page holds, so the server render, the
+ * published page and every page of a layout share one class, and a page
+ * without such a band is untouched.
+ */
+const overHeroSx: SxProps<Theme> = (theme) => ({
+  [`body:has([${UNDER_HEADER_ATTRIBUTE}]) &`]: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'transparent',
+    backgroundImage: 'none',
+    boxShadow: 'none',
+    borderBottom: 0,
+    color: theme.palette.common.white,
+  },
+})
+
+function withOverHeroSx(sx: AppBarProps['sx']): AppBarProps['sx'] {
+  return [overHeroSx, ...(Array.isArray(sx) ? sx : [sx])] as AppBarProps['sx']
 }
 
 /** Scroll distance before a shrinking bar compacts. */
@@ -133,15 +165,17 @@ ScrollAwareAppBar.displayName = 'AglynScrollAwareAppBar'
  * MUI directly. `createElement` rather than JSX keeps this a `.ts` file.
  */
 const AppBar = forwardRef<HTMLElement, AglynAppBarProps>(
-  ({ shrinkOnScroll, hideOnScroll, ...props }, ref) =>
-    shrinkOnScroll || hideOnScroll
+  ({ shrinkOnScroll, hideOnScroll, overHero, ...rest }, ref) => {
+    const props = overHero ? { ...rest, sx: withOverHeroSx(rest.sx) } : rest
+    return shrinkOnScroll || hideOnScroll
       ? createElement(ScrollAwareAppBar, {
           ...props,
           shrink: Boolean(shrinkOnScroll),
           hide: Boolean(hideOnScroll),
           ref,
         })
-      : renderAppBar(props, ref),
+      : renderAppBar(props, ref)
+  },
 )
 AppBar.displayName = 'AglynAppBar'
 
@@ -179,6 +213,15 @@ export const schema: Aglyn.ComponentSchema<AglynAppBarProps> = {
         'back as soon as they scroll up. Pair with a Sticky or Fixed position.',
       component: Aglyn.FieldComponentType.SWITCH,
       label: 'Hide while scrolling down?',
+    },
+    {
+      name: 'overHero',
+      description:
+        'On a page whose first band is set to run under the header, the bar ' +
+        'sits over that photo with no background and white words. Other ' +
+        'pages keep the bar as it is.',
+      component: Aglyn.FieldComponentType.SWITCH,
+      label: 'Sit over a photo hero?',
     },
   ],
 }
