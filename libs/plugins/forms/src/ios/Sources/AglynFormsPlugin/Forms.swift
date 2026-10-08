@@ -193,11 +193,6 @@ func normalizeFormSlug(_ input: String) -> String {
   return slug
 }
 
-private let idAlphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
-
-/// A Firestore-style auto id, as the console mints one before a create.
-func newDocumentID() -> String { String((0..<20).map { _ in idAlphabet.randomElement()! }) }
-
 /// The Besigner page for one version of a form, under the picked site.
 func formBesignerPath(formID: String, versionID: String) -> String {
   "/\(formsDocumentSegment)/\(formID)/versions/\(versionID)/besigner"
