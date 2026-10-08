@@ -665,11 +665,14 @@ describe('the index file serves every storefront shape', () => {
     expect(missingListQueryIndexes(indexFile, 'products', hub, 'COLLECTION')).toEqual([])
   })
 
-  it('needs eight predicates under four orders, four of them shared with the table', () => {
+  it('needs eight predicates under four orders, six of them shared with the table', () => {
     expect(storefront).toHaveLength(32)
     const hubShapes = new Set(hub.map(shape))
     expect(storefront.map(shape).filter((entry) => hubShapes.has(entry)).sort()).toEqual([
       'deletedAt:ASCENDING,nameLower:ASCENDING',
+      // The table's Price header (AGL-3680) rides the storefront's price orders.
+      'deletedAt:ASCENDING,priceFromCents:ASCENDING',
+      'deletedAt:ASCENDING,priceFromCents:DESCENDING',
       'nameTokens:CONTAINS,nameLower:ASCENDING',
       'status:ASCENDING,nameLower:ASCENDING',
       'type:ASCENDING,nameLower:ASCENDING',

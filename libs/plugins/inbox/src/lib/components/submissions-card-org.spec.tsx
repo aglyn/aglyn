@@ -213,7 +213,7 @@ describe('the organization’s Submissions card', () => {
     renderOrgCard()
     expect(mockListQuery?.source).toBe('group:formSubmissions')
     expect(mockListQuery?.plan.filters).toEqual([{ path: 'orgId', op: '==', value: 'org-1' }])
-    expect(mockListQuery?.plan.orderBy).toEqual({ path: 'createdAt', direction: 'desc' })
+    expect(mockListQuery?.plan.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
   })
 
   it('keeps the org clause under the search, on the same query', async () => {

@@ -1090,6 +1090,27 @@ describe('a step’s own failure, and what a runner is handed (AGL-2938)', () =>
       }
     })
 
+    it('tells the listener whose failure it was: a step failing is ours, the model declining is not', async () => {
+      const causes: Array<{ ours?: boolean; error?: string | null }> = []
+      registerAiJobTransitionListener(async ({ to, failure }) => {
+        if (to === 'failed') causes.push({ ours: failure?.ours, error: failure?.error })
+      })
+      try {
+        registerAiJobStep('insight', spent({ failure: 'It could not be built.' }) as never)
+        const broke = await freeJob()
+        await runAiJobStep(firestore, 'org-free', broke.$id, { owner: 'route-1', now: NOW })
+        registerAiJobStep('insight', spent({ refused: true, stopReason: 'refusal' }) as never)
+        const declined = await freeJob()
+        await runAiJobStep(firestore, 'org-free', declined.$id, { owner: 'route-1', now: NOW })
+        expect(causes).toEqual([
+          { ours: true, error: 'step failure: It could not be built.' },
+          { ours: false, error: 'stop_reason refusal' },
+        ])
+      } finally {
+        registerAiJobTransitionListener(null)
+      }
+    })
+
     it('a step that failed of its own accord, on a paid workspace too', async () => {
       registerAiJobStep('insight', spent({ failure: 'Part of this site could not be built.' }) as never)
       const job = await newInsightJob()

@@ -27,6 +27,8 @@ import {
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import type { GridColDef } from '@mui/x-data-grid'
@@ -56,8 +58,10 @@ import {
   ACTIVITY_LIST_FILTER_HEADERS,
 } from '../utils/list-filters'
 import {
-  ACTIVITY_LIST_QUERY,
+  ACTIVITY_LIST_SORT,
   ACTIVITY_SEARCH_HINT,
+  SUBJECT_ACTIVITY_QUERY,
+  SUBJECT_ACTIVITY_SORTS,
 } from '../utils/activity-list-query'
 import { formatStaffTimestamp } from '../utils/staff-timestamps'
 
@@ -69,7 +73,21 @@ import { formatStaffTimestamp } from '../utils/staff-timestamps'
  * cursor is a document in that order, so the plan keeps that order: an
  * action equality (or `in`), a range over the sort field itself, and the
  * `searchTokens` word, each served by its `(field, createdAt DESC)` index.
+ *
+ * EVERY HEADER SORTS (AGL-3680). When (either way) and Action are the
+ * query's order over the whole log (`SUBJECT_ACTIVITY_SORTS`, single-field
+ * indexes on a collection with no base); the cursor is a document, so it
+ * pages any order. Target and Who are drawn from the row — a label of an
+ * object, an address resolved after the read — so they sort the page and
+ * say so.
  */
+
+/** Target and Who are derived per row, so they sort the page on screen. */
+const HOST_ACTIVITY_PAGE_SORTS = {
+  target: (row: any) => activityTargetLabel(row.target) || null,
+  actorEmail: (row: any) => activityActorLabel(row) || null,
+}
+const HOST_ACTIVITY_SORT_HEADERS = { target: 'Target', actorEmail: 'Who (then)' }
 
 export interface HostActivityTableProps {
   hostId: string
@@ -115,12 +133,14 @@ export function HostActivityTable(props: HostActivityTableProps) {
    * query holds, with the rest refused by name and shown, never matched over
    * the page already read.
    */
-  const requestKey = JSON.stringify({ clauses, searchWords })
+  // The header order asked; the plan says which order the query reads in.
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(ACTIVITY_LIST_SORT)
+  const requestKey = JSON.stringify({ clauses, searchWords, askedSort })
   const plan = useMemo(
     () =>
       planListQuery(
-        ACTIVITY_LIST_QUERY,
-        { clauses, search: searchWords },
+        SUBJECT_ACTIVITY_QUERY,
+        { clauses, search: searchWords, sort: askedSort },
         nameSearchNormalizers,
       ),
     // The request is data; its JSON is its identity.
@@ -263,6 +283,16 @@ export function HostActivityTable(props: HostActivityTableProps) {
       ),
     [activityColumns],
   )
+  const columnSort = useListColumnSort<any>({
+    sorts: SUBJECT_ACTIVITY_SORTS,
+    defaultSort: ACTIVITY_LIST_SORT,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows: shownRows,
+    pageSorts: HOST_ACTIVITY_PAGE_SORTS,
+    headers: HOST_ACTIVITY_SORT_HEADERS,
+  })
   const searching = searchWords.some((word) => word.trim())
   const filtered = clauses.length > 0 || searching
 
@@ -291,7 +321,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
             fields: ACTIVITY_LIST_FILTER_FIELDS,
             headers: ACTIVITY_LIST_FILTER_HEADERS,
           })}
-          notices={plan.notices}
+          notices={[...plan.notices, ...columnSort.notices]}
         />
         {searching ? (
           <Typography variant="caption" color="text.secondary">
@@ -316,7 +346,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
         ) : (
           <ListTable
             aria-label="Activity"
-            rows={shownRows}
+            rows={columnSort.rows}
             columns={filterColumns}
             /*
              * NO `onOpen`. An audit row is not a record you open: what is worth
@@ -328,13 +358,14 @@ export function HostActivityTable(props: HostActivityTableProps) {
              * The grid holds ONE page of a cursor feed, so it must not filter,
              * search or re-sort that page and call it the answer. The panel's
              * clauses and the search word go onto the feed's query instead
-             * (see the plan above), and the feed keeps its one order.
+             * (see the plan above); a header asks the query for its order, or
+             * sorts the page and says so (`columnSort`).
              */
             filterMode="server"
             filterModel={gridFilter.filterModel}
             onFilterModelChange={gridFilter.onFilterModelChange}
             quickFilter
-            disableColumnSorting
+            columnSort={columnSort}
             loading={loading}
             noRowsLabel="No activity matches these filters"
           />

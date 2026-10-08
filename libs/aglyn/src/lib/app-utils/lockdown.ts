@@ -1637,6 +1637,7 @@ export function lockdownPausedSurfaceForPluginApiPath(
     path === 'commerce/cart-checkout' ||
     path === 'commerce/pos-order' ||
     path === 'commerce/pos-payment' ||
+    path === 'commerce/pos-offline-sync' ||
     path === 'commerce/draft-order'
   ) {
     return 'checkout'

@@ -33,6 +33,7 @@ import {
   COUPON_FILTER_FIELDS,
   COUPON_READ_BOUND,
   COUPON_SEARCH_PATHS,
+  COUPON_SORT_COLUMNS,
   type CouponRow,
   couponListRow,
   PROMOTION_CODE_READ_BOUND,
@@ -270,7 +271,8 @@ async function handler(request: Request): Promise<Response> {
         serializeCoupon(coupon, codesRead.data),
       )
       if (!listRequest) return Response.json({ coupons }, { status: 200 })
-      // Newest first, the order Stripe lists them in.
+      // Newest first, the order Stripe lists them in, unless a header
+      // asks for another — sorted here over every coupon (AGL-3680).
       return Response.json(
         answerStaffCompleteList({
           rows: coupons.map(couponListRow),
@@ -278,6 +280,7 @@ async function handler(request: Request): Promise<Response> {
           searchPaths: COUPON_SEARCH_PATHS,
           request: listRequest,
           cursorOf: (row) => row.id,
+          sorts: COUPON_SORT_COLUMNS,
         }),
         { status: 200 },
       )

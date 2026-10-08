@@ -264,6 +264,12 @@ export const collectionEntriesSchema: Aglyn.ComponentSchema<CollectionEntriesPro
     description: 'Repeats its children once per entry in a content collection.',
     category: Aglyn.ComponentCategory.DATA_DISPLAY,
     icon: { path: mdiPostOutline.path, sx: { color: 'secondary.main' } },
+    // Search divides `Children.toArray(children)` into one group per entry
+    // (AGL-1516), so the renderer has to hand it one React child per stamped
+    // node (AGL-3660). Wrapped in the single `<Branch>`, a block of N entries
+    // read as ONE child, never divided evenly, and failed open: no search
+    // field on the published page at all.
+    flags: { positionalChildren: Aglyn.FEATURE_FLAG.ENABLED },
     attributes: [
       {
         name: 'collectionSlug',

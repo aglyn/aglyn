@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { WEBHOOK_URL_PATTERN } from './webhooks'
+import { WEBHOOK_URL_PATTERN, maskedWebhookUrl } from './webhooks'
 
 describe('WEBHOOK_URL_PATTERN', () => {
   it('allows public https and blocks local/private targets (AGL-149)', () => {
@@ -24,5 +24,18 @@ describe('WEBHOOK_URL_PATTERN', () => {
     expect(WEBHOOK_URL_PATTERN.test('https://localhost/x')).toBe(false)
     expect(WEBHOOK_URL_PATTERN.test('https://192.168.1.5/x')).toBe(false)
     expect(WEBHOOK_URL_PATTERN.test('https://10.0.0.1/x')).toBe(false)
+  })
+})
+
+describe('maskedWebhookUrl (AGL-3684)', () => {
+  it('shows the host and hides the path that carries the credential', () => {
+    expect(maskedWebhookUrl('https://hooks.slack.com/services/T0/B0/secret')).toBe('https://hooks.slack.com/…')
+    expect(maskedWebhookUrl('https://api.example.com/hook?token=abc')).toBe('https://api.example.com/…')
+    expect(maskedWebhookUrl('https://api.example.com/')).toBe('https://api.example.com')
+  })
+
+  it('never echoes text it cannot parse', () => {
+    expect(maskedWebhookUrl('not a url secret')).toBe('…')
+    expect(maskedWebhookUrl(undefined)).toBe('')
   })
 })

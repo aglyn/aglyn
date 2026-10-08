@@ -770,7 +770,11 @@ describe('the site artifact lists share one ordering decision (AGL-2501)', () =>
     expect(builder).toContain('orderBy(documentId())')
     expect(builder).not.toMatch(/orderBy\('displayName'/)
     for (const declaration of [LAYOUT_LIST_QUERY, COMPONENT_LIST_QUERY, TEMPLATE_LIST_QUERY]) {
-      expect(declaration.sorts).toEqual([ARTIFACT_LIST_ORDER])
+      // The walk is the DEFAULT. Every other order is a header the reader
+      // picked (AGL-3680), on a field every writer stamps and a backfill
+      // filled in — `artifact-list-indexes.spec.ts` holds those.
+      expect(declaration.sorts[0]).toEqual(ARTIFACT_LIST_ORDER)
+      for (const sort of declaration.sorts.slice(1)) expect(sort.column).toBeTruthy()
     }
     expect(ARTIFACT_LIST_ORDER).toEqual({ path: LIST_QUERY_ID_PATH, direction: 'asc' })
   })
@@ -1360,6 +1364,13 @@ const NOT_A_LIST: Array<[string, string]> = [
     'libs/plugins/commerce/src/lib/components/console/commerce-glance-card.component.tsx',
     'The storefront glance: a handful of headline figures with a row each. ' +
       'The cardinality is the set of figures, which the card declares.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/local-delivery-settings-card.component.tsx',
+    'Configuration: a row per delivery zone, kept to `LOCAL_DELIVERY_ZONES_MAX` ' +
+      '(20) by the normalizer that saves them (AGL-3624). The capped read is ' +
+      'the location picker, a lookup of the same `limit(25)` locations the ' +
+      'Inventory locations card lists.',
   ],
   [
     'libs/plugins/commerce/src/lib/components/console/locations-card.component.tsx',
@@ -2044,7 +2055,9 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // product's variants, which the store caps per product.
     // 80 with what Aglyn AI learned on one site (AGL-3661): its preferences,
     // capped by the memory's own `AI_SITE_MEMORY_MAX`.
-    expect(NOT_A_LIST).toHaveLength(80)
+    // 81 with local delivery's zones (AGL-3624), capped by its normalizer.
+    // The pickup and delivery queue beside it is a real list, and pages.
+    expect(NOT_A_LIST).toHaveLength(81)
   })
 })
 

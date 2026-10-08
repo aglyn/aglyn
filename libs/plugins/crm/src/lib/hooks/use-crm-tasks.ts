@@ -29,11 +29,12 @@ import {
 } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
-import type { ListQueryPlan } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import type { ListQueryPlan, ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
   type CrmTaskView,
   crmTaskViewBase,
   crmTaskViewPlan,
+  crmTaskViewSort,
   orderTaskRows,
   TASK_LIST_DECLARATION,
 } from '../model/task-views'
@@ -105,6 +106,11 @@ export function useCrmTaskList(options: {
   /** The Filters panel's clauses, the view's own excluded. */
   clauses?: readonly ListFilterRequest[]
   search?: readonly string[]
+  /**
+   * A header's order (AGL-3680), one of `TASK_LIST_SORTS`; absent, the
+   * view's own — Due soonest first, Done most recently due first.
+   */
+  sort?: ListQuerySort | null
 }): CrmTaskPageResult {
   const { hostId, org, view, uid, nowMs, clauses = NO_CLAUSES, search = NO_WORDS } = options
   // The org root and the reader's tokens from the one scope hook (AGL-2614)
@@ -116,10 +122,8 @@ export function useCrmTaskList(options: {
     [view, nowMs, uid],
   )
   const base = useMemo(() => crmTaskViewBase(plan), [plan])
-  const sort = useMemo(
-    () => ({ path: 'dueAtMs', direction: plan.direction }),
-    [plan.direction],
-  )
+  const viewSort = useMemo(() => crmTaskViewSort(plan), [plan])
+  const sort = options.sort ?? viewSort
   const foldsScope = useCrmFoldsScope(orgId, readTokens)
   const paged = useCrmListQuery<CrmTaskRow>({
     scope,
@@ -133,7 +137,12 @@ export function useCrmTaskList(options: {
     base,
     enabled: plan.assigneeUid === undefined || Boolean(plan.assigneeUid),
   })
-  const tasks = useMemo(() => orderTaskRows(paged.rows), [paged.rows])
+  // Undated last only under the Due order; a header's order is the query's.
+  const orderedByDue = paged.plan.orderBy.path === 'dueAtMs'
+  const tasks = useMemo(
+    () => (orderedByDue ? orderTaskRows(paged.rows) : paged.rows),
+    [paged.rows, orderedByDue],
+  )
   return {
     tasks,
     status: paged.status,

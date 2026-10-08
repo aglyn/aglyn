@@ -16,6 +16,8 @@ struct RouteView: View {
     case .screen(let id, let params): PluginScreenView(screenID: id, params: params)
     case .besigner(let path): BesignerScreen(path: path)
     case .unavailable(let path): NotInAppView(path: path)
+    case .notificationSettings: NotificationSettingsView()
+    case .analytics: AnalyticsView()
     }
   }
 }

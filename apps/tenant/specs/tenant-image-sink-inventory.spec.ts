@@ -392,6 +392,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "The store's logo on the customer display (AGL-3608), the console's public kiosk page at `/kiosk/commerce/pos-display`, which only a display paired to a register can read. The src is the branding server/pos-display.ts answers, where the host's logoUrl and logoDarkUrl go through resolveMediaSrc. The device is the store's own screen turned toward the counter, so the request comes from the store's network, not a site visitor's.",
   },
+  'libs/plugins/commerce/src/lib/components/console/pos-kiosk/kiosk-menu.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The product tiles on the self-service kiosk (AGL-3623), the console's public kiosk page at `/kiosk/commerce/pos-kiosk`, which only a kiosk paired to a register can read. The src is the catalog server/pos-kiosk.ts answers, where each product's first media item goes through resolveMediaSrc with the site's id. The device is the store's own tablet in the store, so the request comes from the store's network, not a site visitor's.",
+  },
   'libs/plugins/commerce/src/lib/components/console/pos-ops/pos-receipt.ts': {
     markers: 2,
     guard: 'off-tenant',

@@ -23,6 +23,14 @@ import {
 import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import { pluginSmsAvailable } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
+import {
+  checkoutCreditProvider,
+  checkoutCreditProviderForCode,
+  normalizeCheckoutCreditAccount,
+  normalizeCheckoutCreditCode,
+  offeredCheckoutCredits,
+  type CheckoutCreditStage,
+} from '@aglyn/aglyn/plugin-manager/plugin-checkout-credits'
 import { finishPosDisplayReceipt } from './pos-display'
 import * as CommerceModel from '../model'
 import { posRegisterSettings } from '../plugin-config'
@@ -95,6 +103,9 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
     if (action === 'gift-card-balance') {
       return await giftCardBalance(staff, body, res)
     }
+    if (action === 'credit-lookup') {
+      return await creditLookup(staff, body, res)
+    }
     if (action === 'context') {
       // What the register needs to draw its tenders: the site's tip and
       // receipt settings, whether card readers are offered at all, and the
@@ -126,6 +137,8 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
         publishableKey: String(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? ''),
         // A text receipt is offered only when an SMS provider is on (AGL-3610).
         smsReceipts: pluginSmsAvailable(),
+        // Store credit other plugins keep — rewards (AGL-3640) — offered here.
+        credits: await offeredCheckoutCredits({ hostId, channel: 'pos' }),
       })
     }
     if (!orderId) return res.status(400).json({ error: 'Missing orderId' })
@@ -133,6 +146,7 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
       'card-present-sdk',
       'cash',
       'gift-card',
+      'credit',
       'folio',
       'card-present',
       'card-keyed',
@@ -175,6 +189,9 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
         break
       case 'gift-card':
         outcome = await takeGiftCard(staff, orderId, paymentId, body)
+        break
+      case 'credit':
+        outcome = await takeCredit(staff, orderId, paymentId, body)
         break
       case 'folio':
         outcome = await takeFolio(staff, orderId, paymentId, body)
@@ -476,6 +493,133 @@ async function takeGiftCard(
   })
 }
 
+/**
+ * Staff search for a store-credit account at the register (AGL-3640): a
+ * customer's email or code, answered by the plugin that keeps the account.
+ * Only staff reach it — `authorizePosStaff` above — so a provider may look
+ * accounts up by email here, which it never does for a shopper.
+ */
+async function creditLookup(staff: PosStaff, body: Record<string, any>, res: any) {
+  const entry = checkoutCreditProvider(String(body['providerId'] ?? ''))
+  if (!entry?.provider.lookup) return res.status(404).json({ error: 'That kind of credit is not taken here.' })
+  const rate = await consumeRateLimit(`pos-credit-lookup:${staff.uid}`, {
+    limit: 60,
+    windowMs: 60_000,
+  })
+  if (!rate.allowed) return res.status(429).json({ error: 'Too many lookups. Wait a moment.' })
+  if (!(await entry.provider.offered({ hostId: staff.hostId, channel: 'pos' }).catch(() => false))) {
+    return res.status(404).json({ error: 'That kind of credit is not taken here.' })
+  }
+  const found = await entry.provider
+    .lookup({ hostId: staff.hostId, query: String(body['query'] ?? '').slice(0, 120) })
+    .catch((error: unknown) => {
+      console.error('[pos-payment] credit lookup failed', entry.providerId, error)
+      return []
+    })
+  const accounts = found
+    .slice(0, 10)
+    .map((account) => normalizeCheckoutCreditAccount(account))
+    .filter((account) => !('error' in account))
+  return res.status(200).json({ providerId: entry.providerId, accounts })
+}
+
+/**
+ * Store credit another plugin keeps (AGL-3640) — a rewards balance, a friend's
+ * referral credit — by the customer's code, or by the account a staff lookup
+ * found. The provider's stage reads the account INSIDE the sale's transaction
+ * and its debit writes there, so the credit is taken with the payment or not
+ * at all; a retried press finds its own payment and takes nothing more.
+ */
+async function takeCredit(
+  staff: PosStaff,
+  orderId: string,
+  paymentId: string,
+  body: Record<string, any>,
+): Promise<PosPaymentOutcome> {
+  const code = normalizeCheckoutCreditCode(body['code'])
+  const entry = code
+    ? checkoutCreditProviderForCode(code)
+    : checkoutCreditProvider(String(body['providerId'] ?? ''))
+  if (!entry) return { ok: false, status: 404, error: 'That code is not one this store takes.' }
+  if (!(await entry.provider.offered({ hostId: staff.hostId, channel: 'pos' }).catch(() => false))) {
+    return { ok: false, status: 404, error: 'That kind of credit is not taken here.' }
+  }
+  const sale = await readPosSale(staff.hostId, orderId)
+  if (!sale) return { ok: false, status: 404, error: 'Unknown sale' }
+  const account = normalizeCheckoutCreditAccount(
+    await entry.provider
+      .resolve({
+        hostId: staff.hostId,
+        ...(code ? { code } : { reference: String(body['reference'] ?? '') }),
+        channel: 'pos',
+        customerEmail: (sale as { customerEmail?: string | null }).customerEmail ?? null,
+        staff: true,
+      })
+      .catch((error: unknown) => {
+        console.error('[pos-payment] credit resolve failed', entry.providerId, error)
+        return null
+      }),
+  )
+  if ('error' in account) return { ok: false, status: account.status, error: account.error }
+  const askedCents = Math.round(Number(body['amountCents'] ?? 0))
+  return await applyPosPayment<CheckoutCreditStage | null>({
+    hostId: staff.hostId,
+    orderId,
+    paymentId,
+    prepare: async (transaction) =>
+      entry.provider.stage({
+        transaction,
+        hostId: staff.hostId,
+        reference: account.reference,
+        orderId,
+        nowMs: Date.now(),
+      }),
+    decide: ({ order, payments, existing, context: stage }) => {
+      if (existing) return { kind: 'keep' }
+      if (order.status !== 'pending') return NOT_OPEN
+      if (!stage) return { kind: 'refuse', status: 404, error: `That ${account.label.toLowerCase()} account no longer exists.` }
+      const open = tenderable(order, payments)
+      if (open <= 0) return { kind: 'refuse', status: 409, error: 'Nothing is left to pay on this sale.' }
+      const amountCents = Math.min(stage.availableCents, open, askedCents > 0 ? askedCents : open)
+      if (!(amountCents > 0)) {
+        return { kind: 'refuse', status: 409, error: `This ${account.label.toLowerCase()} account has nothing to spend.` }
+      }
+      const now = Date.now()
+      return {
+        kind: 'put',
+        payment: {
+          id: paymentId,
+          method: 'credit',
+          amountCents,
+          status: 'succeeded',
+          atMs: now,
+          settledAtMs: now,
+          creditProviderId: entry.providerId,
+          creditReference: account.reference,
+          creditLabel: account.label,
+          ...(account.last4 ? { last4: account.last4 } : {}),
+          takeFeeCents: CommerceModel.posTakeShareCents({
+            takeFeeCents: Number(order.posTakeFeeCents ?? 0),
+            totalCents: Number(order.totals?.totalCents ?? 0),
+            amountCents,
+          }),
+          feeCents: 0,
+          cashierId: staff.uid,
+        },
+      }
+    },
+    write: (_transaction, stage, payment) => {
+      // The stage writes through the sale's own transaction. Taking less than
+      // the payment records would leave the sale paid by money that did not
+      // move, so a short debit aborts the whole commit instead.
+      const taken = stage ? stage.debit({ cents: payment.amountCents, key: payment.id, orderId, channel: 'pos' }) : 0
+      if (taken !== payment.amountCents) {
+        throw new Error(`credit debit ${taken} short of payment ${payment.amountCents}`)
+      }
+    },
+  })
+}
+
 function reservationRef(hostId: string, reservationId: string) {
   return firebaseAdmin
     .app()
@@ -663,6 +807,19 @@ async function reversePayment(
   }
   const cardRef = payment.giftCardId ? giftCardRef(hostId, payment.giftCardId) : null
   const stayRef = payment.reservationId ? reservationRef(hostId, payment.reservationId) : null
+  // Store credit goes back to the plugin that keeps it (AGL-3640), in the
+  // same commit as the reversal. A provider that is gone cannot take it
+  // back, so the void stops with the sale still open rather than cancelling
+  // over credit that did not come back.
+  const creditEntry =
+    payment.method === 'credit' && payment.creditProviderId ? checkoutCreditProvider(payment.creditProviderId) : null
+  if (payment.method === 'credit' && (!creditEntry || !payment.creditReference)) {
+    return {
+      ok: false,
+      status: 409,
+      error: 'The store credit on this sale cannot be handed back right now. The sale is still open.',
+    }
+  }
   return await applyPosPayment({
     hostId,
     orderId: order.$id,
@@ -670,13 +827,23 @@ async function reversePayment(
     prepare: async (transaction) => {
       if (payment.method === 'gift_card' && cardRef) {
         const snapshot = await transaction.get(cardRef)
-        return { card: snapshot.exists ? (snapshot.data() as CommerceModel.HostGiftCard) : null, folio: null }
+        return { card: snapshot.exists ? (snapshot.data() as CommerceModel.HostGiftCard) : null, folio: null, credit: null }
       }
       if (payment.method === 'folio' && stayRef) {
         const snapshot = await transaction.get(stayRef)
-        return { card: null, folio: snapshot.exists ? ((snapshot.get('folio') ?? []) as any[]) : null }
+        return { card: null, folio: snapshot.exists ? ((snapshot.get('folio') ?? []) as any[]) : null, credit: null }
       }
-      return { card: null, folio: null }
+      if (payment.method === 'credit' && creditEntry && payment.creditReference) {
+        const credit = await creditEntry.provider.stage({
+          transaction,
+          hostId,
+          reference: payment.creditReference,
+          orderId: order.$id,
+          nowMs: Date.now(),
+        })
+        return { card: null, folio: null, credit }
+      }
+      return { card: null, folio: null, credit: null }
     },
     decide: ({ existing }) => {
       if (!existing) return { kind: 'refuse', status: 404, error: 'Unknown payment' }
@@ -706,6 +873,9 @@ async function reversePayment(
           folio: context.folio.filter((entry) => entry?.paymentId !== reversed.id),
         })
       }
+      if (reversed.method === 'credit' && context.credit) {
+        context.credit.reverse({ key: reversed.id, orderId: order.$id })
+      }
     },
   })
 }
@@ -718,7 +888,7 @@ const RECEIPT_REPEAT_WINDOW_MS = 2 * 60 * 1000
  * display. Kept on the order; an email chosen after the sale is paid is sent
  * at once, and one chosen before is sent when it completes.
  */
-async function recordReceiptChoice(
+export async function recordReceiptChoice(
   staff: PosStaff,
   orderId: string,
   body: Record<string, any>,
@@ -796,7 +966,9 @@ async function recordReceiptChoice(
     // printer, under the sale's own key so it never prints twice (AGL-3609).
     await printPosSaleReceipt(staff.hostId, orderId)
   }
-  if (order.status === 'paid' && order.registerId) {
+  // A kiosk's own receipt screen (AGL-3623) is not the register's display:
+  // the display may be asking the cashier's customer right now.
+  if (order.status === 'paid' && order.registerId && order.posSource !== 'kiosk') {
     // The customer has answered (or the cashier for them): the display says
     // thank you and drops the address they typed (AGL-3608).
     await finishPosDisplayReceipt(staff.hostId, order.registerId).catch((error: unknown) =>

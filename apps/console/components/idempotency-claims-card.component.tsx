@@ -25,6 +25,8 @@ import {
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -40,6 +42,8 @@ import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import useStaffListQuery from '../hooks/use-staff-list-query'
 import {
+  CLAIM_AGE_SORT,
+  CLAIM_COLUMN_SORTS,
   CLAIM_FILTER_FIELDS,
   CLAIM_FILTER_HEADERS,
   CLAIM_FILTER_OPTIONS,
@@ -147,13 +151,27 @@ export default function IdempotencyClaimsCard() {
       ),
     [],
   )
+  /*
+   * EVERY HEADER SORTS (AGL-3680), on the route's query: Age and State by
+   * the claim time, Operation, Scope and Org by the stored field while no
+   * filter narrows them (`CLAIM_COLUMN_SORTS`).
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const claims = useStaffListQuery<IdempotencyClaim>({
     endpoint: '/api/admin/idempotency-claims',
     clauses: gridFilter.clauses,
     // No search box: every value on a claim is an identifier, which the
     // panel's exact filters match (`utils/idempotency-claims-list-query.ts`).
     search: NO_SEARCH,
+    sort: askedSort,
     onError,
+  })
+  const columnSort = useListColumnSort<IdempotencyClaim>({
+    sorts: CLAIM_COLUMN_SORTS,
+    defaultSort: CLAIM_AGE_SORT,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    rows: claims.rows,
   })
   const { refresh } = claims
   const reload = useCallback(() => {
@@ -206,8 +224,8 @@ export default function IdempotencyClaimsCard() {
         minWidth: 110,
         align: 'right',
         headerAlign: 'right',
-        // Sorted on the number, rendered as a duration — sorting the
-        // rendered text would put "9m" after "10h".
+        // Rendered as a duration; its header orders the query by the claim
+        // time (`claimQuerySort`), never the rendered text.
         valueGetter: (_value, row: any) => row.ageMs ?? 0,
         renderCell: ({ row }: any) => formatAge(row.ageMs),
       },
@@ -321,11 +339,11 @@ export default function IdempotencyClaimsCard() {
                 headers: CLAIM_FILTER_HEADERS,
                 options: CLAIM_FILTER_OPTIONS,
               })}
-              notices={claims.notices}
+              notices={[...claims.notices, ...columnSort.notices]}
             />
             <ListTable
               aria-label="Idempotency claims"
-              rows={claims.rows}
+              rows={columnSort.rows}
               columns={claimColumns}
               loading={claims.loading}
               filterMode="server"
@@ -345,9 +363,8 @@ export default function IdempotencyClaimsCard() {
                * ROW and was never a reason to withhold the pager.
                */
               hideFooter
-              // The rows keep the query's order; a header sort would order
-              // only the page on screen.
-              disableColumnSorting
+              // A header sort asks the route's query for its order.
+              columnSort={columnSort}
             />
             <StaffListPaginationControls
               pagination={claims}

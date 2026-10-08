@@ -34,12 +34,14 @@ import {
   type ListFilterOption,
   listFilterGridColumns,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { Chip, Stack } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useMemo, useState } from 'react'
 import { useStaffListQuery } from '../hooks/use-staff-list-query'
 import {
+  ADMIN_AUDIT_SORT,
   USER_AUDIT_LIST_FIELDS,
   USER_AUDIT_LIST_HEADERS,
   USER_AUDIT_LIST_SELECT_FIELDS,
@@ -104,7 +106,7 @@ export function StaffUserAuditTable(props: StaffUserAuditTableProps) {
   const columns = useMemo((): GridColDef[] => {
     const shown: GridColDef[] = [
       { field: 'action', headerName: 'Action', flex: 1.2, minWidth: 180 },
-      { field: 'target', headerName: 'Target', flex: 1.2, minWidth: 180, sortable: false },
+      { field: 'target', headerName: 'Target', flex: 1.2, minWidth: 180 },
       {
         // An `org.override` this account performed shows up here too, so the
         // reason has to reach this table as well (AGL-1652) — the audit page
@@ -113,7 +115,6 @@ export function StaffUserAuditTable(props: StaffUserAuditTableProps) {
         headerName: 'Why',
         flex: 1,
         minWidth: 160,
-        sortable: false,
         valueGetter: (_value: unknown, row: UserAuditRow) =>
           orgOverrideReasonSummary(row.reason, row.note) ?? '—',
       },
@@ -122,7 +123,6 @@ export function StaffUserAuditTable(props: StaffUserAuditTableProps) {
         headerName: 'Actor',
         flex: 0.9,
         minWidth: 150,
-        sortable: false,
         /*
          * "this account" is a real answer, not a placeholder: an entry is
          * either one this account performed or one performed about it, and a
@@ -143,7 +143,6 @@ export function StaffUserAuditTable(props: StaffUserAuditTableProps) {
         flex: 1,
         minWidth: 180,
         type: 'date',
-        sortable: false,
         valueGetter: (_value: unknown, row: UserAuditRow) => (row.at ? new Date(row.at) : null),
         /*
          * A COLLAPSED ROW SAYS SO. The writer merges an immediate repeat of
@@ -163,6 +162,31 @@ export function StaffUserAuditTable(props: StaffUserAuditTableProps) {
     return listFilterGridColumns(shown, USER_AUDIT_LIST_FIELDS, options, USER_AUDIT_LIST_HEADERS)
   }, [uid, options])
 
+  /*
+   * HEADER SORTS (AGL-3680). The route merges four queries — what this
+   * account did, what targeted it, what it was the subject of, what touched
+   * an address it holds — on When, newest first, so that is the one order
+   * the whole trail can be read in. Every other column sorts the loaded page
+   * and its header says so; a query order per column would need composites
+   * on all four halves for one account's log.
+   */
+  const pageSorts = useMemo(
+    () => ({
+      action: (row: UserAuditRow) => row.action,
+      target: (row: UserAuditRow) => row.target,
+      reason: (row: UserAuditRow) => orgOverrideReasonSummary(row.reason, row.note) ?? null,
+      actorUid: (row: UserAuditRow) => (row.actorUid === uid ? 'this account' : row.actorUid),
+    }),
+    [uid],
+  )
+  const columnSort = useListColumnSort<UserAuditRow>({
+    sorts: [ADMIN_AUDIT_SORT],
+    defaultSort: ADMIN_AUDIT_SORT,
+    rows: audit.rows,
+    pageSorts,
+    headers: { action: 'Action', target: 'Target', reason: 'Why', actorUid: 'Actor', at: 'When' },
+  })
+
   const refused = useMemo(
     () =>
       listQueryRefusals(audit.refused, {
@@ -180,6 +204,7 @@ export function StaffUserAuditTable(props: StaffUserAuditTableProps) {
       description={description}
       columns={columns}
       rows={audit.rows}
+      columnSort={columnSort}
       getRowId={(row: UserAuditRow) => row.id}
       loading={audit.loading}
       unreadable={audit.failed}
@@ -198,7 +223,7 @@ export function StaffUserAuditTable(props: StaffUserAuditTableProps) {
             clauses={clauses}
             onChange={setClauses}
           />
-          <ListQueryNotices refused={refused} notices={audit.notices} />
+          <ListQueryNotices refused={refused} notices={[...audit.notices, ...columnSort.notices]} />
         </Stack>
       }
       page={audit.pageIndex}

@@ -32,6 +32,7 @@ import {
 } from '../../utils/sign-up-landing-hold'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { emailGateWouldRefuse } from '../../utils/email-verification-gate'
 import { VisitorConsentPill } from '../visitor-consent.component'
 
 export interface AuthenticatingLayoutProps
@@ -115,6 +116,21 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
         if (!user) {
           // Signed-in but no user object yet — wait for the next tick
           // rather than hand off with no cookie.
+          return
+        }
+        // An unverified password account cannot have the cookie (AGL-479),
+        // so handing it off lands it session-less on the other origin, which
+        // sends it straight back here to be handed off again — a phone
+        // password sign-up looped like that and never saw /verify-email, so
+        // no verification mail was ever sent (AGL-3690). Verify HERE, on the
+        // origin that holds the session; /verify-email mints the cookie and
+        // carries the continue URL on once the address is confirmed.
+        if (await emailGateWouldRefuse(user)) {
+          if (active) {
+            router.replace(
+              `/verify-email?${continueParam(encodeURIComponent(continueUrl))}`,
+            )
+          }
           return
         }
         try {

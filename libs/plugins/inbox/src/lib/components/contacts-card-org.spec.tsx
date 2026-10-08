@@ -188,7 +188,7 @@ describe('Members & leads on the organization’s Inbox', () => {
     // and a clause would only narrow what the rules already admit.
     expect([...new Set(mockOpened)]).toEqual(['orgs/org-1/leads'])
     expect(mockPlans['orgs/org-1/leads'].filters).toEqual([])
-    expect(mockPlans['orgs/org-1/leads'].orderBy).toEqual({ path: 'createdAt', direction: 'desc' })
+    expect(mockPlans['orgs/org-1/leads'].orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
     expect(screen.queryByText('member@example.com')).toBeNull()
     expect(screen.getByRole('heading', { name: 'Leads' })).toBeTruthy()
     expect(screen.getByText(/choose a site to list its members/)).toBeTruthy()

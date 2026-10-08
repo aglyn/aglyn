@@ -42,7 +42,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'commerce',
     apiPrefixes: ["commerce","membership"],
     register: {"site":"registerCommercePlugin","console":"registerCommerceConsole"},
-    contributes: {"console":{"shell":true,"routes":["/pos","/products"],"slots":["commerceGlance","consoleSearch","hostDashboard","siteMember","transferResources"],"publicRoutes":["/pos-display"]}},
+    contributes: {"console":{"shell":true,"routes":["/pos","/products"],"slots":["commerceGlance","consoleSearch","hostDashboard","siteMember","transferResources"],"publicRoutes":["/pos-display","/pos-kiosk"]}},
     load: () => import('@aglyn/plugins-commerce'),
     loads: {
       site: () => import('@aglyn/plugins-commerce/site'),
@@ -172,6 +172,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     register: {"console":"registerPostPurchaseConsole"},
     contributes: {"console":{"slots":["commerceSettings","orderDetail"]}},
     load: () => import('@aglyn/plugins-post-purchase'),
+  },
+  {
+    id: 'loyalty',
+    apiPrefixes: ["loyalty"],
+    register: {"console":"registerLoyaltyConsole"},
+    contributes: {"console":{"slots":["commercePromotions","orderDetail"]}},
+    load: () => import('@aglyn/plugins-loyalty'),
   },
   {
     id: 'tax-engines',

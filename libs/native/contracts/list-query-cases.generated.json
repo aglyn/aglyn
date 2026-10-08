@@ -138,6 +138,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [],
@@ -169,6 +170,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -206,6 +208,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -243,6 +246,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -280,6 +284,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -320,6 +325,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -357,6 +363,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -397,6 +404,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -439,6 +447,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -476,6 +485,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -513,6 +523,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -550,6 +561,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -587,6 +599,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -627,6 +640,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -664,6 +678,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -704,6 +719,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -726,6 +742,7 @@
         "sort": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         }
       },
@@ -734,6 +751,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [],
@@ -750,6 +768,63 @@
         "sort": {
           "column": "createdAtMs",
           "direction": "asc",
+          "label": "Date",
+          "path": "createdAtMs"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAtMs",
+          "direction": "asc",
+          "label": "Date",
+          "path": "createdAtMs"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort createdAtMs asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAtMs",
+          "direction": "asc",
+          "label": "Date",
+          "path": "createdAtMs"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAtMs",
+          "direction": "asc",
+          "label": "Date",
+          "path": "createdAtMs"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort createdAtMs reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAtMs",
+          "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         }
       },
@@ -758,7 +833,456 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort number desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "orderLabel",
+          "direction": "desc",
+          "label": "Order",
+          "path": "number"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "orderLabel",
+          "direction": "desc",
+          "label": "Order",
+          "path": "number"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort number reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "orderLabel",
+          "direction": "asc",
+          "label": "Order",
+          "path": "number"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "orderLabel",
+          "direction": "asc",
+          "label": "Order",
+          "path": "number"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort number asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "orderLabel",
+          "direction": "asc",
+          "label": "Order",
+          "path": "number"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "orderLabel",
+          "direction": "asc",
+          "label": "Order",
+          "path": "number"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort number reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "orderLabel",
+          "direction": "desc",
+          "label": "Order",
+          "path": "number"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "orderLabel",
+          "direction": "desc",
+          "label": "Order",
+          "path": "number"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort customerEmailLower asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "customerEmail",
+          "direction": "asc",
+          "label": "Customer",
+          "path": "customerEmailLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "customerEmail",
+          "direction": "asc",
+          "label": "Customer",
+          "path": "customerEmailLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort customerEmailLower reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "customerEmail",
+          "direction": "desc",
+          "label": "Customer",
+          "path": "customerEmailLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "customerEmail",
+          "direction": "desc",
+          "label": "Customer",
+          "path": "customerEmailLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort customerEmailLower desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "customerEmail",
+          "direction": "desc",
+          "label": "Customer",
+          "path": "customerEmailLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "customerEmail",
+          "direction": "desc",
+          "label": "Customer",
+          "path": "customerEmailLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort customerEmailLower reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "customerEmail",
+          "direction": "asc",
+          "label": "Customer",
+          "path": "customerEmailLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "customerEmail",
+          "direction": "asc",
+          "label": "Customer",
+          "path": "customerEmailLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort channel asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "channelKey",
+          "direction": "asc",
+          "label": "Channel",
+          "path": "channel"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "channelKey",
+          "direction": "asc",
+          "label": "Channel",
+          "path": "channel"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort channel reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "channelKey",
+          "direction": "desc",
+          "label": "Channel",
+          "path": "channel"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "channelKey",
+          "direction": "desc",
+          "label": "Channel",
+          "path": "channel"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort channel desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "channelKey",
+          "direction": "desc",
+          "label": "Channel",
+          "path": "channel"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "channelKey",
+          "direction": "desc",
+          "label": "Channel",
+          "path": "channel"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort channel reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "channelKey",
+          "direction": "asc",
+          "label": "Channel",
+          "path": "channel"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "channelKey",
+          "direction": "asc",
+          "label": "Channel",
+          "path": "channel"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort status asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "statusKey",
+          "direction": "asc",
+          "label": "Status",
+          "path": "status"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "statusKey",
+          "direction": "asc",
+          "label": "Status",
+          "path": "status"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort status reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "statusKey",
+          "direction": "desc",
+          "label": "Status",
+          "path": "status"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "statusKey",
+          "direction": "desc",
+          "label": "Status",
+          "path": "status"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort status desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "statusKey",
+          "direction": "desc",
+          "label": "Status",
+          "path": "status"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "statusKey",
+          "direction": "desc",
+          "label": "Status",
+          "path": "status"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "ORDER_LIST_QUERY",
+      "label": "sort status reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "statusKey",
+          "direction": "asc",
+          "label": "Status",
+          "path": "status"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "statusKey",
+          "direction": "asc",
+          "label": "Status",
+          "path": "status"
         },
         "served": [],
         "searched": null,
@@ -781,6 +1305,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [],
@@ -809,6 +1334,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [],
@@ -838,6 +1364,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [],
@@ -879,6 +1406,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -919,6 +1447,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [],
@@ -964,6 +1493,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [
@@ -1004,6 +1534,7 @@
         "orderBy": {
           "column": "createdAtMs",
           "direction": "desc",
+          "label": "Date",
           "path": "createdAtMs"
         },
         "served": [],
@@ -1045,6 +1576,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [],
@@ -1088,6 +1620,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [
@@ -1137,6 +1670,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [
@@ -1191,6 +1725,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [
@@ -1240,6 +1775,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [
@@ -1292,6 +1828,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [
@@ -1341,6 +1878,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [
@@ -1393,6 +1931,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [
@@ -1442,6 +1981,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [
@@ -1491,6 +2031,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [
@@ -1543,6 +2084,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [
@@ -1592,6 +2134,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [
@@ -1644,6 +2187,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [
@@ -1666,6 +2210,7 @@
         "sort": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "base": [
@@ -1687,6 +2232,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [],
@@ -1703,6 +2249,89 @@
         "sort": {
           "column": "name",
           "direction": "desc",
+          "label": "Product",
+          "path": "nameLower"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "name",
+          "direction": "desc",
+          "label": "Product",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "PRODUCT_LIST_QUERY",
+      "label": "sort nameLower desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "name",
+          "direction": "desc",
+          "label": "Product",
+          "path": "nameLower"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "name",
+          "direction": "desc",
+          "label": "Product",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "PRODUCT_LIST_QUERY",
+      "label": "sort nameLower reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "name",
+          "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "base": [
@@ -1724,7 +2353,500 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "PRODUCT_LIST_QUERY",
+      "label": "sort status asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "status",
+          "direction": "asc",
+          "label": "Status",
+          "path": "status"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "status",
+          "direction": "asc",
+          "label": "Status",
+          "path": "status"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "PRODUCT_LIST_QUERY",
+      "label": "sort status reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "status",
+          "direction": "desc",
+          "label": "Status",
+          "path": "status"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "status",
+          "direction": "desc",
+          "label": "Status",
+          "path": "status"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "PRODUCT_LIST_QUERY",
+      "label": "sort status desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "status",
+          "direction": "desc",
+          "label": "Status",
+          "path": "status"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "status",
+          "direction": "desc",
+          "label": "Status",
+          "path": "status"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "PRODUCT_LIST_QUERY",
+      "label": "sort status reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "status",
+          "direction": "asc",
+          "label": "Status",
+          "path": "status"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "status",
+          "direction": "asc",
+          "label": "Status",
+          "path": "status"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "PRODUCT_LIST_QUERY",
+      "label": "sort type asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "type",
+          "direction": "asc",
+          "label": "Type",
+          "path": "type"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "type",
+          "direction": "asc",
+          "label": "Type",
+          "path": "type"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "PRODUCT_LIST_QUERY",
+      "label": "sort type reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "type",
+          "direction": "desc",
+          "label": "Type",
+          "path": "type"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "type",
+          "direction": "desc",
+          "label": "Type",
+          "path": "type"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "PRODUCT_LIST_QUERY",
+      "label": "sort type desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "type",
+          "direction": "desc",
+          "label": "Type",
+          "path": "type"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "type",
+          "direction": "desc",
+          "label": "Type",
+          "path": "type"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "PRODUCT_LIST_QUERY",
+      "label": "sort type reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "type",
+          "direction": "asc",
+          "label": "Type",
+          "path": "type"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "type",
+          "direction": "asc",
+          "label": "Type",
+          "path": "type"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "PRODUCT_LIST_QUERY",
+      "label": "sort priceFromCents asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "priceUsd",
+          "direction": "asc",
+          "label": "Price",
+          "path": "priceFromCents"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "priceUsd",
+          "direction": "asc",
+          "label": "Price",
+          "path": "priceFromCents"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "PRODUCT_LIST_QUERY",
+      "label": "sort priceFromCents reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "priceUsd",
+          "direction": "desc",
+          "label": "Price",
+          "path": "priceFromCents"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "priceUsd",
+          "direction": "desc",
+          "label": "Price",
+          "path": "priceFromCents"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "PRODUCT_LIST_QUERY",
+      "label": "sort priceFromCents desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "priceUsd",
+          "direction": "desc",
+          "label": "Price",
+          "path": "priceFromCents"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "priceUsd",
+          "direction": "desc",
+          "label": "Price",
+          "path": "priceFromCents"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "PRODUCT_LIST_QUERY",
+      "label": "sort priceFromCents reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "priceUsd",
+          "direction": "asc",
+          "label": "Price",
+          "path": "priceFromCents"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "deletedAt",
+            "value": null
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "priceUsd",
+          "direction": "asc",
+          "label": "Price",
+          "path": "priceFromCents"
         },
         "served": [],
         "searched": null,
@@ -1760,6 +2882,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [],
@@ -1800,6 +2923,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [],
@@ -1841,6 +2965,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [],
@@ -1894,6 +3019,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [
@@ -1946,6 +3072,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [],
@@ -2003,6 +3130,7 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
         },
         "served": [
@@ -2056,7 +3184,572 @@
         "orderBy": {
           "column": "name",
           "direction": "asc",
+          "label": "Product",
           "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [
+          {
+            "clause": {
+              "field": "nope",
+              "op": "equals",
+              "value": "x"
+            },
+            "reason": "this list does not filter by that"
+          }
+        ],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "no clauses",
+      "request": {
+        "clauses": []
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Received",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "from contains",
+      "request": {
+        "clauses": [
+          {
+            "field": "from",
+            "op": "contains",
+            "value": "Acme Widgets"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "senderTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Received",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "from",
+            "op": "contains",
+            "value": "Acme Widgets"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "read equals",
+      "request": {
+        "clauses": [
+          {
+            "field": "read",
+            "op": "equals",
+            "value": "true"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "read",
+            "op": "==",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Received",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "read",
+            "op": "equals",
+            "value": "true"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "formId equals",
+      "request": {
+        "clauses": [
+          {
+            "field": "formId",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "formId",
+            "op": "==",
+            "value": "alpha"
+          }
+        ],
+        "orderBy": {
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Received",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "formId",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "sort createdAt desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Received",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Received",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "sort createdAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Received",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Received",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "sort createdAt asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Received",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Received",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "sort createdAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Received",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Received",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "sort read asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "read",
+          "direction": "asc",
+          "label": "Read",
+          "path": "read"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "read",
+          "direction": "asc",
+          "label": "Read",
+          "path": "read"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "sort read reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "read",
+          "direction": "desc",
+          "label": "Read",
+          "path": "read"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "read",
+          "direction": "desc",
+          "label": "Read",
+          "path": "read"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "sort read desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "read",
+          "direction": "desc",
+          "label": "Read",
+          "path": "read"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "read",
+          "direction": "desc",
+          "label": "Read",
+          "path": "read"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "sort read reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "read",
+          "direction": "asc",
+          "label": "Read",
+          "path": "read"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "read",
+          "direction": "asc",
+          "label": "Read",
+          "path": "read"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "an undeclared sort is ignored",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "path": "undeclared",
+          "direction": "asc"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Received",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "search one word",
+      "request": {
+        "clauses": [],
+        "search": [
+          "Acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Received",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "search two words",
+      "request": {
+        "clauses": [],
+        "search": [
+          "acme",
+          "widgets"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Received",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": [
+          "Search matches one word at a time: showing results for \"acme\"."
+        ]
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "search with an exact clause",
+      "request": {
+        "clauses": [
+          {
+            "field": "formId",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "search": [
+          "acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          },
+          {
+            "path": "formId",
+            "op": "==",
+            "value": "alpha"
+          }
+        ],
+        "orderBy": {
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Received",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "formId",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "searched": "acme",
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "search with a contains clause",
+      "request": {
+        "clauses": [
+          {
+            "field": "from",
+            "op": "contains",
+            "value": "widget"
+          }
+        ],
+        "search": [
+          "acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "searchTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Received",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [
+          {
+            "clause": {
+              "field": "from",
+              "op": "contains",
+              "value": "widget"
+            },
+            "reason": "cannot be combined with the search — clear the search to use it"
+          }
+        ],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SUBMISSION_LIST_QUERY",
+      "label": "an unknown field is refused",
+      "request": {
+        "clauses": [
+          {
+            "field": "nope",
+            "op": "equals",
+            "value": "x"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Received",
+          "path": "createdAt"
         },
         "served": [],
         "searched": null,
@@ -2671,8 +4364,11 @@
           }
         ],
         "orderBy": {
-          "path": "stats.submissions",
-          "direction": "asc"
+          "alone": true,
+          "column": "submissions",
+          "direction": "asc",
+          "label": "Submissions",
+          "path": "stats.submissions"
         },
         "served": [
           {
@@ -2707,8 +4403,11 @@
           }
         ],
         "orderBy": {
-          "path": "stats.submissions",
-          "direction": "asc"
+          "alone": true,
+          "column": "submissions",
+          "direction": "asc",
+          "label": "Submissions",
+          "path": "stats.submissions"
         },
         "served": [
           {
@@ -2743,8 +4442,11 @@
           }
         ],
         "orderBy": {
-          "path": "stats.submissions",
-          "direction": "asc"
+          "alone": true,
+          "column": "submissions",
+          "direction": "asc",
+          "label": "Submissions",
+          "path": "stats.submissions"
         },
         "served": [
           {
@@ -2779,8 +4481,11 @@
           }
         ],
         "orderBy": {
-          "path": "stats.submissions",
-          "direction": "asc"
+          "alone": true,
+          "column": "submissions",
+          "direction": "asc",
+          "label": "Submissions",
+          "path": "stats.submissions"
         },
         "served": [
           {
@@ -2815,8 +4520,11 @@
           }
         ],
         "orderBy": {
-          "path": "stats.submissions",
-          "direction": "asc"
+          "alone": true,
+          "column": "submissions",
+          "direction": "asc",
+          "label": "Submissions",
+          "path": "stats.submissions"
         },
         "served": [
           {
@@ -2887,8 +4595,11 @@
           }
         ],
         "orderBy": {
-          "path": "stats.submissions",
-          "direction": "asc"
+          "alone": true,
+          "column": "submissions",
+          "direction": "asc",
+          "label": "Submissions",
+          "path": "stats.submissions"
         },
         "served": [
           {
@@ -3000,8 +4711,11 @@
           }
         ],
         "orderBy": {
-          "path": "stats.lastSubmissionAtMs",
-          "direction": "desc"
+          "alone": true,
+          "column": "lastSubmission",
+          "direction": "desc",
+          "label": "Last submission",
+          "path": "stats.lastSubmissionAtMs"
         },
         "served": [
           {
@@ -3036,8 +4750,11 @@
           }
         ],
         "orderBy": {
-          "path": "stats.lastSubmissionAtMs",
-          "direction": "desc"
+          "alone": true,
+          "column": "lastSubmission",
+          "direction": "desc",
+          "label": "Last submission",
+          "path": "stats.lastSubmissionAtMs"
         },
         "served": [
           {
@@ -3072,8 +4789,11 @@
           }
         ],
         "orderBy": {
-          "path": "stats.lastSubmissionAtMs",
-          "direction": "desc"
+          "alone": true,
+          "column": "lastSubmission",
+          "direction": "desc",
+          "label": "Last submission",
+          "path": "stats.lastSubmissionAtMs"
         },
         "served": [
           {
@@ -3108,8 +4828,11 @@
           }
         ],
         "orderBy": {
-          "path": "stats.lastSubmissionAtMs",
-          "direction": "desc"
+          "alone": true,
+          "column": "lastSubmission",
+          "direction": "desc",
+          "label": "Last submission",
+          "path": "stats.lastSubmissionAtMs"
         },
         "served": [
           {
@@ -3144,8 +4867,11 @@
           }
         ],
         "orderBy": {
-          "path": "stats.lastSubmissionAtMs",
-          "direction": "desc"
+          "alone": true,
+          "column": "lastSubmission",
+          "direction": "desc",
+          "label": "Last submission",
+          "path": "stats.lastSubmissionAtMs"
         },
         "served": [
           {
@@ -3180,8 +4906,11 @@
           }
         ],
         "orderBy": {
-          "path": "stats.lastSubmissionAtMs",
-          "direction": "desc"
+          "alone": true,
+          "column": "lastSubmission",
+          "direction": "desc",
+          "label": "Last submission",
+          "path": "stats.lastSubmissionAtMs"
         },
         "served": [
           {
@@ -3225,8 +4954,11 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -3263,8 +4995,11 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -3301,8 +5036,11 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -3339,8 +5077,11 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -3377,8 +5118,11 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -3585,6 +5329,902 @@
     },
     {
       "declaration": "FORM_LIST_QUERY",
+      "label": "sort nameLower asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort nameLower reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort nameLower desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort nameLower reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort slug asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "slug",
+          "direction": "asc",
+          "label": "Slug",
+          "path": "slug"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "slug",
+          "direction": "asc",
+          "label": "Slug",
+          "path": "slug"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort slug reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "slug",
+          "direction": "desc",
+          "label": "Slug",
+          "path": "slug"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "slug",
+          "direction": "desc",
+          "label": "Slug",
+          "path": "slug"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort slug desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "slug",
+          "direction": "desc",
+          "label": "Slug",
+          "path": "slug"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "slug",
+          "direction": "desc",
+          "label": "Slug",
+          "path": "slug"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort slug reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "slug",
+          "direction": "asc",
+          "label": "Slug",
+          "path": "slug"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "slug",
+          "direction": "asc",
+          "label": "Slug",
+          "path": "slug"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort stats.submissions asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "submissions",
+          "direction": "asc",
+          "label": "Submissions",
+          "path": "stats.submissions"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "submissions",
+          "direction": "asc",
+          "label": "Submissions",
+          "path": "stats.submissions"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort stats.submissions reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "submissions",
+          "direction": "desc",
+          "label": "Submissions",
+          "path": "stats.submissions"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "submissions",
+          "direction": "desc",
+          "label": "Submissions",
+          "path": "stats.submissions"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort stats.submissions desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "submissions",
+          "direction": "desc",
+          "label": "Submissions",
+          "path": "stats.submissions"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "submissions",
+          "direction": "desc",
+          "label": "Submissions",
+          "path": "stats.submissions"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort stats.submissions reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "submissions",
+          "direction": "asc",
+          "label": "Submissions",
+          "path": "stats.submissions"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "submissions",
+          "direction": "asc",
+          "label": "Submissions",
+          "path": "stats.submissions"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort stats.leads asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "leads",
+          "direction": "asc",
+          "label": "Leads",
+          "path": "stats.leads"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "leads",
+          "direction": "asc",
+          "label": "Leads",
+          "path": "stats.leads"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort stats.leads reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "leads",
+          "direction": "desc",
+          "label": "Leads",
+          "path": "stats.leads"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "leads",
+          "direction": "desc",
+          "label": "Leads",
+          "path": "stats.leads"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort stats.leads desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "leads",
+          "direction": "desc",
+          "label": "Leads",
+          "path": "stats.leads"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "leads",
+          "direction": "desc",
+          "label": "Leads",
+          "path": "stats.leads"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort stats.leads reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "leads",
+          "direction": "asc",
+          "label": "Leads",
+          "path": "stats.leads"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "leads",
+          "direction": "asc",
+          "label": "Leads",
+          "path": "stats.leads"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort stats.lastSubmissionAtMs desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "lastSubmission",
+          "direction": "desc",
+          "label": "Last submission",
+          "path": "stats.lastSubmissionAtMs"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "lastSubmission",
+          "direction": "desc",
+          "label": "Last submission",
+          "path": "stats.lastSubmissionAtMs"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort stats.lastSubmissionAtMs reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "lastSubmission",
+          "direction": "asc",
+          "label": "Last submission",
+          "path": "stats.lastSubmissionAtMs"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "lastSubmission",
+          "direction": "asc",
+          "label": "Last submission",
+          "path": "stats.lastSubmissionAtMs"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort stats.lastSubmissionAtMs asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "lastSubmission",
+          "direction": "asc",
+          "label": "Last submission",
+          "path": "stats.lastSubmissionAtMs"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "lastSubmission",
+          "direction": "asc",
+          "label": "Last submission",
+          "path": "stats.lastSubmissionAtMs"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort stats.lastSubmissionAtMs reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "lastSubmission",
+          "direction": "desc",
+          "label": "Last submission",
+          "path": "stats.lastSubmissionAtMs"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "lastSubmission",
+          "direction": "desc",
+          "label": "Last submission",
+          "path": "stats.lastSubmissionAtMs"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort updatedAt desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort updatedAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort updatedAt asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort updatedAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort routing.lead asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "leadRouting",
+          "direction": "asc",
+          "label": "Lead routing",
+          "path": "routing.lead"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "leadRouting",
+          "direction": "asc",
+          "label": "Lead routing",
+          "path": "routing.lead"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort routing.lead reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "leadRouting",
+          "direction": "desc",
+          "label": "Lead routing",
+          "path": "routing.lead"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "leadRouting",
+          "direction": "desc",
+          "label": "Lead routing",
+          "path": "routing.lead"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort routing.lead desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "leadRouting",
+          "direction": "desc",
+          "label": "Lead routing",
+          "path": "routing.lead"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "leadRouting",
+          "direction": "desc",
+          "label": "Lead routing",
+          "path": "routing.lead"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort routing.lead reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "leadRouting",
+          "direction": "asc",
+          "label": "Lead routing",
+          "path": "routing.lead"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "leadRouting",
+          "direction": "asc",
+          "label": "Lead routing",
+          "path": "routing.lead"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort inCampaign asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "inCampaign",
+          "direction": "asc",
+          "label": "In a campaign",
+          "path": "inCampaign"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "inCampaign",
+          "direction": "asc",
+          "label": "In a campaign",
+          "path": "inCampaign"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort inCampaign reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "inCampaign",
+          "direction": "desc",
+          "label": "In a campaign",
+          "path": "inCampaign"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "inCampaign",
+          "direction": "desc",
+          "label": "In a campaign",
+          "path": "inCampaign"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort inCampaign desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "inCampaign",
+          "direction": "desc",
+          "label": "In a campaign",
+          "path": "inCampaign"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "inCampaign",
+          "direction": "desc",
+          "label": "In a campaign",
+          "path": "inCampaign"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
+      "label": "sort inCampaign reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "inCampaign",
+          "direction": "asc",
+          "label": "In a campaign",
+          "path": "inCampaign"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "inCampaign",
+          "direction": "asc",
+          "label": "In a campaign",
+          "path": "inCampaign"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "FORM_LIST_QUERY",
       "label": "an undeclared sort is ignored",
       "request": {
         "clauses": [],
@@ -3721,374 +6361,6 @@
         "orderBy": {
           "direction": "asc",
           "path": "__name__"
-        },
-        "served": [],
-        "searched": null,
-        "refused": [
-          {
-            "clause": {
-              "field": "nope",
-              "op": "equals",
-              "value": "x"
-            },
-            "reason": "this list does not filter by that"
-          }
-        ],
-        "notices": []
-      }
-    },
-    {
-      "declaration": "SUBMISSION_LIST_QUERY",
-      "label": "no clauses",
-      "request": {
-        "clauses": []
-      },
-      "plan": {
-        "filters": [],
-        "orderBy": {
-          "direction": "desc",
-          "path": "createdAt"
-        },
-        "served": [],
-        "searched": null,
-        "refused": [],
-        "notices": []
-      }
-    },
-    {
-      "declaration": "SUBMISSION_LIST_QUERY",
-      "label": "from contains",
-      "request": {
-        "clauses": [
-          {
-            "field": "from",
-            "op": "contains",
-            "value": "Acme Widgets"
-          }
-        ]
-      },
-      "plan": {
-        "filters": [
-          {
-            "path": "senderTokens",
-            "op": "array-contains",
-            "value": "acme"
-          }
-        ],
-        "orderBy": {
-          "direction": "desc",
-          "path": "createdAt"
-        },
-        "served": [
-          {
-            "field": "from",
-            "op": "contains",
-            "value": "Acme Widgets"
-          }
-        ],
-        "searched": null,
-        "refused": [],
-        "notices": []
-      }
-    },
-    {
-      "declaration": "SUBMISSION_LIST_QUERY",
-      "label": "read equals",
-      "request": {
-        "clauses": [
-          {
-            "field": "read",
-            "op": "equals",
-            "value": "true"
-          }
-        ]
-      },
-      "plan": {
-        "filters": [
-          {
-            "path": "read",
-            "op": "==",
-            "value": true
-          }
-        ],
-        "orderBy": {
-          "direction": "desc",
-          "path": "createdAt"
-        },
-        "served": [
-          {
-            "field": "read",
-            "op": "equals",
-            "value": "true"
-          }
-        ],
-        "searched": null,
-        "refused": [],
-        "notices": []
-      }
-    },
-    {
-      "declaration": "SUBMISSION_LIST_QUERY",
-      "label": "formId equals",
-      "request": {
-        "clauses": [
-          {
-            "field": "formId",
-            "op": "equals",
-            "value": "alpha"
-          }
-        ]
-      },
-      "plan": {
-        "filters": [
-          {
-            "path": "formId",
-            "op": "==",
-            "value": "alpha"
-          }
-        ],
-        "orderBy": {
-          "direction": "desc",
-          "path": "createdAt"
-        },
-        "served": [
-          {
-            "field": "formId",
-            "op": "equals",
-            "value": "alpha"
-          }
-        ],
-        "searched": null,
-        "refused": [],
-        "notices": []
-      }
-    },
-    {
-      "declaration": "SUBMISSION_LIST_QUERY",
-      "label": "sort createdAt desc",
-      "request": {
-        "clauses": [],
-        "sort": {
-          "direction": "desc",
-          "path": "createdAt"
-        }
-      },
-      "plan": {
-        "filters": [],
-        "orderBy": {
-          "direction": "desc",
-          "path": "createdAt"
-        },
-        "served": [],
-        "searched": null,
-        "refused": [],
-        "notices": []
-      }
-    },
-    {
-      "declaration": "SUBMISSION_LIST_QUERY",
-      "label": "sort createdAt reversed",
-      "request": {
-        "clauses": [],
-        "sort": {
-          "direction": "asc",
-          "path": "createdAt"
-        }
-      },
-      "plan": {
-        "filters": [],
-        "orderBy": {
-          "direction": "desc",
-          "path": "createdAt"
-        },
-        "served": [],
-        "searched": null,
-        "refused": [],
-        "notices": []
-      }
-    },
-    {
-      "declaration": "SUBMISSION_LIST_QUERY",
-      "label": "an undeclared sort is ignored",
-      "request": {
-        "clauses": [],
-        "sort": {
-          "path": "undeclared",
-          "direction": "asc"
-        }
-      },
-      "plan": {
-        "filters": [],
-        "orderBy": {
-          "direction": "desc",
-          "path": "createdAt"
-        },
-        "served": [],
-        "searched": null,
-        "refused": [],
-        "notices": []
-      }
-    },
-    {
-      "declaration": "SUBMISSION_LIST_QUERY",
-      "label": "search one word",
-      "request": {
-        "clauses": [],
-        "search": [
-          "Acme"
-        ]
-      },
-      "plan": {
-        "filters": [
-          {
-            "path": "searchTokens",
-            "op": "array-contains",
-            "value": "acme"
-          }
-        ],
-        "orderBy": {
-          "direction": "desc",
-          "path": "createdAt"
-        },
-        "served": [],
-        "searched": "acme",
-        "refused": [],
-        "notices": []
-      }
-    },
-    {
-      "declaration": "SUBMISSION_LIST_QUERY",
-      "label": "search two words",
-      "request": {
-        "clauses": [],
-        "search": [
-          "acme",
-          "widgets"
-        ]
-      },
-      "plan": {
-        "filters": [
-          {
-            "path": "searchTokens",
-            "op": "array-contains",
-            "value": "acme"
-          }
-        ],
-        "orderBy": {
-          "direction": "desc",
-          "path": "createdAt"
-        },
-        "served": [],
-        "searched": "acme",
-        "refused": [],
-        "notices": [
-          "Search matches one word at a time: showing results for \"acme\"."
-        ]
-      }
-    },
-    {
-      "declaration": "SUBMISSION_LIST_QUERY",
-      "label": "search with an exact clause",
-      "request": {
-        "clauses": [
-          {
-            "field": "formId",
-            "op": "equals",
-            "value": "alpha"
-          }
-        ],
-        "search": [
-          "acme"
-        ]
-      },
-      "plan": {
-        "filters": [
-          {
-            "path": "searchTokens",
-            "op": "array-contains",
-            "value": "acme"
-          },
-          {
-            "path": "formId",
-            "op": "==",
-            "value": "alpha"
-          }
-        ],
-        "orderBy": {
-          "direction": "desc",
-          "path": "createdAt"
-        },
-        "served": [
-          {
-            "field": "formId",
-            "op": "equals",
-            "value": "alpha"
-          }
-        ],
-        "searched": "acme",
-        "refused": [],
-        "notices": []
-      }
-    },
-    {
-      "declaration": "SUBMISSION_LIST_QUERY",
-      "label": "search with a contains clause",
-      "request": {
-        "clauses": [
-          {
-            "field": "from",
-            "op": "contains",
-            "value": "widget"
-          }
-        ],
-        "search": [
-          "acme"
-        ]
-      },
-      "plan": {
-        "filters": [
-          {
-            "path": "searchTokens",
-            "op": "array-contains",
-            "value": "acme"
-          }
-        ],
-        "orderBy": {
-          "direction": "desc",
-          "path": "createdAt"
-        },
-        "served": [],
-        "searched": "acme",
-        "refused": [
-          {
-            "clause": {
-              "field": "from",
-              "op": "contains",
-              "value": "widget"
-            },
-            "reason": "cannot be combined with the search — clear the search to use it"
-          }
-        ],
-        "notices": []
-      }
-    },
-    {
-      "declaration": "SUBMISSION_LIST_QUERY",
-      "label": "an unknown field is refused",
-      "request": {
-        "clauses": [
-          {
-            "field": "nope",
-            "op": "equals",
-            "value": "x"
-          }
-        ]
-      },
-      "plan": {
-        "filters": [],
-        "orderBy": {
-          "direction": "desc",
-          "path": "createdAt"
         },
         "served": [],
         "searched": null,
@@ -4341,8 +6613,10 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -4379,8 +6653,10 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -4417,8 +6693,10 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -4455,8 +6733,10 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -4493,8 +6773,10 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -4543,8 +6825,559 @@
       "plan": {
         "filters": [],
         "orderBy": {
+          "alone": true,
+          "column": "$id",
+          "direction": "desc",
+          "label": "ID",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort __name__ asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "$id",
+          "direction": "asc",
+          "label": "ID",
+          "path": "__name__"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
           "direction": "asc",
           "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort __name__ reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "$id",
+          "direction": "desc",
+          "label": "ID",
+          "path": "__name__"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "$id",
+          "direction": "desc",
+          "label": "ID",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort __name__ desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "$id",
+          "direction": "desc",
+          "label": "ID",
+          "path": "__name__"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "$id",
+          "direction": "desc",
+          "label": "ID",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort __name__ reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "$id",
+          "direction": "asc",
+          "label": "ID",
+          "path": "__name__"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort nameLower asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort nameLower reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort nameLower desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort nameLower reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort description asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "description",
+          "direction": "asc",
+          "label": "Description",
+          "path": "description"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "description",
+          "direction": "asc",
+          "label": "Description",
+          "path": "description"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort description reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "description",
+          "direction": "desc",
+          "label": "Description",
+          "path": "description"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "description",
+          "direction": "desc",
+          "label": "Description",
+          "path": "description"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort description desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "description",
+          "direction": "desc",
+          "label": "Description",
+          "path": "description"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "description",
+          "direction": "desc",
+          "label": "Description",
+          "path": "description"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort description reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "description",
+          "direction": "asc",
+          "label": "Description",
+          "path": "description"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "description",
+          "direction": "asc",
+          "label": "Description",
+          "path": "description"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort updatedAt desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort updatedAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort updatedAt asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort updatedAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort createdAt asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Created",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Created",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort createdAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Created",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Created",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort createdAt desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Created",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Created",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "LAYOUT_LIST_QUERY",
+      "label": "sort createdAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Created",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Created",
+          "path": "createdAt"
         },
         "served": [],
         "searched": null,
@@ -5017,8 +7850,10 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -5055,8 +7890,10 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -5093,8 +7930,10 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -5131,8 +7970,10 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -5169,8 +8010,10 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -5219,8 +8062,671 @@
       "plan": {
         "filters": [],
         "orderBy": {
+          "alone": true,
+          "column": "$id",
+          "direction": "desc",
+          "label": "ID",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort __name__ asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "$id",
+          "direction": "asc",
+          "label": "ID",
+          "path": "__name__"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
           "direction": "asc",
           "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort __name__ reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "$id",
+          "direction": "desc",
+          "label": "ID",
+          "path": "__name__"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "$id",
+          "direction": "desc",
+          "label": "ID",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort __name__ desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "$id",
+          "direction": "desc",
+          "label": "ID",
+          "path": "__name__"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "$id",
+          "direction": "desc",
+          "label": "ID",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort __name__ reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "$id",
+          "direction": "asc",
+          "label": "ID",
+          "path": "__name__"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort nameLower asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort nameLower reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort nameLower desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort nameLower reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort kind asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "kind",
+          "direction": "asc",
+          "label": "Used in",
+          "path": "kind"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "kind",
+          "direction": "asc",
+          "label": "Used in",
+          "path": "kind"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort kind reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "kind",
+          "direction": "desc",
+          "label": "Used in",
+          "path": "kind"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "kind",
+          "direction": "desc",
+          "label": "Used in",
+          "path": "kind"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort kind desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "kind",
+          "direction": "desc",
+          "label": "Used in",
+          "path": "kind"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "kind",
+          "direction": "desc",
+          "label": "Used in",
+          "path": "kind"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort kind reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "kind",
+          "direction": "asc",
+          "label": "Used in",
+          "path": "kind"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "kind",
+          "direction": "asc",
+          "label": "Used in",
+          "path": "kind"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort description asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "description",
+          "direction": "asc",
+          "label": "Description",
+          "path": "description"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "description",
+          "direction": "asc",
+          "label": "Description",
+          "path": "description"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort description reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "description",
+          "direction": "desc",
+          "label": "Description",
+          "path": "description"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "description",
+          "direction": "desc",
+          "label": "Description",
+          "path": "description"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort description desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "description",
+          "direction": "desc",
+          "label": "Description",
+          "path": "description"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "description",
+          "direction": "desc",
+          "label": "Description",
+          "path": "description"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort description reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "description",
+          "direction": "asc",
+          "label": "Description",
+          "path": "description"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "description",
+          "direction": "asc",
+          "label": "Description",
+          "path": "description"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort updatedAt desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort updatedAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort updatedAt asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort updatedAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort createdAt asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Created",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Created",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort createdAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Created",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Created",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort createdAt desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Created",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Created",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "COMPONENT_LIST_QUERY",
+      "label": "sort createdAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Created",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Created",
+          "path": "createdAt"
         },
         "served": [],
         "searched": null,
@@ -5793,8 +9299,10 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -5843,8 +9351,10 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -5893,8 +9403,10 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -5943,8 +9455,10 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -5993,8 +9507,10 @@
           }
         ],
         "orderBy": {
-          "path": "updatedAt",
-          "direction": "desc"
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
         },
         "served": [
           {
@@ -6071,6 +9587,822 @@
         "orderBy": {
           "direction": "asc",
           "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort nameLower asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort nameLower reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort nameLower desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "desc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort nameLower reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "displayName",
+          "direction": "asc",
+          "label": "Display name",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort kind asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "kind",
+          "direction": "asc",
+          "label": "Kind",
+          "path": "kind"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "kind",
+          "direction": "asc",
+          "label": "Kind",
+          "path": "kind"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort kind reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "kind",
+          "direction": "desc",
+          "label": "Kind",
+          "path": "kind"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "kind",
+          "direction": "desc",
+          "label": "Kind",
+          "path": "kind"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort kind desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "kind",
+          "direction": "desc",
+          "label": "Kind",
+          "path": "kind"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "kind",
+          "direction": "desc",
+          "label": "Kind",
+          "path": "kind"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort kind reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "kind",
+          "direction": "asc",
+          "label": "Kind",
+          "path": "kind"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "kind",
+          "direction": "asc",
+          "label": "Kind",
+          "path": "kind"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort source.type asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "source",
+          "direction": "asc",
+          "label": "Source",
+          "path": "source.type"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "source",
+          "direction": "asc",
+          "label": "Source",
+          "path": "source.type"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort source.type reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "source",
+          "direction": "desc",
+          "label": "Source",
+          "path": "source.type"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "source",
+          "direction": "desc",
+          "label": "Source",
+          "path": "source.type"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort source.type desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "source",
+          "direction": "desc",
+          "label": "Source",
+          "path": "source.type"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "source",
+          "direction": "desc",
+          "label": "Source",
+          "path": "source.type"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort source.type reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "source",
+          "direction": "asc",
+          "label": "Source",
+          "path": "source.type"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "source",
+          "direction": "asc",
+          "label": "Source",
+          "path": "source.type"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort updatedAt desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort updatedAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort updatedAt asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "asc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort updatedAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "column": "updatedAt",
+          "direction": "desc",
+          "label": "Updated",
+          "path": "updatedAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort createdAt asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Created",
+          "path": "createdAt"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Created",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort createdAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Created",
+          "path": "createdAt"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Created",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort createdAt desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Created",
+          "path": "createdAt"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "desc",
+          "label": "Created",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "TEMPLATE_LIST_QUERY",
+      "label": "sort createdAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Created",
+          "path": "createdAt"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "libraryRow",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "alone": true,
+          "column": "createdAt",
+          "direction": "asc",
+          "label": "Created",
+          "path": "createdAt"
         },
         "served": [],
         "searched": null,

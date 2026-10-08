@@ -201,6 +201,13 @@ const PLUGIN_TOPICS = {
   // delivery orders (AGL-3644). Unlisted until the deployment offers a
   // service; see PLUGIN_UNLISTED_TOPICS.
   deliveryApps: '/commerce-and-bookings/commerce/delivery-apps',
+  // The Rewards cards under the store's Promotions and the order dialog's
+  // Rewards section (AGL-3640).
+  loyalty: '/commerce-and-bookings/commerce/rewards-and-referrals',
+  // The Rewards account card above the program, for a merchant's own Smile.io
+  // or Yotpo Loyalty account (AGL-3677). Unlisted until the deployment sets
+  // LOYALTY_CONNECTORS_TOKEN_KEY; see PLUGIN_UNLISTED_TOPICS.
+  loyaltyConnectors: '/commerce-and-bookings/commerce/connect-smile-io-or-yotpo',
   events: '/content-and-data/events/overview',
   forms: '/content-and-data/forms/overview',
   funnels: '/marketing-and-automation/analytics/funnels',
@@ -294,6 +301,9 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // The Zapier card draws nothing until the console holds ZAPIER_APP_URL, the
   // published app's link, which the guide waits on too (AGL-3643).
   'zapier',
+  // The Rewards account card draws nothing until the console holds
+  // LOYALTY_CONNECTORS_TOKEN_KEY, the gate the guide waits on (AGL-3677).
+  'loyaltyConnectors',
 ])
 
 // ── Docs parsing ──────────────────────────────────────────────────────────

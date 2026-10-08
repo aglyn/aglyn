@@ -30,6 +30,8 @@ import {
 } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { type GridColDef } from '@mui/x-data-grid'
 import {
@@ -94,6 +96,7 @@ import { artifactRenameListKeys } from '@aglyn/aglyn/app-utils/artifact-list-key
 import {
   COMPONENT_LIST_HEADERS,
   COMPONENT_LIST_QUERY,
+  COMPONENT_LIST_SORTS,
 } from '../utils/artifact-list-queries'
 import PluginWidgetSlot, { useSlotWidgets } from './plugin-widget-slot.component'
 import SaveAsTemplateDialog, {
@@ -232,10 +235,12 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
    * drawer and in its marketplace listing.
    */
   const gridFilter = useListGridFilter({ selectFields: COMPONENT_SELECT_FIELDS })
+  // Every header sorts on the query (AGL-3680): `COMPONENT_LIST_SORTS`.
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const componentList = useListQuery<any>({
     collection: hostId ? collection(firestore, 'hosts', hostId, 'components') : null,
     declaration: COMPONENT_LIST_QUERY,
-    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords },
+    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords, sort: askedSort },
     deps: [firestore, hostId],
     idField: '$id',
     /*
@@ -280,6 +285,14 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
     () => componentList.rows.filter((definition: any) => !definition.deletedAt),
     [componentList.rows],
   )
+  const columnSort = useListColumnSort<any>({
+    sorts: COMPONENT_LIST_SORTS,
+    defaultSort: COMPONENT_LIST_SORTS[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: componentList.plan.orderBy,
+    rows: components,
+  })
 
   /**
    * The readout the page header renders (AGL-2501).
@@ -564,7 +577,6 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       field: 'kind',
       headerName: 'Used in',
       width: 110,
-      sortable: false,
       valueGetter: (_value: any, row: any) => Aglyn.reusableComponentKindOf(row),
       renderCell: ({ value }: any) => <ComponentKindChip kind={value} />,
     },
@@ -768,7 +780,10 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         onChange={gridFilter.setClauses}
         options={COMPONENT_FILTER_OPTIONS}
       />
-      <ListQueryNotices refused={componentRefusals} notices={componentList.plan.notices} />
+      <ListQueryNotices
+        refused={componentRefusals}
+        notices={[...componentList.plan.notices, ...columnSort.notices]}
+      />
       <ListTable
         aria-label="Reusable components"
         rowHeight={TABLE_ROW_HEIGHT}
@@ -807,7 +822,8 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
                   </Stack>
                 ) : null,
             })}
-        rows={components}
+        rows={columnSort.rows}
+        columnSort={columnSort}
         // The whole row opens the detail page (AGL-2501); the action cluster
         // stops propagation so a menu click never navigates underneath it.
         onOpen={(id) =>
@@ -827,13 +843,13 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         loading={componentsStatus === 'loading'}
         // Paged by the footer below, so the grid must not also slice.
         hideFooter
-        // The panel and the search are the grid's; the QUERY answers them
-        // (AGL-3321), so the grid filters and sorts nothing.
+        // The panel, the search and the header sorts are the grid's; the
+        // QUERY answers them (AGL-3321, AGL-3680), so the grid filters and
+        // sorts nothing itself.
         filterMode="server"
         filterModel={gridFilter.filterModel}
         onFilterModelChange={gridFilter.onFilterModelChange}
         quickFilter
-        disableColumnSorting
       />
       <ListPagination
         page={componentList.page}

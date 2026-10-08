@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { SCREEN_KIND_EMAIL } from '@aglyn/aglyn/app-utils/screen-route'
+import { SCREEN_KIND_EMAIL } from '@aglyn/aglyn/app-utils/screen-kind'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 
 /**
