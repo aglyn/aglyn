@@ -315,17 +315,7 @@ describeEmulated('an org erasure persists no copy of the workspace (AGL-1443)', 
       )
     })
     // Bounded by shape, not only by policy: a record of this size cannot be
-    // a copy of a workspace however large the workspace was. The counts grow
-    // by one key per collection the erasure sweeps — every plugin seam adds
-    // one — so the bound is per counted key, not a fixed byte figure a new
-    // plugin trips (AGL-3680 CI: 1039 bytes against 1024).
-    const counted = rows.reduce(
-      (sum, row) =>
-        sum +
-        Object.keys((row['before'] as object) ?? {}).length +
-        Object.keys((row['after'] as object) ?? {}).length,
-      0,
-    )
-    expect(JSON.stringify(recorded).length).toBeLessThan(512 + 48 * counted)
+    // a copy of a workspace however large the workspace was.
+    expect(JSON.stringify(recorded).length).toBeLessThan(1024)
   }, 60_000)
 })
