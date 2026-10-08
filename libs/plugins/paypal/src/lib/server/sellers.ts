@@ -16,6 +16,7 @@
  */
 
 import { randomBytes } from 'node:crypto'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { PayPalConfig } from './config'
 import { isDocumentId, sellersCollection } from './db'
 import { payPalOk, payPalRequest } from './paypal-api'
@@ -92,7 +93,7 @@ export function sellerView(seller: PayPalSellerRecord | null, config: PayPalConf
 }
 
 function sellerActions(seller: PayPalSellerRecord): string[] {
-  if (seller.status === 'revoked') return ['Your PayPal account withdrew Aglyn’s permission. Connect it again to accept PayPal.']
+  if (seller.status === 'revoked') return [`Your PayPal account withdrew ${PLATFORM_BRAND_NAME}’s permission. Connect it again to accept PayPal.`]
   if (seller.status === 'onboarding') return ['Finish setting up your account with PayPal.']
   const actions: string[] = []
   if (seller.primaryEmailConfirmed === false) {
@@ -102,7 +103,7 @@ function sellerActions(seller: PayPalSellerRecord): string[] {
     actions.push('PayPal is not letting your account receive payments yet. Sign in to PayPal and resolve its notice.')
   }
   if (seller.permissionsGranted === false) {
-    actions.push('Grant Aglyn permission in PayPal to take payments for you: connect PayPal again and accept.')
+    actions.push(`Grant ${PLATFORM_BRAND_NAME} permission in PayPal to take payments for you: connect PayPal again and accept.`)
   }
   return actions
 }
@@ -146,7 +147,7 @@ export async function startSellerOnboarding(
         legal_consents: [{ type: 'SHARE_DATA_CONSENT', granted: true }],
         partner_config_override: {
           return_url: input.returnUrl,
-          return_url_description: 'Return to your store settings in Aglyn.',
+          return_url_description: `Return to your store settings in ${PLATFORM_BRAND_NAME}.`,
         },
       },
     }),

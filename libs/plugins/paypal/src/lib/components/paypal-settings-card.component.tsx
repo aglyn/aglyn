@@ -17,6 +17,7 @@
 
 'use client'
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -234,9 +235,9 @@ export function PayPalSettingsCard({ orgId }: PayPalSettingsCardProps) {
         ) : null}
         <Typography variant="body2" color="text.secondary">
           {connected
-            ? 'Shoppers see PayPal and Venmo next to Checkout. PayPal charges you its own processing fee; Aglyn’s transaction fee applies as it does to card sales, and refunds made here return it in proportion.'
+            ? `Shoppers see PayPal and Venmo next to Checkout. PayPal charges you its own processing fee; ${PLATFORM_BRAND_NAME}’s transaction fee applies as it does to card sales, and refunds made here return it in proportion.`
             : canManage
-              ? 'You sign in to PayPal (or open a business account there) and give Aglyn permission to take payments and refunds for you. Aglyn never sees your PayPal password.'
+              ? `You sign in to PayPal (or open a business account there) and give ${PLATFORM_BRAND_NAME} permission to take payments and refunds for you. ${PLATFORM_BRAND_NAME} never sees your PayPal password.`
               : 'The workspace owner can connect PayPal.'}
         </Typography>
       </Stack>

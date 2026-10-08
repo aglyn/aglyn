@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type {
   PluginPaymentProvider,
@@ -123,7 +124,7 @@ export async function refundPayPalCapture(request: PluginPaymentRefundRequest): 
       return {
         ok: false,
         status: 409,
-        error: 'PayPal refused: Aglyn no longer has permission to refund for this PayPal account. Refund it in PayPal, or connect PayPal again.',
+        error: `PayPal refused: ${PLATFORM_BRAND_NAME} no longer has permission to refund for this PayPal account. Refund it in PayPal, or connect PayPal again.`,
       }
     }
     if (issue === 'TRANSACTION_REFUSED' || issue === 'REFUND_NOT_ALLOWED') {
