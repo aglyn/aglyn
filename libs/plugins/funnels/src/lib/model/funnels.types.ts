@@ -46,8 +46,14 @@ export const FUNNEL_FEATURE = 'screenAnalytics' as const
 
 export const FUNNEL_MIN_STEPS = 2
 export const FUNNEL_MAX_STEPS = 8
-/** The most funnels one site keeps. */
+/** The most funnels one site keeps, drafts included. */
 export const FUNNELS_MAX_PER_SITE = 20
+
+/**
+ * The site roles that change what a site measures: its funnels. The `author`
+ * role edits content and does not decide what the site measures.
+ */
+export const FUNNEL_MANAGING_ROLES: ReadonlySet<string> = new Set(['admin', 'editor'])
 export const FUNNEL_NAME_MAX = 80
 export const FUNNEL_LABEL_MAX = 80
 
@@ -83,11 +89,28 @@ export interface FunnelDefinition {
   steps: FunnelStep[]
 }
 
+/**
+ * A funnel's state (AGL-3616). Absent is ACTIVE — every funnel saved before
+ * drafts existed, and every funnel a person saves in the editor. `draft` is
+ * a funnel something else made for a person to review — an AI build, through
+ * this plugin's `funnel` draft writer — and changes nothing live: it does not
+ * switch the site's visitor recording on, is not measured, is not read by the
+ * AI insight figures and carries no drop-off follow-up, until a site admin or
+ * editor activates it on the Funnels card (`funnels/activate`).
+ */
+export type FunnelStatus = 'draft'
+
 export interface StoredFunnel extends FunnelDefinition {
   $id: string
+  status?: FunnelStatus
   createdAt?: unknown
   updatedAt?: unknown
   createdBy?: string
+}
+
+/** Whether a stored funnel document is a draft (see {@link FunnelStatus}). */
+export function isFunnelDraft(data: { status?: unknown } | null | undefined): boolean {
+  return data?.status === 'draft'
 }
 
 /** One recorded step of a visit, as the collector stores it. */
