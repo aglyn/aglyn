@@ -54,11 +54,13 @@ import {
   useHostVersionApi,
 } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { Button, Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { collection, doc, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   EMAIL_TEMPLATE_BASE,
   EMAIL_TEMPLATE_FILTER_HEADERS,
@@ -74,6 +76,13 @@ import { emailTemplateSoftDelete } from '../utils/email-template-soft-delete'
 // pre-AGL-621/622 shape — so every "Edit"/"Design" jump out of the Emails
 // page landed on a 404, including the one right after creating a new email
 // (AGL-685). Takes the resolved org slug + subdomain, not a host doc id.
+/** Origin sorts the loaded page: installed or yours (AGL-3680). */
+const TEMPLATE_PAGE_SORTS = {
+  origin: (row: any) =>
+    templateProvenance(row).origin === 'installed' ? 'installed' : 'local',
+}
+const TEMPLATE_SORT_HEADERS = { origin: 'Origin' }
+
 const besignerHref = (
   orgSlug: string,
   host: string,
@@ -147,6 +156,15 @@ export function EmailScreensCard(props: {
   const { confirm } = useConfirmationContext()
 
   const gridFilter = useListGridFilter()
+  /*
+   * EVERY HEADER SORTS (AGL-3680). Template orders the QUERY by `nameLower`,
+   * A to Z by default and Z to A while nothing narrows the list; Origin is
+   * the presence of the install provenance, which no query can order by, so
+   * it sorts the page on screen and says so.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(
+    EMAIL_TEMPLATE_QUERY.sorts[0],
+  )
   const {
     rows: emailScreens,
     hasMore,
@@ -161,10 +179,21 @@ export function EmailScreensCard(props: {
     request: {
       clauses: gridFilter.clauses,
       search: gridFilter.searchWords,
+      sort: askedSort,
       base: EMAIL_TEMPLATE_BASE,
     },
     deps: [firestore, hostId],
     idField: '$id',
+  })
+  const columnSort = useListColumnSort<any>({
+    sorts: EMAIL_TEMPLATE_QUERY.sorts,
+    defaultSort: EMAIL_TEMPLATE_QUERY.sorts[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows: emailScreens,
+    pageSorts: TEMPLATE_PAGE_SORTS,
+    headers: TEMPLATE_SORT_HEADERS,
   })
   const filtering =
     gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
@@ -358,10 +387,14 @@ export function EmailScreensCard(props: {
               clauses={gridFilter.clauses}
               onChange={gridFilter.setClauses}
             />
-            <ListQueryNotices refused={refusals} notices={plan.notices} />
+            <ListQueryNotices
+              refused={refusals}
+              notices={[...plan.notices, ...columnSort.notices]}
+            />
             <ListTable
               aria-label="Email templates"
-              rows={emailScreens}
+              rows={columnSort.rows}
+              columnSort={columnSort}
               columns={listFilterGridColumns(
                 columns,
                 EMAIL_TEMPLATE_QUERY.fields,
@@ -372,13 +405,12 @@ export function EmailScreensCard(props: {
               onOpen={(_id, row) => router.push(templateHref(row))}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
-              // The panel and the search go to the query; the grid neither
-              // filters nor sorts the page it holds.
+              // The panel, the search and the Template header go to the
+              // query (Origin sorts the page, and says so).
               filterMode="server"
               filterModel={gridFilter.filterModel}
               onFilterModelChange={gridFilter.onFilterModelChange}
               quickFilter
-              disableColumnSorting
               noRowsLabel="No templates match these filters"
             />
             <ListPagination

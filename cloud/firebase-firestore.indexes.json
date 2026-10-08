@@ -4718,6 +4718,48 @@
     },
     {
       "collectionGroup": "formSubmissions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "formId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "formSubmissions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "formId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "read",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "formSubmissions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "formId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "read",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "formSubmissions",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         {
@@ -4768,6 +4810,48 @@
         },
         {
           "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "formSubmissions",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "orgId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "formSubmissions",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "orgId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "read",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "formSubmissions",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "orgId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "read",
           "order": "DESCENDING"
         }
       ]
@@ -4923,6 +5007,20 @@
         {
           "fieldPath": "nameLower",
           "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "screens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nameLower",
+          "order": "DESCENDING"
         }
       ]
     },
@@ -6387,6 +6485,34 @@
       ]
     },
     {
+      "collectionGroup": "leads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "visibleTo",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "leads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "visibleTo",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "email",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "deals",
       "queryScope": "COLLECTION",
       "fields": [
@@ -6957,6 +7083,188 @@
         {
           "fieldPath": "nameLower",
           "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "retired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nameLower",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "retired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nameLower",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "retired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "slug",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "retired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "slug",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "retired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stats.submissions",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "retired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stats.leads",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "retired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stats.leads",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "retired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stats.lastSubmissionAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "retired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "retired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "routing.lead",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "retired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "routing.lead",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "retired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "inCampaign",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "retired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "inCampaign",
+          "order": "DESCENDING"
         }
       ]
     },

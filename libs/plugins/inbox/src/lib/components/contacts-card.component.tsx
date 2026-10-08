@@ -58,6 +58,8 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
   Button,
   Chip,
@@ -162,6 +164,13 @@ export function ContactsCard({
     search: { words: searchWords, onChange: setSearchWords },
   })
   /*
+   * EVERY HEADER SORTS (AGL-3680). Email and Joined/Captured order the QUERY
+   * (`contactSorts`): both are on every member and lead. Source and Site are
+   * sets on a lead, so they sort the page on screen and say so. Null is the
+   * list's own order, newest first; a switch of list starts it again.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
+  /*
    * A switch of list starts it clean: the two lists filter by different
    * fields, and a clause carried across would be one the other list cannot
    * ask — refused on arrival, for a question the reader asked of the list
@@ -171,9 +180,14 @@ export function ContactsCard({
     if (!next || next === view) return
     gridFilter.setClauses([])
     setSearchWords([])
+    setAskedSort(null)
     setChosen(next)
   }
-  const request = { clauses: gridFilter.clauses, search: gridFilter.searchWords }
+  const request = {
+    clauses: gridFilter.clauses,
+    search: gridFilter.searchWords,
+    sort: askedSort,
+  }
 
   /*==========================================
    * SITE MEMBERS — `hosts/{hostId}/siteMembers`, newest first
@@ -285,6 +299,23 @@ export function ContactsCard({
     () => (addressSearched ? [...shown.plan.notices, LEAD_ADDRESS_SEARCH_NOTICE] : shown.plan.notices),
     [addressSearched, shown.plan.notices],
   )
+  const contactPageSorts = useMemo(
+    () => ({
+      sources: (lead: any) => leadSources(lead).map(leadSourceLabel).join(', '),
+      capturedByHostIds: (contact: any) => orgSiteNames(orgMount, contact.capturedByHostIds),
+    }),
+    [orgMount],
+  )
+  const columnSort = useListColumnSort<any>({
+    sorts: declaration.sorts,
+    defaultSort: declaration.sorts[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: shown.plan.orderBy,
+    rows: shown.rows,
+    pageSorts: view === 'leads' ? contactPageSorts : undefined,
+    headers,
+  })
   const filtering =
     gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
 
@@ -431,7 +462,6 @@ export function ContactsCard({
             field: 'sources',
             headerName: 'Source',
             width: 200,
-            sortable: false,
             valueGetter: (_value: unknown, lead: any) =>
               leadSources(lead).map(leadSourceLabel).join(', '),
             renderCell: ({ row: lead }: { row: any }) => (
@@ -456,7 +486,6 @@ export function ContactsCard({
             headerName: 'Site',
             flex: 1,
             minWidth: 160,
-            sortable: false,
             renderCell: ({ row: contact }: { row: any }) =>
               orgSiteNames(orgMount, contact.capturedByHostIds),
           } satisfies GridColDef,
@@ -539,24 +568,27 @@ export function ContactsCard({
                 onChange={gridFilter.setClauses}
                 options={options}
               />
-              <ListQueryNotices refused={refusals} notices={notices} />
+              <ListQueryNotices
+                refused={refusals}
+                notices={[...notices, ...columnSort.notices]}
+              />
               <ListTable
                 // One grid per list, so the other list's search box and
                 // panel state never carry across the toggle.
                 key={view}
                 aria-label={view === 'members' ? 'Site members' : 'Leads'}
-                rows={shown.rows}
+                rows={columnSort.rows}
+                columnSort={columnSort}
                 columns={listFilterGridColumns(columns, declaration.fields, options, headers)}
                 rowHeight={TABLE_ROW_HEIGHT}
                 // Paged by the footer below, so the grid must not also slice.
                 hideFooter
-                // The panel and the search go to the query; the grid neither
-                // filters nor sorts the page it holds.
+                // The panel, the search and the headers go to the query
+                // (Source and Site sort the page, and say so).
                 filterMode="server"
                 filterModel={gridFilter.filterModel}
                 onFilterModelChange={gridFilter.onFilterModelChange}
                 quickFilter
-                disableColumnSorting
                 noRowsLabel={
                   view === 'members'
                     ? 'No members match these filters'
