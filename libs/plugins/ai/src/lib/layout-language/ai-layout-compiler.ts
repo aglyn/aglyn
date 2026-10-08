@@ -2211,12 +2211,13 @@ function timeline(scope: SectionScope, items: readonly AiLayoutItem[]): string {
       { direction: 'row', spacing: '3', alignItems: 'baseline' },
       null,
       [
+        // The numbers keep one column, so every title starts at the same line.
         tree.add(
-          'muiTypography',
-          { children: String(position + 1).padStart(2, '0'), variant: 'h4', component: 'p' },
-          accent(scope),
+          'muiBox',
           null,
-          'number',
+          { flex: '0 0 3.5rem' },
+          [tree.add('muiTypography', { children: String(position + 1).padStart(2, '0'), variant: 'h4', component: 'p' }, accent(scope), null, 'number')],
+          'numberColumn',
         ),
         tree.add(
           'muiStack',
