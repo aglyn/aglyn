@@ -770,7 +770,11 @@ describe('the site artifact lists share one ordering decision (AGL-2501)', () =>
     expect(builder).toContain('orderBy(documentId())')
     expect(builder).not.toMatch(/orderBy\('displayName'/)
     for (const declaration of [LAYOUT_LIST_QUERY, COMPONENT_LIST_QUERY, TEMPLATE_LIST_QUERY]) {
-      expect(declaration.sorts).toEqual([ARTIFACT_LIST_ORDER])
+      // The walk is the DEFAULT. Every other order is a header the reader
+      // picked (AGL-3680), on a field every writer stamps and a backfill
+      // filled in — `artifact-list-indexes.spec.ts` holds those.
+      expect(declaration.sorts[0]).toEqual(ARTIFACT_LIST_ORDER)
+      for (const sort of declaration.sorts.slice(1)) expect(sort.column).toBeTruthy()
     }
     expect(ARTIFACT_LIST_ORDER).toEqual({ path: LIST_QUERY_ID_PATH, direction: 'asc' })
   })

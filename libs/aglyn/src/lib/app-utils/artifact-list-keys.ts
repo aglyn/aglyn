@@ -41,6 +41,11 @@ import { displayNameSearchFields } from './name-search'
  *                so does a deleted template (`artifactDeleteListKeys`), which
  *                is how the library's query leaves tombstones out;
  *
+ *   description  on a layout or component that has none, `null` — the
+ *                lists sort by it (AGL-3680), and an `orderBy` drops every
+ *                document that lacks the field. A writer that passes a
+ *                partial document here must pass its `description` too, or
+ *                the null would overwrite the one it writes;
  *   deletedAt    on a screen, `null` — the flag a campaign's screens list
  *                asks for (`deletedAt == null`) to leave tombstones out. A
  *                query cannot ask for a field to be absent, so a live
@@ -130,6 +135,10 @@ export function artifactCreateListKeys(
   // holds the field (AGL-3321, a campaign's screens).
   if (collection === 'screens') keys['deletedAt'] = null
   if (collection === 'components' && doc['kind'] !== 'email') keys['kind'] = 'site'
+  // Stored, not omitted: the Description header orders by it (AGL-3680).
+  if ((collection === 'layouts' || collection === 'components') && doc['description'] == null) {
+    keys['description'] = null
+  }
   if (collection === 'templates') {
     if (!TEMPLATE_KINDS.includes(String(doc['kind']))) keys['kind'] = 'page'
     // Provenance is server-managed (AGL-666), and a writer that states it is

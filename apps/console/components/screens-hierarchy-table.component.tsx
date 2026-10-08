@@ -39,6 +39,10 @@ import EmptyStateComponent, {
 } from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
+  compareListSortValues,
+  type ListSortValue,
+} from '@aglyn/shared-util-tools/list-query/list-column-sort'
+import {
   DndContext,
   DragOverlay,
   MeasuringStrategy,
@@ -64,6 +68,7 @@ import {
   TableHead,
   TablePagination,
   TableRow,
+  TableSortLabel,
   Tooltip,
   Typography,
   useMediaQuery,
@@ -154,6 +159,10 @@ export interface ScreensHierarchyTableProps {
 
 const COLUMN_COUNT = 8
 
+/** Why a handle does not drag while a header sort is on (AGL-3680). */
+const DRAG_IN_MANUAL_ORDER =
+  'Drag to reorder works in manual order — click the sorted header until it clears'
+
 /**
  * Column widths in px, after the leading controls column, in table order:
  * display name, id, path, description, updated, published, actions. The
@@ -232,6 +241,90 @@ export function compareScreenSiblings(
   const createdB = b.createdAt?.seconds ?? 0
   if (createdA !== createdB) return createdA - createdB
   return a.$id.localeCompare(b.$id)
+}
+
+/*
+ * EVERY HEADER SORTS (AGL-3680), WITHIN EACH SIBLING GROUP.
+ *
+ * The tree holds every screen the page read (`SCREEN_WINDOW`), so a header
+ * sort is a plain client sort (strategy 4 in `list-column-sort.ts`) — but of
+ * each parent's CHILDREN, never of the flattened rows: a sorted tree is still
+ * a tree. The default is the manual order the drag handles write; a header's
+ * third click returns to it. While a header sort is on, dragging is off — a
+ * drop positions a page among its siblings in MANUAL order, which is not the
+ * order on screen, so the handle would put it somewhere the reader did not
+ * aim. Actions is the one column that does not sort.
+ */
+
+/** The columns a header sorts by. */
+export type ScreenSortField =
+  | 'displayName'
+  | '$id'
+  | 'path'
+  | 'description'
+  | 'updatedAt'
+  | 'publishedAt'
+
+export interface ScreenSort {
+  field: ScreenSortField
+  direction: 'asc' | 'desc'
+}
+
+/** The header cells, in table order, and how each reads in the hint. */
+const SORTABLE_COLUMNS: ReadonlyArray<{ field: ScreenSortField; label: string }> = [
+  { field: 'displayName', label: 'Display name' },
+  { field: '$id', label: 'ID' },
+  { field: 'path', label: 'Path' },
+  { field: 'description', label: 'Description' },
+  { field: 'updatedAt', label: 'Updated' },
+  { field: 'publishedAt', label: 'Published' },
+]
+
+/** A header click: ascending, then descending, then back to manual order. */
+export function nextScreenSort(
+  current: ScreenSort | null,
+  field: ScreenSortField,
+): ScreenSort | null {
+  if (current?.field !== field) return { field, direction: 'asc' }
+  return current.direction === 'asc' ? { field, direction: 'desc' } : null
+}
+
+const dateOf = (value?: { toDate?: () => Date }): Date | null => value?.toDate?.() ?? null
+
+/**
+ * What a row shows in a column, as the sort compares it: the Path column's
+ * address — none for a group, the routes a collection template renders.
+ */
+export function screenSortValue(
+  row: ScreenHierarchyRow,
+  field: ScreenSortField,
+  context: {
+    routingMap?: Record<ScreenUid, string>
+    collectionTemplates?: UseCollectionTemplatesResult
+  } = {},
+): ListSortValue {
+  switch (field) {
+    case 'displayName':
+      return row.displayName || null
+    case '$id':
+      return row.$id
+    case 'path': {
+      if (isScreenGroup(row)) return null
+      if (context.collectionTemplates?.templateScreenIds.has(row.$id)) {
+        return collectionTemplateRoutesSummary(
+          context.collectionTemplates.routesByScreenId.get(row.$id),
+        )
+      }
+      const path = context.routingMap?.[row.$id]
+      return path ? screenRoutePathToUrl(path) : null
+    }
+    case 'description':
+      return row.description || null
+    case 'updatedAt':
+      return dateOf(row.updatedAt)
+    case 'publishedAt':
+      return dateOf(row.publishedAt)
+  }
 }
 
 /** Thin droppable strip between rows: drop inserts as a sibling before `beforeId`. */
@@ -317,6 +410,8 @@ function ScreenTableRow(props: {
   entry: ScreenTreeNode
   collapsed: boolean
   nestDisabled: boolean
+  /** A header sort is on: the handle explains instead of dragging. */
+  dragDisabled: boolean
   onToggleCollapse: (id: ScreenUid) => void
   renderRowActions: ScreensHierarchyTableProps['renderRowActions']
   renderRowLeadingActions: ScreensHierarchyTableProps['renderRowLeadingActions']
@@ -331,6 +426,7 @@ function ScreenTableRow(props: {
     entry,
     collapsed,
     nestDisabled,
+    dragDisabled,
     onToggleCollapse,
     renderRowActions,
     renderRowLeadingActions,
@@ -367,6 +463,7 @@ function ScreenTableRow(props: {
   } = useDraggable({
     id: `drag:screen:${row.$id}`,
     data: { screenId: row.$id },
+    disabled: dragDisabled,
   })
   const path = routingMap?.[row.$id]
   // A collection template is published — which is what makes the compose
@@ -410,16 +507,28 @@ function ScreenTableRow(props: {
         onClick={(event) => event.stopPropagation()}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <IconButton
-            ref={setActivatorNodeRef}
-            size="small"
-            aria-label={`Drag ${row.displayName ?? row.$id}`}
-            sx={{ cursor: 'grab', touchAction: 'none' }}
-            {...attributes}
-            {...listeners}
+          <Tooltip
+            title={dragDisabled ? DRAG_IN_MANUAL_ORDER : ''}
+            disableHoverListener={!dragDisabled}
           >
-            <MdiIcon path={ICON_VARIANT_MODIFY_DRAG.path} size={0.7} />
-          </IconButton>
+            <span>
+              <IconButton
+                ref={setActivatorNodeRef}
+                size="small"
+                aria-label={
+                  dragDisabled
+                    ? DRAG_IN_MANUAL_ORDER
+                    : `Drag ${row.displayName ?? row.$id}`
+                }
+                disabled={dragDisabled}
+                sx={{ cursor: dragDisabled ? undefined : 'grab', touchAction: 'none' }}
+                {...attributes}
+                {...listeners}
+              >
+                <MdiIcon path={ICON_VARIANT_MODIFY_DRAG.path} size={0.7} />
+              </IconButton>
+            </span>
+          </Tooltip>
           {hasChildren ? (
             <IconButton
               size="small"
@@ -569,6 +678,11 @@ export function ScreensHierarchyTableComponent(
    */
   const [expandedIds, setExpandedIds] = useState<Set<ScreenUid>>(new Set())
   const [activeId, setActiveId] = useState<ScreenUid | undefined>(undefined)
+  // The header sort, or null for the manual order (AGL-3680).
+  const [sort, setSort] = useState<ScreenSort | null>(null)
+  const sortedLabel = sort
+    ? SORTABLE_COLUMNS.find((column) => column.field === sort.field)?.label
+    : undefined
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   )
@@ -599,8 +713,20 @@ export function ScreensHierarchyTableComponent(
    * what is currently open is how a column width, a page count or a footer
    * total ends up changing when a reader opens a row. Expansion decides what
    * is rendered, further down, and nothing else.
+   *
+   * Siblings run in the manual order, or — while a header sort is on — in
+   * that column's order, the manual order breaking its ties (AGL-3680).
    */
   const tree = useMemo<ScreenTreeNode[]>(() => {
+    const context = { routingMap, collectionTemplates }
+    const compare = sort
+      ? (a: ScreenHierarchyRow, b: ScreenHierarchyRow) =>
+          compareListSortValues(
+            screenSortValue(a, sort.field, context),
+            screenSortValue(b, sort.field, context),
+            sort.direction,
+          ) || compareScreenSiblings(a, b)
+      : compareScreenSiblings
     const childrenByParent = new Map<ScreenUid | undefined, ScreenHierarchyRow[]>()
     for (const screen of screens) {
       // Screens whose parent is missing from the list render at the root so
@@ -618,14 +744,14 @@ export function ScreensHierarchyTableComponent(
       depth: number,
     ): ScreenTreeNode[] =>
       (childrenByParent.get(parentId) ?? [])
-        .sort(compareScreenSiblings)
+        .sort(compare)
         .map((row) => ({
           row,
           depth,
           children: build(row.$id, depth + 1),
         }))
     return build(undefined, 0)
-  }, [screens, screensById])
+  }, [screens, screensById, sort, routingMap, collectionTemplates])
 
   /**
    * How deep the DEEPEST branch goes, expanded or not — the number the
@@ -715,6 +841,8 @@ export function ScreensHierarchyTableComponent(
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       setActiveId(undefined)
+      // A drop places a page in MANUAL order; none lands while sorted.
+      if (sort) return
       const screenId = event.active.data.current?.screenId as
         | ScreenUid
         | undefined
@@ -738,7 +866,7 @@ export function ScreensHierarchyTableComponent(
         return onMoveScreen({ screenId })
       }
     },
-    [onMoveScreen, screensById],
+    [onMoveScreen, screensById, sort],
   )
 
   const activeRow = activeId
@@ -773,14 +901,15 @@ export function ScreensHierarchyTableComponent(
         <Fragment key={row.$id}>
           <GapDropRow
             id={`drop:gap:${row.$id}`}
-            disabled={gapDisabled}
+            disabled={gapDisabled || Boolean(sort)}
             depth={node.depth}
             dragging={Boolean(activeId)}
           />
           <ScreenTableRow
             entry={node}
             collapsed={!expandedIds.has(row.$id)}
-            nestDisabled={nestDisabled}
+            nestDisabled={nestDisabled || Boolean(sort)}
+            dragDisabled={Boolean(sort)}
             onToggleCollapse={handleToggleCollapse}
             renderRowActions={renderRowActions}
             renderRowLeadingActions={renderRowLeadingActions}
@@ -834,6 +963,16 @@ export function ScreensHierarchyTableComponent(
       onDragCancel={() => setActiveId(undefined)}
     >
       {loading && <LinearProgress color="primary" />}
+      {sortedLabel ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          role="status"
+          sx={{ display: 'block', px: 2, py: 1 }}
+        >
+          {`Sorted by ${sortedLabel} within each level. Drag to reorder works in manual order — click ${sortedLabel} again to return to it.`}
+        </Typography>
+      ) : null}
       <ScrollTable size="small" aria-label="Pages hierarchy" sx={tableSx}>
         <ScreenColumnWidths controlsWidth={controlsWidth} />
         {/* Header height matches the DataTable used by layouts, components
@@ -846,12 +985,20 @@ export function ScreensHierarchyTableComponent(
                 tree at once — a per-cell width here would describe the root
                 table only. */}
             <TableCell padding="none" />
-            <TableCell>Display name</TableCell>
-            <TableCell>ID</TableCell>
-            <TableCell>Path</TableCell>
-            <TableCell>Description</TableCell>
-            <TableCell>Updated</TableCell>
-            <TableCell>Published</TableCell>
+            {SORTABLE_COLUMNS.map((column) => {
+              const direction = sort?.field === column.field ? sort.direction : null
+              return (
+                <TableCell key={column.field} sortDirection={direction ?? false}>
+                  <TableSortLabel
+                    active={direction !== null}
+                    direction={direction ?? 'asc'}
+                    onClick={() => setSort((current) => nextScreenSort(current, column.field))}
+                  >
+                    {column.label}
+                  </TableSortLabel>
+                </TableCell>
+              )
+            })}
             <TableCell align="right">Actions</TableCell>
           </TableRow>
         </TableHead>

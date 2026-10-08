@@ -55,6 +55,8 @@ import {
 } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { checkOrgQuota } from '../../../../../../constants/entitlements'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
@@ -106,6 +108,7 @@ import {
 import {
   LAYOUT_LIST_HEADERS,
   LAYOUT_LIST_QUERY,
+  LAYOUT_LIST_SORTS,
 } from '../../../../../../utils/artifact-list-queries'
 import { useLiveArtifactCount } from '@aglyn/tenant-feature-instance'
 
@@ -204,12 +207,17 @@ function Layouts(props) {
    *
    * The walk is the document id (`ARTIFACT_LIST_ORDER`; `hostArtifactQuery`
    * explains why), and the rows are rendered as they arrive — never re-sorted.
+   *
+   * EVERY HEADER SORTS (AGL-3680), on the query: a header click asks it for
+   * that order (`LAYOUT_LIST_SORTS`), and the header shows the order the plan
+   * read in — the default one, with a notice, when a filter is on.
    */
   const gridFilter = useListGridFilter()
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const layoutList = useListQuery<any>({
     collection: hostId ? collection(firestore, 'hosts', hostId, 'layouts') : null,
     declaration: LAYOUT_LIST_QUERY,
-    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords },
+    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords, sort: askedSort },
     deps: [firestore, hostId],
     idField: '$id',
     /*
@@ -248,6 +256,14 @@ function Layouts(props) {
     () => layoutList.rows.filter((layout: any) => !layout.deletedAt),
     [layoutList.rows],
   )
+  const columnSort = useListColumnSort<any>({
+    sorts: LAYOUT_LIST_SORTS,
+    defaultSort: LAYOUT_LIST_SORTS[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: layoutList.plan.orderBy,
+    rows: layouts,
+  })
   /**
    * `sharedLayoutsPerHost` is enforced by `/api/hosts/resources` and had no
    * standing surface here — an author learned the cap by being refused a
@@ -701,7 +717,10 @@ function Layouts(props) {
               clauses={gridFilter.clauses}
               onChange={gridFilter.setClauses}
             />
-            <ListQueryNotices refused={layoutRefusals} notices={layoutList.plan.notices} />
+            <ListQueryNotices
+              refused={layoutRefusals}
+              notices={[...layoutList.plan.notices, ...columnSort.notices]}
+            />
             <ListTable
               aria-label="Layouts"
               rowHeight={TABLE_ROW_HEIGHT}
@@ -747,7 +766,8 @@ function Layouts(props) {
                       </Stack>
                     ),
                   })}
-              rows={layouts}
+              rows={columnSort.rows}
+              columnSort={columnSort}
               onOpen={(id) =>
                 router.push(
                   buildRoute(Route.LAYOUT_DETAILS, {
@@ -760,13 +780,13 @@ function Layouts(props) {
               loading={status === 'loading'}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
-              // The panel and the search are the grid's; the QUERY answers
-              // them (AGL-3321), so the grid filters and sorts nothing.
+              // The panel, the search and the header sorts are the grid's;
+              // the QUERY answers them (AGL-3321, AGL-3680), so the grid
+              // filters and sorts nothing itself.
               filterMode="server"
               filterModel={gridFilter.filterModel}
               onFilterModelChange={gridFilter.onFilterModelChange}
               quickFilter
-              disableColumnSorting
             />
             <ListPagination
               page={layoutList.page}

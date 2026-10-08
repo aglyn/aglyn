@@ -51,6 +51,88 @@
       {
         "direction": "asc",
         "path": "__name__"
+      },
+      {
+        "column": "$id",
+        "direction": "asc",
+        "label": "ID",
+        "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "$id",
+        "direction": "desc",
+        "label": "ID",
+        "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "asc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "desc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "asc",
+        "label": "Used in",
+        "path": "kind"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "desc",
+        "label": "Used in",
+        "path": "kind"
+      },
+      {
+        "alone": true,
+        "column": "description",
+        "direction": "asc",
+        "label": "Description",
+        "path": "description"
+      },
+      {
+        "alone": true,
+        "column": "description",
+        "direction": "desc",
+        "label": "Description",
+        "path": "description"
+      },
+      {
+        "column": "updatedAt",
+        "direction": "desc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "asc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Created",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "desc",
+        "label": "Created",
+        "path": "createdAt"
       }
     ]
   },
@@ -389,6 +471,74 @@
       {
         "direction": "asc",
         "path": "__name__"
+      },
+      {
+        "column": "$id",
+        "direction": "asc",
+        "label": "ID",
+        "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "$id",
+        "direction": "desc",
+        "label": "ID",
+        "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "asc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "desc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "description",
+        "direction": "asc",
+        "label": "Description",
+        "path": "description"
+      },
+      {
+        "alone": true,
+        "column": "description",
+        "direction": "desc",
+        "label": "Description",
+        "path": "description"
+      },
+      {
+        "column": "updatedAt",
+        "direction": "desc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "asc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Created",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "desc",
+        "label": "Created",
+        "path": "createdAt"
       }
     ]
   },
@@ -1247,6 +1397,75 @@
       {
         "direction": "asc",
         "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "asc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "desc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "asc",
+        "label": "Kind",
+        "path": "kind"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "desc",
+        "label": "Kind",
+        "path": "kind"
+      },
+      {
+        "alone": true,
+        "column": "source",
+        "direction": "asc",
+        "label": "Source",
+        "path": "source.type"
+      },
+      {
+        "alone": true,
+        "column": "source",
+        "direction": "desc",
+        "label": "Source",
+        "path": "source.type"
+      },
+      {
+        "column": "updatedAt",
+        "direction": "desc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "asc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Created",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "desc",
+        "label": "Created",
+        "path": "createdAt"
       }
     ]
   },
