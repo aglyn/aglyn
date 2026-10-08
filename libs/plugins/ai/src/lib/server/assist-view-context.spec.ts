@@ -19,8 +19,10 @@
  */
 
 import { ASSIST_EDIT_ACTION_ID, ASSIST_EDIT_TOOL_NAME } from '../model/assist-edit'
+import { ASSIST_OPEN_DRAFT_ACTION_ID, ASSIST_OPEN_DRAFT_PARAM } from '../model/assist-follow-up'
 import {
   ASSIST_ACTION_FENCE,
+  ASSIST_OPEN_DRAFT_ACTION,
   ASSIST_VIEWS,
   type AssistView,
   assertInertActions,
@@ -34,6 +36,7 @@ import {
   viewFactsBlock,
   viewScreenBlock,
   visibleAssistText,
+  withAssistOpenDraftAction,
 } from './assist-view-context'
 
 /**
@@ -615,5 +618,50 @@ describe('the registry stays honest', () => {
         expect(resolved?.href).not.toContain('[')
       }
     }
+  })
+})
+
+describe('the open-draft navigation (AGL-3616)', () => {
+  const draftScope = { orgSlug: 'acme', hostId: 'host-1' }
+  const drafts = [
+    { ref: 'd1', label: 'Home', noun: 'page' },
+    { ref: 'd2', label: 'About', noun: 'page' },
+  ]
+  const block = (ref: string) =>
+    JSON.stringify({ id: ASSIST_OPEN_DRAFT_ACTION_ID, params: { [ASSIST_OPEN_DRAFT_PARAM]: ref } })
+
+  it('is offered only beside drafts the request listed', () => {
+    const view = describeView('/acme/hosts/host-1/screens')
+    expect(withAssistOpenDraftAction(view, [])).toBe(view)
+    expect(withAssistOpenDraftAction(null, drafts)).toBeNull()
+    const offered = withAssistOpenDraftAction(view, drafts)
+    expect(offered?.actions).toContain(ASSIST_OPEN_DRAFT_ACTION)
+    // The registry itself is untouched.
+    expect(view?.actions).not.toContain(ASSIST_OPEN_DRAFT_ACTION)
+  })
+
+  it('resolves to the named draft, with a destination the server built, and only to a listed ref', () => {
+    const view = withAssistOpenDraftAction(describeView('/acme/hosts/host-1/screens'), drafts)
+    expect(resolveAssistProposal(block('d2'), view, draftScope, drafts)).toEqual({
+      id: ASSIST_OPEN_DRAFT_ACTION_ID,
+      label: 'Open “About” in the Besigner',
+      outcome: 'the page “About” in the Besigner, where your request is asked again',
+      href: '/acme/hosts/host-1/screens',
+      values: [],
+      prefill: false,
+      draft: drafts[1],
+    })
+    expect(resolveAssistProposal(block('d7'), view, draftScope, drafts)).toBeNull()
+    expect(resolveAssistProposal(block('d2'), view, draftScope, [])).toBeNull()
+  })
+
+  it('is not proposable from a view it was not added to', () => {
+    const view = describeView('/acme/hosts/host-1/screens')
+    expect(resolveAssistProposal(block('d1'), view, draftScope, drafts)).toBeNull()
+  })
+
+  it('stays inert: a navigation with no write-capable field', () => {
+    const view = withAssistOpenDraftAction(describeView('/acme/hosts/host-1/screens'), drafts) as AssistView
+    expect(assertInertActions([view])).toEqual([])
   })
 })

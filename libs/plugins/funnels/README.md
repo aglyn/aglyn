@@ -10,11 +10,17 @@ analytics (`screenAnalytics`).
   services, products and overlays, and a results view with drop-off, conversion, median time
   between steps and a breakdown by source), in the `hostAnalytics` zone. It hosts two zones
   of its own, `funnelsCreate` and `funnelInsight`, which the AI plugin fills.
-- **Console API:** `funnels/inventory`, `funnels/results`, `funnels/save`, `funnels/delete`,
+- **Console API:** `funnels/inventory`, `funnels/results`, `funnels/save`, `funnels/activate`, `funnels/delete`,
   `funnels/propose` (a draft from a description, through core's text-generation seam) and
   `funnels/act` ("Act on this drop-off": a watch on a step plus an automation drafted
   switched off through the `automation` writer on core's resource-drafts seam), and the
   `funnels.overview` / `funnels.steps` figure readers the AI insight job reads.
+- **AI builds (AGL-3616):** the `funnel` draft writer on core's resource-drafts seam
+  (`server/funnel-drafts.ts`: the save door's plan, role, cap and step checks) and the `funnel`
+  capability an AI build plans (`server/funnel-ai-capability.ts`), both registered from the
+  console API surface. A funnel written this way is `status: 'draft'`: it never switches
+  recording on, is not measured, not read by the figure readers and takes no drop-off watch
+  until a site admin or editor activates it on the card (`funnels/activate`).
 - **Server declarations:** the site collector's `journey` beacon, counted into
   `hosts/{hostId}/funnelJourneys`; a host event listener that ties a visit to the person a
   form submission names (`journeyId` on the event's context); a `host.email.engaged`
@@ -26,7 +32,9 @@ analytics (`screenAnalytics`).
 
 ## What it reads, stores and sends
 
-- `hosts/{hostId}/funnels` — the definitions. Members read; the save and delete routes write.
+- `hosts/{hostId}/funnels` — the definitions, `status: 'draft'` on one an AI build made and
+  nobody has activated yet. Members read; the save, activate and delete routes and the
+  `funnel` draft writer write.
 - `hosts/{hostId}/funnelJourneys` — one document per recorded visit: its steps in order with
   server times, where it arrived from (UTM labels or referring site), and `expiresAt`, 90
   days out. A visit is one browser tab, identified by a random id in that tab's session

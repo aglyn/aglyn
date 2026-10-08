@@ -550,14 +550,19 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
 
   const handleAdjustSave = useCallback(async () => {
     if (!adjusting) return
-    const delta = Math.round(Number(adjusting.delta))
-    if (!delta) return
-    const variants = CommerceModel.adjustVariantInventory(
+    // The update and the ledger row, as the native stock route writes them (AGL-3652).
+    const write = CommerceModel.stockAdjustmentWrite(
       adjusting.product,
-      adjusting.variantId,
-      delta,
-      adjusting.locationId || undefined,
+      adjusting.product.$id,
+      {
+        variantId: adjusting.variantId,
+        delta: Number(adjusting.delta),
+        reason: adjusting.reason,
+        locationId: adjusting.locationId || undefined,
+      },
+      Date.now(),
     )
+    if (!write) return
     /**
      * Refuse the adjustment when the seed is unconfirmed (AGL-1358).
      *
@@ -583,25 +588,14 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           write: (batch) =>
             batch.update(
               doc(firestore, 'hosts', hostId, 'products', adjusting.product.$id),
-              {
-                variants,
-                // The total and the In stock verdict move with the count (AGL-3321).
-                ...CommerceModel.productStockFields({ ...adjusting.product, variants }),
-                updatedAtMs: Date.now(),
-              },
+              // The total and the In stock verdict move with the count (AGL-3321).
+              write.update,
             ),
         })
         // Adjustment history (AGL-281): the same log the sale webhook writes.
         await addDoc(
           collection(firestore, 'hosts', hostId, 'inventoryAdjustments'),
-          {
-            productId: adjusting.product.$id,
-            variantId: adjusting.variantId,
-            delta,
-            reason: adjusting.reason,
-            ...(adjusting.locationId ? { locationId: adjusting.locationId } : {}),
-            atMs: Date.now(),
-          } satisfies CommerceModel.InventoryAdjustment,
+          write.ledger,
         )
       },
     )

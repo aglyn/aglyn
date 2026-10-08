@@ -22,6 +22,10 @@ import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizatio
 import { aiWorkflowExplanationText } from '../model/ai-automation-outline'
 import type { AiJobOutput, AiJobOutputResource } from '../model/ai-jobs.types'
 import {
+  AI_LOGIC_FUNCTION_RESOURCE,
+  AI_LOGIC_FUNCTION_SAVE_FAILURE_COPY,
+  AI_LOGIC_FUNCTION_UNAVAILABLE_COPY,
+  AI_LOGIC_FUNCTION_WRITTEN_NOTE,
   AI_LOGIC_GONE_COPY,
   AI_LOGIC_MAX_OPERATIONS,
   AI_LOGIC_MAX_PARAMETERS,
@@ -31,6 +35,7 @@ import {
   AI_LOGIC_NO_VARIABLE_COPY,
   AI_LOGIC_RESOURCE,
   AI_LOGIC_UNAVAILABLE_COPY,
+  aiLogicJobIsBuildUnit,
   checkAiLogicFunction,
   checkAiLogicVariable,
   parseAiLogicJobInputs,
@@ -51,7 +56,8 @@ import {
 } from '../tools/ai-workflow-tool'
 import { registerAiJobAdmission, type AiJobAdmission, type AiJobAdmissionRefusal } from './ai-job-admission'
 import { aiJobStepBudget } from './ai-job-budget'
-import { aiGenerationSpent, aiUnspentOutcome } from './ai-job-generation'
+import { aiGenerationSpent, aiLimitReview, aiUnspentOutcome } from './ai-job-generation'
+import { aiPluginDraftWriter, type AiPluginDraftWriterLookup } from './ai-job-plugin-drafts'
 import { AI_JOB_BRIEF_MAX_CHARS, type AiJobStepOutcome, type AiJobStepRunner } from './ai-job-text-step'
 import { registerAiJobStep } from './ai-jobs'
 import { readAiLogicFunction, readAiLogicRecords } from './ai-logic-records'
@@ -70,6 +76,14 @@ import { readAiLogicFunction, readAiLogicRecords } from './ai-logic-records'
  *
  * Nothing is written. A proposal rides on a `logic` output, and the logic
  * editor opens it for a person to save.
+ *
+ * Except for a build's unit (AGL-3616): a job derived for a `function` item
+ * of a confirmed build plan — it carries `inputs.originJobId` — writes the
+ * NEW function it checked, through the `function` draft writer the logic
+ * plugin registers on the core's resource-drafts seam (this plugin imports
+ * no other). The writer's refusal is asked before anything is spent, the
+ * record is written under the unit job's id so a run asked again finds it,
+ * and the output is a `draft` the build's ledger records.
  */
 
 /** The longest the step may take reading the site first. */
@@ -263,6 +277,25 @@ export function aiJobLogicExplainGeneration(request: {
 export interface AiJobLogicStepDeps {
   readRecords?: typeof readAiLogicRecords
   readFunction?: typeof readAiLogicFunction
+  /** How the logic plugin's `function` writer is found; the core's registry otherwise. */
+  writerFor?: AiPluginDraftWriterLookup
+}
+
+/** A function a build's unit wrote, as the build's ledger records it. */
+export function aiLogicFunctionDraftOutput(
+  place: { hostId: string; hostSubdomain: string | null },
+  record: { id: string; name: string },
+): AiJobOutput {
+  return {
+    resource: 'draft',
+    id: record.id,
+    versionId: null,
+    hostId: place.hostId,
+    hostSubdomain: place.hostSubdomain,
+    label: record.name,
+    draftResource: AI_LOGIC_FUNCTION_RESOURCE,
+    note: AI_LOGIC_FUNCTION_WRITTEN_NOTE,
+  }
 }
 
 function proposalOutput(
@@ -286,7 +319,8 @@ function proposalOutput(
 export function createAiJobLogicStep(deps: AiJobLogicStepDeps = {}): AiJobStepRunner {
   const readRecords = deps.readRecords ?? readAiLogicRecords
   const readFunction = deps.readFunction ?? readAiLogicFunction
-  return async ({ job, signal, firestore, modelFor }): Promise<AiJobStepOutcome> => {
+  const writerFor = deps.writerFor ?? aiPluginDraftWriter
+  return async ({ job, now, signal, firestore, org, modelFor }): Promise<AiJobStepOutcome> => {
     const model = modelFor?.('job.logic') ?? aiJobLogicModel()
     const unspent = (failure: string): AiJobStepOutcome => ({ ...aiUnspentOutcome(model), failure })
     const inputs = parseAiLogicJobInputs(job.inputs)
@@ -299,6 +333,37 @@ export function createAiJobLogicStep(deps: AiJobLogicStepDeps = {}): AiJobStepRu
     const place = { hostId, hostSubdomain: typeof subdomain === 'string' && subdomain ? subdomain : null }
 
     const functionId = inputs.mode === 'variable' ? null : inputs.functionId
+
+    // A build's new function is written, not proposed: the writer is found,
+    // asked for what it already wrote under this unit's id, and asked whether
+    // this member may have one, all before anything is spent.
+    const writes = inputs.mode === 'function' && !functionId && aiLogicJobIsBuildUnit(job)
+    const writer = writes ? writerFor(AI_LOGIC_FUNCTION_RESOURCE) : null
+    const draftContext = writes
+      ? {
+          orgId: job.orgId,
+          hostId,
+          uid: job.createdBy,
+          org: (org ?? (await firestore.collection('orgs').doc(job.orgId).get()).data() ?? null) as Record<
+            string,
+            unknown
+          > | null,
+          now,
+        }
+      : null
+    if (writes) {
+      if (!writer || !draftContext) return unspent(AI_LOGIC_FUNCTION_UNAVAILABLE_COPY)
+      // The unit's job is named by its plan item's id, which is the id its draft is written under.
+      const written = await writer.read({ hostId, id: job.$id })
+      if (written) return aiUnspentOutcome(model, { outputs: [aiLogicFunctionDraftOutput(place, written)] })
+      const refusal = await writer.refusal(draftContext)
+      if (refusal) {
+        return refusal.status === 403
+          ? aiUnspentOutcome(model, { review: aiLimitReview(refusal.error) })
+          : unspent(refusal.error)
+      }
+    }
+
     const saved = functionId ? await readFunction(firestore, { hostId, id: functionId }) : null
     if (functionId && !saved) return unspent(AI_LOGIC_GONE_COPY)
     const records = await readRecords(firestore, hostId)
@@ -353,6 +418,19 @@ export function createAiJobLogicStep(deps: AiJobLogicStepDeps = {}): AiJobStepRu
     if (generation.status === 'refused') return { ...spent, refused: true }
     if (generation.status === 'needs_input') return { ...spent, failure: AI_LOGIC_NO_FUNCTION_COPY }
     const definition = generation.value
+    if (writer && draftContext) {
+      // Held to the owner's rules before it is written, as every draft is.
+      const content = definition as unknown as Record<string, unknown>
+      const checked = writer.check(content, { hostId })
+      if (checked.ok === false) return { ...spent, failure: checked.problems[0] ?? AI_LOGIC_FUNCTION_SAVE_FAILURE_COPY }
+      const write = await writer.write({ ...draftContext, id: job.$id, name: definition.name, content })
+      if (write.ok === false) {
+        return write.status === 403
+          ? { ...spent, review: aiLimitReview(write.error) }
+          : { ...spent, failure: write.status === 409 ? write.error : AI_LOGIC_FUNCTION_SAVE_FAILURE_COPY }
+      }
+      return { ...spent, outputs: [aiLogicFunctionDraftOutput(place, write)] }
+    }
     return {
       ...spent,
       outputs: [

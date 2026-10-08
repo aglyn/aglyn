@@ -191,6 +191,23 @@ describe('the request shape', () => {
 })
 
 describe('the cache guard (AGL-2352)', () => {
+  it('refuses a platform breakpoint after a site’s cached block, and takes one that closes the span (AGL-3661)', () => {
+    expect(() =>
+      validateAiSystemBlocks([
+        { text: 'rules', cacheBreakpoint: true },
+        { text: 'About Acme Roofing', cacheBreakpoint: true, site: true },
+        { text: 'palette', cacheBreakpoint: true },
+      ]),
+    ).toThrow(AiRequestShapeError)
+    expect(() =>
+      validateAiSystemBlocks([
+        { text: 'rules', cacheBreakpoint: true },
+        { text: 'About Acme Roofing', cacheBreakpoint: true, site: true },
+        { text: 'the inventory', volatile: true },
+      ]),
+    ).not.toThrow()
+  })
+
   it('refuses a block that is both a breakpoint and volatile', () => {
     expect(() =>
       buildAiRequestBody({

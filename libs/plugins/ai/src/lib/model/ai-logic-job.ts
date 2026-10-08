@@ -47,7 +47,11 @@ import type { AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
  *    computes, and anything in it worth checking.
  *
  * Nothing is written: a proposal rides on the job's output, and the logic
- * editor is where a person saves it, or does not.
+ * editor is where a person saves it, or does not. The one exception is a
+ * NEW function asked for by a build (AGL-3616), which the person confirmed
+ * as a plan: that unit's job writes the checked function through the logic
+ * plugin's `function` draft writer, a record nothing on the site uses until
+ * a page binds it.
  */
 
 export const AI_LOGIC_JOB_MODES = ['function', 'variable', 'explain'] as const
@@ -150,7 +154,11 @@ export function checkAiLogicFunction(
     violations.push(
       violation('logic-name', 'The function name must start with a letter or _, then letters, digits or _; at most 40 characters.'),
     )
-  } else if (name !== context.editing && context.functions.includes(name)) {
+  } else if (
+    name.toLowerCase() !== context.editing?.toLowerCase() &&
+    context.functions.some((taken) => taken.toLowerCase() === name.toLowerCase())
+  ) {
+    // Case-insensitive, as the Functions card and the logic plugin's writer compare names.
     violations.push(violation('logic-name-taken', `The site already has a function named ${name}. Choose another name.`))
   }
 
@@ -296,7 +304,8 @@ export function checkAiLogicVariable(
   const name = str(answer['name'])
   if (!VARIABLE_NAME_PATTERN.test(name)) {
     violations.push(violation('logic-name', 'The variable name must start with a letter or _, then letters, digits or _; at most 40 characters.'))
-  } else if (context.variables.some((variable) => variable.name === name)) {
+  } else if (context.variables.some((variable) => variable.name.toLowerCase() === name.toLowerCase())) {
+    // Case-insensitive, as the Variables card and the logic plugin's writer compare names.
     violations.push(violation('logic-name-taken', `The site already has a variable named ${name}. Choose another name.`))
   }
   const type = answer['type']
@@ -393,3 +402,23 @@ export const AI_LOGIC_NO_FUNCTION_COPY =
 export const AI_LOGIC_NO_VARIABLE_COPY =
   'The AI could not write a variable from this description. Try naming what it holds, and its value.'
 export const AI_LOGIC_NO_EXPLANATION_COPY = 'The AI could not explain this function. Try again.'
+
+// ── A function a build writes (AGL-3616) ──────────────────────────────────
+
+/**
+ * The resource the logic plugin's `function` draft writer is registered
+ * under. A `logic` job run as a unit of a build writes its function through
+ * it; one a person started proposes it and writes nothing.
+ */
+export const AI_LOGIC_FUNCTION_RESOURCE = 'function'
+
+/** Whether a job is a build's unit rather than one a person started: a derived job carries its origin. */
+export function aiLogicJobIsBuildUnit(job: { inputs?: Readonly<Record<string, unknown>> | null }): boolean {
+  const origin = job.inputs?.['originJobId']
+  return typeof origin === 'string' && origin.length > 0
+}
+
+export const AI_LOGIC_FUNCTION_UNAVAILABLE_COPY = 'Functions are not available on this site.'
+export const AI_LOGIC_FUNCTION_SAVE_FAILURE_COPY = 'The function was written but could not be saved. Try the job again.'
+export const AI_LOGIC_FUNCTION_WRITTEN_NOTE =
+  'A new site function, checked against the expression grammar and run once. Nothing on the site uses it until a page binds it.'

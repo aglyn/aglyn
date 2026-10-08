@@ -209,4 +209,12 @@ export const TTL_POLICIES = Object.freeze([
     // (30 minutes); both are also refused by age on read.
     why: 'cached carrier rate quotes, 30 minutes',
   },
+  {
+    collection: 'zapierHookDeliveries',
+    field: 'expiresAt',
+    // AGL-3643 — top level: one event reached one Zapier REST hook, so an
+    // outbox retry does not post it again. Ids only, no customer data
+    // (`ZAPIER_DELIVERY_MARKER_RETENTION_MS`).
+    why: 'Zapier hook delivery markers (ids only), 3 days',
+  },
 ])

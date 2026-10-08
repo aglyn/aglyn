@@ -52,7 +52,7 @@ import {
   query,
   where,
 } from 'firebase/firestore'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
@@ -82,6 +82,11 @@ import { PosItemDialog, posItemNeedsChoice, type PosItemChoice } from './pos/pos
 import { PosReceiptPanel } from './pos/pos-receipt-panel.component'
 import { PosTenderPanel } from './pos/pos-tender-panel.component'
 import { posDisplayTipCents, usePosDisplay } from './pos/use-pos-display'
+import {
+  type ConsoleWidgetSlotRenderer,
+  useConsoleWidgetSlot,
+} from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import { POS_ORDERS_ZONE } from './pos-zones'
 
 /** The till sells active products only; every read of the catalog asks it. */
 const SELLABLE: ListFilterRequest = { field: 'status', op: 'equals', value: 'active' }
@@ -217,7 +222,22 @@ function lineKey(line: Pick<RegisterLine, 'productId' | 'variantId' | 'modifiers
   return `${line.productId}:${line.variantId ?? ''}:${CommerceModel.modifierSelectionKey(line.modifiers)}`
 }
 
+/**
+ * The register's zone (AGL-3644), drawn again only when what it is handed
+ * changes: the till redraws on every tap, and the shell's renderer is not
+ * memoized (the order dialog's reasoning).
+ */
+const PosOrdersZone = memo(function PosOrdersZone(props: {
+  renderer: ConsoleWidgetSlotRenderer
+  hostId: string
+  registerId: string | null
+}) {
+  const { renderer: Renderer, hostId, registerId } = props
+  return <Renderer slot={POS_ORDERS_ZONE.id} hostId={hostId} orgId={undefined} registerId={registerId} />
+})
+
 export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
+  const WidgetSlot = useConsoleWidgetSlot()
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -840,6 +860,8 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
         }}
       >
         <Box sx={{ flex: 1, p: 2, overflowY: 'auto', pb: wide ? 2 : 12 }}>
+          {/* Orders other channels send to the counter (AGL-3644). */}
+          {WidgetSlot ? <PosOrdersZone renderer={WidgetSlot} hostId={hostId} registerId={registerId || null} /> : null}
           <PosProductGrid
             search={search}
             onSearch={setSearch}

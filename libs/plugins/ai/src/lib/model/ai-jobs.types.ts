@@ -245,6 +245,8 @@ export type AiJobOutputResource =
   | 'draft'
   | 'logic'
   | 'orgAutomation'
+  /** A post a guided start wrote into the site's blog (AGL-3676): a content collection entry. */
+  | 'entry'
 
 /**
  * One thing a job wrote. Addressed by resource and id so the console can
