@@ -878,7 +878,7 @@ orders and refunds.
 | --- | --- | --- | --- |
 | `TAX_ENGINES_TOKEN_KEY` | Feature | Runtime | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored AvaTax license key and TaxJar API token with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a credential opened under an old key is sealed again under the new one the next time its store is taxed. **Losing the key loses every connection**: each merchant connects their account again, and until they do their store taxes at its own rates. |
 
-### Email platforms: Mailchimp, Klaviyo, Omnisend and Attentive {#marketing-platforms}
+### Email platforms: Mailchimp, Klaviyo, Omnisend, Attentive and Constant Contact {#marketing-platforms}
 
 A site can keep its contacts and their unsubscribes in step with the merchant's
 **own** Mailchimp, Klaviyo or Omnisend account, both ways, and send its orders to
@@ -887,7 +887,8 @@ key, so the deployment needs no vendor account: only the key those keys are
 sealed under. Leave it unset and no Email platforms card appears and
 nothing is sent to any of them. The app registrations are optional: with them,
 a merchant can connect by signing in to the platform instead of pasting a key,
-and with Attentive's partner app, Attentive is offered at all. Set these on the
+and with Attentive's partner app or a Constant Contact app, that platform is
+offered at all: neither takes a merchant key. Set these on the
 **console only**: the sync runs there, and the tenant runtime never opens a
 merchant's credential.
 
@@ -900,6 +901,8 @@ merchant's credential.
 | `KLAVIYO_CLIENT_SECRET` | Optional | Runtime, console | The Klaviyo app's client secret. |
 | `ATTENTIVE_CLIENT_ID` | Optional | Runtime, console | The Attentive partner app's client id. Attentive is offered only with it: its API takes no merchant key. |
 | `ATTENTIVE_CLIENT_SECRET` | Optional | Runtime, console | The Attentive partner app's client secret. |
+| `CONSTANT_CONTACT_CLIENT_ID` | Optional | Runtime, console | The API key (client id) of an app registered at developer.constantcontact.com, set to the **Authorization Code** flow with **rotating refresh tokens**. Constant Contact is offered only with it and its secret: its v3 API takes no merchant key. |
+| `CONSTANT_CONTACT_CLIENT_SECRET` | Optional | Runtime, console | That app's client secret. |
 
 Register `https://<console>/api/marketing-platforms/oauth/callback` as the
 redirect URI in each app. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.

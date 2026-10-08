@@ -40,5 +40,5 @@
     "react": "^19.2.8"
   },
   "sideEffects": false,
-  "description": "Marketing platforms for Aglyn sites: two-way contact and consent sync with Mailchimp, Klaviyo and Omnisend, order events for their flows, and Attentive behind a partner key."
+  "description": "Marketing platforms for Aglyn sites: two-way contact and consent sync with Mailchimp, Klaviyo and Omnisend, order events for their flows, Attentive behind a partner key, and Constant Contact behind its OAuth app."
 }

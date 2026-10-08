@@ -16,7 +16,7 @@
  */
 
 import { EVENT_MAX_ATTEMPTS } from '../constants'
-import type { MarketingConnectionLogEntry } from '../model/connections'
+import { MARKETING_PROVIDERS, type MarketingConnectionLogEntry } from '../model/connections'
 import { eventRetryDelayMs, type ConnectionStore, type StoredConnection, type StoredEvent } from '../server/store'
 
 /** An in-memory {@link ConnectionStore} with the production store's semantics, for specs. */
@@ -75,7 +75,7 @@ export function createMemoryStore() {
             connection.hostId === hostId &&
             (connection.status === 'active' || connection.status === 'error') &&
             connection.syncEvents !== false &&
-            connection.provider !== 'mailchimp',
+            MARKETING_PROVIDERS[connection.provider]?.events === true,
         )
         .map(([id]) => id)
     },

@@ -151,4 +151,40 @@ describe('the email platforms card', () => {
     expect(screen.getByRole('button', { name: 'Connect again' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull()
   })
+
+  it('offers Constant Contact by sign-in only, without an event switch, and asks to connect again once its grant is gone', async () => {
+    const offer = { id: 'constant-contact' as const, apiKey: false, oauth: true }
+    const fresh = api({
+      list: jest.fn(async () => ({ available: [offer], connections: [] })),
+      // A hash: the one navigation jsdom performs.
+      oauthStart: jest.fn(async () => '#constant-contact-consent'),
+    })
+    const first = render(<MarketingPlatformsCard hostId="h" api={fresh} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect' }))
+    expect(screen.queryByLabelText(/API key/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect with Constant Contact' }))
+    await waitFor(() => expect(fresh.oauthStart).toHaveBeenCalledWith('constant-contact', expect.any(String)))
+    first.unmount()
+
+    const revoked = api({
+      list: jest.fn(async () => ({
+        available: [offer],
+        connections: [
+          connection({
+            id: 'h_constant-contact',
+            provider: 'constant-contact',
+            authKind: 'oauth',
+            status: 'reconnect',
+            lastError: 'The connection was revoked or expired. Connect again.',
+          }),
+        ],
+      })),
+    })
+    render(<MarketingPlatformsCard hostId="h" api={revoked} />)
+    expect(await screen.findByText('The connection was revoked or expired. Connect again.')).toBeTruthy()
+    expect(screen.queryByLabelText('Send orders and started checkouts')).toBeNull()
+    expect(screen.getByText('12 contacts sent · 3 subscription changes read back')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect again' }))
+    expect(screen.getByRole('button', { name: 'Connect with Constant Contact' })).toBeTruthy()
+  })
 })

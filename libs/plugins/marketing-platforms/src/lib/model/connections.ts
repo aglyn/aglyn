@@ -20,9 +20,15 @@
  * page and the server name them. Client-safe: no credential, no SDK.
  */
 
-export type MarketingProviderId = 'mailchimp' | 'klaviyo' | 'omnisend' | 'attentive'
+export type MarketingProviderId = 'mailchimp' | 'klaviyo' | 'omnisend' | 'attentive' | 'constant-contact'
 
-export const MARKETING_PROVIDER_IDS: readonly MarketingProviderId[] = ['mailchimp', 'klaviyo', 'omnisend', 'attentive']
+export const MARKETING_PROVIDER_IDS: readonly MarketingProviderId[] = [
+  'mailchimp',
+  'klaviyo',
+  'omnisend',
+  'attentive',
+  'constant-contact',
+]
 
 export interface MarketingProviderInfo {
   id: MarketingProviderId
@@ -72,6 +78,15 @@ export const MARKETING_PROVIDERS: Readonly<Record<MarketingProviderId, Marketing
     apiKey: null,
     listNoun: null,
     events: true,
+  },
+  // OAuth only (AGL-3696): v3 takes no merchant key, and its public API has
+  // no order or custom event endpoint, so no events are sent.
+  'constant-contact': {
+    id: 'constant-contact',
+    label: 'Constant Contact',
+    apiKey: null,
+    listNoun: 'list',
+    events: false,
   },
 }
 

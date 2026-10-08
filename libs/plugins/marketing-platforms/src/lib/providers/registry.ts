@@ -17,6 +17,7 @@
 
 import type { MarketingProviderId } from '../model/connections'
 import { createAttentiveProvider } from './attentive'
+import { createConstantContactProvider } from './constant-contact'
 import type { ProviderHttp } from './http'
 import { createKlaviyoProvider } from './klaviyo'
 import { createMailchimpProvider } from './mailchimp'
@@ -34,5 +35,7 @@ export function createMarketingProvider(id: MarketingProviderId, http: ProviderH
       return createOmnisendProvider(http)
     case 'attentive':
       return createAttentiveProvider(http)
+    case 'constant-contact':
+      return createConstantContactProvider(http)
   }
 }

@@ -73,6 +73,24 @@ for the how-to.
   give any customer store credit by hand, beside your gift cards, and see every member's
   balance and history.
 
+<!--
+  AGL-3696 — Constant Contact is built and hidden until a deployment sets
+  CONSTANT_CONTACT_CLIENT_ID and CONSTANT_CONTACT_CLIENT_SECRET on the console
+  (its v3 API takes no merchant key, so it is reached only through Aglyn's
+  registered app). This entry is held unpublished, like the section it links,
+  which waits in a comment in marketing-and-automation/email-campaigns/email-platforms.md:
+  once both are set on aglyn.com, remove this comment's markers, move "(newest)"
+  here from the top heading, and follow the steps in that page's comment.
+
+## October 2026 — Constant Contact, kept in step
+
+- **[Constant Contact](marketing-and-automation/email-campaigns/email-platforms.md#constant-contact)** —
+  sign in to your own Constant Contact account from a site's setup page and your
+  contacts go into the list you choose, with their tags, lifetime value and order
+  count in custom fields you can segment on. An unsubscribe on either side reaches
+  the other, and someone who opts back in there is lifted on the site too.
+-->
+
 ## October 2026 — your own email platform, kept in step
 
 - **[Mailchimp, Klaviyo and Omnisend](marketing-and-automation/email-campaigns/email-platforms.md)** —

@@ -95,9 +95,11 @@ export function readRetryAfterMs(value: string | null, nowMs = Date.now()): numb
   return Number.isFinite(at) ? Math.max(0, at - nowMs) : null
 }
 
-/** The provider's own words for a refusal, trimmed, from the shapes the four providers use. */
+/** The provider's own words for a refusal, trimmed, from the shapes the providers use. */
 function providerMessage(payload: any, fallback: string): string {
   const candidates = [
+    // Constant Contact answers a list of `{ error_key, error_message }`.
+    Array.isArray(payload) ? payload[0]?.error_message : undefined,
     payload?.detail,
     payload?.title,
     payload?.errors?.[0]?.detail,

@@ -25,7 +25,7 @@ const MarketingPlatformsCard = lazy(() => import('./components/marketing-platfor
 /**
  * The console surface (AGL-3639): one card on a site's setup page that
  * connects Mailchimp, Klaviyo, Omnisend and — where the deployment has the
- * partner app — Attentive. The card draws nothing until the deployment can
+ * app — Attentive and Constant Contact (AGL-3696). The card draws nothing until the deployment can
  * hold a connection (`MARKETING_PLATFORMS_TOKEN_KEY` on the console).
  */
 export function registerMarketingPlatformsConsole(): void {

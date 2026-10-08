@@ -45,6 +45,10 @@ export const MARKETING_PLATFORMS_API_ROUTES = {
  * - Mailchimp and Klaviyo OAuth — the app registrations. Without them a
  *   merchant connects with their own API key, which needs no app.
  * - Attentive — the partner app. Without it Attentive is not offered at all.
+ * - Constant Contact — the app registered on Constant Contact's developer
+ *   portal (AGL-3696). Its v3 API takes no merchant key, so without it
+ *   Constant Contact is not offered at all, and the other providers are
+ *   unaffected either way.
  */
 export const MARKETING_PLATFORMS_ENV = {
   tokenKey: 'MARKETING_PLATFORMS_TOKEN_KEY',
@@ -54,6 +58,8 @@ export const MARKETING_PLATFORMS_ENV = {
   klaviyoClientSecret: 'KLAVIYO_CLIENT_SECRET',
   attentiveClientId: 'ATTENTIVE_CLIENT_ID',
   attentiveClientSecret: 'ATTENTIVE_CLIENT_SECRET',
+  constantContactClientId: 'CONSTANT_CONTACT_CLIENT_ID',
+  constantContactClientSecret: 'CONSTANT_CONTACT_CLIENT_SECRET',
 } as const
 
 /**

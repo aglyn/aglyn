@@ -46,6 +46,51 @@ The first sync starts within 15 minutes. **Sync now** runs it straight away.
 Only a site admin can connect, change or disconnect a platform; editors can see
 the card and its log.
 
+<!--
+  AGL-3696 — Constant Contact is built and hidden until a deployment registers
+  an app on Constant Contact's developer portal and sets CONSTANT_CONTACT_CLIENT_ID
+  and CONSTANT_CONTACT_CLIENT_SECRET on the console (beside the
+  MARKETING_PLATFORMS_TOKEN_KEY the other platforms already use). Its v3 API takes
+  no merchant API key, so until then the card does not offer it and these docs
+  do not name it. Once both are set on aglyn.com: remove this comment's markers;
+  add Constant Contact to the title, description and first paragraph above
+  ("Mailchimp, Klaviyo, Omnisend or Constant Contact"); add it to "Unsubscribes go
+  both ways" and to the platforms named in "When someone unsubscribes in your
+  platform"; and publish the What's New entry held in whats-new.md under AGL-3696.
+
+## Constant Contact {#constant-contact}
+
+Constant Contact connects by signing in rather than with a key:
+
+1. On the **Constant Contact** card, select **Connect**, then **Connect with
+   Constant Contact**.
+2. Sign in to Constant Contact and allow Aglyn to read your account and manage
+   your contacts. You come back to the site's **Setup** page.
+3. Choose the **list** contacts go into. If your account has only one, it is
+   chosen for you.
+
+What is kept in step:
+
+- **Contacts go out** into the list you chose, with their name and phone
+  number. Constant Contact has no field for the rest, so Aglyn adds four custom
+  fields to your account the first time it syncs — **Aglyn tags**, **Aglyn
+  source** (the connection's tag), **Aglyn lifetime value** and **Aglyn
+  orders** — and fills them in. Build a segment on any of them.
+- **New contacts arrive with implicit permission.** Constant Contact never
+  changes an existing contact's permission through a sync, so someone who
+  unsubscribed in Constant Contact is never subscribed again by Aglyn.
+- **Unsubscribes go both ways.** An unsubscribe on your site unsubscribes the
+  contact in Constant Contact (someone Constant Contact does not hold is left
+  out). An unsubscribe in Constant Contact reaches the site, and if the person
+  later opts back in there, the next sync lifts it.
+- **No orders.** Constant Contact's API has no way to receive order or checkout
+  events, so the card has no orders switch for it.
+
+Your sign-in stays connected: Aglyn renews its access on its own. If you remove
+Aglyn's access in Constant Contact, or change your password there, the card
+says **Connect again**; select it and sign in again. Your settings are kept.
+-->
+
 ## Who is sent, and as what {#who-is-sent}
 
 Each person is sent with the answer the site's own campaigns would give them:

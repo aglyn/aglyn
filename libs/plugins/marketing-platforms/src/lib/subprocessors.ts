@@ -21,7 +21,8 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-subprocessors'
 
 /**
- * Mailchimp, Klaviyo, Omnisend and Attentive (AGL-3639): each the merchant's
+ * Mailchimp, Klaviyo, Omnisend, Attentive (AGL-3639) and Constant Contact
+ * (AGL-3696): each the merchant's
  * OWN account, connected by the merchant with their own key or their own
  * consent, so each is a destination the customer chose rather than a
  * recipient of Aglyn's. Nothing reaches any of them until a site connects
@@ -65,6 +66,10 @@ export const MARKETING_PLATFORMS_HOSTS: PluginEgressHostDeclaration[] = [
   destination('a.klaviyo.com', 'Klaviyo', 'klaviyo', true),
   destination('api.omnisend.com', 'Omnisend', 'omnisend', true),
   destination('api.attentivemobile.com', 'Attentive', 'attentive', true),
+  // Constant Contact is reached with a grant the merchant gives Aglyn's
+  // registered app on their own account; the app registration makes it no
+  // recipient of Aglyn's — the data goes to, and stays in, the merchant's account.
+  destination('api.cc.email', 'Constant Contact', 'constant-contact', false),
   {
     ...oauth('login.mailchimp.com', 'Mailchimp'),
     reason:
@@ -72,6 +77,11 @@ export const MARKETING_PLATFORMS_HOSTS: PluginEgressHostDeclaration[] = [
   },
   consentPage('www.klaviyo.com', 'Klaviyo'),
   consentPage('ui.attentivemobile.com', 'Attentive'),
+  {
+    ...oauth('authz.constantcontact.com', 'Constant Contact'),
+    reason:
+      "Customer-chosen destination. Constant Contact's OAuth token endpoint, for a deployment that registered the Constant Contact app: the code exchange when a merchant connects their own account, and each refresh, which rotates the refresh token (`libs/plugins/marketing-platforms/src/lib/server/oauth.ts`). Its consent page is on the same host and is opened by the merchant's browser.",
+  },
 ]
 
 /** The plugin's `subprocessors` entry: no recipient of Aglyn's own, only the merchant's chosen destinations. */

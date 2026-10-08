@@ -35,8 +35,9 @@ import {
  * The token key is the floor: nothing is stored without it, so with it unset
  * every provider is unavailable and the page says why. Above it, a provider
  * is offered by API key when it takes one (Mailchimp, Klaviyo, Omnisend) and
- * by OAuth when its app registration is set. Attentive takes no API key, so
- * it is offered only with its partner app — hidden otherwise, page and docs.
+ * by OAuth when its app registration is set. Attentive and Constant Contact
+ * take no API key, so each is offered only with its app — hidden otherwise,
+ * page and docs — and either one's absence changes nothing for the others.
  *
  * Read in the bracket form, so a bundler never inlines a value.
  */
@@ -76,6 +77,11 @@ export function readMarketingPlatformsConfig(
     ['mailchimp', MARKETING_PLATFORMS_ENV.mailchimpClientId, MARKETING_PLATFORMS_ENV.mailchimpClientSecret],
     ['klaviyo', MARKETING_PLATFORMS_ENV.klaviyoClientId, MARKETING_PLATFORMS_ENV.klaviyoClientSecret],
     ['attentive', MARKETING_PLATFORMS_ENV.attentiveClientId, MARKETING_PLATFORMS_ENV.attentiveClientSecret],
+    [
+      'constant-contact',
+      MARKETING_PLATFORMS_ENV.constantContactClientId,
+      MARKETING_PLATFORMS_ENV.constantContactClientSecret,
+    ],
   ]
   for (const [id, idVar, secretVar] of pairs) {
     const clientId = read(env, idVar)

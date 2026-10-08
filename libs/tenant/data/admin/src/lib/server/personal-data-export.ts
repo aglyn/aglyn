@@ -232,7 +232,7 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     keyedBy: 'field',
     subjects: ['org'],
     exported: true,
-    note: 'EXISTENCE ONLY for the credential — each site’s connection to the merchant’s own Mailchimp, Klaviyo, Omnisend or Attentive account (AGL-3639): provider, status, account name, the chosen list and tag, the sync switches, cursors and run timing. The sealed access and refresh tokens and the id of the key that sealed them carry `token` in their names and are redacted (see redactSecrets); the document id is the site id and the provider.',
+    note: 'EXISTENCE ONLY for the credential — each site’s connection to the merchant’s own Mailchimp, Klaviyo, Omnisend, Attentive or Constant Contact account (AGL-3639, AGL-3696): provider, status, account name, the chosen list and tag, the sync switches, cursors and run timing. The sealed access and refresh tokens and the id of the key that sealed them carry `token` in their names and are redacted (see redactSecrets); the document id is the site id and the provider.',
   },
   {
     collection: 'marketingPlatformEvents',

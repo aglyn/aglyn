@@ -3029,7 +3029,7 @@
       ],
       "orgKeyedCollections": [
         {
-          "$comment": "A site's connection to the merchant's OWN Mailchimp, Klaviyo, Omnisend or Attentive account, the credential sealed, with its sync cursors and its log subcollection (AGL-3639). Top level and closed to every client, so org erasure removes them by orgId.",
+          "$comment": "A site's connection to the merchant's OWN Mailchimp, Klaviyo, Omnisend, Attentive or Constant Contact account, the credential sealed, with its sync cursors and its log subcollection (AGL-3639). Top level and closed to every client, so org erasure removes them by orgId.",
           "name": "marketingPlatformConnections",
           "orgField": "orgId"
         },
@@ -3041,7 +3041,7 @@
       ],
       "catalog": {
         "order": 23,
-        "$comment": "Two-way contact and consent sync with a merchant's OWN email platform (AGL-3639): Mailchimp, Klaviyo and Omnisend by the merchant's own API key, and by OAuth where the deployment registered the app (MAILCHIMP_CLIENT_ID/SECRET, KLAVIYO_CLIENT_ID/SECRET); Attentive only with its partner app (ATTENTIVE_CLIENT_ID/SECRET). It reaches the CRM's people only through core's person-records seam and each site's consent only through core's site-marketing-sync module, and commerce's events only through the domain-event outbox; it imports neither plugin. Sold with the CRM (`features.crm`), no price of its own. On for every workspace, off for a site only when that site says so, and no release flag: the card draws nothing until the console sets MARKETING_PLATFORMS_TOKEN_KEY, the key merchants' credentials are sealed under.",
+        "$comment": "Two-way contact and consent sync with a merchant's OWN email platform (AGL-3639): Mailchimp, Klaviyo and Omnisend by the merchant's own API key, and by OAuth where the deployment registered the app (MAILCHIMP_CLIENT_ID/SECRET, KLAVIYO_CLIENT_ID/SECRET); Attentive only with its partner app (ATTENTIVE_CLIENT_ID/SECRET), and Constant Contact only with its OAuth app (CONSTANT_CONTACT_CLIENT_ID/SECRET, AGL-3696; hidden in the card and the docs until both are set). It reaches the CRM's people only through core's person-records seam and each site's consent only through core's site-marketing-sync module, and commerce's events only through the domain-event outbox; it imports neither plugin. Sold with the CRM (`features.crm`), no price of its own. On for every workspace, off for a site only when that site says so, and no release flag: the card draws nothing until the console sets MARKETING_PLATFORMS_TOKEN_KEY, the key merchants' credentials are sealed under.",
         "label": "Email platforms",
         "alwaysOnForWorkspace": true,
         "description": "Two-way contact and unsubscribe sync with your own Mailchimp, Klaviyo or Omnisend account, and order events for their flows.",

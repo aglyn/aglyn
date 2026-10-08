@@ -44,6 +44,29 @@ export interface CredentialDeps {
 }
 
 export function createCredentialOpener(deps: CredentialDeps) {
+  /** The grant another run stored after `connection` was read, when it is still good. */
+  const rotatedElsewhere = async (
+    id: string,
+    connection: StoredConnection,
+    keyring: SecretBoxKeyring,
+  ): Promise<ProviderCredential | null> => {
+    const latest = await deps.store.get(id)
+    if (
+      !latest?.sealedToken ||
+      latest.sealedRefreshToken === connection.sealedRefreshToken ||
+      latest.tokenExpiresAtMs === null ||
+      latest.tokenExpiresAtMs - TOKEN_REFRESH_MARGIN_MS <= deps.now()
+    ) {
+      return null
+    }
+    try {
+      const token = openCredential(latest.sealedToken, id, 'token', keyring).value
+      return { kind: 'oauth', token, apiBase: latest.apiBase }
+    } catch {
+      return null
+    }
+  }
+
   return async function openConnectionCredential(id: string, connection: StoredConnection): Promise<ProviderCredential> {
     const config = deps.config()
     const keyring: SecretBoxKeyring | null = config.keyring
@@ -75,19 +98,26 @@ export function createCredentialOpener(deps: CredentialDeps) {
     } catch {
       throw new ProviderError('auth', 'The stored credential could not be opened. Connect again.')
     }
-    const grant = await refreshOAuthGrant({
-      http: deps.http,
-      provider: connection.provider,
-      client,
-      refreshToken: refresh,
-      nowMs: deps.now(),
-    }).catch((error) => {
+    let grant: Awaited<ReturnType<typeof refreshOAuthGrant>>
+    try {
+      grant = await refreshOAuthGrant({
+        http: deps.http,
+        provider: connection.provider,
+        client,
+        refreshToken: refresh,
+        nowMs: deps.now(),
+      })
+    } catch (error) {
+      if (!(error instanceof ProviderError && (error.kind === 'invalid' || error.kind === 'auth'))) throw error
+      // A provider that rotates refresh tokens (Constant Contact) refuses
+      // the old one once another run — a Sync now beside the tick — has
+      // spent it. That run stored the new grant: use it rather than calling
+      // a live connection revoked.
+      const rotated = await rotatedElsewhere(id, connection, keyring)
+      if (rotated) return rotated
       // A refused refresh is a revoked grant; anything else is retried.
-      if (error instanceof ProviderError && (error.kind === 'invalid' || error.kind === 'auth')) {
-        throw new ProviderError('auth', 'The connection was revoked or expired. Connect again.')
-      }
-      throw error
-    })
+      throw new ProviderError('auth', 'The connection was revoked or expired. Connect again.')
+    }
     await deps.store.patch(id, {
       sealedToken: sealCredential(grant.accessToken, id, 'token', keyring),
       // A provider that rotates refresh tokens hands back a new one; one that

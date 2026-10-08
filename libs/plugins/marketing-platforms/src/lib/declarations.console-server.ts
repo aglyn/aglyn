@@ -30,7 +30,7 @@ export function registerMarketingPlatformsConsoleServerDeclarations(): void {
       id: MARKETING_PLATFORMS_SYNC_JOB_ID,
       label: 'Email platform sync',
       drives:
-        'Copies each connected site’s contacts and their consent to Mailchimp, Klaviyo, Omnisend or Attentive, reads unsubscribes made there back to the site, and delivers order events for their flows. If it stops, an unsubscribe made in the outside platform does not reach the site’s own sends, and abandoned-cart and post-purchase flows stop firing.',
+        'Copies each connected site’s contacts and their consent to Mailchimp, Klaviyo, Omnisend, Attentive or Constant Contact, reads unsubscribes made there back to the site, and delivers order events for their flows. If it stops, an unsubscribe made in the outside platform does not reach the site’s own sends, and abandoned-cart and post-purchase flows stop firing.',
       run: async (context) => {
         const [{ runSyncTick }, { platformSyncDeps }, { readMarketingPlatformsConfig }] = await Promise.all([
           import('./server/sync-engine'),

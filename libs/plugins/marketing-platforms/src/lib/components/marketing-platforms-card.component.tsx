@@ -75,6 +75,7 @@ const READS_BACK: Readonly<Record<MarketingProviderId, string>> = {
   klaviyo: 'Contacts and unsubscribes both ways, plus orders and started checkouts for your flows.',
   omnisend: 'Contacts out, unsubscribes back, plus orders and started checkouts for your flows.',
   attentive: 'Contacts and orders out. Attentive does not report unsubscribes back.',
+  'constant-contact': 'Contacts and unsubscribes both ways, with tags, lifetime value and order count in custom fields.',
 }
 
 const formatTime = (ms: number | null): string => (ms ? new Date(ms).toLocaleString() : 'Not yet')
@@ -84,7 +85,7 @@ const help = (excerpt: string, anchor: '#connect' | '#settings' | '#sync-log' | 
 
 /**
  * EMAIL PLATFORMS (AGL-3639): a site's connections to the merchant's own
- * Mailchimp, Klaviyo, Omnisend or Attentive account — one card per platform
+ * Mailchimp, Klaviyo, Omnisend, Attentive or Constant Contact account — one card per platform
  * the deployment offers, its state and actions in its header, and the sync
  * log under each connected one. Draws nothing where the deployment cannot
  * hold a connection, or the member cannot read the site's.

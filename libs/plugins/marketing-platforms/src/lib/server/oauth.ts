@@ -40,6 +40,13 @@ import type { OAuthClient } from './config'
  * - **Klaviyo** requires PKCE and issues an hour-long access token with a
  *   refresh token, refreshed before each run that needs it.
  * - **Attentive** issues a token for the install.
+ * - **Constant Contact** (AGL-3696) is the server-side authorization code
+ *   flow: the client authenticates with Basic and the token request carries
+ *   its parameters in the query string, as its docs specify. PKCE is
+ *   documented only for its public-client flow, which uses no secret, so a
+ *   confidential app does not send it. Access tokens last a day and every
+ *   refresh ROTATES the refresh token (`offline_access`); the new one is
+ *   sealed in the same write as the access token.
  */
 
 export interface OAuthEndpoints {
@@ -67,6 +74,12 @@ export const OAUTH_ENDPOINTS: Readonly<Partial<Record<MarketingProviderId, OAuth
     authorize: 'https://ui.attentivemobile.com/integrations/oauth-install',
     token: 'https://api.attentivemobile.com/v1/authorization-codes/tokens',
     scope: 'subscriptions:write events:write ecommerce:write',
+    pkce: false,
+  },
+  'constant-contact': {
+    authorize: 'https://authz.constantcontact.com/oauth2/default/v1/authorize',
+    token: 'https://authz.constantcontact.com/oauth2/default/v1/token',
+    scope: 'account_read contact_data offline_access',
     pkce: false,
   },
 }
@@ -160,6 +173,7 @@ const PROVIDER_LABEL: Record<MarketingProviderId, string> = {
   klaviyo: 'Klaviyo',
   omnisend: 'Omnisend',
   attentive: 'Attentive',
+  'constant-contact': 'Constant Contact',
 }
 
 async function tokenRequest(
@@ -176,19 +190,21 @@ async function tokenRequest(
     Accept: 'application/json',
   }
   const body = new URLSearchParams(form)
-  if (provider === 'klaviyo') {
-    // Klaviyo authenticates the client with Basic; the others in the form.
+  if (provider === 'klaviyo' || provider === 'constant-contact') {
+    // Klaviyo and Constant Contact authenticate the client with Basic; the others in the form.
     headers['Authorization'] = `Basic ${Buffer.from(`${client.clientId}:${client.clientSecret}`).toString('base64')}`
   } else {
     body.set('client_id', client.clientId)
     body.set('client_secret', client.clientSecret)
   }
+  // Constant Contact reads the grant from the query string, not the body.
+  const inQuery = provider === 'constant-contact'
   const answer = await providerRequest(http, {
     provider: PROVIDER_LABEL[provider],
     method: 'POST',
-    url: endpoints.token,
+    url: inQuery ? `${endpoints.token}?${body.toString()}` : endpoints.token,
     headers,
-    body: body.toString(),
+    body: inQuery ? '' : body.toString(),
   })
   const accessToken = typeof answer?.access_token === 'string' ? answer.access_token : ''
   if (!accessToken) throw new ProviderError('auth', `${PROVIDER_LABEL[provider]} did not issue an access token`)
@@ -236,7 +252,7 @@ export async function exchangeOAuthCode(input: {
   return grant
 }
 
-/** Trades a refresh token for a new grant (Klaviyo). */
+/** Trades a refresh token for a new grant (Klaviyo, Constant Contact). */
 export async function refreshOAuthGrant(input: {
   http: ProviderHttp
   provider: MarketingProviderId
