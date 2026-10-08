@@ -40,3 +40,28 @@ export const AI_PROVIDER_UNAVAILABLE: OperatorAlertDefinition = {
   dedupeWindowMinutes: 6 * 60,
   defaultEnabled: true,
 }
+
+/**
+ * An AI job failed on our side: a provider error, a step that produced
+ * nothing usable, a build that delivered nothing. Not a model declining the
+ * brief, and not a site with AI switched off — those are the customer's, and
+ * the customer is told. Deduped per job kind, so an outage is one alert an
+ * hour for each kind it breaks rather than one per job; the runner's own
+ * words are in `{{error}}`, and every failure is in the log as `ai job failed`.
+ */
+export const AI_JOB_FAILED: OperatorAlertDefinition = {
+  type: 'ai.jobFailed',
+  pluginId: AI_PLUGIN_ID,
+  label: 'An AI job failed',
+  description:
+    'An AI job (a site, page, build, theme…) failed on the platform’s side, so a customer got nothing for their request. Read the error, then search the logs for “ai job failed” to see whether it is one job or every job of that kind.',
+  tier: 'should',
+  category: 'ops',
+  title: 'An AI {{kind}} job failed',
+  body:
+    'AI job {{jobId}} ({{kind}}) in workspace {{orgId}} failed at step {{step}}: {{error}}. The customer was told and given back the credits. Further {{kind}} failures within the hour are counted into the next alert.',
+  link: '/admin/orgs/{{orgId}}',
+  delivery: 'immediate',
+  dedupeWindowMinutes: 60,
+  defaultEnabled: true,
+}
