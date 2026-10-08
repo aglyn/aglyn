@@ -29,13 +29,30 @@ import {
   missingListQueryIndexes,
   planListQuery,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
-import { HOST_MEMBER_LIST_QUERY, hostMemberListRequest } from './host-member-filters'
+import {
+  HOST_MEMBER_LIST_COLUMN_SORTS,
+  HOST_MEMBER_LIST_QUERY,
+  hostMemberListRequest,
+} from './host-member-filters'
 
 const plan = (
   clauses: Array<{ field: string; op: string; value: string }>,
   words: string[] = [],
+  sort: (typeof HOST_MEMBER_LIST_COLUMN_SORTS)[number] | null = null,
 ) =>
-  planListQuery(HOST_MEMBER_LIST_QUERY, hostMemberListRequest(clauses, words), nameSearchNormalizers)
+  planListQuery(
+    HOST_MEMBER_LIST_QUERY,
+    hostMemberListRequest(clauses, words, sort),
+    nameSearchNormalizers,
+  )
+
+const sortBy = (column: string, direction: 'asc' | 'desc') => {
+  const found = HOST_MEMBER_LIST_COLUMN_SORTS.find(
+    (sort) => sort.column === column && sort.direction === direction,
+  )
+  if (!found) throw new Error(`no ${column} ${direction}`)
+  return found
+}
 
 describe('the roster query (AGL-3321)', () => {
   it('reads by address, unfiltered', () => {
@@ -48,7 +65,7 @@ describe('the roster query (AGL-3321)', () => {
     ])
     const several = plan([{ field: 'role', op: 'isAnyOf', value: 'viewer, admin' }])
     expect(several.filters).toEqual([{ path: 'role', op: 'in', value: ['viewer', 'admin'] }])
-    expect(several.orderBy).toEqual({ path: 'email', direction: 'asc' })
+    expect(several.orderBy).toMatchObject({ path: 'email', direction: 'asc' })
   })
 
   it('serves the search as a prefix of the stored, lower-cased address, beside a role', () => {
@@ -59,7 +76,7 @@ describe('the roster query (AGL-3321)', () => {
       { path: 'email', op: '<=', value: 'ann@' },
     ])
     // The range is on the field the list sorts by, so the order stands.
-    expect(both.orderBy).toEqual({ path: 'email', direction: 'asc' })
+    expect(both.orderBy).toMatchObject({ path: 'email', direction: 'asc' })
     expect(both.refused).toEqual([])
   })
 
@@ -84,6 +101,31 @@ describe('the roster query (AGL-3321)', () => {
     expect(
       hostMemberListRequest([{ field: 'email', op: 'startsWith', value: 'x' }], []).clauses,
     ).toEqual([])
+  })
+})
+
+describe('every roster header sorts the whole roster (AGL-3680)', () => {
+  it('orders the query by address either way and by Site access either way', () => {
+    expect(plan([], [], sortBy('email', 'desc')).orderBy).toMatchObject({ path: 'email', direction: 'desc' })
+    expect(plan([], [], sortBy('role', 'asc')).orderBy).toMatchObject({ path: 'role', direction: 'asc' })
+    expect(plan([], [], sortBy('role', 'desc')).orderBy).toMatchObject({ path: 'role', direction: 'desc' })
+  })
+
+  it('falls back to A to Z, and says so, while searching or filtering', () => {
+    for (const asked of [
+      plan([], ['ann'], sortBy('role', 'asc')),
+      plan([{ field: 'role', op: 'equals', value: 'admin' }], [], sortBy('email', 'desc')),
+    ]) {
+      expect(asked.orderBy).toMatchObject({ path: 'email', direction: 'asc' })
+      expect(asked.sortFallback?.reason).toBe('alone')
+      expect(asked.notices.join(' ')).toMatch(/sorts only with no filter or search on/)
+    }
+  })
+
+  it('keeps A to Z under the search, which is a range on the address', () => {
+    const searched = plan([], ['ann'], sortBy('email', 'asc'))
+    expect(searched.orderBy).toMatchObject({ path: 'email', direction: 'asc' })
+    expect(searched.sortFallback).toBeUndefined()
   })
 })
 

@@ -45,6 +45,7 @@ import ListQueryNotices, {
 import ListTable from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -91,10 +92,7 @@ import {
   pluginGridColumns,
   useStablePluginColumns,
 } from './plugin-grid-columns.component'
-import {
-  usePluginColumnSort,
-  usePluginListColumns,
-} from './plugin-list-columns.component'
+import { usePluginListColumns } from './plugin-list-columns.component'
 
 const ASSIGNABLE_ROLES: OrgRole[] = ['admin', 'editor', 'viewer']
 
@@ -144,6 +142,24 @@ type MemberRow = AglynOrgMember & {
   name: string
   roleKey: string
   accessKey: string
+}
+
+/** The org roles, strongest first: how the Role header orders them. */
+const ROLE_RANK: readonly string[] = ['owner', 'admin', 'editor', 'viewer']
+
+/*
+ * EVERY HEADER SORTS THE WHOLE ROSTER (AGL-3680), and a plugin column's
+ * comparator is the same one order. The card holds every member it lists —
+ * the whole roster, or every match the query answered — so a sort over the
+ * rows is a sort of the list (strategy 4, `complete`), not of a page.
+ */
+const MEMBER_SORTS: Readonly<Record<string, (row: MemberRow) => string | number>> = {
+  member: (row) => row.name,
+  role: (row) => {
+    const rank = ROLE_RANK.indexOf(row.roleKey)
+    return rank === -1 ? ROLE_RANK.length : rank
+  },
+  access: (row) => row.accessKey,
 }
 
 /** Keeps a cell's own keystrokes from moving the grid's focus. */
@@ -243,21 +259,30 @@ export function OrgMembersCard() {
     refused: ListQueryRefusal[]
     notices: string[]
   } | null>(null)
-  const {
-    rows: sortedMembers,
-    sortedBy: pluginSortedBy,
-    onSort: onPluginSort,
-  } = usePluginColumnSort(filtering ? (matched?.members ?? []) : members)
+  const listedMembers = filtering ? matched?.members : members
   const memberRows = useMemo<MemberRow[]>(
     () =>
-      sortedMembers.map((member) => ({
+      (listedMembers ?? []).map((member) => ({
         ...member,
         name: member.displayName || member.email || member.$id,
         roleKey: member.role ?? 'viewer',
         accessKey: consoleUserType(member),
       })),
-    [sortedMembers],
+    [listedMembers],
   )
+  /*
+   * One order over the roster: a Member, Role or Access header, or a plugin
+   * column's comparator handed over by its own header (AGL-2939) — the last
+   * one picked replaces the other, so the grid never shows a header sorted
+   * over rows a plugin re-ordered.
+   */
+  const columnSort = useListColumnSort<MemberRow>({
+    sorts: [],
+    rows: memberRows,
+    pageSorts: MEMBER_SORTS,
+    complete: true,
+  })
+  const { pageSortedBy: pluginSortedBy, sortPage: onPluginSort } = columnSort
   const seatQuota = checkOrgSeatQuota(org, 'managers', managerSeatsUsed)
   // An org admin sees every org host via the memberRoles projection, so
   // this doubles as the org host directory for the access editor.
@@ -484,7 +509,7 @@ export function OrgMembersCard() {
   const stablePluginColumns = useStablePluginColumns(pluginColumns)
   const pluginMemberColumns = useMemo(
     () =>
-      pluginGridColumns<AglynOrgMember>(stablePluginColumns, {
+      pluginGridColumns<MemberRow>(stablePluginColumns, {
         slotProps: { orgId, canManage },
         sortedBy: pluginSortedBy,
         onSort: onPluginSort,
@@ -948,6 +973,8 @@ export function OrgMembersCard() {
         <ListTable
           aria-label="Organization members"
           rows={memberRows}
+          // Every header sorts the whole roster (`columnSort`).
+          columnSort={columnSort}
           loading={filtering && matched === null}
           columns={listFilterGridColumns(
             memberColumns,
@@ -958,9 +985,6 @@ export function OrgMembersCard() {
           // A row holds a role picker over a custom-role picker, so it is as
           // tall as what it holds.
           getRowHeight={() => 'auto'}
-          // The rows arrive in the roster's order, or a plugin column's; the
-          // grid's own sort would be a second order fighting the first.
-          disableColumnSorting
           // The panel and the search are the grid's; the roster's QUERY
           // answers them (AGL-3321), so the grid must not filter its rows.
           filterMode="server"
