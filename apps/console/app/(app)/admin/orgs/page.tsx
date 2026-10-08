@@ -40,12 +40,13 @@ import {
 } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { type GridColDef, type GridSortModel } from '@mui/x-data-grid'
+import { type GridColDef } from '@mui/x-data-grid'
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import {
   type ListQuerySort,
   planListQuery,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
   type ListFilterOption,
@@ -85,10 +86,7 @@ import {
   pluginGridColumns,
   useStablePluginColumns,
 } from '../../../../components/plugin-grid-columns.component'
-import {
-  usePluginColumnSort,
-  usePluginListColumns,
-} from '../../../../components/plugin-list-columns.component'
+import { usePluginListColumns } from '../../../../components/plugin-list-columns.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -146,6 +144,23 @@ const ORG_LIST_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterOption
 }
 const ORG_SELECT_FIELDS = Object.keys(ORG_LIST_FILTER_OPTIONS)
 
+/**
+ * The columns the row DERIVES — the plan it reads as, the subscription merged
+ * from `billing/stripe`, the resolved site limit — sort the page on screen
+ * (AGL-3680): no query can order by a value the document does not hold.
+ */
+const ORG_PAGE_SORTS = {
+  plan: (row: any) =>
+    isEnterpriseOrg(row as never) ? PLAN_LABELS.enterprise : resolveEffectivePlan(row as never),
+  subscription: (row: any) => row.subscription?.status ?? null,
+  siteLimit: (row: any) => resolveOrgEntitlements(row).hostLimit,
+}
+const ORG_PAGE_SORT_HEADERS = {
+  plan: 'Plan',
+  subscription: 'Subscription',
+  siteLimit: 'Site limit',
+}
+
 /** What a plugin column's cell receives for its row: the row, and its org id. */
 const orgRowProps = (row: any) => ({ row, orgId: String(row.$id) })
 
@@ -181,30 +196,20 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
    * organization beats a substring match over the rows on screen.
    */
   /*
-   * THE HEADER SORT IS THE ROUTE'S ORDER, over every organization — not a
-   * sort of the page on screen, which would read as the whole list's.
-   * Organization and Created are the headers that sort: the query can only
-   * order by a field every org carries (`ORG_LIST_COLUMN_SORTS`). Newest
-   * first until a header is clicked; clearing a sort comes back to it.
+   * EVERY HEADER SORTS (AGL-3680). Organization and Created are the ROUTE'S
+   * order, over every organization (`ORG_LIST_COLUMN_SORTS`); Plan,
+   * Subscription and Site limit are derived by the row, so they sort the
+   * page on screen and say so (`ORG_PAGE_SORTS`). Newest first until a
+   * header is clicked; clearing a sort comes back to it.
+   *
+   * The hook holds the order asked; the plan below says which order the
+   * route will READ in — a Created filter leads with Created whatever was
+   * asked — so the header shows the order the rows are in, and the route's
+   * notices say why.
    */
-  const [columnSort, setColumnSort] = useState<ListQuerySort>(
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(
     ORG_LIST_COLUMN_SORTS[0],
   )
-  const pagination = useStaffListQuery<any>({
-    endpoint: '/api/admin/orgs',
-    clauses: gridFilter.clauses,
-    search: gridFilter.searchWords,
-    sort: columnSort,
-    rowsKey: 'orgs',
-    onError: reportOrgsError,
-  })
-  // `refresh` re-reads the page currently shown — the post-mutation target.
-  const { rows: orgs, loading, refresh, filtering } = pagination
-  /*
-   * The order the route will read in, planned from the same declaration: a
-   * Created date filter leads the order with Created, whatever header was
-   * asked, so the grid shows the order the rows ARE in and says why.
-   */
   const orderPlan = useMemo(
     () =>
       planListQuery(
@@ -212,24 +217,32 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         {
           clauses: gridFilter.clauses,
           search: gridFilter.searchWords,
-          sort: columnSort,
+          sort: askedSort,
         },
         nameSearchNormalizers,
       ),
-    [gridFilter.clauses, gridFilter.searchWords, columnSort],
+    [gridFilter.clauses, gridFilter.searchWords, askedSort],
   )
-  const createdRanged = orderPlan.filters.some(
-    (filter) => filter.path === 'createdAt',
-  )
-  const orderColumn = ORG_LIST_COLUMN_SORTS.find(
-    (sort) =>
-      sort.path === orderPlan.orderBy.path &&
-      sort.direction === orderPlan.orderBy.direction,
-  )
-  const orderNotices =
-    orderPlan.orderBy.path !== columnSort.path
-      ? ['Sorted by Created: a Created filter orders the list by that date.']
-      : []
+  const pagination = useStaffListQuery<any>({
+    endpoint: '/api/admin/orgs',
+    clauses: gridFilter.clauses,
+    search: gridFilter.searchWords,
+    sort: askedSort,
+    rowsKey: 'orgs',
+    onError: reportOrgsError,
+  })
+  // `refresh` re-reads the page currently shown — the post-mutation target.
+  const { rows: orgs, loading, refresh, filtering } = pagination
+  const columnSort = useListColumnSort<any>({
+    sorts: ORG_LIST_COLUMN_SORTS,
+    defaultSort: ORG_LIST_COLUMN_SORTS[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: orderPlan.orderBy,
+    rows: orgs,
+    pageSorts: ORG_PAGE_SORTS,
+    headers: ORG_PAGE_SORT_HEADERS,
+  })
 
   /*
    * Columns a plugin contributes to this list (AGL-2984), drawn after the
@@ -248,30 +261,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
    * document, so no query could order by them. While it does, the grid's
    * header shows no sort; a grid header click hands the order back.
    */
-  const {
-    rows: sortedOrgs,
-    sortedBy: pluginSortedBy,
-    onSort: onPluginSort,
-  } = usePluginColumnSort(orgs)
-  const sortModel = useMemo<GridSortModel>(
-    () =>
-      pluginSortedBy || !orderColumn?.column
-        ? []
-        : [{ field: orderColumn.column, sort: orderColumn.direction }],
-    [pluginSortedBy, orderColumn],
-  )
-  const onSortModelChange = useCallback(
-    (model: GridSortModel) => {
-      if (pluginSortedBy) onPluginSort(pluginSortedBy, null)
-      const [first] = model
-      setColumnSort(
-        ORG_LIST_COLUMN_SORTS.find(
-          (sort) => sort.column === first?.field && sort.direction === first?.sort,
-        ) ?? ORG_LIST_COLUMN_SORTS[0],
-      )
-    },
-    [pluginSortedBy, onPluginSort],
-  )
+  const { pageSortedBy: pluginSortedBy, sortPage: onPluginSort } = columnSort
   const pluginGridCols = useMemo(
     () =>
       pluginGridColumns(pluginColumns, {
@@ -346,10 +336,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Organization',
         flex: 1.4,
         minWidth: 200,
-        // A to Z, Z to A, then back to newest first. Not while a Created
-        // filter holds the order.
-        sortable: !createdRanged,
-        sortingOrder: ['asc', 'desc', null],
+        // A to Z, Z to A, then back to newest first (`columnSort`).
         valueGetter: (_value, row: any) => String(row.name ?? row.$id),
         renderCell: ({ row }: any) => (
           /*
@@ -396,9 +383,9 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Plan',
         flex: 1.1,
         minWidth: 220,
-        // An org with no stored plan has no `plan` key, and a query ordered
-        // by it would drop that org; the same holds for the billing status.
-        sortable: false,
+        // The plan the org READS as, sorted over the page (`ORG_PAGE_SORTS`):
+        // an org with no stored plan has no `plan` key, and a query ordered
+        // by it would drop that org.
         valueGetter: (_value, row: any) =>
           isEnterpriseOrg(row as never)
             ? PLAN_LABELS.enterprise
@@ -510,7 +497,6 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Subscription',
         flex: 0.8,
         minWidth: 130,
-        sortable: false,
         valueGetter: (_value, row: any) => row.subscription?.status ?? '--',
       },
       {
@@ -518,7 +504,6 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Site limit',
         flex: 0.8,
         minWidth: 130,
-        sortable: false,
         // A derived entitlement, not a stored field — there is nothing for a
         // query to filter on.
         filterable: false,
@@ -560,8 +545,6 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Created',
         flex: 0.7,
         minWidth: 120,
-        sortable: true,
-        sortingOrder: ['desc', 'asc'],
         // `type: 'date'` is what gives the panel a date PICKER rather than a
         // free-text box for a value the route parses as a day.
         type: 'date',
@@ -609,7 +592,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         { width: 120 },
       ),
     ], ORG_LIST_FILTER_FIELDS, ORG_LIST_FILTER_OPTIONS, ORG_LIST_FILTER_HEADERS),
-    [refresh, handleShowUsage, usageLoading, pluginGridCols, createdRanged],
+    [refresh, handleShowUsage, usageLoading, pluginGridCols],
   )
 
   return (
@@ -664,7 +647,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                   headers: ORG_LIST_FILTER_HEADERS,
                   options: ORG_LIST_FILTER_OPTIONS,
                 })}
-                notices={[...pagination.notices, ...orderNotices]}
+                notices={[...pagination.notices, ...columnSort.notices]}
               />
               {orgs.length === 0 && !filtering ? (
                 <Typography variant="body2" color="text.secondary">
@@ -675,13 +658,11 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                 </Typography>
               ) : (
                 <ListTable
-                  rows={sortedOrgs}
+                  rows={columnSort.rows}
                   columns={orgColumns}
                   loading={loading}
-                  // The route orders; see `columnSort` above.
-                  sortingMode="server"
-                  sortModel={sortModel}
-                  onSortModelChange={onSortModelChange}
+                  // The route orders, or the page does; see `columnSort` above.
+                  columnSort={columnSort}
                   /*
                    * The grid must NOT also filter. With the server answering
                    * the clauses and the search, a second client-side pass over

@@ -79,6 +79,13 @@ export interface ListColumnSortOptions<Row> {
   /** The order asked while no header is: one of `sorts`, or null. */
   defaultSort?: ListQuerySort | null
   /**
+   * The asked order, CONTROLLED — for a list whose query is read before the
+   * rows this hook sorts exist (the order feeds the read; the read feeds the
+   * rows). Omitted, the hook holds it.
+   */
+  sort?: ListQuerySort | null
+  onSortChange?: (sort: ListQuerySort | null) => void
+  /**
    * The order the query WILL read in — the plan's `orderBy` — when that can
    * differ from the one asked (an `alone` fallback, a range filter). The
    * header shows that order, not the one clicked.
@@ -100,8 +107,17 @@ const same = (a: ListQuerySort | null | undefined, b: ListQuerySort | null | und
   Boolean(a && b && a.path === b.path && a.direction === b.direction)
 
 export function useListColumnSort<Row>(options: ListColumnSortOptions<Row>): ListColumnSort<Row> {
-  const { sorts, defaultSort = null, orderBy, rows, pageSorts, headers } = options
-  const [querySort, setQuerySort] = useState<ListQuerySort | null>(defaultSort)
+  const { sorts, defaultSort = null, orderBy, rows, pageSorts, headers, onSortChange } = options
+  const [heldSort, setHeldSort] = useState<ListQuerySort | null>(defaultSort)
+  const controlled = options.sort !== undefined
+  const querySort = controlled ? (options.sort ?? null) : heldSort
+  const setQuerySort = useCallback(
+    (next: ListQuerySort | null) => {
+      if (!controlled) setHeldSort(next)
+      onSortChange?.(next)
+    },
+    [controlled, onSortChange],
+  )
   const [active, setActive] = useState<Active<Row>>(null)
 
   const columns = useMemo(() => {
@@ -146,7 +162,7 @@ export function useListColumnSort<Row>(options: ListColumnSortOptions<Row>): Lis
           defaultSort,
       )
     },
-    [columns, sorts, defaultSort],
+    [columns, sorts, defaultSort, setQuerySort],
   )
 
   const sortPage = useCallback((id: string, compare: ((a: Row, b: Row) => number) | null) => {
