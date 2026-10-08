@@ -134,5 +134,9 @@
   "zapier": {
     "baseline": 3724,
     "budget": 5120
+  },
+  "stock-photos": {
+    "baseline": 5902,
+    "budget": 8192
   }
 }
