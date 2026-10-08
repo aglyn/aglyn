@@ -28,7 +28,7 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
   override fun observeDoc(path: String): Flow<Live<FirestoreDoc?>> = callbackFlow {
     trySend(Live.Loading)
     val registration = db.document(path).addSnapshotListener { snapshot, error ->
-      if (error != null) trySend(Live.Failed(error)) else trySend(Live.Ready(snapshot?.toDoc()))
+      if (error != null) trySend(Live.Failed(error)) else trySend(Live.Ready(snapshot?.toDoc(), snapshot?.metadata?.isFromCache == true))
     }
     awaitClose { registration.remove() }
   }
@@ -39,7 +39,7 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
       if (error != null) {
         trySend(Live.Failed(error))
       } else {
-        trySend(Live.Ready(snapshot?.documents?.mapNotNull { it.toDoc() } ?: emptyList()))
+        trySend(Live.Ready(snapshot?.documents?.mapNotNull { it.toDoc() } ?: emptyList(), snapshot?.metadata?.isFromCache == true))
       }
     }
     awaitClose { registration.remove() }

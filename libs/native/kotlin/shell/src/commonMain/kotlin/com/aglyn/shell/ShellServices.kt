@@ -119,6 +119,14 @@ internal class ShellPluginContext(
     }
   }
 
+  override fun back(): Boolean = navigator.back()
+
+  override fun openSite(hostId: String): Boolean {
+    if (workspace.sites.none { it.id == hostId }) return false
+    services.workspace.selectSite(hostId)
+    return true
+  }
+
   override fun openBesigner(path: String, scope: ConsoleScope): Boolean {
     val whole = scopedConsolePath(path, scope, orgSlug, hostSlug)
     if (!BesignerPaths.isBesignerPath(whole)) return false

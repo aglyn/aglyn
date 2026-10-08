@@ -101,6 +101,11 @@ import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.WifiOff
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.FileCopy
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -211,6 +216,11 @@ object AglynIcons {
     "content_copy" to Icons.Outlined.ContentCopy,
     "visibility" to Icons.Outlined.Visibility,
     "mouse" to Icons.Outlined.Mouse,
+    "expand_more" to Icons.Outlined.ExpandMore,
+    "expand_less" to Icons.Outlined.ExpandLess,
+    "file_copy" to Icons.Outlined.FileCopy,
+    "key" to Icons.Outlined.Key,
+    "play_arrow" to Icons.Outlined.PlayArrow,
   )
 
   fun named(name: String?): ImageVector = byName[name] ?: Icons.Outlined.Extension

@@ -71,6 +71,20 @@ interface NativePluginContext {
   fun navigate(screenId: String, params: NativeParams = emptyMap())
 
   /**
+   * Leaves the screen on top, as the top bar's back arrow does: an editor
+   * opened on its own screen returns to its list once it saves. False when
+   * nothing was stacked to go back from.
+   */
+  fun back(): Boolean = false
+
+  /**
+   * Picks one of the workspace's sites, as the site switcher does, so a
+   * screen listing every site's records can open one in its own site. False
+   * when the shell cannot switch (the id is not a site this person holds).
+   */
+  fun openSite(hostId: String): Boolean = false
+
+  /**
    * Opens the Besigner, the apps' only web content, in the authenticated web
    * view inside the app. [path] must be a Besigner page ([BesignerPaths]):
    * any other console page is a native screen, so this refuses it and

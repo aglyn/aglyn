@@ -1,0 +1,259 @@
+package com.aglyn.ui
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+
+/** One entry of a [SelectField]: what is stored, what is read, and an optional greyed-out state. */
+data class SelectOption(val value: String, val label: String, val enabled: Boolean = true, val supporting: String? = null)
+
+/**
+ * A labelled field that opens a menu of choices: the native twin of the
+ * console's `TextField select`. The field shows the chosen option's label (or
+ * [placeholder]); [supportingText] and [isError] read as on a text field.
+ */
+@Composable
+fun SelectField(
+  label: String,
+  options: List<SelectOption>,
+  selected: String?,
+  onSelect: (String) -> Unit,
+  modifier: Modifier = Modifier,
+  placeholder: String? = null,
+  supportingText: String? = null,
+  isError: Boolean = false,
+  enabled: Boolean = true,
+) {
+  var open by remember { mutableStateOf(false) }
+  val chosen = options.firstOrNull { it.value == selected }
+  Box(modifier) {
+    OutlinedTextField(
+      value = chosen?.label ?: "",
+      onValueChange = {},
+      readOnly = true,
+      enabled = enabled,
+      label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+      placeholder = placeholder?.let { { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
+      supportingText = supportingText?.let { { Text(it) } },
+      isError = isError,
+      singleLine = true,
+      trailingIcon = { Icon(AglynIcons.named(if (open) "expand_less" else "expand_more"), contentDescription = null) },
+      modifier = Modifier.fillMaxWidth(),
+    )
+    // The read-only field takes no taps of its own; this layer opens the menu
+    // and reads as one dropdown to a screen reader.
+    Box(
+      Modifier
+        .matchParentSize()
+        .padding(top = 8.dp, bottom = if (supportingText != null) 22.dp else 0.dp)
+        .clip(MaterialTheme.shapes.extraSmall)
+        .clickable(enabled = enabled, role = Role.DropdownList) { open = true }
+        .semantics { contentDescription = "$label: ${chosen?.label ?: placeholder ?: "none"}" },
+    )
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.heightIn(max = 420.dp)) {
+      for (option in options) {
+        DropdownMenuItem(
+          text = {
+            Column {
+              Text(option.label, fontWeight = if (option.value == selected) FontWeight.SemiBold else null)
+              option.supporting?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+          },
+          enabled = option.enabled,
+          leadingIcon = if (option.value == selected) {
+            { Icon(AglynIcons.named("check"), contentDescription = null, Modifier.size(18.dp)) }
+          } else {
+            null
+          },
+          onClick = {
+            open = false
+            onSelect(option.value)
+          },
+          modifier = Modifier.testTag("option-${option.value}"),
+        )
+      }
+    }
+  }
+}
+
+/** A section of a [SectionNav]: its key, its label and an optional icon. */
+data class SectionItem(val key: String, val label: String, val icon: String? = null)
+
+/**
+ * A page's sections: a row of chips across the top on phones, and a list
+ * down the side on wider windows, beside [content]. The console's hub
+ * sections (a section rail) as a native control.
+ */
+@Composable
+fun SectionNav(
+  sections: List<SectionItem>,
+  selected: String,
+  onSelect: (String) -> Unit,
+  modifier: Modifier = Modifier,
+  header: (@Composable () -> Unit)? = null,
+  /** The narrowest window the sections move to the side at; narrower ones show chips across the top. */
+  sideFrom: WidthClass = WidthClass.EXPANDED,
+  content: @Composable () -> Unit,
+) {
+  val wide = currentWidthClass() >= sideFrom
+  if (wide) {
+    Row(modifier.fillMaxSize()) {
+      Column(
+        Modifier.width(220.dp).fillMaxHeight().verticalScroll(rememberScrollState()).padding(space(1.5f)),
+        verticalArrangement = Arrangement.spacedBy(space(0.5f)),
+      ) {
+        header?.invoke()
+        for (section in sections) {
+          val on = section.key == selected
+          Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+            contentColor = if (on) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+              .fillMaxWidth()
+              .clip(MaterialTheme.shapes.extraLarge)
+              .clickable { onSelect(section.key) }
+              .semantics {
+                this.selected = on
+                role = Role.Tab
+              }
+              .testTag("section-${section.key}"),
+          ) {
+            Row(
+              Modifier.heightIn(min = 48.dp).padding(horizontal = space(2f)),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(space(1.5f)),
+            ) {
+              section.icon?.let { Icon(AglynIcons.named(it), contentDescription = null, Modifier.size(20.dp)) }
+              Text(section.label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+          }
+        }
+      }
+      androidx.compose.material3.VerticalDivider()
+      Box(Modifier.weight(1f).fillMaxHeight()) { content() }
+    }
+  } else {
+    Column(modifier.fillMaxSize()) {
+      header?.invoke()
+      ChoiceChipRow(
+        options = sections.map { ChipOption(it.key, it.label, it.icon) },
+        selected = selected,
+        onSelect = onSelect,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(1f)),
+      )
+      HorizontalDivider()
+      Box(Modifier.weight(1f, fill = true)) { content() }
+    }
+  }
+}
+
+/** An overflow ("more") menu of a row's actions. */
+data class MenuAction(val label: String, val icon: String? = null, val destructive: Boolean = false, val enabled: Boolean = true, val onClick: () -> Unit)
+
+@Composable
+fun OverflowMenu(actions: List<MenuAction>, modifier: Modifier = Modifier, contentDescription: String = "More actions") {
+  var open by remember { mutableStateOf(false) }
+  Box(modifier) {
+    IconButton(onClick = { open = true }, modifier = Modifier.testTag("overflow")) {
+      Icon(AglynIcons.named("more_vert"), contentDescription = contentDescription)
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+      for (action in actions) {
+        val tint = if (action.destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+        DropdownMenuItem(
+          text = { Text(action.label, color = tint) },
+          leadingIcon = action.icon?.let { { Icon(AglynIcons.named(it), contentDescription = null, tint = tint) } },
+          enabled = action.enabled,
+          onClick = {
+            open = false
+            action.onClick()
+          },
+          modifier = Modifier.testTag("menu-${action.label.lowercase().replace(' ', '-')}"),
+        )
+      }
+    }
+  }
+}
+
+/** Puts [text] on the platform clipboard. */
+@Composable
+fun rememberCopyToClipboard(): (String) -> Unit {
+  @Suppress("DEPRECATION")
+  val clipboard = LocalClipboardManager.current
+  return remember(clipboard) { { text: String -> clipboard.setText(AnnotatedString(text)) } }
+}
+
+/** A dialog that offers a short list of choices, one tap each, and Cancel: a menu where there is no anchor for one. */
+@Composable
+fun ChoiceDialog(
+  title: String,
+  options: List<SelectOption>,
+  onPick: (String) -> Unit,
+  onDismiss: () -> Unit,
+  modifier: Modifier = Modifier,
+  dismissLabel: String = "Cancel",
+) {
+  androidx.compose.material3.AlertDialog(
+    onDismissRequest = onDismiss,
+    modifier = modifier.testTag("choice-dialog"),
+    title = { Text(title) },
+    text = {
+      Column {
+        for (option in options) {
+          Row(
+            Modifier
+              .fillMaxWidth()
+              .heightIn(min = 48.dp)
+              .clip(MaterialTheme.shapes.small)
+              .clickable(enabled = option.enabled) { onPick(option.value) }
+              .padding(horizontal = space(1f))
+              .testTag("choice-${option.value}"),
+            verticalAlignment = Alignment.CenterVertically,
+          ) { Text(option.label, style = MaterialTheme.typography.bodyLarge) }
+        }
+      }
+    },
+    confirmButton = {},
+    dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text(dismissLabel) } },
+  )
+}

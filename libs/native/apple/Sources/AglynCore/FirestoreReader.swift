@@ -9,10 +9,15 @@ public struct FirestoreDocument: @unchecked Sendable {
   public let id: String
   /// Plain values: String, Bool, Int/Double (as NSNumber), Date, arrays and dictionaries.
   public let data: [String: Any]
+  /// The snapshot came from the device's cache, not confirmed by the server
+  /// (the web SDK's `metadata.fromCache`). An editor that writes a whole
+  /// document back refuses to save over a row the server has not confirmed.
+  public let fromCache: Bool
 
-  public init(id: String, data: [String: Any]) {
+  public init(id: String, data: [String: Any], fromCache: Bool = false) {
     self.id = id
     self.data = data
+    self.fromCache = fromCache
   }
 
   public func string(_ key: String) -> String? { data[key] as? String }
@@ -39,16 +44,20 @@ public struct FirestoreQuery: @unchecked Sendable {
   public var filters: [ListQueryConstraint]
   public var order: [Order]
   public var limit: Int?
+  /// Also answer when only the snapshot's metadata changes — a cached
+  /// answer the server then confirms — so `fromCache` turns false on screen.
+  public var includeMetadataChanges: Bool
 
   public init(
     _ collection: [String], equals: [(field: String, value: Any)] = [], filters: [ListQueryConstraint] = [],
-    order: [Order] = [], limit: Int? = nil
+    order: [Order] = [], limit: Int? = nil, includeMetadataChanges: Bool = false
   ) {
     self.collection = collection
     self.equals = equals
     self.filters = filters
     self.order = order
     self.limit = limit
+    self.includeMetadataChanges = includeMetadataChanges
   }
 
   /// Every filter, equality ones first.
@@ -121,6 +130,15 @@ public protocol FirestoreReader: AnyObject, Sendable {
   /// Writes fields (a `FirestoreSentinel` value becomes its server value).
   func setDocument(_ path: [String], _ fields: [String: Any], merge: Bool) async throws
   func deleteDocument(_ path: [String]) async throws
+
+  /// The server's count of a query's documents (the web SDK's
+  /// `getCountFromServer`), or nil where the reader cannot ask for one; a
+  /// caller then falls back to the rows it holds.
+  func count(_ query: FirestoreQuery) async throws -> Int?
+}
+
+extension FirestoreReader {
+  public func count(_ query: FirestoreQuery) async throws -> Int? { nil }
 }
 
 /// A listener that does nothing, for a query that cannot run yet.
