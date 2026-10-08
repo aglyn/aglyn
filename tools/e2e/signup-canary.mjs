@@ -521,7 +521,11 @@ async function walk(page, db, auth, identity, created) {
   let sawCheckpoint = false
   let form = null
   while (Date.now() < formBy && !form) {
-    form = await page.$('input[name="Passwd"]')
+    // A phone is redirected to the auth host while this loop polls
+    // (AGL-3690), and a query that lands mid-navigation throws "Execution
+    // context was destroyed". That is the redirect working, not a missing
+    // form, so it counts as "not yet" and the loop polls again.
+    form = await page.$('input[name="Passwd"]').catch(() => null)
     if (form) break
     const title = await page.title().catch(() => '')
     if (/checkpoint|just a moment|attention required/i.test(title)) {
