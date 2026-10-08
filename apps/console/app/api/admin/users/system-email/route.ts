@@ -32,6 +32,7 @@ import {
   meterPlatformEmail,
 } from '@aglyn/tenant-data-admin'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import { resolveIdpDisplayName } from '@aglyn/aglyn/app-utils/idp-profile'
 import { generateAuthActionLink } from '../../../_lib/auth-action-link'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 import { renderSystemEmail } from '../../../_lib/render-system-email'
@@ -110,7 +111,7 @@ async function staffCaller(
     ok: true,
     uid: decoded.uid,
     email: String(decoded.email ?? '').toLowerCase(),
-    name: String(decoded['name'] ?? '').trim().split(/\s+/)[0] || '',
+    name: resolveIdpDisplayName(decoded).trim().split(/\s+/)[0] || '',
   }
 }
 
