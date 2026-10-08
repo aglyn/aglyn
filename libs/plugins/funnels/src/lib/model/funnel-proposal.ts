@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { SITE_JOURNEY_STEP_TYPES } from '@aglyn/aglyn/app-utils/site-journey'
+import { SITE_JOURNEY_STEP_TYPES } from '@aglyn/aglyn/app-utils/site-journey-steps'
 import { normalizeFunnelStep } from './funnel-definition'
 import { labelStepFromInventory, stepInventoryProblem, type FunnelInventory } from './funnel-inventory'
 import {

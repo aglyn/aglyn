@@ -790,6 +790,14 @@
     }
   ],
   "DEFAULT_TITLE_PATTERN": "{{page.name}} {{site.separator}} {{site.name}}",
+  "DROP_OFF_MAX_HOURS": 720,
+  "DROP_OFF_WAIT_HOURS": [
+    1,
+    24,
+    72,
+    168
+  ],
+  "DROP_OFF_WATCHES_MAX": 12,
   "EMAIL_LIST_QUERY": {
     "fields": [
       {
@@ -1370,6 +1378,27 @@
     "format"
   ],
   "FUNCTION_MAX_OPERATIONS": 1000,
+  "FUNNEL_EMAIL_KEY_LABELS": {
+    "clicked": "link clicked",
+    "opened": "opened"
+  },
+  "FUNNEL_FEATURE": "screenAnalytics",
+  "FUNNEL_LABEL_MAX": 80,
+  "FUNNEL_MAX_RANGE_DAYS": 90,
+  "FUNNEL_MAX_STEPS": 8,
+  "FUNNEL_MIN_STEPS": 2,
+  "FUNNEL_NAME_MAX": 80,
+  "FUNNEL_STEP_TYPE_LABELS": {
+    "booking": "Made a booking",
+    "cart": "Added a product to the cart",
+    "email": "Email from the site",
+    "event": "Custom event",
+    "form": "Submitted a form",
+    "order": "Placed an order",
+    "overlay": "Clicked a bar or popup",
+    "page": "Viewed a page"
+  },
+  "FUNNELS_MAX_PER_SITE": 20,
   "HOST_EVENTS": [
     {
       "label": "Form submitted",
@@ -3789,6 +3818,7 @@
       }
     ]
   },
+  "SITE_JOURNEY_KEY_MAX": 200,
   "SITE_LIST_DECLARATION": {
     "fields": [
       {
