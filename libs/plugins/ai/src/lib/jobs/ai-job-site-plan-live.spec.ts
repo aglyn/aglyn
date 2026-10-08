@@ -31,6 +31,22 @@
  * It calls the provider and costs real money (about 19 credits a brief), so
  * it runs only when asked: `AGLYN_LIVE_AI=1` with `ANTHROPIC_API_KEY` set.
  * Run it before promoting a change to the site job, its prompt or its rules.
+ *
+ * THE CHEAP VERIFICATION LADDER (AGL-3660; docs/AI_JOBS.md, "Verifying a
+ * prompt change"). Climb it in order and stop at the first rung that can
+ * see the mistake:
+ *
+ *   1. unit tests — the step's own spec on golden answers, and
+ *      `runtime/ai-prompt-cache.spec.ts` for the cached bytes: free;
+ *   2. replay — this spec again: under the launcher every request whose
+ *      bytes were answered before is replayed from `.cache/ai-replay` for
+ *      nothing, and only a CHANGED prompt goes to the provider;
+ *   3. one live run per plan (Free, then `AGLYN_LIVE_AI_ORG_PLAN=business`)
+ *      for the prompts you changed — read `run.live` in the table: 0 means
+ *      nothing new was asked and the run proves nothing;
+ *   4. the full live sweep, only before landing: `AGLYN_AI_REPLAY=refresh`
+ *      asks every request again, and `AGLYN_LIVE_AI_BATCH=1` sends the round
+ *      as one Message Batch at half price (minutes, not seconds).
  */
 
 jest.mock('../runtime/site-inventory', () => ({ __esModule: true, readSiteInventory: jest.fn() }))
@@ -44,6 +60,7 @@ jest.mock('./ai-jobs', () => ({
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import type { AiJob } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory } from '../model/ai-site-inventory'
+import { aiLiveRunLedger } from '../runtime/ai-dev-replay'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 import { createAiJobPlanStep } from './ai-job-plan-step'
@@ -123,7 +140,8 @@ describeLive("a guided start's plan from the real model", () => {
       }),
     )
     // The whole table, every run, so a red run shows every brief's outcome.
-    console.log(JSON.stringify(results, null, 1))
+    // Live against replayed (AGL-3660): a run with live 0 asked nothing new.
+    console.log(JSON.stringify({ run: aiLiveRunLedger(), results }, null, 1))
     expect(results.filter((result) => !result.planned || result.refused)).toEqual([])
   })
 })

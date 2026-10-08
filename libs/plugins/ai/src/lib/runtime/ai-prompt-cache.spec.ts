@@ -60,6 +60,10 @@ import { AI_JOB_INSIGHT_SYSTEM } from '../jobs/ai-job-insight-step'
 import { AI_JOB_LAYOUT_INSTRUCTIONS } from '../jobs/ai-job-layout-step'
 import { AI_JOB_PAGE_INSTRUCTIONS, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
 import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
+import { AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS, AI_LAYOUT_FRAME_KIND } from '../jobs/ai-job-layout-language'
+import { AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS, AI_LAYOUT_PAGE_KIND } from '../jobs/ai-job-page-language'
+import { AI_LAYOUT_FRAME_TOOL, AI_LAYOUT_PAGE_TOOL } from '../layout-language/ai-layout-language'
+import { buildAnthropicRequestBody } from '../providers/anthropic'
 import { AI_JOB_TEMPLATE_INSTRUCTIONS } from '../jobs/ai-job-template-step'
 import { AI_JOB_TEXT_SYSTEM } from '../jobs/ai-job-text-step'
 import { AI_OVERLAY_SYSTEM } from '../jobs/ai-job-overlay-copy'
@@ -397,6 +401,29 @@ const REQUESTS: Record<string, Composed> = {
     blocks: (site) => aiDoctrineSystemBlocks(site, { instructions: AI_JOB_PAGE_INSTRUCTIONS }),
     tools: () => [AI_PAGE_SECTION_TOOL, aiInventoryLookupTool()],
   },
+  // The layout language (AGL-3660): a guided start's pages, one answer a
+  // page, and its header and footer. Both carry the fields-scope doctrine and
+  // the language; the site's inventory rides after the last breakpoint.
+  'layout-page': {
+    door: 'jobs/ai-job-page-language.ts',
+    step: 'job.page',
+    blocks: (site) =>
+      aiDoctrineSystemBlocks(site, {
+        instructions: AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS,
+        scope: aiDoctrineScopeFor(AI_LAYOUT_PAGE_KIND),
+      }),
+    tools: () => [AI_LAYOUT_PAGE_TOOL, aiInventoryLookupTool()],
+  },
+  'layout-frame': {
+    door: 'jobs/ai-job-layout-step.ts',
+    step: 'job.layout',
+    blocks: (site) =>
+      aiDoctrineSystemBlocks(site, {
+        instructions: AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS,
+        scope: aiDoctrineScopeFor(AI_LAYOUT_FRAME_KIND),
+      }),
+    tools: () => [AI_LAYOUT_FRAME_TOOL, aiInventoryLookupTool()],
+  },
   theme: {
     door: 'jobs/ai-job-theme-step.ts',
     step: 'job.theme',
@@ -675,6 +702,43 @@ describe('a cached span is keyed on the request, never on the tenant', () => {
   })
 })
 
+/**
+ * The bytes a provider caches, as the Anthropic adapter puts them on the wire:
+ * the tools, then every system block through the last `cache_control`. What a
+ * cache entry is keyed on, so two requests that differ here never share one.
+ */
+function wirePrefix(name: string, site: AiSiteInventory, brief: string): string {
+  const request = REQUESTS[name]
+  const body = buildAnthropicRequestBody({
+    model: aiModelForStep(request.step),
+    maxTokens: 1_000,
+    system: request.blocks(site),
+    tools: request.tools(site),
+    messages: [{ role: 'user', content: brief }],
+    stream: false,
+  })
+  const system = (body['system'] ?? []) as Array<{ cache_control?: unknown }>
+  const last = system.map((block) => Boolean(block.cache_control)).lastIndexOf(true)
+  return JSON.stringify({ tools: body['tools'] ?? [], system: system.slice(0, last + 1) })
+}
+
+describe('a cached prefix is byte-stable across briefs, as it goes on the wire (AGL-3660)', () => {
+  // The guided start's own requests, and every other door's: the brief is the
+  // user turn and the site is the volatile block, so neither may move a byte
+  // of what the provider caches. A timestamp, an id, a key order that follows
+  // insertion or a tool list built per request would each fail here.
+  it.each(Object.keys(REQUESTS).filter((name) => name !== 'seo-fixes'))(
+    '%s sends the same cached bytes for two briefs on two sites',
+    (name) => {
+      const a = wirePrefix(name, SITE_A, 'A 2-page website for a dog groomer in Austin called Hillside.')
+      const b = wirePrefix(name, SITE_B, 'A 5-page website for a bakery in Tulsa that sells cakes to order.')
+      expect(a).toBe(b)
+      expect(a).not.toContain('Hillside')
+      expect(a).not.toContain('Acme Roofing')
+    },
+  )
+})
+
 describe('the ledger: what each request caches, against its model’s minimum', () => {
   const measured = () =>
     Object.fromEntries(
@@ -741,6 +805,12 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       email: { prefixTokens: 2_896, minimum: 512, caches: true, toolsStable: true },
       form: { prefixTokens: 2_728, minimum: 512, caches: true, toolsStable: true },
       'page-section': { prefixTokens: 4_596, minimum: 512, caches: true, toolsStable: true },
+      // The layout language (AGL-3660). Read four characters a token these
+      // err low: the token counting endpoint puts the page's cached span at
+      // 2,872 tokens and the frame's at 3,471 on the balanced tier, tools
+      // and their system prompt included.
+      'layout-page': { prefixTokens: 1_831, minimum: 512, caches: true, toolsStable: true },
+      'layout-frame': { prefixTokens: 2_202, minimum: 512, caches: true, toolsStable: true },
       // 3,326 before AGL-3403 widened the components a theme may style and
       // gave a component leaf its theme-aware `sx` target.
       theme: { prefixTokens: 3_517, minimum: 512, caches: true, toolsStable: true },

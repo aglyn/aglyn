@@ -37,6 +37,22 @@
  * `AGLYN_LIVE_AI_MODEL` names another catalog model (a Free tier on the fast
  * one, say); `AGLYN_LIVE_AI_OUT=<dir>` writes each compiled page and layout
  * there for `render-layout-shots.mts`.
+ *
+ * THE CHEAP VERIFICATION LADDER (AGL-3660; docs/AI_JOBS.md, "Verifying a
+ * prompt change"). Climb it in order and stop at the first rung that can
+ * see the mistake:
+ *
+ *   1. unit tests — the step's own spec on golden answers, and
+ *      `runtime/ai-prompt-cache.spec.ts` for the cached bytes: free;
+ *   2. replay — this spec again: under the launcher every request whose
+ *      bytes were answered before is replayed from `.cache/ai-replay` for
+ *      nothing, and only a CHANGED prompt goes to the provider;
+ *   3. one live run per plan (Free, then `AGLYN_LIVE_AI_ORG_PLAN=business`)
+ *      for the prompts you changed — read `run.live` in the table: 0 means
+ *      nothing new was asked and the run proves nothing;
+ *   4. the full live sweep, only before landing: `AGLYN_AI_REPLAY=refresh`
+ *      asks every request again, and `AGLYN_LIVE_AI_BATCH=1` sends the round
+ *      as one Message Batch at half price (minutes, not seconds).
  */
 
 jest.mock('../runtime/site-inventory', () => ({ __esModule: true, readSiteInventory: jest.fn() }))
@@ -73,6 +89,7 @@ import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
 import { aiModelForStep } from '../providers/routing'
 import { runValidatedGeneration } from '../runtime/ai-doctrine'
+import { aiLiveRunLedger } from '../runtime/ai-dev-replay'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { aiBuildsWithComponents } from './ai-job-drafts'
 import {
@@ -245,6 +262,8 @@ interface Result {
   calls: number
   attempts: number
   outputTokens: number[]
+  /** Every call's input, split as the provider billed it: uncached, read from the cache, written to it. */
+  usage: { inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number }
   cutOffs: number
   estCostUsd: number
   credits: number
@@ -261,6 +280,12 @@ function record(name: string, prompt: string, before: number, result: { status: 
     calls: calls.length,
     attempts: result.attempts,
     outputTokens: calls.map((call) => Number(call.usage['outputTokens'] ?? 0)),
+    usage: {
+      inputTokens: calls.reduce((total, call) => total + Number(call.usage['inputTokens'] ?? 0), 0),
+      cacheReadTokens: calls.reduce((total, call) => total + Number(call.usage['cacheReadTokens'] ?? 0), 0),
+      cacheWriteTokens: calls.reduce((total, call) => total + Number(call.usage['cacheWriteTokens'] ?? 0), 0),
+      outputTokens: calls.reduce((total, call) => total + Number(call.usage['outputTokens'] ?? 0), 0),
+    },
     cutOffs: calls.filter((call) => call.stopReason === 'max_tokens').length,
     estCostUsd: result.estCostUsd,
     credits: assistCreditsFromUsd(result.estCostUsd),
@@ -393,6 +418,8 @@ describeLive('six guided starts designed by the real model in the layout languag
     const frames = results.filter((result) => result.name.endsWith('header+footer'))
     const sum = (list: Result[], pick: (result: Result) => number) => list.reduce((total, result) => total + pick(result), 0)
     const table = {
+      // Live against replayed (AGL-3660): a run with live 0 asked nothing new.
+      run: aiLiveRunLedger(),
       orgPlan: ORG_PLAN,
       model: MODEL ?? aiModelForStep('job.page'),
       pagesBuilt: `${pages.filter((result) => result.status === 'ok').length}/${pages.length}`,
@@ -400,6 +427,18 @@ describeLive('six guided starts designed by the real model in the layout languag
       firstTry: `${results.filter((result) => result.attempts === 1 && result.status === 'ok').length}/${results.length}`,
       cutOffs: sum(results, (result) => result.cutOffs),
       estCostUsd: Number(sum(results, (result) => result.estCostUsd).toFixed(4)),
+      // Where the input went: the share of prompt tokens read from the cache
+      // is the number caching changes, and the one a run is compared on.
+      inputTokens: sum(results, (result) => result.usage.inputTokens),
+      cacheReadTokens: sum(results, (result) => result.usage.cacheReadTokens),
+      cacheWriteTokens: sum(results, (result) => result.usage.cacheWriteTokens),
+      outputTokensTotal: sum(results, (result) => result.usage.outputTokens),
+      cacheReadShare: Number(
+        (
+          sum(results, (result) => result.usage.cacheReadTokens) /
+          Math.max(1, sum(results, (result) => result.usage.inputTokens + result.usage.cacheReadTokens + result.usage.cacheWriteTokens))
+        ).toFixed(3),
+      ),
       creditsPerPage: pages.map((result) => result.credits),
       creditsPerFrame: frames.map((result) => result.credits),
       outputTokensPerPage: pages.map((result) => result.outputTokens),

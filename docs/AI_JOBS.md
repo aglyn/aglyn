@@ -309,6 +309,65 @@ per-token money can cost more per request; and on a door that cannot cache,
 every static byte is billed at full input rate on every attempt AND on every
 re-ask, so its prompt is worth shortening rather than enriching.
 
+## Verifying a prompt change
+
+Nearly all of the provider bill is development, not customers (AGL-3660):
+in October 2026, $20.56 on the provider's console against about $1.05
+metered to workspaces. Most of it was live evals re-run whole on every
+iteration, on Free and on a paid workspace, at $0.35–0.80 a plan a run. So a
+change is verified on the cheapest rung that can see its mistake:
+
+1. **Unit tests** (free). The step's own spec on golden answers, and
+   `src/lib/runtime/ai-prompt-cache.spec.ts`, which holds every request's
+   cached bytes to one value across briefs and sites — the tools and the
+   system blocks through the last breakpoint, as the adapter writes them.
+2. **Replay** (free for what did not change). A live spec run under the
+   launcher's mark (`AI_EVAL_LIVE_LAUNCHER`) replays every request whose
+   bytes were answered before from `.cache/ai-replay/` (gitignored), and
+   sends only the requests whose prompt changed.
+3. **One live run per plan, for the prompts you changed**: the spec once on
+   Free and once with `AGLYN_LIVE_AI_ORG_PLAN=business`. Every live table
+   carries `run`: `live` and `replayed` counts and what the live calls cost
+   at list. `live: 0` means nothing new was asked; it is not a live pass.
+4. **The full live sweep, only before landing**: `AGLYN_AI_REPLAY=refresh`
+   asks every request again, and `AGLYN_LIVE_AI_BATCH=1` sends each round as
+   one Message Batch at half price.
+
+### The development layers
+
+All three live in `runAiRequest` (`src/lib/runtime/ai-runtime.ts`), are read
+from the environment by `src/lib/runtime/ai-dev-env.ts`, and are OFF in any
+deployed server — `NODE_ENV=production`, `VERCEL_ENV` of `production` or
+`preview`, or `K_SERVICE` — whatever the variables say.
+
+- **Replay** (`ai-dev-replay.ts`). A request's key is a SHA-256 of the
+  provider, model, system text, tools, messages, ceiling, thinking and
+  effort, as canonical JSON. `AGLYN_AI_REPLAY=1` replays and records,
+  `refresh` sends every request and records over the old answer, `off`
+  does neither; unset, it is on under the launcher and off elsewhere.
+  `AGLYN_AI_REPLAY_DIR` moves the store. A replayed answer is one the same
+  model gave to the same bytes, so a run that passes on replays has still
+  had every changed prompt answered live. A prompt that carries something
+  per run — a fresh job id, a random seed — never replays; a spec that wants
+  replays builds its ids from its briefs.
+- **Batch** (`ai-live-batch.ts`). `AGLYN_LIVE_AI_BATCH=1` turns every
+  non-streaming request into an entry of a Message Batch: requests that
+  arrive within `AGLYN_LIVE_AI_BATCH_WINDOW_MS` (2 s) of each other — a
+  `Promise.all` over the briefs — go as one batch, and the re-asks, asked
+  only once their answers are read, gather into the next. Half price, in
+  minutes rather than seconds; the adapter waits up to an hour.
+- **The first request over a prefix goes alone.** A cache entry is readable
+  only once the request writing it has started answering, so a `Promise.all`
+  over N briefs on one prompt wrote the prefix N times and read it none.
+  In a development run the first request over a cached prefix is sent
+  alone and the others follow it. Production's beat runs one step at a
+  time, so it never needed this and never gets it.
+- **The hour-long cache.** Under the launcher every breakpoint asks for
+  `ttl: "1h"` (`AGLYN_AI_CACHE_TTL=5m` turns it back), since an agent re-runs
+  an eval every ten to forty minutes, past the default five. Production
+  keeps five minutes: a job's steps run a beat apart, and a one-call step
+  with no re-ask would pay the hour's dearer write for nothing.
+
 ## Rules a kind can actually break
 
 The seventeen building rules are written for a kind that composes a document.

@@ -27,6 +27,7 @@ import type {
   AiSystemBlock,
   AiTool,
 } from '../providers/contract'
+import { aiLiveBatchStats } from './ai-live-batch'
 import { AI_REPLAY_DIR_ENV, aiDevReplayMode, type AiDevEnv as Env, type AiDevReplayMode } from './ai-dev-env'
 
 /** The key format's version: bumped when what a key covers changes, so no old answer is read under a new meaning. */
@@ -373,4 +374,28 @@ export async function aiDevWarmPrefixFirst<T>(
 export function resetAiDevWarmPrefixes(): void {
   warming.clear()
   warmedAt.clear()
+}
+
+// ── What a live eval prints ──────────────────────────────────────────────
+
+/**
+ * The line every live eval's table carries (AGL-3660): how many of its
+ * requests went to the provider and how many were answered from disk, what
+ * the live ones cost at list, and how many batches carried them. A table
+ * whose `live` is 0 proved nothing new — every prompt in it had been answered
+ * before — and is not a live pass; `AGLYN_AI_REPLAY=refresh` asks again.
+ */
+export function aiLiveRunLedger(env: Env = process.env): AiDevReplayStats & {
+  batches: number
+  batchedRequests: number
+  allReplayed: boolean
+} {
+  const replay = aiDevReplayStats(env)
+  const batch = aiLiveBatchStats()
+  return {
+    ...replay,
+    batches: batch.batches,
+    batchedRequests: batch.requests,
+    allReplayed: replay.live === 0 && replay.replayed > 0,
+  }
 }

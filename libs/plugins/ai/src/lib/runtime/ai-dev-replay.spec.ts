@@ -232,7 +232,7 @@ describe('a request through the runtime in a development process', () => {
 
   it('reads and writes nothing in a deployed server, even when asked', async () => {
     process.env['AGLYN_AI_REPLAY'] = '1'
-    process.env['NODE_ENV'] = 'production'
+    ;(process.env as Record<string, string>)['NODE_ENV'] = 'production'
     const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
     await ask('a bakery')
     await ask('a bakery')

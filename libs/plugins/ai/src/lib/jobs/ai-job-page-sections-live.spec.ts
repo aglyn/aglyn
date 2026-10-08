@@ -46,6 +46,22 @@
  *   AGLYN_LIVE_AI=1 AI_EVAL_LIVE=1 AI_EVAL_LIVE_LAUNCHER=tools/ai-eval/record-live.mjs \
  *     node --env-file=.env node_modules/jest/bin/jest.js -c libs/plugins/ai/jest.config.ts \
  *     libs/plugins/ai/src/lib/jobs/ai-job-page-sections-live.spec.ts
+ *
+ * THE CHEAP VERIFICATION LADDER (AGL-3660; docs/AI_JOBS.md, "Verifying a
+ * prompt change"). Climb it in order and stop at the first rung that can
+ * see the mistake:
+ *
+ *   1. unit tests — the step's own spec on golden answers, and
+ *      `runtime/ai-prompt-cache.spec.ts` for the cached bytes: free;
+ *   2. replay — this spec again: under the launcher every request whose
+ *      bytes were answered before is replayed from `.cache/ai-replay` for
+ *      nothing, and only a CHANGED prompt goes to the provider;
+ *   3. one live run per plan (Free, then `AGLYN_LIVE_AI_ORG_PLAN=business`)
+ *      for the prompts you changed — read `run.live` in the table: 0 means
+ *      nothing new was asked and the run proves nothing;
+ *   4. the full live sweep, only before landing: `AGLYN_AI_REPLAY=refresh`
+ *      asks every request again, and `AGLYN_LIVE_AI_BATCH=1` sends the round
+ *      as one Message Batch at half price (minutes, not seconds).
  */
 
 jest.mock('../runtime/site-inventory', () => ({ __esModule: true, readSiteInventory: jest.fn() }))
@@ -102,6 +118,7 @@ import { aiPlanEmbedsFor, type AiBuildPlanScreen } from '../model/ai-build-plan'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
 import { aiModelForStep } from '../providers/routing'
+import { aiLiveRunLedger } from '../runtime/ai-dev-replay'
 import {
   aiAnswerTree,
   runValidatedGeneration,
@@ -409,6 +426,8 @@ describeLive("a guided start's Home page from the real model, a section a pass",
     const results = pages.flat()
     const calls = results.flatMap((result) => result.calls)
     const table = {
+      // Live against replayed (AGL-3660): a run with live 0 asked nothing new.
+      run: aiLiveRunLedger(),
       orgPlan: ORG_PLAN,
       estCostUsd: Number(results.reduce((sum, result) => sum + result.estCostUsd, 0).toFixed(4)),
       pagesBuilt: pages.filter((sections, index) => sections.length === HOMES[index].screen.sections.length && sections.every((s) => s.status === 'ok')).length,
