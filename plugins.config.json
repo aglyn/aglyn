@@ -101,6 +101,15 @@
       "apiPrefixes": [
         "forms"
       ],
+      "mobile": {
+        "$comment": "AGL-3668: a site's forms in the Aglyn app: search, in use or retired, create, duplicate, rename, retire, CRM routing, questions, versions (open in the Besigner, publish) and the form's submissions (the Inbox plugin's screens) with export; list and detail side by side on tablets and desktop.",
+        "android": { "package": "com.aglyn.plugins.forms", "register": "registerFormsNative" },
+        "contributes": {
+          "screens": ["forms.form", "forms.list"],
+          "quickActions": ["forms.open"],
+          "deepLinks": ["forms.page", "forms.record"]
+        }
+      },
       "modules": {
         "site": "site"
       },
@@ -1935,6 +1944,14 @@
       "apiPrefixes": [
         "inbox"
       ],
+      "mobile": {
+        "$comment": "AGL-3668: a site's form submissions in the Aglyn app, the site's or one form's (the Forms screens open it with formId): read filter, search, export, and each submission's fields with read or unread, reply and delete; list and detail side by side on tablets and desktop.",
+        "android": { "package": "com.aglyn.plugins.inbox", "register": "registerInboxNative" },
+        "contributes": {
+          "screens": ["inbox.submission", "inbox.submissions"],
+          "deepLinks": ["inbox.submissions-page"]
+        }
+      },
       "catalog": {
         "order": 14,
         "label": "Inbox",
@@ -2731,7 +2748,8 @@
       "id": "theme-presets",
       "package": "@aglyn/plugins-themes",
       "register": {
-        "console": "registerThemesConsole"
+        "console": "registerThemesConsole",
+        "consoleServerDeclarations": "registerThemesConsoleServerDeclarations"
       },
       "catalog": {
         "order": 3,
@@ -2976,6 +2994,155 @@
         "siteOff": {
           "stops": "Switching Fulfillment networks off for this site stops its paid orders going to ShipBob or Amazon, and stops their shipments and stock counts coming back.",
           "keeps": "The connections and every order already sent are kept, and what a network already shipped stays on the order."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "orderDetail"
+          ]
+        }
+      }
+    },
+    {
+      "id": "marketplaces",
+      "package": "@aglyn/plugins-marketplaces",
+      "register": {
+        "console": "registerMarketplacesConsole",
+        "consoleApi": "registerMarketplacesConsoleApi",
+        "serverDeclarations": "registerMarketplacesServerDeclarations",
+        "consoleServerDeclarations": "registerMarketplacesConsoleServerDeclarations",
+        "subprocessors": "marketplacesSubprocessors"
+      },
+      "apiPrefixes": [
+        "marketplaces"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's connection to the merchant's OWN Amazon, eBay, Etsy, TikTok Shop, Walmart or Faire seller account, its grant sealed, with its settings, its order cursor, its log and listingState subcollections (AGL-3638). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "marketplaceConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One marketplace order and the Aglyn order it became, with the shipments to confirm back to the marketplace and its fees (AGL-3638). Written by the console job and the order-event intake.",
+          "name": "marketplaceOrders",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 27,
+        "$comment": "Marketplace listing and order sync for the commerce plugin (AGL-3638): the merchant's OWN Amazon, eBay, Etsy, TikTok Shop, Walmart or Faire seller account, connected by OAuth through the deployment's app. Listing quantities (and, by choice, prices) follow the catalog read through core's core.product-catalog; marketplace orders become real orders through core's core.channel-orders, whose seller takes their units off the shelf in the same transaction; shipments go back with tracking from commerce's order.fulfilled event. It imports no other plugin. Sold with commerce (`features.commerce`), no price of its own; marketplace fees are recorded on the order and never charged by Aglyn. On for every workspace, off for a site only when that site says so, and no release flag: nothing draws until the console holds MARKETPLACES_TOKEN_KEY and a marketplace's app credentials (MARKETPLACES_* in .env.selfhost.example).",
+        "label": "Marketplaces",
+        "alwaysOnForWorkspace": true,
+        "description": "Sell on Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire from one stock count: their orders come in as yours, and tracking goes back.",
+        "siteOff": {
+          "stops": "Switching Marketplaces off for this site stops importing its marketplace orders, sending tracking to the marketplaces, and keeping their listings in step with its stock.",
+          "keeps": "The connections and every order already imported are kept, and switching it back on resumes from where the orders were last read."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "orderDetail"
+          ]
+        }
+      }
+    },
+    {
+      "id": "print-on-demand",
+      "package": "@aglyn/plugins-print-on-demand",
+      "register": {
+        "console": "registerPrintOnDemandConsole",
+        "consoleApi": "registerPrintOnDemandConsoleApi",
+        "serverDeclarations": "registerPrintOnDemandServerDeclarations",
+        "consoleServerDeclarations": "registerPrintOnDemandConsoleServerDeclarations",
+        "subprocessors": "printOnDemandSubprocessors"
+      },
+      "apiPrefixes": [
+        "print-on-demand"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's connection to the merchant's OWN Printful store or Printify shop, the token and webhook secret sealed (AGL-3641). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "podConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "A product imported from a service: the store product and variants it became, and what the service charges for each (AGL-3641).",
+          "name": "podProductLinks",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "The part of a paid order a service makes and ships: its status there, its costs and its parcels. No buyer address or email is kept (AGL-3641).",
+          "name": "podOrders",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 28,
+        "$comment": "Print on demand (AGL-3641): a merchant connects their OWN Printful store or Printify shop with a token made there (neither needs a developer app or partnership of Aglyn's), imports its products through core's core.product-writer, and paid orders are sent to it through commerce's order events; parcels come back through core's core.shipment-records. It never imports commerce. No `requires` edge, for the reason shipping gives; it runs only on a site where commerce is on (site-context.ts). On for every workspace, off for a site only when that site says so, and no release flag: every surface hides itself until the deployment sets PRINT_ON_DEMAND_TOKEN_KEY, the key merchants' tokens are sealed under. Aglyn holds no account with either service and adds nothing to their prices. Spocket is not offered: it has no API a merchant can connect without a partnership.",
+        "label": "Print on demand",
+        "alwaysOnForWorkspace": true,
+        "description": "Sell products your own Printful or Printify account makes and ships, with orders sent and tracking returned automatically.",
+        "siteOff": {
+          "stops": "Switching Print on demand off for this site stops new paid orders being sent to Printful or Printify, and stops imported products updating.",
+          "keeps": "The connections, the imported products and the orders already sent are kept, and parcels already on their way still reach the orders."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "orderDetail",
+            "productEditor"
+          ]
+        }
+      }
+    },
+    {
+      "id": "inventory-sync",
+      "package": "@aglyn/plugins-inventory-sync",
+      "register": {
+        "console": "registerInventorySyncConsole",
+        "consoleApi": "registerInventorySyncConsoleApi",
+        "serverDeclarations": "registerInventorySyncServerDeclarations",
+        "consoleServerDeclarations": "registerInventorySyncConsoleServerDeclarations",
+        "subprocessors": "inventorySyncSubprocessors"
+      },
+      "apiPrefixes": [
+        "inventory-sync"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's connection to the merchant's OWN Cin7 Core, inFlow or Brightpearl account, its keys or grant sealed, with its sync settings, last stock count, cursors and log subcollection (AGL-3642). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "inventorySyncConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One paid order's hand-off to the connected system: the lines sent, the system's id for it, attempts and why it was not sent (AGL-3642). Written by the order-event intake and the console job.",
+          "name": "inventorySyncOrders",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One product linked between the store and the connected system by the system's id or the SKU, with the version last synced (AGL-3642). Written by the console job.",
+          "name": "inventorySyncProducts",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 29,
+        "$comment": "Inventory and ERP sync for the commerce plugin's stores (AGL-3642): stock counts kept in step in the direction each connection names (the system's counts set through core's stock-levels seam, or the store's catalog read through core's product-catalog seam and adjusted into the system), products imported through core's product-writer seam or made in the system, and paid orders sent through commerce's order events; it imports neither commerce nor any other plugin. Sold with commerce (`features.commerce`), no price of its own. On for every workspace, off for a site only when that site says so, and no release flag: nothing draws until the console holds INVENTORY_SYNC_TOKEN_KEY (Cin7 Core and inFlow, on the merchant's own keys), and Brightpearl also needs BRIGHTPEARL_APP_REF and BRIGHTPEARL_DEV_REF.",
+        "label": "Inventory sync",
+        "alwaysOnForWorkspace": true,
+        "description": "Stock, products and paid orders kept in step with your own Cin7 Core, inFlow or Brightpearl account.",
+        "siteOff": {
+          "stops": "Switching Inventory sync off for this site stops its stock counts, products and paid orders syncing with Cin7 Core, inFlow or Brightpearl.",
+          "keeps": "The connection and its settings are kept, and everything already synced stays on both sides."
         },
         "publishedSiteImpact": "console-only"
       },

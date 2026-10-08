@@ -861,7 +861,10 @@ export interface InventoryAdjustment {
   orderId?: string
   /** Location for multi-location stock (AGL-286); absent = default. */
   locationId?: string
-  /** Who counted, for a `sync` row: the warehouse that reported it (AGL-3634). */
+  /**
+   * Who counted, for a `sync` row: the warehouse that reported it (AGL-3634);
+   * for a `sale` another channel made, that channel (AGL-3638).
+   */
   source?: string
   atMs: number
 }

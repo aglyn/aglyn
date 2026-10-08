@@ -117,6 +117,9 @@ function output(
   return { resource, id, hostId: 'host-1', label }
 }
 
+/** The look the scaffold designs first (AGL-3660), as its unit reports it. */
+const LOOK: AiJobOutput = { resource: 'theme', id: 'look', hostId: 'host-1', label: 'Your look' }
+
 /** The site's own listing as the scaffold reports it, from `siteJob`'s inputs. */
 const SITE_LISTING: AiJobOutput = {
   resource: 'seo',
@@ -180,7 +183,8 @@ function siteJob(overrides: Partial<AiJob> = {}): AiJob {
     },
     // The welcome email's id, recorded on the step when the job was created (AGL-3079).
     steps: [{ name: 'generate', status: 'running', creditsSpent: 0, draftIds: { email: 'drftWelcom' } }],
-    outputs: [],
+    // The look is designed first (AGL-3660); these specs start past it unless they say otherwise.
+    outputs: [LOOK],
     creditsReserved: 0,
     creditsSpent: 0,
     createdBy: 'uid-1',
@@ -215,6 +219,7 @@ function stepWith(
   return createAiJobSiteStep({
     runnerFor: (kind) => runners[kind] ?? null,
     readNodes: EVERY_SECTION,
+    look: async () => ({ outputs: [LOOK], usage: AI_JOB_ZERO_USAGE, estCostUsd: 0, model: 'test-model', stopReason: null }),
     ...deps,
   })
 }
@@ -276,6 +281,8 @@ describe('the units a plan owes', () => {
   it('owes only what the plan names, and no email unless one is asked for', () => {
     const units = aiSiteJobUnits(confirmedPlan(), {})
     expect(units.map((unit) => unit.kind)).toEqual([
+      // The look comes first on every scaffold (AGL-3660).
+      'theme',
       'page',
       'page',
       'page',
@@ -286,6 +293,7 @@ describe('the units a plan owes', () => {
   it('reads how far it got from the outputs already recorded', () => {
     const units = aiSiteJobUnits(confirmedPlan({ create: [LAYOUT, FORM] }), {})
     expect(aiSitePendingUnits(units, []).map((unit) => unit.slot)).toEqual([
+      't',
       'l',
       'f',
       'p0',
@@ -294,6 +302,7 @@ describe('the units a plan owes', () => {
       'p3',
     ])
     const built = [
+      LOOK,
       output('layout', 'layout-1'),
       output('form', 'form-1'),
       output('screen', 's-0'),
@@ -343,7 +352,8 @@ describe('the job each unit is built under', () => {
       planScreen({ title: 'Contact', slug: 'contact', id: 'drftContPg' }),
     ],
   })
-  const units = aiSiteJobUnits(plan, { welcomeEmail: true })
+  // The look's unit leads every scaffold (AGL-3660); these address the units after it.
+  const units = aiSiteJobUnits(plan, { welcomeEmail: true }).slice(1)
   const built = aiSiteBuiltRefs(units, [
     output('layout', 'layout-1', 'Site frame'),
     output('form', 'form-1', 'Contact'),
@@ -370,7 +380,7 @@ describe('the job each unit is built under', () => {
       screens: plan.screens.map((screen) => ({ ...screen, id: undefined })),
     })
     const job = siteJob({ plan: unrecorded, steps: [] })
-    const legacy = aiSiteJobUnits(unrecorded, { welcomeEmail: true })
+    const legacy = aiSiteJobUnits(unrecorded, { welcomeEmail: true }).slice(1)
     expect(legacy.map((unit) => aiSiteUnitJob(job, unit, built).$id)).toEqual([
       'job-1-l',
       'job-1-f',
@@ -475,7 +485,7 @@ describe('the job each unit is built under', () => {
     const job = siteJob({
       plan,
       steps: [{ name: 'generate', status: 'running', creditsSpent: 0 }],
-      outputs: [output('layout', 'layout-1')],
+      outputs: [LOOK, output('layout', 'layout-1')],
     })
     const derived = aiSiteUnitJob(job, units[2], built)
     expect(derived.steps).toEqual([])
@@ -516,7 +526,7 @@ describe('one unit a pass', () => {
     await step(
       context(
         siteJob({
-          outputs: [output('screen', 'screen-0'), output('screen', 'screen-1')],
+          outputs: [LOOK, output('screen', 'screen-0'), output('screen', 'screen-1')],
         }),
       ),
     )
@@ -528,9 +538,7 @@ describe('one unit a pass', () => {
       page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })),
     })
     const job = siteJob({
-      outputs: ['screen-0', 'screen-1', 'screen-2'].map((id) =>
-        output('screen', id),
-      ),
+      outputs: [LOOK, ...['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id))],
     })
     expect((await step(context(job))).continue).toBeUndefined()
   })
@@ -639,7 +647,7 @@ describe('one unit a pass', () => {
         pages: AI_SITE_PAGES.min,
         welcomeEmail: true,
       },
-      outputs: ['a', 'b', 'c', 'd'].map((id) => output('screen', id)),
+      outputs: [LOOK, ...['a', 'b', 'c', 'd'].map((id) => output('screen', id))],
     })
     // No email runner: the last page's report finishes the scaffold.
     expect(
@@ -753,7 +761,7 @@ describe('the site’s own listing, from the answers', () => {
     // A later pass has the listing among the job's outputs already, and adds
     // no second one — a person staging it twice would stage it twice.
     const later = await step(
-      context(siteJob({ outputs: [SITE_LISTING, output('screen', 'drftPage00')] })),
+      context(siteJob({ outputs: [LOOK, SITE_LISTING, output('screen', 'drftPage00')] })),
     )
     expect(later.outputs.filter((entry) => entry.resource === 'seo')).toEqual([])
     expect(later.outputs).toEqual([output('screen', 'drftPage01')])
@@ -1036,7 +1044,7 @@ describe('a site job generates every page from its plan (AGL-3596)', () => {
       screens: [planScreen({ title: 'Home', slug: '/', duplicateOf: STARTER_HOME, id: 'drftPage00' })],
     })
     const job = siteJob({ plan, inputs: { businessType: 'dog groomer', pages: 1, autoConfirm: true } })
-    const [unit] = aiSiteJobUnits(plan)
+    const [, unit] = aiSiteJobUnits(plan)
     const derived = aiSiteUnitJob(job, unit, new Map())
     expect(derived.plan?.screens[0].duplicateOf).toBeNull()
     expect(derived.inputs['originJobId']).toBe('job-1')
@@ -1044,7 +1052,7 @@ describe('a site job generates every page from its plan (AGL-3596)', () => {
 
   it('a page job keeps the page it was asked to start from', () => {
     const plan = confirmedPlan({ screens: [planScreen({ duplicateOf: 'scrAbout' })] })
-    const [unit] = aiSiteJobUnits(plan)
+    const [, unit] = aiSiteJobUnits(plan)
     expect(aiSiteUnitJob(siteJob({ kind: 'page', plan }), unit, new Map()).plan?.screens[0].duplicateOf).toBe('scrAbout')
   })
 
@@ -1112,7 +1120,7 @@ describe('a guided site start publishes what it built (AGL-3596)', () => {
   const lastPass = (inputs: Record<string, unknown>) =>
     siteJob({
       inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, welcomeEmail: false, ...inputs },
-      outputs: ['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id)),
+      outputs: [LOOK, ...['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id))],
     })
 
   it('publishes every page on the last pass of a guided start, once, and keeps what it put live', async () => {

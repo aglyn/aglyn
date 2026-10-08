@@ -621,6 +621,143 @@ describe('repeats (rule 1)', () => {
     ])
   })
 
+  /*
+   * The live eval's portfolio Home on a paid workspace (AGL-3660): six work
+   * samples as a component placed in each of three columns, twice. Compiled
+   * column by column, that was the same Grid three times, and rule 1 refused
+   * the page on every ask.
+   */
+  it('draws a component placed in every column as one group of its instances', () => {
+    const work = (title: string, description: string, col: number): AiLayoutBlock => ({
+      kind: 'component',
+      to: CARD,
+      col,
+      items: [
+        { title: 'title', text: title },
+        { title: 'description', text: description },
+      ],
+    })
+    const { compiled, report } = build(
+      [
+        { blocks: [{ kind: 'heading', text: 'Our services' }] },
+        {
+          cols: [1, 1, 1],
+          blocks: [
+            { kind: 'heading', text: 'Selected work' },
+            work('Bath', 'Warm water and a gentle dry.', 0),
+            work('Trim', 'Neat lines for every coat.', 1),
+            work('Nails', 'Short and smooth.', 2),
+            work('Teeth', 'A fresh brush.', 0),
+            work('Ears', 'Cleaned with care.', 1),
+            work('Coat', 'A soft finish.', 2),
+          ],
+        },
+      ],
+      pagePlan,
+      true,
+    )
+    expect(report.violations).toEqual([])
+    expect(
+      Object.values(compiled.tree.nodes)
+        .filter((node) => node.componentId === 'reusableInstance')
+        .map((node) => (node.props?.['propValues'] as Record<string, string>)['title']),
+    ).toEqual(['Bath', 'Trim', 'Nails', 'Teeth', 'Ears', 'Coat'])
+  })
+
+  it('reads a component placed in every column whose item is the card itself', () => {
+    const work = (title: string, text: string, col: number): AiLayoutBlock => ({ kind: 'component', to: CARD, col, items: [{ title, text }] })
+    const { compiled, report } = build(
+      [
+        { blocks: [{ kind: 'heading', text: 'Our services' }] },
+        { cols: [1, 1, 1], blocks: [{ kind: 'heading', text: 'Classes' }, work('Gentle Flow', 'A slow start.', 0), work('Restorative', 'Soft and quiet.', 1), work('Slow Stretch', 'Easy and unhurried.', 2)] },
+      ],
+      pagePlan,
+      true,
+    )
+    expect(report.violations).toEqual([])
+    expect(
+      Object.values(compiled.tree.nodes)
+        .filter((node) => node.componentId === 'reusableInstance')
+        .map((node) => node.props?.['propValues']),
+    ).toEqual([
+      { title: 'Gentle Flow', description: 'A slow start.' },
+      { title: 'Restorative', description: 'Soft and quiet.' },
+      { title: 'Slow Stretch', description: 'Easy and unhurried.' },
+    ])
+  })
+
+  /*
+   * The business eval's towing Home (AGL-3660): one service a column, each a
+   * cards block with no `to`, its item naming the Card component. The plan's
+   * component went to the first column alone, so the row drew one boxed card
+   * beside three bare ones. Every item of a cards row is drawn alike.
+   */
+  const itemsOf = (nodes: Record<string, { componentId?: string; props?: Record<string, unknown>; nodes?: string[] }>, rowRole: string[]) =>
+    Object.values(nodes)
+      .filter((node) => node.componentId === 'muiGrid' && node.props?.['container'])
+      .map((grid) => (grid.nodes ?? []).map((cell) => nodes[nodes[cell]?.nodes?.[0] ?? '']))
+      .filter((cells) => cells.length >= 2 && cells.every(Boolean))
+      .map((cells) => cells.map((node) => `${node?.componentId}:${String(node?.props?.['variant'] ?? '')}`))
+      .filter((row) => rowRole.some((role) => row[0]?.startsWith(role)) || row.some((cell) => rowRole.some((role) => cell.startsWith(role))))
+
+  it.each([
+    ['the plan places the component', [CARD], true],
+    ['only the items name the component', [], true],
+    ['a workspace that keeps no components', [], false],
+  ] as const)('draws every item of a cards row split over columns alike: %s', (_case, uses, reusable) => {
+    const service = (title: string, col: number): AiLayoutBlock => ({
+      kind: 'cards',
+      col,
+      items: [{ title, text: `${title}, any hour of the day.`, ...(reusable ? { to: CARD } : {}) }],
+    })
+    const { compiled, report } = build(
+      [
+        { blocks: [{ kind: 'heading', text: 'Help on the road' }] },
+        {
+          cols: [1, 1, 1, 1],
+          blocks: [
+            { kind: 'heading', text: 'Services' },
+            service('Emergency towing', 0),
+            service('Roadside assistance', 1),
+            service('Fuel delivery', 2),
+            service('Accident recovery', 3),
+          ],
+        },
+      ],
+      { ...pagePlan, sections: [pagePlan.sections[0], { name: 'Services', uses: [...uses], items: 4 }] },
+      reusable,
+    )
+    expect(report.violations).toEqual([])
+    const rows = itemsOf(compiled.tree.nodes as never, ['reusableInstance', 'muiCard', 'muiListItemText'])
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toHaveLength(4)
+    expect(new Set(rows[0]).size).toBe(1)
+  })
+
+  /*
+   * The business eval's blog Home (AGL-3660): four "Card" items of the Card
+   * component, no words of their own. A published page never shows "Card":
+   * such items say nothing and are left out, so the section shows none and
+   * the page check asks for it again.
+   */
+  it('never draws an item whose only words are the name of the component that places it', () => {
+    const { compiled } = build(
+      [
+        { blocks: [{ kind: 'heading', text: 'Weeknight cooking' }] },
+        {
+          blocks: [
+            { kind: 'heading', text: 'Latest recipes' },
+            { kind: 'cards', items: ['Card', 'Card', 'cmp-service-card'].map((title) => ({ title, text: '', to: CARD })) },
+          ],
+        },
+      ],
+      pagePlan,
+      true,
+    )
+    expect(JSON.stringify(compiled.tree.nodes)).not.toMatch(/"Card"|cmp-service-card"/)
+    expect(compiled.itemIds[1]).toEqual([])
+  })
+
   it('draws the same cards in full on a workspace that keeps none', () => {
     const { compiled, report } = build(
       [
@@ -639,6 +776,36 @@ describe('repeats (rule 1)', () => {
         (node) => node.componentId === 'muiCard',
       ),
     ).toHaveLength(3)
+  })
+})
+
+/*
+ * Live on hillside-dog-grooming.aglyn.app (beta.231, AGL-3660): a lone
+ * button in a column Stack stretched across the whole column, because a
+ * column Stack stretches its children. A compiled button is sized to its
+ * words: it aligns itself with its section, or sits in a row of buttons.
+ */
+describe('buttons size to their words', () => {
+  const button = (text: string, to = `page:${SERVICES}`, col?: number): AiLayoutBlock => ({ kind: 'button', text, to, ...(col !== undefined ? { col } : {}) })
+  const pages: Array<[string, AiLayoutSection[]]> = [
+    ['a lone button under a group', [{ blocks: [{ kind: 'heading', text: 'Grooming' }] }, { blocks: [{ kind: 'heading', text: 'Why us' }, { kind: 'cards', items: [{ title: 'Calm', text: 'Gentle hands.' }, { title: 'Local', text: 'Near you.' }] }, button('Contact us')] }]],
+    ['a hero column with one button', [{ cols: [7, 5], blocks: [{ kind: 'heading', text: 'Grooming', col: 0 }, { kind: 'lede', text: 'Gentle hands.', col: 0 }, button('Book a groom', `page:${CONTACT}`, 0), { kind: 'image', text: 'A dog', col: 1 }] }]],
+    ['a centered pair', [{ align: 'center', blocks: [{ kind: 'heading', text: 'Grooming' }, button('Book'), button('Services')] }]],
+  ]
+  it.each(pages)('%s', (_name, sections) => {
+    const plan: AiLayoutPagePlan = { title: 'Home', sections: sections.map((_, index) => ({ name: `s${index}`, uses: [], items: 0 })) }
+    const { compiled } = build(sections, plan, false)
+    const nodes = compiled.tree.nodes as Record<string, { componentId?: string; props?: Record<string, unknown>; sx?: Record<string, unknown> | null; nodes?: string[] }>
+    const parentOf = (id: string) => Object.values(nodes).find((node) => node.nodes?.includes(id))
+    const buttons = Object.entries(nodes).filter(([, node]) => node.componentId === 'muiButton')
+    expect(buttons.length).toBeGreaterThan(0)
+    for (const [id, node] of buttons) {
+      expect(node.props?.['fullWidth']).toBeUndefined()
+      expect(node.sx?.['width']).toBeUndefined()
+      const parent = parentOf(id)
+      const inRow = parent?.componentId === 'muiStack' && parent.props?.['direction'] === 'row'
+      expect([id, inRow || ['flex-start', 'center'].includes(String(node.sx?.['alignSelf']))]).toEqual([id, true])
+    }
   })
 })
 
@@ -756,6 +923,24 @@ describe('the frame', () => {
       .filter((text): text is string => typeof text === 'string')
     expect(texts.filter((text) => /©|copyright|all rights reserved/i.test(text))).toEqual(['© Hillside Dog Grooming'])
     expect(texts).toContain('Gentle grooming for Austin dogs.')
+  })
+
+  // The towing footer's "Request a Tow" spanned its whole column (AGL-3660).
+  it('sizes a lone footer button to its words', () => {
+    const { stored } = frame({
+      header: { band: 'plain', blocks: [] },
+      footer: {
+        cols: [2, 1],
+        blocks: [
+          { kind: 'heading', col: 0, text: 'Hillside Dog Grooming' },
+          { kind: 'button', col: 0, text: 'Request a groom', to: `page:${CONTACT}` },
+          { kind: 'list', col: 1, items: [{ title: 'Services', text: '', to: `page:${SERVICES}` }] },
+        ],
+      },
+    })
+    const button = Object.values(stored.nodes).find((node) => node.props?.['children'] === 'Request a groom')
+    expect(button?.props?.['fullWidth']).toBeUndefined()
+    expect(button?.sx).toMatchObject({ alignSelf: 'flex-start' })
   })
 
   it.each([

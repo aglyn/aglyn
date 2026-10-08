@@ -70,13 +70,18 @@ const CardElement = forwardRef<HTMLDivElement, CardElementProps>(
     const props = dropClearedProps(rawProps)
     const { variant, elevation, children, ...rest } = props
     const outlined = variant === 'outlined'
+    // A variant or an elevation the author did not set is left to the site's
+    // theme (AGL-3660): a Card dropped from the drawer takes the card style
+    // the theme's MuiCard defaults give it, as every Card the site has does.
+    const chosen = outlined ? 'outlined' : variant === 'elevation' ? 'elevation' : undefined
+    // Same trap as Paper: a string elevation indexes MUI's shadow array and
+    // yields a completely flat card.
+    const depth = outlined ? undefined : toElevation(elevation)
     return (
       <MuiCard
         ref={ref}
-        variant={outlined ? 'outlined' : 'elevation'}
-        // Same trap as Paper: a string elevation indexes MUI's shadow
-        // array and yields a completely flat card.
-        elevation={outlined ? undefined : toElevation(elevation)}
+        {...(chosen ? { variant: chosen } : {})}
+        {...(depth !== undefined ? { elevation: depth } : {})}
         {...applySemanticElement(rest as Record<string, unknown>)}
       >
         {children}

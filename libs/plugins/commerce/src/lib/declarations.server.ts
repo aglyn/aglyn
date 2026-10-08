@@ -35,6 +35,14 @@ import {
   registerPluginStockLevels,
   type PluginStockLevels,
 } from '@aglyn/aglyn/plugin-manager/plugin-stock-levels'
+import {
+  registerPluginChannelOrders,
+  type PluginChannelOrders,
+} from '@aglyn/aglyn/plugin-manager/plugin-channel-orders'
+import {
+  registerPluginProductWriter,
+  type PluginProductWriter,
+} from '@aglyn/aglyn/plugin-manager/plugin-product-writer'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_OPERATOR_ALERTS } from './constants/operator-alerts'
 import { registerCommerceEventTriggers } from './server/order-event-triggers'
@@ -83,11 +91,31 @@ export function registerCommerceServerDeclarations(): void {
   // Counts another warehouse keeps, applied as a stock-take (AGL-3634): a
   // fulfillment network says how many it can ship and the products say so.
   registerPluginStockLevels(lazyStockLevels, { pluginId: BUNDLE_ID })
+  // Products another plugin brings from a source of its own (AGL-3641),
+  // written through the store's own rules.
+  registerPluginProductWriter(lazyProductWriter, { pluginId: BUNDLE_ID })
+  // Orders a marketplace sold (AGL-3638), recorded as this plugin's own:
+  // numbered, their units off the same shelf in the same write, announced.
+  registerPluginChannelOrders(lazyChannelOrders, { pluginId: BUNDLE_ID })
+}
+
+/** Outside orders, with the Admin SDK and the model arriving on the first call. */
+const loadChannelOrders = async () => (await import('./server/channel-orders')).commerceChannelOrders
+
+const lazyChannelOrders: PluginChannelOrders = {
+  importOrder: async (order) => (await loadChannelOrders()).importOrder(order),
+  cancelOrder: async (request) => (await loadChannelOrders()).cancelOrder(request),
+  recordFees: async (request) => (await loadChannelOrders()).recordFees(request),
 }
 
 /** Stock counts, with the Admin SDK and the model arriving on the first call. */
 const lazyStockLevels: PluginStockLevels = {
   setAvailable: async (request) => (await import('./server/stock-levels')).commerceStockLevels.setAvailable(request),
+}
+
+/** The writer, with the Admin SDK and the model arriving on the first write. */
+const lazyProductWriter: PluginProductWriter = {
+  upsertSourced: async (write) => (await import('./server/product-writer')).commerceProductWriter.upsertSourced(write),
 }
 
 const loadShipmentRecords = async () =>

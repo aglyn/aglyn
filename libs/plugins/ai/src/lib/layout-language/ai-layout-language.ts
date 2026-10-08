@@ -426,27 +426,100 @@ export interface AiLayoutPageReading {
   settled: AiLayoutSettlement[]
 }
 
+/** What a planned section is, as the reader matches an answer's sections to it. */
+export interface AiLayoutPlannedSection {
+  name: string
+  items: number
+}
+
+const WORD = /[a-z0-9]+/g
+const STOP = new Set(['a', 'an', 'and', 'the', 'of', 'for', 'to', 'our', 'your', 'with', 'in', 'on', 'we', 'us', 'you'])
+const wordsOf = (text: string) => new Set((text.toLowerCase().match(WORD) ?? []).filter((word) => !STOP.has(word)))
+
+/** The kinds that show a section's repeated items. */
+const ITEM_KINDS = new Set(['list', 'cards', 'steps', 'stats', 'quotes', 'faq', 'component'])
+
 /**
- * The page an answer describes, against the number of sections its plan
- * names: each planned section takes the answer's section at its position,
- * an answer's extra sections are left out, and a planned section the answer
- * left empty or out is `null` — the one thing a re-ask asks for again.
+ * How well an answer's section fits a planned one: the words its headings
+ * share with the plan's name, and whether it shows items where the plan
+ * asked for them and none where it asked for none.
+ */
+function fit(raw: unknown, planned: AiLayoutPlannedSection): number {
+  const blocks = isRecord(raw) && Array.isArray(raw['blocks']) ? raw['blocks'].filter(isRecord) : []
+  const said = wordsOf(
+    blocks
+      .filter((block) => block['kind'] === 'heading' || block['kind'] === 'eyebrow')
+      .map((block) => String(block['text'] ?? ''))
+      .join(' '),
+  )
+  const named = wordsOf(planned.name)
+  let shared = 0
+  for (const word of named) if (said.has(word) || [...said].some((other) => other.startsWith(word) || word.startsWith(other))) shared += 1
+  const showsItems = blocks.some((block) => ITEM_KINDS.has(String(block['kind'])) && (block['kind'] === 'component' || (Array.isArray(block['items']) && block['items'].length > 0)))
+  const wantsItems = planned.items > 0
+  return shared * 2 + (wantsItems === showsItems ? 1.5 : -1.5)
+}
+
+/**
+ * The answer's sections that best match the plan, in order, where it gave
+ * more than the plan names (AGL-3660): a model that opened a page with a
+ * hero of its own, or closed it with a call to action, shifted every planned
+ * section by one, and the cut fell on the plan's last sections — the ones
+ * that carried its items. Each planned section takes the answer's section
+ * that fits it best, keeping the answer's order.
+ */
+function alignSections(given: readonly unknown[], planned: readonly AiLayoutPlannedSection[]): number[] {
+  const n = given.length
+  const m = planned.length
+  // best[i][j]: the best score placing plan sections j.. on answer sections i..
+  const best: number[][] = Array.from({ length: n + 1 }, () => Array(m + 1).fill(-Infinity))
+  for (let i = 0; i <= n; i += 1) best[i][m] = 0
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
+      if (n - i < m - j) continue
+      best[i][j] = Math.max(best[i + 1][j], fit(given[i], planned[j]) + best[i + 1][j + 1])
+    }
+  }
+  const picked: number[] = []
+  let i = 0
+  for (let j = 0; j < m; j += 1) {
+    while (i < n && best[i][j] !== fit(given[i], planned[j]) + best[i + 1][j + 1]) i += 1
+    picked.push(i)
+    i += 1
+  }
+  return picked
+}
+
+/**
+ * The page an answer describes, against the sections its plan names: each
+ * planned section takes the answer's section at its position — or, where the
+ * answer gave more sections than the plan names and the plan's sections are
+ * given, the one that fits it best (`alignSections`) — an answer's extra
+ * sections are left out, and a planned section the answer left empty or out
+ * is `null` — the one thing a re-ask asks for again.
  */
 export function aiReadLayoutPage(
   raw: unknown,
   planned: number,
+  plan?: readonly AiLayoutPlannedSection[],
 ): AiLayoutPageReading {
   const settled: AiLayoutSettlement[] = []
   const given =
     isRecord(raw) && Array.isArray(raw['sections']) ? raw['sections'] : []
+  const aligned =
+    given.length > planned && plan && plan.length === planned
+      ? alignSections(given, plan)
+      : Array.from({ length: planned }, (_, index) => index)
   if (given.length > planned) {
     settled.push({
       at: 'sections',
-      what: `${given.length} sections for a plan of ${planned}; the extra left out`,
+      what: `${given.length} sections for a plan of ${planned}; ${
+        aligned.every((at, index) => at === index) ? 'the extra left out' : `sections ${aligned.map((at) => at + 1).join(', ')} kept as the plan's`
+      }`,
     })
   }
-  const sections = Array.from({ length: planned }, (_, index) =>
-    aiReadLayoutSection(given[index], `sections[${index}]`, settled),
+  const sections = aligned.map((at, index) =>
+    aiReadLayoutSection(given[at], `sections[${index}]`, settled),
   )
   return { sections, settled }
 }

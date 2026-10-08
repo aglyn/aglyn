@@ -184,6 +184,7 @@ const WORKSPACE_DOORS = [
   'ai/admin/signals',
   'ai/admin/overage',
   'ai/admin/credits',
+  'ai/admin/conversations',
 ]
 
 const HANDLERS = { GET, POST, PATCH, DELETE }

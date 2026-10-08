@@ -53,6 +53,7 @@ import {
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
+import { aiSiteKindDesignLines } from '../model/ai-site-kinds'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiGenerationWorstCaseOnTierMs, aiJobStepBudget } from './ai-job-budget'
 import { aiJobBriefLine, aiPlanReferenceLines } from './ai-job-generation'
@@ -246,6 +247,8 @@ export function aiLayoutPagePrompt(input: {
   return [
     `Page: "${screen.title}" at ${screen.slug}`,
     aiJobBriefLine(job),
+    // The kind of site the person picked sets how its pages are arranged (AGL-3660).
+    ...aiSiteKindDesignLines(job.inputs),
     ...aiPlanReferenceLines(plan),
     `Sections to design, in order:`,
     ...sections,
@@ -273,6 +276,8 @@ export interface AiLayoutPageBuilt {
   settled: AiLayoutSettlement[]
   /** What the last answer's gaps took out of the page (`ai-layout-gaps.ts`). */
   dropped: string[]
+  /** How many repeated items each plan section shows, as built (AGL-3660). */
+  items: number[]
 }
 
 export interface AiLayoutPageCheckInput {
@@ -316,6 +321,51 @@ export function aiLayoutMissingSections(kept: ReadonlyArray<AiLayoutSection | nu
 /** The violation a planned section the answer gave nothing usable for is named by. */
 export const AI_LAYOUT_SECTION_MISSING_CODE = 'layout-section-missing'
 
+/** The code a section planned with items that shows none is refused under (AGL-3660). */
+export const AI_LAYOUT_SECTION_EMPTY_CODE = 'layout-section-no-items'
+
+/** How many of a section's planned items it must show: one for a short list, two for anything longer. */
+const leastItems = (planned: number) => (planned >= 3 ? 2 : planned >= 1 ? 1 : 0)
+
+/**
+ * How many repeated items each section shows once stored (AGL-3660): the
+ * elements the compiler drew for them, under the ids they are stored by,
+ * that are still in the page after anything later took words out.
+ */
+export function aiLayoutShownItems(
+  itemIds: readonly (readonly string[])[],
+  storedIds: Readonly<Record<string, string>>,
+  nodes: Readonly<Record<string, unknown>>,
+): number[] {
+  return itemIds.map((ids) => ids.filter((id) => storedIds[id] !== undefined && storedIds[id] in nodes).length)
+}
+
+/**
+ * The sections a page planned with repeated items — cards, steps, a list —
+ * that show none, or too few, once the page is built (AGL-3660). A heading
+ * and an intro over nothing is a section a visitor reads as broken, so it is
+ * asked for again.
+ */
+export function aiLayoutEmptyItemSections(
+  screen: Pick<AiBuildPlanScreen, 'sections'>,
+  items: readonly number[],
+): AiDoctrineViolation[] {
+  return screen.sections.flatMap((section, index): AiDoctrineViolation[] => {
+    const least = leastItems(section.items)
+    if (!least) return []
+    const shown = items[index] ?? 0
+    if (shown >= least) return []
+    return [
+      {
+        rule: null,
+        code: AI_LAYOUT_SECTION_EMPTY_CODE,
+        message: `Section ${index + 1} ("${section.name}") is planned with ${section.items} items and shows ${shown || 'none'}.`,
+        detail: `Give section ${index + 1} one cards, steps, stats, list or faq block holding its ${section.items} items, each with a title and its words.`,
+      },
+    ]
+  })
+}
+
 /**
  * The check a language page answer is held to: each planned section read,
  * the page compiled, stored and checked whole. Sections that read are kept
@@ -332,7 +382,11 @@ export function aiLayoutPageCheck(
     // The last answer a generation takes has its gaps taken out rather than asked about again.
     answers += 1
     const last = answers >= AI_GENERATION_MAX_ATTEMPTS
-    const reading = aiReadLayoutPage(answer, fills.length)
+    const reading = aiReadLayoutPage(
+      answer,
+      fills.length,
+      fills.map((index) => input.screen.sections[index]),
+    )
     reading.sections.forEach((section, position) => {
       // A section the answer gives is taken as given; one it leaves out keeps
       // what an earlier answer gave, so a re-ask may send only what was missing.
@@ -413,12 +467,15 @@ export function aiLayoutPageCheck(
         scrollTargetIds: input.sectionIds,
       },
     )
+    // Each section's items as they are stored, after anything the gaps took out.
+    const items = aiLayoutShownItems(compiled.itemIds, stored.storedIds, nodes as unknown as Record<string, unknown>)
     // A street address or opening hours the job was never given is invented
     // (rule 14, AGL-3596), the same check a layout is held to; a phone number
     // or an email the compiler already writes as its gap.
     const violations: AiDoctrineViolation[] = [
       ...report.violations,
       ...copy.violations,
+      ...aiLayoutEmptyItemSections(input.screen, items),
       ...aiLayoutInventedContactViolations(
         { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: nodes as unknown as Record<string, AiDoctrineNode> },
         input.targets.facts,
@@ -432,6 +489,7 @@ export function aiLayoutPageCheck(
             load: report.load,
             settled: [...reading.settled, ...compiled.settled],
             dropped,
+            items,
           },
       violations,
     }

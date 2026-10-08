@@ -119,6 +119,23 @@ export function analyzeProgress(snapshots) {
   const withoutActive = working.filter(
     (snapshot) => !snapshot.rows.some((row) => row.state === 'active'),
   )
+  // The look is designed first, on a row of its own (AGL-3660): after the
+  // plan, before the header and footer, and its credits stay on it once done.
+  const lookRow = (row) => /^Designing your look/i.test(row.label)
+  const lookRowSeen = snapshots.some((snapshot) => snapshot.rows.some(lookRow))
+  const lookRowActive = snapshots.some((snapshot) =>
+    snapshot.rows.some((row) => lookRow(row) && row.state === 'active'),
+  )
+  const lookRowFirst = snapshots
+    .filter((snapshot) => snapshot.rows.some(lookRow))
+    .every((snapshot) => snapshot.rows.findIndex(lookRow) === 1)
+  const lastLook = [...snapshots]
+    .reverse()
+    .map((snapshot) => snapshot.rows.find(lookRow))
+    .find(Boolean)
+  const lookCreditsKept = Boolean(
+    lastLook && lastLook.state === 'done' && /\b\d+\s+credits?\b/i.test(lastLook.text ?? ''),
+  )
   const formRow = (row) => /\bform\b/i.test(row.label)
   const formRowSeen = snapshots.some((snapshot) => snapshot.rows.some(formRow))
   const formRowActive = snapshots.some((snapshot) =>
@@ -161,6 +178,11 @@ export function analyzeProgress(snapshots) {
       jobStatus: snapshot.jobStatus,
       rows: snapshot.rows.map((row) => `${row.label}: ${row.state}`),
     })),
+    lookRowSeen,
+    lookRowFirst,
+    lookRowActive,
+    lookCreditsKept,
+    lookRowLast: lastLook ? `${lastLook.state}: ${lastLook.text ?? ''}` : null,
     formRowSeen,
     formRowActive,
     troubleMidRun,

@@ -245,6 +245,18 @@ data class EventWriteInput(
 )
 
 @Serializable
+data class FormLeadRoutingOptionsItem(
+    val label: String,
+    val value: String,
+)
+
+@Serializable
+data class FormStatusOptionsItem(
+    val label: String,
+    val value: String,
+)
+
+@Serializable
 data class HostEventDeclaration(
     val label: String,
     val order: Double,
@@ -261,6 +273,7 @@ data class HostOrder(
     val buyerNotifications: Map<String, HostOrderBuyerNotificationsValue>? = null,
     val cashierId: String? = null,
     val channel: OrderChannel? = null,
+    val channelSource: OrderChannelSource? = null,
     val checkoutSessionId: String? = null,
     val couponCode: String? = null,
     val createdAtMs: Double? = null,
@@ -648,6 +661,32 @@ data class ManagedBooking(
     val status: String? = null,
 )
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = MediaKindSerializer::class)
+enum class MediaKind(val raw: String) {
+    DOCUMENT("document"),
+    IMAGE("image"),
+    PDF("pdf"),
+    VIDEO("video"),
+    UNKNOWN(""),
+}
+
+internal object MediaKindSerializer :
+    RawEnumSerializer<MediaKind>("com.aglyn.contracts.MediaKind", MediaKind.entries, MediaKind.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = MediaSortSerializer::class)
+enum class MediaSort(val raw: String) {
+    NAME("name"),
+    NEWEST("newest"),
+    OLDEST("oldest"),
+    SIZE("size"),
+    UNKNOWN(""),
+}
+
+internal object MediaSortSerializer :
+    RawEnumSerializer<MediaSort>("com.aglyn.contracts.MediaSort", MediaSort.entries, MediaSort.UNKNOWN, { it.raw })
+
 @Serializable
 data class MobileDevice(
     val apnsEnvironment: ApnsEnvironment? = null,
@@ -723,6 +762,7 @@ data class OrderAddress(
 @Serializable(with = OrderChannelSerializer::class)
 enum class OrderChannel(val raw: String) {
     DRAFT("draft"),
+    MARKETPLACE("marketplace"),
     ONLINE("online"),
     POS("pos"),
     SUBSCRIPTION("subscription"),
@@ -731,6 +771,31 @@ enum class OrderChannel(val raw: String) {
 
 internal object OrderChannelSerializer :
     RawEnumSerializer<OrderChannel>("com.aglyn.contracts.OrderChannel", OrderChannel.entries, OrderChannel.UNKNOWN, { it.raw })
+
+@Serializable
+data class OrderChannelSource(
+    val channelId: String,
+    val channelLabel: String,
+    val currency: String,
+    val externalOrderId: String,
+    val externalRef: String,
+    val fees: List<OrderChannelSourceFeesItem>? = null,
+    val feesTotalCents: Double? = null,
+    val lines: List<OrderChannelSourceLinesItem>,
+    val taxRemittedByChannel: Boolean,
+)
+
+@Serializable
+data class OrderChannelSourceFeesItem(
+    val amountCents: Double,
+    val label: String,
+)
+
+@Serializable
+data class OrderChannelSourceLinesItem(
+    val externalLineId: String,
+    val lineIndex: Double,
+)
 
 @Serializable
 data class OrderDispute(
@@ -1153,6 +1218,17 @@ data class ScreenTrafficRow(
     val total: Long,
 )
 
+@Serializable
+data class SiteFilterOptions(
+    val hasCustomDomain: List<SiteFilterOptionsHasCustomDomainItem>,
+)
+
+@Serializable
+data class SiteFilterOptionsHasCustomDomainItem(
+    val label: String,
+    val value: String,
+)
+
 /** The values in contracts.generated.json, keyed as the TypeScript exports are. */
 @Serializable
 data class ContractValues(
@@ -1173,11 +1249,33 @@ data class ContractValues(
     @SerialName("EVENT_LOCATION_MAX_LENGTH") val eventLocationMaxLength: Long,
     @SerialName("EVENT_ORGANIZER_MAX_LENGTH") val eventOrganizerMaxLength: Long,
     @SerialName("EVENT_TITLE_MAX_LENGTH") val eventTitleMaxLength: Long,
+    @SerialName("FORM_IN_USE") val formInUse: ListQueryFilter,
+    @SerialName("FORM_LEAD_ROUTING_OPTIONS") val formLeadRoutingOptions: List<FormLeadRoutingOptionsItem>,
+    @SerialName("FORM_LIST_FILTER_HEADERS") val formListFilterHeaders: Map<String, String>,
+    @SerialName("FORM_LIST_QUERY") val formListQuery: ListQueryDeclaration,
+    @SerialName("FORM_SCOPED_SUBMISSION_LIST_QUERY") val formScopedSubmissionListQuery: ListQueryDeclaration,
+    @SerialName("FORM_STATUS_OPTIONS") val formStatusOptions: List<FormStatusOptionsItem>,
     @SerialName("FUNCTION_BUILTIN_NAMES") val functionBuiltinNames: List<String>,
     @SerialName("FUNCTION_MAX_OPERATIONS") val functionMaxOperations: Long,
     @SerialName("HOST_EVENTS") val hostEvents: List<HostEventDeclaration>,
     @SerialName("LIST_QUERY_DISJUNCTIONS") val listQueryDisjunctions: Long,
     @SerialName("LIST_QUERY_ID_PATH") val listQueryIdPath: String,
+    @SerialName("MEDIA_ALT_MAX_LENGTH") val mediaAltMaxLength: Long,
+    @SerialName("MEDIA_ALT_OPTIONS") val mediaAltOptions: List<ListFilterOption>,
+    @SerialName("MEDIA_DISJUNCTION_LIMIT") val mediaDisjunctionLimit: Long,
+    @SerialName("MEDIA_FILTER_HEADERS") val mediaFilterHeaders: Map<String, String>,
+    @SerialName("MEDIA_FOLDER_MAX_DEPTH") val mediaFolderMaxDepth: Long,
+    @SerialName("MEDIA_FOLDER_NAME_MAX_LENGTH") val mediaFolderNameMaxLength: Long,
+    @SerialName("MEDIA_KINDS") val mediaKinds: List<MediaKind>,
+    @SerialName("MEDIA_LIST_QUERY") val mediaListQuery: ListQueryDeclaration,
+    @SerialName("MEDIA_ORIENTATION_OPTIONS") val mediaOrientationOptions: List<ListFilterOption>,
+    @SerialName("MEDIA_SCOPED_SEARCH_NOTICE") val mediaScopedSearchNotice: String,
+    @SerialName("MEDIA_SORT_LABELS") val mediaSortLabels: Map<String, String>,
+    @SerialName("MEDIA_SORT_ORDER") val mediaSortOrder: Map<String, ListQuerySort>,
+    @SerialName("MEDIA_SORTS") val mediaSorts: List<MediaSort>,
+    @SerialName("MEDIA_TAG_MAX_COUNT") val mediaTagMaxCount: Long,
+    @SerialName("MEDIA_TAG_MAX_LENGTH") val mediaTagMaxLength: Long,
+    @SerialName("MEDIA_TYPE_OPTIONS") val mediaTypeOptions: List<ListFilterOption>,
     @SerialName("NAME_TOKEN_LIMIT") val nameTokenLimit: Long,
     @SerialName("NAME_TOKEN_MAX_PREFIX") val nameTokenMaxPrefix: Long,
     @SerialName("OPEN_DISPUTE_CLAUSE") val openDisputeClause: ListFilterClause,
@@ -1190,6 +1288,7 @@ data class ContractValues(
     @SerialName("ORDER_STATUS_COLOR") val orderStatusColor: Map<String, OrderStatusColorValue>,
     @SerialName("ORDER_STATUS_LABELS") val orderStatusLabels: Map<String, String>,
     @SerialName("ORDER_STATUS_OPTIONS") val orderStatusOptions: List<ListFilterOption>,
+    @SerialName("ORG_SUBMISSION_LIST_QUERY") val orgSubmissionListQuery: ListQueryDeclaration,
     @SerialName("PRODUCT_LIST_BASE") val productListBase: List<ListQueryFilter>,
     @SerialName("PRODUCT_LIST_HEADERS") val productListHeaders: Map<String, String>,
     @SerialName("PRODUCT_LIST_OPTIONS") val productListOptions: Map<String, List<ListFilterOption>>,
@@ -1198,5 +1297,12 @@ data class ContractValues(
     @SerialName("REMINDER_WINDOW_END_HOURS") val reminderWindowEndHours: Long,
     @SerialName("REMINDER_WINDOW_START_HOURS") val reminderWindowStartHours: Long,
     @SerialName("SCOPED_SEARCH_JOIN") val scopedSearchJoin: String,
+    @SerialName("SITE_CARDS_PAGE_SIZE") val siteCardsPageSize: Long,
+    @SerialName("SITE_FILTER_HEADERS") val siteFilterHeaders: Map<String, String>,
+    @SerialName("SITE_FILTER_OPTIONS") val siteFilterOptions: SiteFilterOptions,
+    @SerialName("SITE_LIST_DECLARATION") val siteListDeclaration: ListQueryDeclaration,
+    @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
+    @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
+    @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
     @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
 )

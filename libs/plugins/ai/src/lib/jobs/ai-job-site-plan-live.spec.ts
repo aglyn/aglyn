@@ -74,6 +74,8 @@ const NOW = new Date()
  * default's plan.
  */
 const ORG_PLAN = process.env['AGLYN_LIVE_AI_ORG_PLAN'] === 'business' ? 'business' : 'free'
+/** The pages the guided start asks for: Free's most, or a paid start's default of five. */
+const PAGES = ORG_PLAN === 'business' ? 5 : 2
 const ORG: Partial<AglynOrgBilling> & { ownerUid: string } = { plan: ORG_PLAN, ownerUid: 'owner-1' }
 
 /**
@@ -100,8 +102,8 @@ function siteJob(inputs: Record<string, unknown>, index: number): AiJob {
     hostId: 'host-live',
     kind: 'site',
     status: 'running',
-    brief: `A 2-page website for ${String(inputs['businessType'])}.`,
-    inputs: { pages: 2, welcomeEmail: false, submissions: 'inbox', ...inputs },
+    brief: `A ${PAGES}-page website for ${String(inputs['businessType'])}.`,
+    inputs: { pages: PAGES, welcomeEmail: false, submissions: 'inbox', ...inputs },
     steps: [{ name: 'plan', status: 'running', creditsSpent: 0 }],
     outputs: [],
     creditsReserved: 300,

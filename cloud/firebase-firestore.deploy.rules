@@ -2429,6 +2429,26 @@ allow read, write: if false;
 
 
 
+match /podConnections/{connectionId} {
+allow read, write: if false;
+}
+match /podProductLinks/{linkId} {
+allow read, write: if false;
+}
+match /podOrders/{partId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
 match /marketingPlatformConnections/{connectionId} {
 allow read, write: if false;
 match /log/{entryId} {
@@ -2456,6 +2476,53 @@ allow read, write: if false;
 }
 }
 match /fulfillmentNetworkOrders/{handOffId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+match /marketplaceConnections/{connectionId} {
+allow read, write: if false;
+match /log/{entryId} {
+allow read, write: if false;
+}
+match /listingState/{chunkId} {
+allow read, write: if false;
+}
+}
+match /marketplaceOrders/{marketplaceOrderId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+match /inventorySyncConnections/{connectionId} {
+allow read, write: if false;
+match /log/{entryId} {
+allow read, write: if false;
+}
+}
+match /inventorySyncOrders/{handOffId} {
+allow read, write: if false;
+}
+match /inventorySyncProducts/{linkId} {
 allow read, write: if false;
 }
 

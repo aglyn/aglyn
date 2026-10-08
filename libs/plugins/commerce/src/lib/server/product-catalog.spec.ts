@@ -193,6 +193,22 @@ describe('productOffers', () => {
     expect(offers[1]).toMatchObject({ availability: 'in_stock', quantity: null })
   })
 
+  it('carries each configuration’s own SKU, which a marketplace matches its listing by (AGL-3638)', () => {
+    const offers = productOffers(
+      'prod-1',
+      product({
+        options: [{ name: 'Color', values: ['Red', 'Blue'] }],
+        variants: [
+          { id: 'v1', options: { Color: 'Red' }, priceUsd: 20, sku: ' CANDLE-RED ' },
+          { id: 'v2', options: { Color: 'Blue' }, priceUsd: 20 },
+        ],
+      }),
+      context,
+    )
+    expect(offers[0].sku).toBe('CANDLE-RED')
+    expect(offers[1].sku).toBeUndefined()
+  })
+
   it('states a sale as the compare-at price with its own as the sale price', () => {
     const [offer] = productOffers(
       'prod-1',

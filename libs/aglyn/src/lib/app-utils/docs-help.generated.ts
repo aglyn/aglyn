@@ -80,7 +80,7 @@ export const PLUGIN_DOCS = {
   aiMonitoring: {
     path: '/staff-console/ai-monitoring',
     title: 'AI monitoring',
-    excerpt: 'How staff watch one organization\'s AI usage — the add-on, credit pool, overage, refusals, jobs, tokens and cache hit rate, top spenders and margin — read what it asked Aglyn AI and what it answered, and where those figures appear across the staff console.',
+    excerpt: 'How staff watch one organization\'s AI usage — add-on, credits, overage, refusals, jobs, tokens, cache hits and margin — read its AI conversations, and find those figures across the staff console.',
   },
   aiProducts: {
     path: '/ai/products-with-ai',
@@ -262,6 +262,11 @@ export const PLUGIN_DOCS = {
     title: 'Install your first marketplace item',
     excerpt: 'A click-by-click walkthrough of the Marketplace — find something, choose which sites get it, install it, and turn it off again.',
   },
+  inventorySync: {
+    path: '/commerce-and-bookings/commerce/inventory-and-erp-sync',
+    title: 'Inventory and ERP sync (Cin7 Core, inFlow, Brightpearl)',
+    excerpt: 'Keep stock counts, products and paid orders in step with your own Cin7 Core, inFlow Inventory or Brightpearl account. Rolling out.',
+  },
   inviteTeammates: {
     path: '/workspace-and-billing/teams-and-roles/invite-teammates',
     title: 'Invite teammates',
@@ -276,6 +281,11 @@ export const PLUGIN_DOCS = {
     path: '/marketing-and-automation/marketing-overlays/overview',
     title: 'Marketing Overlays',
     excerpt: 'Site-wide announcement bars and promotional popups with triggers, scheduling, and email capture.',
+  },
+  marketplaces: {
+    path: '/commerce-and-bookings/commerce/marketplaces',
+    title: 'Marketplaces (Amazon, eBay, Etsy, TikTok Shop, Walmart, Faire)',
+    excerpt: 'Keep your Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire listings in step with your store\'s stock, bring their orders in as your orders, and send tracking back. Rolling out.',
   },
   membersOnly: {
     path: '/workspace-and-billing/teams-and-roles/members-only',
@@ -316,6 +326,11 @@ export const PLUGIN_DOCS = {
     path: '/commerce-and-bookings/commerce/tracking-and-protection',
     title: 'Tracking and protection (AfterShip, Route and Narvar)',
     excerpt: 'Connect your own AfterShip, Route or Narvar account so parcels are followed, buyers land on your branded tracking page, and shipped orders can carry Route package protection. Rolling out.',
+  },
+  printOnDemand: {
+    path: '/commerce-and-bookings/commerce/print-on-demand',
+    title: 'Print on demand (Printful and Printify)',
+    excerpt: 'Connect your own Printful or Printify account, import its products into your store, and paid orders are sent to it to make and ship, with tracking written back to each order. Rolling out.',
   },
   publishAPlugin: {
     path: '/developers/plugins/publish-a-plugin',
@@ -428,9 +443,11 @@ export const PLUGIN_DOCS_ANCHORS = {
   fulfillmentNetworks: ['#connect-a-network', '#settings', '#how-orders-are-sent', '#stock-counts', '#shipments-and-tracking', '#canceling-and-refunds', '#activity'],
   funnels: ['#step-types', '#how-it-counts', '#what-is-a-visit', '#identified-visitors', '#create', '#create-with-ai', '#act-on-drop-off', '#ask-ai'],
   installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#what-to-do-next', '#related'],
+  inventorySync: ['#connect-a-system', '#stock-counts', '#products', '#orders', '#canceling-and-refunds', '#activity'],
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#declining-an-invite', '#an-ordinary-invitation-never-changes-who-owns-the-workspace', '#owner-handoff', '#aglyn-staff', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#ai-actions', '#ai-usage', '#ai-allotment', '#tips', '#related'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#contributes--where-the-plugin-loads', '#config--settings-without-writing-a-settings-screen', '#listing--version-documents', '#review--trust-lifecycle', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#with-ai', '#variables-in-copy', '#engagement-stats', '#across-your-sites', '#related'],
+  marketplaces: ['#connect-a-marketplace', '#listings', '#orders', '#activity'],
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],
   ordersAndReturns: ['#fulfillment', '#invoices', '#returns', '#buyer-requests', '#run-a-return', '#order-webhooks', '#what-your-endpoint-receives', '#check-the-signature', '#answer-quickly-and-retries', '#related'],
   orgAutomations: ['#what-an-org-automation-is', '#create-one', '#triggers', '#steps', '#pause-it-on-one-site', '#waiting-switching-off-and-deleting', '#every-sites-own-automations', '#related'],
@@ -439,6 +456,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   posHardware: ['#recommended-kit', '#card-readers', '#receipt-printers', '#add-a-printer', '#what-prints', '#your-logo-on-the-receipt', '#status', '#cash-drawer', '#barcode-scanning', '#label-printers', '#product-labels', '#shipping-labels', '#customer-display-tablet', '#related'],
   posOperations: ['#shifts-and-the-cash-drawer', '#what-the-reports-show', '#shift-history', '#requiring-a-shift', '#who-rang-it', '#staff-pins', '#customers-at-the-register', '#returns-and-exchanges', '#refund-limits-and-manager-approval', '#printed-receipts', '#related'],
   postPurchase: ['#connect-a-service', '#afterships-webhook', '#package-protection-at-checkout', '#branded-tracking-pages', '#on-the-order', '#switching-it-off-for-a-site'],
+  printOnDemand: ['#before-you-start', '#connect', '#import-products', '#costs-and-margins', '#orders', '#test-orders', '#canceling-and-refunding', '#shipments-and-tracking', '#disconnect', '#what-is-sent-to-the-service'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#tips', '#related'],
   publisherHandbook: ['#before-your-first-publish', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#rules-an-email-starter-has-to-meet', '#publishing-a-version', '#before-you-publish', '#review-what-happens-after-you-publish', '#the-two-badges-and-what-each-one-promises', '#asking-to-be-verified', '#testing-a-version-before-it-is-approved', '#watching-your-own-submission', '#disabled-versions', '#private-plugins', '#authoring-your-listing', '#what-your-listing-can-say-about-aglyn', '#versioning--updates', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#getting-paid', '#low-prices-and-processing'],
   redirects: ['#manage-redirects', '#sending-visitors-to-another-site', '#import-and-export', '#columns', '#how-a-row-finds-an-existing-rule', '#conflicts-the-dry-run-and-undo', '#metrics', '#match-modes-v2', '#related'],

@@ -126,6 +126,13 @@ export interface AiLayoutCompiledPage {
   /** A button's compiled id → the plan section a click scrolls to. */
   scrollTo: Record<string, number>
   settled: AiLayoutSettlement[]
+  /**
+   * Each plan section's repeated items — cards, steps, figures, component
+   * instances, list lines and questions — by the id of the element that
+   * draws each (AGL-3660), so a check can count what a visitor sees after
+   * anything later takes words out.
+   */
+  itemIds: string[][]
 }
 
 /** The most pictures a page carries; each beyond it is one more empty slot to fill. */
@@ -153,6 +160,8 @@ export interface PageScope {
   pageIcon: AiIconLibraryEntry
   /** The forms this page already places, each once. */
   formsPlaced: Set<string>
+  /** Each section's repeated items, by the id of the element that draws each (AGL-3660). */
+  itemIds: string[][]
 }
 
 /** Everything one section's compile shares. */
@@ -226,6 +235,7 @@ export function aiCompileLayoutPage(
     formSection: formSectionOf(sections, plan, targets),
     pageIcon: pageIconOf(sections),
     formsPlaced: new Set(),
+    itemIds: plan.sections.map(() => []),
   }
   const roots = plan.sections.map((_, index) => {
     const section = sections[index] ?? { blocks: [] }
@@ -244,6 +254,7 @@ export function aiCompileLayoutPage(
     sectionRoots: roots,
     scrollTo: page.scrollTo,
     settled: page.settled,
+    itemIds: page.itemIds,
   }
 }
 
@@ -311,6 +322,24 @@ function compileSection(
   let filled = columns
     .map((column, position) => ({ column, weight: cols?.[position] ?? 1 }))
     .filter((entry) => entry.column.length)
+  // A row whose columns each place the same component, one instance a
+  // column or more, is that component's group of cards: the compiler lays
+  // its instances out once, rather than one like Grid a column (rule 1).
+  // Row by row, as the columns showed them: the first of each column, then the second.
+  const deepest = Math.max(0, ...filled.map((entry) => entry.column.length))
+  const placedHere = Array.from({ length: deepest }, (_, row) =>
+    filled.flatMap((entry) => (entry.column[row] ? [entry.column[row]] : [])),
+  ).flat()
+  const repeated = placedHere[0]?.kind === 'component' ? componentOf(page.targets, placedHere[0].to) : null
+  if (
+    filled.length >= 2 &&
+    repeated &&
+    placedHere.every((block) => block.kind === 'component' && block.to === repeated.id)
+  ) {
+    head.push({ kind: 'cards', to: repeated.id, items: placedHere.map((block) => componentItem(block, repeated.props)) })
+    page.settled.push({ at, what: `${placedHere.length} ${repeated.name} instances in ${filled.length} columns drawn as one group` })
+    filled = []
+  }
   // A row whose columns each hold only one kind of group — a card a column —
   // is that group, laid out by the compiler rather than column by column.
   const groups = filled.flatMap((entry) => entry.column)
@@ -455,6 +484,22 @@ function compileSection(
   )
 }
 
+/**
+ * A component block's prop values as a card item: its title-like prop as the
+ * title and its text-like prop as the text, which `instanceValues` writes
+ * back into the same props.
+ */
+function componentItem(block: AiLayoutBlock, props: Record<string, string>): AiLayoutItem {
+  // An item that names no prop is the card itself, written as a cards item.
+  const own = (block.items ?? []).find((item) => !(item.title in props) && (item.title.trim() || item.text.trim()))
+  if (own && !(block.items ?? []).some((item) => item.title in props)) return { title: own.title, text: own.text }
+  const value = (pattern: RegExp) =>
+    (block.items ?? []).find((item) => item.title in props && pattern.test(item.title) && item.text.trim())?.text ?? ''
+  const title = value(/title|name|heading|label|question|figure|value/i) || block.text || ''
+  const text = value(/text|description|body|summary|copy|answer|detail|caption/i)
+  return { title, text }
+}
+
 /** A band the page has room for: past two brand or two dark bands, a soft one instead. */
 function settleBand(
   page: PageScope,
@@ -549,6 +594,15 @@ function placePlanned(
       else delete block.to
     }
     if (block.kind === 'component' && !block.to) block.to = plannedComponents[0]
+    // A group whose every item names the same component is that component's
+    // placements (AGL-3660): the design put the id on its items, not the block.
+    if (AI_LAYOUT_GROUP_KINDS.has(block.kind) && !block.to && block.items?.length) {
+      const named = block.items[0]?.to
+      if (named && componentOf(page.targets, named) && block.items.every((item) => item.to === named)) {
+        block.to = named
+        block.items = block.items.map(({ to: _to, ...item }) => item)
+      }
+    }
   }
   for (const form of plannedForms) {
     if (!blocks.some((block) => block.kind === 'form' && block.to === form)) {
@@ -578,7 +632,11 @@ function placePlanned(
         !block.to,
     )
     if (group) {
-      group.to = component
+      // Every group of that kind the design split over the row's columns, so
+      // each item of the row is drawn alike (AGL-3660), never the first alone.
+      for (const like of blocks) {
+        if (like.kind === group.kind && !like.to) like.to = component
+      }
       continue
     }
     blocks.push({
@@ -721,9 +779,7 @@ export function compileFlow(
               spacing: '2',
               useFlexGap: true,
               flexWrap: 'wrap',
-              ...(scope.centered && room === 'full'
-                ? { justifyContent: 'center' }
-                : {}),
+              ...(scope.centered ? { justifyContent: 'center' } : {}),
             },
             null,
             buttons,
@@ -935,7 +991,9 @@ function compileButton(
       size: scope.index === 0 || block.style === 'large' ? 'large' : 'medium',
       ...destinationProps(destination),
     },
-    null,
+    // Sized to its words, never stretched across the column a Stack would
+    // stretch it over (AGL-3660), and aligned with its section.
+    { alignSelf: scope.centered ? 'center' : 'flex-start' },
     null,
     'button',
   )
@@ -1022,7 +1080,8 @@ function image(
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
-      borderRadius: 4,
+      // In multiples of the theme's corner radius, so a sharp site's frames are sharp.
+      borderRadius: 2,
       bgcolor: 'action.hover',
       // The frame's shape follows its room, so no two slots of a page share one style.
       aspectRatio:
@@ -1052,13 +1111,10 @@ function form(scope: SectionScope, block: AiLayoutBlock): string | null {
     [placed],
     'formContent',
   )
-  return tree.add(
-    'muiCard',
-    { variant: 'outlined' },
-    null,
-    [content],
-    'formCard',
-  )
+  // The card style is the site theme's (AGL-3660), as a card dropped from the
+  // drawer takes it; it takes the flow's width, so a centered section never
+  // shrinks a form to its button.
+  return tree.add('muiCard', null, { alignSelf: 'stretch' }, [content], 'formCard')
 }
 
 /** A reusable component placed by its id, its props filled from the block's items. */
@@ -1134,6 +1190,12 @@ function instanceValues(
 
 // ── Groups ────────────────────────────────────────────────────────────────
 
+/** Records the elements that draw a section's repeated items, and hands them back. */
+function noted<T extends readonly string[]>(scope: SectionScope, ids: T): T {
+  if (!scope.frame) scope.page.itemIds[scope.index]?.push(...ids)
+  return ids
+}
+
 /** How many items sit side by side in a room. */
 function across(
   count: number,
@@ -1203,15 +1265,28 @@ function speaks(scope: SectionScope, item: AiLayoutItem): boolean {
 }
 
 /** A group's items with every part that has no words left once cleaned emptied, and wordless items left out. */
+/** A title that only names the kind of thing it is: "Card", "Item 2", "Title". */
+const AI_LAYOUT_PLACEHOLDER_TITLE = /^(?:card|item|title|heading|placeholder|tile|box|feature|service|post|article|entry)\s*\d*$/i
+
 function cleanItems(
   scope: SectionScope,
   items: readonly AiLayoutItem[],
 ): AiLayoutItem[] {
   const facts = scope.page.targets.facts
+  // A title that is only the name or id of what places it — a "Card" item of
+  // the Card component (AGL-3660) — is no words a visitor reads.
+  const references = new Set(
+    scope.page.targets.components.flatMap((component) => [component.name, component.id]).map((name) => name.trim().toLowerCase()),
+  )
   return items
     .map((item) => ({
       ...item,
-      title: aiLayoutWords(item.title, 'itemTitle', facts) ? item.title : '',
+      title:
+        aiLayoutWords(item.title, 'itemTitle', facts) &&
+        !references.has(item.title.trim().toLowerCase()) &&
+        !AI_LAYOUT_PLACEHOLDER_TITLE.test(item.title.trim())
+          ? item.title
+          : '',
       text: aiLayoutWords(item.text, 'itemText', facts) ? item.text : '',
     }))
     .filter((item) => speaks(scope, item))
@@ -1250,7 +1325,7 @@ function group(
     case 'steps':
       return layOut(
         scope,
-        items.map((item, position) => step(scope, item, position)),
+        noted(scope, items.map((item, position) => step(scope, item, position))),
         perRow,
         '4',
         'steps',
@@ -1258,7 +1333,7 @@ function group(
     case 'stats':
       return layOut(
         scope,
-        items.map((item) => stat(scope, item)),
+        noted(scope, items.map((item) => stat(scope, item))),
         perRow,
         '4',
         'stats',
@@ -1266,7 +1341,7 @@ function group(
     case 'quotes':
       return layOut(
         scope,
-        items.map((item) => quote(scope, item)),
+        noted(scope, items.map((item) => quote(scope, item))),
         perRow,
         '3',
         'quotes',
@@ -1274,7 +1349,7 @@ function group(
     default:
       return layOut(
         scope,
-        items.map((item) => card(scope, block, item)),
+        noted(scope, items.map((item) => card(scope, block, item))),
         perRow,
         '3',
         'cards',
@@ -1302,7 +1377,7 @@ function instances(
       'instance',
     )
   })
-  return layOut(scope, ids, perRow, '3', 'instances')
+  return layOut(scope, noted(scope, ids), perRow, '3', 'instances')
 }
 
 /**
@@ -1340,7 +1415,7 @@ function compactGroup(
       'pair',
     )
   })
-  return layOut(scope, pairs, perRow, '3', 'compact')
+  return layOut(scope, noted(scope, pairs), perRow, '3', 'compact')
 }
 
 /** A card: an optional icon, its title one level under the section's heading, and its words. */
@@ -1403,15 +1478,9 @@ function card(
     [stack],
     'cardContent',
   )
-  return tree.add(
-    'muiCard',
-    block.style === 'primary' || block.style === 'large'
-      ? { variant: 'elevation', elevation: '2' }
-      : { variant: 'outlined' },
-    { height: '100%' },
-    [content],
-    'card',
-  )
+  // Flat, outlined, raised, tinted or ruled is the site theme's card style
+  // (AGL-3660), never a choice stamped on this card.
+  return tree.add('muiCard', null, { height: '100%' }, [content], 'card')
 }
 
 /** A numbered step: its number in the brand color, its title and its words. */
@@ -1557,13 +1626,7 @@ function quote(scope: SectionScope, item: AiLayoutItem): string {
     [stack],
     'quoteContent',
   )
-  return tree.add(
-    'muiCard',
-    { variant: 'outlined' },
-    { height: '100%' },
-    [content],
-    'quoteCard',
-  )
+  return tree.add('muiCard', null, { height: '100%' }, [content], 'quoteCard')
 }
 
 /** A list: check-marked lines, or plain lines where rule 1 holds and the list is long. */
@@ -1595,7 +1658,7 @@ function list(scope: SectionScope, block: AiLayoutBlock): string | null {
       return [id]
     })
     return links.length
-      ? tree.add('muiStack', { spacing: '1' }, null, links, 'links')
+      ? tree.add('muiStack', { spacing: '1' }, null, noted(scope, links), 'links')
       : null
   }
   const lines = cleanItems(scope, block.items ?? [])
@@ -1619,7 +1682,7 @@ function list(scope: SectionScope, block: AiLayoutBlock): string | null {
         'row',
       ),
     )
-    return tree.add('muiList', { disablePadding: true }, null, rows, 'list')
+    return tree.add('muiList', { disablePadding: true }, null, noted(scope, rows), 'list')
   }
   const check = aiIconOfWord(block.icon) ?? AI_ICON_LIBRARY.check
   const rows = lines.map((line) =>
@@ -1646,7 +1709,7 @@ function list(scope: SectionScope, block: AiLayoutBlock): string | null {
       'row',
     ),
   )
-  return tree.add('muiStack', { spacing: '1.5' }, null, rows, 'list')
+  return tree.add('muiStack', { spacing: '1.5' }, null, noted(scope, rows), 'list')
 }
 
 /** Questions and answers: an accordion each, or question-over-answer pairs where rule 1 holds. */
@@ -1683,7 +1746,7 @@ function faq(scope: SectionScope, block: AiLayoutBlock): string | null {
         'row',
       ),
     )
-    return tree.add('muiList', { disablePadding: true }, null, rows, 'faq')
+    return tree.add('muiList', { disablePadding: true }, null, noted(scope, rows), 'faq')
   }
   const panels = items.map((item, position) =>
     tree.add(
@@ -1725,7 +1788,7 @@ function faq(scope: SectionScope, block: AiLayoutBlock): string | null {
       'panel',
     ),
   )
-  return tree.add('muiStack', { spacing: '1.5' }, null, panels, 'faq')
+  return tree.add('muiStack', { spacing: '1.5' }, null, noted(scope, panels), 'faq')
 }
 
 /** The id the compiled page's root is stored under. */

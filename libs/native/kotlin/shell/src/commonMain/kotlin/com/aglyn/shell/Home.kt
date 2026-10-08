@@ -58,8 +58,9 @@ import com.aglyn.ui.space
 /** The shell's own native areas it offers as quick actions, beside the plugins' own. */
 private data class ShellAction(val key: String, val title: String, val icon: String, val order: Int, val route: Route)
 
+// Pages, Sites and the rest of a site's content are the site registration's
+// own quick actions (libs/native/kotlin/site), listed with the plugins'.
 private val SHELL_ACTIONS = listOf(
-  ShellAction("pages", "Pages", "description", 100, Route.Pages),
   ShellAction("analytics", "Analytics", "bar_chart", 110, Route.Analytics),
 )
 
@@ -104,7 +105,7 @@ internal fun HomeScreen(
 
   val glance: List<Pair<GridSpan, @Composable (Modifier) -> Unit>> = buildList {
     if (hasSite) {
-      add(GridSpan.HALF to { modifier -> PagesCard(host, modifier) { navigator.push(Route.Pages) } })
+      add(GridSpan.HALF to { modifier -> PagesCard(host, modifier) { navigator.push(Route.Screen(SITE_PAGES_SCREEN_ID)) } })
     }
     add(GridSpan.HALF to { modifier -> UnreadCard(feed, modifier) { navigator.select(ShellNavigator.NOTIFICATIONS) } })
     for (widget in widgets) {

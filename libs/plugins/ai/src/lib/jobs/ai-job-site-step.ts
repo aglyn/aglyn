@@ -64,6 +64,7 @@ import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePagesOfPlan } from './ai-job-la
 import { aiPageSectionNodeId } from './ai-job-page-sections'
 import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import { aiJobPublishesSite, aiPublishGuidedSite } from './ai-site-publish'
+import { AI_SITE_LOOK_BUDGET, aiRunSiteLook } from './ai-job-site-look'
 import { aiConfirmedPlan, aiUnspentOutcome } from './ai-job-generation'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
@@ -194,6 +195,9 @@ const CREATION_UNITS: Array<{
   { unit: 'form', create: 'form' },
 ]
 
+/** What the look's unit is called on the ledger. */
+export const AI_SITE_LOOK_LABEL = 'Your look'
+
 export const AI_SITE_NO_PLAN_COPY =
   'This site job has no confirmed plan to build.'
 
@@ -225,8 +229,14 @@ export function aiSiteJobUnits(
   plan: Pick<AiJobPlan, 'create' | 'screens'>,
   options: { welcomeEmail?: boolean } = {},
 ): AiSiteUnit[] {
-  const units: AiSiteUnit[] = []
+  // The site's look is designed first, on every scaffold (AGL-3660): the
+  // header, the footer and every page render in it from their first draft.
+  // A theme change the plan names is that same unit, never a second one.
+  const units: AiSiteUnit[] = [
+    { kind: 'theme', ...UNIT_KINDS.theme, slot: 't', label: AI_SITE_LOOK_LABEL },
+  ]
   for (const { unit, create } of CREATION_UNITS) {
+    if (unit === 'theme') continue
     const creation = plan.create.find((entry) => entry.kind === create)
     if (!creation) continue
     units.push({
@@ -564,6 +574,10 @@ export function aiSiteUnitJob(
   // A site's pages and its layout are designed in the layout language and
   // compiled (AGL-3660), and a page is told which page places the site's form.
   if (unit.kind === 'layout' || unit.kind === 'page') {
+    // The look designed first (AGL-3660): its header arrangement and band rhythm.
+    const look = (job.outputs ?? []).find((output) => output.resource === 'theme' && output.id === 'look')
+    const style = look?.proposal?.['style'] as Record<string, unknown> | undefined
+    if (style) unitInputs['siteStyle'] = { headerAlign: style['headerAlign'], rhythm: style['rhythm'] }
     unitInputs[AI_LAYOUT_LANGUAGE_INPUT] = true
     const formPage = aiLayoutFormPageOfPlan(plan)
     if (formPage) unitInputs[AI_LAYOUT_FORM_PAGE_INPUT] = formPage
@@ -690,6 +704,8 @@ export interface AiJobSiteStepDeps {
   readNodes?: typeof readAiDraftNodes
   /** The guided start's publish; specs hand in a fake. */
   publish?: typeof aiPublishGuidedSite
+  /** The look's pass (AGL-3660); specs hand in a fake. */
+  look?: (context: AiJobStepContext, job: AiJob) => Promise<AiJobStepOutcome>
 }
 
 /** A page the scaffold reported built that holds none of its plan's sections. */
@@ -760,8 +776,8 @@ function aiSiteOwedUnits(
   freeTaste: boolean,
   runnerFor: typeof aiJobStepRunnerFor,
 ): AiSiteUnit[] {
-  return aiSiteJobUnits(plan, { welcomeEmail: aiSiteWelcomeEmail(inputs, freeTaste) }).filter((unit) =>
-    runnerFor(unit.jobKind),
+  return aiSiteJobUnits(plan, { welcomeEmail: aiSiteWelcomeEmail(inputs, freeTaste) }).filter(
+    (unit) => unit.kind === 'theme' || runnerFor(unit.jobKind),
   )
 }
 
@@ -771,6 +787,7 @@ export function createAiJobSiteStep(
   const runnerFor = deps.runnerFor ?? aiJobStepRunnerFor
   const readNodes = deps.readNodes ?? readAiDraftNodes
   const publish = deps.publish ?? aiPublishGuidedSite
+  const look = deps.look ?? aiRunSiteLook
   return async (context): Promise<AiJobStepOutcome> => {
     const { job } = context
     // The scaffold asks no model of its own. What it names where it spends
@@ -827,7 +844,9 @@ export function createAiJobSiteStep(
 
     if (!next) return finish({ ...aiUnspentOutcome(model), ...init }, builtPages())
     const unit = units.find((one) => one.slot === next.slot) as AiSiteUnit
-    const runner = runnerFor(unit.jobKind)
+    // The look is the scaffold's own pass (AGL-3660), not the theme job's proposal.
+    const runner: AiJobStepRunner | undefined =
+      unit.kind === 'theme' ? (lookContext) => look(lookContext, lookContext.job) : runnerFor(unit.jobKind)
     if (!runner) return { ...aiUnspentOutcome(model), ...init }
     const othersOpen = ledgerUnits.some(
       (one) => one.slot !== unit.slot && aiBuildItemOpen(rows.get(one.slot) ?? { status: 'pending' }),
@@ -920,14 +939,15 @@ export function aiSiteJobRunMinimumMs(job: AiJob): number {
   const plan = aiConfirmedPlan(job)
   const inputs = parseAiSiteJobInputs(job.inputs)
   if (!plan || typeof inputs === 'string') return AI_JOB_PAGE_STEP_MINIMUM_MS
-  const units = aiSiteJobUnits(plan, { welcomeEmail: inputs.welcomeEmail }).filter((unit) =>
-    aiJobStepRunnerFor(unit.jobKind),
+  const units = aiSiteJobUnits(plan, { welcomeEmail: inputs.welcomeEmail }).filter(
+    (unit) => unit.kind === 'theme' || aiJobStepRunnerFor(unit.jobKind),
   )
   const outputs = job.outputs ?? []
   const ledger = job.items?.length ? job.items : aiSiteInitialLedger(units, outputs)
   const next = aiBuildNextUnit(aiSiteLedgerUnits(units), ledger)
   const unit = next ? units.find((one) => one.slot === next.slot) : undefined
   if (!unit) return AI_JOB_PAGE_STEP_MINIMUM_MS
+  if (unit.kind === 'theme') return AI_SITE_LOOK_BUDGET.minimumMs
   return aiJobStepRunMinimumMs(aiSiteUnitJob(job, unit, aiBuildBuiltRefs(aiSiteLedgerUnits(units), ledger, outputs)))
 }
 

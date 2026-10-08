@@ -164,6 +164,18 @@
       "@aglyn/plugins-fulfillment-networks/*": [
         "../../libs/plugins/fulfillment-networks/src/lib/*"
       ],
+      "@aglyn/plugins-marketplaces": [
+        "../../libs/plugins/marketplaces/src/index.ts"
+      ],
+      "@aglyn/plugins-marketplaces/*": [
+        "../../libs/plugins/marketplaces/src/lib/*"
+      ],
+      "@aglyn/plugins-inventory-sync": [
+        "../../libs/plugins/inventory-sync/src/index.ts"
+      ],
+      "@aglyn/plugins-inventory-sync/*": [
+        "../../libs/plugins/inventory-sync/src/lib/*"
+      ],
       "@aglyn/plugins-crm": [
         "../../libs/plugins/crm/src/index.ts"
       ],
@@ -193,6 +205,12 @@
       ],
       "@aglyn/plugins-workflows/*": [
         "../../libs/plugins/workflows/src/lib/*"
+      ],
+      "@aglyn/plugins-print-on-demand": [
+        "../../libs/plugins/print-on-demand/src/index.ts"
+      ],
+      "@aglyn/plugins-print-on-demand/*": [
+        "../../libs/plugins/print-on-demand/src/lib/*"
       ],
       "@aglyn/plugins-redirects": [
         "../../libs/plugins/redirects/src/index.ts"

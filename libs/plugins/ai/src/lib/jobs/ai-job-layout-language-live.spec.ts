@@ -18,12 +18,15 @@
  */
 
 /**
- * Six guided starts' pages and frames designed by the REAL model in the layout
- * language and compiled (AGL-3660): for each brief its Home page, one more
- * page, its Contact page, and its header and footer — through the same prompt, tool, ceiling,
- * re-ask and check the page step and the layout step run. Every page must be
- * built with no refusal, and a run prints a table: each page's calls, output
- * tokens, credits and anything it settled.
+ * Twelve guided starts' looks, pages and frames designed by the REAL model and
+ * compiled (AGL-3660): for each brief its look (the base theme and the site's
+ * own choices over it), its Home page, one more page, its Contact page, and
+ * its header and footer — through the same prompt, tool, ceiling, re-ask and
+ * check the look, the page step and the layout step run. The briefs span ten
+ * kinds of site, and two of them are one brief run twice, which must still
+ * come out as two different looks. Every page must be built with no refusal,
+ * and a run prints a table: each page's calls, output tokens, credits and
+ * anything it settled, and each look's tokens and credits.
  *
  * It calls the provider and costs real money (about $0.50 a run), so it runs
  * only when asked: `AGLYN_LIVE_AI=1` with `ANTHROPIC_API_KEY` set, and the live
@@ -56,6 +59,21 @@
  */
 
 jest.mock('../runtime/site-inventory', () => ({ __esModule: true, readSiteInventory: jest.fn() }))
+
+/**
+ * The platform's base themes as the themes plugin lists them, read from its
+ * source by path (one plugin's spec never imports another plugin): the look
+ * is offered them by name and description, as the server offers them.
+ */
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-theme-presets', () => {
+  const { readFileSync } = jest.requireActual('node:fs')
+  const { join } = jest.requireActual('node:path')
+  const text = readFileSync(join(__dirname, '../../../../themes/src/lib/presets/index.ts'), 'utf8') as string
+  const presets = [...text.matchAll(/id: `\$\{BUNDLE_ID\}\.([a-z0-9-]+)`,\s*name: '([^']+)',\s*description: '([^']+)'/g)].map(
+    (match) => ({ id: `theme-presets.${match[1]}`, name: match[2], description: match[3], theme: {} }),
+  )
+  return { __esModule: true, listServerThemePresets: () => presets }
+})
 jest.mock('./ai-jobs', () => ({
   __esModule: true,
   AI_JOBS_COLLECTION: 'aiJobs',
@@ -80,13 +98,18 @@ jest.mock('../runtime/ai-runtime', () => {
   }
 })
 
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { AI_LAYOUT_FRAME_TOOL } from '../layout-language/ai-layout-language'
 import type { AiBuildPlanScreen } from '../model/ai-build-plan'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
+import { aiSiteKindFor, aiSiteStyleTokens } from '../model/ai-site-kinds'
+import type { AiSiteStyle } from '../model/ai-site-look'
+import { aiRunSiteLook } from './ai-job-site-look'
+import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
+import { aiResolveLayoutPictures } from '../layout-language/ai-layout-pictures'
 import { aiModelForStep } from '../providers/routing'
 import { runValidatedGeneration } from '../runtime/ai-doctrine'
 import { aiLiveRunLedger } from '../runtime/ai-dev-replay'
@@ -135,7 +158,7 @@ interface Brief {
 
 const s = (name: string, items = 0, uses: string[] = []) => ({ name, uses, items })
 
-/** Six guided starts, each a Home page and the page the brief most needs, with a Contact page holding the form. */
+/** Twelve guided starts, each a Home page and the page the brief most needs, with a Contact page holding the form. */
 const BRIEFS: readonly Brief[] = [
   {
     key: 'groomer',
@@ -203,7 +226,86 @@ const BRIEFS: readonly Brief[] = [
       { title: 'About', slug: '/about', sections: [s('Our firm'), s('Our attorneys', 2), s('Our approach')] },
     ],
   },
+  {
+    key: 'portfolio',
+    name: 'Mara Okafor Illustration',
+    businessType: 'an illustrator portfolio for picture books and editorial work',
+    audience: 'art directors and publishers',
+    city: 'Chicago',
+    pages: [
+      { title: 'Home', slug: '/', sections: [s('Statement'), s('Selected work', 6), s('Clients and press', 4), s('Commission me')] },
+      { title: 'Work', slug: '/work', sections: [s('Picture books', 4), s('Editorial', 4), s('Process')] },
+    ],
+  },
+  {
+    key: 'blog',
+    name: 'Salt & Season',
+    businessType: 'a food blog about weeknight cooking',
+    audience: 'busy home cooks',
+    city: 'Minneapolis',
+    pages: [
+      { title: 'Home', slug: '/', sections: [s('Welcome'), s('Latest recipes', 4), s('Topics', 5), s('Get new recipes')] },
+      { title: 'Articles', slug: '/articles', sections: [s('Articles intro'), s('Featured articles', 6), s('Browse by topic', 5)] },
+    ],
+  },
+  {
+    key: 'store',
+    name: 'Wick & Grain',
+    businessType: 'an online store for hand-poured soy candles',
+    audience: 'people buying gifts',
+    city: 'Asheville',
+    pages: [
+      { title: 'Home', slug: '/', sections: [s('Hero'), s('Bestsellers', 4), s('How we make them', 3), s('Gift sets')] },
+      { title: 'Shop', slug: '/shop', sections: [s('Shop intro'), s('Collections', 6), s('Care and shipping', 4)] },
+    ],
+  },
+  {
+    key: 'towing',
+    name: 'Rapid Hook Towing',
+    businessType: 'a 24-hour towing and roadside assistance company',
+    audience: 'drivers stranded on the highway',
+    city: 'Phoenix',
+    pages: [
+      { title: 'Home', slug: '/', sections: [s('Hero'), s('Services', 4), s('Why drivers call us', 3), s('Call for a tow')] },
+      { title: 'Services', slug: '/services', sections: [s('Roadside services', 5), s('Service area'), s('Common questions', 4)] },
+    ],
+  },
+  {
+    key: 'therapist',
+    name: 'Quiet Harbor Counseling',
+    businessType: 'a licensed counselor for anxiety and life transitions',
+    audience: 'adults looking for their first therapist',
+    city: 'Seattle',
+    pages: [
+      { title: 'Home', slug: '/', sections: [s('Welcome'), s('How I can help', 3), s('What a first session is like', 3), s('Book a free consultation')] },
+      { title: 'Approach', slug: '/approach', sections: [s('My approach'), s('Areas of focus', 4), s('Questions people ask', 4)] },
+    ],
+  },
+  {
+    key: 'photographer',
+    name: 'Juniper Lane Photography',
+    businessType: 'a wedding and portrait photographer',
+    audience: 'engaged couples',
+    city: 'Nashville',
+    pages: [
+      { title: 'Home', slug: '/', sections: [s('Hero'), s('Galleries', 4), s('About me'), s('Check your date')] },
+      { title: 'Galleries', slug: '/galleries', sections: [s('Weddings', 4), s('Portraits', 4), s('What to expect', 3)] },
+    ],
+  },
 ]
+
+/**
+ * The roofer's brief again under another job (AGL-3660): the same words and
+ * the same kind, and a different seed, so the run shows two looks from one
+ * brief side by side.
+ */
+const TWINS: readonly Brief[] = [{ ...(BRIEFS.find((brief) => brief.key === 'roofer') as Brief), key: 'roofer-twin' }]
+/** `AGLYN_LIVE_AI_BRIEFS=roofer,towing` runs only those briefs. */
+const ONLY = (process.env['AGLYN_LIVE_AI_BRIEFS'] ?? '').split(',').map((key) => key.trim()).filter(Boolean)
+const ALL_BRIEFS: readonly Brief[] = [...BRIEFS, ...TWINS].filter((brief) => !ONLY.length || ONLY.includes(brief.key))
+
+/** Each brief's kind, as the guided start suggests it from what the site is for. */
+const kindOf = (brief: Brief) => aiSiteKindFor(brief.businessType).id
 
 const planned = (brief: Brief) => [
   ...brief.pages.map((page, index) => ({ id: `${brief.key}-p${index}`, label: page.title, slug: page.slug })),
@@ -219,7 +321,11 @@ function inventory(): AiSiteInventory {
   }
 }
 
+/** Each brief's look, once designed, which its pages and frame are built in (AGL-3660). */
+const LOOKS = new Map<string, AiSiteStyle | null>()
+
 function job(brief: Brief, kind: 'page' | 'layout', id: string, screen: AiBuildPlanScreen | null): AiJob {
+  const look = LOOKS.get(brief.key)
   const plan = {
     reuse: [{ kind: 'form', id: FORM_ID, purpose: 'the form this site’s pages are built on' }],
     create: kind === 'layout' ? [{ kind: 'layout', name: 'Main Layout', why: 'header and footer', duplicateOf: null, fields: ['header', 'nav', 'main', 'footer'] }] : [],
@@ -241,6 +347,8 @@ function job(brief: Brief, kind: 'page' | 'layout', id: string, screen: AiBuildP
     inputs: {
       businessName: brief.name,
       businessType: brief.businessType,
+      siteKind: kindOf(brief),
+      ...(look ? { siteStyle: { headerAlign: look.headerAlign, rhythm: look.rhythm } } : {}),
       audience: brief.audience,
       city: brief.city,
       sitePages: planned(brief),
@@ -271,6 +379,8 @@ interface Result {
   findings: string[]
   settled: number
   dropped: string[]
+  /** Each section's planned items and the items it shows, as `shown/planned` (AGL-3660). */
+  items?: string[]
 }
 
 function record(name: string, prompt: string, before: number, result: { status: string; estCostUsd: number; attempts: number } & Record<string, unknown>): Result {
@@ -355,6 +465,7 @@ async function buildPage(brief: Brief, index: number): Promise<Result> {
     observe: (check) => (answer) => {
       attempt += 1
       const checked = check(answer)
+      if (OUT) writeFileSync(join(OUT, `${brief.key}-${page.title.toLowerCase()}.answer-${attempt}.json`), JSON.stringify(answer, null, 1))
       if (OUT && checked.violations.length) {
         writeFileSync(
           join(OUT, `${brief.key}-${page.title.toLowerCase()}.refused-${attempt}.json`),
@@ -368,9 +479,20 @@ async function buildPage(brief: Brief, index: number): Promise<Result> {
     writeFileSync(join(OUT, `${brief.key}-${page.title.toLowerCase()}.refused.json`), JSON.stringify(result.answer, null, 1))
   }
   if (OUT && result.status === 'ok') {
-    writeFileSync(join(OUT, `${brief.key}-${page.title.toLowerCase()}.json`), JSON.stringify({ name: `${brief.key}-${page.title}`, nodes: result.value.nodes }, null, 1))
+    // The page step fills each picture slot with a photo the site serves itself, after the check.
+    const nodes = await aiResolveLayoutPictures(result.value.nodes, {
+      rootId: CANVAS_ROOT_ELEMENT_ID,
+      sectionIds,
+      sectionNames: screen.sections.map((section) => section.name),
+      seed: `${unit.$id}:${screen.id}`,
+    })
+    writeFileSync(join(OUT, `${brief.key}-${page.title.toLowerCase()}.json`), JSON.stringify({ name: `${brief.key}-${page.title}`, nodes }, null, 1))
   }
-  return record(`${brief.key} / ${page.title}`, prompt, before, result as never)
+  const recorded = record(`${brief.key} / ${page.title}`, prompt, before, result as never)
+  if (result.status === 'ok') {
+    recorded.items = screen.sections.map((section, index) => `${result.value.items[index] ?? 0}/${section.items}`)
+  }
+  return recorded
 }
 
 async function buildFrame(brief: Brief): Promise<Result> {
@@ -392,6 +514,7 @@ async function buildFrame(brief: Brief): Promise<Result> {
     maxTokens: AI_JOB_LAYOUT_LANGUAGE_BUDGET.maxTokens(model),
     ...AI_LAYOUT_LANGUAGE_THINKING,
     check: aiLayoutFrameCheck({
+      ...aiSiteStyleTokens(unit.inputs),
       siteName,
       homeId: aiLayoutHomeId(pages, site),
       pages,
@@ -405,6 +528,53 @@ async function buildFrame(brief: Brief): Promise<Result> {
   return record(`${brief.key} / header+footer`, prompt, before, result as never)
 }
 
+interface LookResult extends Result {
+  style: AiSiteStyle | null
+}
+
+/** A brief's look: the real look pass, saved nowhere but here. */
+async function buildLook(brief: Brief): Promise<LookResult> {
+  const unit = { ...job(brief, 'layout', `job-live-${brief.key}`, null), kind: 'theme' } as AiJob
+  let style: AiSiteStyle | null = null
+  const before = mockCalls.length
+  const outcome = await aiRunSiteLook(
+    { job: unit, stepIndex: 0, now: NOW, firestore: {} as never, ...(MODEL ? { modelFor: () => MODEL } : {}) },
+    unit,
+    {
+      // Each brief a customer of its own: drawn apart from no other site.
+      others: async () => [],
+      save: async (_firestore, input) => {
+        style = input.style
+        return { write: 'applied', baseName: input.style.base }
+      },
+    },
+  )
+  // The looks run side by side: this brief's call is the one that names this business and this seed.
+  const calls = mockCalls
+    .slice(before)
+    .filter((call) => call.prompt.startsWith('Kind of site:') && call.prompt.includes(`Design seed: ${unit.$id.slice(-6)}.`))
+  return {
+    name: `${brief.key} / look`,
+    status: outcome.outputs.length ? 'ok' : outcome.refused ? 'refused' : 'failed',
+    calls: calls.length,
+    attempts: calls.length,
+    outputTokens: calls.map((call) => Number(call.usage['outputTokens'] ?? 0)),
+    usage: {
+      inputTokens: calls.reduce((total, call) => total + Number(call.usage['inputTokens'] ?? 0), 0),
+      cacheReadTokens: calls.reduce((total, call) => total + Number(call.usage['cacheReadTokens'] ?? 0), 0),
+      cacheWriteTokens: calls.reduce((total, call) => total + Number(call.usage['cacheWriteTokens'] ?? 0), 0),
+      outputTokens: calls.reduce((total, call) => total + Number(call.usage['outputTokens'] ?? 0), 0),
+    },
+    cutOffs: calls.filter((call) => call.stopReason === 'max_tokens').length,
+    estCostUsd: outcome.estCostUsd,
+    credits: assistCreditsFromUsd(outcome.estCostUsd),
+    findings: outcome.failure ? [outcome.failure] : [],
+    settled: 0,
+    dropped: [],
+    style,
+  }
+}
+
 const describeLive = LIVE ? describe : describe.skip
 
 describeLive('six guided starts designed by the real model in the layout language', () => {
@@ -412,11 +582,33 @@ describeLive('six guided starts designed by the real model in the layout languag
 
   it('builds every page and every header and footer with no refusal', async () => {
     if (OUT) mkdirSync(OUT, { recursive: true })
-    const results = await Promise.all(
-      BRIEFS.flatMap((brief) => [buildPage(brief, 0), buildPage(brief, 1), buildPage(brief, -1), buildFrame(brief)]),
+    const looks = await Promise.all(ALL_BRIEFS.map((brief) => buildLook(brief)))
+    ALL_BRIEFS.forEach((brief, index) => LOOKS.set(brief.key, looks[index].style))
+    const built = await Promise.all(
+      ALL_BRIEFS.flatMap((brief) => [buildPage(brief, 0), buildPage(brief, 1), buildPage(brief, -1), buildFrame(brief)]),
     )
-    const pages = results.filter((result) => !result.name.endsWith('header+footer'))
-    const frames = results.filter((result) => result.name.endsWith('header+footer'))
+    const results: Result[] = [...looks, ...built]
+    const pages = built.filter((result) => !result.name.endsWith('header+footer'))
+    const frames = built.filter((result) => result.name.endsWith('header+footer'))
+    if (OUT) {
+      // Each brief as one site for `render-layout-shots.mts`: its frame, its Home and its look.
+      for (const [index, brief] of ALL_BRIEFS.entries()) {
+        const read = (file: string) => {
+          try {
+            return JSON.parse(readFileSync(join(OUT, file), 'utf8')) as { nodes: unknown }
+          } catch {
+            return null
+          }
+        }
+        const frame = read(`${brief.key}-layout.json`)
+        const home = read(`${brief.key}-home.json`)
+        if (!frame || !home) continue
+        writeFileSync(
+          join(OUT, `${brief.key}-site.json`),
+          JSON.stringify({ name: brief.name, kind: kindOf(brief), nodes: frame.nodes, page: home.nodes, style: looks[index].style }, null, 1),
+        )
+      }
+    }
     const sum = (list: Result[], pick: (result: Result) => number) => list.reduce((total, result) => total + pick(result), 0)
     const table = {
       // Live against replayed (AGL-3660): a run with live 0 asked nothing new.
@@ -442,12 +634,38 @@ describeLive('six guided starts designed by the real model in the layout languag
       ),
       creditsPerPage: pages.map((result) => result.credits),
       creditsPerFrame: frames.map((result) => result.credits),
+      creditsPerLook: looks.map((result) => result.credits),
+      itemsPerSection: Object.fromEntries(pages.map((result) => [result.name, (result.items ?? []).join(' ')])),
+      looks: looks.map((result, index) => {
+        const style = result.style as AiSiteStyle | null
+        return {
+          brief: ALL_BRIEFS[index].key,
+          kind: kindOf(ALL_BRIEFS[index]),
+          base: style?.base,
+          hue: style?.hue,
+          accent: style?.accent,
+          fonts: style?.fonts,
+          corners: style?.corners,
+          buttons: style?.buttons,
+          cards: style?.cards,
+          fields: style?.fields,
+          eyebrow: style?.eyebrow,
+          header: style?.header,
+          headerAlign: style?.headerAlign,
+          rhythm: style?.rhythm,
+          ground: style?.ground,
+        }
+      }),
       outputTokensPerPage: pages.map((result) => result.outputTokens),
       outputTokensPerFrame: frames.map((result) => result.outputTokens),
       results,
     }
     console.log(JSON.stringify(table, null, 1))
     expect(results.filter((result) => result.status !== 'ok').map((result) => [result.name, result.findings])).toEqual([])
+    // One brief run twice is two looks, never one.
+    const twin = looks[ALL_BRIEFS.findIndex((brief) => brief.key === 'roofer-twin')].style
+    const roofer = looks[ALL_BRIEFS.findIndex((brief) => brief.key === 'roofer')].style
+    expect(twin && roofer && JSON.stringify({ ...twin, seed: 0 }) !== JSON.stringify({ ...roofer, seed: 0 })).toBe(true)
   })
 })
 

@@ -9,6 +9,8 @@ import com.aglyn.pluginhost.NativePluginManifestEntry
 import com.aglyn.plugins.bookings.registerBookingsNative
 import com.aglyn.plugins.commerce.registerCommerceNative
 import com.aglyn.plugins.eventscalendar.registerEventsCalendarNative
+import com.aglyn.plugins.forms.registerFormsNative
+import com.aglyn.plugins.inbox.registerInboxNative
 import com.aglyn.plugins.redirects.registerRedirectsNative
 import com.aglyn.plugins.workflows.registerWorkflowsNative
 
@@ -28,6 +30,16 @@ object NativePluginManifest {
             id = "events-calendar",
             contributes = mapOf("screens" to listOf("events-calendar.events"), "quickActions" to listOf("events-calendar.open"), "deepLinks" to listOf("events-calendar.page")),
             register = ::registerEventsCalendarNative,
+        ),
+        NativePluginManifestEntry(
+            id = "forms",
+            contributes = mapOf("screens" to listOf("forms.form", "forms.list"), "quickActions" to listOf("forms.open"), "deepLinks" to listOf("forms.page", "forms.record")),
+            register = ::registerFormsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "inbox",
+            contributes = mapOf("screens" to listOf("inbox.submission", "inbox.submissions"), "deepLinks" to listOf("inbox.submissions-page")),
+            register = ::registerInboxNative,
         ),
         NativePluginManifestEntry(
             id = "redirects",

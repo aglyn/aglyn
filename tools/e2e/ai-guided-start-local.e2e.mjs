@@ -121,12 +121,14 @@ const flag = (name) => argv.includes(`--${name}`)
 if (flag('help')) {
   console.log(`Usage: npm run e2e:ai-guided-start:local -- [options]
 
-  --brief <text>          What kind of site (default "A dog groomer in Austin")
+  --brief <text>          What kind of site (default "A dog groomer in Austin"); several
+                          separated by " || " are used in turn, one a run, so two runs
+                          of two briefs show two sites' looks side by side
   --audience <text>       Who it is for (default "Local dog owners")
-  --example <label|id>    Look & layout example, or "none" (default Business)
+  --style <label|id>      Style of site, or "auto" for the one the brief suggests (default auto)
   --submissions <id>      inbox | lead (default inbox)
   --pages <n>             Pages to plan (default 2, the Free maximum)
-  --site-name <text>      The site's name (default "Hillside Dog Grooming")
+  --site-name <text>      The site's name (default "Hillside Dog Grooming"); " || " as --brief
   --runs <n>              Fresh workspace + site per run (default 1)
   --app-root <checkout>   Serve this checkout's console and tenant (default this one)
   --out <dir>             Output directory (default tmp/ai-guided-start/<timestamp>)
@@ -141,14 +143,18 @@ if (flag('help')) {
   process.exit(0)
 }
 
+/** Several briefs or names, " || " apart: one a run, in turn (AGL-3660). */
+const several = (text) => text.split(/\s*\|\|\s*/).filter(Boolean)
+const briefs = several(option('brief', 'A dog groomer in Austin'))
+const siteNames = several(option('site-name', 'Hillside Dog Grooming'))
 const answers = {
-  siteType: option('brief', 'A dog groomer in Austin'),
+  siteType: briefs[0],
   audience: option('audience', 'Local dog owners'),
-  example: option('example', 'Business'),
+  style: option('style', 'auto'),
   submissions: option('submissions', 'inbox'),
   pages: Number(option('pages', '2')),
 }
-const siteName = option('site-name', 'Hillside Dog Grooming')
+let siteName = siteNames[0]
 const runs = Math.max(1, Number(option('runs', '1')))
 const appRoot = resolve(option('app-root', repoRoot))
 const startedAt = new Date().toISOString()
@@ -735,15 +741,23 @@ async function runOnce(context, index) {
       .fill(answers.siteType)
     if (answers.audience)
       await page.getByLabel('Who is it for?').fill(answers.audience)
-    if (answers.example && answers.example !== 'none') {
+    // The style of site (AGL-3660): the one the brief suggests is already
+    // picked; a named one is clicked.
+    if (answers.style && answers.style !== 'auto') {
       await page
-        .getByRole('button', {
-          name: new RegExp(`^(?:${escapeRegExp(answers.example)})\\s—`, 'i'),
+        .getByRole('radio', {
+          name: new RegExp(`^(?:${escapeRegExp(answers.style)})`, 'i'),
         })
-        .or(page.locator(`[aria-label^="${answers.example}" i]`))
         .first()
         .click()
     }
+    record(run, {
+      style: await page
+        .getByRole('radio', { checked: true })
+        .first()
+        .getAttribute('aria-label')
+        .catch(() => null),
+    })
     await pickOption(
       page,
       'Where do form submissions go?',
@@ -844,6 +858,18 @@ async function runOnce(context, index) {
       `${run.progress.workingWithoutActive.length} of ${run.progress.workingSnapshots} working state(s) had none`,
     )
     check(
+      'look row shown first and active',
+      run.progress.lookRowSeen ? run.progress.lookRowFirst && run.progress.lookRowActive : false,
+      run.progress.lookRowSeen
+        ? `first: ${run.progress.lookRowFirst}, active: ${run.progress.lookRowActive}`
+        : 'no "Designing your look" row on the page',
+    )
+    check(
+      'look row keeps its credits once done',
+      run.progress.lookRowSeen ? run.progress.lookCreditsKept : null,
+      run.progress.lookRowLast ?? '',
+    )
+    check(
       'form row shown as active',
       run.progress.formRowSeen ? run.progress.formRowActive : null,
       run.progress.formRowSeen ? '' : 'no form row on the page',
@@ -917,6 +943,25 @@ async function runOnce(context, index) {
     // 7. What is actually in the site.
     const host = await readHost(firestore, run.hostId)
     writeFileSync(join(runDir, 'host.json'), JSON.stringify(host, null, 2))
+    // The site's own look (AGL-3660): a base theme picked, the look as the
+    // override over it, and the style tokens this job wrote.
+    const siteStyle = host.data?.siteStyle ?? null
+    const primary =
+      host.data?.themeOverride?.patch?.colorSchemes?.light?.primary?.main ??
+      host.data?.theme?.colorSchemes?.light?.primary?.main ??
+      null
+    record(run, {
+      look: siteStyle
+        ? { base: siteStyle.base, kind: siteStyle.kind, fonts: siteStyle.fonts, cards: siteStyle.cards, buttons: siteStyle.buttons, primary }
+        : null,
+    })
+    check(
+      'site theme is its own look',
+      Boolean(siteStyle && siteStyle.jobId === run.jobId && host.data?.themeOverride && primary),
+      siteStyle
+        ? `base ${siteStyle.base} (${host.data?.themeSelection?.name ?? 'site theme'}), kind ${siteStyle.kind}, primary ${primary}, fonts ${siteStyle.fonts}, cards ${siteStyle.cards}, buttons ${siteStyle.buttons}`
+        : 'no siteStyle on the site',
+    )
     const plan = job?.plan ?? null
     const planScreens = plan?.screens ?? []
     const live = host.screens.filter((screen) => screen.data.deletedAt == null)
@@ -1207,7 +1252,7 @@ const summary = {
   appRoot,
   appRef: gitRef(appRoot),
   harnessRef: gitRef(repoRoot),
-  answers: { ...answers, siteName },
+  answers: { ...answers, briefs, siteNames },
   outDir,
   runs: [],
 }
@@ -1246,7 +1291,9 @@ try {
   const beatLog = createWriteStream(join(outDir, 'beat.log'), { flags: 'a' })
 
   for (let index = 0; index < runs; index += 1) {
-    log(`run ${index + 1} of ${runs}`)
+    answers.siteType = briefs[index % briefs.length]
+    siteName = siteNames[index % siteNames.length]
+    log(`run ${index + 1} of ${runs}: ${answers.siteType} (${siteName})`)
     let run
     try {
       run = await runOnce(
@@ -1268,7 +1315,16 @@ try {
     writeSummary()
   }
   beatLog.end()
-  exitCode = summary.runs.every((run) => run.verdict === 'PASS') ? 0 : 1
+  // Two runs never share a look (AGL-3660): not their primary color, not their tokens.
+  const looks = summary.runs.map((run) => run.look).filter(Boolean)
+  if (looks.length > 1) {
+    const distinct = new Set(looks.map((entry) => JSON.stringify(entry)))
+    const primaries = new Set(looks.map((entry) => entry.primary))
+    summary.looksDiffer = distinct.size === looks.length && primaries.size === looks.length
+    log(`${summary.looksDiffer ? 'PASS' : 'FAIL'} every run has its own look — ${looks.map((entry) => `${entry.kind}/${entry.base} ${entry.primary} ${entry.fonts}`).join(' | ')}`)
+  }
+  exitCode =
+    summary.runs.every((run) => run.verdict === 'PASS') && summary.looksDiffer !== false ? 0 : 1
 } catch (error) {
   summary.error = String(error?.message ?? error)
   console.error(`ai guided start: ${summary.error}`)

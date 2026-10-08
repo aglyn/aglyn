@@ -185,10 +185,18 @@ const PLUGIN_TOPICS = {
   // dialog's section (AGL-3634). Unlisted until the deployment offers a
   // network; see PLUGIN_UNLISTED_TOPICS.
   fulfillmentNetworks: '/commerce-and-bookings/commerce/fulfillment-networks',
+  // The Inventory and ERP card under the store's Settings and the order
+  // dialog's section (AGL-3642). Unlisted until the deployment sets
+  // INVENTORY_SYNC_TOKEN_KEY; see PLUGIN_UNLISTED_TOPICS.
+  inventorySync: '/commerce-and-bookings/commerce/inventory-and-erp-sync',
   // The AfterShip, Route and Narvar cards under the store's Settings and the
   // order dialog's Tracking and protection section (AGL-3635). Unlisted until
   // the deployment offers a service; see PLUGIN_UNLISTED_TOPICS.
   postPurchase: '/commerce-and-bookings/commerce/tracking-and-protection',
+  // The Marketplaces cards under the store's Settings and the order dialog's
+  // section (AGL-3638). Unlisted until the deployment offers a marketplace;
+  // see PLUGIN_UNLISTED_TOPICS.
+  marketplaces: '/commerce-and-bookings/commerce/marketplaces',
   events: '/content-and-data/events/overview',
   forms: '/content-and-data/forms/overview',
   funnels: '/marketing-and-automation/analytics/funnels',
@@ -217,6 +225,10 @@ const PLUGIN_TOPICS = {
   // The Tax service card under the store's Settings (AGL-3631). The guide is
   // unlisted while the service is rolling out; see PLUGIN_UNLISTED_TOPICS.
   taxServices: '/commerce-and-bookings/commerce/tax-services',
+  // The Print on demand card under the store's Settings, and its product and
+  // order widgets (AGL-3641). Unlisted while rolling out; see
+  // PLUGIN_UNLISTED_TOPICS.
+  printOnDemand: '/commerce-and-bookings/commerce/print-on-demand',
   // Shifts, staff PINs and register returns (AGL-3609).
   posOperations: '/commerce-and-bookings/commerce/pos-operations',
   posHardware: '/commerce-and-bookings/commerce/pos-hardware',
@@ -262,10 +274,20 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // FULFILLMENT_NETWORKS_TOKEN_KEY and a network's app, the gate the guide
   // waits on (AGL-3634).
   'fulfillmentNetworks',
+  // The Inventory and ERP card draws nothing until the console holds
+  // INVENTORY_SYNC_TOKEN_KEY, the gate the guide waits on (AGL-3642).
+  'inventorySync',
   // The Tracking and protection cards draw nothing until the console holds
   // POST_PURCHASE_VENDORS and POST_PURCHASE_TOKEN_KEY, the gate the guide
   // waits on (AGL-3635).
   'postPurchase',
+  // The Marketplaces cards draw nothing until the console holds
+  // MARKETPLACES_TOKEN_KEY and a marketplace's app, the gate the guide waits
+  // on (AGL-3638).
+  'marketplaces',
+  // The Print on demand card draws nothing until the deployment holds
+  // PRINT_ON_DEMAND_TOKEN_KEY, the same gate the guide waits on (AGL-3641).
+  'printOnDemand',
 ])
 
 // ── Docs parsing ──────────────────────────────────────────────────────────

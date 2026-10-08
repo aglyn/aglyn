@@ -1310,8 +1310,8 @@ nothing itself.
   page, held to the same doctrine and written by the same draft writer, and a
   kind whose step this deployment has not loaded is simply not among the units.
   The scaffold asks no model anything.
-- **The units, in build order.** The palette change first (a member reads it
-  while the pages build), then the layout every page renders inside and the form
+- **The units, in build order.** The site's LOOK first (AGL-3660, below), then
+  the layout every page renders inside and the form
   they place — a page binds both by id, so they must exist — then the pages,
   then the welcome email. Each unit's derived job carries as its `$id` the id
   its plan entry recorded (the welcome email's is on the scaffold's own step),
@@ -1388,6 +1388,61 @@ nothing itself.
   forms a batch makes are the same form: the body admits only the two the form
   step can bind and reads anything else as nobody having said, which leaves each
   form step's own proposal standing.
+
+### A site's look and its kind (AGL-3660)
+
+Every scaffold opens with a look unit, its own row on the build page
+("Designing your look"), so the header, the footer and every page render in the
+site's own theme from their first draft. It never builds a theme change through
+the `theme` kind's proposal, and no site plan may propose one.
+
+- **The kind.** The guided start asks for the style of site in a grid of 21
+  kinds (`model/ai-site-kinds.ts`: business, trades, law and finance, health and
+  wellness, restaurant, store, portfolio, studio, photography, blog, events,
+  fitness, yoga, beauty, real estate, education, nonprofit, music, personal,
+  landing page, coming soon), the one its first answer suggests selected until
+  the person picks another; the job carries it as `inputs.siteKind`. A kind is
+  not a template: it is a LOOK FAMILY the code bounds the theme to (base themes,
+  hue ranges, palette strength, grounds, font pairings, corners, button style,
+  heading scale, density) and two lines the model reads — how its pages are
+  arranged (every page and the frame) and which pages it usually has (the
+  plan). It creates no collection, product or event records; the store's and
+  the blog's guidance says those are added in Commerce and Data.
+- **The answer.** One `submit_site_look` call on the fast tier, no thinking, a
+  600-token ceiling, never re-asked (`jobs/ai-job-site-look.ts`): a base theme
+  from the themes plugin's presets (read on the server through
+  `core.theme.presets`) or the starter theme, a brand hue and an accent, a
+  ground, a font pairing (every family from the fonts plugin's Google catalog,
+  `ai-site-look.spec.ts` holds the weights), corners, and the building blocks'
+  styles: buttons, cards, fields, eyebrows and the header bar. The lists are
+  offered in the job's own order. A brand hex in the brief is the primary color.
+- **The seed.** `aiSiteStyleFor` fills what the answer left out from the kind's
+  options with the job's seed, and nudges every hue by 5–16 degrees and the
+  palette's strength, so one brief run twice is two looks. The tokens are stored
+  on the site as `hosts/{id}.siteStyle`.
+- **The theme.** `aiSiteTheme` builds both schemes in OKLCH and holds them to
+  WCAG (text 4.5:1 on its ground and on paper, every button label 4.5:1, the
+  brand color 3:1 on the page), then `validateThemeForPublish`; a theme that
+  fails falls back to the starter's colors. Everything lives in the theme —
+  palette, fonts, type scale, corners, spacing, and MuiButton, MuiCard,
+  MuiAccordion, MuiTextField, MuiAppBar and overline styles — so a Card or a
+  Button dragged in later matches, and the layout compiler emits plain cards
+  and a plain header bar.
+- **Saved as a pick and its edits.** The base preset is selected through the
+  theme library (the starter theme is filed as "Site theme"), and the look is
+  the override over it, so Setup → Theme names the base and lists the edits. A
+  site whose owner already changed its theme keeps it.
+- **What it costs.** 4 credits in the live eval, 7 for the look that writes its
+  cache, which is what the Free wall counts.
+- **Drawn apart from the workspace's sites.** The look reads the workspace's
+  other sites' `siteStyle` and draws again (up to 32 seeds) until none shares
+  its base, hue family, heading font and buttons and every one differs in at
+  least three tracked dimensions. Independent workspaces share such a tuple in
+  0.2–1.1% of pairs (`ai-site-look.spec.ts`).
+- **The model.** On a paid plan the guided start offers the shared model picker
+  (Auto by default, bounded by the plan's tiers); the job carries the pick and
+  every step — the look, the plan, the layout, each page — runs on it, and the
+  estimate is priced by the pick's multiplier. A Free start offers none.
 
 ## The doors
 
@@ -2524,9 +2579,10 @@ the element budget its request asks for.
   the real plan step (a three-page answer re-asked to two) and prices both requests
   at their ceilings, never under the measured input, the first writing the cache and
   the second paying for the prefix as plain input: a Free site's plan comes to at most
-  35 credits, its answer and its re-ask together. Each page then costs a listing and a
-  first section pass at the Free page's figures, and the wall keeps room for one
-  retried section: a Free site with its layout fits 8 sections across its two pages, at most 249 credits
+  35 credits, its answer and its re-ask together. The site's look (AGL-3660) is one
+  fast-tier answer that is never re-asked: 4 credits in the live eval, 7 for the one that writes its cache, which is the figure the wall counts. Each page then costs a
+  listing and a first section pass at the Free page's figures, and the wall keeps room
+  for one retried section: a Free site fits 8 sections across its two pages, at most 256 credits
   of the 300. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the plan it derives
   and to the Free page's build figures, and the Free wall holds a Free site's plan to
   that section count and to its page cap. On a paid workspace a site plan's one answer comes to at most 84 credits

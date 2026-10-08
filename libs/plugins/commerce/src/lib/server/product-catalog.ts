@@ -234,12 +234,14 @@ export function productOffers(productId: string, raw: DocumentData, context: Pag
     const imageUrl = variantImage ?? media[0]
     const weightGrams = Number(variant.weightGrams) > 0 ? Math.round(Number(variant.weightGrams)) : undefined
     const gtin = CommerceModel.normalizeGtin(variant.barcode) || (hasVariants ? '' : facts?.gtin ?? '')
+    const sku = str(variant.sku).trim().slice(0, 120)
     const offer: CatalogOffer = {
       id: offerId(productId, variant.id, hasVariants),
       groupId: productId,
       hasVariants,
       productId,
       variantId: variant.id,
+      ...(sku ? { sku } : {}),
       productName: product.name.trim(),
       title: choices.length ? `${product.name.trim()} - ${choices.join(' / ')}` : product.name.trim(),
       description,

@@ -358,6 +358,26 @@ public struct EventWriteInput: Codable, Hashable, Sendable {
   }
 }
 
+public struct FormLeadRoutingOptionsItem: Codable, Hashable, Sendable {
+  public var label: String
+  public var value: String
+
+  public init(label: String, value: String) {
+    self.label = label
+    self.value = value
+  }
+}
+
+public struct FormStatusOptionsItem: Codable, Hashable, Sendable {
+  public var label: String
+  public var value: String
+
+  public init(label: String, value: String) {
+    self.label = label
+    self.value = value
+  }
+}
+
 public struct HostEventDeclaration: Codable, Hashable, Sendable {
   public var label: String
   public var order: Double
@@ -382,6 +402,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var buyerNotifications: [String: HostOrderBuyerNotificationsValue]?
   public var cashierId: String?
   public var channel: OrderChannel?
+  public var channelSource: OrderChannelSource?
   public var checkoutSessionId: String?
   public var couponCode: String?
   public var createdAtMs: Double?
@@ -420,12 +441,13 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var totals: OrderTotals?
   public var unresolvedLines: [OrderUnresolvedLine]?
 
-  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillments: [OrderFulfillment]? = nil, invoiceId: String? = nil, lineItems: [OrderLineItem]? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, productId: String? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: HostOrderTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil) {
+  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillments: [OrderFulfillment]? = nil, invoiceId: String? = nil, lineItems: [OrderLineItem]? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, productId: String? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: HostOrderTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil) {
     self.amountCents = amountCents
     self.billingAddress = billingAddress
     self.buyerNotifications = buyerNotifications
     self.cashierId = cashierId
     self.channel = channel
+    self.channelSource = channelSource
     self.checkoutSessionId = checkoutSessionId
     self.couponCode = couponCode
     self.createdAtMs = createdAtMs
@@ -984,6 +1006,34 @@ public struct ManagedBooking: Codable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum MediaKind: String, Codable, CaseIterable, Hashable, Sendable {
+  case document = "document"
+  case image = "image"
+  case pdf = "pdf"
+  case video = "video"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum MediaSort: String, Codable, CaseIterable, Hashable, Sendable {
+  case name = "name"
+  case newest = "newest"
+  case oldest = "oldest"
+  case size = "size"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct MobileDevice: Codable, Hashable, Sendable {
   public var apnsEnvironment: ApnsEnvironment?
   public var app: MobileDeviceApp
@@ -1090,6 +1140,7 @@ public struct OrderAddress: Codable, Hashable, Sendable {
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum OrderChannel: String, Codable, CaseIterable, Hashable, Sendable {
   case draft = "draft"
+  case marketplace = "marketplace"
   case online = "online"
   case pos = "pos"
   case subscription = "subscription"
@@ -1098,6 +1149,50 @@ public enum OrderChannel: String, Codable, CaseIterable, Hashable, Sendable {
   public init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct OrderChannelSource: Codable, Hashable, Sendable {
+  public var channelId: String
+  public var channelLabel: String
+  public var currency: String
+  public var externalOrderId: String
+  public var externalRef: String
+  public var fees: [OrderChannelSourceFeesItem]?
+  public var feesTotalCents: Double?
+  public var lines: [OrderChannelSourceLinesItem]
+  public var taxRemittedByChannel: Bool
+
+  public init(channelId: String, channelLabel: String, currency: String, externalOrderId: String, externalRef: String, fees: [OrderChannelSourceFeesItem]? = nil, feesTotalCents: Double? = nil, lines: [OrderChannelSourceLinesItem], taxRemittedByChannel: Bool) {
+    self.channelId = channelId
+    self.channelLabel = channelLabel
+    self.currency = currency
+    self.externalOrderId = externalOrderId
+    self.externalRef = externalRef
+    self.fees = fees
+    self.feesTotalCents = feesTotalCents
+    self.lines = lines
+    self.taxRemittedByChannel = taxRemittedByChannel
+  }
+}
+
+public struct OrderChannelSourceFeesItem: Codable, Hashable, Sendable {
+  public var amountCents: Double
+  public var label: String
+
+  public init(amountCents: Double, label: String) {
+    self.amountCents = amountCents
+    self.label = label
+  }
+}
+
+public struct OrderChannelSourceLinesItem: Codable, Hashable, Sendable {
+  public var externalLineId: String
+  public var lineIndex: Double
+
+  public init(externalLineId: String, lineIndex: Double) {
+    self.externalLineId = externalLineId
+    self.lineIndex = lineIndex
   }
 }
 
@@ -1754,6 +1849,24 @@ public struct ScreenTrafficRow: Codable, Hashable, Sendable {
   }
 }
 
+public struct SiteFilterOptions: Codable, Hashable, Sendable {
+  public var hasCustomDomain: [SiteFilterOptionsHasCustomDomainItem]
+
+  public init(hasCustomDomain: [SiteFilterOptionsHasCustomDomainItem]) {
+    self.hasCustomDomain = hasCustomDomain
+  }
+}
+
+public struct SiteFilterOptionsHasCustomDomainItem: Codable, Hashable, Sendable {
+  public var label: String
+  public var value: String
+
+  public init(label: String, value: String) {
+    self.label = label
+    self.value = value
+  }
+}
+
 /// The values in contracts.generated.json, keyed as the TypeScript exports are.
 public struct ContractValues: Codable, Hashable, Sendable {
   public let bookingFieldAsks: [BookingFieldAsk]
@@ -1773,11 +1886,33 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let eventLocationMaxLength: Int
   public let eventOrganizerMaxLength: Int
   public let eventTitleMaxLength: Int
+  public let formInUse: ListQueryFilter
+  public let formLeadRoutingOptions: [FormLeadRoutingOptionsItem]
+  public let formListFilterHeaders: [String: String]
+  public let formListQuery: ListQueryDeclaration
+  public let formScopedSubmissionListQuery: ListQueryDeclaration
+  public let formStatusOptions: [FormStatusOptionsItem]
   public let functionBuiltinNames: [String]
   public let functionMaxOperations: Int
   public let hostEvents: [HostEventDeclaration]
   public let listQueryDisjunctions: Int
   public let listQueryIdPath: String
+  public let mediaAltMaxLength: Int
+  public let mediaAltOptions: [ListFilterOption]
+  public let mediaDisjunctionLimit: Int
+  public let mediaFilterHeaders: [String: String]
+  public let mediaFolderMaxDepth: Int
+  public let mediaFolderNameMaxLength: Int
+  public let mediaKinds: [MediaKind]
+  public let mediaListQuery: ListQueryDeclaration
+  public let mediaOrientationOptions: [ListFilterOption]
+  public let mediaScopedSearchNotice: String
+  public let mediaSortLabels: [String: String]
+  public let mediaSortOrder: [String: ListQuerySort]
+  public let mediaSorts: [MediaSort]
+  public let mediaTagMaxCount: Int
+  public let mediaTagMaxLength: Int
+  public let mediaTypeOptions: [ListFilterOption]
   public let nameTokenLimit: Int
   public let nameTokenMaxPrefix: Int
   public let openDisputeClause: ListFilterClause
@@ -1790,6 +1925,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let orderStatusColor: [String: OrderStatusColorValue]
   public let orderStatusLabels: [String: String]
   public let orderStatusOptions: [ListFilterOption]
+  public let orgSubmissionListQuery: ListQueryDeclaration
   public let productListBase: [ListQueryFilter]
   public let productListHeaders: [String: String]
   public let productListOptions: [String: [ListFilterOption]]
@@ -1798,6 +1934,13 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let reminderWindowEndHours: Int
   public let reminderWindowStartHours: Int
   public let scopedSearchJoin: String
+  public let siteCardsPageSize: Int
+  public let siteFilterHeaders: [String: String]
+  public let siteFilterOptions: SiteFilterOptions
+  public let siteListDeclaration: ListQueryDeclaration
+  public let submissionFilterHeaders: [String: String]
+  public let submissionListQuery: ListQueryDeclaration
+  public let submissionReadOptions: [ListFilterOption]
   public let workflowMaxSteps: Int
 
   enum CodingKeys: String, CodingKey {
@@ -1818,11 +1961,33 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case eventLocationMaxLength = "EVENT_LOCATION_MAX_LENGTH"
     case eventOrganizerMaxLength = "EVENT_ORGANIZER_MAX_LENGTH"
     case eventTitleMaxLength = "EVENT_TITLE_MAX_LENGTH"
+    case formInUse = "FORM_IN_USE"
+    case formLeadRoutingOptions = "FORM_LEAD_ROUTING_OPTIONS"
+    case formListFilterHeaders = "FORM_LIST_FILTER_HEADERS"
+    case formListQuery = "FORM_LIST_QUERY"
+    case formScopedSubmissionListQuery = "FORM_SCOPED_SUBMISSION_LIST_QUERY"
+    case formStatusOptions = "FORM_STATUS_OPTIONS"
     case functionBuiltinNames = "FUNCTION_BUILTIN_NAMES"
     case functionMaxOperations = "FUNCTION_MAX_OPERATIONS"
     case hostEvents = "HOST_EVENTS"
     case listQueryDisjunctions = "LIST_QUERY_DISJUNCTIONS"
     case listQueryIdPath = "LIST_QUERY_ID_PATH"
+    case mediaAltMaxLength = "MEDIA_ALT_MAX_LENGTH"
+    case mediaAltOptions = "MEDIA_ALT_OPTIONS"
+    case mediaDisjunctionLimit = "MEDIA_DISJUNCTION_LIMIT"
+    case mediaFilterHeaders = "MEDIA_FILTER_HEADERS"
+    case mediaFolderMaxDepth = "MEDIA_FOLDER_MAX_DEPTH"
+    case mediaFolderNameMaxLength = "MEDIA_FOLDER_NAME_MAX_LENGTH"
+    case mediaKinds = "MEDIA_KINDS"
+    case mediaListQuery = "MEDIA_LIST_QUERY"
+    case mediaOrientationOptions = "MEDIA_ORIENTATION_OPTIONS"
+    case mediaScopedSearchNotice = "MEDIA_SCOPED_SEARCH_NOTICE"
+    case mediaSortLabels = "MEDIA_SORT_LABELS"
+    case mediaSortOrder = "MEDIA_SORT_ORDER"
+    case mediaSorts = "MEDIA_SORTS"
+    case mediaTagMaxCount = "MEDIA_TAG_MAX_COUNT"
+    case mediaTagMaxLength = "MEDIA_TAG_MAX_LENGTH"
+    case mediaTypeOptions = "MEDIA_TYPE_OPTIONS"
     case nameTokenLimit = "NAME_TOKEN_LIMIT"
     case nameTokenMaxPrefix = "NAME_TOKEN_MAX_PREFIX"
     case openDisputeClause = "OPEN_DISPUTE_CLAUSE"
@@ -1835,6 +2000,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case orderStatusColor = "ORDER_STATUS_COLOR"
     case orderStatusLabels = "ORDER_STATUS_LABELS"
     case orderStatusOptions = "ORDER_STATUS_OPTIONS"
+    case orgSubmissionListQuery = "ORG_SUBMISSION_LIST_QUERY"
     case productListBase = "PRODUCT_LIST_BASE"
     case productListHeaders = "PRODUCT_LIST_HEADERS"
     case productListOptions = "PRODUCT_LIST_OPTIONS"
@@ -1843,6 +2009,13 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case reminderWindowEndHours = "REMINDER_WINDOW_END_HOURS"
     case reminderWindowStartHours = "REMINDER_WINDOW_START_HOURS"
     case scopedSearchJoin = "SCOPED_SEARCH_JOIN"
+    case siteCardsPageSize = "SITE_CARDS_PAGE_SIZE"
+    case siteFilterHeaders = "SITE_FILTER_HEADERS"
+    case siteFilterOptions = "SITE_FILTER_OPTIONS"
+    case siteListDeclaration = "SITE_LIST_DECLARATION"
+    case submissionFilterHeaders = "SUBMISSION_FILTER_HEADERS"
+    case submissionListQuery = "SUBMISSION_LIST_QUERY"
+    case submissionReadOptions = "SUBMISSION_READ_OPTIONS"
     case workflowMaxSteps = "WORKFLOW_MAX_STEPS"
   }
 }
