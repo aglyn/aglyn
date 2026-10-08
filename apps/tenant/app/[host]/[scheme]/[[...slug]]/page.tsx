@@ -1288,7 +1288,8 @@ function buildJsonLd(props: Props): string[] {
               description?: string
               mediaUrls?: string[]
               variants?: Array<{
-                priceUsd: number
+                /** `null` while the product is listed before it has a price (AGL-3676). */
+                priceUsd: number | null
                 soldOut?: boolean
                 sku?: string
               }>
@@ -1300,9 +1301,11 @@ function buildJsonLd(props: Props): string[] {
   )?.commerce
   const seededProduct = seededCommerce?.product
   if (seededProduct && canonicalBase) {
+    // A variant with no price yet (AGL-3676) is no offer: `Number(null)` is
+    // 0, which would advertise the product as free.
     const prices = (seededProduct.variants ?? [])
-      .map((variant) => Number(variant.priceUsd))
-      .filter((price) => Number.isFinite(price))
+      .map((variant) => variant.priceUsd)
+      .filter((price): price is number => typeof price === 'number' && Number.isFinite(price))
     const low = prices.length ? Math.min(...prices) : undefined
     const high = prices.length ? Math.max(...prices) : undefined
     // Out of stock only when EVERY variant is — one available size still

@@ -50,6 +50,12 @@ export interface PublicCatalogItem {
   imageUrl?: string
   soldOut: boolean
   tags?: string[]
+  /**
+   * Listed before any variant has a price (AGL-3676): the card says "Price
+   * coming soon" instead of a price, and nothing sells it until one is set.
+   * Absent for every product with a price.
+   */
+  priceComingSoon?: true
 }
 
 /** Host category surfaced to grids for filter chips (AGL-561). */
@@ -340,6 +346,9 @@ function toItem(row: CatalogRow): PublicCatalogItem {
     // function every stock writer stores it through.
     soldOut: CommerceModel.productStockFields(product).soldOut,
     ...(product.tags?.length ? { tags: product.tags } : {}),
+    ...(product.variants.some((variant) => CommerceModel.variantHasPrice(variant))
+      ? {}
+      : { priceComingSoon: true as const }),
   }
 }
 

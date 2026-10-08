@@ -393,6 +393,16 @@ describe('catalog handler params (AGL-561)', () => {
    * ask for both. Forced red by dropping `deletedAt == null` from
    * `STOREFRONT_CATALOG_BASE`: "Gone Hat", deleted while active, is listed.
    */
+  it('lists a product before it has a price as coming soon, and every priced one as priced (AGL-3676)', async () => {
+    seedProduct('soon-hat', { name: 'Soon Hat', variants: [{ id: 'default', inventory: null }] })
+    const result = await run({ q: 'hat' })
+    const byName = Object.fromEntries(
+      ((result.body as { items?: Array<Record<string, unknown>> })?.items ?? []).map((item) => [item['name'], item]),
+    )
+    expect(byName['Soon Hat']).toMatchObject({ priceComingSoon: true })
+    expect(byName['Blue Hat']).not.toHaveProperty('priceComingSoon')
+  })
+
   it('never lists a deleted or unpublished product', async () => {
     seedProduct('gone', { name: 'Gone Hat', status: 'active', deletedAt: 5 })
     seedProduct('archived', { name: 'Archived Hat', status: 'archived' })
