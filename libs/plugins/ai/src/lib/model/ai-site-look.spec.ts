@@ -21,6 +21,7 @@ import { contrastRatio, validateThemeForPublish } from '@aglyn/aglyn/app-utils/s
 import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import { AI_SITE_FONT_PAIRINGS, AI_SITE_KINDS, aiSiteKind, aiSiteKindFor } from './ai-site-kinds'
 import {
+  AI_SITE_DISPLAY_BOOST,
   AI_SITE_LOOK_DIMENSIONS,
   aiReadSiteLook,
   aiSiteLookSignature,
@@ -180,6 +181,22 @@ describe('site looks (AGL-3660)', () => {
     expect(theme.components?.['MuiTextField']?.defaultProps).toEqual({ variant: 'filled' })
     // Theme terms only: no literal color in a component style.
     expect(JSON.stringify(theme.components)).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(/i)
+  })
+
+  it('sets a designer kind’s display line and title larger, and a business site’s as before (AGL-3660)', () => {
+    const size = (id: string, variant: 'displayXl' | 'h1' | 'h2') => {
+      // One style but its kind, so only the kind's boost differs.
+      const style = { ...aiSiteStyleFor({ kind: kind('business'), answer: {}, seed: 5 }), kind: id, fonts: 'inter', headingScale: 1.2 }
+      return parseFloat(String(aiSiteTheme(style, DEFAULT_SITE_THEME).typography?.variants?.[variant]?.fontSize))
+    }
+    expect(Object.keys(AI_SITE_DISPLAY_BOOST).sort()).toEqual(['blog', 'photography', 'portfolio', 'studio'])
+    // 4rem at a 1.2 heading scale with the display share of 1.2: 4.96rem.
+    expect(size('business', 'displayXl')).toBeCloseTo(4.96, 2)
+    expect(size('portfolio', 'displayXl')).toBeCloseTo(4.96 * 1.25, 2)
+    expect(size('studio', 'displayXl')).toBeCloseTo(4.96 * 1.3, 2)
+    expect(size('portfolio', 'h1')).toBeCloseTo(size('business', 'h1') * 1.1, 2)
+    // Nothing under the page title moves.
+    expect(size('portfolio', 'h2')).toBe(size('business', 'h2'))
   })
 
   it('keeps what a base theme sets beyond the look', () => {
