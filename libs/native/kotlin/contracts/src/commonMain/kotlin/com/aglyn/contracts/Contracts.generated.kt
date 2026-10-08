@@ -58,6 +58,17 @@ internal object ApnsEnvironmentSerializer :
     RawEnumSerializer<ApnsEnvironment>("com.aglyn.contracts.ApnsEnvironment", ApnsEnvironment.entries, ApnsEnvironment.UNKNOWN, { it.raw })
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = BindingRefViaSerializer::class)
+enum class BindingRefVia(val raw: String) {
+    ID("id"),
+    NAME("name"),
+    UNKNOWN(""),
+}
+
+internal object BindingRefViaSerializer :
+    RawEnumSerializer<BindingRefVia>("com.aglyn.contracts.BindingRefVia", BindingRefVia.entries, BindingRefVia.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = ContentSchemaTypeSerializer::class)
 enum class ContentSchemaType(val raw: String) {
     ARTICLE("Article"),
@@ -167,6 +178,85 @@ data class FormLeadRoutingOptionsItem(
 data class FormStatusOptionsItem(
     val label: String,
     val value: String,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = FunctionComparatorSerializer::class)
+enum class FunctionComparator(val raw: String) {
+    NOT_EQUAL("!="),
+    LESS_THAN("<"),
+    LESS_THAN_OR_EQUAL("<="),
+    EQUAL("=="),
+    GREATER_THAN(">"),
+    GREATER_THAN_OR_EQUAL(">="),
+    UNKNOWN(""),
+}
+
+internal object FunctionComparatorSerializer :
+    RawEnumSerializer<FunctionComparator>("com.aglyn.contracts.FunctionComparator", FunctionComparator.entries, FunctionComparator.UNKNOWN, { it.raw })
+
+@Serializable
+data class FunctionConditionalOperation(
+    val `if`: FunctionConditionalOperationIf? = null,
+    val otherwise: List<FunctionSetOperation>? = null,
+    val then: List<FunctionSetOperation>? = null,
+)
+
+@Serializable
+data class FunctionConditionalOperationIf(
+    val comparator: FunctionComparator,
+    val left: String,
+    val right: String,
+)
+
+@Serializable
+data class FunctionSetOperation(
+    val expression: String? = null,
+    val set: String? = null,
+    val workflow: String? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = FunctionValueTypeSerializer::class)
+enum class FunctionValueType(val raw: String) {
+    BOOLEAN("boolean"),
+    NUMBER("number"),
+    TEXT("text"),
+    UNKNOWN(""),
+}
+
+internal object FunctionValueTypeSerializer :
+    RawEnumSerializer<FunctionValueType>("com.aglyn.contracts.FunctionValueType", FunctionValueType.entries, FunctionValueType.UNKNOWN, { it.raw })
+
+@Serializable
+data class HostFunction(
+    val name: String? = null,
+    val operations: List<FunctionConditionalOperation>? = null,
+    val parameters: List<HostFunctionParameter>? = null,
+    val returnValue: String? = null,
+    val variables: List<HostFunctionVariable>? = null,
+)
+
+@Serializable
+data class HostFunctionParameter(
+    val defaultValue: String? = null,
+    val label: String? = null,
+    val name: String? = null,
+    val options: List<HostFunctionParameterOption>? = null,
+    val required: Boolean? = null,
+    val type: FunctionValueType? = null,
+)
+
+@Serializable
+data class HostFunctionParameterOption(
+    val label: String? = null,
+    val value: String,
+)
+
+@Serializable
+data class HostFunctionVariable(
+    val name: String? = null,
+    val type: FunctionValueType? = null,
 )
 
 @Serializable
@@ -376,6 +466,33 @@ enum class HostRedirectKind(val raw: String) {
 
 internal object HostRedirectKindSerializer :
     RawEnumSerializer<HostRedirectKind>("com.aglyn.contracts.HostRedirectKind", HostRedirectKind.entries, HostRedirectKind.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = HostVariableTypeSerializer::class)
+enum class HostVariableType(val raw: String) {
+    BOOLEAN("boolean"),
+    COLLECTION("collection"),
+    DATE("date"),
+    DICTIONARY("dictionary"),
+    NUMBER("number"),
+    TEXT("text"),
+    TIME("time"),
+    UNKNOWN(""),
+}
+
+internal object HostVariableTypeSerializer :
+    RawEnumSerializer<HostVariableType>("com.aglyn.contracts.HostVariableType", HostVariableType.entries, HostVariableType.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = InstallTargetSerializer::class)
+enum class InstallTarget(val raw: String) {
+    HOST("host"),
+    ORG("org"),
+    UNKNOWN(""),
+}
+
+internal object InstallTargetSerializer :
+    RawEnumSerializer<InstallTarget>("com.aglyn.contracts.InstallTarget", InstallTarget.entries, InstallTarget.UNKNOWN, { it.raw })
 
 @Serializable
 data class ListFilterClause(
@@ -1178,13 +1295,32 @@ data class TenantEmailEntry(
     val requiresFeature: String? = null,
 )
 
+@Serializable
+data class WhereUsedDependent(
+    val id: String? = null,
+    val name: String? = null,
+    val type: String? = null,
+    val versionId: String? = null,
+    val via: List<BindingRefVia>? = null,
+)
+
+@Serializable
+data class WhereUsedResult(
+    val dependents: List<WhereUsedDependent>? = null,
+    val legacyCount: Long? = null,
+    val total: Long? = null,
+)
+
 /** The values in contracts.generated.json, keyed as the TypeScript exports are. */
 @Serializable
 data class ContractValues(
     @SerialName("AREA_SERVED_MAX") val areaServedMax: Long,
+    @SerialName("ARTIFACT_TYPE_LABELS") val artifactTypeLabels: Map<String, String>,
+    @SerialName("BROWSE_SORTS") val browseSorts: Map<String, ListQuerySort>,
     @SerialName("COMPONENT_LIST_QUERY") val componentListQuery: ListQueryDeclaration,
     @SerialName("CONTENT_SCHEMA_TYPE_DEFAULT") val contentSchemaTypeDefault: ContentSchemaType,
     @SerialName("CONTENT_SCHEMA_TYPE_OPTIONS") val contentSchemaTypeOptions: List<ContentSchemaTypeOptionsItem>,
+    @SerialName("DATASET_AUTHORABLE_FIELD_TYPES") val datasetAuthorableFieldTypes: List<DatasetFieldType>,
     @SerialName("DATASET_FIELD_TYPE_LABELS") val datasetFieldTypeLabels: Map<String, String>,
     @SerialName("DATASET_FIELD_TYPES") val datasetFieldTypes: List<DatasetFieldType>,
     @SerialName("DATASET_FILTER_PREFIX_MAX") val datasetFilterPrefixMax: Long,
@@ -1198,10 +1334,16 @@ data class ContractValues(
     @SerialName("FORM_LIST_QUERY") val formListQuery: ListQueryDeclaration,
     @SerialName("FORM_SCOPED_SUBMISSION_LIST_QUERY") val formScopedSubmissionListQuery: ListQueryDeclaration,
     @SerialName("FORM_STATUS_OPTIONS") val formStatusOptions: List<FormStatusOptionsItem>,
+    @SerialName("FUNCTION_MAX_OPERATIONS") val functionMaxOperations: Long,
+    @SerialName("HELD_LICENCE_QUERY") val heldLicenceQuery: ListQueryDeclaration,
+    @SerialName("HOST_VARIABLE_TYPE_LABELS") val hostVariableTypeLabels: Map<String, String>,
+    @SerialName("INSTALL_TARGETS") val installTargets: Map<String, List<InstallTarget>>,
     @SerialName("LAYOUT_LIST_QUERY") val layoutListQuery: ListQueryDeclaration,
     @SerialName("LIST_QUERY_DISJUNCTIONS") val listQueryDisjunctions: Long,
     @SerialName("LIST_QUERY_ID_PATH") val listQueryIdPath: String,
+    @SerialName("LISTING_CATEGORIES") val listingCategories: List<String>,
     @SerialName("LOCAL_BUSINESS_TYPE_OPTIONS") val localBusinessTypeOptions: List<LocalBusinessTypeOptionsItem>,
+    @SerialName("MARKETPLACE_BROWSE_QUERY") val marketplaceBrowseQuery: ListQueryDeclaration,
     @SerialName("MEDIA_ALT_MAX_LENGTH") val mediaAltMaxLength: Long,
     @SerialName("MEDIA_ALT_OPTIONS") val mediaAltOptions: List<ListFilterOption>,
     @SerialName("MEDIA_DISJUNCTION_LIMIT") val mediaDisjunctionLimit: Long,

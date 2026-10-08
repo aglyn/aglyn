@@ -70,6 +70,21 @@ export const DATASET_FIELD_TYPES: DatasetFieldType[] = [
   'reference',
 ]
 
+/**
+ * The types a person picks for a new field in the Schema dialog; the rest
+ * exist for compatibility and stay editable on a field that already has one.
+ */
+export const DATASET_AUTHORABLE_FIELD_TYPES: DatasetFieldType[] = [
+  'text',
+  'bool',
+  'int32',
+  'float',
+  'timestamp',
+  'coordinates',
+  'sorted',
+  'reference',
+]
+
 /** Display names, mirroring dod.ts `lbl`. */
 export const DATASET_FIELD_TYPE_LABELS: Record<DatasetFieldType, string> = {
   text: 'Text',

@@ -274,24 +274,16 @@ export interface MarketplaceListing {
  */
 export type { MarketplaceArtifactType }
 
-/**
- * Human-readable label for each artifact type (AGL-864).
- *
- * Shared by browse cards, the listing detail page, and the seller panel so
- * "what kind of thing is this" reads the same everywhere. Resolve a listing's
- * label through {@link listingArtifactLabel}, which tolerates the legacy
- * `type`/`kind` shape the way {@link listingArtifactType} does.
- */
-export const ARTIFACT_TYPE_LABELS: Record<MarketplaceArtifactType, string> = {
-  plugin: 'Plugin',
-  component: 'Component',
-  template: 'Site template',
-  layout: 'Layout',
-  datasetSchema: 'Dataset schema',
-  emailTemplate: 'Email template',
-  emailStarter: 'Email starter',
-  theme: 'Theme',
-}
+export {
+  ARTIFACT_TYPE_LABELS,
+  INSTALL_TARGETS,
+  type InstallPin,
+  type InstallTarget,
+  LISTING_CATEGORIES,
+  type PluginInstallState,
+  resolvePluginInstallState,
+} from './marketplace-catalog'
+import { ARTIFACT_TYPE_LABELS, INSTALL_TARGETS, type InstallPin, type InstallTarget, LISTING_CATEGORIES } from './marketplace-catalog'
 
 /** The friendly artifact-type label for a listing (AGL-864). */
 export function listingArtifactLabel(listing: {
@@ -300,42 +292,6 @@ export function listingArtifactLabel(listing: {
   kind?: string
 }): string {
   return ARTIFACT_TYPE_LABELS[listingArtifactType(listing)] ?? 'Component'
-}
-
-/** Where an installed artifact lives. */
-export type InstallTarget = 'org' | 'host'
-
-/**
- * Install targets each artifact type actually supports (AGL-656).
- *
- * This is not a policy choice — it is where the install routes physically
- * write. Only plugins have an org-scoped pin
- * (`orgs/{orgId}/installs/{listingId}`, applying to every site, shadowed by
- * a host pin). Components land in `hosts/{h}/components`, templates and
- * layouts in `hosts/{h}/templates`: all host-scoped by nature, because a
- * screen tree belongs to a site.
- *
- * Exported so the UI can ask rather than assume — an install picker that
- * offers "this whole organization" for a template would be lying.
- */
-export const INSTALL_TARGETS: Record<
-  MarketplaceArtifactType,
-  readonly InstallTarget[]
-> = {
-  plugin: ['org', 'host'],
-  component: ['host'],
-  template: ['host'],
-  layout: ['host'],
-  // Dataset schemas are org-shared data (AGL-237), so they install at org
-  // scope — as a new empty dataset, not a pin (AGL-657).
-  datasetSchema: ['org'],
-  emailTemplate: ['host'],
-  // A campaign email is a screen, and a screen belongs to a site.
-  emailStarter: ['host'],
-  // A theme is one site's visual identity, written to `hosts/{h}.theme`
-  // (AGL-1020). Applying one org-wide would repaint every site at once from a
-  // control that says "install".
-  theme: ['host'],
 }
 
 /** Targets a listing can be installed to, defaulting to host-only. */
@@ -347,58 +303,6 @@ export function installTargetsFor(listing: {
   return INSTALL_TARGETS[listingArtifactType(listing)] ?? ['host']
 }
 
-/** A plugin install pin — the version-pinned doc the install API writes. */
-export interface InstallPin {
-  version?: number | string
-}
-
-/**
- * The install state of a plugin listing for one site, told honestly (AGL-656).
- *
- * A plugin can be pinned at two scopes: the org pin
- * (`orgs/{orgId}/installs/{listingId}`) applies to every site, and a host pin
- * (`hosts/{hostId}/installs/{listingId}`) applies to just this one AND shadows
- * the org pin. Detecting installs from `hosts/{h}/components` — the COMPONENT
- * collection — never sees either pin, so an installed plugin used to read as
- * "not installed" on both the browse grid and the detail page. This resolves
- * the effective state from the two pins the way the loader does.
- */
-export interface PluginInstallState {
-  /** Effective pin scope for this site — host wins over org — or null. */
-  scope: InstallTarget | null
-  /** Version pinned at the effective scope, or null when not installed. */
-  installedVersion: string | null
-  /** Both pins exist: the host pin takes precedence, shadowing the org one. */
-  shadowed: boolean
-  /** Installed, but the pinned version is behind the listing's latest. */
-  updateAvailable: boolean
-}
-
-/**
- * Resolves a plugin listing's install state for a site from its two pins
- * (AGL-656). The host pin shadows the org pin, mirroring the loader, so the
- * effective version and update prompt always describe what actually runs here.
- */
-export function resolvePluginInstallState(
-  latestVersion: number | string | undefined,
-  hostPin: InstallPin | null | undefined,
-  orgPin: InstallPin | null | undefined,
-): PluginInstallState {
-  const effective = hostPin ?? orgPin ?? null
-  const installedVersion =
-    effective?.version != null ? String(effective.version) : null
-  return {
-    scope: hostPin ? 'host' : orgPin ? 'org' : null,
-    installedVersion,
-    shadowed: Boolean(hostPin && orgPin),
-    // Any difference is an upgrade prompt, matching the installed-plugins card
-    // — pins only ever move forward, so "different" means "behind".
-    updateAvailable:
-      installedVersion != null &&
-      latestVersion != null &&
-      String(latestVersion) !== installedVersion,
-  }
-}
 
 /** One site's slice of an org-scope install picture (AGL-997). */
 export interface OrgInstallSite {
@@ -749,21 +653,6 @@ export function missingPublicListingContent(listing: {
   return missing
 }
 
-/** Fixed category taxonomy for marketplace listings (AGL-430). */
-export const LISTING_CATEGORIES: readonly string[] = [
-  'analytics',
-  'automation',
-  'commerce',
-  'communication',
-  'content',
-  'design',
-  'forms',
-  'integrations',
-  'marketing',
-  'productivity',
-  'seo',
-  'security',
-] as const
 
 export const LISTING_README_MAX_CHARS = 20_000
 export const LISTING_MAX_SCREENSHOTS = 6

@@ -220,6 +220,34 @@
     {
       "path": "libs/shared/util/tools/src/lib/list-query/list-query-plan.ts",
       "why": "The pure list query planner (AGL-3622): a list filter becomes the same Firestore constraints on web and native."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/binding-tokens.ts",
+      "why": "Reached by variables: the binding token grammar."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "why": "A no-code function's shape and its parameters' options grammar; the native Logic screens edit functions from it (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/variables.ts",
+      "why": "A site variable's types, labels, name rule and how its value reads; the native Logic screens list and edit variables from it (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/where-used-summary.ts",
+      "why": "The where-used scan's answer and its one-line summary; the native Logic screens word a delete's warning from it (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/model/listing-query.ts",
+      "why": "The marketplace browse and licenses list declarations and their audience base; the native marketplace screens plan the same Firestore queries (AGL-3668)."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/model/listing-visibility.ts",
+      "why": "Whether a listing is browsable and its artifact type, read by the native marketplace screens (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "why": "Artifact type labels, install targets, categories, a plugin's install state and each type's install route and message; the native marketplace screens install from it (AGL-3668); type-only imports."
     }
   ]
 }

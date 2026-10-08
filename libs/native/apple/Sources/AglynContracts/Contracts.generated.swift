@@ -85,6 +85,18 @@ public enum ApnsEnvironment: String, Codable, CaseIterable, Hashable, Sendable {
 }
 
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum BindingRefVia: String, Codable, CaseIterable, Hashable, Sendable {
+  case id = "id"
+  case name = "name"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum ContentSchemaType: String, Codable, CaseIterable, Hashable, Sendable {
   case article = "Article"
   case blogPosting = "BlogPosting"
@@ -245,6 +257,125 @@ public struct FormStatusOptionsItem: Codable, Hashable, Sendable {
   public init(label: String, value: String) {
     self.label = label
     self.value = value
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum FunctionComparator: String, Codable, CaseIterable, Hashable, Sendable {
+  case notEqual = "!="
+  case lessThan = "<"
+  case lessThanOrEqual = "<="
+  case equal = "=="
+  case greaterThan = ">"
+  case greaterThanOrEqual = ">="
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct FunctionConditionalOperation: Codable, Hashable, Sendable {
+  public var `if`: FunctionConditionalOperationIf?
+  public var otherwise: [FunctionSetOperation]?
+  public var then: [FunctionSetOperation]?
+
+  public init(`if`: FunctionConditionalOperationIf? = nil, otherwise: [FunctionSetOperation]? = nil, then: [FunctionSetOperation]? = nil) {
+    self.if = `if`
+    self.otherwise = otherwise
+    self.then = then
+  }
+}
+
+public struct FunctionConditionalOperationIf: Codable, Hashable, Sendable {
+  public var comparator: FunctionComparator
+  public var left: String
+  public var right: String
+
+  public init(comparator: FunctionComparator, left: String, right: String) {
+    self.comparator = comparator
+    self.left = left
+    self.right = right
+  }
+}
+
+public struct FunctionSetOperation: Codable, Hashable, Sendable {
+  public var expression: String?
+  public var set: String?
+  public var workflow: String?
+
+  public init(expression: String? = nil, set: String? = nil, workflow: String? = nil) {
+    self.expression = expression
+    self.set = set
+    self.workflow = workflow
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum FunctionValueType: String, Codable, CaseIterable, Hashable, Sendable {
+  case boolean = "boolean"
+  case number = "number"
+  case text = "text"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct HostFunction: Codable, Hashable, Sendable {
+  public var name: String?
+  public var operations: [FunctionConditionalOperation]?
+  public var parameters: [HostFunctionParameter]?
+  public var returnValue: String?
+  public var variables: [HostFunctionVariable]?
+
+  public init(name: String? = nil, operations: [FunctionConditionalOperation]? = nil, parameters: [HostFunctionParameter]? = nil, returnValue: String? = nil, variables: [HostFunctionVariable]? = nil) {
+    self.name = name
+    self.operations = operations
+    self.parameters = parameters
+    self.returnValue = returnValue
+    self.variables = variables
+  }
+}
+
+public struct HostFunctionParameter: Codable, Hashable, Sendable {
+  public var defaultValue: String?
+  public var label: String?
+  public var name: String?
+  public var options: [HostFunctionParameterOption]?
+  public var required: Bool?
+  public var type: FunctionValueType?
+
+  public init(defaultValue: String? = nil, label: String? = nil, name: String? = nil, options: [HostFunctionParameterOption]? = nil, required: Bool? = nil, type: FunctionValueType? = nil) {
+    self.defaultValue = defaultValue
+    self.label = label
+    self.name = name
+    self.options = options
+    self.required = required
+    self.type = type
+  }
+}
+
+public struct HostFunctionParameterOption: Codable, Hashable, Sendable {
+  public var label: String?
+  public var value: String
+
+  public init(label: String? = nil, value: String) {
+    self.label = label
+    self.value = value
+  }
+}
+
+public struct HostFunctionVariable: Codable, Hashable, Sendable {
+  public var name: String?
+  public var type: FunctionValueType?
+
+  public init(name: String? = nil, type: FunctionValueType? = nil) {
+    self.name = name
+    self.type = type
   }
 }
 
@@ -574,6 +705,35 @@ public enum HostRedirectKind: String, Codable, CaseIterable, Hashable, Sendable 
   case exact = "exact"
   case prefix = "prefix"
   case regex = "regex"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum HostVariableType: String, Codable, CaseIterable, Hashable, Sendable {
+  case boolean = "boolean"
+  case collection = "collection"
+  case date = "date"
+  case dictionary = "dictionary"
+  case number = "number"
+  case text = "text"
+  case time = "time"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum InstallTarget: String, Codable, CaseIterable, Hashable, Sendable {
+  case host = "host"
+  case org = "org"
   case unknown = ""
 
   public init(from decoder: Decoder) throws {
@@ -1778,12 +1938,43 @@ public struct TenantEmailEntry: Codable, Hashable, Sendable {
   }
 }
 
+public struct WhereUsedDependent: Codable, Hashable, Sendable {
+  public var id: String?
+  public var name: String?
+  public var type: String?
+  public var versionId: String?
+  public var via: [BindingRefVia]?
+
+  public init(id: String? = nil, name: String? = nil, type: String? = nil, versionId: String? = nil, via: [BindingRefVia]? = nil) {
+    self.id = id
+    self.name = name
+    self.type = type
+    self.versionId = versionId
+    self.via = via
+  }
+}
+
+public struct WhereUsedResult: Codable, Hashable, Sendable {
+  public var dependents: [WhereUsedDependent]?
+  public var legacyCount: Int?
+  public var total: Int?
+
+  public init(dependents: [WhereUsedDependent]? = nil, legacyCount: Int? = nil, total: Int? = nil) {
+    self.dependents = dependents
+    self.legacyCount = legacyCount
+    self.total = total
+  }
+}
+
 /// The values in contracts.generated.json, keyed as the TypeScript exports are.
 public struct ContractValues: Codable, Hashable, Sendable {
   public let areaServedMax: Int
+  public let artifactTypeLabels: [String: String]
+  public let browseSorts: [String: ListQuerySort]
   public let componentListQuery: ListQueryDeclaration
   public let contentSchemaTypeDefault: ContentSchemaType
   public let contentSchemaTypeOptions: [ContentSchemaTypeOptionsItem]
+  public let datasetAuthorableFieldTypes: [DatasetFieldType]
   public let datasetFieldTypeLabels: [String: String]
   public let datasetFieldTypes: [DatasetFieldType]
   public let datasetFilterPrefixMax: Int
@@ -1797,10 +1988,16 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let formListQuery: ListQueryDeclaration
   public let formScopedSubmissionListQuery: ListQueryDeclaration
   public let formStatusOptions: [FormStatusOptionsItem]
+  public let functionMaxOperations: Int
+  public let heldLicenceQuery: ListQueryDeclaration
+  public let hostVariableTypeLabels: [String: String]
+  public let installTargets: [String: [InstallTarget]]
   public let layoutListQuery: ListQueryDeclaration
   public let listQueryDisjunctions: Int
   public let listQueryIdPath: String
+  public let listingCategories: [String]
   public let localBusinessTypeOptions: [LocalBusinessTypeOptionsItem]
+  public let marketplaceBrowseQuery: ListQueryDeclaration
   public let mediaAltMaxLength: Int
   public let mediaAltOptions: [ListFilterOption]
   public let mediaDisjunctionLimit: Int
@@ -1855,9 +2052,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
 
   enum CodingKeys: String, CodingKey {
     case areaServedMax = "AREA_SERVED_MAX"
+    case artifactTypeLabels = "ARTIFACT_TYPE_LABELS"
+    case browseSorts = "BROWSE_SORTS"
     case componentListQuery = "COMPONENT_LIST_QUERY"
     case contentSchemaTypeDefault = "CONTENT_SCHEMA_TYPE_DEFAULT"
     case contentSchemaTypeOptions = "CONTENT_SCHEMA_TYPE_OPTIONS"
+    case datasetAuthorableFieldTypes = "DATASET_AUTHORABLE_FIELD_TYPES"
     case datasetFieldTypeLabels = "DATASET_FIELD_TYPE_LABELS"
     case datasetFieldTypes = "DATASET_FIELD_TYPES"
     case datasetFilterPrefixMax = "DATASET_FILTER_PREFIX_MAX"
@@ -1871,10 +2071,16 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case formListQuery = "FORM_LIST_QUERY"
     case formScopedSubmissionListQuery = "FORM_SCOPED_SUBMISSION_LIST_QUERY"
     case formStatusOptions = "FORM_STATUS_OPTIONS"
+    case functionMaxOperations = "FUNCTION_MAX_OPERATIONS"
+    case heldLicenceQuery = "HELD_LICENCE_QUERY"
+    case hostVariableTypeLabels = "HOST_VARIABLE_TYPE_LABELS"
+    case installTargets = "INSTALL_TARGETS"
     case layoutListQuery = "LAYOUT_LIST_QUERY"
     case listQueryDisjunctions = "LIST_QUERY_DISJUNCTIONS"
     case listQueryIdPath = "LIST_QUERY_ID_PATH"
+    case listingCategories = "LISTING_CATEGORIES"
     case localBusinessTypeOptions = "LOCAL_BUSINESS_TYPE_OPTIONS"
+    case marketplaceBrowseQuery = "MARKETPLACE_BROWSE_QUERY"
     case mediaAltMaxLength = "MEDIA_ALT_MAX_LENGTH"
     case mediaAltOptions = "MEDIA_ALT_OPTIONS"
     case mediaDisjunctionLimit = "MEDIA_DISJUNCTION_LIMIT"

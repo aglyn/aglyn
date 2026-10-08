@@ -1016,6 +1016,15 @@
         "serverDeclarations": "registerMarketplaceServerDeclarations",
         "planEntitlements": "marketplacePlanEntitlements"
       },
+      "mobile": {
+        "$comment": "AGL-3668: the workspace's Marketplace page in the Aglyn app: browse (category, search and order on the query, over what the workspace may see), a listing's page (details, versions, reviews), install through each artifact type's route (a plugin on this site or every site), update and remove a plugin, rate, review and report, the installed plugins, and the workspace's licenses; browse and a listing side by side on tablets and desktop.",
+        "android": { "package": "com.aglyn.plugins.marketplace", "register": "registerMarketplaceNative" },
+        "contributes": {
+          "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing"],
+          "quickActions": ["marketplace.open"],
+          "deepLinks": ["marketplace.listing-page", "marketplace.page"]
+        }
+      },
       "consoleRedirects": [
         {
           "$comment": "The address the marketplace had under Manage before it became an organization section (AGL-236). A checkout with no site to return to still lands here, so it keeps resolving.",
@@ -1539,6 +1548,15 @@
         "consoleServerDeclarations": "registerDataConsoleServerDeclarations",
         "usageAxes": "dataUsageAxes"
       },
+      "mobile": {
+        "$comment": "AGL-3668: the workspace's datasets in the Aglyn app: the list a member can see, create (and a join collection), each dataset's records count, fields, sharing and references, its records with the quick search and filters as one query, record create, edit and delete (reference integrity through /api/orgs/datasets), export, the schema editor (names, sharing, fields, reorder) and delete; list and detail side by side on tablets and desktop.",
+        "android": { "package": "com.aglyn.plugins.data", "register": "registerDataNative" },
+        "contributes": {
+          "screens": ["data.datasets", "data.records", "data.schema"],
+          "quickActions": ["data.open"],
+          "deepLinks": ["data.page"]
+        }
+      },
       "modules": {
         "tenantApi": "tenant-api"
       },
@@ -1980,6 +1998,15 @@
         "console": "registerLogicConsole",
         "serverDeclarations": "registerLogicServerDeclarations",
         "consoleServerDeclarations": "registerLogicConsoleServerDeclarations"
+      },
+      "mobile": {
+        "$comment": "AGL-3668: a site's Functions & Variables in the Aglyn app: variables (type, value, the workflow that fills one) and no-code functions (parameters with what a visitor sees, variables, if/then/otherwise operations, the return value), where each is used (the console's scan, a page's Besigner from it), create through the resources route, edit and delete with the site's cache drop.",
+        "android": { "package": "com.aglyn.plugins.logic", "register": "registerLogicNative" },
+        "contributes": {
+          "screens": ["logic.function", "logic.page"],
+          "quickActions": ["logic.open"],
+          "deepLinks": ["logic.page"]
+        }
       },
       "catalog": {
         "order": 15,

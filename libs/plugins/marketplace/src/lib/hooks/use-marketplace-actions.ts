@@ -27,77 +27,11 @@ import {
   type InstallPlanStep,
   listingArtifactType,
 } from '../model/marketplace'
+import {
+  marketplaceInstallEndpoint,
+  marketplaceLandingMessage,
+} from '../model/marketplace-catalog'
 
-/**
- * Each artifact type has its own installer route (AGL-672): routing
- * everything to the component one silently installed the wrong thing or
- * 404'd. `listingArtifactType` tolerates the legacy `type`/`kind`
- * discriminators (AGL-654).
- */
-function endpointForArtifact(artifactType: string): string {
-  switch (artifactType) {
-    case 'template':
-      return 'marketplace/install-template'
-    case 'layout':
-      return 'marketplace/install-layout'
-    case 'plugin':
-      return 'marketplace/install-plugin'
-    case 'datasetSchema':
-      return 'marketplace/install-dataset-schema'
-    case 'emailTemplate':
-      return 'marketplace/install-email-template'
-    case 'emailStarter':
-      return 'marketplace/install-email-starter'
-    case 'theme':
-      return 'marketplace/install-theme'
-    default:
-      return 'marketplace/install'
-  }
-}
-
-/**
- * Artifact types whose install deliberately does NOT touch the running site
- * (AGL-669/671/657) — the copy must not imply otherwise. Templates and layouts
- * land in the Templates library; an email template lands as an inactive
- * version the owner still has to activate.
- */
-function landingMessage(
-  artifactType: string,
-  displayName: string,
-): string | null {
-  switch (artifactType) {
-    case 'template':
-    case 'layout':
-      return (
-        `Saved "${displayName}" to your Templates — nothing is live until ` +
-        'you use it.'
-      )
-    case 'emailTemplate':
-      return (
-        `Saved "${displayName}" as a draft version — activate it in the ` +
-        'email designer to start sending it.'
-      )
-    case 'emailStarter':
-      // A copy, and saying so is the point: the publisher cannot reach it
-      // again, and nothing goes out until a campaign is sent from it.
-      return (
-        `Added "${displayName}" to your Email templates as your own copy — ` +
-        'edit it freely, nothing is sent until you send a campaign.'
-      )
-    case 'datasetSchema':
-      return `Created "${displayName}" as a new, empty dataset.`
-    case 'theme':
-      // The one type that DOES change the running site on install, so it gets
-      // the opposite of the reassurance the others get — plus the way back,
-      // because a repainted site is alarming if you cannot see how to undo it.
-      return (
-        `Applied "${displayName}" to this site. Setup → Theme has a way back ` +
-        'to your previous theme.'
-      )
-    default:
-      return null
-  }
-}
 
 /**
  * What to tell someone whose install will never be three-way mergeable
@@ -179,7 +113,7 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
       const dequeue = queueLoading()
       try {
         const artifactType = listingArtifactType(listing)
-        const endpoint = endpointForArtifact(artifactType)
+        const endpoint = marketplaceInstallEndpoint(artifactType)
         const response = await authorizedFetch(user, `/api/${endpoint}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -213,7 +147,7 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
           })
         }
         // Types that land inert must not read as "your site changed".
-        const landed = landingMessage(artifactType, listing.displayName)
+        const landed = marketplaceLandingMessage(artifactType, listing.displayName)
         enqueueSnackbar(
           landed ??
             (payload.updated
@@ -327,7 +261,7 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
       const dequeue = queueLoading()
       try {
         const artifactType = listingArtifactType(listing)
-        const endpoint = endpointForArtifact(artifactType)
+        const endpoint = marketplaceInstallEndpoint(artifactType)
         let installed = 0
         const errors: string[] = []
         /**
@@ -397,7 +331,7 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
         const updating = options?.intent === 'update'
         const noun = updating
           ? 'Updated'
-          : landingMessage(artifactType, '')
+          : marketplaceLandingMessage(artifactType, '')
             ? 'Saved'
             : 'Installed'
         const toVersion =
