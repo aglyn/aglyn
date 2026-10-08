@@ -677,6 +677,42 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'delivery-apps',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "openapi.doordash.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The DoorDash API for the merchant's own DoorDash store, which a site's admin links by its store id in the store's settings, reached only from `libs/plugins/delivery-apps/src/lib/providers/doordash.ts` to answer that store's orders and send its menu.",
+        dataReceived: "For an order the service sent a store connected here: the service's own order id and store id, the answer (accepted with the minutes the kitchen needs, rejected with the merchant's reason, or ready for pickup), and the number of the store order it became. For the menu, when the merchant sends it: each product's name, choices, description, price, photo address and whether it is in stock. No buyer's details are sent: the buyer's name, phone and the order's items come FROM the service, in its webhook or when its order is read. Each call is signed with the deployment's partner credentials.",
+      },
+      {
+        host: "api.uber.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Uber Eats API for the merchant's own Uber Eats store, which a site's admin links by its store id in the store's settings, reached only from `libs/plugins/delivery-apps/src/lib/providers/uber-eats.ts` to answer that store's orders and send its menu.",
+        dataReceived: "For an order the service sent a store connected here: the service's own order id and store id, the answer (accepted with the minutes the kitchen needs, rejected with the merchant's reason, or ready for pickup), and the number of the store order it became. For the menu, when the merchant sends it: each product's name, choices, description, price, photo address and whether it is in stock. No buyer's details are sent: the buyer's name, phone and the order's items come FROM the service, in its webhook or when its order is read. Each call is signed with the deployment's partner credentials.",
+      },
+      {
+        host: "auth.uber.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. Uber's OAuth token endpoint, for the client-credentials token each Uber Eats call carries (`libs/plugins/delivery-apps/src/lib/providers/uber-eats.ts`).",
+        dataReceived: "The deployment's Uber client id and secret and the scopes asked for — credentials, never orders or menus.",
+      },
+      {
+        host: "api-third-party-gtm.grubhub.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Grubhub API for the merchant's own Grubhub store, which a site's admin links by its store id in the store's settings, reached only from `libs/plugins/delivery-apps/src/lib/providers/grubhub.ts` to answer that store's orders and send its menu.",
+        dataReceived: "For an order the service sent a store connected here: the service's own order id and store id, the answer (accepted with the minutes the kitchen needs, rejected with the merchant's reason, or ready for pickup), and the number of the store order it became. For the menu, when the merchant sends it: each product's name, choices, description, price, photo address and whether it is in stock. No buyer's details are sent: the buyer's name, phone and the order's items come FROM the service, in its webhook or when its order is read. Each call is signed with the deployment's partner credentials.",
+      },
+      {
+        host: "api-third-party-gtm-pp.grubhub.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Grubhub API for the merchant's own Grubhub store, which a site's admin links by its store id in the store's settings, reached only from `libs/plugins/delivery-apps/src/lib/providers/grubhub.ts` to answer that store's orders and send its menu. Its pre-production host, used only by a deployment set to the sandbox, where nothing real sells.",
+        dataReceived: "For an order the service sent a store connected here: the service's own order id and store id, the answer (accepted with the minutes the kitchen needs, rejected with the merchant's reason, or ready for pickup), and the number of the store order it became. For the menu, when the merchant sends it: each product's name, choices, description, price, photo address and whether it is in stock. No buyer's details are sent: the buyer's name, phone and the order's items come FROM the service, in its webhook or when its order is read. Each call is signed with the deployment's partner credentials.",
+      },
+    ],
+  },
+  {
     pluginId: 'sales-channels',
     subprocessors: [],
     hosts: [

@@ -1018,6 +1018,38 @@ The services are told about shipments at
 connects and builds from `NEXT_PUBLIC_CONSOLE_URL`. A console the services
 cannot reach (a laptop) still works: each open order is asked after by the
 console job every 15 minutes.
+### Delivery apps: DoorDash, Uber Eats and Grubhub {#delivery-apps}
+
+A store's POS register can take the merchant's **own** DoorDash, Uber Eats
+and Grubhub orders. No service takes a key a merchant could paste: each admits
+a point-of-sale integration only through a **partner (integration provider)
+account** the deployment's operator holds with it, and the merchant links their
+store by the store id the service shows them. A service is offered only when
+**every** variable it names is set; with none set, no Delivery apps card
+appears, the register shows no delivery orders and every webhook answers 404.
+Set these on the **console only**: the webhooks, the register's routes and the
+job run there.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `DELIVERY_APPS_DOORDASH_DEVELOPER_ID` | Optional | Runtime, console | The DoorDash developer id of the integration. DoorDash is offered only with it and the three below. |
+| `DELIVERY_APPS_DOORDASH_KEY_ID` | Optional | Runtime, console | The integration's access key id. |
+| `DELIVERY_APPS_DOORDASH_SIGNING_SECRET` | Optional | Runtime, console | The access key's signing secret, as DoorDash issues it (base64url). Signs each request's JWT. |
+| `DELIVERY_APPS_DOORDASH_WEBHOOK_SECRET` | Optional | Runtime, console | The token set on the integration's order webhook; a webhook without it is refused. |
+| `DELIVERY_APPS_DOORDASH_PROVIDER_TYPE` | Optional | Runtime, console | The provider type DoorDash assigned the integration, sent with each menu. |
+| `DELIVERY_APPS_DOORDASH_ENVIRONMENT` | Optional | Runtime, console | `sandbox` marks DoorDash orders as test orders. Unset is live. |
+| `DELIVERY_APPS_UBER_EATS_CLIENT_ID` | Optional | Runtime, console | The Uber Eats app's client id. Uber Eats is offered only with it and its secret. |
+| `DELIVERY_APPS_UBER_EATS_CLIENT_SECRET` | Optional | Runtime, console | The app's client secret. Also the key Uber signs each webhook with. |
+| `DELIVERY_APPS_UBER_EATS_ENVIRONMENT` | Optional | Runtime, console | `sandbox` marks Uber Eats orders as test orders (Uber's test stores). Unset is live. |
+| `DELIVERY_APPS_GRUBHUB_CLIENT_ID` | Optional | Runtime, console | The Grubhub partner client id. Grubhub is offered only with it and the two below. |
+| `DELIVERY_APPS_GRUBHUB_SECRET_KEY` | Optional | Runtime, console | The partner's MAC secret key, as Grubhub issues it (base64). Signs each request and verifies each webhook. |
+| `DELIVERY_APPS_GRUBHUB_PARTNER_KEY` | Optional | Runtime, console | The partner key sent as `X-GH-PARTNER-KEY`. |
+| `DELIVERY_APPS_GRUBHUB_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends Grubhub calls to its pre-production host and marks its orders as test orders. Unset is live. |
+
+Register each service's order webhook as
+`https://<console>/api/delivery-apps/webhooks/doordash`, `…/uber-eats` or
+`…/grubhub`. Uber's webhook notifications must include orders, cancels,
+failures and resolved fulfillment issues.
 
 ---
 

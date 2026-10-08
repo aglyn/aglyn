@@ -1,0 +1,45 @@
+{
+  "name": "@aglyn/plugins-delivery-apps",
+  "version": "1.0.0-beta.231",
+  "private": true,
+  "license": "Apache-2.0",
+  "homepage": "https://aglyn.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aglyn/aglyn.git",
+    "directory": "libs/plugins/delivery-apps"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./*": {
+      "types": "./src/lib/*.d.ts",
+      "default": "./src/lib/*.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@aglyn/aglyn": "1.0.0-beta.231",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.231",
+    "@aglyn/shared-ui-snackstack": "1.0.0-beta.231",
+    "@aglyn/shared-util-http": "1.0.0-beta.231",
+    "@aglyn/shared-util-tools": "1.0.0-beta.231",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.231",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.231",
+    "@aglyn/tenant-runtime": "1.0.0-beta.231",
+    "@swc/helpers": "0.5.23"
+  },
+  "peerDependencies": {
+    "@mui/material": "^9.3.1",
+    "react": "^19.2.8"
+  },
+  "sideEffects": false,
+  "description": "Delivery apps for Aglyn stores: bring DoorDash, Uber Eats and Grubhub orders to the POS register to accept, make and hand over, with their items off the same shelf every other sale takes from."
+}

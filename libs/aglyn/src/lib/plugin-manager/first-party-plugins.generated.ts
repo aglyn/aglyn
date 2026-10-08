@@ -276,6 +276,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "keeps": "The connection and its settings are kept, and everything already synced stays on both sides."
     }
   },
+  {
+    "id": "delivery-apps",
+    "label": "Delivery apps",
+    "alwaysOnForWorkspace": true,
+    "description": "Take DoorDash, Uber Eats and Grubhub orders at your register: accept, make and hand them over, with their items off the same shelf.",
+    "siteOff": {
+      "stops": "Switching Delivery apps off for this site stops its DoorDash, Uber Eats and Grubhub orders reaching the register; the services are told the store is not connected.",
+      "keeps": "The linked stores, their item matches and every order already taken are kept, and switching it back on takes new orders again."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -309,6 +319,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "marketplaces": "console-only",
   "print-on-demand": "console-only",
   "inventory-sync": "console-only",
+  "delivery-apps": "console-only",
 }
 
 /**
@@ -2322,6 +2333,16 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "inventory-sync",
     "name": "inventorySyncProducts",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "delivery-apps",
+    "name": "deliveryAppStores",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "delivery-apps",
+    "name": "deliveryAppOrders",
     "orgField": "orgId"
   },
 ]

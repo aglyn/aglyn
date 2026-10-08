@@ -119,6 +119,13 @@ export interface PluginChannelOrder {
   shippingAddress: PluginChannelOrderAddress | null
   /** Placed in the channel's sandbox: recorded, but never counted as revenue. */
   testMode: boolean
+  /**
+   * How the goods leave the store (AGL-3644): `ship`, the default, by a
+   * carrier to `shippingAddress`; `courier`, handed over the counter to the
+   * channel's own courier (a delivery app), so nothing is shipped from here
+   * and the seller says so to the merchant.
+   */
+  handoff?: 'ship' | 'courier'
 }
 
 /** A line the store's stock could not cover in full: the channel sold more than the shelf held. */
@@ -166,6 +173,51 @@ export type PluginChannelOrderCancelOutcome =
   | { outcome: 'not_cancellable'; status: string }
   | { outcome: 'no_such_record' }
 
+/** The channel's courier took the whole order (AGL-3644): it is fulfilled, with nothing shipped from here. */
+export interface PluginChannelOrderHandoff {
+  hostId: string
+  recordId: string
+  /** Shown on the order's timeline, e.g. `Picked up by the DoorDash courier`. */
+  note: string
+}
+
+export type PluginChannelOrderHandoffOutcome =
+  | { outcome: 'completed' }
+  | { outcome: 'already' }
+  /** The seller's rules refused (it was cancelled, say); `status` is the seller's word for where it stands. */
+  | { outcome: 'not_completable'; status: string }
+  | { outcome: 'no_such_record' }
+
+/**
+ * Money the channel gave back to the buyer of an order it sent (AGL-3644):
+ * a refund, or the channel's adjustment of the order — an item removed, a
+ * quantity lowered. No money moves here: the channel refunded its buyer and
+ * takes it from the merchant's payout, so the seller RECORDS it on the order.
+ *
+ * `restock` names the units that never left the store (an item taken off the
+ * order before it was handed over); the seller puts back at most what the
+ * order's own sale took. Empty for a refund of goods already gone.
+ */
+export interface PluginChannelOrderRefund {
+  hostId: string
+  recordId: string
+  /** The channel's id for this refund or adjustment: the same id a second time records nothing. */
+  refundId: string
+  /** Minor units in the order's currency; `0` for an adjustment that only moves stock. */
+  amountCents: number
+  /** Shown on the order's timeline. */
+  reason: string
+  restock: Array<{ lineIndex: number; quantity: number }>
+}
+
+export type PluginChannelOrderRefundOutcome =
+  /** Recorded: `refundedCents` is the order's refunded total now, `restockedUnits` what went back on the shelf. */
+  | { outcome: 'recorded'; refundedCents: number; restockedUnits: number }
+  | { outcome: 'already' }
+  /** The seller would not record it; `reason` says why, for the merchant. */
+  | { outcome: 'refused'; reason: string }
+  | { outcome: 'no_such_record' }
+
 export interface PluginChannelOrders {
   /** Records an outside order once, with its units off the shelf in the same write. */
   importOrder(order: PluginChannelOrder): Promise<PluginChannelOrderOutcome>
@@ -177,6 +229,14 @@ export interface PluginChannelOrders {
     recordId: string
     fees: PluginChannelOrderFee[]
   }): Promise<'recorded' | 'no_such_record'>
+  /**
+   * The channel's courier took the order (AGL-3644). Optional: a seller that
+   * cannot record a hand-off leaves it out, and the importer leaves the order
+   * for the merchant to fulfill.
+   */
+  completeOrder?(request: PluginChannelOrderHandoff): Promise<PluginChannelOrderHandoffOutcome>
+  /** The channel refunded or adjusted an order it sent (AGL-3644). Optional, as `completeOrder`. */
+  recordRefund?(request: PluginChannelOrderRefund): Promise<PluginChannelOrderRefundOutcome>
 }
 
 const PLUGIN_CHANNEL_ORDERS = definePluginServiceContract<PluginChannelOrders>('core.channel-orders', {

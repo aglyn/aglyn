@@ -197,6 +197,10 @@ const PLUGIN_TOPICS = {
   // section (AGL-3638). Unlisted until the deployment offers a marketplace;
   // see PLUGIN_UNLISTED_TOPICS.
   marketplaces: '/commerce-and-bookings/commerce/marketplaces',
+  // The Delivery apps cards under the store's Settings and the register's
+  // delivery orders (AGL-3644). Unlisted until the deployment offers a
+  // service; see PLUGIN_UNLISTED_TOPICS.
+  deliveryApps: '/commerce-and-bookings/commerce/delivery-apps',
   events: '/content-and-data/events/overview',
   forms: '/content-and-data/forms/overview',
   funnels: '/marketing-and-automation/analytics/funnels',
@@ -288,6 +292,10 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // The Print on demand card draws nothing until the deployment holds
   // PRINT_ON_DEMAND_TOKEN_KEY, the same gate the guide waits on (AGL-3641).
   'printOnDemand',
+  // The Delivery apps cards and the register's queue draw nothing until the
+  // console holds a service's partner credentials, the gate the guide waits
+  // on (AGL-3644).
+  'deliveryApps',
 ])
 
 // ── Docs parsing ──────────────────────────────────────────────────────────

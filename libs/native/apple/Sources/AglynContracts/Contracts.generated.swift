@@ -848,10 +848,12 @@ public struct OrderChannelSource: Codable, Hashable, Sendable {
   public var externalRef: String
   public var fees: [OrderChannelSourceFeesItem]?
   public var feesTotalCents: Double?
+  public var handoff: OrderChannelSourceHandoff?
   public var lines: [OrderChannelSourceLinesItem]
+  public var refundIds: [String]?
   public var taxRemittedByChannel: Bool
 
-  public init(channelId: String, channelLabel: String, currency: String, externalOrderId: String, externalRef: String, fees: [OrderChannelSourceFeesItem]? = nil, feesTotalCents: Double? = nil, lines: [OrderChannelSourceLinesItem], taxRemittedByChannel: Bool) {
+  public init(channelId: String, channelLabel: String, currency: String, externalOrderId: String, externalRef: String, fees: [OrderChannelSourceFeesItem]? = nil, feesTotalCents: Double? = nil, handoff: OrderChannelSourceHandoff? = nil, lines: [OrderChannelSourceLinesItem], refundIds: [String]? = nil, taxRemittedByChannel: Bool) {
     self.channelId = channelId
     self.channelLabel = channelLabel
     self.currency = currency
@@ -859,7 +861,9 @@ public struct OrderChannelSource: Codable, Hashable, Sendable {
     self.externalRef = externalRef
     self.fees = fees
     self.feesTotalCents = feesTotalCents
+    self.handoff = handoff
     self.lines = lines
+    self.refundIds = refundIds
     self.taxRemittedByChannel = taxRemittedByChannel
   }
 }
@@ -871,6 +875,18 @@ public struct OrderChannelSourceFeesItem: Codable, Hashable, Sendable {
   public init(amountCents: Double, label: String) {
     self.amountCents = amountCents
     self.label = label
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum OrderChannelSourceHandoff: String, Codable, CaseIterable, Hashable, Sendable {
+  case courier = "courier"
+  case ship = "ship"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
   }
 }
 

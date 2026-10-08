@@ -14069,3 +14069,45 @@ describe('inventory sync records are the server’s alone (AGL-3642)', () => {
     }
   })
 })
+
+describe('delivery-app records are the server’s alone (AGL-3644)', () => {
+  // A store link routes a service's orders to a site's register; an order
+  // record says what the service is told. All written and read by the
+  // delivery-apps plugin's webhooks, register routes and job through the
+  // Admin SDK.
+  const DOCS = [
+    ['deliveryAppStores', 'doordash_0123456789abcdef01234567'],
+    ['deliveryAppOrders', 'doordash_76543210fedcba9876543210'],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), { orgId: ORG, hostId: HOST, status: 'new', active: true })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} listing ${name} by site`, getDocs(query(collection(db, path[0]), where('hostId', '==', HOST), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG, hostId: HOST }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})

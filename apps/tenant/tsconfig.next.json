@@ -176,6 +176,12 @@
       "@aglyn/plugins-inventory-sync/*": [
         "../../libs/plugins/inventory-sync/src/lib/*"
       ],
+      "@aglyn/plugins-delivery-apps": [
+        "../../libs/plugins/delivery-apps/src/index.ts"
+      ],
+      "@aglyn/plugins-delivery-apps/*": [
+        "../../libs/plugins/delivery-apps/src/lib/*"
+      ],
       "@aglyn/plugins-crm": [
         "../../libs/plugins/crm/src/index.ts"
       ],

@@ -2528,6 +2528,22 @@ allow read, write: if false;
 
 
 
+
+
+
+
+
+
+
+match /deliveryAppStores/{deliveryAppStoreId} {
+allow read, write: if false;
+}
+match /deliveryAppOrders/{deliveryAppOrderId} {
+allow read, write: if false;
+}
+
+
+
 match /apiIdempotency/{keyHash} {
 allow read, write: if false;
 }

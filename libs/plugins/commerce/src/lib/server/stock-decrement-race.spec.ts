@@ -421,6 +421,10 @@ describe('AGL-2320 — every stock writer is transactional', () => {
     // every ledger row in ONE transaction that reads each product first, and
     // its cancellation's restore in one transaction, as the cancel's.
     'channel-orders.ts',
+    // A channel's adjustment or refund (AGL-3644): the units it names go
+    // back inside the transaction that reads the order, its ledger and each
+    // product first, bounded by what the sale took.
+    'channel-order-updates.ts',
   ])
 
   const sources = fs
