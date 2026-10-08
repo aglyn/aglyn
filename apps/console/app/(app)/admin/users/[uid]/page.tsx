@@ -76,6 +76,7 @@ import StaffUserProductEmail, {
   type StaffUserMarketing,
 } from '../../../../../components/staff-user-product-email.component'
 import StaffTableHead from '../../../../../components/staff-table-head.component'
+import StaffUserSendEmailCard from '../../../../../components/staff-user-send-email-card.component'
 
 interface UserDetail {
   user: {
@@ -799,6 +800,13 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                             }
                           />
                         ),
+                      },
+                      {
+                        key: 'send-email',
+                        // AGL-3691. Any system email, or a written follow-up,
+                        // to this account — the tool a stranded sign-up's
+                        // verification resend needed instead of a script.
+                        children: <StaffUserSendEmailCard uid={detail.user.uid} />,
                       },
                       {
                         key: 'erase',
