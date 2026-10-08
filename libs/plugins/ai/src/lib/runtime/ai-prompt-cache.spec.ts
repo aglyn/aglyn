@@ -850,8 +850,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       template: { prefixTokens: 5_039, minimum: 512, caches: true, toolsStable: true },
       component: { prefixTokens: 5_038, minimum: 512, caches: true, toolsStable: true },
       // 2,901 before AGL-3287 gave the email palette its Header and Footer,
-      // which the catalog names as blocks to imitate.
-      email: { prefixTokens: 2_896, minimum: 512, caches: true, toolsStable: true },
+      // which the catalog names as blocks to imitate. Up 74 at AGL-3676, which
+      // says plainly that a subject line and a preheader carry no merge token.
+      email: { prefixTokens: 2_970, minimum: 512, caches: true, toolsStable: true },
       form: { prefixTokens: 2_728, minimum: 512, caches: true, toolsStable: true },
       'page-section': { prefixTokens: 4_596, minimum: 512, caches: true, toolsStable: true },
       // The layout language (AGL-3660). Read four characters a token these
