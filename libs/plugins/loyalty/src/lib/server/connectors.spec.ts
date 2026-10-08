@@ -306,7 +306,7 @@ describe('the Smile.io adapter (AGL-3677)', () => {
       adapter.adjust(credentials, { member, email: 'pat@example.com', points: 45, earned: true, title: 'Points for an order', ref: 'ABC' }),
     ).resolves.toEqual({ id: '9001' })
     expect(calls[0].body).toEqual({
-      points_transaction: { customer_id: 304, points_change: 45, description: 'Points for an order', internal_note: 'Aglyn ABC' },
+      points_transaction: { customer_id: 304, points_change: 45, description: 'Points for an order', internal_note: 'Rewards ref ABC' },
     })
     await expect(adapter.hasAdjustment(credentials, { member, email: 'pat@example.com', ref: 'ABC' })).resolves.toBe(true)
     await expect(adapter.hasAdjustment(credentials, { member, email: 'pat@example.com', ref: 'XYZ' })).resolves.toBe(false)
@@ -349,7 +349,7 @@ describe('the Yotpo Loyalty adapter (AGL-3677)', () => {
       customer_email: 'new@example.com',
       point_adjustment_amount: 40,
       apply_adjustment_to_points_earned: true,
-      history_title: 'Points for an order · Aglyn R1',
+      history_title: 'Points for an order · Rewards ref R1',
     })
     await expect(adapter.hasAdjustment(credentials, { member: member!, email: 'new@example.com', ref: 'R1' })).resolves.toBe(true)
   })
@@ -595,7 +595,7 @@ describe('sending exactly once (AGL-3677)', () => {
     expect(result).toEqual({ sent: 1, failed: 0 })
     expect(adjustCalls()).toHaveLength(0)
     expect(members.get('pat@example.com')?.points).toBe(450)
-    expect(members.get('pat@example.com')?.history.map((entry) => entry.note)).toEqual([`Aglyn ${loyaltySyncRef(`${HOST}__earn__cs_live_1`)}`])
+    expect(members.get('pat@example.com')?.history.map((entry) => entry.note)).toEqual([`Rewards ref ${loyaltySyncRef(`${HOST}__earn__cs_live_1`)}`])
   })
 
   it('a live claim is left to its sender', async () => {

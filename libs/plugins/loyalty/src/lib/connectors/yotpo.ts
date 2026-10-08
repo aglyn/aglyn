@@ -123,7 +123,7 @@ export function createYotpoAdapter(
           customer_email: adjustment.email,
           point_adjustment_amount: adjustment.points,
           apply_adjustment_to_points_earned: adjustment.earned,
-          history_title: `${adjustment.title} · Aglyn ${adjustment.ref}`.slice(
+          history_title: `${adjustment.title} · Rewards ref ${adjustment.ref}`.slice(
             0,
             120,
           ),
@@ -143,7 +143,7 @@ export function createYotpoAdapter(
         ? answer.body.history_items
         : []
       return items.some((item) =>
-        JSON.stringify(item ?? {}).includes(`Aglyn ${input.ref}`),
+        JSON.stringify(item ?? {}).includes(`Rewards ref ${input.ref}`),
       )
     },
   }

@@ -115,7 +115,7 @@ export function createSmileAdapter(
             customer_id: Number(adjustment.member.id),
             points_change: adjustment.points,
             description: adjustment.title,
-            internal_note: `Aglyn ${adjustment.ref}`,
+            internal_note: `Rewards ref ${adjustment.ref}`,
           },
         },
       })
@@ -133,7 +133,7 @@ export function createSmileAdapter(
         ? answer.body.points_transactions
         : []
       return rows.some((row) =>
-        String(row?.internal_note ?? '').includes(`Aglyn ${input.ref}`),
+        String(row?.internal_note ?? '').includes(`Rewards ref ${input.ref}`),
       )
     },
   }

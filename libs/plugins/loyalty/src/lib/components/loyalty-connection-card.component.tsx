@@ -127,7 +127,7 @@ export function LoyaltyConnectionCard(props: {
     return (
       <CardDisplay
         header={`Rewards account: ${connection.label}`}
-        subheader={`Points are kept in your ${connection.label} account. Every order’s points, refunds, redemptions and your own changes are sent there; Aglyn’s own points, welcome points and referral rewards are off.`}
+        subheader={`Points are kept in your ${connection.label} account. Every order’s points, refunds, redemptions and your own changes are sent there; the built-in points, welcome points and referral rewards are off.`}
         help={help}
         HeaderProps={{
           action: (
@@ -219,7 +219,7 @@ export function LoyaltyConnectionCard(props: {
   return (
     <CardDisplay
       header="Rewards account"
-      subheader="Already run Smile.io or Yotpo Loyalty? Connect your own account and your members’ points are kept there instead of in Aglyn’s built-in program."
+      subheader="Already run Smile.io or Yotpo Loyalty? Connect your own account and your members’ points are kept there instead of in the built-in program."
       help={help}
       HeaderProps={{
         action: (

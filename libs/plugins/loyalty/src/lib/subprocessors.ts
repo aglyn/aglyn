@@ -33,10 +33,10 @@ import type { PluginSubprocessorsAnswer } from '@aglyn/aglyn/plugin-manager/plug
  * account" sentence on the Subprocessors page covers them.
  */
 const SMILE_DATA =
-  'For each points movement: the buyer’s email address (to find their Smile.io member), the signed number of points, a short description, and an Aglyn reference. No order contents, amounts, addresses or payment details are sent. The merchant’s Smile.io API key authenticates each call.'
+  'For each points movement: the buyer’s email address (to find their Smile.io member), the signed number of points, a short description, and a short reference for the movement. No order contents, amounts, addresses or payment details are sent. The merchant’s Smile.io API key authenticates each call.'
 
 const YOTPO_DATA =
-  'For each points movement: the buyer’s email address, and their name when Yotpo is asked to enroll them, the signed number of points, a short history title with an Aglyn reference. No order contents, amounts, addresses or payment details are sent. The merchant’s Yotpo GUID and API key authenticate each call.'
+  'For each points movement: the buyer’s email address, and their name when Yotpo is asked to enroll them, the signed number of points, a short history title with a reference for the movement. No order contents, amounts, addresses or payment details are sent. The merchant’s Yotpo GUID and API key authenticate each call.'
 
 export function loyaltySubprocessors(): PluginSubprocessorsAnswer {
   return {
