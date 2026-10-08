@@ -25,7 +25,8 @@
  * interleave, which is what a race spec needs.
  *
  * Supports: `collection().doc()`, `get`, `set` (with `merge`), `create`,
- * `update`, `delete`; queries with `==` and `in`, `orderBy`, `limit`;
+ * `update`, `delete`; queries with `==`, `in` and `array-contains`, `orderBy`, `limit`,
+ * and a collection's `count()`;
  * `runTransaction` with `get` (document or query), `set`, `update`;
  * `batch()`. Field paths are top-level only.
  */
@@ -139,7 +140,7 @@ export class MemoryCollection {
     return new MemoryDoc(this.store, `${this.path}/${id ?? this.store.nextId()}`)
   }
 
-  where(field: string, op: '==' | 'in', value: unknown): MemoryQuery {
+  where(field: string, op: MemoryFilterOp, value: unknown): MemoryQuery {
     return new MemoryQuery(this.store, this.path).where(field, op, value)
   }
 
@@ -149,6 +150,11 @@ export class MemoryCollection {
 
   limit(count: number): MemoryQuery {
     return new MemoryQuery(this.store, this.path).limit(count)
+  }
+
+  /** The aggregate: its result's `data().count`. */
+  count(): MemoryQuery {
+    return new MemoryQuery(this.store, this.path)
   }
 
   get() {
@@ -235,8 +241,10 @@ export class MemoryDoc {
   }
 }
 
+export type MemoryFilterOp = '==' | 'in' | 'array-contains'
+
 export class MemoryQuery {
-  private filters: Array<{ field: string; op: '==' | 'in'; value: unknown }> = []
+  private filters: Array<{ field: string; op: MemoryFilterOp; value: unknown }> = []
   private order: { field: string; direction: 'asc' | 'desc' } | null = null
   private max = Infinity
 
@@ -253,7 +261,7 @@ export class MemoryQuery {
     return next
   }
 
-  where(field: string, op: '==' | 'in', value: unknown): MemoryQuery {
+  where(field: string, op: MemoryFilterOp, value: unknown): MemoryQuery {
     const next = this.clone()
     next.filters.push({ field, op, value })
     return next
@@ -279,7 +287,9 @@ export class MemoryQuery {
         this.filters.every(({ field, op, value }) =>
           op === 'in'
             ? (value as unknown[]).includes(stored.data[field])
-            : stored.data[field] === value,
+            : op === 'array-contains'
+              ? Array.isArray(stored.data[field]) && stored.data[field].includes(value)
+              : stored.data[field] === value,
         ),
       )
     if (this.order) {
@@ -292,7 +302,8 @@ export class MemoryQuery {
     const docs = rows
       .slice(0, this.max)
       .map(([path]) => new MemoryDoc(this.store, path).snapshot())
-    return { docs, size: docs.length, empty: docs.length === 0 }
+    // `data()` answers a `count()` aggregate read through the same query.
+    return { docs, size: docs.length, empty: docs.length === 0, data: () => ({ count: docs.length }) }
   }
 
   /** The paths and versions this query matches now, to detect a changed result. */

@@ -1017,6 +1017,34 @@ export const EXPECTED_POSTURE = Object.freeze([
           Object.freeze({ type: 'path', op: 'eq', value: '/api/outreach/click' }),
         ]),
       }),
+      Object.freeze({
+        name: 'Shipping connector bypass',
+        why: "ShipStation's order import and shipment notices and ShippingEasy's shipment callback are calls from the shipping apps' own servers, which cannot solve a challenge, so a challenged connector imports nothing and marks nothing shipped",
+        // DECLARED 2026-10-07 (AGL-3613, AGL-3633) ahead of the live rule,
+        // which the orchestrator adds in Vercel before the first live test;
+        // `firewall-drift.yml` reads it missing until then.
+        //
+        // Same argument as the Machine traffic bypass: each route enforces
+        // its OWN auth before it reads anything. ShipStation's Custom Store
+        // presents the site's HTTP Basic pair, compared as digests in constant
+        // time (`server/shipstation.ts`); ShippingEasy signs each callback with
+        // the merchant's API secret, an HMAC over the path, query and body
+        // (`server/shippingeasy.ts`). Neither caller can send a header we
+        // invent, so a header condition is unavailable, and an unproven
+        // caller is answered 401 by the route and learns nothing about the
+        // site. Both carry their own per-site, per-address rate limit.
+        //
+        // PREFIX, one group per connector, because the site id is a path
+        // segment. Each prefix ends in a slash, so it admits only that
+        // connector's `/{hostId}` route and never a sibling path that merely
+        // starts the same way.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/api/commerce/shipstation/' }),
+        ]),
+        alsoRequiresGroups: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/api/commerce/shippingeasy/' }),
+        ]),
+      }),
     ]),
     // The console mount is the one mailed images resolve to, so Gmail's image
     // proxy and every campaign image land on this copy of the rule.

@@ -413,7 +413,7 @@ export function PackageImportWizard(props: PackageImportWizardProps) {
             <Box sx={{ flex: 1, minWidth: 0 }}>
               {item ? (
                 <Stack spacing={2}>
-                  <Stack direction="row" spacing={2} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Stack useFlexGap direction="row" spacing={2} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
                     <Typography variant="h6" component="h3">
                       {packageItemTitle(item)}
                     </Typography>

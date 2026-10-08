@@ -28,21 +28,16 @@ class NativePluginRegistrar internal constructor(
 
   /**
    * A declared screen whose native version has not landed on this platform:
-   * the shell opens [path] in the console view, exactly as an unmatched link
-   * would, so a declared id never leads to a blank page.
+   * the shell shows a native "coming to the app" state, so a declared id
+   * never leads to a blank page and never to a console page.
    */
-  fun consoleScreen(
+  fun upcomingScreen(
     id: String,
     title: String,
-    path: String,
-    scope: ConsoleScope = ConsoleScope.SITE,
-    requiresSite: Boolean = scope == ConsoleScope.SITE,
+    requiresSite: Boolean = true,
     apps: Set<NativeApp> = setOf(NativeApp.AGLYN),
     icon: String? = null,
-  ) {
-    require(path.startsWith("/")) { "console screen \"$id\" path \"$path\" is a console path and starts with /" }
-    add(NativeScreen(pluginId, id, title, requiresSite, apps, icon, consolePath = path, consoleScope = scope) { _, _ -> })
-  }
+  ) = add(NativeScreen(pluginId, id, title, requiresSite, apps, icon, upcoming = true) { _, _ -> })
 
   fun tab(id: String, title: String, icon: String, screen: String, order: Int, apps: Set<NativeApp> = setOf(NativeApp.AGLYN)) =
     add(NativeTab(pluginId, id, title, icon, screen, order, apps))
@@ -63,11 +58,10 @@ class NativePluginRegistrar internal constructor(
     icon: String,
     order: Int,
     requiresSite: Boolean = false,
-    screen: String? = null,
+    screen: String,
     params: NativeParams = emptyMap(),
-    consolePath: String? = null,
     apps: Set<NativeApp> = setOf(NativeApp.AGLYN),
-  ) = add(NativeQuickAction(pluginId, id, title, icon, order, requiresSite, screen, params, consolePath, apps))
+  ) = add(NativeQuickAction(pluginId, id, title, icon, order, requiresSite, screen, params, apps))
 
   fun deepLink(id: String, path: String, screen: String) = add(NativeDeepLink(pluginId, id, path, screen))
 
@@ -103,12 +97,6 @@ class NativePluginRegistry {
   val version: StateFlow<Int> = mutableVersion
 
   internal fun add(kind: ContributionKind, item: Contribution) {
-    if (kind == ContributionKind.QUICK_ACTIONS) {
-      val action = item as NativeQuickAction
-      require((action.screen != null) != (action.consolePath != null)) {
-        "quick action \"${action.id}\" opens a screen or a console path — exactly one"
-      }
-    }
     if (kind == ContributionKind.DEEP_LINKS) {
       val link = item as NativeDeepLink
       require(link.path.startsWith("/")) {

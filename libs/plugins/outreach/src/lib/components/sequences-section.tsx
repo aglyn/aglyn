@@ -364,6 +364,7 @@ export function OutreachSequenceList(props: {
                       {mailboxLabel(sequence)}
                     </Typography>
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={0.5}
                       sx={{ flexWrap: 'wrap', rowGap: 0.5 }}

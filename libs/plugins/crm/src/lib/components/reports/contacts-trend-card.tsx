@@ -112,7 +112,7 @@ export function ContactsTrendCard(props: ContactsTrendCardProps) {
       contentGutterY
     >
       <Stack spacing={2}>
-        <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+        <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
           <ReportStatTile
             label={'New contacts'}
             value={figures ? figures.current.toLocaleString() : null}

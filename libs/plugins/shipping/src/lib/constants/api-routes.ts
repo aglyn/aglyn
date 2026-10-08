@@ -55,4 +55,16 @@ export const SHIPPING_API_ROUTES = {
   webhookShippo: 'shipping/webhooks/shippo',
   /** `POST` — EasyPost's webhook; verified by its signature. */
   webhookEasypost: 'shipping/webhooks/easypost',
+  /** `GET ?hostId` — the services a workspace can connect its own account for, and its connections (AGL-3632). */
+  ownAccounts: 'shipping/own-accounts',
+  /** `POST` — connect the merchant's own Easyship, Sendcloud or ShipperHQ account. */
+  ownAccountsConnect: 'shipping/own-accounts/connect',
+  /** `POST` — disconnect one. */
+  ownAccountsDisconnect: 'shipping/own-accounts/disconnect',
+  /** `GET ?o&l&t` — a label file a provider serves only to its caller, behind the label's own token. */
+  labelFile: 'shipping/labels/file',
+  /** `POST ?org` — Easyship's webhook; verified by the workspace's webhook secret. */
+  webhookEasyship: 'shipping/webhooks/easyship',
+  /** `POST ?org` — Sendcloud's webhook; verified by the workspace's secret key. */
+  webhookSendcloud: 'shipping/webhooks/sendcloud',
 } as const

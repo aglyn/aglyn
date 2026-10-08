@@ -142,6 +142,12 @@ const Stack = forwardRef<HTMLDivElement, StackWithFlexProps>(
       // (AGL-2525). A stack IS the nav row on most sites; before this it
       // could only be wrapped in one.
       ...applySemanticElement(dropClearedProps(props) as Record<string, unknown>),
+      // A spacing stored as text — every AI-built page stores its props as
+      // text — is still a step on the spacing scale: MUI reads "2" as a CSS
+      // length and spaces nothing (AGL-3660).
+      ...(typeof props.spacing === 'string' && props.spacing.trim() && Number.isFinite(Number(props.spacing))
+        ? { spacing: Number(props.spacing) }
+        : {}),
       // After the spread, so the element picker cannot carry a `useFlexGap`
       // past it. `spacing` reaches children as `margin-left` unless this is
       // on, and those margins assume flex: on a grid they land INSIDE the

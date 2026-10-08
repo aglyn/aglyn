@@ -405,7 +405,12 @@ export function OrgDataTransferCard(props: { onImported?(): void }) {
       })}
       HeaderProps={{
         action: hasPackages && client ? (
-          <Stack direction="row" spacing={1}>
+          <Stack
+            direction="row"
+            spacing={1}
+            useFlexGap
+            sx={{ flexWrap: 'wrap' }}
+          >
             <Button size="small" onClick={() => setOpen({ kind: 'packageImport' })}>
               {'Import package'}
             </Button>
@@ -463,6 +468,7 @@ export function OrgDataTransferCard(props: { onImported?(): void }) {
                   <Button
                     size="small"
                     component={AppLink}
+                    sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
                     href={buildRoute(Route.HOST_ADMIN_BACKUP, { orgSlug, host: String(site['subdomain'] ?? site.$id) })}
                   >
                     {'Backup & restore'}

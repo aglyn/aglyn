@@ -18,11 +18,13 @@
 
 import { canvas, decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn'
 import {
+  ICON_VARIANT_CLOSE,
   ICON_VARIANT_DATE_TIME,
   ICON_VARIANT_MENU_DOWN,
   ICON_VARIANT_MODIFY_DELETE,
   ICON_VARIANT_MODIFY_EDIT,
 } from '@aglyn/shared-data-enums'
+import { mdiHistory } from '@aglyn/shared-data-mdi'
 import {
   HelpTip,
   MdiIcon,
@@ -750,9 +752,20 @@ export const BesignerVersionsComponent = observer(
           size="small"
           color="inherit"
           onClick={() => setOpen(true)}
+          aria-label={`Versions: ${label}`}
+          title={label}
+          startIcon={<MdiIcon path={mdiHistory.path} />}
           endIcon={<MdiIcon path={ICON_VARIANT_MENU_DOWN.path} />}
           sx={{
             maxWidth: 220,
+            // On a phone the clock alone stands for the version, and the page
+            // name beside it gets the room the id took.
+            minWidth: 0,
+            flexShrink: 0,
+            '& .MuiButton-startIcon': {
+              display: { xs: 'inherit', sm: 'none' },
+              mr: 0,
+            },
             // A version id is a CASE-SENSITIVE Firestore document id whose
             // alphabet contains both `I` and `l`, and this label falls back
             // to the raw id whenever a version has no display name. MUI's
@@ -765,7 +778,12 @@ export const BesignerVersionsComponent = observer(
             '& .MuiButton-endIcon': { marginLeft: 0 },
           }}
         >
-          <Typography variant="body2" component="span" noWrap>
+          <Typography
+            variant="body2"
+            component="span"
+            noWrap
+            sx={{ display: { xs: 'none', sm: 'block' } }}
+          >
             {label}
           </Typography>
         </Button>
@@ -781,6 +799,17 @@ export const BesignerVersionsComponent = observer(
               component="span"
               sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
             >
+              {/* Where the element picker keeps its close: on a phone the
+                  dialog fills the screen and the Close action is a scroll
+                  away, below every version. */}
+              <IconButton
+                edge="start"
+                color="inherit"
+                onClick={() => setOpen(false)}
+                aria-label="close"
+              >
+                <MdiIcon path={ICON_VARIANT_CLOSE.path} />
+              </IconButton>
               {'Versions'}
               <HelpTip
                 {...docsHelp('versionsAndPublishing', {

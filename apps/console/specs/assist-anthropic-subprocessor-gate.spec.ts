@@ -132,6 +132,22 @@ const MENTIONS_ONLY = new Map<string, string>([
     "The guided start's live plan eval (AGL-3596). It checks the key is SET before it runs, and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter above, and what it sends is ten fixed sample briefs written in the spec, never a customer's content. CI never sets the switch, so CI never calls the provider.",
   ],
   [
+    'libs/plugins/ai/src/lib/jobs/ai-job-page-sections-live.spec.ts',
+    "The guided start's live page-sections eval (AGL-3596). Like the live plan eval above, it checks the key is SET and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter, and what it sends is the fixed sample briefs written in the spec, never a customer's content. CI never sets the switch, so CI never calls the provider.",
+  ],
+  [
+    'libs/plugins/ai/src/lib/jobs/ai-job-layout-language-live.spec.ts',
+    "The layout language's live eval (AGL-3660). Like the live evals above, it checks the key is SET and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter, and what it sends is the fixed sample briefs written in the spec, never a customer's content. CI never sets the switch, so CI never calls the provider.",
+  ],
+  [
+    'tools/scripts/lib/emulated-env.mjs',
+    "The local emulator stack's environment builder (AGL-3596). It names the key only to BLANK it for an emulated console unless a developer asks for live AI on their own machine, in which case it passes the developer's own key through unchanged. It reads no customer data and is never part of a deployment.",
+  ],
+  [
+    'tools/scripts/lib/emulated-env.test.mjs',
+    "The spec of the environment builder above (AGL-3596): a placeholder key, asserting it is blanked by default and passed through only on request. It sends nothing anywhere.",
+  ],
+  [
     'libs/plugins/ai/src/lib/server/assist-chat-build-rung.spec.ts',
     "A spec of Assist's build offer (AGL-3616) that sets a placeholder key so the chat route believes a provider is configured. Every provider call in it is mocked; it sends nothing anywhere.",
   ],

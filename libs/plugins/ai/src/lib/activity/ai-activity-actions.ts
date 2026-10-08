@@ -256,9 +256,10 @@ export function registerAiActivityActions(): void {
         (prefix) => prefix !== 'ai.',
       ),
       // The staff cards opening on an org (AGL-2930) and on one account
-      // (AGL-2928). Neither writes these any more; the rows already in the
-      // log still classify as reads rather than changes.
-      staffAuditAccessActions: ['org.ai-viewed', 'user.ai-usage-viewed'],
+      // (AGL-2928), which no longer write these, so the rows already in the
+      // log still classify as reads; and a staff member reading what an org
+      // asked Aglyn AI (AGL-3675), which writes one per page.
+      staffAuditAccessActions: ['org.ai-viewed', 'user.ai-usage-viewed', 'org.ai-conversations-viewed'],
     },
     actions: AI_ACTIVITY_ACTION_LIST.map((key) => ({
       key,

@@ -194,6 +194,7 @@ export function MarketplaceHub(props: ConsolePluginPageProps) {
       <MarketplacePaymentsNotice />
       {hostList.length > 1 ? (
         <Stack
+          useFlexGap
           direction="row"
           spacing={1}
           sx={{ alignItems: 'center', flexWrap: 'wrap' }}

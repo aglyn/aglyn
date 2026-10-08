@@ -53,9 +53,11 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: (...args: unknown[]) => mockFetch(...args),
 }))
 
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import {
+  AI_SITE_ITEM_HINT,
+  AI_SITE_PAGE_HINT,
   AI_SITE_PLAN_HINT,
   aiJobPageCopy,
   aiSiteBuildCreditsLine,
@@ -224,6 +226,8 @@ describe('a guided start that put the site live (AGL-3596)', () => {
     await open(done(SITE_PUBLISH))
     expect(await screen.findByRole('heading', { name: 'Your site is live' })).toBeTruthy()
     expect(screen.queryByText(/drafts/)).toBeNull()
+    // The shared notice every new site goes live with, address and all (AGL-3663).
+    expect(screen.getByText('groomer.aglyn.app/')).toBeTruthy()
     const view = screen.getByRole('link', { name: 'View your site' })
     expect(view.getAttribute('href')).toBe('https://groomer.aglyn.app/')
     expect(view.getAttribute('target')).toBe('_blank')
@@ -420,6 +424,8 @@ describe('the detail a site job shows while it works', () => {
     const rows = aiSiteBuildRows(planning())
     expect(rows.map((row) => [row.label, row.state])).toEqual([
       ['Planning your pages', 'active'],
+      // The look is designed first (AGL-3660).
+      ['Designing your look', 'waiting'],
       ['Building the header and footer', 'waiting'],
       ['Writing your 2 pages', 'waiting'],
       ['Publishing your site', 'waiting'],
@@ -429,7 +435,7 @@ describe('the detail a site job shows while it works', () => {
   })
 
   it('fills the bar by finished stages, the active one counting half', () => {
-    expect(aiSiteBuildFraction(aiSiteBuildRows(planning()))).toBeCloseTo(0.5 / 4)
+    expect(aiSiteBuildFraction(aiSiteBuildRows(planning()))).toBeCloseTo(0.5 / 5)
     expect(aiSiteBuildFraction([{ id: 'plan', label: 'Planning your pages', state: 'active' }])).toBeNull()
   })
 
@@ -442,8 +448,198 @@ describe('the detail a site job shows while it works', () => {
 
   it('draws a filling bar, the hint and the sections on the page', async () => {
     await open(planning())
-    const bar = await screen.findByRole('progressbar', { name: /Building: 0 of 4 steps done/ })
-    expect(bar.getAttribute('aria-valuenow')).toBe(String(Math.round((0.5 / 4) * 100)))
+    const bar = await screen.findByRole('progressbar', { name: /Building: 0 of 5 steps done/ })
+    expect(bar.getAttribute('aria-valuenow')).toBe(String(Math.round((0.5 / 5) * 100)))
     expect(screen.getByText(AI_SITE_PLAN_HINT)).toBeTruthy()
+  })
+})
+
+/*
+ * The 2026-10-07 production guided start (AGL-3596): a layout, a form and two
+ * pages. Once the build wrote its item ledger, the item being written still
+ * read `pending`, so every row said Waiting and the page looked stalled; and
+ * between its plan and its build the job parked on the plan for the instant
+ * the machine took to confirm it, which the page drew as a failed site.
+ */
+describe('a guided start, snapshot by snapshot (AGL-3596)', () => {
+  const PROD_PLAN = {
+    ...PLAN,
+    create: [
+      { kind: 'layout', name: 'Main Layout', why: 'The frame.', duplicateOf: null, fields: [] },
+      { kind: 'form', name: 'Contact Request Form', why: 'Requests.', duplicateOf: null, fields: [] },
+    ],
+    screens: [PLAN.screens[0], { ...PLAN.screens[1], title: 'Contact', slug: '/contact' }],
+  }
+  const item = (slot: string, op: string, label: string, status: string, extra: Record<string, unknown> = {}) => ({
+    slot, op, label, status, attempt: 1, creditsSpent: status === 'succeeded' ? 40 : 0, creditsRefunded: 0, outputs: [], ...extra,
+  })
+  const inputs = { businessType: 'A dog groomer in Austin', audience: 'Local dog owners', starter: 'business', pages: 2, submissions: 'inbox', welcomeEmail: false }
+  const steps = (plan: string, generate: string) => [
+    { name: 'plan', status: plan, startedAt: plan === 'pending' ? null : '2026-10-07T17:11:06.000Z', endedAt: null, creditsSpent: plan === 'done' ? 12 : 0, error: null },
+    { name: 'generate', status: generate, startedAt: generate === 'pending' && plan !== 'done' ? null : '2026-10-07T17:12:08.000Z', endedAt: null, creditsSpent: 0, error: null },
+  ]
+  const at = () => new Date().toISOString()
+  const ledger = (home: string, contact = 'pending') => [
+    item('l', 'layout', 'Main Layout', 'succeeded', { settledAt: '2026-10-07T17:12:30.000Z' }),
+    item('f', 'form', 'Contact Request Form', 'succeeded', { settledAt: '2026-10-07T17:12:45.000Z' }),
+    item('p0', 'page', 'Home', home),
+    item('p1', 'page', 'Contact', contact),
+  ]
+  const base = { kind: 'site', siteInputs: inputs, autoConfirm: true, outputs: [], creditsSpent: 0 }
+  const SNAPSHOTS: Array<[string, AiJobSummary]> = [
+    ['queued', job({ ...base, status: 'queued', running: false, plan: null, steps: steps('pending', 'pending') } as never)],
+    ['planning', job({ ...base, status: 'running', plan: null, steps: steps('running', 'pending') } as never)],
+    [
+      'parked on its plan for the instant the machine confirms it',
+      job({ ...base, status: 'needs_review', running: false, plan: { ...PROD_PLAN, status: 'proposed' }, review: { reason: 'plan', message: 'The plan is ready.', findings: [] }, creditsSpent: 12, updatedAt: at(), steps: steps('done', 'pending') } as never),
+    ],
+    ['confirmed and queued', job({ ...base, status: 'queued', running: false, plan: PROD_PLAN, creditsSpent: 12, steps: steps('done', 'pending') } as never)],
+    ['building, no ledger yet', job({ ...base, status: 'running', plan: PROD_PLAN, creditsSpent: 12, steps: steps('done', 'running') } as never)],
+    ['between passes, the ledger written', job({ ...base, status: 'queued', running: false, plan: PROD_PLAN, creditsSpent: 97, steps: steps('done', 'pending'), items: ledger('pending') } as never)],
+    ['writing Home', job({ ...base, status: 'running', plan: PROD_PLAN, creditsSpent: 97, steps: steps('done', 'running'), items: ledger('pending') } as never)],
+    [
+      'Home failed, writing Contact',
+      job({ ...base, status: 'running', plan: PROD_PLAN, creditsSpent: 196, refundedCredits: 99, steps: steps('done', 'running'), items: ledger('failed').map((one) => (one.slot === 'p0' ? { ...one, creditsSpent: 99, creditsRefunded: 99, settledAt: '2026-10-07T17:13:05.000Z', failure: { ours: true, reason: 'step-failure', message: 'It could not be built this time.' } } : one)) } as never),
+    ],
+  ]
+
+  it('never reads a moving job as failed, stopped or unloadable', async () => {
+    let push: (next: AiJobSummary) => void = () => undefined
+    mockFollow.mockReset()
+    mockFollow.mockImplementation((_u: unknown, _o: string, _i: string, signal: AbortSignal, onJob: (next: AiJobSummary) => void) => {
+      push = onJob
+      return new Promise((resolve) => signal.addEventListener('abort', () => resolve('ok')))
+    })
+    render(<AiSiteBuildPage hostId="host-1" segments={['job-1']} basePath="/acme/hosts/groomer/ai-jobs" entitled />)
+    await waitFor(() => expect(mockFollow).toHaveBeenCalled())
+    for (const [name, snapshot] of SNAPSHOTS) {
+      act(() => push(snapshot))
+      const where = `at "${name}"`
+      expect([where, screen.getByRole('heading', { level: 1 }).textContent]).toEqual([where, 'Building your site'])
+      // Only a part that really failed is marked so, and it says the build goes on.
+      expect([where, screen.queryAllByRole('img', { name: 'Couldn’t be built' }).length]).toEqual([where, name.startsWith('Home failed') ? 1 : 0])
+      if (name.startsWith('Home failed')) expect(screen.getByText(/The rest of your site keeps building\./)).toBeTruthy()
+      expect([where, screen.queryByText(/could not be loaded|was not built|The plan is ready/)]).toEqual([where, null])
+      expect([where, screen.queryByRole('button', { name: /Confirm|Try again/ })]).toEqual([where, null])
+      // Something is always shown as in progress while the job moves.
+      expect([where, screen.getAllByLabelText('In progress').length]).toEqual([where, 1])
+    }
+  })
+
+  it('shows the page being written as building, with its hint, sections and time, once the ledger exists', () => {
+    const rows = aiSiteBuildRows(SNAPSHOTS[6][1])
+    expect(rows.map((row) => [row.label, row.state])).toEqual([
+      ['Planning your pages', 'done'],
+      ['Building the header and footer: Main Layout', 'done'],
+      ['Building the form: Contact Request Form', 'done'],
+      ['Writing page 1 of 2: Home', 'active'],
+      ['Writing page 2 of 2: Contact', 'waiting'],
+      ['Publishing your site', 'waiting'],
+    ])
+    expect(rows[3]).toMatchObject({ hint: AI_SITE_PAGE_HINT, startedAt: '2026-10-07T17:12:45.000Z', sections: ['hero', 'services'] })
+    // The plan keeps its credits once the items take over (prod 2026-10-07, job yazWNJr9k-).
+    expect(rows[0].credits).toBe(12)
+    // The next item counts from the failed one's settle.
+    const next = aiSiteBuildRows(SNAPSHOTS[7][1])
+    expect(next.map((row) => row.state)).toEqual(['done', 'done', 'done', 'failed', 'active', 'waiting'])
+    expect(next[4].startedAt).toBe('2026-10-07T17:13:05.000Z')
+    // A part that is not a page says it is being built.
+    const layout = aiSiteBuildRows(job({ ...SNAPSHOTS[6][1], items: ledger('pending').map((one) => (one.slot === 'f' ? { ...one, status: 'pending', settledAt: undefined } : one)) } as never))
+    expect(layout[2]).toMatchObject({ state: 'active', hint: AI_SITE_ITEM_HINT, startedAt: '2026-10-07T17:12:30.000Z' })
+  })
+
+  it('draws the active page’s hint and its sections as being written', async () => {
+    await open(SNAPSHOTS[6][1])
+    expect(await screen.findByText(AI_SITE_PAGE_HINT)).toBeTruthy()
+    expect(screen.getByText('Writing: hero, services')).toBeTruthy()
+    expect(screen.getAllByRole('img', { name: 'Waiting' })).toHaveLength(2)
+  })
+
+  it('reads a plan parked past the confirmation’s grace as what it is', () => {
+    const stale = job({ ...(SNAPSHOTS[2][1] as object), updatedAt: '2026-10-07T00:00:00.000Z' } as never)
+    expect(aiJobPageCopy(stale, 'Aglyn').heading).toBe('Your site was not built')
+    expect(aiJobPageCopy(SNAPSHOTS[2][1], 'Aglyn').heading).toBe('Building your site')
+    // A job that does not confirm its own plan is parked on it.
+    expect(aiJobPageCopy(job({ ...(SNAPSHOTS[2][1] as object), autoConfirm: undefined } as never), 'Aglyn').heading).toBe('Your site was not built')
+  })
+})
+
+/*
+ * The founder, 2026-10-07: the page never showed the contact form being
+ * built (AGL-3596). The guided start always plans one, so its row is there
+ * from the start, between the header and footer and the pages, and it is the
+ * active row while the form is built.
+ */
+describe('the contact form’s stage (AGL-3596)', () => {
+  const PLAN_WITH_FORM = {
+    ...PLAN,
+    create: [
+      { kind: 'layout', name: 'Main Layout', why: 'The frame.', duplicateOf: null, fields: [] },
+      { kind: 'form', name: 'Contact Request Form', why: 'Requests.', duplicateOf: null, fields: [] },
+    ],
+  }
+  const steps = [
+    { name: 'plan', status: 'done', startedAt: '2026-10-07T17:11:06.000Z', endedAt: null, creditsSpent: 12, error: null },
+    { name: 'generate', status: 'running', startedAt: '2026-10-07T17:12:08.000Z', endedAt: null, creditsSpent: 0, error: null },
+  ]
+  const ledger = (slot: string, op: string, label: string, status: string, extra: Record<string, unknown> = {}) => ({
+    slot, op, label, status, attempt: 1, creditsSpent: status === 'succeeded' ? 48 : 0, creditsRefunded: 0, outputs: [], ...extra,
+  })
+  /** The header and footer built; the form is next. */
+  const FORM_NEXT = () =>
+    job({
+      kind: 'site',
+      status: 'running',
+      plan: PLAN_WITH_FORM,
+      steps,
+      siteInputs: { businessType: 'A dog groomer in Austin', pages: 2, submissions: 'inbox' },
+      items: [
+        ledger('l', 'layout', 'Main Layout', 'succeeded', { settledAt: '2026-10-07T17:12:30.000Z' }),
+        ledger('f', 'form', 'Contact Request Form', 'pending'),
+        ledger('p0', 'page', 'Home', 'pending'),
+        ledger('p1', 'page', 'Book', 'pending'),
+      ],
+    } as never)
+
+  it('lists the form before the plan exists, in build order', () => {
+    const rows = aiSiteBuildRows(
+      job({
+        kind: 'site',
+        plan: null,
+        steps: [
+          { name: 'plan', status: 'running', startedAt: '2026-10-07T17:11:06.000Z', endedAt: null, creditsSpent: 0, error: null },
+          { name: 'generate', status: 'pending', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+        ],
+        siteInputs: { businessType: 'A dog groomer in Austin', pages: 2, submissions: 'lead' },
+      } as never),
+    )
+    expect(rows.map((row) => row.label)).toEqual([
+      'Planning your pages',
+      'Designing your look',
+      'Building the header and footer',
+      'Building your contact form',
+      'Writing your 2 pages',
+      'Publishing your site',
+    ])
+  })
+
+  it('makes the form the active row once the header and footer are built, counted from then', () => {
+    const rows = aiSiteBuildRows(FORM_NEXT())
+    expect(rows.map((row) => [row.label, row.state])).toEqual([
+      ['Planning your pages', 'done'],
+      ['Building the header and footer: Main Layout', 'done'],
+      ['Building the form: Contact Request Form', 'active'],
+      ['Writing page 1 of 2: Home', 'waiting'],
+      ['Writing page 2 of 2: Book', 'waiting'],
+      ['Publishing your site', 'waiting'],
+    ])
+    expect(rows[2]).toMatchObject({ hint: AI_SITE_ITEM_HINT, startedAt: '2026-10-07T17:12:30.000Z' })
+  })
+
+  it('draws the form’s row as in progress, with its hint', async () => {
+    await open(FORM_NEXT())
+    expect(await screen.findByText(AI_SITE_ITEM_HINT)).toBeTruthy()
+    const row = screen.getByText('Building the form: Contact Request Form').closest('li') as HTMLElement
+    expect(row.querySelector('[aria-label="In progress"]')).toBeTruthy()
   })
 })

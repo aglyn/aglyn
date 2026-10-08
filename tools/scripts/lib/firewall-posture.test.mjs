@@ -406,6 +406,17 @@ function healthyConsoleConfig() {
           { conditions: [{ type: 'path', op: 'eq', value: '/api/outreach/click' }] },
         ],
       },
+      {
+        name: 'Shipping connector bypass',
+        id: 'rule_shipping_connectors_console',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          { conditions: [{ type: 'path', op: 'pre', value: '/api/commerce/shipstation/' }] },
+          { conditions: [{ type: 'path', op: 'pre', value: '/api/commerce/shippingeasy/' }] },
+        ],
+      },
     ],
   }
 }
@@ -1305,4 +1316,17 @@ test('a rate-limit declaration that asserts less than it appears to is refused a
     validatePostureTable([{ ...pluginsExpected, rateLimitRules: [base] }]).join('\n'),
     /an 'unprotected' entry cannot declare `rateLimitRules`/,
   )
+})
+
+test('the shipping connector bypass needs both connectors, each by its own prefix (AGL-3633)', () => {
+  const config = healthyConsoleConfig()
+  const rule = ruleNamed(config, 'Shipping connector bypass')
+  rule.conditionGroup = rule.conditionGroup.filter(
+    (group) => group.conditions[0].value !== '/api/commerce/shippingeasy/',
+  )
+  assert.match(evalConsole(config).findings.join('\n'), /Shipping connector bypass/)
+
+  const widened = healthyConsoleConfig()
+  ruleNamed(widened, 'Shipping connector bypass').conditionGroup[0].conditions[0].value = '/api/commerce'
+  assert.match(evalConsole(widened).findings.join('\n'), /Shipping connector bypass/)
 })

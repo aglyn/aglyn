@@ -179,7 +179,7 @@ export function ClosedDealsCard(props: ClosedDealsCardProps) {
       contentGutterY
     >
       <Stack spacing={2}>
-        <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+        <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
           <ReportStatTile
             label={'Won'}
             value={figures ? figures.won.count.toLocaleString() : null}

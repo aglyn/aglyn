@@ -109,6 +109,8 @@ import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 import { aiPlanSiteLines, aiSitePlanCapabilities, createAiJobPlanStep } from './ai-job-plan-step'
+import { aiRunSiteLook } from './ai-job-site-look'
+import { AI_SITE_LOOK_TOOL_NAME } from '../model/ai-site-look'
 
 // The reader's pure halves, past the mock that keeps its Admin SDK out.
 const { aiStarterHomeCandidate, aiStarterHomeUntouched } = jest.requireActual(
@@ -326,8 +328,19 @@ describe('a Free workspace’s site start is one or two pages', () => {
     expect(aiSitePlanCapabilities({ kind: 'site', inputs: { pages: 9 } }, FREE)?.freeSitePages).toBe(2)
     expect(capped?.create['theme-change'].allowed).toBe(false)
     // A paid workspace's and a page job's capabilities pass through.
-    expect(aiSitePlanCapabilities({ kind: 'site', inputs: { pages: 5 } }, PAID)).toBe(PAID)
+    // A paid site start plans no theme change either: its look is a unit of its own (AGL-3660).
+    expect(aiSitePlanCapabilities({ kind: 'site', inputs: { pages: 5 } }, PAID)?.create['theme-change'].allowed).toBe(false)
     expect(aiSitePlanCapabilities({ kind: 'page', inputs: {} }, FREE)).toBe(FREE)
+  })
+
+  // A site start builds no component, so a paid plan draws its repeated items
+  // in their sections, as a Free one does (AGL-3660): held to rule 1, every
+  // paid plan in the live business eval was refused.
+  it('plans a paid site start with no reusable component, as it builds none', () => {
+    const paid = aiSitePlanCapabilities({ kind: 'site', inputs: { pages: 5 } }, PAID)
+    expect(paid?.reusableComponents).toBe(false)
+    expect(paid?.create.component.allowed).toBe(false)
+    expect(aiSitePlanCapabilities({ kind: 'site', inputs: { pages: 2 } }, FREE)?.reusableComponents).toBe(false)
   })
 
   it('refuses a Free site plan past its page cap on the Free wall, naming the cap', () => {
@@ -355,7 +368,7 @@ describe('a Free workspace’s site start is one or two pages', () => {
     const turn = String(first.messages[0].content)
     expect(turn).toContain('Plan this site\'s home page at / and it replaces this one.')
     expect(turn).toContain('This is a Free workspace: plan at most 2 pages — the home page at / and the one page the brief most needs, such as services, booking or contact')
-    expect(turn).toContain('- theme change: no, because a Free workspace\'s site start keeps the theme the site was created with')
+    expect(turn).toContain('- theme change: no, because a site start designs its own look before its pages')
     expect(String(second.messages.at(-1)?.content)).toContain("a Free workspace's site start builds at most 2")
     expect((outcome.plan as AiJobPlan).screens.map((screen) => screen.slug)).toEqual(['/', '/book'])
     expect(outcome.uncredited).toBeUndefined()
@@ -370,7 +383,7 @@ describe('a Free workspace’s site start is one or two pages', () => {
     mockRunAiRequest.mockResolvedValueOnce(toolAnswer(five))
     const outcome = await planStepFor(PAID_ORG, PAID, siteJob({ pages: 5 }))
     const [request] = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
-    expect(request.model).toBe('claude-sonnet-5')
+    expect(request.model).toBe('claude-sonnet-5-5')
     expect(request.thinking).toBe('off')
     expect(request.maxTokens).toBe(AI_SITE_PLAN_MAX_TOKENS.paid)
     expect(String(request.messages[0].content)).not.toContain('Free workspace')
@@ -437,6 +450,36 @@ function planCredits(requests: SentRequest[]): number {
   return assistCreditsFromUsd(total)
 }
 
+/**
+ * The look's one request at its worst (AGL-3660): its answer at its ceiling,
+ * writing its cached prefix. It is never re-asked — an answer it cannot use
+ * leaves the kind and the seed to choose — so one exchange is all it spends.
+ */
+async function lookCredits(): Promise<number> {
+  mockRunAiRequest.mockReset()
+  mockRunAiRequest.mockResolvedValueOnce({ ...toolAnswer({}), toolUse: [{ name: AI_SITE_LOOK_TOOL_NAME, input: {} }] })
+  const job = { ...siteJob(), kind: 'theme', inputs: { ...siteJob().inputs, originJobId: 'job-site' } } as AiJob
+  await aiRunSiteLook(
+    { job, stepIndex: 0, now: NOW, firestore: aiEvalMemoryFirestore({}).firestore, org: FREE_ORG },
+    job,
+    { save: async () => ({ write: 'applied', baseName: 'Minimal' }) },
+  )
+  const [request] = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
+  const { cached, uncached } = spans(request)
+  const derived = assistCreditsFromUsd(
+    usd(
+      { inputTokens: realTokens(uncached), outputTokens: request.maxTokens, cacheReadTokens: 0, cacheWriteTokens: realTokens(cached) },
+      request.model,
+    ),
+  )
+  // Never under what a real look spent: the live eval's look that wrote the
+  // cache came to 7 credits on 2026-10-07; the rest read it, at 4.
+  return Math.max(derived, MEASURED_SITE_LOOK_CREDITS)
+}
+
+/** The dearest look the live eval measured (AGL-3660). */
+const MEASURED_SITE_LOOK_CREDITS = 7
+
 async function freeSiteRequests(): Promise<SentRequest[]> {
   mockRunAiRequest.mockReset()
   mockRunAiRequest.mockResolvedValueOnce(toolAnswer(THREE_PAGES)).mockResolvedValueOnce(toolAnswer(TWO_PAGES))
@@ -453,7 +496,7 @@ describe('a Free two-page site fits the Free taste, end to end', () => {
     const requests = await freeSiteRequests()
     expect(requests).toHaveLength(2)
     const plan = planCredits(requests)
-    const derived: AiFreeSiteWorstCase = { ...AI_FREE_PAGE_WORST_CASE_CREDITS, plan }
+    const derived: AiFreeSiteWorstCase = { ...AI_FREE_PAGE_WORST_CASE_CREDITS, plan, look: await lookCredits() }
     expect(derived).toEqual(AI_FREE_SITE_WORST_CASE_CREDITS)
     // The build's exchanges are the Free page's, which its own proof holds.
     expect({
@@ -476,6 +519,7 @@ describe('a Free two-page site fits the Free taste, end to end', () => {
       const sections = aiFreeSiteSectionsWithin({ layouts, pages }, FREE_AI_TASTE_CREDITS_PER_MONTH)
       const total =
         credits.plan +
+        credits.look +
         layouts * credits.layout +
         pages * (credits.listing + credits.firstSection) +
         (sections - pages) * credits.laterSection
@@ -485,7 +529,10 @@ describe('a Free two-page site fits the Free taste, end to end', () => {
     }
     const sections = aiFreeSiteSectionsWithin({ layouts: 0, pages }, FREE_AI_TASTE_CREDITS_PER_MONTH)
     const total =
-      credits.plan + pages * (credits.listing + credits.firstSection) + (sections - pages) * credits.laterSection
+      credits.plan +
+      credits.look +
+      pages * (credits.listing + credits.firstSection) +
+      (sections - pages) * credits.laterSection
     const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
     expect([credits.plan, notes.includes(`a Free site's plan comes to at most ${credits.plan} credits`)]).toEqual([credits.plan, true])
     expect([sections, total, notes.includes(`fits ${sections} sections across its two pages, at most ${total} credits`)]).toEqual([
@@ -497,7 +544,7 @@ describe('a Free two-page site fits the Free taste, end to end', () => {
 
   it('quotes the dialog an estimate from the same figures, inside the wall', () => {
     const credits = AI_FREE_SITE_WORST_CASE_CREDITS
-    expect(aiFreeSiteCreditEstimate(2)).toBe(credits.plan + 2 * (credits.listing + credits.firstSection) + 2 * 2 * credits.laterSection)
+    expect(aiFreeSiteCreditEstimate(2)).toBe(credits.plan + credits.look + 2 * (credits.listing + credits.firstSection) + 2 * 2 * credits.laterSection)
     expect(aiFreeSiteCreditEstimate(2)).toBeLessThanOrEqual(FREE_AI_TASTE_CREDITS_PER_MONTH)
     expect(aiFreeSiteCreditEstimate(1)).toBeLessThan(aiFreeSiteCreditEstimate(2))
   })

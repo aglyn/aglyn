@@ -302,7 +302,12 @@ export function ConsentGroupChangeProgress(props: ConsentGroupChangeProgressProp
           <LinearProgress aria-label="Consent group change in progress" />
         ) : null}
         {canDrive && (stalled || halted || phase === 'carry') ? (
-          <Stack direction="row" spacing={1}>
+          <Stack
+            direction="row"
+            spacing={1}
+            useFlexGap
+            sx={{ flexWrap: 'wrap' }}
+          >
             {stalled || halted ? (
               <Button size="small" variant="contained" onClick={retry} disabled={busy}>
                 {'Retry now'}

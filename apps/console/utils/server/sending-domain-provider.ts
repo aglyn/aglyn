@@ -266,15 +266,39 @@ interface ProviderRecord {
 }
 
 /**
- * Pull the selector and the key out of the DKIM record a provider returned.
+ * A provider record's name as a host relative to the sending domain.
  *
- * Both come from the record; neither is derived. The name is returned either
- * relative (`resend._domainkey`) or absolute
- * (`resend._domainkey.acme.com`) depending on the provider, so the domain
- * suffix is trimmed and what remains must actually end in `._domainkey`. A
- * name we cannot read that way is a record we do not understand, and the
- * caller fails rather than guessing at a selector.
+ * A provider writes the name one of three ways, and all three name the same
+ * record:
+ *
+ *   absolute          `resend._domainkey.mail.acme.com`
+ *   domain-relative   `resend._domainkey`
+ *   zone-relative     `resend._domainkey.mail`
+ *
+ * The third is what Resend returns for a SUBDOMAIN: the name is relative to
+ * the registrable zone the customer edits (`acme.com`), so the domain's own
+ * leading labels are left on the end. Without trimming them, every sending
+ * domain that is a subdomain read as a record we do not understand.
+ *
+ * The leading labels are trimmed longest first, and only whole labels, so a
+ * host is never cut mid-label.
  */
+function hostWithinDomain(name: string, domain: string): string {
+  const host = name.trim().toLowerCase().replace(/\.$/, '')
+  const normalized = normalizeSendingDomain(domain)
+  if (host.endsWith(`.${normalized}`)) {
+    return host.slice(0, -(normalized.length + 1))
+  }
+  const labels = normalized.split('.')
+  for (let count = labels.length - 1; count > 0; count--) {
+    const leading = labels.slice(0, count).join('.')
+    if (host.endsWith(`.${leading}`)) {
+      return host.slice(0, -(leading.length + 1))
+    }
+  }
+  return host
+}
+
 /**
  * The CNAME target the provider redirects tracked clicks through.
  *
@@ -289,19 +313,28 @@ export function readIssuedTrackingTarget(
   records: unknown,
 ): string | null {
   const list = Array.isArray(records) ? (records as ProviderRecord[]) : []
-  const suffix = `.${normalizeSendingDomain(domain)}`
   const entry = list.find((item) => {
     if (String(item?.type ?? '').toUpperCase() !== 'CNAME') return false
     const label = String(item?.record ?? '').toUpperCase()
     if (label === 'TRACKING') return true
-    const name = String(item?.name ?? '').trim().toLowerCase()
-    const host = name.endsWith(suffix) ? name.slice(0, -suffix.length) : name
-    return host === SENDING_TRACKING_SUBDOMAIN
+    return (
+      hostWithinDomain(String(item?.name ?? ''), domain) ===
+      SENDING_TRACKING_SUBDOMAIN
+    )
   })
   const value = String(entry?.value ?? '').trim().replace(/\.$/, '')
   return value || null
 }
 
+/**
+ * Pull the selector and the key out of the DKIM record a provider returned.
+ *
+ * Both come from the record; neither is derived. The name is reduced to a
+ * host within the domain ({@link hostWithinDomain}), and what remains must
+ * actually end in `._domainkey`. A name we cannot read that way is a record
+ * we do not understand, and the caller fails rather than guessing at a
+ * selector.
+ */
 export function readIssuedDkim(
   domain: string,
   records: unknown,
@@ -314,14 +347,7 @@ export function readIssuedDkim(
   )
   if (!entry) return null
 
-  const rawName = String(entry.name ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/\.$/, '')
-  const suffix = `.${normalizeSendingDomain(domain)}`
-  const host = rawName.endsWith(suffix)
-    ? rawName.slice(0, -suffix.length)
-    : rawName
+  const host = hostWithinDomain(String(entry.name ?? ''), domain)
   const match = /^(.+)\._domainkey$/.exec(host)
   if (!match) return null
 

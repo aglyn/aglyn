@@ -149,7 +149,7 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
   return (
     <Drawer anchor="right" open={Boolean(member)} onClose={onClose}>
       {member ? (
-        <Stack spacing={2} sx={{ width: 400, p: 3 }}>
+        <Stack spacing={2} sx={{ width: 400, maxWidth: '100vw', p: 3 }}>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="h6" noWrap sx={{ flex: 1 }}>
               {member.displayName || member.name || email || memberId}

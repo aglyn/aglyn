@@ -7,6 +7,11 @@ import SwiftUI
 /// "Aglyn": manages the workspace on iPhone, iPad and Mac.
 @main
 struct AglynApp: App {
+  #if os(iOS)
+    @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
+  #elseif os(macOS)
+    @NSApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
+  #endif
   @State private var model = AppModel(app: .aglyn)
 
   init() {

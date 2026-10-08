@@ -254,3 +254,39 @@ describe('connect, show, rotate, disconnect', () => {
     expect(connection()).toBeUndefined()
   })
 })
+
+describe('the ShippingEasy card through the same door (AGL-3633)', () => {
+  it('lets an editor read the status and only an admin change it', async () => {
+    const { res, result } = respond()
+    await shippingConnectorsHandler(
+      {
+        method: 'GET',
+        query: { hostId: HOST, connector: 'shippingeasy' },
+        body: undefined,
+        headers: { authorization: 'Bearer editor' },
+        cookies: {},
+        socket: {},
+      } as never,
+      res,
+    )
+    expect(result.status).toBe(200)
+    expect(result.body).toEqual({ available: true, connected: false })
+
+    const editor = await post('editor', { connector: 'shippingeasy', action: 'sync' })
+    expect(editor.status).toBe(403)
+    expect(editor.body.error).toMatch(/ShippingEasy/)
+    const author = await post('author', { connector: 'shippingeasy', action: 'disconnect' })
+    expect(author.status).toBe(403)
+  })
+
+  it('refuses an unknown connector and an action the connector does not have', async () => {
+    expect((await post('admin', { connector: 'shipbob', action: 'connect' })).status).toBe(400)
+    expect((await post('admin', { connector: 'shippingeasy', action: 'reveal' })).status).toBe(400)
+    expect((await post('admin', { connector: 'shipstation', action: 'sync' })).status).toBe(400)
+  })
+
+  it('refuses a site whose plan has no commerce', async () => {
+    mockEntitled = false
+    expect((await post('admin', { connector: 'shippingeasy', action: 'disconnect' })).status).toBe(403)
+  })
+})

@@ -240,6 +240,7 @@ export function TimelineEntry(props: TimelineEntryProps) {
       <Stack spacing={0.5} sx={{ flex: 1, minWidth: 0 }}>
         {chips ? (
           <Stack
+            useFlexGap
             direction="row"
             spacing={1}
             sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}

@@ -16,6 +16,7 @@
  */
 
 import { pluginShipmentRecords } from '@aglyn/aglyn/plugin-manager/plugin-shipment-records'
+import { timingSafeEqual } from 'node:crypto'
 import {
   firebaseAdmin,
   memberHasOrgPermission,
@@ -23,9 +24,16 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { SHIPPING_COLLECTIONS } from '../constants/bundle-common'
 import { LABEL_MARKUP_PCT } from '../model/label-billing'
+import { isOwnAccountKind, OWN_ACCOUNT_SERVICES } from '../model/own-accounts'
 import { serviceCatalog } from '../model/service-catalog'
 import { normalizeShippingAddress } from '../model/shipping-settings'
-import type { ConnectableCarrier, RateBadge } from '../providers/types'
+import type {
+  ConnectableCarrier,
+  ConnectableCarrierForm,
+  ProviderAccount,
+  RateBadge,
+  ShippingProvider,
+} from '../providers/types'
 import { ShippingProviderError } from '../providers/types'
 import {
   ensureShippingAccount,
@@ -35,13 +43,23 @@ import {
   writeDebitConsent,
 } from './account-store'
 import { readAddressCheck, writeAddressCheck, type StoredAddressCheck } from './address-checks'
-import { readShippingConfig } from './config'
+import { isShippingSurfaceConfigured, readOwnAccountKinds, readShippingConfig } from './config'
+import {
+  connectOwnAccount,
+  disconnectOwnAccount,
+  listOwnAccounts,
+  OwnAccountError,
+  ownAccountView,
+  resolveOrgShippingConfig,
+} from './own-accounts'
 import { isDocumentId, orgRef } from './db'
 import {
+  assertVoidableHere,
   buyLabel,
   forgetCarrierAccounts,
   listRecordLabels,
   rateRecord,
+  readLabel,
   readRecord,
   ShippingFlowError,
   voidLabel,
@@ -49,7 +67,7 @@ import {
   type QuotedRate,
   type StoredLabel,
 } from './labels'
-import { shippingError, shippingGate, shippingJson } from './route-gate'
+import { shippingError, shippingGate, shippingJson, shippingMemberGate } from './route-gate'
 import { readHostSettings, resolveShipFrom, writeHostSettings } from './settings-store'
 import { resolveShippingSite } from './site-context'
 
@@ -135,14 +153,30 @@ function publicRate(rate: QuotedRate) {
   }
 }
 
+/**
+ * Whether labels and carrier rates exist for a site: `available` when the
+ * workspace has a platform to ship through — the deployment's, or its own
+ * Easyship or Sendcloud account (AGL-3632) — and `ownAccounts` when the
+ * deployment offers merchant-account services to connect, which the card
+ * that connects them draws on even before there is a platform.
+ */
 export const availabilityRoute: Handler = methods(['GET'], async (request) => {
-  const configured = readShippingConfig()
   const hostId = new URL(request.url).searchParams.get('hostId') ?? ''
-  if (!configured.configured || !isDocumentId(hostId)) return shippingJson({ available: false })
+  if (!isShippingSurfaceConfigured() || !isDocumentId(hostId)) return shippingJson({ available: false })
   const site = await resolveShippingSite(hostId)
+  if (!site) return shippingJson({ available: false })
+  const offered = readOwnAccountKinds()
+  const configured = await resolveOrgShippingConfig(site.orgId)
   return shippingJson({
-    available: Boolean(site),
-    ...(site ? { provider: configured.config.provider.displayName, testMode: configured.config.testMode } : {}),
+    available: configured.configured,
+    ...(configured.configured
+      ? {
+          provider: configured.config.provider.displayName,
+          testMode: configured.config.testMode,
+          ...(configured.config.ownAccount ? { ownAccount: true } : {}),
+        }
+      : {}),
+    ...(offered.length ? { ownAccounts: true, platform: readShippingConfig().configured } : {}),
   })
 })
 
@@ -187,6 +221,9 @@ export const accountRoute: Handler = methods(['GET', 'POST'], async (request) =>
     ])
     return shippingJson({
       opened: Boolean(account),
+      // The merchant's own Easyship or Sendcloud account bills them itself:
+      // there is nothing to consent to here (AGL-3632).
+      ...(config.ownAccount ? { ownAccount: true } : {}),
       provider: config.provider.displayName,
       testMode: config.testMode,
       consent: consent ? { acceptedAtMs: consent.acceptedAtMs } : null,
@@ -212,37 +249,75 @@ export const carrierAccountsRoute: Handler = methods(['GET'], async (request) =>
   if (gate instanceof Response) return gate
   try {
     const account = await openedAccount(gate)
-    const accounts = await gate.config.provider.listCarrierAccounts(account)
+    const provider = gate.config.provider
+    const [accounts, connectable] = await Promise.all([
+      provider.listCarrierAccounts(account),
+      provider.connectCarrierAccount ? connectableFor(provider, account) : Promise.resolve([]),
+    ])
     return shippingJson({
       accounts,
-      canConnect: Boolean(gate.config.provider.connectCarrierAccount),
+      canConnect: connectable.length > 0,
+      canToggle: Boolean(provider.setCarrierAccountActive),
+      connectable,
     })
   } catch (error) {
     return flowRefusal(error)
   }
 })
 
-const CONNECTABLE: readonly ConnectableCarrier[] = ['ups', 'fedex']
+/**
+ * The carriers a merchant may connect on the provider, and how: the
+ * provider's own list — Shippo's two account-holder forms, EasyPost's carrier
+ * types (AGL-3632). A provider that cannot list them answers none rather
+ * than failing the card.
+ */
+async function connectableFor(
+  provider: ShippingProvider,
+  account: ProviderAccount,
+): Promise<ConnectableCarrierForm[]> {
+  if (!provider.connectableCarriers) return []
+  return provider.connectableCarriers(account).catch((error) => {
+    console.warn('[shipping] connectable carriers unavailable', provider.id, (error as Error)?.message)
+    return []
+  })
+}
 
 export const carrierAccountsConnectRoute: Handler = methods(['POST'], async (request) => {
   const gate = await shippingGate(request, { role: 'admin', orgPermission: 'billing.manage' })
   if (gate instanceof Response) return gate
   const { body, config } = gate
-  const carrier = String(body['carrier'] ?? '') as ConnectableCarrier
-  const accountNumber = String(body['accountNumber'] ?? '').trim().slice(0, 40)
-  const contact = (body['contact'] ?? {}) as Record<string, unknown>
-  const address = normalizeShippingAddress(body['address'])
-  if (!CONNECTABLE.includes(carrier) || !accountNumber || !address) {
-    return shippingError(400, 'Name the carrier, the account number and its billing address.')
-  }
   if (!config.provider.connectCarrierAccount) {
     return shippingError(409, `${config.provider.displayName} does not connect carrier accounts here.`)
   }
+  const carrier = String(body['carrier'] ?? '').slice(0, 80) as ConnectableCarrier
+  const accountNumber = String(body['accountNumber'] ?? '').trim().slice(0, 40)
+  const contact = (body['contact'] ?? {}) as Record<string, unknown>
+  const address = normalizeShippingAddress(body['address'])
   const returnTo = String(body['returnTo'] ?? '')
   try {
     const account = await openedAccount(gate)
+    const form = (await connectableFor(config.provider, account)).find((one) => one.carrier === carrier)
+    if (!form) return shippingError(400, 'That carrier cannot be connected here.')
+    let credentials: Record<string, string> | undefined
+    if (form.flow === 'credentials') {
+      const given = (body['credentials'] ?? {}) as Record<string, unknown>
+      credentials = {}
+      for (const field of form.fields) {
+        const value = String(given[field.key] ?? '').trim().slice(0, 400)
+        if (value) credentials[field.key] = value
+      }
+      if (!Object.keys(credentials).length) {
+        return shippingError(400, `Enter the ${form.label} account’s credentials.`)
+      }
+    } else if (!accountNumber || !address) {
+      return shippingError(400, 'Name the carrier, the account number and its billing address.')
+    }
     const connected = await config.provider.connectCarrierAccount(account, {
       carrier,
+      ...(credentials ? { credentials } : {}),
+      ...(typeof body['description'] === 'string' && body['description'].trim()
+        ? { description: body['description'].trim().slice(0, 100) }
+        : {}),
       accountNumber,
       contact: {
         name: String(contact['name'] ?? '').slice(0, 80),
@@ -250,7 +325,7 @@ export const carrierAccountsConnectRoute: Handler = methods(['POST'], async (req
         email: String(contact['email'] ?? gate.actor.email).slice(0, 120),
         phone: String(contact['phone'] ?? '').slice(0, 40),
       },
-      address,
+      address: address ?? { country: 'US' },
       ...(/^https:\/\//.test(returnTo) ? { redirectUri: returnTo } : {}),
       state: gate.actor.hostId,
     })
@@ -383,6 +458,10 @@ export const labelsVoidRoute: Handler = methods(['POST'], async (request) => {
   const labelId = String(gate.body['labelId'] ?? '')
   if (!isDocumentId(labelId)) return shippingError(400, 'Missing labelId')
   try {
+    // Refused before any account is opened: a label bought elsewhere is
+    // not this platform's to void.
+    const stored = await readLabel(gate.actor.orgId, labelId)
+    if (stored && stored.hostId === gate.actor.hostId) assertVoidableHere(stored, gate.config)
     const account = await openedAccount(gate)
     const label = await voidLabel(gate.actor, gate.config, labelId, account)
     return shippingJson({ label: publicLabel(label) })
@@ -586,5 +665,134 @@ export const spendRoute: Handler = methods(['GET'], async (request) => {
     return shippingJson({ available: true, months: [...totals.values()], markupPct: LABEL_MARKUP_PCT })
   } catch (error) {
     return flowRefusal(error)
+  }
+})
+
+/**
+ * THE MERCHANT'S OWN ACCOUNTS (AGL-3632): the services this deployment
+ * offers to connect, and the workspace's connections, never a credential.
+ * Reading takes a site admin; connecting and disconnecting change how the
+ * whole workspace ships and who bills it, so they take the workspace's
+ * `billing.manage` as well, like a carrier account does.
+ */
+export const ownAccountsRoute: Handler = methods(['GET'], async (request) => {
+  const gate = await shippingMemberGate(request, { role: 'admin' })
+  if (gate instanceof Response) return gate
+  try {
+    const offered = readOwnAccountKinds()
+    const connections = (await listOwnAccounts(gate.actor.orgId)).filter((one) => offered.includes(one.kind))
+    return shippingJson({
+      services: offered.map((kind) => OWN_ACCOUNT_SERVICES[kind]),
+      connections: connections.map(ownAccountView),
+    })
+  } catch (error) {
+    return flowRefusal(error)
+  }
+})
+
+function ownAccountRefusal(error: unknown): Response {
+  if (error instanceof OwnAccountError) return shippingError(error.status, error.message)
+  if (error instanceof ShippingProviderError) {
+    // The service's own words for credentials it refused are the merchant's
+    // to act on; anything else is the service being unreachable.
+    if (error.status === 400 || error.status === 401 || error.status === 403 || error.status === 422) {
+      return shippingError(400, error.detail || 'The service did not accept those credentials.')
+    }
+    return shippingError(502, error.detail || error.message)
+  }
+  return flowRefusal(error)
+}
+
+export const ownAccountsConnectRoute: Handler = methods(['POST'], async (request) => {
+  const gate = await shippingMemberGate(request, { role: 'admin', orgPermission: 'billing.manage' })
+  if (gate instanceof Response) return gate
+  const kind = gate.body['kind']
+  if (!isOwnAccountKind(kind)) return shippingError(400, 'Name the service to connect.')
+  const values = gate.body['values']
+  try {
+    const connection = await connectOwnAccount({
+      orgId: gate.actor.orgId,
+      uid: gate.actor.uid,
+      kind,
+      values: values && typeof values === 'object' && !Array.isArray(values) ? (values as Record<string, unknown>) : {},
+    })
+    forgetCarrierAccounts(gate.actor.orgId)
+    return shippingJson({ connection })
+  } catch (error) {
+    return ownAccountRefusal(error)
+  }
+})
+
+export const ownAccountsDisconnectRoute: Handler = methods(['POST'], async (request) => {
+  const gate = await shippingMemberGate(request, { role: 'admin', orgPermission: 'billing.manage' })
+  if (gate instanceof Response) return gate
+  const kind = gate.body['kind']
+  if (!isOwnAccountKind(kind)) return shippingError(400, 'Name the service to disconnect.')
+  try {
+    await disconnectOwnAccount(gate.actor.orgId, kind)
+    forgetCarrierAccounts(gate.actor.orgId)
+    return shippingJson({ ok: true })
+  } catch (error) {
+    return ownAccountRefusal(error)
+  }
+})
+
+function tokensMatch(given: string, expected: string): boolean {
+  const a = Buffer.from(given, 'utf8')
+  const b = Buffer.from(expected, 'utf8')
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
+/**
+ * A LABEL FILE the provider serves only to its own caller (AGL-3632,
+ * Sendcloud's documents and Easyship's base64 labels). A machine route: the
+ * address is the capability — the workspace, the label and a random token
+ * only that label carries — so a label prints from the console, a packing
+ * slip and a return email alike, as a Shippo label's public address does.
+ * The file is fetched from the provider with the workspace's own account on
+ * every request and never stored.
+ */
+export const labelFileRoute: Handler = methods(['GET'], async (request) => {
+  const params = new URL(request.url).searchParams
+  const orgId = params.get('o') ?? ''
+  const labelId = params.get('l') ?? ''
+  const token = params.get('t') ?? ''
+  if (!isShippingSurfaceConfigured() || !isDocumentId(orgId) || !isDocumentId(labelId) || !token) {
+    return shippingError(404, 'Not found')
+  }
+  try {
+    const label = (await orgRef(orgId).collection(SHIPPING_COLLECTIONS.labels).doc(labelId).get()).data() as
+      | StoredLabel
+      | undefined
+    if (!label?.fileToken || !label.providerDocumentRef || !tokensMatch(token, label.fileToken)) {
+      return shippingError(404, 'Not found')
+    }
+    const configured = await resolveOrgShippingConfig(orgId)
+    if (
+      !configured.configured ||
+      configured.config.providerId !== label.providerId ||
+      !configured.config.ownAccount ||
+      !configured.config.provider.labelDocument
+    ) {
+      return shippingError(410, 'This label’s shipping account is no longer connected.')
+    }
+    const file = await configured.config.provider.labelDocument(configured.config.ownAccount, {
+      documentRef: label.providerDocumentRef,
+      shipmentId: label.providerLabelId || label.shipmentId,
+    })
+    const extension = file.contentType.includes('zpl') ? 'zpl' : file.contentType.includes('png') ? 'png' : 'pdf'
+    return new Response(file.body as unknown as BodyInit, {
+      status: 200,
+      headers: {
+        'Content-Type': file.contentType,
+        'Content-Disposition': `inline; filename="label-${String(label.trackingNumber ?? labelId).replace(/[^A-Za-z0-9_-]/g, '')}.${extension}"`,
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    })
+  } catch (error) {
+    if (error instanceof ShippingProviderError) return shippingError(502, error.detail || error.message)
+    console.error('[shipping] label file failed', error)
+    return shippingError(500, 'Something went wrong. Try again.')
   }
 })

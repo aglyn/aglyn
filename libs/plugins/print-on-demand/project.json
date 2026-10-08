@@ -1,0 +1,30 @@
+{
+  "name": "plugins-print-on-demand",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/plugins/print-on-demand/src",
+  "projectType": "library",
+  "tags": ["aglyn:addons", "scope:plugin", "type:feature"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/plugins/print-on-demand",
+        "main": "libs/plugins/print-on-demand/src/index.ts",
+        "tsConfig": "libs/plugins/print-on-demand/tsconfig.lib.json",
+        "assets": ["libs/plugins/print-on-demand/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/print-on-demand"],
+      "options": {
+        "jestConfig": "libs/plugins/print-on-demand/jest.config.ts"
+      }
+    }
+  }
+}

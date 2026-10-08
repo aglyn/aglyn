@@ -26,6 +26,9 @@ import { generatePresetId } from '../utils/generate-preset-id'
 // Component ids are persisted in layout documents; never rename.
 export const ID: Aglyn.ComponentId = 'layoutSlot'
 
+// The component and its preset show the same drawer glyph.
+const SLOT_ICON = { path: mdiPageLayoutBody.path, sx: { color: '#9c27b0' } }
+
 /**
  * Elements the slot may render as (AGL-2486).
  *
@@ -162,10 +165,7 @@ export const schema: Aglyn.ComponentSchema<LayoutSlotProps> = {
   description:
     "Marks where each bound page's content renders inside this layout. One per layout.",
   category: Aglyn.ComponentCategory.LAYOUT,
-  icon: {
-    path: mdiPageLayoutBody.path,
-    sx: { color: '#9c27b0' },
-  },
+  icon: SLOT_ICON,
   // The slot's children come from screen composition, never from the canvas.
   restrictChildren: [Aglyn.LinealDirectiveFlag.LIMIT_TO, { components: [] }],
   flags: {
@@ -208,10 +208,7 @@ export const presets: Aglyn.PresetSchema[] = [
     $id: generatePresetId(ID),
     type: Aglyn.NodeType.PRESET,
     displayName: 'Layout Slot',
-    icon: {
-      path: mdiPageLayoutBody.path,
-      sx: { color: '#9c27b0' },
-    },
+    icon: SLOT_ICON,
     category: Aglyn.ComponentCategory.LAYOUT,
     data: {
       $id: null,

@@ -61,9 +61,16 @@ function provider(routes: Parameters<typeof mockFetch>[0]) {
 }
 
 describe('QuickBooks Online adapter', () => {
-  it('builds the consent address with the accounting scope and the signed state', () => {
+  it('builds the consent address with the accounting scope and the signed state', async () => {
     const { adapter } = provider([])
-    const url = new URL(adapter.authorizeUrl({ state: 'as1.x.y', redirectUri: 'https://app.aglyn.com/api/accounting/oauth/callback' }))
+    const url = new URL(
+      await adapter.authorizeUrl({
+        state: 'as1.x.y',
+        redirectUri: 'https://app.aglyn.com/api/accounting/oauth/callback',
+        orgId: 'org-1',
+        orgName: null,
+      }),
+    )
     expect(url.origin + url.pathname).toBe('https://appcenter.intuit.com/connect/oauth2')
     expect(url.searchParams.get('scope')).toBe('com.intuit.quickbooks.accounting')
     expect(url.searchParams.get('state')).toBe('as1.x.y')

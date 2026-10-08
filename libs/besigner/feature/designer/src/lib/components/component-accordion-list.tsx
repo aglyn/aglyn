@@ -25,6 +25,7 @@ import { DragOverlay, useDndMonitor } from '@dnd-kit/core'
 import { Box, Grid, Stack } from '@mui/material'
 import { Observer, observer } from 'mobx-react-lite'
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useElementDrawerContext } from '../contexts/element-drawer-context'
 import useDetailHoverIntent from '../hooks/use-detail-hover-intent'
 import usePickerFilter from '../hooks/use-picker-filter'
@@ -198,14 +199,21 @@ export const ComponentAccordionList = observer(
                                     }
                                     {...draggable.listeners}
                                   />
-                                  <DragOverlay dropAnimation={null}>
-                                    {draggable.isDragging && (
-                                      <NodeCard
-                                        node={node as any}
-                                        sx={{ zIndex: 9999 }}
-                                      />
-                                    )}
-                                  </DragOverlay>
+                                  {/* Portaled: below `md` this list sits in
+                                      an overlay drawer that hides while a
+                                      drag is in flight, and the card under
+                                      the finger must outlive it. */}
+                                  {createPortal(
+                                    <DragOverlay dropAnimation={null} zIndex={9999}>
+                                      {draggable.isDragging && (
+                                        <NodeCard
+                                          node={node as any}
+                                          sx={{ zIndex: 9999 }}
+                                        />
+                                      )}
+                                    </DragOverlay>,
+                                    document.body,
+                                  )}
                                 </>
                               )}
                             </Draggable>

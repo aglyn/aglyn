@@ -47,6 +47,21 @@ describe('schemaAcceptsChildren (AGL-1389)', () => {
     expect(schemaAcceptsChildren({ $id: 'leaf', flags })).toBe(false)
   })
 
+  it('opens editable text that says it keeps its text beside its children (AGL-3672)', () => {
+    const flags = {
+      textEditable: FEATURE_FLAG.ENABLED,
+      dropping: FEATURE_FLAG.ENABLED,
+    }
+    expect(schemaAcceptsChildren({ $id: 'text', flags })).toBe(true)
+    // An image has no slot whatever it claims.
+    expect(
+      schemaAcceptsChildren({
+        $id: 'img',
+        flags: { selfClosing: FEATURE_FLAG.ENABLED, dropping: FEATURE_FLAG.ENABLED },
+      }),
+    ).toBe(false)
+  })
+
   it('refuses children on an empty restrictChildren allowlist', () => {
     // The Layout Slot's spelling. `confirmValidLinealRelationship` already
     // refuses every candidate against an empty allowlist, so the hierarchy

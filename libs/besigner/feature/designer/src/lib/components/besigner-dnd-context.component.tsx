@@ -20,7 +20,6 @@ import {
   DndContext,
   KeyboardSensor,
   MeasuringStrategy,
-  MouseSensor,
   PointerSensor,
   pointerWithin,
   TouchSensor,
@@ -53,6 +52,36 @@ export const snapDraggingToCursor: Modifier = ({
 
   return transform
 }
+/**
+ * Pointer events cover mouse, pen AND touch, and dnd-kit hands a gesture to
+ * whichever sensor's activator claims it first — `pointerdown` always fires
+ * before `touchstart`, so a plain PointerSensor would swallow every touch and
+ * the TouchSensor's press-and-hold would never run. Declining touch pointers
+ * here leaves them to the TouchSensor, which is what lets a finger scroll the
+ * palette, the layers tree and the canvas without picking anything up.
+ */
+class NonTouchPointerSensor extends PointerSensor {
+  static activators: typeof PointerSensor.activators =
+    PointerSensor.activators.map((activator) => ({
+      ...activator,
+      handler: (event, options) =>
+        event.nativeEvent.pointerType !== 'touch' &&
+        activator.handler(event, options),
+    }))
+}
+
+/**
+ * A mouse or pen drag starts after a few pixels of travel, so a click on a
+ * drag handle (the overlay's move button, a palette card) stays a click.
+ */
+const POINTER_ACTIVATION = { distance: 6 }
+
+/**
+ * A finger drag starts after a short hold; moving further than the tolerance
+ * before then is a scroll, and the drag never starts.
+ */
+const TOUCH_ACTIVATION = { delay: 250, tolerance: 8 }
+
 export interface BesignerDndContextProps<BackendContext, BackendOptions> {
   children?: JSX.Children
   backend?: BackendFactory
@@ -75,9 +104,10 @@ export function BesignerDndContext<T, U>(props: BesignerDndContextProps<T, U>) {
   }
 
   const sensors = useSensors(
-    useSensor(MouseSensor),
-    useSensor(PointerSensor),
-    useSensor(TouchSensor),
+    useSensor(NonTouchPointerSensor, {
+      activationConstraint: POINTER_ACTIVATION,
+    }),
+    useSensor(TouchSensor, { activationConstraint: TOUCH_ACTIVATION }),
     useSensor(KeyboardSensor),
   )
 

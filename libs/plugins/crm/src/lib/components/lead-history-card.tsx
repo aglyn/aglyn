@@ -140,7 +140,7 @@ export function LeadHistoryCard(props: LeadHistoryCardProps) {
         </Stack>
         <Fact label="Sources">
           {sources.length ? (
-            <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5 }}>
+            <Stack useFlexGap direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5 }}>
               {sources.map((source) => (
                 <Chip key={source} size="small" variant="outlined" label={leadSourceLabel(source)} />
               ))}

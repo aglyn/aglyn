@@ -46,6 +46,7 @@ import ReturnsCard from './console/returns-card.component'
 import ReviewsModerationCard from './console/reviews-moderation-card.component'
 import ShippingSettingsCard from './console/shipping-settings-card.component'
 import ShipStationCard from './console/shipstation-card.component'
+import ShippingEasyCard from './console/shippingeasy-card.component'
 import StockMovementsCard from './console/stock-movements-card.component'
 import StoreSettingsCard from './console/store-settings-card.component'
 import StorefrontTaxSummaryCard from './console/storefront-tax-summary-card.component'
@@ -187,6 +188,8 @@ function sectionBody(
             },
             { size: { xs: 12 }, children: <SuppliersCard hostId={hostId} /> },
             { size: { xs: 12 }, children: <ShipStationCard hostId={hostId} /> },
+            // ShippingEasy, with the merchant's own keys (AGL-3633).
+            { size: { xs: 12 }, children: <ShippingEasyCard hostId={hostId} /> },
             // The store's own endpoints for order events (AGL-3611). Renders
             // nothing for a person who may not manage them.
             {

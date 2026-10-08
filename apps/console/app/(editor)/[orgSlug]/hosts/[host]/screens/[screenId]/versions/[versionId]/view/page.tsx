@@ -1393,7 +1393,7 @@ function ScreenDetails() {
         // straight from the route, so the room it watches is exactly the one
         // Open Besigner opens — no resolution, no guess.
         headerRight={
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
             <DocumentPresenceLive
               hostId={hostId}
               docType="screen"
@@ -1540,6 +1540,7 @@ function ScreenDetails() {
                   >
                     <Stack spacing={1.5}>
                       <Stack
+                        useFlexGap
                         direction="row"
                         spacing={1}
                         sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -1626,6 +1627,7 @@ function ScreenDetails() {
                         }
                       />
                       <Stack
+                        useFlexGap
                         direction="row"
                         spacing={1}
                         sx={{ flexWrap: 'wrap', rowGap: 1 }}

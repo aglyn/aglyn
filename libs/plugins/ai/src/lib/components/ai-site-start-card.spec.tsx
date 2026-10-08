@@ -74,8 +74,9 @@ import {
   AI_SITE_FREE_PAGES_NOTE,
   AI_SITE_SUBMISSION_CHOICES,
   aiFreeSiteCreditEstimate,
+  aiSiteCreditEstimate,
 } from '../model/ai-site-job'
-import { AI_SITE_START_EXAMPLES } from '../model/ai-site-start'
+import { AI_SITE_KINDS } from '../model/ai-site-kinds'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -149,7 +150,8 @@ beforeEach(() => {
 afterEach(() => {
   // The whole flow is the jobs route. Nothing here writes a draft, publishes
   // anything or touches the site the person is standing on.
-  for (const [url] of mockFetch.mock.calls) expect(String(url)).toMatch(/^\/api\/ai\/jobs/)
+  // The model list a paid start reads to price a pick is a read too (AGL-3660).
+  for (const [url] of mockFetch.mock.calls) expect(String(url)).toMatch(/^\/api\/ai\/(jobs|models)/)
 })
 
 /** Renders the dialog on its first step, once the jobs route has admitted this workspace. */
@@ -193,10 +195,10 @@ function expectNothingDrawn(container: HTMLElement) {
 const typeAnswer = (label: string | RegExp, value: string) =>
   fireEvent.change(screen.getByLabelText(label), { target: { value } })
 
-/** The example chip, by the name it reads out as: its starter and its one line. */
-const exampleChip = (index: number) =>
-  screen.getByRole('button', {
-    name: `${AI_SITE_START_EXAMPLES[index].label} — ${AI_SITE_START_EXAMPLES[index].blurb}`,
+/** A style-of-site card, by the name it reads out as: its kind and its one line (AGL-3660). */
+const kindCard = (index: number) =>
+  screen.getByRole('radio', {
+    name: `${AI_SITE_KINDS[index].label}: ${AI_SITE_KINDS[index].blurb}`,
   })
 
 describe('the start is on the first-run zone, gated as every generative door is', () => {
@@ -312,7 +314,7 @@ describe('the skip', () => {
     await openCard()
     // Half-answered, which is where somebody most plausibly leaves.
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
-    fireEvent.click(exampleChip(0))
+    fireEvent.click(kindCard(0))
     const asked = mockFetch.mock.calls.length
     fireEvent.click(screen.getByRole('button', { name: 'Skip and start blank' }))
     await Promise.resolve()
@@ -386,7 +388,7 @@ describe('leaving the full screen dialog', () => {
     await openCard()
     // Half-answered, which is where somebody most plausibly leaves.
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
-    fireEvent.click(exampleChip(0))
+    fireEvent.click(kindCard(0))
     const asked = mockFetch.mock.calls.length
     leave()
     await Promise.resolve()
@@ -431,19 +433,27 @@ describe('leaving the full screen dialog', () => {
 })
 
 describe('the questions become a site scaffold', () => {
-  it('asks what the site is, who it is for and which example they like', async () => {
+  it('asks what the site is, who it is for and which style of site it is', async () => {
     await openCard()
     expect(screen.getByLabelText(/What kind of site are you creating\?/)).toBeTruthy()
     expect(screen.getByLabelText(/Who is it for\?/)).toBeTruthy()
-    expect(screen.getByRole('region', { name: 'Look & layout' })).toBeTruthy()
-    AI_SITE_START_EXAMPLES.forEach((_example, index) => expect(exampleChip(index)).toBeTruthy())
+    expect(screen.getByRole('region', { name: 'Style' })).toBeTruthy()
+    AI_SITE_KINDS.forEach((_kind, index) => expect(kindCard(index)).toBeTruthy())
+    // The answer above suggests the style until the person picks one (AGL-3660).
+    typeAnswer(/What kind of site are you creating\?/, 'a roofing company')
+    const trades = AI_SITE_KINDS.findIndex((kind) => kind.id === 'trades')
+    expect(kindCard(trades).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(kindCard(0))
+    expect(kindCard(0).getAttribute('aria-checked')).toBe('true')
+    expect(kindCard(trades).getAttribute('aria-checked')).toBe('false')
   })
 
   it('starts one site job for this site, carrying every answer', async () => {
     await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     typeAnswer(/Who is it for\?/, 'local dog owners')
-    fireEvent.click(exampleChip(0))
+    const restaurant = AI_SITE_KINDS.findIndex((kind) => kind.id === 'restaurant')
+    fireEvent.click(kindCard(restaurant))
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await screen.findByText(/Your site is being planned/)
@@ -459,7 +469,8 @@ describe('the questions become a site scaffold', () => {
       expect.objectContaining({
         businessType: 'a neighborhood dog groomer',
         audience: 'local dog owners',
-        starter: AI_SITE_START_EXAMPLES[0].id,
+        siteKind: 'restaurant',
+        starter: AI_SITE_KINDS.find((kind) => kind.id === 'restaurant')?.starter,
       }),
     )
   })
@@ -552,6 +563,43 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     await waitFor(() => expect(mockPush).toHaveBeenCalled())
     const [, init] = mockFetch.mock.calls.find(([url, request]) => url === '/api/ai/jobs' && request?.method === 'POST')!
     expect(JSON.parse(init.body).inputs).toEqual(expect.objectContaining({ pages: 2, welcomeEmail: false }))
+  })
+
+  it('offers no model picker on the Free plan', async () => {
+    await openFreeCard()
+    expect(screen.queryByRole('button', { name: /^AI model:/ })).toBeNull()
+  })
+
+  /*
+   * A paid start picks the model that builds the site (AGL-3660): Auto by
+   * default, the estimate priced by the pick, and the pick on the job.
+   */
+  it('offers the model picker on a paid plan, prices the estimate by the pick, and starts the job on it', async () => {
+    await openCard()
+    const picker = screen.getByRole('button', { name: 'AI model: Auto' })
+    const auto = aiSiteCreditEstimate(5, { welcomeEmail: true })
+    expect(screen.getByText(`About ${auto.toLocaleString('en-US')} credits, estimated.`)).toBeTruthy()
+    mockFetch.mockResolvedValueOnce(
+      json({
+        kind: 'job.page',
+        auto: { id: 'auto', label: 'Auto', tier: 'balanced', creditsPerRequest: 10, multiplier: 1, model: 'claude-sonnet-5' },
+        options: [
+          { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', tier: 'fast', creditsPerRequest: 4, multiplier: 0.4 },
+          { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', tier: 'balanced', creditsPerRequest: 10, multiplier: 1 },
+        ],
+        measured: true,
+      }),
+    )
+    fireEvent.click(picker)
+    fireEvent.click(await screen.findByText('Claude Haiku 4.5'))
+    expect(screen.getByRole('button', { name: 'AI model: Claude Haiku 4.5' })).toBeTruthy()
+    expect(screen.getByText(`About ${Math.round(auto * 0.4).toLocaleString('en-US')} credits, estimated.`)).toBeTruthy()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await waitFor(() => expect(postCall()).toBeTruthy())
+    expect(JSON.parse(postCall()[1].body).model).toBe('claude-haiku-4-5')
+    localStorage.clear()
   })
 
   it('keeps a paid workspace’s four to eight pages', async () => {

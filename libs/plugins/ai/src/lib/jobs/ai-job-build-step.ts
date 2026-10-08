@@ -74,6 +74,8 @@ import {
   type AiPluginDraftWriterLookup,
 } from './ai-job-plugin-drafts'
 import { aiSitePageWritten, aiSiteResolvedRef } from './ai-job-site-step'
+import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePagesOfPlan } from './ai-job-layout-site-pages'
+import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
   type AiJobItemOutcome,
@@ -237,6 +239,15 @@ export function aiBuildUnitJob(
     originJobId: aiOriginJobId(job),
   }
   delete inputs[AI_BUILD_PUBLISH_INPUT]
+  // A build's pages and layouts are designed in the layout language and
+  // compiled (AGL-3660), told the pages the build plans and where its form is.
+  if (context.kind === 'page' || context.kind === 'layout') {
+    inputs[AI_LAYOUT_LANGUAGE_INPUT] = true
+    const pages = aiLayoutSitePagesOfPlan(plan.screens)
+    if (pages.length) inputs[AI_LAYOUT_SITE_PAGES_INPUT] = pages
+    const formPage = aiLayoutFormPageOfPlan(plan)
+    if (formPage) inputs[AI_LAYOUT_FORM_PAGE_INPUT] = formPage
+  }
   return {
     ...job,
     $id: aiBuildUnitJobId(job, unit),

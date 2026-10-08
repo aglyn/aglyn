@@ -41,7 +41,6 @@ import androidx.compose.ui.unit.dp
 import com.aglyn.core.AuthState
 import com.aglyn.core.WorkspaceSite
 import com.aglyn.core.WorkspaceState
-import com.aglyn.pluginhost.ConsoleScope
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.pluginhost.PosPlacement
 import com.aglyn.ui.AglynIcons
@@ -201,7 +200,7 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
             Text(workspace.site?.name ?: "", style = MaterialTheme.typography.titleLarge)
             Text(
               when (route) {
-                is Route.Console -> "Console"
+                is Route.Besigner -> "Besigner"
                 is Route.Screen -> services.registry.screen(route.screenId)?.title ?: "Register"
                 else -> "Register"
               },
@@ -242,18 +241,13 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
   ) { padding ->
     Box(Modifier.padding(padding).fillMaxSize()) {
       when {
-        route is Route.Console -> services.console(route.path) { navigator.back() }
+        route is Route.Besigner -> services.besigner(route.path, { navigator.back() }) { navigator.back() }
         route is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, true) { navigator.back() }
         register != null -> register.content(context, emptyMap())
         else -> EmptyState(
-          "The register opens here",
-          body = "Ring up sales in the console's register on this device until the native register is installed.",
+          "The register is not installed",
+          body = "Update the app to ring up sales on this device.",
           icon = AglynIcons.named("point_of_sale"),
-          action = {
-            OutlinedButton(onClick = { context.openConsolePath("/pos", ConsoleScope.SITE) }, Modifier.testTag("open-console-register")) {
-              Text("Open the register")
-            }
-          },
           modifier = Modifier.testTag("register-placeholder"),
         )
       }

@@ -56,6 +56,16 @@ import {
 } from './native-checkout'
 import { ensureCheckoutDomain } from './payment-method-domains'
 import { raiseCheckoutStarted } from './order-events'
+import {
+  checkoutExtrasCents,
+  encodeCheckoutExtrasMetadata,
+  readChosenCheckoutExtras,
+} from '@aglyn/aglyn/plugin-manager/plugin-checkout-extras'
+import { quoteCartExtras, type CheckoutExtrasLine } from './checkout-extras'
+
+/** An option the buyer ticked is no longer offered (AGL-3635). */
+export const CHECKOUT_EXTRA_UNAVAILABLE_MESSAGE =
+  'An option you picked is no longer available. Review your cart and try again.'
 
 /**
  * Cart checkout (AGL-293): the whole cart in one Stripe Checkout
@@ -211,6 +221,8 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     const reserveLines: StockHoldLine[] = []
     /** The basket as `checkout.started` reports it (AGL-3639). */
     const startedItems: Parameters<typeof raiseCheckoutStarted>[1]['items'] = []
+    /** The basket as an extras offer prices it (AGL-3635). */
+    const extrasLines: CheckoutExtrasLine[] = []
     // Cart checkout never builds subscription sessions — every line bills
     // one-time in `payment` mode (recurring products subscribe through the
     // PDP's direct checkout, AGL-303) — so the buyer-chosen billing field
@@ -271,6 +283,14 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       }
       const unitCents = Math.round(Number(variant.priceUsd) * 100)
       itemsCents += unitCents * line.quantity
+      extrasLines.push({
+        productId: line.productId,
+        name: product.name,
+        ...((variant as { sku?: string }).sku ? { sku: String((variant as { sku?: string }).sku) } : {}),
+        quantity: line.quantity,
+        unitCents,
+        physical: (product.type ?? 'physical') === 'physical',
+      })
       startedItems.push({
         productId: line.productId,
         variantId: variant.id ?? null,
@@ -432,6 +452,42 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       return res
         .status(409)
         .json({ error: CommerceModel.CART_UNPRICEABLE_SHIPPING_MESSAGE })
+    }
+
+    // OPTIONAL LINES THE BUYER TICKED (AGL-3635) — package protection — asked
+    // of core's checkout-extras seam AGAIN here, never taken from the request:
+    // the body names which offers, the provider names the price. Above the
+    // claim, so a refusal keeps the key. An offer the buyer ticked that is no
+    // longer made refuses rather than selling without it: they asked for
+    // cover, and a parcel that silently has none is the worse surprise.
+    const chosenExtras = readChosenCheckoutExtras(body.extras)
+    const chargedExtras = chosenExtras.length
+      ? (
+          await quoteCartExtras({
+            hostId,
+            lines: extrasLines,
+            destination: { country: body.shippingCountry, postalCode: body.shippingPostalCode },
+          })
+        ).filter((extra) => chosenExtras.includes(extra.id))
+      : []
+    if (chargedExtras.length !== chosenExtras.length) {
+      return res.status(409).json({ error: CHECKOUT_EXTRA_UNAVAILABLE_MESSAGE, extrasChanged: true })
+    }
+    const extrasCents = checkoutExtrasCents(chargedExtras)
+    // Each as its own line after the goods, untaxed (`txcd_00000000`, Stripe's
+    // nontaxable code) and outside every per-line tax, engine and fee loop
+    // below, which read `cart.lines` only: an extra is not goods, so the
+    // platform's take is not charged on it.
+    chargedExtras.forEach((extra, offset) => {
+      const index = cart.lines.length + offset
+      params.set(`line_items[${index}][quantity]`, '1')
+      params.set(`line_items[${index}][price_data][currency]`, 'usd')
+      params.set(`line_items[${index}][price_data][unit_amount]`, String(extra.amountCents))
+      params.set(`line_items[${index}][price_data][product_data][name]`, extra.label.slice(0, 120))
+      params.set(`line_items[${index}][price_data][product_data][tax_code]`, 'txcd_00000000')
+    })
+    for (const [key, value] of Object.entries(encodeCheckoutExtrasMetadata(chargedExtras))) {
+      params.set(`metadata[${key}]`, value)
     }
 
     chargedItemsCents = itemsCents
@@ -918,6 +974,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         manualRate && manualRate.pct > 0 ? manualRate.pct : 0
       const chargeCents =
         chargedItemsCents +
+        // Stripe's cost on the extras is a real cost of this charge, passed
+        // through at cost like the rest; no take is added on them (AGL-3635).
+        extrasCents +
         (engineTax.quote
           ? engineTax.quote.taxCents
           : Math.round((chargedItemsCents * manualTaxPct) / 100)) +
@@ -1124,7 +1183,8 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         accountId: String(accountId),
         feeCents,
         taxOwner: cartTaxOwner,
-        merchantGoodsCents: chargedItemsCents,
+        // The extras are the merchant's to keep and remit (AGL-3635).
+        merchantGoodsCents: chargedItemsCents + extrasCents,
         shippingFloorCents: cartShippingFloorCents,
       }),
     ).forEach(([key, value]) => params.set(key, value))
@@ -1150,7 +1210,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         String(
           CommerceModel.platformLiableTransferCents({
             feeCents,
-            merchantGoodsCents: chargedItemsCents,
+            merchantGoodsCents: chargedItemsCents + extrasCents,
             shippingFloorCents: cartShippingFloorCents,
           }),
         ),
@@ -1228,10 +1288,14 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           // A tax service's answer can differ between two tries under one
           // key, so the key names it and a changed answer opens a new session
           // rather than a Stripe parameter mismatch (AGL-3631).
+          // Likewise an extra's price (AGL-3635): a re-quote that moved opens
+          // a new session instead of a parameter mismatch.
           ...stripeKeyHeader(
-            engineTax.stamp
-              ? `session-tax-${engineTax.quote?.taxCents ?? 'own'}-${engineTax.stamp.status}`
-              : 'session',
+            `${
+              engineTax.stamp
+                ? `session-tax-${engineTax.quote?.taxCents ?? 'own'}-${engineTax.stamp.status}`
+                : 'session'
+            }${extrasCents > 0 ? `-x${extrasCents}` : ''}`,
           ),
           // Empty on the hosted path (AGL-1944).
           ...nativeCheckoutStripeHeaders(nativeMode),

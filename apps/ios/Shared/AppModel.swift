@@ -20,6 +20,7 @@ final class AppModel {
   let reader: FirestoreReader?
   let api: ConsoleAPIClient?
   let registry = NativePluginRegistry()
+  let push: PushCenter
   private(set) var pluginFailures: [NativePluginLoadFailure] = []
   private(set) var workspace: WorkspaceStore?
   /// Bumped by Refresh (⌘R); live lists re-subscribe on it.
@@ -28,6 +29,9 @@ final class AppModel {
   init(app: AglynAppKind) {
     self.app = app
     let appID: AglynAppID = app == .pos ? .pos : .aglyn
+    let push = PushCenter(app: appID)
+    self.push = push
+    PushAppDelegate.push = push
     var config: AglynConfig?
     var problems: [String] = []
     do {
@@ -40,11 +44,19 @@ final class AppModel {
     if let config, problems.isEmpty {
       self.config = config
       AglynFirebase.configure(config)
-      self.auth = AuthSession()
-      self.reader = FirebaseFirestoreReader()
+      let auth = AuthSession.make(config)
+      self.auth = auth
+      // A REST sign-in has no SDK user for Firestore to read as, so Firestore goes over REST too.
+      self.reader =
+        auth.transport == .rest
+        ? RestFirestoreReader(
+          projectID: config.firebase.projectID, emulatorHost: config.firestoreEmulatorHost,
+          idToken: { try await auth.idToken(forceRefresh: false) })
+        : FirebaseFirestoreReader()
       self.api = ConsoleAPIClient(origin: config.consoleOrigin) { force in
-        try await AuthSession.idToken(forceRefresh: force)
+        try await auth.idToken(forceRefresh: force)
       }
+      auth.onBeforeSignOut { await push.signingOut() }
     } else {
       self.config = nil
       self.auth = nil
@@ -65,6 +77,7 @@ final class AppModel {
     guard user?.uid != workspace?.uid else { return }
     workspace?.stop()
     workspace = nil
+    push.signedIn(uid: user?.uid, reader: reader)
     guard let user, let reader else { return }
     let store = WorkspaceStore(uid: user.uid, reader: reader)
     store.start()
@@ -90,30 +103,19 @@ final class AppModel {
       hostSlug: workspace?.site?.subdomain.isEmpty == false ? workspace?.site?.subdomain : workspace?.site?.id,
       firestore: reader,
       api: api,
+      writer: ReaderMergeWriter(reader),
       navigate: { [weak navigation] screen, params in navigation?.push(.screen(screen, params)) },
-      openConsolePath: { [weak self, weak navigation] path, scope in
-        guard let self, let navigation else { return }
-        navigation.push(.console(self.scopedConsolePath(path, scope: scope)))
-      })
-  }
-
-  func scopedConsolePath(_ path: String, scope: ConsolePathScope) -> String {
-    let rest = path.hasPrefix("/") ? path : "/\(path)"
-    switch scope {
-    case .absolute: return rest
-    case .org: return workspace?.org.map { "/\($0.slug)\(rest)" } ?? rest
-    case .site:
-      guard let org = workspace?.org, let site = workspace?.site else { return rest }
-      return "/\(org.slug)/hosts/\(site.subdomain.isEmpty ? site.id : site.subdomain)\(rest)"
-    }
+      openBesigner: { [weak navigation] path in navigation?.push(.besigner(path)) })
   }
 
   /// Opens a console link (universal link, `aglyn://`, a notification's
-  /// link): natively when a plugin answers it, otherwise in the console WebView.
+  /// link): natively when a plugin answers it, a Besigner page in the app's
+  /// web view, and otherwise a note that the app has no screen for it yet.
   func open(_ link: String, in navigation: ShellNavigation) {
     switch registry.resolve(link) {
     case .screen(let screen, let params)?: navigation.push(.screen(screen, params))
-    case .console(let path)?: navigation.push(.console(path))
+    case .besigner(let path)?: navigation.push(.besigner(path))
+    case .unavailable(let path)?: navigation.push(.unavailable(path))
     case nil: break
     }
   }

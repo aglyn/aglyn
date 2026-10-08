@@ -83,8 +83,8 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
     _ onChange: @escaping @MainActor (Result<[FirestoreDocument], Error>) -> Void
   ) -> FirestoreListening {
     var built: Query = collection(query.collection)
-    for (field, value) in query.equals { built = built.whereField(field, isEqualTo: value) }
-    for order in query.order { built = built.order(by: order.field, descending: order.descending) }
+    for constraint in query.allFilters { built = constraint.apply(to: built) }
+    for order in query.order { built = built.order(by: fieldPath(order.field), descending: order.descending) }
     if let limit = query.limit { built = built.limit(to: limit) }
     let handle = built.addSnapshotListener { snapshot, error in
       let result: Result<[FirestoreDocument], Error> =
@@ -112,6 +112,7 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
   private static func writable(_ value: Any) -> Any {
     switch value {
     case FirestoreSentinel.serverTimestamp: return FieldValue.serverTimestamp()
+    case FirestoreSentinel.delete: return FieldValue.delete()
     case let map as [String: Any]: return map.mapValues(writable)
     default: return value
     }

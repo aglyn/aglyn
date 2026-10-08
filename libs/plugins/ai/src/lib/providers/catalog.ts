@@ -98,6 +98,16 @@ export function aiRatesAtList(
   }
 }
 
+/** {@link aiRatesAtList} for a model whose cache read is not a tenth of its input price. */
+export function aiRatesAtListWithCacheRead(
+  inputPerMTok: number,
+  outputPerMTok: number,
+  cacheReadPerMTok: number,
+): AiCatalogRates {
+  const rates = { ...aiRatesPerMTok(inputPerMTok, outputPerMTok), cacheReadPerToken: cacheReadPerMTok / 1_000_000 }
+  return { providerRates: rates, billedRates: { ...rates } }
+}
+
 export interface AiCatalogEntry extends AiModelDescriptor, AiCatalogRates {
   /**
    * The tier a routing decision reads: `fast` for short, constrained
@@ -195,7 +205,7 @@ export const ANTHROPIC_CRM_ASSISTANCE_DISCLOSED: AnthropicCrmAssistanceWording =
  * wording the Subprocessors row and Privacy Policy section 2 were
  * republished with on October 5, 2026 (legal v10), before
  * `release_crm_assist_whole_record` may be turned on. The catalog row below
- * carries it, dated to that change-log entry.
+ * carries it in `dataReceived`.
  */
 export const ANTHROPIC_CRM_ASSISTANCE_WHOLE_RECORD: AnthropicCrmAssistanceWording = {
   record:
@@ -222,8 +232,8 @@ export const AI_CATALOG_PROVIDERS: readonly AiCatalogProvider[] = [
       entity: 'Anthropic, PBC',
       region: 'United States',
       purpose:
-        "AI-assisted features in the console and the site editor: the Aglyn Assist helper, including changes it proposes to a page, component, or layout open in the editor; editor assistance (rewriting element copy, drafting blog bodies, generating a section layout); and AI generation, which creates drafts and proposals for a customer's site from a brief or from what the site already holds, such as copy, layouts, templates, automations, search titles and descriptions, theme changes, product descriptions and tags, draft products, and store categories and discounts; explanations of a site's automations, including why an automation's run failed; AI insights, which answer a customer's questions about its own figures, such as site traffic, sales, bookings, forms, campaigns, A/B tests and datasets, and write a weekly summary of them for members who ask for one; and AI assistance in the CRM, which summarizes a contact, company, deal or lead for a user and suggests a next step, drafts a one-to-one email for the user to review and send, and suggests how the columns of a spreadsheet the user imports match CRM fields",
-      publishedOn: '2026-10-05',
+        "AI features of the Services, including the Aglyn Assist helper: creating, editing and reviewing content, drafts and settings for a customer’s site, store and CRM, and explaining and summarizing the customer’s own setup and data",
+      publishedOn: '2026-10-07',
       reason:
         "Reached through the AI plugin's Anthropic adapter (`libs/plugins/ai/src/lib/providers/anthropic.ts`) by the doors that call the AI runtime. `libs/plugins/ai/src/lib/server/assist-chat.ts` is gated by `release_assist` AND the key, and a generation job's text step by `release_ai_generative`; `libs/plugins/ai/src/lib/server/ai-assist.ts` carries NO release flag, so setting `{apiKeyEnv}` in production is by itself what starts this flow. `assist-anthropic-subprocessor-gate.spec.ts` holds the per-door detail and is the deeper guard for this one vendor.",
       dataReceived: anthropicDataReceived(ANTHROPIC_CRM_ASSISTANCE_WHOLE_RECORD),
@@ -248,12 +258,17 @@ const anthropicCapabilities = {
 
 export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
   {
-    id: 'claude-sonnet-5',
+    // THE BALANCED TIER'S DEFAULT (AGL-3660): the first balanced row is what
+    // `aiDefaultModelFor` answers, so Free, "Auto" and every step routed to
+    // balanced run here. Rejects `thinking: {type: "disabled"}` and forced
+    // tool choice: the adapter sends thinking off as `between_tools` and
+    // every tool call with `tool_choice: auto`.
+    id: 'claude-sonnet-5-5',
     provider: ANTHROPIC,
-    label: 'Claude Sonnet 5',
+    label: 'Claude Sonnet 5.5',
     capabilities: anthropicCapabilities,
     /*
-     * THE ONE ROW BILLED ABOVE ITS PROVIDER RATE (AGL-3015).
+     * THE ROWS BILLED ABOVE THEIR PROVIDER RATE (AGL-3015).
      *
      * The balanced tier prices most requests, so this markup is most of the
      * platform's AI margin. It is carried in the rate and not in the credit
@@ -264,8 +279,23 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
      *
      * Everything that reasons about what we PAY — the margin surfaces, the
      * staff spend meters, the discount guardrail's cost of goods — reads
-     * `providerRates`, which is the vendor's published list.
+     * `providerRates`, which is the vendor's published list. Sonnet 5.5's
+     * list is Sonnet 5's, except a cache read: $0.10/MTok, a twentieth of
+     * input. A customer is billed exactly what Sonnet 5 billed, so the
+     * balanced tier's prices do not move when its default does.
      */
+    providerRates: { ...aiRatesPerMTok(2, 10), cacheReadPerToken: 0.1 / 1_000_000 },
+    billedRates: aiRatesPerMTok(3, 15),
+    tier: 'balanced',
+    cacheMinTokens: 512,
+  },
+  {
+    // The balanced default until AGL-3660, kept so a workspace that chose it
+    // and every recording that names it still resolve, at the same rates.
+    id: 'claude-sonnet-5',
+    provider: ANTHROPIC,
+    label: 'Claude Sonnet 5',
+    capabilities: anthropicCapabilities,
     providerRates: aiRatesPerMTok(2, 10),
     billedRates: aiRatesPerMTok(3, 15),
     tier: 'balanced',
@@ -299,6 +329,22 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     label: 'Claude Opus 5',
     capabilities: anthropicCapabilities,
     ...aiRatesAtList(5, 25),
+    tier: 'deep',
+    cacheMinTokens: 512,
+  },
+  {
+    // Listed for a side-by-side comparison (AGL-3660); the deep tier's
+    // default stays claude-opus-5 above. Thinking cannot be disabled and its
+    // effort defaults to medium, so the adapter omits thinking where a step
+    // asks for it off and names effort high where a step names none — Opus
+    // 5's own default. Forced tool choice is refused; the adapter sends auto.
+    id: 'claude-opus-5-5',
+    provider: ANTHROPIC,
+    label: 'Claude Opus 5.5',
+    capabilities: anthropicCapabilities,
+    // At list, like its deep-tier siblings. A cache read is $0.20/MTok, a
+    // twentieth of input rather than the usual tenth.
+    ...aiRatesAtListWithCacheRead(4, 20, 0.2),
     tier: 'deep',
     cacheMinTokens: 512,
   },

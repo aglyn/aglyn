@@ -47,6 +47,9 @@ export function registerShippingConsoleApi(): void {
     [SHIPPING_API_ROUTES.addressValidate, (routes) => routes.addressValidateRoute],
     [SHIPPING_API_ROUTES.batchRates, (routes) => routes.batchRatesRoute],
     [SHIPPING_API_ROUTES.batchBuy, (routes) => routes.batchBuyRoute],
+    [SHIPPING_API_ROUTES.ownAccounts, (routes) => routes.ownAccountsRoute],
+    [SHIPPING_API_ROUTES.ownAccountsConnect, (routes) => routes.ownAccountsConnectRoute],
+    [SHIPPING_API_ROUTES.ownAccountsDisconnect, (routes) => routes.ownAccountsDisconnectRoute],
   ]
   for (const [path, pick] of routes) {
     const handler = lazy(pick)
@@ -75,6 +78,30 @@ export function registerShippingConsoleApi(): void {
     {
       web: async (request) => (await import('./server/webhook-routes')).easypostWebhookRoute(request),
     },
+    { machine: true },
+  )
+  // The merchant-account webhooks (AGL-3632), one address per workspace,
+  // each verified with that workspace's own secret.
+  registerPluginApiRoute(
+    SHIPPING_API_ROUTES.webhookEasyship,
+    {
+      web: async (request) => (await import('./server/webhook-routes')).easyshipWebhookRoute(request),
+    },
+    { machine: true },
+  )
+  registerPluginApiRoute(
+    SHIPPING_API_ROUTES.webhookSendcloud,
+    {
+      web: async (request) => (await import('./server/webhook-routes')).sendcloudWebhookRoute(request),
+    },
+    { machine: true },
+  )
+  // A label file a provider serves only to its own caller (AGL-3632): the
+  // address carries the label's own token, so a packing slip or a return
+  // email opens it with no session.
+  registerPluginApiRoute(
+    SHIPPING_API_ROUTES.labelFile,
+    { web: (request) => lazy((routes) => routes.labelFileRoute)(request) },
     { machine: true },
   )
 }

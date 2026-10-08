@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { hostThemeToThemeOptions } from '@aglyn/shared-ui-theme/util/host-theme'
+import { createTheme, ThemeProvider } from '@mui/material/styles'
 import { render, screen } from '@testing-library/react'
 import CardElement, {
   CARD_ACTIONS_ID,
@@ -159,5 +161,38 @@ describe('Card "Variant" options (AGL-1451)', () => {
       'elevation',
       'outlined',
     ])
+  })
+})
+
+/*
+ * A site's look lives in its theme (AGL-3660): the AI site start writes the
+ * card style as MuiCard defaults, so a Card a person drags in from the drawer,
+ * with no variant of its own, takes the site's card style, as every card the
+ * AI drew does. An author's own choice still wins.
+ */
+describe('a Card with no variant of its own takes the site theme’s card style (AGL-3660)', () => {
+  const siteTheme = (card: Record<string, unknown>) =>
+    createTheme(
+      hostThemeToThemeOptions(
+        { components: { MuiCard: { defaultProps: card } } },
+        'light',
+      ),
+    )
+  const inTheme = (card: Record<string, unknown>, ui: React.ReactElement) =>
+    cardRoot(<ThemeProvider theme={siteTheme(card)}>{ui}</ThemeProvider>)
+
+  it('is outlined on an outlined site', () => {
+    expect(inTheme({ variant: 'outlined' }, <CardElement />).className).toMatch(/MuiPaper-outlined/)
+  })
+
+  it('is flat or raised as the site says', () => {
+    expect(inTheme({ variant: 'elevation', elevation: 0 }, <CardElement />).className).toMatch(/MuiPaper-elevation0/)
+    expect(inTheme({ variant: 'elevation', elevation: 3 }, <CardElement />).className).toMatch(/MuiPaper-elevation3/)
+  })
+
+  it('keeps the author’s own variant over the site’s', () => {
+    const root = inTheme({ variant: 'outlined' }, <CardElement variant="elevation" elevation={2} />)
+    expect(root.className).toMatch(/MuiPaper-elevation2/)
+    expect(root.className).not.toMatch(/MuiPaper-outlined/)
   })
 })

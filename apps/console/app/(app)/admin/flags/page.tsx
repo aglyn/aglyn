@@ -261,6 +261,7 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
                       }}
                     >
                       <Stack
+                        useFlexGap
                         direction="row"
                         spacing={1}
                         sx={{ alignItems: 'center', flexWrap: 'wrap' }}

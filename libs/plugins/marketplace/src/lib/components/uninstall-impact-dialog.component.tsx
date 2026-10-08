@@ -254,6 +254,7 @@ export function UninstallImpactDialog(props: UninstallImpactDialogProps) {
                     `${site.affectedScreens === 1 ? '' : 's'} affected`}
                 </Typography>
                 <Stack
+                  useFlexGap
                   direction="row"
                   spacing={1}
                   sx={{ flexWrap: 'wrap', gap: 1, marginTop: 1 }}

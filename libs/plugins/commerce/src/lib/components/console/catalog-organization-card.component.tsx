@@ -632,7 +632,7 @@ const CollectionPreview = memo(function CollectionPreview(props: {
 }) {
   const { matches, countPrefix } = props
   return (
-    <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+    <Stack useFlexGap direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
       <Typography variant="caption" color="text.secondary">
         {`Matches ${countPrefix}${matches.length} products: `}
       </Typography>

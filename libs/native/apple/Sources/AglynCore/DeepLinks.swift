@@ -14,18 +14,22 @@ public protocol DeepLinkRoute {
   var screen: String { get }
 }
 
-/// Where a link goes: a registered screen, or the console WebView.
+/// Where a link goes: a registered screen, the Besigner (the only web
+/// content the apps show, in their own web view), or nowhere yet: a console
+/// page the app has no native screen for. That is a gap to build; it never
+/// opens the console page instead.
 public enum LinkTarget: Equatable, Sendable {
   case screen(String, NativeParams)
-  case console(String)
+  case besigner(String)
+  case unavailable(String)
 }
 
 /// Turns a console URL or path into where the app should go.
 ///
 /// Every link the app meets is a console link: a universal link to the
 /// console's own domain, an `aglyn://` link, or a notification's `link`. A
-/// plugin that answers a path natively registers a deep link for it; anything
-/// else opens in the authenticated console WebView, so no link is a dead end.
+/// plugin that answers a path natively registers a deep link for it. A
+/// Besigner path opens the Besigner in the app's web view; nothing else does.
 public enum DeepLinks {
   /// The console's own top-level sections, which are not workspaces and are matched whole.
   public static let consoleTopLevel: Set<String> = [
@@ -50,6 +54,43 @@ public enum DeepLinks {
         rest: "/" + segments.dropFirst(3).joined(separator: "/"))
     }
     return Scope(orgSlug: first, rest: "/" + segments.dropFirst().joined(separator: "/"))
+  }
+
+  /// The Besigner's pages under `/{orgSlug}/hosts/{hostSlug}`: the console's
+  /// `(editor)` route group, and nothing else (the Kotlin kit's `BesignerPaths`).
+  static let besignerSitePatterns = [
+    "^/theme$",
+    "^/templates/[^/]+/(besigner|preview)$",
+    "^/emails/[^/]+/versions/[^/]+/besigner$",
+    "^/screens/[^/]+/versions/[^/]+(/(besigner|preview|view))?$",
+    // Components, layouts and every plugin's declared Besigner document.
+    "^/[^/]+/[^/]+/versions/[^/]+/(besigner|preview)$",
+  ]
+
+  /// The staff console's editor pages.
+  static let besignerStaffPatterns = [
+    "^/admin/emails/[^/]+/versions/[^/]+/besigner$",
+    "^/admin/sites/[^/]+/preview/[^/]+/[^/]+$",
+  ]
+
+  /// Whether `path`, a whole console path (its query and fragment ignored),
+  /// is a Besigner page: the only web content the apps show.
+  public static func isBesignerPath(_ path: String) -> Bool {
+    let bare = String(path.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")
+      .split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
+    guard bare.hasPrefix("/"), !bare.contains("//"),
+      !bare.split(separator: "/").contains(where: { $0 == ".." || $0 == "." })
+    else { return false }
+    let matches = { (pattern: String, text: String) in text.range(of: pattern, options: .regularExpression) != nil }
+    if besignerStaffPatterns.contains(where: { matches($0, bare) }) { return true }
+    let scope = splitConsoleScope(bare)
+    guard let host = scope.hostSlug, !host.isEmpty else { return false }
+    return besignerSitePatterns.contains { matches($0, scope.rest) }
+  }
+
+  /// The Besigner on one page's working version, under the picked site.
+  public static func besignerScreen(_ screenID: String, versionID: String) -> String {
+    "/screens/\(screenID)/versions/\(versionID)/besigner"
   }
 
   /// The path part of a console URL, an `aglyn://` URL, or a bare path.
@@ -132,6 +173,6 @@ public enum DeepLinks {
       merged.merge(params) { _, new in new }
       return .screen(route.screen, merged)
     }
-    return .console(full)
+    return isBesignerPath(path) ? .besigner(full) : .unavailable(full)
   }
 }

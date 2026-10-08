@@ -5,6 +5,192 @@
   ],
   "timeZone": "UTC",
   "functions": {
+    "accountPushSwitch": {
+      "module": "libs/aglyn/src/lib/app-utils/mobile-push.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            "content.order",
+            "content",
+            true
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            null,
+            "content.order",
+            "content",
+            false
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {},
+            "content.order",
+            "content",
+            true,
+            {
+              "content": false
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "accountTypes": {
+                "content.order": {
+                  "push": false
+                }
+              }
+            },
+            "content.order",
+            "content",
+            true
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "accountTypes": {
+                "content.order": {
+                  "push": true
+                }
+              },
+              "account": {
+                "content": {
+                  "push": false
+                }
+              }
+            },
+            "content.order",
+            "content",
+            true
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "account": {
+                "content": {
+                  "push": false
+                }
+              }
+            },
+            "content.order",
+            "content",
+            true
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "account": {
+                "content": {
+                  "push": true
+                }
+              }
+            },
+            "content.order",
+            "content",
+            false,
+            {
+              "content": false
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "accountTypes": {
+                "content.order": {
+                  "console": false
+                }
+              }
+            },
+            "content.order",
+            "content",
+            true
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "accountTypes": {
+                "content.order": {
+                  "console": true
+                }
+              },
+              "account": {
+                "content": {
+                  "console": false
+                }
+              }
+            },
+            "content.order",
+            "content",
+            false
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "account": {
+                "content": {
+                  "console": false
+                }
+              }
+            },
+            "content.order",
+            "content",
+            true
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "accountTypes": {
+                "content.booking": {
+                  "push": false
+                }
+              }
+            },
+            "content.order",
+            "content",
+            true
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "account": {
+                "content": {
+                  "email": true
+                }
+              }
+            },
+            "content.order",
+            "content",
+            true,
+            {
+              "content": true
+            }
+          ],
+          "result": true
+        }
+      ]
+    },
     "apportionCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "cases": [
@@ -596,6 +782,332 @@
         }
       ]
     },
+    "isLowStock": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "variants": [
+                {
+                  "id": "a",
+                  "priceUsd": 1,
+                  "inventory": 3
+                }
+              ]
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "variants": [
+                {
+                  "id": "a",
+                  "priceUsd": 1,
+                  "inventory": 3
+                }
+              ],
+              "lowStockThreshold": 5
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "variants": [
+                {
+                  "id": "a",
+                  "priceUsd": 1,
+                  "inventory": 6
+                }
+              ],
+              "lowStockThreshold": 5
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "variants": [
+                {
+                  "id": "a",
+                  "priceUsd": 1
+                }
+              ],
+              "lowStockThreshold": 5
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "variants": [
+                {
+                  "id": "a",
+                  "priceUsd": 1,
+                  "inventory": 0
+                }
+              ],
+              "lowStockThreshold": 0
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "variants": [
+                {
+                  "id": "a",
+                  "priceUsd": 1,
+                  "inventory": 2
+                }
+              ],
+              "lowStockThreshold": -1
+            }
+          ],
+          "result": false
+        }
+      ]
+    },
+    "liftLegacyOrder": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
+      "cases": [
+        {
+          "args": [
+            {}
+          ],
+          "result": {
+            "channel": "online",
+            "lineItems": [],
+            "status": "paid",
+            "totals": {
+              "discountCents": 0,
+              "feeCents": 0,
+              "itemsCents": 0,
+              "shippingCents": 0,
+              "taxCents": 0,
+              "totalCents": 0
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "amountCents": 1200,
+              "productId": "p3",
+              "feeCents": 65
+            }
+          ],
+          "result": {
+            "amountCents": 1200,
+            "channel": "online",
+            "feeCents": 65,
+            "lineItems": [
+              {
+                "name": "Product",
+                "productId": "p3",
+                "quantity": 1,
+                "unitAmountCents": 1200
+              }
+            ],
+            "productId": "p3",
+            "status": "paid",
+            "totals": {
+              "discountCents": 0,
+              "feeCents": 65,
+              "itemsCents": 1200,
+              "shippingCents": 0,
+              "taxCents": 0,
+              "totalCents": 1200
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "amountCents": 500
+            }
+          ],
+          "result": {
+            "amountCents": 500,
+            "channel": "online",
+            "lineItems": [],
+            "status": "paid",
+            "totals": {
+              "discountCents": 0,
+              "feeCents": 0,
+              "itemsCents": 500,
+              "shippingCents": 0,
+              "taxCents": 0,
+              "totalCents": 500
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "refunded",
+              "channel": "pos",
+              "amountCents": 300
+            }
+          ],
+          "result": {
+            "amountCents": 300,
+            "channel": "pos",
+            "lineItems": [],
+            "status": "refunded",
+            "totals": {
+              "discountCents": 0,
+              "feeCents": 0,
+              "itemsCents": 300,
+              "shippingCents": 0,
+              "taxCents": 0,
+              "totalCents": 300
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 100
+                }
+              ]
+            }
+          ],
+          "result": {
+            "lineItems": [
+              {
+                "name": "Mug",
+                "productId": "p1",
+                "quantity": 1,
+                "unitAmountCents": 100
+              }
+            ],
+            "status": "paid"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "pending",
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 100
+                }
+              ]
+            }
+          ],
+          "result": {
+            "lineItems": [
+              {
+                "name": "Mug",
+                "productId": "p1",
+                "quantity": 1,
+                "unitAmountCents": 100
+              }
+            ],
+            "status": "pending"
+          }
+        }
+      ]
+    },
+    "liftLegacyProduct": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "name": "Mug",
+              "slug": "mug",
+              "type": "physical",
+              "status": "draft",
+              "variants": [
+                {
+                  "id": "v1",
+                  "priceUsd": 9,
+                  "inventory": 2
+                }
+              ]
+            }
+          ],
+          "result": {
+            "name": "Mug",
+            "slug": "mug",
+            "status": "draft",
+            "type": "physical",
+            "variants": [
+              {
+                "id": "v1",
+                "inventory": 2,
+                "priceUsd": 9
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Old Mug",
+              "priceUsd": 12,
+              "inventory": 4
+            }
+          ],
+          "result": {
+            "inventory": 4,
+            "name": "Old Mug",
+            "priceUsd": 12,
+            "slug": "old-mug",
+            "status": "active",
+            "type": "physical",
+            "variants": [
+              {
+                "id": "default",
+                "inventory": 4,
+                "priceUsd": 12
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Tee",
+              "status": "archived",
+              "type": "digital",
+              "priceUsd": 5
+            }
+          ],
+          "result": {
+            "name": "Tee",
+            "priceUsd": 5,
+            "slug": "tee",
+            "status": "archived",
+            "type": "digital",
+            "variants": [
+              {
+                "id": "default",
+                "inventory": null,
+                "priceUsd": 5
+              }
+            ]
+          }
+        }
+      ]
+    },
     "orderChannelLabel": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "cases": [
@@ -634,6 +1146,690 @@
             null
           ],
           "result": "Online"
+        }
+      ]
+    },
+    "orderCountsAsSale": {
+      "module": "libs/plugins/commerce/src/lib/model/order-figures.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "$id": "o1",
+              "status": "paid",
+              "createdAtMs": 1000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 2,
+                  "unitAmountCents": 500
+                }
+              ],
+              "totals": {
+                "totalCents": 1000
+              },
+              "livemode": true
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "$id": "o2",
+              "status": "refunded",
+              "createdAtMs": 2000,
+              "lineItems": [
+                {
+                  "productId": "p2",
+                  "name": "Tote",
+                  "quantity": 1,
+                  "unitAmountCents": 700
+                }
+              ],
+              "totals": {
+                "totalCents": 700
+              },
+              "refundedCents": 700,
+              "livemode": true
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "$id": "o3",
+              "status": "pending",
+              "createdAtMs": 3000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 900
+                }
+              ],
+              "totals": {
+                "totalCents": 900
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "$id": "cs_test_abc",
+              "status": "paid",
+              "createdAtMs": 4000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 300
+                }
+              ],
+              "totals": {
+                "totalCents": 300
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "$id": "o5",
+              "createdAtMs": 5000,
+              "amountCents": 1200,
+              "productId": "p3"
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "$id": "o6",
+              "status": "cancelled",
+              "createdAtMs": 6000,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 100
+                }
+              ],
+              "totals": {
+                "totalCents": 100
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "$id": "o7",
+              "status": "fulfilled",
+              "createdAtMs": 7000,
+              "lineItems": [
+                {
+                  "productId": "p2",
+                  "name": "Tote",
+                  "quantity": 3,
+                  "unitAmountCents": 200
+                },
+                {
+                  "productId": "p1",
+                  "name": "Mug",
+                  "quantity": 1,
+                  "unitAmountCents": 50
+                }
+              ],
+              "totals": {
+                "totalCents": 650
+              },
+              "refundedCents": 50,
+              "livemode": true
+            }
+          ],
+          "result": true
+        }
+      ]
+    },
+    "orderDisputeBlocksRefund": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
+      "cases": [
+        {
+          "args": [
+            {}
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "needs_response"
+              }
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "under_review"
+              }
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "warning_needs_response"
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "warning_under_review"
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "won"
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "lost"
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "warning_closed"
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "needs_response",
+                "outcome": "won"
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "dispute": {
+                "id": "dp",
+                "amountCents": 500,
+                "openedAtMs": 1,
+                "status": "needs_response",
+                "closedAtMs": 5
+              }
+            }
+          ],
+          "result": false
+        }
+      ]
+    },
+    "orderIsTestMode": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
+      "cases": [
+        {
+          "args": [
+            {}
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "livemode": false
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "livemode": true,
+              "$id": "cs_test_1"
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "$id": "cs_test_a1"
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "checkoutSessionId": "cs_test_b2"
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "$id": "cs_live_x"
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "$id": "ABCdef123"
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "$id": " pi_test_9 "
+            }
+          ],
+          "result": true
+        }
+      ]
+    },
+    "orderLineFulfillmentStates": {
+      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "cases": [
+        {
+          "args": [
+            {}
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "lineItems": [
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 2
+                },
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 1,
+                  "productType": "digital"
+                },
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 3,
+                  "productType": "service"
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "fulfilledQuantity": 0,
+              "lineItemId": 0,
+              "quantity": 2,
+              "remainingQuantity": 2,
+              "requiresShipping": true
+            },
+            {
+              "fulfilledQuantity": 0,
+              "lineItemId": 1,
+              "quantity": 1,
+              "remainingQuantity": 1,
+              "requiresShipping": false
+            },
+            {
+              "fulfilledQuantity": 0,
+              "lineItemId": 2,
+              "quantity": 3,
+              "remainingQuantity": 3,
+              "requiresShipping": false
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "lineItems": [
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 3
+                },
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 2
+                }
+              ],
+              "fulfillments": [
+                {
+                  "id": "f1",
+                  "atMs": 1,
+                  "lineItemIds": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "fulfilledQuantity": 3,
+              "lineItemId": 0,
+              "quantity": 3,
+              "remainingQuantity": 0,
+              "requiresShipping": true
+            },
+            {
+              "fulfilledQuantity": 0,
+              "lineItemId": 1,
+              "quantity": 2,
+              "remainingQuantity": 2,
+              "requiresShipping": true
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "lineItems": [
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 3
+                },
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 2
+                }
+              ],
+              "fulfillments": [
+                {
+                  "id": "f1",
+                  "atMs": 1,
+                  "lineItemIds": [
+                    0
+                  ],
+                  "lines": [
+                    {
+                      "lineItemId": 0,
+                      "quantity": 1
+                    },
+                    {
+                      "lineItemId": 1,
+                      "quantity": 2
+                    }
+                  ]
+                },
+                {
+                  "id": "f2",
+                  "atMs": 2,
+                  "lineItemIds": [
+                    0
+                  ],
+                  "lines": [
+                    {
+                      "lineItemId": 0,
+                      "quantity": 1
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "fulfilledQuantity": 2,
+              "lineItemId": 0,
+              "quantity": 3,
+              "remainingQuantity": 1,
+              "requiresShipping": true
+            },
+            {
+              "fulfilledQuantity": 2,
+              "lineItemId": 1,
+              "quantity": 2,
+              "remainingQuantity": 0,
+              "requiresShipping": true
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "lineItems": [
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 3
+                }
+              ],
+              "fulfillments": [
+                {
+                  "id": "f1",
+                  "atMs": 1,
+                  "lineItemIds": [
+                    0
+                  ],
+                  "status": "cancelled"
+                },
+                {
+                  "id": "f2",
+                  "atMs": 2,
+                  "lineItemIds": [
+                    0
+                  ],
+                  "lines": [
+                    {
+                      "lineItemId": 0,
+                      "quantity": 1
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "fulfilledQuantity": 1,
+              "lineItemId": 0,
+              "quantity": 3,
+              "remainingQuantity": 2,
+              "requiresShipping": true
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "lineItems": [
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 2
+                }
+              ],
+              "fulfillments": [
+                {
+                  "id": "f1",
+                  "atMs": 1,
+                  "lineItemIds": [
+                    0
+                  ],
+                  "lines": [
+                    {
+                      "lineItemId": 0,
+                      "quantity": 5
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "fulfilledQuantity": 2,
+              "lineItemId": 0,
+              "quantity": 2,
+              "remainingQuantity": 0,
+              "requiresShipping": true
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "lineItems": [
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 2.7
+                },
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": 0
+                },
+                {
+                  "name": "Item",
+                  "productId": "p",
+                  "unitAmountCents": 100,
+                  "quantity": -1
+                }
+              ],
+              "fulfillments": [
+                {
+                  "id": "f1",
+                  "atMs": 1,
+                  "lineItemIds": [
+                    9,
+                    1
+                  ]
+                },
+                {
+                  "id": "f2",
+                  "atMs": 2,
+                  "lineItemIds": [],
+                  "lines": [
+                    {
+                      "lineItemId": 7,
+                      "quantity": 1
+                    },
+                    {
+                      "lineItemId": 0,
+                      "quantity": 0
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "fulfilledQuantity": 0,
+              "lineItemId": 0,
+              "quantity": 2,
+              "remainingQuantity": 2,
+              "requiresShipping": true
+            },
+            {
+              "fulfilledQuantity": 0,
+              "lineItemId": 1,
+              "quantity": 0,
+              "remainingQuantity": 0,
+              "requiresShipping": true
+            },
+            {
+              "fulfilledQuantity": 0,
+              "lineItemId": 2,
+              "quantity": 0,
+              "remainingQuantity": 0,
+              "requiresShipping": true
+            }
+          ]
         }
       ]
     },
@@ -778,6 +1974,754 @@
             }
           ],
           "result": "Refunded in full ($50.00)"
+        }
+      ]
+    },
+    "orderWindowFigures": {
+      "module": "libs/plugins/commerce/src/lib/model/order-figures.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "$id": "o1",
+                "status": "paid",
+                "createdAtMs": 1000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 2,
+                    "unitAmountCents": 500
+                  }
+                ],
+                "totals": {
+                  "totalCents": 1000
+                },
+                "livemode": true
+              },
+              {
+                "$id": "o2",
+                "status": "refunded",
+                "createdAtMs": 2000,
+                "lineItems": [
+                  {
+                    "productId": "p2",
+                    "name": "Tote",
+                    "quantity": 1,
+                    "unitAmountCents": 700
+                  }
+                ],
+                "totals": {
+                  "totalCents": 700
+                },
+                "refundedCents": 700,
+                "livemode": true
+              },
+              {
+                "$id": "o3",
+                "status": "pending",
+                "createdAtMs": 3000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 900
+                  }
+                ],
+                "totals": {
+                  "totalCents": 900
+                }
+              },
+              {
+                "$id": "cs_test_abc",
+                "status": "paid",
+                "createdAtMs": 4000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 300
+                  }
+                ],
+                "totals": {
+                  "totalCents": 300
+                }
+              },
+              {
+                "$id": "o5",
+                "createdAtMs": 5000,
+                "amountCents": 1200,
+                "productId": "p3"
+              },
+              {
+                "$id": "o6",
+                "status": "cancelled",
+                "createdAtMs": 6000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 100
+                  }
+                ],
+                "totals": {
+                  "totalCents": 100
+                }
+              },
+              {
+                "$id": "o7",
+                "status": "fulfilled",
+                "createdAtMs": 7000,
+                "lineItems": [
+                  {
+                    "productId": "p2",
+                    "name": "Tote",
+                    "quantity": 3,
+                    "unitAmountCents": 200
+                  },
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 50
+                  }
+                ],
+                "totals": {
+                  "totalCents": 650
+                },
+                "refundedCents": 50,
+                "livemode": true
+              }
+            ],
+            0,
+            10000
+          ],
+          "result": {
+            "averageCents": 700,
+            "orders": 4,
+            "revenueCents": 2800
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "$id": "o1",
+                "status": "paid",
+                "createdAtMs": 1000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 2,
+                    "unitAmountCents": 500
+                  }
+                ],
+                "totals": {
+                  "totalCents": 1000
+                },
+                "livemode": true
+              },
+              {
+                "$id": "o2",
+                "status": "refunded",
+                "createdAtMs": 2000,
+                "lineItems": [
+                  {
+                    "productId": "p2",
+                    "name": "Tote",
+                    "quantity": 1,
+                    "unitAmountCents": 700
+                  }
+                ],
+                "totals": {
+                  "totalCents": 700
+                },
+                "refundedCents": 700,
+                "livemode": true
+              },
+              {
+                "$id": "o3",
+                "status": "pending",
+                "createdAtMs": 3000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 900
+                  }
+                ],
+                "totals": {
+                  "totalCents": 900
+                }
+              },
+              {
+                "$id": "cs_test_abc",
+                "status": "paid",
+                "createdAtMs": 4000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 300
+                  }
+                ],
+                "totals": {
+                  "totalCents": 300
+                }
+              },
+              {
+                "$id": "o5",
+                "createdAtMs": 5000,
+                "amountCents": 1200,
+                "productId": "p3"
+              },
+              {
+                "$id": "o6",
+                "status": "cancelled",
+                "createdAtMs": 6000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 100
+                  }
+                ],
+                "totals": {
+                  "totalCents": 100
+                }
+              },
+              {
+                "$id": "o7",
+                "status": "fulfilled",
+                "createdAtMs": 7000,
+                "lineItems": [
+                  {
+                    "productId": "p2",
+                    "name": "Tote",
+                    "quantity": 3,
+                    "unitAmountCents": 200
+                  },
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 50
+                  }
+                ],
+                "totals": {
+                  "totalCents": 650
+                },
+                "refundedCents": 50,
+                "livemode": true
+              }
+            ],
+            2000,
+            6000
+          ],
+          "result": {
+            "averageCents": 600,
+            "orders": 2,
+            "revenueCents": 1200
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "$id": "o1",
+                "status": "paid",
+                "createdAtMs": 1000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 2,
+                    "unitAmountCents": 500
+                  }
+                ],
+                "totals": {
+                  "totalCents": 1000
+                },
+                "livemode": true
+              },
+              {
+                "$id": "o2",
+                "status": "refunded",
+                "createdAtMs": 2000,
+                "lineItems": [
+                  {
+                    "productId": "p2",
+                    "name": "Tote",
+                    "quantity": 1,
+                    "unitAmountCents": 700
+                  }
+                ],
+                "totals": {
+                  "totalCents": 700
+                },
+                "refundedCents": 700,
+                "livemode": true
+              },
+              {
+                "$id": "o3",
+                "status": "pending",
+                "createdAtMs": 3000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 900
+                  }
+                ],
+                "totals": {
+                  "totalCents": 900
+                }
+              },
+              {
+                "$id": "cs_test_abc",
+                "status": "paid",
+                "createdAtMs": 4000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 300
+                  }
+                ],
+                "totals": {
+                  "totalCents": 300
+                }
+              },
+              {
+                "$id": "o5",
+                "createdAtMs": 5000,
+                "amountCents": 1200,
+                "productId": "p3"
+              },
+              {
+                "$id": "o6",
+                "status": "cancelled",
+                "createdAtMs": 6000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 100
+                  }
+                ],
+                "totals": {
+                  "totalCents": 100
+                }
+              },
+              {
+                "$id": "o7",
+                "status": "fulfilled",
+                "createdAtMs": 7000,
+                "lineItems": [
+                  {
+                    "productId": "p2",
+                    "name": "Tote",
+                    "quantity": 3,
+                    "unitAmountCents": 200
+                  },
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 50
+                  }
+                ],
+                "totals": {
+                  "totalCents": 650
+                },
+                "refundedCents": 50,
+                "livemode": true
+              }
+            ],
+            8000,
+            9000
+          ],
+          "result": {
+            "averageCents": 0,
+            "orders": 0,
+            "revenueCents": 0
+          }
+        },
+        {
+          "args": [
+            [],
+            0,
+            1
+          ],
+          "result": {
+            "averageCents": 0,
+            "orders": 0,
+            "revenueCents": 0
+          }
+        }
+      ]
+    },
+    "productInventory": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "variants": [
+                {
+                  "id": "a",
+                  "priceUsd": 1
+                },
+                {
+                  "id": "b",
+                  "priceUsd": 1
+                }
+              ]
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "variants": [
+                {
+                  "id": "a",
+                  "priceUsd": 1,
+                  "inventory": 3
+                },
+                {
+                  "id": "b",
+                  "priceUsd": 1,
+                  "inventory": null
+                },
+                {
+                  "id": "c",
+                  "priceUsd": 1,
+                  "inventory": 4
+                }
+              ]
+            }
+          ],
+          "result": 7
+        },
+        {
+          "args": [
+            {
+              "variants": [
+                {
+                  "id": "a",
+                  "priceUsd": 1,
+                  "inventory": 0
+                }
+              ]
+            }
+          ],
+          "result": 0
+        }
+      ]
+    },
+    "productPriceRange": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "variants": []
+            }
+          ],
+          "result": [
+            0,
+            0
+          ]
+        },
+        {
+          "args": [
+            {
+              "variants": [
+                {
+                  "id": "a",
+                  "priceUsd": 5
+                },
+                {
+                  "id": "b",
+                  "priceUsd": 12.5
+                },
+                {
+                  "id": "c",
+                  "priceUsd": -1
+                }
+              ]
+            }
+          ],
+          "result": [
+            5,
+            12.5
+          ]
+        },
+        {
+          "args": [
+            {
+              "variants": [
+                {
+                  "id": "a",
+                  "priceUsd": 3
+                }
+              ]
+            }
+          ],
+          "result": [
+            3,
+            3
+          ]
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": [
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "productSales": {
+      "module": "libs/plugins/commerce/src/lib/model/order-figures.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "$id": "o1",
+                "status": "paid",
+                "createdAtMs": 1000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 2,
+                    "unitAmountCents": 500
+                  }
+                ],
+                "totals": {
+                  "totalCents": 1000
+                },
+                "livemode": true
+              },
+              {
+                "$id": "o2",
+                "status": "refunded",
+                "createdAtMs": 2000,
+                "lineItems": [
+                  {
+                    "productId": "p2",
+                    "name": "Tote",
+                    "quantity": 1,
+                    "unitAmountCents": 700
+                  }
+                ],
+                "totals": {
+                  "totalCents": 700
+                },
+                "refundedCents": 700,
+                "livemode": true
+              },
+              {
+                "$id": "o3",
+                "status": "pending",
+                "createdAtMs": 3000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 900
+                  }
+                ],
+                "totals": {
+                  "totalCents": 900
+                }
+              },
+              {
+                "$id": "cs_test_abc",
+                "status": "paid",
+                "createdAtMs": 4000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 300
+                  }
+                ],
+                "totals": {
+                  "totalCents": 300
+                }
+              },
+              {
+                "$id": "o5",
+                "createdAtMs": 5000,
+                "amountCents": 1200,
+                "productId": "p3"
+              },
+              {
+                "$id": "o6",
+                "status": "cancelled",
+                "createdAtMs": 6000,
+                "lineItems": [
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 100
+                  }
+                ],
+                "totals": {
+                  "totalCents": 100
+                }
+              },
+              {
+                "$id": "o7",
+                "status": "fulfilled",
+                "createdAtMs": 7000,
+                "lineItems": [
+                  {
+                    "productId": "p2",
+                    "name": "Tote",
+                    "quantity": 3,
+                    "unitAmountCents": 200
+                  },
+                  {
+                    "productId": "p1",
+                    "name": "Mug",
+                    "quantity": 1,
+                    "unitAmountCents": 50
+                  }
+                ],
+                "totals": {
+                  "totalCents": 650
+                },
+                "refundedCents": 50,
+                "livemode": true
+              }
+            ]
+          ],
+          "result": [
+            {
+              "cents": 1300,
+              "name": "Tote",
+              "productId": "p2",
+              "units": 4
+            },
+            {
+              "cents": 1050,
+              "name": "Mug",
+              "productId": "p1",
+              "units": 3
+            }
+          ]
+        },
+        {
+          "args": [
+            []
+          ],
+          "result": []
+        }
+      ]
+    },
+    "readMobilePushData": {
+      "module": "libs/aglyn/src/lib/app-utils/mobile-push.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "type": "content.order",
+              "link": "/h1/orders",
+              "orgId": "o1",
+              "hostId": "h1"
+            }
+          ],
+          "result": {
+            "hostId": "h1",
+            "link": "/h1/orders",
+            "orgId": "o1",
+            "type": "content.order"
+          }
+        },
+        {
+          "args": [
+            {
+              "type": "content.order",
+              "link": "https://app.aglyn.com/x"
+            }
+          ],
+          "result": {
+            "link": "https://app.aglyn.com/x",
+            "type": "content.order"
+          }
+        },
+        {
+          "args": [
+            {
+              "type": "content.order",
+              "link": "javascript:alert(1)"
+            }
+          ],
+          "result": {
+            "type": "content.order"
+          }
+        },
+        {
+          "args": [
+            {
+              "type": "content.order",
+              "link": "aglyn://x",
+              "orgId": ""
+            }
+          ],
+          "result": {
+            "type": "content.order"
+          }
+        },
+        {
+          "args": [
+            {
+              "type": ""
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "link": "/x"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "text"
+          ],
+          "result": null
         }
       ]
     }

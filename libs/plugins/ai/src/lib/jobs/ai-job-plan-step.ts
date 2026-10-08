@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { createHash } from 'node:crypto'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import {
@@ -46,6 +47,7 @@ import {
   AI_SITE_FREE_PAGES,
   AI_SITE_PLAN_MAX_TOKENS,
   aiFreeSiteSectionsWithin,
+  aiSiteNameSentence,
   aiSitePlanShapeRefusal,
 } from '../model/ai-site-job'
 import { aiPlanFailureCopy, aiPlanRetryRefusal } from '../model/ai-job-failure-copy'
@@ -221,12 +223,16 @@ export function aiPlanBuildLines(
  * job's turn, whose length the Free page's wall is proven at.
  */
 export function aiPlanSiteLines(
-  job: Pick<AiJob, 'kind'>,
+  job: Pick<AiJob, 'kind'> & Partial<Pick<AiJob, 'inputs'>>,
   inventory: AiSiteInventory | null,
   capabilities: AiPlanCapabilities | null,
 ): string[] {
   if (job.kind !== 'site') return []
   const lines: string[] = []
+  // The business's own name, as the name to use (AGL-3596): the plan's search
+  // titles carry it, and an input line alone left the model free to coin one.
+  const name = job.inputs?.['businessName']
+  if (typeof name === 'string' && name.trim()) lines.push(aiSiteNameSentence(name.trim()))
   const pages = (inventory?.screens ?? []).filter((screen) => !screen.template)
   const starter = pages.find((screen) => screen.replaceable)
   if (pages.length) {
@@ -252,6 +258,9 @@ export function aiPlanSiteLines(
       `This is a Free workspace: plan at most ${cap} ${cap === 1 ? 'page' : 'pages'} — the home page at / and the one page the brief most needs, such as services, booking or contact — with at most ${sections} sections across them.${aiPlanCanPlaceForm(inventory, capabilities) ? ' Put the contact form on one of them.' : ''}`,
     )
   }
+  // The kind of site the person picked (AGL-3660): the pages it usually has.
+  const kind = aiSiteKindOfInputs(job.inputs)
+  if (kind) lines.push(`This is a ${kind.label.toLowerCase()} site. ${kind.pages}`)
   lines.push(
     "Keep the plan an outline: each page's title, address, a short search title and description, and its sections named in a few words. The build writes the copy.",
   )
@@ -763,7 +772,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
             codes: result.violations.map((violation) => violation.code),
             refunded: false,
           }),
-          detail: review.message,
+          detail: review.detail ?? review.message,
           ...(retryRefusal ? { retryRefusal } : {}),
         },
       }
@@ -790,34 +799,43 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
 }
 
 /**
- * A site job's capabilities on the Free taste (AGL-3594): its plan holds at
- * most the pages the member asked for within the Free band, which the Free
- * wall then holds it to, and it changes no theme — the site was born with
- * one (AGL-3497), and a palette pass is credits the two pages need. Every
- * other job's capabilities pass through.
+ * A site job's capabilities (AGL-3594, AGL-3660): it changes no theme in its
+ * plan — every scaffold designs its look first, in a unit of its own — and on
+ * the Free taste its plan holds at most the pages the member asked for within
+ * the Free band, which the Free wall then holds it to. Every other job's
+ * capabilities pass through.
  */
 export function aiSitePlanCapabilities(
   job: Pick<AiJob, 'kind' | 'inputs'>,
   capabilities: AiPlanCapabilities | null,
 ): AiPlanCapabilities | null {
-  if (job.kind !== 'site' || !capabilities?.freeTaste) return capabilities
+  if (job.kind !== 'site' || !capabilities) return capabilities
+  const create = {
+    ...capabilities.create,
+    'theme-change': {
+      allowed: false,
+      left: null,
+      reason: 'a site start designs its own look before its pages',
+    },
+    // A site start builds its look, one layout and one form, never a
+    // component (`AI_SITE_CREATE_KINDS`), so a paid workspace's plan draws
+    // repeated items in their sections, as a Free one's does. Held to rule 1
+    // instead, every paid plan was refused: for the component it left out,
+    // or, re-asked, for the one it could not build (AGL-3660).
+    component: {
+      allowed: false,
+      left: null,
+      reason: 'a site start draws its repeated items in their sections',
+    },
+  }
+  const site = { ...capabilities, reusableComponents: false, create }
+  if (!capabilities.freeTaste) return site
   const asked = Number((job.inputs ?? {})['pages'])
   const pages =
     Number.isInteger(asked) && asked >= AI_SITE_FREE_PAGES.min
       ? Math.min(asked, AI_SITE_FREE_PAGES.max)
       : AI_SITE_FREE_PAGES.max
-  return {
-    ...capabilities,
-    freeSitePages: pages,
-    create: {
-      ...capabilities.create,
-      'theme-change': {
-        allowed: false,
-        left: null,
-        reason: "a Free workspace's site start keeps the theme the site was created with",
-      },
-    },
-  }
+  return { ...site, freeSitePages: pages }
 }
 
 /**

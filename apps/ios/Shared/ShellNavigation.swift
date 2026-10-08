@@ -9,8 +9,10 @@ import SwiftUI
 enum Route: Hashable {
   /// A plugin screen by id, with its params.
   case screen(String, NativeParams)
-  /// A console path in the authenticated WebView.
-  case console(String)
+  /// A Besigner page in the app's authenticated web view (the only web content).
+  case besigner(String)
+  /// A console page the app has no native screen for yet.
+  case unavailable(String)
 }
 
 /// The shell's top-level sections: the sidebar on iPad and Mac, the tab bar on iPhone.

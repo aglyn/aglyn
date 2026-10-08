@@ -216,6 +216,7 @@ export default function StaffChurnReportCard() {
                   {report.comments.map((comment) => (
                     <Stack key={comment.id} spacing={0.5}>
                       <Stack
+                        useFlexGap
                         direction="row"
                         spacing={0.5}
                         sx={{ alignItems: 'center', flexWrap: 'wrap' }}

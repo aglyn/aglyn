@@ -69,6 +69,8 @@ android {
 dependencies {
   implementation(project(":native-shell"))
   implementation(project(":plugin-manifest"))
+  // Scan stock: the products scanner, CameraX + ML Kit (approved 2026-10-07).
+  implementation(project(":native-camera"))
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.core.splashscreen)

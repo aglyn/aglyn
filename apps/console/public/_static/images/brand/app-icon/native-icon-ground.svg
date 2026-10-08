@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- The ground of the native Aglyn and Aglyn POS app icons: primary #00B0FF at the top-left corner to secondary #E040FB at the bottom-right. -->
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#00B0FF"/>
+      <stop offset="1" stop-color="#E040FB"/>
+    </linearGradient>
+  </defs>
+  <path d="M0 0H1024V1024H0Z" fill="url(#ground)"/>
+</svg>

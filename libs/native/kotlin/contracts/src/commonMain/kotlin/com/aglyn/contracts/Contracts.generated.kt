@@ -64,6 +64,7 @@ data class HostOrder(
     val buyerNotifications: Map<String, HostOrderBuyerNotificationsValue>? = null,
     val cashierId: String? = null,
     val channel: OrderChannel? = null,
+    val channelSource: OrderChannelSource? = null,
     val checkoutSessionId: String? = null,
     val couponCode: String? = null,
     val createdAtMs: Double? = null,
@@ -75,6 +76,7 @@ data class HostOrder(
     val discountBy: String? = null,
     val discountPct: Double? = null,
     val dispute: OrderDispute? = null,
+    val extras: List<OrderExtra>? = null,
     val feeCents: Double? = null,
     val fulfillments: List<OrderFulfillment>? = null,
     val invoiceId: String? = null,
@@ -94,7 +96,7 @@ data class HostOrder(
     val restockCheck: OrderRestockCheck? = null,
     val shiftId: String? = null,
     val shippingAddress: OrderAddress? = null,
-    val status: OrderStatus,
+    val status: OrderStatus? = null,
     val subscriptionId: String? = null,
     val taxMode: HostOrderTaxMode? = null,
     val timeline: List<OrderTimelineEvent>? = null,
@@ -157,6 +159,90 @@ internal object HostOrderTaxModeSerializer :
     RawEnumSerializer<HostOrderTaxMode>("com.aglyn.contracts.HostOrderTaxMode", HostOrderTaxMode.entries, HostOrderTaxMode.UNKNOWN, { it.raw })
 
 @Serializable
+data class HostProduct(
+    val categoryIds: List<String>? = null,
+    val channel: ProductChannelFacts? = null,
+    val collectionIds: List<String>? = null,
+    val createdAtMs: Double? = null,
+    val description: String? = null,
+    val digitalFiles: List<HostProductDigitalFilesItem>? = null,
+    val downloadLimit: Double? = null,
+    val gatedVideos: List<HostProductGatedVideosItem>? = null,
+    val giftCard: Boolean? = null,
+    val imageUrl: String? = null,
+    val inventory: Double? = null,
+    val lowStockThreshold: Double? = null,
+    val mediaUrls: List<String>? = null,
+    val modifierGroups: List<ProductModifierGroup>? = null,
+    val name: String? = null,
+    val options: List<ProductOption>? = null,
+    val oversellPolicy: HostProductOversellPolicy? = null,
+    val posQuickKey: Boolean? = null,
+    val priceUsd: Double? = null,
+    val relatedProductIds: List<String>? = null,
+    val seo: HostProductSeo? = null,
+    val shipping: ProductShippingFacts? = null,
+    val slug: String? = null,
+    val status: ProductStatus? = null,
+    val subscription: HostProductSubscription? = null,
+    val subscriptionOptional: Boolean? = null,
+    val supplierId: String? = null,
+    val tags: List<String>? = null,
+    val taxExempt: Boolean? = null,
+    val type: ProductType? = null,
+    val updatedAtMs: Double? = null,
+    val variants: List<ProductVariant>? = null,
+)
+
+@Serializable
+data class HostProductDigitalFilesItem(
+    val fileName: String,
+    val url: String,
+    val version: String? = null,
+)
+
+@Serializable
+data class HostProductGatedVideosItem(
+    val title: String? = null,
+    val url: String,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = HostProductOversellPolicySerializer::class)
+enum class HostProductOversellPolicy(val raw: String) {
+    BACKORDER("backorder"),
+    DENY("deny"),
+    UNKNOWN(""),
+}
+
+internal object HostProductOversellPolicySerializer :
+    RawEnumSerializer<HostProductOversellPolicy>("com.aglyn.contracts.HostProductOversellPolicy", HostProductOversellPolicy.entries, HostProductOversellPolicy.UNKNOWN, { it.raw })
+
+@Serializable
+data class HostProductSeo(
+    val description: String? = null,
+    val imageUrl: String? = null,
+    val title: String? = null,
+)
+
+@Serializable
+data class HostProductSubscription(
+    val interval: HostProductSubscriptionInterval,
+    val trialDays: Double? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = HostProductSubscriptionIntervalSerializer::class)
+enum class HostProductSubscriptionInterval(val raw: String) {
+    MONTH("month"),
+    YEAR("year"),
+    UNKNOWN(""),
+}
+
+internal object HostProductSubscriptionIntervalSerializer :
+    RawEnumSerializer<HostProductSubscriptionInterval>("com.aglyn.contracts.HostProductSubscriptionInterval", HostProductSubscriptionInterval.entries, HostProductSubscriptionInterval.UNKNOWN, { it.raw })
+
+@Serializable
 data class HostRedirect(
     val destination: String,
     val enabled: Boolean? = null,
@@ -178,6 +264,14 @@ enum class HostRedirectKind(val raw: String) {
 
 internal object HostRedirectKindSerializer :
     RawEnumSerializer<HostRedirectKind>("com.aglyn.contracts.HostRedirectKind", HostRedirectKind.entries, HostRedirectKind.UNKNOWN, { it.raw })
+
+@Serializable
+data class ListFilterClause(
+    val field: String,
+    val label: String? = null,
+    val op: String,
+    val value: String,
+)
 
 @Serializable
 data class ListFilterField(
@@ -422,6 +516,7 @@ data class OrderAddress(
 @Serializable(with = OrderChannelSerializer::class)
 enum class OrderChannel(val raw: String) {
     DRAFT("draft"),
+    MARKETPLACE("marketplace"),
     ONLINE("online"),
     POS("pos"),
     SUBSCRIPTION("subscription"),
@@ -430,6 +525,31 @@ enum class OrderChannel(val raw: String) {
 
 internal object OrderChannelSerializer :
     RawEnumSerializer<OrderChannel>("com.aglyn.contracts.OrderChannel", OrderChannel.entries, OrderChannel.UNKNOWN, { it.raw })
+
+@Serializable
+data class OrderChannelSource(
+    val channelId: String,
+    val channelLabel: String,
+    val currency: String,
+    val externalOrderId: String,
+    val externalRef: String,
+    val fees: List<OrderChannelSourceFeesItem>? = null,
+    val feesTotalCents: Double? = null,
+    val lines: List<OrderChannelSourceLinesItem>,
+    val taxRemittedByChannel: Boolean,
+)
+
+@Serializable
+data class OrderChannelSourceFeesItem(
+    val amountCents: Double,
+    val label: String,
+)
+
+@Serializable
+data class OrderChannelSourceLinesItem(
+    val externalLineId: String,
+    val lineIndex: Double,
+)
 
 @Serializable
 data class OrderDispute(
@@ -444,6 +564,16 @@ data class OrderDispute(
     val reversedTransferCents: Double? = null,
     val status: String,
     val transferReversalId: String? = null,
+)
+
+@Serializable
+data class OrderExtra(
+    val amountCents: Double,
+    val id: String,
+    val key: String,
+    val label: String,
+    val pluginId: String,
+    val quoteRef: String? = null,
 )
 
 @Serializable
@@ -622,6 +752,20 @@ enum class OrderStatus(val raw: String) {
 internal object OrderStatusSerializer :
     RawEnumSerializer<OrderStatus>("com.aglyn.contracts.OrderStatus", OrderStatus.entries, OrderStatus.UNKNOWN, { it.raw })
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = OrderStatusColorValueSerializer::class)
+enum class OrderStatusColorValue(val raw: String) {
+    DEFAULT("default"),
+    ERROR("error"),
+    INFO("info"),
+    SUCCESS("success"),
+    WARNING("warning"),
+    UNKNOWN(""),
+}
+
+internal object OrderStatusColorValueSerializer :
+    RawEnumSerializer<OrderStatusColorValue>("com.aglyn.contracts.OrderStatusColorValue", OrderStatusColorValue.entries, OrderStatusColorValue.UNKNOWN, { it.raw })
+
 @Serializable
 data class OrderTimelineEvent(
     val atMs: Double,
@@ -631,13 +775,14 @@ data class OrderTimelineEvent(
 
 @Serializable
 data class OrderTotals(
-    val discountCents: Double,
-    val feeCents: Double,
-    val itemsCents: Double,
-    val shippingCents: Double,
-    val taxCents: Double,
+    val discountCents: Double? = null,
+    val extrasCents: Double? = null,
+    val feeCents: Double? = null,
+    val itemsCents: Double? = null,
+    val shippingCents: Double? = null,
+    val taxCents: Double? = null,
     val tipCents: Double? = null,
-    val totalCents: Double,
+    val totalCents: Double? = null,
 )
 
 @Serializable
@@ -689,6 +834,27 @@ internal object PosReceiptChannelSerializer :
     RawEnumSerializer<PosReceiptChannel>("com.aglyn.contracts.PosReceiptChannel", PosReceiptChannel.entries, PosReceiptChannel.UNKNOWN, { it.raw })
 
 @Serializable
+data class ProductChannelFacts(
+    val brand: String? = null,
+    val condition: ProductChannelFactsCondition? = null,
+    val googleProductCategory: String? = null,
+    val gtin: String? = null,
+    val mpn: String? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = ProductChannelFactsConditionSerializer::class)
+enum class ProductChannelFactsCondition(val raw: String) {
+    NEW("new"),
+    REFURBISHED("refurbished"),
+    USED("used"),
+    UNKNOWN(""),
+}
+
+internal object ProductChannelFactsConditionSerializer :
+    RawEnumSerializer<ProductChannelFactsCondition>("com.aglyn.contracts.ProductChannelFactsCondition", ProductChannelFactsCondition.entries, ProductChannelFactsCondition.UNKNOWN, { it.raw })
+
+@Serializable
 data class ProductModifierGroup(
     val id: String,
     val max: Double,
@@ -704,6 +870,33 @@ data class ProductModifierOption(
     val priceCents: Double,
 )
 
+@Serializable
+data class ProductOption(
+    val name: String,
+    val values: List<String>,
+)
+
+@Serializable
+data class ProductShippingFacts(
+    val heightCm: Double? = null,
+    val hsCode: String? = null,
+    val lengthCm: Double? = null,
+    val originCountry: String? = null,
+    val widthCm: Double? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = ProductStatusSerializer::class)
+enum class ProductStatus(val raw: String) {
+    ACTIVE("active"),
+    ARCHIVED("archived"),
+    DRAFT("draft"),
+    UNKNOWN(""),
+}
+
+internal object ProductStatusSerializer :
+    RawEnumSerializer<ProductStatus>("com.aglyn.contracts.ProductStatus", ProductStatus.entries, ProductStatus.UNKNOWN, { it.raw })
+
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = ProductTypeSerializer::class)
 enum class ProductType(val raw: String) {
@@ -715,6 +908,20 @@ enum class ProductType(val raw: String) {
 
 internal object ProductTypeSerializer :
     RawEnumSerializer<ProductType>("com.aglyn.contracts.ProductType", ProductType.entries, ProductType.UNKNOWN, { it.raw })
+
+@Serializable
+data class ProductVariant(
+    val barcode: String? = null,
+    val compareAtPriceUsd: Double? = null,
+    val id: String? = null,
+    val imageUrl: String? = null,
+    val inventory: Double? = null,
+    val inventoryByLocation: Map<String, Double>? = null,
+    val options: Map<String, String>? = null,
+    val priceUsd: Double? = null,
+    val sku: String? = null,
+    val weightGrams: Double? = null,
+)
 
 @Serializable
 data class ReceiptData(
@@ -764,12 +971,14 @@ data class ContractValues(
     @SerialName("LIST_QUERY_ID_PATH") val listQueryIdPath: String,
     @SerialName("NAME_TOKEN_LIMIT") val nameTokenLimit: Long,
     @SerialName("NAME_TOKEN_MAX_PREFIX") val nameTokenMaxPrefix: Long,
+    @SerialName("OPEN_DISPUTE_CLAUSE") val openDisputeClause: ListFilterClause,
     @SerialName("ORDER_CHANNEL_LABELS") val orderChannelLabels: Map<String, String>,
     @SerialName("ORDER_CHANNEL_OPTIONS") val orderChannelOptions: List<ListFilterOption>,
     @SerialName("ORDER_DISPUTE_OPTIONS") val orderDisputeOptions: List<ListFilterOption>,
     @SerialName("ORDER_LIST_HEADERS") val orderListHeaders: Map<String, String>,
     @SerialName("ORDER_LIST_QUERY") val orderListQuery: ListQueryDeclaration,
     @SerialName("ORDER_LIST_SELECT_FIELDS") val orderListSelectFields: List<String>,
+    @SerialName("ORDER_STATUS_COLOR") val orderStatusColor: Map<String, OrderStatusColorValue>,
     @SerialName("ORDER_STATUS_LABELS") val orderStatusLabels: Map<String, String>,
     @SerialName("ORDER_STATUS_OPTIONS") val orderStatusOptions: List<ListFilterOption>,
     @SerialName("PRODUCT_LIST_BASE") val productListBase: List<ListQueryFilter>,

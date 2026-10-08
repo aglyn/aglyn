@@ -51,8 +51,15 @@ const EASYPOST_SERVICES: PluginShippingService[] = [
   { serviceKey: 'dhlexpress:expressworldwide', carrier: 'DHL Express', label: 'DHL Express Worldwide' },
 ]
 
+/**
+ * The list checkout can be narrowed to. A merchant's own Easyship or
+ * Sendcloud account (AGL-3632) offers whatever couriers that account has
+ * switched on, so there is no fixed list: every quoted service is offered.
+ */
 export function serviceCatalog(providerId: ShippingProviderId): PluginShippingService[] {
-  return providerId === 'easypost' ? EASYPOST_SERVICES : SHIPPO_SERVICES
+  if (providerId === 'easypost') return EASYPOST_SERVICES
+  if (providerId === 'shippo') return SHIPPO_SERVICES
+  return []
 }
 
 /**

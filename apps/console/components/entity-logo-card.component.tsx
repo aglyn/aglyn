@@ -199,7 +199,16 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
         <Typography variant="body2" color="text.secondary">
           {entityCopy.description}
         </Typography>
-        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+        <Stack
+          direction="row"
+          spacing={2}
+          useFlexGap
+          sx={{
+            alignItems: 'center',
+            flexWrap: { xs: 'wrap', md: 'nowrap' },
+            rowGap: 1,
+          }}
+        >
           {preview ? (
             <Box
               component="img"

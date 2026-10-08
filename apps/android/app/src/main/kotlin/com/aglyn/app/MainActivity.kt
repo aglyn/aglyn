@@ -7,6 +7,9 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.CompositionLocalProvider
+import com.aglyn.camera.CameraXBarcodeScanner
+import com.aglyn.ui.LocalCameraScanner
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
@@ -39,7 +42,12 @@ class MainActivity : ComponentActivity() {
     lifecycleScope.launch {
       services.auth.state.collect { state -> if (state is AuthState.SignedIn) askForNotificationsOnce() }
     }
-    setContent { AglynShell(services, autoSignIn = autoSignIn, pendingLink = pendingLink, onLinkOpened = { pendingLink = null }) }
+    setContent {
+      // Scan stock reads barcodes with CameraX + ML Kit.
+      CompositionLocalProvider(LocalCameraScanner provides CameraXBarcodeScanner) {
+        AglynShell(services, autoSignIn = autoSignIn, pendingLink = pendingLink, onLinkOpened = { pendingLink = null })
+      }
+    }
   }
 
   override fun onNewIntent(intent: Intent) {

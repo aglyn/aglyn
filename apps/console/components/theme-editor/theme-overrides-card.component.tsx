@@ -284,6 +284,7 @@ export function ThemeOverridesCard(props: {
                   <TableRow key={entry.path}>
                     <TableCell>
                       <Stack
+                        useFlexGap
                         direction="row"
                         spacing={1}
                         sx={{ alignItems: 'center', flexWrap: 'wrap' }}

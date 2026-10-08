@@ -51,6 +51,7 @@ import {
 } from 'react'
 import { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
 import { CheckoutReturnNotice } from './checkout-return-notice'
+import { CartExtras, useCartExtras } from './cart-extras'
 
 /**
  * The Payment Element (AGL-1944), lazily. Stripe.js and its React wrapper are
@@ -247,9 +248,12 @@ function CartLines(props: {
       ),
     [cart],
   )
+  // Optional lines another plugin offers (AGL-3635), asked while the cart is shown.
+  const extras = useCartExtras(hostId, cartSignature)
+  const extrasSignature = extras.chosenIds.join(',')
   useEffect(() => {
     attemptKey.current = ''
-  }, [cartSignature, email, coupon, giftCard, shipTo, shipPostal])
+  }, [cartSignature, email, coupon, giftCard, shipTo, shipPostal, extrasSignature])
 
   const handleCheckout = useCallback(async () => {
     if (status === 'sending') return
@@ -281,6 +285,8 @@ function CartLines(props: {
           // rate than the address the shopper then enters (AGL-1721).
           ...(shipTo ? { shippingCountry: shipTo } : {}),
           ...(shipPostal.trim() ? { shippingPostalCode: shipPostal.trim() } : {}),
+          // Which offers, never their price: the server asks the provider again.
+          ...(extras.chosenIds.length ? { extras: extras.chosenIds } : {}),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -357,6 +363,14 @@ function CartLines(props: {
       // this is a visitor-facing surface, the 501 bodies differ between the
       // cart and buy-now doors, and one of them could grow a variable name
       // without anyone thinking about who reads it.
+      // An offer the shopper ticked changed or went away (AGL-3635): show
+      // what is offered now and let them decide again.
+      if (payload?.extrasChanged) {
+        extras.reload()
+        setMessage(String(payload?.error ?? ''))
+        setStatus('error')
+        return
+      }
       if (isPaymentsNotConfigured(response.status)) {
         setMessage(storefrontPaymentsNotConfiguredText())
         setStatus('unconfigured')
@@ -389,7 +403,7 @@ function CartLines(props: {
     // subtotal and the OLD lines. The pre-AGL-1591 raw call had the same bug
     // in the `value` alone, where a wrong number is indistinguishable from a
     // right one.
-  }, [hostId, cart, coupon, email, optIn, giftCard, shipTo, shipPostal, status, siteFetch])
+  }, [hostId, cart, coupon, email, optIn, giftCard, shipTo, shipPostal, status, siteFetch, extras.chosenIds, extras.reload])
 
   if (!cart || cart.lines.length === 0) {
     return (
@@ -485,6 +499,12 @@ function CartLines(props: {
         <Typography variant="subtitle2">{'Subtotal'}</Typography>
         <Typography variant="subtitle2">{usd(cart.subtotalCents)}</Typography>
       </Box>
+      <CartExtras
+        offers={extras.offers}
+        chosen={extras.chosen}
+        onToggle={extras.toggle}
+        formatCents={usd}
+      />
       <Typography variant="caption" color="text.secondary">
         {'Shipping and taxes are calculated at checkout.'}
       </Typography>

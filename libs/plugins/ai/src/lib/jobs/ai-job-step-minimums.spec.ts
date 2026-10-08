@@ -35,6 +35,7 @@
  * through its units, where each pass needs its own unit's time.
  */
 
+import { AI_SITE_LOOK_BUDGET } from './ai-job-site-look'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AiBuildPlanCreate } from '../model/ai-build-plan'
@@ -64,6 +65,7 @@ import { AI_JOB_FORM_STEP_BUDGET } from './ai-job-form-step'
 import { AI_INSIGHT_READS_MS, AI_JOB_INSIGHT_STEP_BUDGET } from './ai-job-insight-budget'
 import { AI_JOB_LAYOUT_STEP_BUDGET } from './ai-job-layout-step'
 import { AI_JOB_PAGE_SECTION_MAX_TOKENS, AI_JOB_PAGE_SECTION_TOKENS, AI_JOB_PAGE_STEP_BUDGET } from './ai-job-page-budget'
+import { AI_JOB_PAGE_LANGUAGE_BUDGET } from './ai-job-page-language'
 import { AI_JOB_PLAN_STEP_BUDGET } from './ai-job-plan-step'
 import {
   AI_JOB_CATALOG_BUDGET,
@@ -414,9 +416,17 @@ describe('a pass needs the time of the step its unit is handed to (AGL-3035)', (
       ...Array.from({ length: AI_SITE_PAGES.min }, (_, index): [AiJobKind, AiJobOutput] => ['page', built('screen', `drftPage0${index}`)]),
       ['email', built('emailScreen', 'drftWelcom')],
     ]
+    // A scaffold's page is one answer in the layout language (AGL-3660), so it needs that pass's time,
+    // and its look is one short answer on the fast tier, held to the least any scaffold pass registers.
+    const unitMinimum = (kind: AiJobKind) =>
+      kind === 'page'
+        ? AI_JOB_PAGE_LANGUAGE_BUDGET.minimumMs
+        : kind === 'theme'
+          ? Math.max(AI_SITE_LOOK_BUDGET.minimumMs, aiJobStepMinimumMs('site', 'generate'))
+          : aiJobStepMinimumMs(kind, 'generate')
     const outputs: AiJobOutput[] = []
     for (const [kind, output] of units) {
-      expect([kind, aiJobNextStepMinimumMs({ ...job, outputs: [...outputs] })]).toEqual([kind, aiJobStepMinimumMs(kind, 'generate')])
+      expect([kind, aiJobNextStepMinimumMs({ ...job, outputs: [...outputs] })]).toEqual([kind, unitMinimum(kind)])
       outputs.push(output)
     }
     // A scaffold with nothing left to build spends nothing; a page pass's time covers it.
@@ -445,7 +455,8 @@ describe('a pass needs the time of the step its unit is handed to (AGL-3035)', (
     expect(next([])).toBe(aiJobStepMinimumMs('layout', 'generate'))
     expect(next(['c0'])).toBe(aiJobStepMinimumMs('form', 'generate'))
     expect(next(['c0', 'c1'])).toBe(aiJobStepMinimumMs('template', 'generate'))
-    expect(next(['c0', 'c1', 'i0'])).toBe(aiJobStepMinimumMs('page', 'generate'))
+    // A build's page is one answer in the layout language (AGL-3660).
+    expect(next(['c0', 'c1', 'i0'])).toBe(AI_JOB_PAGE_LANGUAGE_BUDGET.minimumMs)
     // Nothing left: a page pass's time covers the last, publishing pass.
     expect(next(['c0', 'c1', 'i0', 'p0'])).toBe(aiJobStepMinimumMs('build', 'generate'))
     expect(aiJobStepMinimumMs('build', 'generate')).toBe(aiJobStepMinimumMs('page', 'generate'))

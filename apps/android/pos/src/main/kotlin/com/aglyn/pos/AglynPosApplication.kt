@@ -2,15 +2,28 @@ package com.aglyn.pos
 
 import android.app.Application
 import com.aglyn.core.AglynEnv
-import com.aglyn.hardware.SimulatedCardCollector
 import com.aglyn.hardware.StaticPeripherals
-import com.aglyn.hardware.StripeTerminalSdkCollector
 import com.aglyn.pluginhost.NativeApp
-import com.aglyn.plugins.manifest.NativePlugins
+import com.aglyn.plugins.manifest.NativePluginManifest
 import com.aglyn.shell.AndroidShell
+import com.aglyn.pos.terminal.PermissionGate
+import com.aglyn.pos.terminal.StripeTerminalCollector
 import com.aglyn.shell.ShellServices
+import com.stripe.stripeterminal.TerminalApplicationDelegate
+import com.stripe.stripeterminal.taptopay.TapToPay
 
 class AglynPosApplication : Application() {
+  /** The activity on screen, which asks for the card reader's permissions. */
+  @Volatile var permissionGate: PermissionGate? = null
+
+  override fun onCreate() {
+    super.onCreate()
+    // Tap to Pay runs its PIN and card screens in its own process; nothing
+    // of the app's belongs there.
+    if (TapToPay.isInTapToPayProcess()) return
+    TerminalApplicationDelegate.onCreate(this)
+  }
+
   val services: ShellServices by lazy {
     AndroidShell.services(
       context = this,
@@ -25,17 +38,18 @@ class AglynPosApplication : Application() {
         authEmulatorHost = BuildConfig.AUTH_EMULATOR_HOST,
         firestoreEmulatorHost = BuildConfig.FIRESTORE_EMULATOR_HOST,
       ),
-      manifest = NativePlugins.entries,
+      manifest = NativePluginManifest.entries,
       appVersion = BuildConfig.VERSION_NAME,
       debugSignIn = if (BuildConfig.DEBUG && BuildConfig.DEBUG_EMAIL.isNotEmpty()) {
         BuildConfig.DEBUG_EMAIL to BuildConfig.DEBUG_PASSWORD
       } else {
         null
       },
-      // Tap to Pay and Bluetooth readers arrive with the Stripe Terminal SDK;
-      // until then a debug build trains on a simulated reader.
+      // Tap to Pay and Bluetooth readers through the Stripe Terminal SDK.
+      // Only the SDK's simulated readers run until live readers are switched
+      // on for a build (TERMINAL_LIVE_READERS), which needs Stripe live mode.
       peripherals = StaticPeripherals(
-        cardCollector = if (BuildConfig.DEBUG) SimulatedCardCollector() else StripeTerminalSdkCollector(),
+        cardCollector = StripeTerminalCollector(this, simulated = !BuildConfig.TERMINAL_LIVE_READERS, permissions = { permissionGate }),
       ),
     )
   }

@@ -118,6 +118,24 @@ test('the model: enums, structs, maps, inline shapes, nullability, ints, json an
   )
 })
 
+test('optional: a named field or a whole struct decodes when absent, in both sources', () => {
+  const model = build({ types: ['Order'] }, { optional: ['Order.status', 'Line'] })
+  const byName = Object.fromEntries(model.types.map((t) => [t.name, t]))
+  const order = Object.fromEntries(byName.Order.fields.map((f) => [f.name, f.optional]))
+  assert.equal(order.status, true)
+  assert.equal(order.id, false)
+  assert.ok(byName.Line.fields.every((f) => f.optional))
+  const kotlin = kotlinContractsContent(model)
+  assert.match(kotlin, /val status: Status\? = null,/)
+  assert.match(kotlin, /val sku: String\? = null,/)
+  assert.match(kotlin, /val id: String,/)
+  const swift = swiftContractsContent(model)
+  assert.match(swift, /public var status: Status\?\n/)
+  assert.match(swift, /public var quantity: Double\?\n/)
+  assert.throws(() => build({ types: ['Line'] }, { optional: ['Order.status'] }), /names fields no emitted type has:\noptional: Order\.status/)
+  assert.throws(() => build({ types: ['Line'] }, { optional: ['Nope'] }), /optional: Nope/)
+})
+
 test('refusals name the type and why', () => {
   const refuse = (modules, pattern, extra) => assert.throws(() => build(modules, extra), pattern)
   refuse({ types: ['WithDate'] }, /WithDate\.at: Date has no stable wire form/)

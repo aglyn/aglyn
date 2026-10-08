@@ -220,8 +220,10 @@ function AdminEmails() {
                   return (
                     <Stack
                       key={definition.key}
-                      direction="row"
-                      spacing={2}
+                      // The actions keep their full width, so on a phone a
+                      // row beside them would leave the description a sliver.
+                      direction={{ xs: 'column', sm: 'row' }}
+                      spacing={{ xs: 1, sm: 2 }}
                       sx={{
                         alignItems: 'flex-start',
                         justifyContent: 'space-between',
@@ -230,12 +232,14 @@ function AdminEmails() {
                     >
                       <Stack spacing={0.5} sx={{ flexGrow: 1 }}>
                         <Stack
+                          useFlexGap
                           direction="row"
                           spacing={1}
-                          sx={{ alignItems: 'center' }}
+                          sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                         >
                           <Typography variant="subtitle2">
                             {definition.name}
+
                           </Typography>
                           {editable ? (
                             <Chip

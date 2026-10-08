@@ -426,19 +426,23 @@ function SignUp() {
         LEGAL_DOCUMENT_VERSION,
         'signup-google-redirect',
       )
+      // Where the visit that became this account began (AGL-3289), straight
+      // after the acceptance: the workspace below copies its creator's record
+      // at birth, and every await between the account and this call is one
+      // more chance for a navigation to tear the page down before it goes
+      // out. Above the new-account return, like the popup door: an account
+      // /signin created and bounced here for consent is NOT new to Firebase
+      // by now, and the server — which reads the auth record's creation time
+      // — is what decides whether it still counts, not this credential.
+      await rememberAccountAcquisition(credential.user, {
+        door: 'signup-google-redirect',
+      })
       // The product-updates tick this redirect carried (AGL-3185). Recorded
       // for a returning account too: the person ticked the box, and the
       // record is about that act, not about whether the account is new.
       if (optedIn) {
         await postPlatformMarketingConsent(credential.user, 'granted', 'console-signup')
       }
-      // Where the visit that became this account began (AGL-3289), before
-      // the workspace below is created: it copies its creator's record at
-      // birth. Above the new-account return, like the popup door: an account
-      // /signin created and bounced here for consent is NOT new to Firebase
-      // by now, and the server — which reads the auth record's creation time
-      // — is what decides whether it still counts, not this credential.
-      await rememberAccountAcquisition(credential.user)
       // The mobile door provisions the workspace too (AGL-1942). It used to
       // record the acceptance and stop, so a phone sign-up — the majority of
       // them — reached the picker no matter what: not even the AGL-1117 plan
@@ -647,6 +651,15 @@ function SignUp() {
             LEGAL_DOCUMENT_VERSION,
             values ? 'signup-password' : 'signup-google',
           )
+          // Where the visit began, first touch and all (AGL-3289) — next,
+          // before the writes below and before the provision, whose workspace
+          // copies its creator's record. The server decides from the verified
+          // token which door this was and whether the account is new, so a
+          // returning Google account through this door writes nothing.
+          await rememberAccountAcquisition(
+            credential.user,
+            values ? {} : { door: 'signup-google' },
+          )
           // Remember the plan the visitor picked, on the ACCOUNT (AGL-1535).
           //
           // Everything below carries the intent on the URL, and that works
@@ -676,12 +689,6 @@ function SignUp() {
           // memory of a URL. Awaited alongside the intent because the
           // provision below can end in a hard navigation.
           await rememberSignUpCampaign(firestore, credential.user.uid, campaign)
-          // Where the visit began, first touch and all (AGL-3289) — before the
-          // provision below, whose workspace copies its creator's record. The
-          // server decides from the verified token whether this account is
-          // new, so a returning Google account through this door writes
-          // nothing.
-          await rememberAccountAcquisition(credential.user)
           // Only the email/password branch has form values to keep; the
           // Google branches carry their name on the token, and the session
           // route seeds from that (AGL-1127).

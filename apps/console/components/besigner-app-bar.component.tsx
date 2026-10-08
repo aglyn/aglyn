@@ -21,6 +21,7 @@ import {
   HistoryControlsComponent,
   PanelControlsComponent,
   SchemePreviewControlsComponent,
+  useAglynBesignerFlag,
 } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_APP_SETTINGS,
@@ -28,19 +29,27 @@ import {
   ICON_VARIANT_MODIFY_SAVE,
   ICON_VARIANT_NEW_TAB,
   ICON_VARIANT_PAGES,
+  ICON_VARIANT_SHOW_MORE_VERTICAL,
   ICON_VARIANT_SYMBOL_CONFIRMED,
+  ICON_VARIANT_THEME_DARK,
+  ICON_VARIANT_THEME_LIGHT,
 } from '@aglyn/shared-data-enums'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Button,
   ButtonGroup,
   type ButtonProps,
+  Box,
   Divider,
+  IconButton,
+  ListItemIcon,
   ListItemText,
   Menu,
   MenuItem,
   Stack,
   Tooltip,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import { forwardRef, useState } from 'react'
 import SecondaryAppBarComponent, {
@@ -161,6 +170,16 @@ function SaveControl(props: {
       }
     />
   )
+  // On a phone the state reads from its icon — the check of a saved draft,
+  // the disk of an unsaved one — and the words stay its accessible name and
+  // tooltip, which gives the leading tools back the ~75px they scrolled for.
+  // Publish keeps its word: it is the one state that asks for a tap.
+  const labelSx = publishPending
+    ? undefined
+    : { display: { xs: 'none', sm: 'inline' } }
+  const iconOnlySx = publishPending
+    ? {}
+    : { '& .MuiButton-endIcon': { ml: { xs: 0, sm: 1 } } }
   // The primary click follows the label. A button that says Publish and saves
   // a draft is the same misdirection one layer down.
   const primaryClick: ButtonProps['onClick'] = publishPending
@@ -172,9 +191,18 @@ function SaveControl(props: {
         onClick={primaryClick}
         size="small"
         endIcon={icon}
-        sx={(theme) => ({ mr: `${theme.spacing(-1)} !important` })}
+        aria-label={label}
+        title={label}
+        sx={(theme) => ({
+          mr: `${theme.spacing(-1)} !important`,
+          flexShrink: 0,
+          whiteSpace: 'nowrap',
+          ...iconOnlySx,
+        })}
       >
-        {label}
+        <Box component="span" sx={labelSx}>
+          {label}
+        </Box>
       </Button>
     )
   }
@@ -190,13 +218,25 @@ function SaveControl(props: {
           // own horizontal padding, so the chevron read as a second control
           // with a gap rather than the tail of this one.
           '& .MuiButtonGroup-grouped': { minWidth: 0 },
+          // One line however narrow the bar: the state is read at a glance,
+          // and a two-line label doubled the toolbar's height on a phone.
+          flexShrink: 0,
+          whiteSpace: 'nowrap',
           // The divider between halves STAYS now that the group is outlined:
           // it is what makes a split button read as one control with two hit
           // targets rather than a button with a stray glyph after it.
         })}
       >
-        <Button onClick={primaryClick} endIcon={icon} sx={{ pr: 0.75 }}>
-          {label}
+        <Button
+          onClick={primaryClick}
+          endIcon={icon}
+          aria-label={label}
+          title={label}
+          sx={{ pr: 0.75, ...iconOnlySx }}
+        >
+          <Box component="span" sx={labelSx}>
+            {label}
+          </Box>
         </Button>
         <Button
           aria-label="Save options"
@@ -307,6 +347,103 @@ export interface BesignerAppBarProps extends SecondaryAppBarProps {
   presence?: JSX.Children
 }
 
+/**
+ * Everything the narrow toolbar does not keep on the bar, one tap away.
+ *
+ * The page's Properties, the artboard's color scheme, Live and Preview are
+ * each used a few times a session; Add, Undo/Redo, Device, the two panels
+ * and Save are used constantly, so those are what stay visible.
+ */
+function CompactMoreMenu(props: {
+  liveUrl?: string
+  liveUnavailableReason?: string
+  onPreview?: ButtonProps['onClick']
+  onPropertiesEdit?: ButtonProps['onClick']
+}) {
+  const { liveUrl, liveUnavailableReason, onPreview, onPropertiesEdit } = props
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const [canvasScheme, setCanvasScheme] = useAglynBesignerFlag('canvasScheme')
+  const isDark = canvasScheme === 'dark'
+  const close = () => setAnchor(null)
+  return (
+    <>
+      <Tooltip title="More">
+        <IconButton
+          size="small"
+          aria-label="more editor actions"
+          aria-haspopup="menu"
+          onClick={(event) => setAnchor(event.currentTarget)}
+        >
+          <MdiIcon fontSize="small" path={ICON_VARIANT_SHOW_MORE_VERTICAL.path} />
+        </IconButton>
+      </Tooltip>
+      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={close}>
+        <MenuItem
+          disabled={!onPropertiesEdit}
+          onClick={(event) => {
+            close()
+            onPropertiesEdit?.(event as never)
+          }}
+        >
+          <ListItemIcon>
+            <MdiIcon fontSize="small" path={ICON_VARIANT_APP_SETTINGS.path} />
+          </ListItemIcon>
+          <ListItemText primary="Page properties" />
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            close()
+            setCanvasScheme((prev) => (prev === 'dark' ? 'light' : 'dark'))
+          }}
+        >
+          <ListItemIcon>
+            <MdiIcon
+              fontSize="small"
+              path={
+                isDark
+                  ? ICON_VARIANT_THEME_LIGHT.path
+                  : ICON_VARIANT_THEME_DARK.path
+              }
+            />
+          </ListItemIcon>
+          <ListItemText
+            primary={`Preview ${isDark ? 'light' : 'dark'} scheme`}
+          />
+        </MenuItem>
+        <MenuItem
+          component="a"
+          href={liveUrl || undefined}
+          target="_blank"
+          rel="noopener noreferrer"
+          disabled={!liveUrl}
+          onClick={close}
+        >
+          <ListItemIcon>
+            <MdiIcon fontSize="small" path={ICON_VARIANT_PAGES.path} />
+          </ListItemIcon>
+          <ListItemText
+            primary="Live"
+            secondary={!liveUrl ? liveUnavailableReason : undefined}
+          />
+        </MenuItem>
+        <MenuItem
+          disabled={!onPreview}
+          onClick={(event) => {
+            close()
+            onPreview?.(event as never)
+          }}
+        >
+          <ListItemIcon>
+            <MdiIcon fontSize="small" path={ICON_VARIANT_NEW_TAB.path} />
+          </ListItemIcon>
+          <ListItemText primary="Preview" />
+        </MenuItem>
+      </Menu>
+    </>
+  )
+}
+CompactMoreMenu.displayName = 'CompactMoreMenu'
+
 export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
   (props, ref) => {
     const {
@@ -323,6 +460,65 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
       livePublished,
       publishTarget,
     } = props
+
+    // Below `md` the one-row toolbar of eleven controls would push Save off
+    // a phone. The everyday controls stay, scrolling sideways if a phone is
+    // narrower still, with Save and More pinned at the end; the rest move
+    // into More. Wider screens keep the toolbar exactly as it is.
+    const theme = useTheme()
+    const compact = useMediaQuery(theme.breakpoints.down('md'))
+    const saveControl = (
+      <SaveControl
+        onSave={onSave}
+        onSaveAndPublish={onSaveAndPublish}
+        publishBlockedReason={publishBlockedReason}
+        draftSaved={draftSaved}
+        saveAvailable={saveAvailable}
+        livePublished={livePublished}
+        publishTarget={publishTarget}
+      />
+    )
+
+    if (compact) {
+      return (
+        <SecondaryAppBarComponent ref={ref}>
+          <Stack
+            direction="row"
+            spacing={0.5}
+            sx={{ alignItems: 'center', flexGrow: 1, minWidth: 0 }}
+          >
+            <Stack
+              direction="row"
+              spacing={0.5}
+              sx={{
+                alignItems: 'center',
+                flexGrow: 1,
+                minWidth: 0,
+                overflowX: 'auto',
+                scrollbarWidth: 'none',
+                '&::-webkit-scrollbar': { display: 'none' },
+                '& > *': { flexShrink: 0 },
+              }}
+            >
+              <AddControlsComponent />
+              <HistoryControlsComponent />
+              <DevicePreviewControlsComponent iconOnly />
+              <PanelControlsComponent compact />
+              {presence ? <Box sx={{ display: { xs: 'none', sm: 'flex' } }}>{presence}</Box> : null}
+            </Stack>
+            {saveControl}
+            <Box sx={{ pl: 1 }}>
+              <CompactMoreMenu
+                liveUrl={liveUrl}
+                liveUnavailableReason={liveUnavailableReason}
+                onPreview={onPreview}
+                onPropertiesEdit={onPropertiesEdit}
+              />
+            </Box>
+          </Stack>
+        </SecondaryAppBarComponent>
+      )
+    }
 
     return (
       <SecondaryAppBarComponent
@@ -421,15 +617,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
               said, and they close the tab believing the work landed. Clicking
               always produces an answer now, and `handleSave` checks the
               stored document before agreeing there is nothing to write. */}
-          <SaveControl
-            onSave={onSave}
-            onSaveAndPublish={onSaveAndPublish}
-            publishBlockedReason={publishBlockedReason}
-            draftSaved={draftSaved}
-            saveAvailable={saveAvailable}
-            livePublished={livePublished}
-            publishTarget={publishTarget}
-          />
+          {saveControl}
         </Stack>
       </SecondaryAppBarComponent>
     );

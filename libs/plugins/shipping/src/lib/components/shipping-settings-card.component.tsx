@@ -62,6 +62,9 @@ interface SettingsAnswer {
 
 interface AccountAnswer {
   opened: boolean
+  /** The workspace ships through its own Easyship or Sendcloud account (AGL-3632). */
+  ownAccount?: boolean
+  provider?: string
   consent: { acceptedAtMs: number } | null
   consentText: string
   markupPct: number
@@ -337,7 +340,14 @@ export function ShippingSettingsCard(props: ShippingSettingsWidgetProps) {
             </Stack>
           </Stack>
 
-          {account ? (
+          {account?.ownAccount ? (
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle1">{'Paying for labels'}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {`Labels are bought on your own ${account.provider ?? 'shipping'} account, which bills you for each one. Nothing is charged here.`}
+              </Typography>
+            </Stack>
+          ) : account ? (
             <Stack spacing={1.5}>
               <Typography variant="subtitle1">{'Paying for labels'}</Typography>
               <Typography variant="body2" color="text.secondary">

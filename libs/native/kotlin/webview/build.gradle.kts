@@ -20,8 +20,20 @@ kotlin {
   sourceSets {
     commonMain.dependencies {
       api(project(":native-core"))
+      implementation(project(":native-plugin-host"))
       implementation(project(":native-ui"))
       implementation(libs.compose.ui.backhandler)
+    }
+    named("desktopMain") {
+      dependencies {
+        // WebView2 over COM (webview2/), the Windows Besigner.
+        implementation(libs.jna)
+      }
+    }
+    named("desktopTest") {
+      dependencies {
+        implementation(kotlin("test"))
+      }
     }
     commonTest.dependencies {
       implementation(kotlin("test"))

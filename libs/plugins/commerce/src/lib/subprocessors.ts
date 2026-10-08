@@ -19,6 +19,7 @@ import type {
   PluginEgressHostDeclaration,
   PluginSubprocessorsAnswer,
 } from '@aglyn/aglyn/plugin-manager/plugin-subprocessors'
+import { SHIPPINGEASY_DEFAULT_BASE_URL } from './model/shippingeasy'
 import { TRACKING_CARRIERS } from './model/tracking-url'
 import { EPOS_PRINT_NAMESPACE } from './printing/render-epson'
 
@@ -49,6 +50,19 @@ export function commerceSubprocessors(): PluginSubprocessorsAnswer {
     reason:
       'The ePOS-Print XML namespace (`libs/plugins/commerce/src/lib/printing/render-epson.ts`) on the print job an Epson receipt printer receives when it polls. A namespace is an identifier that happens to look like a URL; neither the platform nor the printer requests it.',
     dataReceived: 'Nothing. No request is made.',
+  })
+  hosts.push({
+    host: new URL(SHIPPINGEASY_DEFAULT_BASE_URL).host,
+    disposition: 'not-a-subprocessor',
+    reason:
+      'ShippingEasy’s order API (`libs/plugins/commerce/src/lib/server/shippingeasy.ts`, AGL-3633). A site admin ' +
+      'connects their OWN ShippingEasy account with its API key, secret and store key, and commerce sends that ' +
+      'site’s paid orders into it and cancels canceled ones there. The customer chose and contracts with ' +
+      'ShippingEasy; the platform sends nothing to it for a site that has not connected it.',
+    dataReceived:
+      'For a connected site only: each shippable order’s number, date, totals, ship-to and billing name, ' +
+      'address, email and phone, and its items (name, SKU, quantity, price, weight, options), signed with the ' +
+      'merchant’s own API key. Nothing from any other site or account.',
   })
   return { hosts }
 }

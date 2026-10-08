@@ -51,6 +51,8 @@ export const SHIPPING_COLLECTIONS = {
   addressChecks: 'shippingAddressChecks',
   trackers: 'shippingTrackers',
   quoteCache: 'shippingQuoteCache',
+  /** `orgs/{orgId}/shippingConnections/{kind}`: the merchant's own Easyship, Sendcloud or ShipperHQ account (AGL-3632). */
+  ownAccounts: 'shippingConnections',
 } as const
 
 /** The entitlement every shipping surface stands on: the plans that sell. */

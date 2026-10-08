@@ -222,7 +222,7 @@ export function BillingAiTopUsersComponent(props: BillingAiTopUsersProps) {
       <Typography variant="body2" color="text.secondary">
         {`Who is generating what, per site: each member's ${name} credits for the month and their share of the workspace's spend. Open a member for the split by site and by kind.`}
       </Typography>
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+      <Stack useFlexGap direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
         <TextField
           select
           size="small"

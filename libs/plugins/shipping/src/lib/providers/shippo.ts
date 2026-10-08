@@ -28,6 +28,7 @@ import {
 } from './http'
 import {
   ShippingProviderError,
+  type ConnectableCarrierForm,
   type ConnectCarrierInput,
   type LabelFormat,
   type ProviderAccount,
@@ -74,6 +75,12 @@ const SHIPPO_LABEL_FILE_TYPE: Readonly<Record<LabelFormat, string>> = {
 const SHIPPO_SIGNATURE = { standard: 'STANDARD', adult: 'ADULT' } as const
 
 /** The parameter names a carrier account's connect asks for, per carrier. */
+/** The carriers Shippo connects here: the account-holder form, UPS then signing in at UPS. */
+export const SHIPPO_CONNECTABLE_CARRIERS: ConnectableCarrierForm[] = [
+  { carrier: 'ups', label: 'UPS', flow: 'contact', fields: [] },
+  { carrier: 'fedex', label: 'FedEx', flow: 'contact', fields: [] },
+]
+
 function carrierParameters(input: ConnectCarrierInput): Record<string, unknown> {
   const [firstName, ...rest] = input.contact.name.trim().split(/\s+/)
   const lastName = rest.join(' ') || firstName
@@ -489,7 +496,14 @@ export function createShippoProvider(options: ShippoProviderOptions): ShippingPr
         })
     },
 
+    async connectableCarriers(): Promise<ConnectableCarrierForm[]> {
+      return SHIPPO_CONNECTABLE_CARRIERS
+    },
+
     async connectCarrierAccount(account, input) {
+      if (input.carrier !== 'ups' && input.carrier !== 'fedex') {
+        throw new ShippingProviderError('Shippo connects UPS and FedEx accounts here', 400, 'shippo')
+      }
       const created = await call<{ object_id?: string; carrier?: string; carrier_name?: string; active?: boolean }>(
         account,
         '/carrier_accounts/',

@@ -23,7 +23,8 @@
  * REAL Firestore, with REAL tokens minted by the Auth emulator. No mocks on
  * the code under test.
  *
- * What it holds: the door writes where the account came from ONCE; a second
+ * What it holds: every door — password, Google popup, Google redirect —
+ * writes the same record, naming itself (AGL-3674); the door writes it ONCE; a second
  * call — a retry, another tab, a returning Google account — never restates
  * it; the request's own cookie is the fallback when the page could not read
  * the record; and an address with an invitation waiting is the invite door.
@@ -84,6 +85,12 @@ describeEmulated('the sign-up acquisition write (emulator)', () => {
     return { uid: user.uid, email, token: await mintIdToken(email) }
   }
 
+  async function signUpWithGoogle(label: string): Promise<{ uid: string; email: string; token: string }> {
+    const email = `acq-${label}-${RUN}@aglyn.test`
+    const token = await mintGoogleIdToken(email)
+    return { uid: (await getAuth().getUserByEmail(email)).uid, email, token }
+  }
+
   function call(token: string, body: unknown, headers: Record<string, string> = {}) {
     return POST(
       new Request('https://app.example.com/api/auth/acquisition', {
@@ -123,6 +130,47 @@ describeEmulated('the sign-up acquisition write (emulator)', () => {
     expect(typeof (await stored(account.uid)).accountCreatedAt).toBe('number')
   }, 60_000)
 
+  it('records a Google account the same way, naming its provider', async () => {
+    const account = await signUpWithGoogle('google')
+    const response = await call(account.token, { touch: touch() })
+    expect(await response.json()).toEqual({ status: 'recorded' })
+    expect(await stored(account.uid)).toMatchObject({
+      source: 'g2.com',
+      channel: 'referral',
+      door: 'signup-google',
+      provider: 'google.com',
+      recordedBy: 'signup',
+    })
+  }, 60_000)
+
+  it('records the Google redirect door by name, in the same shape', async () => {
+    const account = await signUpWithGoogle('google-redirect')
+    const response = await call(account.token, { touch: touch(), door: 'signup-google-redirect' })
+    expect(await response.json()).toEqual({ status: 'recorded' })
+    expect(await stored(account.uid)).toMatchObject({
+      source: 'g2.com',
+      channel: 'referral',
+      door: 'signup-google-redirect',
+      provider: 'google.com',
+      recordedBy: 'signup',
+    })
+  }, 60_000)
+
+  it('lets the page pick only between its own provider\'s doors', async () => {
+    const account = await signUp('claims-google')
+    await call(account.token, { touch: touch(), door: 'signup-google-redirect' })
+    expect(await stored(account.uid)).toMatchObject({ door: 'signup-password', provider: 'password' })
+  }, 60_000)
+
+  it('never restates a Google record either — a returning Google sign-in writes nothing', async () => {
+    const account = await signUpWithGoogle('google-twice')
+    await call(account.token, { touch: touch() })
+    const first = await stored(account.uid)
+    const again = await call(account.token, { touch: touch({ ref: 'www.bing.com' }), door: 'signup-google-redirect' })
+    expect(await again.json()).toEqual({ status: 'exists' })
+    expect(await stored(account.uid)).toEqual(first)
+  }, 60_000)
+
   it('never restates it — a second call, with another touch, writes nothing', async () => {
     const account = await signUp('twice')
     await call(account.token, { touch: touch() })
@@ -159,19 +207,38 @@ describeEmulated('the sign-up acquisition write (emulator)', () => {
   }, 60_000)
 })
 
+/** A Google ID token for a new account, from the Auth emulator's fake IdP. */
+async function mintGoogleIdToken(email: string): Promise<string> {
+  const claims = JSON.stringify({ sub: `google-${email}`, email, email_verified: true, name: 'Ada Lovelace' })
+  return emulatorIdToken('accounts:signInWithIdp', {
+    postBody: `id_token=${encodeURIComponent(claims)}&providerId=google.com`,
+    requestUri: 'http://localhost',
+    returnSecureToken: true,
+  })
+}
+
 /**
  * An ID token from the Auth emulator, over plain local HTTP — the jest
  * environment's fetch polyfill is not a usable client here.
  */
 async function mintIdToken(email: string): Promise<string> {
+  return emulatorIdToken('accounts:signInWithPassword', {
+    email,
+    password: PASSWORD,
+    returnSecureToken: true,
+  })
+}
+
+/** One Identity Toolkit call to the Auth emulator, answered with its ID token. */
+async function emulatorIdToken(method: string, body: Record<string, unknown>): Promise<string> {
   const [hostname, port] = String(process.env.FIREBASE_AUTH_EMULATOR_HOST).split(':')
-  const payload = JSON.stringify({ email, password: PASSWORD, returnSecureToken: true })
-  const body = await new Promise<string>((resolve, reject) => {
+  const payload = JSON.stringify(body)
+  const answer = await new Promise<string>((resolve, reject) => {
     const request = httpRequest(
       {
         hostname,
         port: Number(port),
-        path: '/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake',
+        path: `/identitytoolkit.googleapis.com/v1/${method}?key=fake`,
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
       },
@@ -185,7 +252,7 @@ async function mintIdToken(email: string): Promise<string> {
     request.write(payload)
     request.end()
   })
-  const data = JSON.parse(body) as { idToken?: string }
-  if (!data.idToken) throw new Error(`Auth emulator sign-in failed: ${body}`)
+  const data = JSON.parse(answer) as { idToken?: string }
+  if (!data.idToken) throw new Error(`Auth emulator sign-in failed: ${answer}`)
   return data.idToken
 }

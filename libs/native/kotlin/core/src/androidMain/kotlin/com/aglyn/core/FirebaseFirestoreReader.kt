@@ -4,6 +4,7 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -83,6 +84,13 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
   }
 }
 
+/** [FirestoreWriter] on the Firebase Android SDK: `set` with `SetOptions.merge()`, as the web SDK's merge. */
+class FirebaseFirestoreWriter(private val db: FirebaseFirestore) : FirestoreWriter {
+  override suspend fun merge(path: String, data: Map<String, Any?>) {
+    db.document(path).set(toSdkWrite(data), SetOptions.merge()).await()
+  }
+}
+
 internal fun DocumentSnapshot.toDoc(): FirestoreDoc? {
   if (!exists()) return null
   return FirestoreDoc(id, reference.path, (data ?: emptyMap()).mapValues { plain(it.value) })
@@ -94,5 +102,17 @@ private fun plain(value: Any?): Any? = when (value) {
   is List<*> -> value.map(::plain)
   is Int -> value.toLong()
   is Float -> value.toDouble()
+  else -> value
+}
+
+/** A merge's values as the SDK writes them: timestamps as Timestamp, [FirestoreDelete] as FieldValue.delete(). */
+@Suppress("UNCHECKED_CAST")
+internal fun toSdkWrite(data: Map<String, Any?>): Map<String, Any?> = data.mapValues { (_, value) -> sdkWriteValue(value) }
+
+private fun sdkWriteValue(value: Any?): Any? = when (value) {
+  FirestoreDelete -> com.google.firebase.firestore.FieldValue.delete()
+  is FirestoreTimestamp -> Timestamp(value.seconds, value.nanos)
+  is Map<*, *> -> value.entries.associate { it.key.toString() to sdkWriteValue(it.value) }
+  is List<*> -> value.map(::sdkWriteValue)
   else -> value
 }

@@ -7,8 +7,14 @@
   "LIST_QUERY_ID_PATH": "__name__",
   "NAME_TOKEN_LIMIT": 120,
   "NAME_TOKEN_MAX_PREFIX": 12,
+  "OPEN_DISPUTE_CLAUSE": {
+    "field": "disputeKey",
+    "op": "equals",
+    "value": "open"
+  },
   "ORDER_CHANNEL_LABELS": {
     "draft": "Draft",
+    "marketplace": "Marketplace",
     "online": "Online",
     "pos": "POS",
     "subscription": "Subscription"
@@ -29,6 +35,10 @@
     {
       "label": "Subscription",
       "value": "subscription"
+    },
+    {
+      "label": "Marketplace",
+      "value": "marketplace"
     }
   ],
   "ORDER_DISPUTE_OPTIONS": [
@@ -151,6 +161,15 @@
     "productIds",
     "disputeKey"
   ],
+  "ORDER_STATUS_COLOR": {
+    "cancelled": "default",
+    "delivered": "info",
+    "fulfilled": "info",
+    "paid": "success",
+    "partially_fulfilled": "warning",
+    "pending": "default",
+    "refunded": "error"
+  },
   "ORDER_STATUS_LABELS": {
     "cancelled": "Canceled",
     "delivered": "Delivered",
