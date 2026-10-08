@@ -37,6 +37,16 @@
         <action android:name="com.google.firebase.MESSAGING_EVENT" />
       </intent-filter>
     </service>
+    <!-- Media uploads from the camera: the camera app writes into the app's cache through this provider. -->
+    <provider
+      android:name="androidx.core.content.FileProvider"
+      android:authorities="${applicationId}.fileprovider"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/file_paths" />
+    </provider>
     <meta-data
       android:name="com.google.firebase.messaging.default_notification_channel_id"
       android:value="aglyn" />

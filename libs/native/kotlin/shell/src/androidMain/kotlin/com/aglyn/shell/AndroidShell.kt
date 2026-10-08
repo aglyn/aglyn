@@ -44,7 +44,7 @@ object AndroidShell {
     val api = ConsoleApiClient(config.consoleOrigin, defaultHttpClient(), auth::idToken, config.brandName)
     val prefs = SharedPreferencesStore(context)
     val registry = NativePluginRegistry()
-    registry.load(manifest).failed.forEach { android.util.Log.e("Aglyn", "plugin ${it.pluginId}: ${it.error}") }
+    registry.load(PLATFORM_ENTRIES + manifest).failed.forEach { android.util.Log.e("Aglyn", "plugin ${it.pluginId}: ${it.error}") }
     return ShellServices(
       app = app,
       config = config,

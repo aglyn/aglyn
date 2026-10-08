@@ -101,6 +101,15 @@
       "apiPrefixes": [
         "forms"
       ],
+      "mobile": {
+        "$comment": "AGL-3668: a site's forms in the Aglyn app: search, in use or retired, create, duplicate, rename, retire, CRM routing, questions, versions (open in the Besigner, publish) and the form's submissions (the Inbox plugin's screens) with export; list and detail side by side on tablets and desktop.",
+        "android": { "package": "com.aglyn.plugins.forms", "register": "registerFormsNative" },
+        "contributes": {
+          "screens": ["forms.form", "forms.list"],
+          "quickActions": ["forms.open"],
+          "deepLinks": ["forms.page", "forms.record"]
+        }
+      },
       "modules": {
         "site": "site"
       },
@@ -1912,6 +1921,14 @@
       "apiPrefixes": [
         "inbox"
       ],
+      "mobile": {
+        "$comment": "AGL-3668: a site's form submissions in the Aglyn app, the site's or one form's (the Forms screens open it with formId): read filter, search, export, and each submission's fields with read or unread, reply and delete; list and detail side by side on tablets and desktop.",
+        "android": { "package": "com.aglyn.plugins.inbox", "register": "registerInboxNative" },
+        "contributes": {
+          "screens": ["inbox.submission", "inbox.submissions"],
+          "deepLinks": ["inbox.submissions-page"]
+        }
+      },
       "catalog": {
         "order": 14,
         "label": "Inbox",

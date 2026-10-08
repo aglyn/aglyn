@@ -46,6 +46,12 @@ class ShellServices(
   val push: com.aglyn.core.PushRegistrar = com.aglyn.core.NoPush,
   /** Writes as the signed-in person, under the same rules as the console's own writes. */
   val writer: com.aglyn.core.FirestoreWriter = com.aglyn.core.NoFirestoreWrites,
+  /** Remote images for every screen ([com.aglyn.ui.LocalImageLoader]). */
+  val imageLoader: com.aglyn.ui.ImageLoader? = HttpImageLoader(com.aglyn.core.defaultHttpClient()),
+  /** The device's photo, camera and file pickers ([com.aglyn.ui.LocalMediaPicker]); the entry point binds them. */
+  val mediaPicker: com.aglyn.ui.MediaPicker? = null,
+  /** Where an export goes ([com.aglyn.ui.LocalFileExporter]); the entry point binds it. */
+  val fileExporter: com.aglyn.ui.FileExporter? = null,
 ) {
   /** Removes this install's device row, then signs out, so no push follows the person out. */
   suspend fun signOut() {
@@ -59,11 +65,19 @@ sealed interface Route {
   data class Screen(val screenId: String, val params: NativeParams = emptyMap()) : Route
   /** The Besigner on a whole console path that [com.aglyn.pluginhost.BesignerPaths] accepts. */
   data class Besigner(val path: String) : Route
-  /** The site's pages, each opening in the Besigner. */
-  data object Pages : Route
   data object Switcher : Route
   data object NotificationSettings : Route
 }
+
+/**
+ * The platform's own content screens (sites, pages, media, setup…), which are
+ * core rather than a plugin's: loaded before the generated plugin manifest,
+ * through the same registrar and declaration check.
+ */
+val PLATFORM_ENTRIES: List<com.aglyn.pluginhost.NativePluginManifestEntry> = listOf(com.aglyn.site.SitePlatformEntry)
+
+/** The site's Pages screen, which the site registration (libs/native/kotlin/site) contributes. */
+const val SITE_PAGES_SCREEN_ID = "site.pages"
 
 class ShellNavigator(initialTop: String = HOME) {
   var top by mutableStateOf(initialTop)
@@ -108,6 +122,14 @@ internal class ShellPluginContext(
   override val writer get() = services.writer
   override val peripherals get() = services.peripherals
   override val deviceStore get() = services.prefs
+  override val siteRole get() = workspace.site?.role
+  override val orgRole get() = workspace.org?.role
+
+  override fun selectSite(hostId: String) = services.workspace.selectSite(hostId)
+
+  override fun back() {
+    navigator.back()
+  }
 
   override fun navigate(screenId: String, params: NativeParams) {
     if (screenId in topLevelScreens && params.isEmpty()) {
@@ -142,7 +164,7 @@ internal class ShellPluginContext(
   private fun nativeFor(path: String) {
     val rest = DeepLinks.splitConsoleScope(path.substringBefore('?')).rest
     when {
-      rest == "/screens" || rest.startsWith("/screens/") -> navigator.push(Route.Pages)
+      rest == "/screens" || rest.startsWith("/screens/") -> navigator.push(Route.Screen(SITE_PAGES_SCREEN_ID))
       rest.startsWith("/notifications") -> navigator.select(ShellNavigator.NOTIFICATIONS)
       rest.startsWith("/settings") -> navigator.select(ShellNavigator.SETTINGS)
       else -> navigator.select(ShellNavigator.HOME)

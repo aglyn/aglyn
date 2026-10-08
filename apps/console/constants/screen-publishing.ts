@@ -20,10 +20,7 @@ import {
   isFirstPublishedRoute,
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
-import {
-  SCREEN_ROOT_PATH,
-  screenRoutePathToUrl,
-} from '@aglyn/aglyn/app-utils/screen-route'
+import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   collection,
@@ -38,10 +35,8 @@ import {
   type WriteBatch,
 } from 'firebase/firestore'
 import revalidateLivePages from '../utils/revalidate-live-pages'
-import {
-  PUBLISH_OUTBOX_COLLECTION,
-  sanitizePublishOutboxPaths,
-} from './publish-outbox'
+import { PUBLISH_OUTBOX_COLLECTION } from './publish-outbox'
+import { changedRoutePaths, planScreenRouteWrite } from './screen-route-plan'
 
 /**
  * The signed-in user, whose ID token authenticates the cache announcement.
@@ -143,61 +138,18 @@ function stagePlaceholderUpdates(
   },
 ): Record<string, null> {
   const { hostId, state, entries, hostUpdates, published } = options
-  const placeholder = state.defaultHomeScreenId
-  if (!placeholder) return {}
-  if (published === placeholder && entries[placeholder]) {
-    hostUpdates['defaultHomeScreenId'] = deleteField()
-    return {}
-  }
-  if (state.screens[placeholder] !== SCREEN_ROOT_PATH) return {}
-  const takesRoot = Object.entries(entries).some(
-    ([screenId, path]) => screenId !== placeholder && path === SCREEN_ROOT_PATH,
-  )
-  if (!takesRoot) return {}
-  hostUpdates[`screens.${placeholder}`] = deleteField()
-  hostUpdates['defaultHomeScreenId'] = deleteField()
+  const plan = planScreenRouteWrite(state, entries, published)
+  for (const field of plan.hostDeletes) hostUpdates[field] = deleteField()
+  if (!plan.placeholderUnpublished) return {}
   batch.set(
-    doc(firestore, 'hosts', hostId, 'screens', placeholder),
+    doc(firestore, 'hosts', hostId, 'screens', plan.placeholderUnpublished),
     { publishedAt: deleteField() },
     { merge: true },
   )
-  return { [placeholder]: null }
+  return { [plan.placeholderUnpublished]: null }
 }
 
-/**
- * The live addresses a routing-map write is about to change.
- *
- * ADDRESSES, not document ids, and that is the whole point of computing them
- * here. `/api/screens/revalidate` resolves a `screenId` through the routing
- * map, which is correct for a publish and empty for its opposite: an
- * unpublish removes the entry first, so the route would look the screen up,
- * find nothing, and answer `not-routed` — a reported success over a retired
- * page that is still cached and still being served. The old path is read
- * BEFORE the write and named outright, so retiring a page drops it.
- *
- * Both sides of every change are included: a rename has to drop the address
- * it moved away from as well as the one it moved to, or the old URL keeps
- * serving the page from cache while the map no longer points anywhere near
- * it.
- */
-function changedPaths(
-  before: Record<string, string>,
-  after: Record<string, string | null | undefined>,
-): string[] {
-  const paths = new Set<string>()
-  for (const [screenId, next] of Object.entries(after)) {
-    const previous = before[screenId]
-    const nextPath = next ?? undefined
-    // An entry rewritten to the address it already had changes nothing a
-    // visitor can see. Skipped so a whole-map sync — which rewrites every
-    // descendant on a rename — announces the handful that moved rather than
-    // the whole site, which the tenant would cap anyway.
-    if (previous === nextPath) continue
-    if (previous) paths.add(screenRoutePathToUrl(previous))
-    if (nextPath) paths.add(screenRoutePathToUrl(nextPath))
-  }
-  return sanitizePublishOutboxPaths([...paths])
-}
+const changedPaths = changedRoutePaths
 
 /**
  * ADD THE DURABLE COPY OF THE ANNOUNCE TO THE BATCH THAT PUBLISHES (AGL-2575).
