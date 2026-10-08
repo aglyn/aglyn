@@ -20,6 +20,7 @@ import * as CommerceModel from '../model'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { toStorefrontPurchaseSource } from '../model/purchase-analytics'
+import { isProviderCheckoutId } from './provider-checkout'
 
 /** Stripe Checkout Session ids: `cs_` + live/test prefix + base58-ish body. */
 const SESSION_ID = /^cs_[A-Za-z0-9_]{8,255}$/
@@ -155,7 +156,9 @@ export const orderAnalyticsHandler: PluginApiHandler = async (req, res) => {
   }
   // Shape-checked before it reaches Firestore: a document id is a path
   // segment, and an unvalidated one is how a lookup becomes a traversal.
-  if (!SESSION_ID.test(sessionId)) {
+  // A checkout paid through another plugin's provider (AGL-3630) is named by
+  // its own id, and recorded under it exactly as a card session is.
+  if (!SESSION_ID.test(sessionId) && !isProviderCheckoutId(sessionId)) {
     return res.status(400).json({ error: 'Invalid sessionId' })
   }
   // A REHEARSAL MUST NOT REACH THE MERCHANT'S OWN ANALYTICS.

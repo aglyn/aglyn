@@ -21,6 +21,11 @@ import type {
 } from '@aglyn/aglyn/server'
 import type { PluginPersonRefundRequest } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import {
+  registerPluginPaymentProvider,
+  type PluginPaymentRefundRequest,
+  type PluginPaymentRefundResult,
+} from '@aglyn/aglyn/plugin-manager/plugin-payment-providers'
 import { refundHandler } from './refund'
 import {
   reportedRefundLedger,
@@ -1730,5 +1735,74 @@ describe('refunding a split-tender register sale (AGL-3607)', () => {
     expect(result.body.error).toContain('$25.00')
     expect(refundCalls).toHaveLength(0)
     expect(storedOrder().refundedCents ?? 0).toBe(0)
+  })
+})
+
+describe('refunding an order paid through another provider (AGL-3630)', () => {
+  const asked: PluginPaymentRefundRequest[] = []
+  let answer: PluginPaymentRefundResult
+
+  beforeEach(() => {
+    resetPluginServicesForTests()
+    refundReports = standInPersonRecords()
+    asked.length = 0
+    answer = { ok: true, refundId: 'R-1', status: 'completed' }
+    registerPluginPaymentProvider(
+      'wallet',
+      {
+        available: async () => null,
+        createCheckout: async () => {
+          throw new Error('not in this suite')
+        },
+        refund: async (request) => {
+          asked.push(request)
+          return answer
+        },
+      },
+      { pluginId: 'wallet-plugin' },
+    )
+    const { paymentIntentId: _card, ...order } = storedOrder() as Record<string, unknown>
+    docs.set('hosts/host-1/orders/order-1', {
+      ...order,
+      checkoutSessionId: 'pay_wallet_0123456789abcdef0123456789abcdef',
+      paymentProvider: 'wallet',
+      providerPaymentId: 'CAP-1',
+    })
+  })
+
+  it('sends the refund back the way the money came, never to Stripe', async () => {
+    const result = await post({ amountCents: 2_000 }, { 'idempotency-key': 'attempt-w' })
+    expect(result.status).toBe(200)
+    expect(asked).toEqual([
+      expect.objectContaining({ paymentId: 'CAP-1', amountCents: 2_000, hostId: 'host-1', orgId: 'org-1', currency: 'usd' }),
+    ])
+    expect(asked[0].idempotencyKey).toBeTruthy()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(storedOrder().refundedCents).toBe(2_000)
+  })
+
+  it('refunds once for a retried request', async () => {
+    await post({ amountCents: 2_000 }, { 'idempotency-key': 'attempt-w' })
+    await post({ amountCents: 2_000 }, { 'idempotency-key': 'attempt-w' })
+    expect(asked).toHaveLength(1)
+    expect(storedOrder().refundedCents).toBe(2_000)
+  })
+
+  it('gives the reservation back when the provider refuses', async () => {
+    answer = { ok: false, status: 409, error: 'PayPal says there is less left to refund on this payment.' }
+    expectServerError(/refund error/i)
+    const result = await post({ amountCents: 2_000 }, { 'idempotency-key': 'attempt-x' })
+    expect(result).toEqual({ status: 409, body: { error: 'PayPal says there is less left to refund on this payment.' } })
+    expect(storedOrder().refundedCents ?? 0).toBe(0)
+  })
+
+  it('says so when the provider that took the money is gone', async () => {
+    resetPluginServicesForTests()
+    refundReports = standInPersonRecords()
+    expectServerError(/refund error/i)
+    const result = await post({}, { 'idempotency-key': 'attempt-y' })
+    expect(result.status).toBe(409)
+    expect(result.body.error).toMatch(/not available any more/)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

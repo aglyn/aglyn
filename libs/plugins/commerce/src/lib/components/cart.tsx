@@ -98,6 +98,11 @@ interface CartView {
   lines: CartLineView[]
   count: number
   subtotalCents: number
+  /**
+   * Other ways to pay another plugin offers for this store (AGL-3630).
+   * Absent unless one does — a store without one draws exactly what it drew.
+   */
+  paymentOptions?: Array<{ providerId: string; label: string; methods: string[] }>
 }
 
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
@@ -255,10 +260,22 @@ function CartLines(props: {
     attemptKey.current = ''
   }, [cartSignature, email, coupon, giftCard, shipTo, shipPostal, extrasSignature])
 
+  /**
+   * Which way to pay the next attempt is for (AGL-3630): `null` for the card
+   * checkout, or another plugin's provider. A different choice is a different
+   * attempt, so it gets its own key.
+   */
+  const chosenProvider = useRef<string | null>(null)
+  const attemptProvider = useRef<string | null>(null)
+
   const handleCheckout = useCallback(async () => {
     if (status === 'sending') return
     setStatus('sending')
     setMessage('')
+    if (attemptProvider.current !== chosenProvider.current) {
+      attemptKey.current = ''
+      attemptProvider.current = chosenProvider.current
+    }
     if (!attemptKey.current) {
       attemptKey.current =
         globalThis.crypto?.randomUUID?.() ??
@@ -287,6 +304,8 @@ function CartLines(props: {
           ...(shipPostal.trim() ? { shippingPostalCode: shipPostal.trim() } : {}),
           // Which offers, never their price: the server asks the provider again.
           ...(extras.chosenIds.length ? { extras: extras.chosenIds } : {}),
+          // Which provider, never its availability: the server asks again.
+          ...(chosenProvider.current ? { paymentProvider: chosenProvider.current } : {}),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -595,7 +614,10 @@ function CartLines(props: {
           (shipCountries !== null && !shipTo) ||
           (askPostal && !shipPostal.trim())
         }
-        onClick={handleCheckout}
+        onClick={() => {
+          chosenProvider.current = null
+          void handleCheckout()
+        }}
       >
         {status === 'sending'
           ? // "Redirecting" stops being true the moment the form opens in
@@ -605,6 +627,31 @@ function CartLines(props: {
             : 'Redirecting…'
           : checkoutLabel || 'Checkout'}
       </Button>
+      {/* Another plugin's way to pay (AGL-3630), offered only when the server
+          says this store takes it; the same cart, priced by the same handler,
+          paid on the provider's own page. */}
+      {!nativeCheckout
+        ? (cart.paymentOptions ?? []).map((option) => (
+            <Button
+              key={option.providerId}
+              variant="outlined"
+              color="primary"
+              disabled={
+                status === 'sending' ||
+                status === 'unconfigured' ||
+                cart.lines.every((line) => line.unavailable) ||
+                (shipCountries !== null && !shipTo) ||
+                (askPostal && !shipPostal.trim())
+              }
+              onClick={() => {
+                chosenProvider.current = option.providerId
+                void handleCheckout()
+              }}
+            >
+              {`Pay with ${option.methods.length > 1 ? option.methods.join(' or ') : option.label}`}
+            </Button>
+          ))
+        : null}
       {nativeCheckout ? (
         <Suspense fallback={<StorefrontPaymentElementFallback />}>
           <StorefrontPaymentElement

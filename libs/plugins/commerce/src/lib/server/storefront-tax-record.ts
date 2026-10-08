@@ -185,8 +185,11 @@ export async function recordStorefrontTax(
         object?.total_details?.amount_tax ?? 0,
       )
       if (
-        object?.automatic_tax?.enabled === true ||
-        (Number.isFinite(stripeStatedTax) && stripeStatedTax > 0)
+        // A card session only: a checkout paid through another provider
+        // (AGL-3630) states its tax on the object and has no session to fetch.
+        String(object?.id ?? '').startsWith('cs_') &&
+        (object?.automatic_tax?.enabled === true ||
+          (Number.isFinite(stripeStatedTax) && stripeStatedTax > 0))
       ) {
         taxSource = (await expandedSession(String(object?.id ?? ''))) ?? object
       }

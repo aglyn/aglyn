@@ -479,6 +479,17 @@ export interface HostOrder {
   paymentIntentId?: string
   checkoutSessionId?: string
   /**
+   * Set when the buyer paid through another plugin's payment provider
+   * (AGL-3630) instead of the card account: the provider's id, its id for
+   * the payment (what a refund names) and for the checkout. Absent on every
+   * card order, which is how the refund route tells the two apart.
+   */
+  paymentProvider?: string
+  /** The provider's own name, for the order's copy ("refunds through PayPal"). */
+  paymentProviderLabel?: string
+  providerPaymentId?: string
+  providerCheckoutId?: string
+  /**
    * The recurring cycle this order fulfils (channel `subscription`,
    * AGL-1750). The order's own doc id is the invoice id — that identity is
    * the redelivery key — and these carry the join back to

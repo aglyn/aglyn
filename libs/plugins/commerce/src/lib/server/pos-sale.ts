@@ -116,6 +116,8 @@ export function posSaleSummary(order: PosLiftedOrder) {
       ...(payment.readerId ? { readerId: payment.readerId } : {}),
       ...(payment.failureMessage ? { failureMessage: payment.failureMessage } : {}),
       ...(payment.livemode != null ? { livemode: payment.livemode } : {}),
+      // A provider's QR names the provider on the register (AGL-3630).
+      ...(payment.providerLabel ? { providerLabel: payment.providerLabel } : {}),
     })),
   }
 }
@@ -143,7 +145,7 @@ export function posCompletionPatch(
   const invoiceTakeCents = CommerceModel.posInvoiceTakeCents({ takeFeeCents, payments })
   const settled = payments.filter((payment) => payment.status === 'succeeded')
   const cardFeeCents = settled
-    .filter((payment) => CommerceModel.isCardPaymentMethod(payment.method))
+    .filter((payment) => CommerceModel.isNettedPaymentMethod(payment.method))
     .reduce((sum, payment) => sum + Math.max(0, Math.round(Number(payment.feeCents ?? 0))), 0)
   const feeCents = cardFeeCents + invoiceTakeCents
   const tipCents = CommerceModel.posTipCents(payments)

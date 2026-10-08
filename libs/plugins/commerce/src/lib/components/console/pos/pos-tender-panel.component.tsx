@@ -171,7 +171,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
   // the QR page and the typed card all settle on the server, and this is the
   // register's view of it (the webhook does the same thing when it lands).
   const pending = sale.payments.filter(
-    (payment) => payment.status === 'pending' && CommerceModel.isCardPaymentMethod(payment.method),
+    (payment) => payment.status === 'pending' && CommerceModel.settlesRemotely(payment.method),
   )
   const pendingKey = pending.map((payment) => payment.id).join(',')
   const latest = useRef({ user, onSale })
@@ -258,6 +258,18 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
     if (url) setQr({ url, amountCents: amountCents + tipCents })
   }, [run, chargeCents, tipCents])
 
+  // Another plugin's way to pay (AGL-3630): the customer scans and pays on
+  // the provider's page, and the ledger takes the payment when it settles.
+  const startProviderLink = useCallback(
+    async (providerId: string) => {
+      const amountCents = chargeCents
+      const result = await run('provider-link', { amountCents, tipCents, providerId }, true)
+      const url = result?.sale.payments.find((payment) => payment.id === result.paymentId)?.checkoutUrl
+      if (url) setQr({ url, amountCents: amountCents + tipCents })
+    },
+    [run, chargeCents, tipCents],
+  )
+
   const tipOn = Boolean(settings?.tippingEnabled) && !paid
 
   return (
@@ -282,9 +294,9 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
                 {payment.changeCents ? ` · change ${usd(payment.changeCents)}` : ''}
               </Typography>
               <Chip size="small" label={STATUS_LABEL[payment.status]} color={STATUS_COLOR[payment.status]} />
-              {payment.status === 'pending' && CommerceModel.isCardPaymentMethod(payment.method) ? (
+              {payment.status === 'pending' && CommerceModel.settlesRemotely(payment.method) ? (
                 <>
-                  {payment.method === 'card_link' && payment.checkoutUrl ? (
+                  {(payment.method === 'card_link' || payment.method === 'wallet_link') && payment.checkoutUrl ? (
                     <Button
                       size="small"
                       onClick={() => setQr({ url: payment.checkoutUrl as string, amountCents: payment.amountCents })}
@@ -418,6 +430,17 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
             >
               {'Card (QR)'}
             </Button>
+            {(context?.paymentOptions ?? []).map((option) => (
+              <Button
+                key={option.providerId}
+                variant="outlined"
+                disabled={busy || chargeCents <= 0}
+                onClick={() => void startProviderLink(option.providerId)}
+                sx={{ minHeight: 56 }}
+              >
+                {`${option.methods.length > 1 ? option.methods.join(' / ') : option.label} (QR)`}
+              </Button>
+            ))}
             <Button
               variant="outlined"
               disabled={busy || chargeCents <= 0}

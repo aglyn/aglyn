@@ -62,6 +62,21 @@ import {
   readChosenCheckoutExtras,
 } from '@aglyn/aglyn/plugin-manager/plugin-checkout-extras'
 import { quoteCartExtras, type CheckoutExtrasLine } from './checkout-extras'
+import {
+  type HostTokenSource,
+  resolveHostToken,
+} from '@aglyn/aglyn/app-utils/host-tokens'
+import {
+  PROVIDER_NOTHING_TO_CHARGE_MESSAGE,
+  PROVIDER_TAX_MESSAGE,
+  PROVIDER_UNAVAILABLE_MESSAGE,
+  openProviderCheckout,
+  providerCartCheckoutRequest,
+  providerCheckoutId,
+  providerTaxCents,
+  readProviderChoice,
+  storefrontPaymentOptions,
+} from './provider-checkout'
 
 /** An option the buyer ticked is no longer offered (AGL-3635). */
 export const CHECKOUT_EXTRA_UNAVAILABLE_MESSAGE =
@@ -98,6 +113,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     .toUpperCase()
     .slice(0, 40)
   if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
+  // Another way to pay the buyer picked beside Checkout (AGL-3630), or null —
+  // and null builds exactly the card session this handler always built.
+  const providerChoice = readProviderChoice(body)
   // AGL-1769: validated here even though this handler only READS the cart,
   // because it is where the raw cookie left the request — `:342` stamps it
   // into `metadata[cartId]`, and the billing webhook builds a document path
@@ -395,6 +413,25 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       .collection('settings')
       .doc('store')
       .get()
+    // The provider is asked AGAIN whether it takes this sale (AGL-3630), never
+    // trusted from the button: the merchant may have disconnected it, and a
+    // store whose tax the card processor calculates cannot hand anyone else
+    // the amount. Above the claim, so a refusal keeps the key.
+    if (providerChoice) {
+      const offered = await storefrontPaymentOptions({
+        orgId: String(ownerOrg.orgId ?? ''),
+        hostId,
+        taxSettings: storeSettings.get('tax') as CommerceModel.TaxSettings | undefined,
+      })
+      if (!offered.some((option) => option.providerId === providerChoice.providerId)) {
+        return res.status(409).json({
+          error:
+            (storeSettings.get('tax') as CommerceModel.TaxSettings | undefined)?.mode === 'stripe'
+              ? PROVIDER_TAX_MESSAGE
+              : PROVIDER_UNAVAILABLE_MESSAGE,
+        })
+      }
+    }
     // A live carrier rate (AGL-3612) is quoted here too, before the session,
     // for the destination the shopper declared; a store with none plans from
     // its table exactly as before. See `carrier-shipping.ts`.
@@ -866,7 +903,16 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       }
     }
 
-    if (totalOffCents > 0) {
+    if (totalOffCents > 0 && providerChoice) {
+      // Another provider is handed the reduction as an amount (AGL-3630): no
+      // coupon object is minted on the card account for a sale it never sees.
+      // The fee scales exactly as it does below.
+      feeCents = Math.round(
+        (feeCents * Math.max(0, itemsCents - totalOffCents)) /
+          Math.max(1, itemsCents),
+      )
+      chargedItemsCents = Math.max(0, itemsCents - totalOffCents)
+    } else if (totalOffCents > 0) {
       const stripeCoupon = await fetch('https://api.stripe.com/v1/coupons', {
         method: 'POST',
         headers: {
@@ -898,6 +944,10 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // basket a gift card covered entirely still takes nothing: the fee is a cut
     // of the goods, and there are no goods left to cut.
     if (feeApplies && chargedItemsCents > 0 && feeCents < 1) feeCents = 1
+    // The transaction fee alone, before the card processor's cost is added
+    // below (AGL-3630): another provider bills the merchant its own
+    // processing, so the platform's share there is this.
+    const transactionFeeCents = feeCents
     // STRIPE'S CARD COST, PASSED THROUGH AT COST (AGL-2152). The loop above
     // accumulates the platform's advertised TAKE per line and nothing else; on
     // a destination charge Stripe debits 2.9% + 30¢ of the whole card total
@@ -1064,6 +1114,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     }
     if (taxDecision.kind === 'stripe-automatic') {
       params.set('automatic_tax[enabled]', 'true')
+    } else if (providerChoice) {
+      // Another provider is handed tax as an amount (AGL-3630), computed
+      // below from the same quote and rate; no tax-rate object is minted.
     } else if (engineTax.quote) {
       // The tax service's cents per line as one rate per line (AGL-3631),
       // applied after the coupon exactly like the store's own rate below. One
@@ -1258,6 +1311,102 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // and is identical on both checkout paths. This swaps the redirect's URL
     // pair for `ui_mode` + `return_url` and stops. Off unless the flag is on for
     // this org AND a publishable key exists; see `resolveNativeCheckoutMode`.
+    // ANOTHER PROVIDER (AGL-3630): everything above is the card path's own
+    // pricing; only the last step differs. The provider is handed the priced
+    // sale as amounts — the lines, the discount, the tax, the delivery
+    // options, the platform's transaction fee — with the session's metadata,
+    // and the buyer is sent to its page. Fulfilment is the card webhook's own
+    // branch, through `provider-settlement.ts`.
+    if (providerChoice) {
+      const checkoutId = providerCheckoutId(providerChoice.providerId, claim.stripeKey)
+      const manualRate =
+        taxSettings.mode === 'manual' && !taxSettings.pricesIncludeTax
+          ? CommerceModel.resolveTaxRate(taxSettings, taxSettings.origin ?? {})
+          : null
+      const providerTax = providerTaxCents({
+        engineTaxCents: engineTax.quote ? engineTax.quote.taxCents : null,
+        manualRatePct: manualRate && manualRate.pct > 0 ? manualRate.pct : 0,
+        lines: cartEngineLines.map((entry, position) => ({
+          netCents: cartEngineNet[position],
+          taxable: !productsById.get(entry.line.productId)?.taxExempt,
+        })),
+      })
+      const cheapestShippingCents =
+        hasPhysicalLine && shippingOptions.length
+          ? Math.min(...shippingOptions.map((option) => option.amountCents))
+          : 0
+      if (chargedItemsCents + extrasCents + providerTax + cheapestShippingCents <= 0) {
+        await releaseGiftCardHold()
+        await releasePromotionHolds()
+        await releaseStock()
+        await claim.release()
+        return res.status(409).json({ error: PROVIDER_NOTHING_TO_CHARGE_MESSAGE })
+      }
+      params.set('metadata[feeCents]', String(Math.max(0, transactionFeeCents)))
+      const hostData = (await hostRef.get().catch(() => null))?.data() as HostTokenSource | undefined
+      const started = await openProviderCheckout(
+        providerCartCheckoutRequest({
+          providerId: providerChoice.providerId,
+          checkoutId,
+          orgId: String(ownerOrg.orgId ?? ''),
+          hostId,
+          params,
+          // An extra after the goods (package protection) is a service, not a parcel.
+          physical: (index) => {
+            const line = cart.lines[index]
+            return Boolean(line) && (productsById.get(line.productId)?.type ?? 'physical') === 'physical'
+          },
+          discountCents: Math.max(0, itemsCents - chargedItemsCents),
+          taxCents: providerTax,
+          shipping: hasPhysicalLine ? { options: shippingOptions, countries: shippingPlan.countries } : null,
+          platformFeeCents: Math.max(0, transactionFeeCents),
+          merchantName: String(resolveHostToken('businessName', hostData) ?? ''),
+          buyerEmail: email,
+          returnUrl: `${backUrl}${separator}order=success&session_id=${checkoutId}`,
+          cancelUrl: `${backUrl}${separator}order=canceled`,
+          expiresAtMs: Date.now() + CommerceModel.CHECKOUT_SESSION_TTL_MS,
+        }),
+        providerChoice.providerId,
+      )
+      if (!started) {
+        await releaseGiftCardHold()
+        await releasePromotionHolds()
+        await releaseStock()
+        await claim.release()
+        return res.status(502).json({ error: 'Checkout failed' })
+      }
+      heldPromotions.length = 0
+      stockHold = null
+      await hostRef
+        .collection('checkouts')
+        .doc(checkoutId)
+        .set({
+          cartId,
+          ...(email ? { email } : {}),
+          ...(marketingOptIn ? { marketingOptIn: true } : {}),
+          itemsCents,
+          resumeUrl: backUrl,
+          status: 'open',
+          paymentProvider: providerChoice.providerId,
+          recoveryState: checkoutRecoveryState({ email }),
+          createdAtMs: Date.now(),
+        })
+        .catch(() => undefined)
+      if (email) {
+        await raiseCheckoutStarted(String(hostId), {
+          id: checkoutId,
+          email,
+          marketingOptIn,
+          currency: 'usd',
+          itemsCents,
+          resumeUrl: backUrl ?? null,
+          items: startedItems,
+        })
+      }
+      await claim.record(200, started)
+      return res.status(200).json(started)
+    }
+
     const nativeMode = await resolveNativeCheckoutMode(
       String(ownerOrg?.org?.id ?? ''),
     )

@@ -619,3 +619,147 @@ describe('the gate', () => {
     expect((await act({ action: 'cash', tenderedCents: 100 }, 'x', 'other')).status).toBe(403)
   })
 })
+
+/*==========================================
+ * ANOTHER PLUGIN'S PROVIDER, BY QR (AGL-3630).
+ *=========================================*/
+
+import {
+  registerPluginPaymentProvider,
+  type PluginPaymentCheckoutRequest,
+  type PluginPaymentRefundRequest,
+  type PluginPaymentSettlement,
+} from '@aglyn/aglyn/plugin-manager/plugin-payment-providers'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { commercePosCheckoutOwner } from './pos-provider-payment'
+
+describe('a provider’s QR at the register (AGL-3630)', () => {
+  const opened: PluginPaymentCheckoutRequest[] = []
+  const refunds: PluginPaymentRefundRequest[] = []
+
+  beforeEach(() => {
+    resetPluginServicesForTests()
+    opened.length = 0
+    refunds.length = 0
+    registerPluginPaymentProvider(
+      'wallet',
+      {
+        available: async () => ({
+          providerId: 'wallet',
+          label: 'Wallet',
+          methods: [{ id: 'wallet', label: 'Wallet' }, { id: 'later', label: 'Later' }],
+          livemode: false,
+        }),
+        createCheckout: async (request) => {
+          opened.push(request)
+          return { providerId: 'wallet', providerCheckoutId: 'w1', redirectUrl: 'https://console.example.com/api/wallet/pay?c=w1', livemode: false }
+        },
+        refund: async (request) => {
+          refunds.push(request)
+          return { ok: true, refundId: `R-${refunds.length}`, status: 'completed' }
+        },
+      },
+      { pluginId: 'wallet-plugin' },
+    )
+  })
+
+  function settlementFor(request: PluginPaymentCheckoutRequest, overrides: Partial<PluginPaymentSettlement> = {}): PluginPaymentSettlement {
+    const amount = request.lines.reduce((sum, line) => sum + line.unitCents * line.quantity, 0)
+    return {
+      providerId: 'wallet',
+      providerLabel: 'Wallet',
+      providerCheckoutId: 'w1',
+      ownerKind: request.ownerKind,
+      checkoutId: request.checkoutId,
+      orgId: 'org-1',
+      hostId: 'host-1',
+      currency: 'usd',
+      metadata: request.metadata,
+      totalCents: amount,
+      payer: { email: 'customer@example.com' },
+      paymentId: 'CAPTURE-1',
+      amountCents: amount,
+      breakdown: { itemsCents: amount, discountCents: 0, taxCents: 0, shippingCents: 0, totalCents: amount },
+      platformFeeCents: request.platformFeeCents,
+      livemode: false,
+      settledAtMs: 1_800_000_000_000,
+      ...overrides,
+    }
+  }
+
+  it('is offered to the register by the provider’s methods', async () => {
+    const context = await act({ action: 'context' })
+    expect(context.body.paymentOptions).toEqual([{ providerId: 'wallet', label: 'Wallet', methods: ['Wallet', 'Later'] }])
+  })
+
+  it('reserves the amount, opens one checkout for it with the tip, and shows its page', async () => {
+    const first = await act({ action: 'provider-link', providerId: 'wallet', amountCents: 5_000, tipCents: 500 }, 'q1')
+    expect(first.status).toBe(200)
+    expect(first.body.sale.payments).toEqual([
+      expect.objectContaining({ method: 'wallet_link', status: 'pending', amountCents: 5_000, tipCents: 500, checkoutUrl: 'https://console.example.com/api/wallet/pay?c=w1', providerLabel: 'Wallet' }),
+    ])
+    expect(opened).toHaveLength(1)
+    expect(opened[0]).toMatchObject({
+      ownerKind: 'commerce-pos',
+      channel: 'in-person',
+      lines: [
+        { name: 'In-store purchase', quantity: 1, unitCents: 5_000, ships: false },
+        { name: 'Tip', quantity: 1, unitCents: 500, ships: false },
+      ],
+      // Half the sale carries half the take, and the tip none — no card cost on top.
+      platformFeeCents: 100,
+      metadata: { type: 'pos-payment', hostId: 'host-1', orderId: 'sale-1' },
+    })
+    expect(opened[0].returnUrl).toMatch(/paid=1$/)
+    // The same press again: the same payment, no second checkout.
+    await act({ action: 'provider-link', providerId: 'wallet', amountCents: 5_000, tipCents: 500 }, 'q1')
+    expect(opened).toHaveLength(1)
+    expect(stripeCalls).toEqual([])
+  })
+
+  it('refuses a provider that is not offered', async () => {
+    const refused = await act({ action: 'provider-link', providerId: 'elsewhere', amountCents: 5_000 }, 'q2')
+    expect(refused.status).toBe(409)
+    expect(sale().payments).toEqual([])
+  })
+
+  it('settles the payment once, completing the sale with the fee netted, not invoiced', async () => {
+    await act({ action: 'provider-link', providerId: 'wallet', amountCents: 10_000 }, 'q3')
+    const request = opened[0]
+    expect(await commercePosCheckoutOwner.approve({ ...settlementFor(request) })).toEqual({ ok: true })
+    await commercePosCheckoutOwner.settle(settlementFor(request))
+    await commercePosCheckoutOwner.settle(settlementFor(request))
+    expect(sale().status).toBe('paid')
+    expect(sale().payments[0]).toMatchObject({ status: 'succeeded', providerPaymentId: 'CAPTURE-1', feeCents: 200 })
+    expect(sale().totals.feeCents).toBe(200)
+    expect(sale().feeCollection).toBe('payout')
+    expect([...fakeDocs.keys()].some((key) => key.startsWith('orgs/org-1/offlineFees/'))).toBe(false)
+    expect(mockSaleCompleted).toEqual(['sale-1'])
+  })
+
+  it('refuses to take money the register stopped waiting for', async () => {
+    const started = await act({ action: 'provider-link', providerId: 'wallet', amountCents: 5_000 }, 'q4')
+    await act({ action: 'cancel', paymentId: started.body.paymentId })
+    expect(sale().payments[0].status).toBe('canceled')
+    expect(await commercePosCheckoutOwner.approve(settlementFor(opened[0]))).toMatchObject({ ok: false })
+    expect(stripeCalls).toEqual([])
+  })
+
+  it('gives the amount back when the customer never pays', async () => {
+    await act({ action: 'provider-link', providerId: 'wallet', amountCents: 5_000 }, 'q5')
+    await commercePosCheckoutOwner.expire(settlementFor(opened[0]))
+    expect(sale().payments[0]).toMatchObject({ status: 'failed' })
+    expect(sale().status).toBe('pending')
+  })
+
+  it('hands a settled QR payment back through the provider when the sale is voided', async () => {
+    await act({ action: 'provider-link', providerId: 'wallet', amountCents: 4_000, tipCents: 400 }, 'q6')
+    await commercePosCheckoutOwner.settle(settlementFor(opened[0]))
+    const voided = await act({ action: 'void' })
+    expect(voided.status).toBe(200)
+    expect(sale().status).toBe('cancelled')
+    expect(sale().payments[0].status).toBe('reversed')
+    expect(refunds).toEqual([expect.objectContaining({ paymentId: 'CAPTURE-1', amountCents: 4_400, idempotencyKey: expect.stringMatching(/^pos-void:/) })])
+    expect(stripeCalls).toEqual([])
+  })
+})

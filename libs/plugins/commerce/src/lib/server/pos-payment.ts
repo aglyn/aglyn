@@ -24,6 +24,8 @@ import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import { pluginSmsAvailable } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
 import { finishPosDisplayReceipt } from './pos-display'
+import { posPaymentOptions, refundPosProviderPayment, startProviderLinkPayment } from './pos-provider-payment'
+import { resolveHostToken, type HostTokenSource } from '@aglyn/aglyn/app-utils/host-tokens'
 import * as CommerceModel from '../model'
 import { posRegisterSettings } from '../plugin-config'
 import {
@@ -126,6 +128,19 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
         publishableKey: String(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? ''),
         // A text receipt is offered only when an SMS provider is on (AGL-3610).
         smsReceipts: pluginSmsAvailable(),
+        // Another plugin's way to pay, by QR (AGL-3630); absent when none.
+        ...(await (async () => {
+          const options = await posPaymentOptions(staff.orgId, hostId).catch(() => [])
+          return options.length
+            ? {
+                paymentOptions: options.map((option) => ({
+                  providerId: option.providerId,
+                  label: option.label,
+                  methods: option.methods.map((method) => method.label),
+                })),
+              }
+            : {}
+        })()),
       })
     }
     if (!orderId) return res.status(400).json({ error: 'Missing orderId' })
@@ -137,6 +152,7 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
       'card-present',
       'card-keyed',
       'card-link',
+      'provider-link',
     ].includes(action)
     const attemptKey = posIdempotencyKey(req)
     if (startsPayment && !attemptKey) {
@@ -226,6 +242,27 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
           tipCents,
           cashierId: staff.uid,
           org: staff.org,
+          returnUrl: await registerReturnUrl(req.headers.host, hostId, staff),
+        })
+        break
+      case 'provider-link':
+        outcome = await startProviderLinkPayment({
+          hostId,
+          orderId,
+          paymentId,
+          amountCents,
+          tipCents,
+          cashierId: staff.uid,
+          orgId: staff.orgId,
+          providerId: String(body['providerId'] ?? ''),
+          merchantName: String(
+            resolveHostToken(
+              'businessName',
+              (await firebaseAdmin.app().firestore().collection('hosts').doc(hostId).get()).data() as
+                | HostTokenSource
+                | undefined,
+            ) ?? '',
+          ),
           returnUrl: await registerReturnUrl(req.headers.host, hostId, staff),
         })
         break
@@ -576,7 +613,7 @@ export async function voidPosSale(
     }
   }
   for (const payment of CommerceModel.orderPayments(order)) {
-    if (payment.status === 'pending' && CommerceModel.isCardPaymentMethod(payment.method)) {
+    if (payment.status === 'pending' && CommerceModel.settlesRemotely(payment.method)) {
       const cancelled = await cancelPosCardPayment({ hostId, orderId, paymentId: payment.id })
       if (!cancelled.ok) return cancelled
     }
@@ -659,6 +696,19 @@ async function reversePayment(
         status: 502,
         error: posStripeErrorMessage(refund.body, 'The card refund failed. The sale is still open.'),
       }
+    }
+  }
+  // Paid through another plugin's provider (AGL-3630): handed back there.
+  if (payment.method === 'wallet_link') {
+    const refunded = await refundPosProviderPayment({
+      orgId: staff.orgId,
+      hostId,
+      payment,
+      amountCents: payment.amountCents + Number(payment.tipCents ?? 0),
+      idempotencyKey: `pos-void:${payment.id}`,
+    })
+    if ('error' in refunded) {
+      return { ok: false, status: 502, error: `${refunded.error} The sale is still open.` }
     }
   }
   const cardRef = payment.giftCardId ? giftCardRef(hostId, payment.giftCardId) : null

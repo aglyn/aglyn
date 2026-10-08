@@ -43,6 +43,10 @@ import {
   registerPluginProductWriter,
   type PluginProductWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-product-writer'
+import {
+  registerPluginPaymentCheckoutOwner,
+  type PluginPaymentCheckoutOwner,
+} from '@aglyn/aglyn/plugin-manager/plugin-payment-providers'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_OPERATOR_ALERTS } from './constants/operator-alerts'
 import { registerCommerceEventTriggers } from './server/order-event-triggers'
@@ -97,6 +101,30 @@ export function registerCommerceServerDeclarations(): void {
   // Orders a marketplace sold (AGL-3638), recorded as this plugin's own:
   // numbered, their units off the same shelf in the same write, announced.
   registerPluginChannelOrders(lazyChannelOrders, { pluginId: BUNDLE_ID })
+  // A cart paid through another plugin's payment provider (AGL-3630): the
+  // provider calls back to approve, fulfil, release and report, and the
+  // fulfilment is the card webhook's own branch.
+  registerPluginPaymentCheckoutOwner('commerce-cart', lazyCartCheckoutOwner, { pluginId: BUNDLE_ID })
+  // The register's QR payment through the same providers.
+  registerPluginPaymentCheckoutOwner('commerce-pos', lazyPosCheckoutOwner, { pluginId: BUNDLE_ID })
+}
+
+const loadPosOwner = async () => (await import('./server/pos-provider-payment')).commercePosCheckoutOwner
+
+const lazyPosCheckoutOwner: PluginPaymentCheckoutOwner = {
+  approve: async (approval) => (await loadPosOwner()).approve(approval),
+  settle: async (settlement) => (await loadPosOwner()).settle(settlement),
+  expire: async (checkout) => (await loadPosOwner()).expire(checkout),
+  onPaymentEvent: async (event) => (await loadPosOwner()).onPaymentEvent?.(event),
+}
+
+const loadCartOwner = async () => (await import('./server/provider-settlement')).commerceCartCheckoutOwner
+
+const lazyCartCheckoutOwner: PluginPaymentCheckoutOwner = {
+  approve: async (approval) => (await loadCartOwner()).approve(approval),
+  settle: async (settlement) => (await loadCartOwner()).settle(settlement),
+  expire: async (checkout) => (await loadCartOwner()).expire(checkout),
+  onPaymentEvent: async (event) => (await loadCartOwner()).onPaymentEvent?.(event),
 }
 
 /** Outside orders, with the Admin SDK and the model arriving on the first call. */

@@ -30,6 +30,12 @@ import { raiseOrderEvent } from './order-events'
 import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
 import { createStripeRefund } from './stripe-refund'
 import { posRegisterRefundAuthority } from './pos-refund-authority'
+import { refundThroughProvider } from './provider-refund'
+
+/** What the order had refunded before this request, for a keyless provider refund's idempotency. */
+function alreadyRefundedForKey(order: { refundedCents?: number }): number {
+  return Math.max(0, Number(order.refundedCents ?? 0))
+}
 
 /**
  * A claim on one refund attempt (AGL-1696), the same primitive the POS sale
@@ -377,8 +383,19 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
         Boolean(payment.paymentIntentId),
     )
     const splitRefunds = (order as { paymentRefunds?: Record<string, number> }).paymentRefunds ?? {}
-    let paymentIntentId =
-      (splitCards.length > 1 ? splitCards[0].paymentIntentId : undefined) ??
+    // Paid through another plugin's provider (AGL-3630): the refund goes back
+    // the way the money came, and no card payment is looked for.
+    // A register sale paid by one provider QR and no card is the same case.
+    const walletPayments = CommerceModel.orderPayments(order).filter(
+      (payment) => payment.status === 'succeeded' && payment.method === 'wallet_link' && payment.providerId && payment.providerPaymentId,
+    )
+    const providerTarget =
+      order.paymentProvider && order.providerPaymentId
+        ? { providerId: String(order.paymentProvider), paymentId: String(order.providerPaymentId) }
+        : splitCards.length === 0 && walletPayments.length === 1
+          ? { providerId: String(walletPayments[0].providerId), paymentId: String(walletPayments[0].providerPaymentId) }
+          : null
+    let paymentIntentId = providerTarget ? 'provider' : (splitCards.length > 1 ? splitCards[0].paymentIntentId : undefined) ??
       order.paymentIntentId ??
       // Legacy rows stored the checkout session as the doc id; resolve
       // the payment intent from Stripe.
@@ -533,7 +550,7 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       })
     }
 
-    if (splitCards.length > 1) {
+    if (!providerTarget && splitCards.length > 1) {
       // The card this refund comes off: the first with enough left on it.
       // A refund larger than any one card refuses with the largest that
       // fits, rather than splitting money across charges unasked; a part a
@@ -569,11 +586,22 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       paymentIntentId = String(card.paymentIntentId)
     }
 
-    const refund = await createStripeRefund({
-      paymentIntentId: String(paymentIntentId),
-      amountCents: refundCents,
-      idempotencyKey: claim?.stripeKey ?? null,
-    })
+    const refund = providerTarget
+      ? await refundThroughProvider({
+          ...providerTarget,
+          orgId: await (async () => {
+            const owner = await getOrgForHost(hostId)
+            return String(owner?.orgId ?? owner?.org?.id ?? '')
+          })(),
+          hostId,
+          amountCents: refundCents,
+          idempotencyKey: claim?.stripeKey ?? `${orderId}:${alreadyRefundedForKey(order)}:${refundCents}`,
+        })
+      : await createStripeRefund({
+          paymentIntentId: String(paymentIntentId),
+          amountCents: refundCents,
+          idempotencyKey: claim?.stripeKey ?? null,
+        })
     if ('error' in refund) {
       console.error('Stripe refund error', refund.code, refund.error)
       // Stripe said no, so we KNOW no money moved: give the reservation back

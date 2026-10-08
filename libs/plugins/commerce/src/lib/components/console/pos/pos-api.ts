@@ -71,6 +71,8 @@ export interface PosRegisterContext {
   }>
   publishableKey: string
   smsReceipts: boolean
+  /** Another plugin's way to pay by QR (AGL-3630); absent when none is offered. */
+  paymentOptions?: Array<{ providerId: string; label: string; methods: string[] }>
 }
 
 type User = Parameters<typeof authorizedFetch>[0]
@@ -157,6 +159,7 @@ export type PosTenderAction =
   | 'card-present-sdk'
   | 'card-keyed'
   | 'card-link'
+  | 'provider-link'
   | 'status'
   | 'cancel'
   | 'retry'

@@ -21,6 +21,7 @@ import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { cartCookieName, mintCartId, readCartId } from './cart-cookie'
+import { storefrontPaymentOptions, storefrontPaymentOptionViews } from './provider-checkout'
 
 export interface ResolvedCartLine extends CommerceModel.CartLine {
   name: string
@@ -203,10 +204,27 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
     const subtotalCents = lines
       .filter((line) => !line.unavailable)
       .reduce((sum, line) => sum + line.unitAmountCents * line.quantity, 0)
+    // Other ways to pay another plugin offers for this store (AGL-3630), asked
+    // only for a cart with something in it. Absent when there are none — a
+    // store with no provider answers exactly what it answered before.
+    const paymentOptions =
+      !isPost && lines.length
+        ? storefrontPaymentOptionViews(
+            await storefrontPaymentOptions({
+              orgId: '',
+              hostId,
+              taxSettings: async () =>
+                (await hostRef.collection('settings').doc('store').get()).get('tax') as
+                  | CommerceModel.TaxSettings
+                  | undefined,
+            }).catch(() => []),
+          )
+        : []
     return res.status(200).json({
       lines,
       count: CommerceModel.cartCount(cart),
       subtotalCents,
+      ...(paymentOptions.length ? { paymentOptions } : {}),
     })
   } catch (error) {
     console.error(error)

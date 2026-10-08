@@ -45,6 +45,11 @@ export type OrderPaymentMethod =
   | 'gift_card'
   /** Charged to a checked-in reservation's folio. */
   | 'folio'
+  /**
+   * Another plugin's payment provider (AGL-3630) — PayPal, Venmo — paid on
+   * the provider's own page the customer opens from a QR code.
+   */
+  | 'wallet_link'
 
 export type OrderPaymentStatus =
   /** Started and not finished: reserves its amount against the balance. */
@@ -63,6 +68,7 @@ export const ORDER_PAYMENT_METHODS: readonly OrderPaymentMethod[] = [
   'card_link',
   'gift_card',
   'folio',
+  'wallet_link',
 ]
 
 /** One payment toward a register sale, on `HostOrder.payments`. */
@@ -112,6 +118,14 @@ export interface OrderPayment {
   livemode?: boolean
   /** The console user who took the payment. */
   cashierId?: string
+  /**
+   * A `wallet_link` payment's provider (AGL-3630): its id and name, its id
+   * for the money once moved (what a refund names) and for the checkout.
+   */
+  providerId?: string
+  providerLabel?: string
+  providerPaymentId?: string
+  providerCheckoutId?: string
 }
 
 /** The tenders whose money moves through Stripe. */
@@ -123,6 +137,20 @@ export const POS_CARD_METHODS: ReadonlySet<OrderPaymentMethod> = new Set([
 
 export function isCardPaymentMethod(method: OrderPaymentMethod): boolean {
   return POS_CARD_METHODS.has(method)
+}
+
+/**
+ * The tenders whose platform fee the processor takes at the payment itself
+ * (AGL-3630): the card methods' application fee, and a provider's platform
+ * fee on a `wallet_link`. Every other tender's share accrues to the invoice.
+ */
+export function isNettedPaymentMethod(method: OrderPaymentMethod): boolean {
+  return POS_CARD_METHODS.has(method) || method === 'wallet_link'
+}
+
+/** The tenders that settle away from the register, which it waits on and polls. */
+export function settlesRemotely(method: OrderPaymentMethod): boolean {
+  return POS_CARD_METHODS.has(method) || method === 'wallet_link'
 }
 
 /** Whole non-negative cents from an untrusted value. */
@@ -255,7 +283,7 @@ export function posInvoiceTakeCents(input: {
   const netted = input.payments
     .filter(
       (payment) =>
-        payment.status === 'succeeded' && isCardPaymentMethod(payment.method),
+        payment.status === 'succeeded' && isNettedPaymentMethod(payment.method),
     )
     .reduce((sum, payment) => sum + wholeCents(payment.takeFeeCents), 0)
   return Math.max(0, wholeCents(input.takeFeeCents) - netted)
@@ -266,8 +294,8 @@ export function posFeeCollection(
   payments: readonly OrderPayment[],
 ): 'payout' | 'invoice' | 'split' {
   const settled = payments.filter((payment) => payment.status === 'succeeded')
-  const card = settled.some((payment) => isCardPaymentMethod(payment.method))
-  const other = settled.some((payment) => !isCardPaymentMethod(payment.method))
+  const card = settled.some((payment) => isNettedPaymentMethod(payment.method))
+  const other = settled.some((payment) => !isNettedPaymentMethod(payment.method))
   if (card && other) return 'split'
   return card ? 'payout' : 'invoice'
 }
@@ -275,7 +303,10 @@ export function posFeeCollection(
 /** A one-line description of a payment for the register, receipt and timeline. */
 export function describeOrderPayment(payment: OrderPayment): string {
   const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`
-  const label = ORDER_PAYMENT_METHOD_LABELS[payment.method] ?? 'Payment'
+  const label =
+    payment.method === 'wallet_link' && payment.providerLabel
+      ? `${payment.providerLabel} (QR)`
+      : (ORDER_PAYMENT_METHOD_LABELS[payment.method] ?? 'Payment')
   const card =
     payment.cardBrand || payment.last4
       ? ` (${[payment.cardBrand, payment.last4 ? `•••• ${payment.last4}` : '']
@@ -295,6 +326,7 @@ export const ORDER_PAYMENT_METHOD_LABELS: Record<OrderPaymentMethod, string> = {
   card_link: 'Card (QR)',
   gift_card: 'Gift card',
   folio: 'Charged to room',
+  wallet_link: 'Wallet (QR)',
 }
 
 /*==========================================

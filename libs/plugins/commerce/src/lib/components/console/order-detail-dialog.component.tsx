@@ -586,13 +586,16 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
       order,
       lineItemIds ?? [],
     )
+    // Where the money goes back through: the card processor, or the provider
+    // another plugin brought that took it (AGL-3630).
+    const processor = order.paymentProvider ? order.paymentProviderLabel || 'the payment provider' : 'Stripe'
     const confirmed = await confirm({
       title: scoped ? 'Refund this line?' : 'Refund this order?',
       description:
         (scoped
           ? `Refunds ${usd(scopedCents)} for ${(lineItemIds ?? [])
               .map((index) => lines[index]?.name ?? `line ${index}`)
-              .join(', ')} through Stripe, and withdraws that line's ` +
+              .join(', ')} through ${processor}, and withdraws that line's ` +
             'downloads, license keys and gated content. A license key already ' +
             'sent to the buyer is retired, not returned to your pool — they ' +
             'still hold the string, so reissuing it would give two people one ' +
@@ -600,7 +603,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           : `Refunds ${usd(
               (order.totals?.totalCents ?? order.amountCents ?? 0) -
                 (order.refundedCents ?? 0),
-            )} to the buyer through Stripe.`) +
+            )} to the buyer through ${processor}.`) +
         // An open INQUIRY keeps this button live on purpose (AGL-1820):
         // Stripe names a full refund as the way to resolve one before it
         // escalates to a chargeback. Said here so the admin reads the refund
@@ -1182,8 +1185,9 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
                 'A chargeback is open on this order, and refunding would not' +
                 ' withdraw it — the bank has already taken the disputed' +
                 ' amount, so a refund on top would pay the shopper twice.' +
-                ' Respond to the dispute or accept it in the Stripe' +
-                ' dashboard; refund any remainder once it settles.'
+                ` Respond to the dispute or accept it in ${
+                  order.paymentProvider ? order.paymentProviderLabel || 'the payment provider' : 'the Stripe dashboard'
+                }; refund any remainder once it settles.`
               }
             >
               {/* A disabled button fires no pointer events; the wrapper
