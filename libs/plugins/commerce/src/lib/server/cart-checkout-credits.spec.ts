@@ -19,22 +19,24 @@ import type {
   PluginApiRequest,
   PluginApiResponse,
 } from '@aglyn/aglyn/server'
-import { cartCheckoutHandler, CHECKOUT_EXTRA_UNAVAILABLE_MESSAGE } from './cart-checkout'
-import { registerPluginCheckoutExtra } from '@aglyn/aglyn/plugin-manager/plugin-checkout-extras'
+import { cartCheckoutHandler, CHECKOUT_CREDIT_INVALID_MESSAGE } from './cart-checkout'
+import {
+  decodeCheckoutCreditMetadata,
+  registerPluginCheckoutCredit,
+  type PluginCheckoutCreditProvider,
+} from '@aglyn/aglyn/plugin-manager/plugin-checkout-credits'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
-import { decodeCheckoutExtrasMetadata } from '@aglyn/aglyn/plugin-manager/plugin-checkout-extras'
 import { cartExtrasHandler } from './checkout-extras'
-import * as Aglyn from '@aglyn/aglyn/server'
 
 /**
- * Optional lines another plugin offers (AGL-3635) reach the Checkout Session
- * only as the buyer chose them and only at the price the provider names at
- * the moment of sale: package protection is charged as its own untaxed
- * line, carries no platform take, rides the session metadata the webhook
- * records it from, and an offer the buyer ticked that is gone refuses
- * rather than selling without it.
+ * Store credit another plugin keeps (AGL-3640) reaches the Checkout Session
+ * only through core's checkout-credits seam: the code is resolved and HELD by
+ * its provider before Stripe is asked, against what is left after every other
+ * reduction; the held cents join the one session coupon; the metadata carries
+ * the hold — never the code — for the webhook to settle; and every refusal,
+ * the provider's or Stripe's, lets the hold go.
  *
- * The harness is `cart-checkout-shipping.spec.ts`'s: Stripe is mocked
+ * The harness is `cart-checkout-extras.spec.ts`'s: Stripe is mocked
  * absolutely and the assertions read the form body the handler built.
  */
 
@@ -160,6 +162,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 // ---------------------------------------------------------------------------
 
 let sessionBody: URLSearchParams | null = null
+let couponFails = false
 
 /** `amount_off` on every coupon the handler minted, in call order. */
 const couponAmounts: string[] = []
@@ -182,6 +185,7 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
   // object on the merchant's account. Modelled so the ordering assertion
   // below — that a refused checkout creates none — can be made at all.
   if (target.endsWith('/v1/coupons')) {
+    if (couponFails) return { ok: false, json: async () => ({ error: { message: 'down' } }) }
     // The MONEY on a discount: `amount_off` is what Stripe takes off the
     // session, so it is the assertion surface for any pricing question.
     couponAmounts.push(
@@ -250,6 +254,9 @@ interface Scenario {
   extraProduct?: { id: string; priceUsd: number; quantity: number }
   /** The offers the buyer ticked, as the cart sends them. */
   extras?: unknown
+  /** A rewards or referral code, as typed. */
+  creditCode?: string
+  email?: string
 }
 
 function makeRequest(scenario: Scenario): PluginApiRequest {
@@ -259,6 +266,8 @@ function makeRequest(scenario: Scenario): PluginApiRequest {
       hostId: 'host-1',
       ...(scenario.couponCode ? { couponCode: scenario.couponCode } : {}),
       ...(scenario.extras !== undefined ? { extras: scenario.extras } : {}),
+      ...(scenario.creditCode !== undefined ? { creditCode: scenario.creditCode } : {}),
+      ...(scenario.email ? { email: scenario.email } : {}),
       ...('shippingCountry' in scenario
         ? { shippingCountry: scenario.shippingCountry }
         : {}),
@@ -336,95 +345,44 @@ async function runCheckout(
   return { result, body: sessionBody as URLSearchParams | null }
 }
 
-/** The countries the session will accept an address in, in emitted order. */
-function allowedCountries(body: URLSearchParams | null) {
-  const out: string[] = []
-  for (
-    let index = 0;
-    body?.has(`shipping_address_collection[allowed_countries][${index}]`);
-    index += 1
-  ) {
-    out.push(
-      String(
-        body.get(`shipping_address_collection[allowed_countries][${index}]`),
-      ),
-    )
-  }
-  return out
-}
+// ---------------------------------------------------------------------------
+// A recording provider
+// ---------------------------------------------------------------------------
 
-/** Every `shipping_options[n]` in the emitted form body, in index order. */
-function shippingOptions(body: URLSearchParams | null) {
-  if (!body) return []
-  const out: { name: string; amount: string; currency: string; type: string }[] =
-    []
-  for (let index = 0; body.has(`shipping_options[${index}][shipping_rate_data][display_name]`); index += 1) {
-    const field = `shipping_options[${index}][shipping_rate_data]`
-    out.push({
-      name: String(body.get(`${field}[display_name]`)),
-      amount: String(body.get(`${field}[fixed_amount][amount]`)),
-      currency: String(body.get(`${field}[fixed_amount][currency]`)),
-      type: String(body.get(`${field}[type]`)),
-    })
-  }
-  return out
-}
+const calls: Array<[string, Record<string, unknown>]> = []
 
-const shipping = {
-  zones: [
-    { id: 'us', name: 'United States', countries: ['US'] },
-    { id: 'world', name: 'Everywhere else', countries: ['*'] },
-  ],
-  rates: [
-    { id: 'std', zoneId: 'us', name: 'Standard', kind: 'flat', amountCents: 799 },
+function provide(overrides: Partial<PluginCheckoutCreditProvider> = {}) {
+  registerPluginCheckoutCredit(
     {
-      id: 'intl',
-      zoneId: 'world',
-      name: 'International',
-      kind: 'flat',
-      amountCents: 2999,
-    },
-  ],
-}
-
-const PROTECTION = {
-  key: 'package-protection',
-  label: 'Package protection',
-  description: 'Covers loss in transit.',
-  amountCents: 198,
-  currency: 'usd',
-  defaultSelected: true,
-  quoteRef: 'q_1',
-}
-
-/** What the provider was asked, each time. */
-const asked: Array<{ itemsCents: number; lines: unknown[] }> = []
-
-function offerProtection(amountCents = 198) {
-  registerPluginCheckoutExtra(
-    {
-      offer: async (request) => {
-        asked.push({ itemsCents: request.itemsCents, lines: request.lines })
-        return request.lines.some((line) => line.ships) ? { ...PROTECTION, amountCents } : null
+      key: 'rewards',
+      label: 'Rewards',
+      recognizes: (code) => code.startsWith('RW-'),
+      offered: async (input) => {
+        calls.push(['offered', input])
+        return true
       },
+      resolve: async (input) => {
+        calls.push(['resolve', input])
+        return { ok: true, reference: 'm:abc', label: 'Rewards', last4: 'CCCC', availableCents: 1_500 }
+      },
+      hold: async (input) => {
+        calls.push(['hold', input as unknown as Record<string, unknown>])
+        return { ok: true, cents: Math.min(1_500, input.maxCents) }
+      },
+      release: async (input) => {
+        calls.push(['release', input])
+      },
+      stage: async () => null,
+      restore: async () => 0,
+      ...overrides,
     },
-    { pluginId: 'post-purchase' },
+    { pluginId: 'loyalty' },
   )
 }
 
-function extraLine(body: URLSearchParams | null, index: number) {
-  const field = `line_items[${index}][price_data]`
-  return body?.has(`${field}[unit_amount]`)
-    ? {
-        name: body.get(`${field}[product_data][name]`),
-        amount: body.get(`${field}[unit_amount]`),
-        taxCode: body.get(`${field}[product_data][tax_code]`),
-        quantity: body.get(`line_items[${index}][quantity]`),
-      }
-    : null
-}
+const named = (name: string) => calls.filter(([call]) => call === name).map(([, input]) => input)
 
-describe('cart checkout extras (AGL-3635)', () => {
+describe('cart checkout store credit (AGL-3640)', () => {
   const realFetch = global.fetch
   const realKey = process.env.STRIPE_SECRET_KEY
 
@@ -441,135 +399,115 @@ describe('cart checkout extras (AGL-3635)', () => {
   beforeEach(() => {
     fetchMock.mockClear()
     couponAmounts.length = 0
-    asked.length = 0
+    calls.length = 0
+    couponFails = false
     resetPluginServicesForTests()
   })
 
-  it('sells exactly as before when the buyer ticked nothing', async () => {
-    offerProtection()
+  it('sells exactly as before with no code', async () => {
+    provide()
     const { result, body } = await runCheckout(null)
     expect(result.status).toBe(200)
-    expect(extraLine(body, 1)).toBeNull()
-    expect(body?.has('metadata[extra0]')).toBe(false)
-    expect(asked).toHaveLength(0)
+    expect(body?.has('metadata[credit0]')).toBe(false)
+    expect(couponAmounts).toEqual([])
+    expect(calls).toEqual([])
   })
 
-  it('charges a ticked offer as its own untaxed line, at the price asked for again now', async () => {
-    offerProtection(205)
-    const { result, body } = await runCheckout(null, { extras: ['post-purchase.package-protection'] })
+  it('holds the code’s credit against the goods, joins it to the one coupon, and carries the hold — not the code', async () => {
+    provide()
+    const { result, body } = await runCheckout(null, { creditCode: ' rw-aaaa-bbbb-cccc ', email: 'Pat@Example.com' })
     expect(result.status).toBe(200)
-    expect(extraLine(body, 1)).toEqual({
-      name: 'Package protection',
-      amount: '205',
-      taxCode: 'txcd_00000000',
-      quantity: '1',
-    })
-    expect(asked).toEqual([{ itemsCents: 6000, lines: [expect.objectContaining({ unitCents: 3000, quantity: 2, ships: true })] }])
-    const metadata = Object.fromEntries(
-      [...(body?.entries() ?? [])]
-        .filter(([key]) => key.startsWith('metadata['))
-        .map(([key, value]) => [key.slice('metadata['.length, -1), value]),
-    )
-    expect(decodeCheckoutExtrasMetadata(metadata)).toEqual([
-      {
-        id: 'post-purchase.package-protection',
-        pluginId: 'post-purchase',
-        key: 'package-protection',
-        label: 'Package protection',
-        amountCents: 205,
-        quoteRef: 'q_1',
-      },
+    expect(named('resolve')).toEqual([
+      { hostId: 'host-1', code: 'RW-AAAA-BBBB-CCCC', channel: 'online', customerEmail: 'pat@example.com', staff: false },
     ])
+    expect(named('hold')[0]).toMatchObject({ hostId: 'host-1', reference: 'm:abc', maxCents: 6_000, currency: 'usd' })
+    expect(couponAmounts).toEqual(['1500'])
+    expect(body?.get('discounts[0][coupon]')).toBe('co_test_1')
+    const held = decodeCheckoutCreditMetadata(Object.fromEntries([...(body?.entries() ?? [])].map(([key, value]) => [key.replace(/^metadata\[|\]$/g, ''), value])))
+    expect(held).toMatchObject({ providerId: 'loyalty.rewards', reference: 'm:abc', amountCents: 1_500, label: 'Rewards', last4: 'CCCC' })
+    expect(held?.holdKey).toBe(named('hold')[0]['holdKey'])
+    expect(String(body?.get('metadata[credit0]'))).not.toContain('RW-')
+    expect(named('release')).toEqual([])
   })
 
-  it('takes no platform cut on the extra: only the card cost of carrying it', async () => {
-    offerProtection(198)
-    const without = await runCheckout(null)
-    const feeWithout = Number(without.body?.get('payment_intent_data[application_fee_amount]') ?? 0)
-    const withExtra = await runCheckout(null, { extras: ['post-purchase.package-protection'] })
-    const feeWith = Number(withExtra.body?.get('payment_intent_data[application_fee_amount]') ?? 0)
-    expect(feeWith - feeWithout).toBe(
-      Aglyn.saleProcessingCostCents(6000 + 198) - Aglyn.saleProcessingCostCents(6000),
-    )
-  })
-
-  it('refuses rather than sells without cover the buyer ticked and is no longer offered', async () => {
-    const gone = await runCheckout(null, { extras: ['post-purchase.package-protection'] })
-    expect(gone.result).toEqual({
-      status: 409,
-      body: { error: CHECKOUT_EXTRA_UNAVAILABLE_MESSAGE, extrasChanged: true },
-    })
-    expect(stripeCalls('/v1/checkout/sessions')).toBe(0)
-    offerProtection()
-    const forged = await runCheckout(null, { extras: ['someone.else-entirely'] })
-    expect(forged.result.status).toBe(409)
-    expect(stripeCalls('/v1/checkout/sessions')).toBe(0)
-  })
-
-  it('ignores a choice that is not an id, and never takes a price from the request', async () => {
-    offerProtection(198)
-    const { result, body } = await runCheckout(null, {
-      extras: [{ id: 'post-purchase.package-protection', amountCents: 1 }],
-    })
+  it('holds only what is left after a coupon', async () => {
+    provide()
+    const { result } = await runCheckout(null, { creditCode: 'RW-AAAA-BBBB-CCCC', couponCode: 'HALF' })
     expect(result.status).toBe(200)
-    expect(extraLine(body, 1)).toBeNull()
+    expect(named('hold')[0]).toMatchObject({ maxCents: 3_000 })
+    expect(couponAmounts).toEqual(['4500'])
+  })
+
+  it('refuses a code no provider takes, before Stripe is asked', async () => {
+    const { result } = await runCheckout(null, { creditCode: 'RW-AAAA-BBBB-CCCC' })
+    expect(result).toEqual({ status: 400, body: { error: CHECKOUT_CREDIT_INVALID_MESSAGE, creditCodeInvalid: true } })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses where the site does not offer it', async () => {
+    provide({ offered: async () => false })
+    const { result } = await runCheckout(null, { creditCode: 'RW-AAAA-BBBB-CCCC' })
+    expect(result.status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('passes the provider’s refusal on, in its words, and holds nothing', async () => {
+    provide({ resolve: async () => ({ ok: false, status: 409, error: 'A referral code is for a first order.' }) })
+    const { result } = await runCheckout(null, { creditCode: 'RW-AAAA-BBBB-CCCC' })
+    expect(result).toEqual({ status: 409, body: { error: 'A referral code is for a first order.', creditCodeInvalid: true } })
+    expect(named('hold')).toEqual([])
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('a hold that fails is a refusal, and a provider that throws is one too', async () => {
+    provide({ hold: async () => ({ ok: false, status: 409, error: 'This rewards account has nothing to spend right now.' }) })
+    expect((await runCheckout(null, { creditCode: 'RW-AAAA-BBBB-CCCC' })).result.status).toBe(409)
+    resetPluginServicesForTests()
+    provide({
+      hold: async () => {
+        throw new Error('boom')
+      },
+    })
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    expect((await runCheckout(null, { creditCode: 'RW-AAAA-BBBB-CCCC' })).result.status).toBe(409)
+    spy.mockRestore()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('a coupon Stripe will not mint refuses the sale and lets the hold go', async () => {
+    provide()
+    couponFails = true
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { result } = await runCheckout(null, { creditCode: 'RW-AAAA-BBBB-CCCC' })
+    spy.mockRestore()
+    expect(result).toEqual({ status: 502, body: { error: 'Checkout failed' } })
+    expect(named('release')).toEqual([{ hostId: 'host-1', reference: 'm:abc', holdKey: named('hold')[0]['holdKey'] }])
+    expect(stripeCalls('/v1/checkout/sessions')).toBe(0)
+  })
+
+  it('a provider that gives nothing adds nothing and keeps no hold', async () => {
+    provide({ hold: async () => ({ ok: true, cents: 0 }) })
+    const { result, body } = await runCheckout(null, { creditCode: 'RW-AAAA-BBBB-CCCC' })
+    expect(result.status).toBe(200)
+    expect(body?.has('metadata[credit0]')).toBe(false)
+    expect(named('release')).toHaveLength(1)
   })
 })
 
-describe('the cart’s offers (AGL-3635)', () => {
-  function getRequest(cookie = true): PluginApiRequest {
-    return {
-      method: 'GET',
-      query: { hostId: 'host-1' },
-      cookies: cookie ? { 'aglyn_cart_host-1': 'cart-1' } : {},
-      headers: {},
-    } as unknown as PluginApiRequest
-  }
+describe('the cart learns which codes it may take', () => {
+  beforeEach(() => resetPluginServicesForTests())
 
-  beforeEach(() => {
-    resetPluginServicesForTests()
-    asked.length = 0
-  })
-
-  it('answers none, reading nothing, when no plugin offers', async () => {
-    seedStore(null, {})
-    const { res, result } = makeResponse()
-    await cartExtrasHandler(getRequest(), res)
-    expect(result).toEqual({ status: 200, body: { extras: [], credits: [] } })
-  })
-
-  it('shows each offer for the visitor’s basket, without its quote id', async () => {
-    seedStore(null, {})
-    offerProtection()
-    const { res, result } = makeResponse()
-    await cartExtrasHandler(getRequest(), res)
-    expect(result).toEqual({
-      status: 200,
-      body: {
-        extras: [
-          {
-            id: 'post-purchase.package-protection',
-            label: 'Package protection',
-            description: 'Covers loss in transit.',
-            amountCents: 198,
-            defaultSelected: true,
-          },
-        ],
-        // No store-credit provider is registered here (AGL-3640).
-        credits: [],
-      },
-    })
-  })
-
-  it('offers nothing for a basket that does not ship, or no basket', async () => {
-    seedStore(null, { product: { type: 'digital' } })
-    offerProtection()
-    const digital = makeResponse()
-    await cartExtrasHandler(getRequest(), digital.res)
-    expect(digital.result.body).toEqual({ extras: [], credits: [] })
-    const none = makeResponse()
-    await cartExtrasHandler(getRequest(false), none.res)
-    expect(none.result.body).toEqual({ extras: [], credits: [] })
-    expect(asked).toHaveLength(0)
+  it('names each offered provider, and nothing when none is registered', async () => {
+    const ask = async () => {
+      const { res, result } = makeResponse()
+      await cartExtrasHandler(
+        { method: 'GET', query: { hostId: 'host-1' }, cookies: {}, headers: {} } as unknown as PluginApiRequest,
+        res,
+      )
+      return result
+    }
+    expect((await ask()).body).toEqual({ extras: [], credits: [] })
+    provide()
+    expect((await ask()).body).toEqual({ extras: [], credits: [{ providerId: 'loyalty.rewards', label: 'Rewards' }] })
   })
 })

@@ -114,6 +114,8 @@ export function posSaleSummary(order: PosLiftedOrder) {
         ? { checkoutUrl: payment.checkoutUrl }
         : {}),
       ...(payment.readerId ? { readerId: payment.readerId } : {}),
+      // What a store-credit payment's provider calls it (AGL-3640).
+      ...(payment.creditLabel ? { creditLabel: payment.creditLabel } : {}),
       ...(payment.failureMessage ? { failureMessage: payment.failureMessage } : {}),
       ...(payment.livemode != null ? { livemode: payment.livemode } : {}),
     })),

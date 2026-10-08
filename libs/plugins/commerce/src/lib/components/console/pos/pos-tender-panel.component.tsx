@@ -33,6 +33,7 @@ import * as CommerceModel from '../../../model'
 import {
   centsFromInput,
   newAttemptKey,
+  posCreditLookup,
   posGiftCardBalance,
   posNativeBridge,
   posTender,
@@ -46,6 +47,7 @@ import {
 import { POS_TOUCH_PX } from './pos-product-grid.component'
 import {
   PosCashDialog,
+  PosCreditDialog,
   PosFolioDialog,
   PosGiftCardDialog,
   PosKeyedCardDialog,
@@ -104,7 +106,11 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
   const [amount, setAmount] = useState('')
   const [tipCents, setTipCents] = useState(0)
   const [busy, setBusy] = useState(false)
-  const [dialog, setDialog] = useState<'cash' | 'gift' | 'folio' | null>(null)
+  const [dialog, setDialog] = useState<'cash' | 'gift' | 'folio' | 'credit' | null>(null)
+  // The store-credit provider whose dialog is open (AGL-3640).
+  const [creditProvider, setCreditProvider] = useState<{ providerId: string; label: string; lookup: boolean } | null>(
+    null,
+  )
   const [qr, setQr] = useState<{ url: string; amountCents: number } | null>(null)
   const [keyed, setKeyed] = useState<{ clientSecret: string; amountCents: number; paymentId: string } | null>(
     null,
@@ -426,6 +432,20 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
             >
               {'Gift card'}
             </Button>
+            {(context?.credits ?? []).map((credit) => (
+              <Button
+                key={credit.providerId}
+                variant="outlined"
+                disabled={busy || chargeCents <= 0}
+                onClick={() => {
+                  setCreditProvider(credit)
+                  setDialog('credit')
+                }}
+                sx={{ minHeight: 56 }}
+              >
+                {credit.label}
+              </Button>
+            ))}
             {props.stays.length ? (
               <Button
                 variant="outlined"
@@ -463,7 +483,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
                 title: 'Void this sale?',
                 description:
                   'Every payment taken on it is handed back: cards are refunded, gift ' +
-                  'cards re-credited and room charges removed. Hand back any cash.',
+                  'cards and store credit re-credited and room charges removed. Hand back any cash.',
                 confirmationText: 'Void sale',
                 confirmationButtonProps: { color: 'error' },
               })
@@ -520,6 +540,39 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
         }}
         onApply={async (code) => {
           const result = await run('gift-card', { code, ...(typedCents > 0 ? { amountCents: chargeCents } : {}) }, true)
+          if (result) setDialog(null)
+        }}
+      />
+      <PosCreditDialog
+        open={dialog === 'credit' && Boolean(creditProvider)}
+        label={creditProvider?.label ?? 'Store credit'}
+        canLookup={Boolean(creditProvider?.lookup)}
+        busy={busy}
+        onClose={() => setDialog(null)}
+        onLookup={async (query) => {
+          if (!creditProvider) return null
+          try {
+            return (await posCreditLookup(user, hostId, creditProvider.providerId, query)).accounts
+          } catch (error) {
+            notify(error instanceof PosRequestError ? error.message : 'Could not look that up', 'warning')
+            return null
+          }
+        }}
+        onApplyCode={async (code) => {
+          const result = await run('credit', { code, ...(typedCents > 0 ? { amountCents: chargeCents } : {}) }, true)
+          if (result) setDialog(null)
+        }}
+        onApplyAccount={async (account) => {
+          if (!creditProvider) return
+          const result = await run(
+            'credit',
+            {
+              providerId: creditProvider.providerId,
+              reference: account.reference,
+              ...(typedCents > 0 ? { amountCents: chargeCents } : {}),
+            },
+            true,
+          )
           if (result) setDialog(null)
         }}
       />

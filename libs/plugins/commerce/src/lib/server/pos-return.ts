@@ -20,6 +20,7 @@ import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
 import { recordPluginPersonRefund } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { reverseOrderConversion } from '@aglyn/aglyn/plugin-manager/plugin-conversion-credit'
+import { checkoutCreditProvider } from '@aglyn/aglyn/plugin-manager/plugin-checkout-credits'
 import * as CommerceModel from '../model'
 import {
   planPosReturn,
@@ -484,6 +485,15 @@ export async function handlePosReturn(deps: PosReturnDeps, req: PluginApiRequest
       } else if (allocation.method === 'folio') {
         await reverseFolio(staff.hostRef, tender?.reservationId ?? String(order['reservationId'] ?? ''), allocation.amountCents, orderId, deps.now())
         results.push({ allocation, status: 'refunded' })
+      } else if (allocation.method === 'credit') {
+        await restorePluginCredit(
+          staff.hostRef.id,
+          tender,
+          allocation.amountCents,
+          orderId,
+          `pos-return:${orderId}:${allocation.paymentId}:${reserved.prior.posPaymentRefunds[allocation.paymentId] ?? 0}`,
+        )
+        results.push({ allocation, status: 'refunded' })
       } else {
         // Cash: recorded on the drawer with the return itself, below.
         results.push({ allocation, status: 'refunded' })
@@ -809,6 +819,27 @@ async function creditGiftCard(
       lastCreditOrderId: orderId,
     })
   })
+}
+
+/**
+ * Store credit back to the plugin that keeps it (AGL-3640): a rewards
+ * balance gets back what this payment took. Idempotent per `key`, so a
+ * retried return gives back once. A friend's referral credit was a discount,
+ * not a balance, and its provider gives nothing back — correctly: nobody is
+ * owed money for it.
+ */
+async function restorePluginCredit(
+  hostId: string,
+  tender: { creditProviderId?: string; creditReference?: string } | undefined,
+  amountCents: number,
+  orderId: string,
+  key: string,
+): Promise<void> {
+  const entry = tender?.creditProviderId ? checkoutCreditProvider(tender.creditProviderId) : null
+  if (!entry || !tender?.creditReference) {
+    throw new ReturnRefusal(409, 'The store credit on this sale cannot take a refund right now.')
+  }
+  await entry.provider.restore({ hostId, reference: tender.creditReference, orderId, cents: amountCents, key })
 }
 
 /** A room charge taken back: a negative line on the same stay's folio. */

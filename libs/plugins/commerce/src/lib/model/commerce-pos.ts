@@ -45,6 +45,12 @@ export type OrderPaymentMethod =
   | 'gift_card'
   /** Charged to a checked-in reservation's folio. */
   | 'folio'
+  /**
+   * Store credit another plugin keeps — rewards, referral credit — taken
+   * through core's checkout-credits seam (AGL-3640). Which plugin and which
+   * account ride on the payment as `creditProviderId` and `creditReference`.
+   */
+  | 'credit'
 
 export type OrderPaymentStatus =
   /** Started and not finished: reserves its amount against the balance. */
@@ -63,6 +69,7 @@ export const ORDER_PAYMENT_METHODS: readonly OrderPaymentMethod[] = [
   'card_link',
   'gift_card',
   'folio',
+  'credit',
 ]
 
 /** One payment toward a register sale, on `HostOrder.payments`. */
@@ -89,6 +96,12 @@ export interface OrderPayment {
   readerId?: string
   /** The gift card's code (its document id) for `gift_card`. */
   giftCardId?: string
+  /** For `credit`: the provider that paid it (`{pluginId}.{key}`, AGL-3640). */
+  creditProviderId?: string
+  /** For `credit`: the provider's own handle on the account it came from. */
+  creditReference?: string
+  /** For `credit`: what the provider calls it, for the register and receipt. */
+  creditLabel?: string
   cardBrand?: string
   last4?: string
   /** Cash handed over for a `cash` payment, and the change given back. */
@@ -275,7 +288,8 @@ export function posFeeCollection(
 /** A one-line description of a payment for the register, receipt and timeline. */
 export function describeOrderPayment(payment: OrderPayment): string {
   const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`
-  const label = ORDER_PAYMENT_METHOD_LABELS[payment.method] ?? 'Payment'
+  const label =
+    (payment.method === 'credit' && payment.creditLabel) || ORDER_PAYMENT_METHOD_LABELS[payment.method] || 'Payment'
   const card =
     payment.cardBrand || payment.last4
       ? ` (${[payment.cardBrand, payment.last4 ? `•••• ${payment.last4}` : '']
@@ -295,6 +309,7 @@ export const ORDER_PAYMENT_METHOD_LABELS: Record<OrderPaymentMethod, string> = {
   card_link: 'Card (QR)',
   gift_card: 'Gift card',
   folio: 'Charged to room',
+  credit: 'Store credit',
 }
 
 /*==========================================

@@ -303,6 +303,7 @@ data class HostOrder(
     val checkoutSessionId: String? = null,
     val couponCode: String? = null,
     val createdAtMs: Double? = null,
+    val credits: List<OrderCredit>? = null,
     val customerEmail: String? = null,
     val customerId: String? = null,
     val customerName: String? = null,
@@ -863,6 +864,29 @@ data class OrderChannelSourceLinesItem(
 )
 
 @Serializable
+data class OrderCredit(
+    val amountCents: Double,
+    val appliedAs: OrderCreditAppliedAs,
+    val key: String,
+    val label: String,
+    val last4: String,
+    val pluginId: String,
+    val providerId: String,
+    val reference: String,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = OrderCreditAppliedAsSerializer::class)
+enum class OrderCreditAppliedAs(val raw: String) {
+    DISCOUNT("discount"),
+    TENDER("tender"),
+    UNKNOWN(""),
+}
+
+internal object OrderCreditAppliedAsSerializer :
+    RawEnumSerializer<OrderCreditAppliedAs>("com.aglyn.contracts.OrderCreditAppliedAs", OrderCreditAppliedAs.entries, OrderCreditAppliedAs.UNKNOWN, { it.raw })
+
+@Serializable
 data class OrderDispute(
     val amountCents: Double,
     val closedAtMs: Double? = null,
@@ -957,6 +981,9 @@ data class OrderPayment(
     val changeCents: Double? = null,
     val checkoutSessionId: String? = null,
     val checkoutUrl: String? = null,
+    val creditLabel: String? = null,
+    val creditProviderId: String? = null,
+    val creditReference: String? = null,
     val failureMessage: String? = null,
     val feeCents: Double? = null,
     val folioAtMs: Double? = null,
@@ -981,6 +1008,7 @@ enum class OrderPaymentMethod(val raw: String) {
     CARD_LINK("card_link"),
     CARD_PRESENT("card_present"),
     CASH("cash"),
+    CREDIT("credit"),
     FOLIO("folio"),
     GIFT_CARD("gift_card"),
     UNKNOWN(""),
