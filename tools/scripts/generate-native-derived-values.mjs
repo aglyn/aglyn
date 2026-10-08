@@ -69,7 +69,10 @@ function aliases() {
   return alias
 }
 
-/** The workspaces whose answers each platform replays. */
+/**
+ * The workspaces whose answers each platform replays.
+ * AGL-1715-EXEMPT: fixture inputs for the replay cases, not a copy of the live-status set.
+ */
 const CASE_ORGS = [
   { plan: 'free' },
   { plan: 'starter' },
