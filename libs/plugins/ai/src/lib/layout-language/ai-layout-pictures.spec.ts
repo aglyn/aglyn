@@ -153,6 +153,29 @@ describe('a language page fills its picture slots with photos the site serves it
     expect(photos.slice(5).every((src) => STARTER_SRCS.includes(src))).toBe(true)
   })
 
+  it('serves the about picture the owner before a card takes it, as the live Juniper Clay page did not (AGL-3660)', () => {
+    // Its six slots in document order: a hero, three work cards, Exhibitions, About.
+    const roles = ['hero', 'gallery', 'gallery', 'gallery', 'gallery', 'about'] as const
+    const slots = roles.map((role) => ({ role }) as AiLayoutPictureSlot)
+    for (let job = 0; job < 40; job += 1) {
+      const photos = aiLayoutStarterPhotos(slots, `job-${job}:home`).map((photo) => photo.src)
+      expect(photos[5]).toBe(AI_LAYOUT_STARTER_PHOTOS.about.src)
+      // Six slots, five starters: one repeat, never beside itself.
+      expect(new Set(photos).size).toBe(5)
+      photos.forEach((src, index) => expect(src === photos[index + 1]).toBe(false))
+    }
+  })
+
+  it('repeats no photo on any page of five slots or fewer, whatever the seed and the roles', () => {
+    const roles = ['hero', 'about', 'gallery'] as const
+    for (let job = 0; job < 60; job += 1) {
+      const count = 1 + (job % 5)
+      const slots = Array.from({ length: count }, (_, index) => ({ role: roles[(job + index) % 3] }) as AiLayoutPictureSlot)
+      const photos = aiLayoutStarterPhotos(slots, `job-${job}`).map((photo) => photo.src)
+      expect(new Set(photos).size).toBe(count)
+    }
+  })
+
   it('opens sites with different photos, and the same job always with the same one', () => {
     const hero = [{ role: 'hero' }] as AiLayoutPictureSlot[]
     const openers = new Set(

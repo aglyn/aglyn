@@ -68,6 +68,15 @@ const ALLOWED = new Map<string, string>([
     'libs/plugins/marketplace/src/lib/model/legal/publisher-agreement/2026-08-14.1/marketplace-publisher-agreement.txt',
     'Verbatim capture of the published page; the live page carries the stale name — AGL-1840.',
   ],
+  // A model's recorded answer (AGL-3660): the two plans a live Free yoga
+  // guided start gave, copied verbatim so its specs replay what the model
+  // actually wrote. "a welcoming community" is a yoga studio's search
+  // description, not the marketplace or the forum, and rewording a recording
+  // makes it a fixture of something no model said.
+  [
+    'libs/plugins/ai/src/lib/jobs/fixtures/ai-yoga-site-plan-recording.ts',
+    "Verbatim recording of a live model answer (AGL-3660): a yoga studio's search description says 'a welcoming community'.",
+  ],
   // A website kind the AI guided start offers (AGL-3660): "Nonprofit &
   // community" names community ORGANIZATIONS a visitor's site is for, and
   // "community" is a word a person types to describe one. Neither the

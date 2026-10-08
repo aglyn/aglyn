@@ -2208,6 +2208,27 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   a source that throws, takes a starter photo. A picture never fails a job: on
   any error the page keeps its slots as the compiler wrote them. The resolver
   costs no AI credits.
+- **Stock photos.** The page step hands the resolver
+  `aiLayoutStockPhotoSource` (`src/lib/jobs/ai-layout-stock-photos.ts`), which
+  names no library: it asks core for the deployment's stock photo provider
+  (`core.stock-photos`, filled by the `stock-photos` plugin with Pixabay once the
+  console holds `PIXABAY_API_KEY`) and for the media library's server door
+  (`core.media-ingest`, registered by the console), and builds no source when
+  either is missing. Per slot it searches plain words — the head of the site's
+  business type for the hero ("yoga studio"), the picture's subject from its alt
+  text (else its section's name) with the business for the rest, people for an
+  about picture — at the frame's orientation and a minimum size; picks among
+  the first hits not already on the page by the job's seed and the slot; reuses
+  a photo the site's library already holds by its source key, or downloads it
+  and stores it in the site's library as the job's creator with its credit
+  (`stockPhoto` on the asset, and "Photo by … on Pixabay." as its description).
+  The page names the site's own asset, never the library's address. A page asks
+  at most eight searches and spends at most 20 s on photos inside the step's own
+  signal; a refusal to store (the storage band, a lockdown) stops copying for
+  the rest of the page, and every slot left empty takes a starter photo. The
+  provider caches each search 24 hours (`stockPhotoSearches`) and keeps the
+  library's rate limit. No AI model is called, and the guided start's credit
+  estimate is unchanged.
 - **The cap.** The compiler's per-page picture cap is unchanged; the resolver
   only fills the slots the compiler wrote.
 
@@ -2806,16 +2827,57 @@ the element budget its request asks for.
   at their ceilings, never under the measured input, the first writing the cache and
   the second paying for the prefix as plain input: a Free site's plan comes to at most
   35 credits, its answer and its re-ask together. The site's look (AGL-3660) is one
-  fast-tier answer that is never re-asked: 4 credits in the live eval, 7 for the one that writes its cache, which is the figure the wall counts. Each page then costs a
-  listing and a first section pass at the Free page's figures, and the wall keeps room
-  for one retried section: a Free site fits 8 sections across its two pages, at most 256 credits
-  of the 300. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the plan it derives
-  and to the Free page's build figures, and the Free wall holds a Free site's plan to
-  that section count and to its page cap. That leaves 0 credits on a site with no
-  new layout and 16 on one with a layout, and one post at its worst on the fast
+  fast-tier answer that is never re-asked: 4 credits in the live eval, 7 for the one that writes its cache, which is the figure the wall counts.
+  The build is priced as the layout language builds it (re-derived in AGL-3660; the
+  per-section passes it replaced no longer run on a site): a guided start creates its
+  site EMPTY, so it builds its layout (23, the live guided start's layout step, above the
+  frame's prefix and its largest live answer) and its saved form (29, the live form
+  step) before its pages, and a Free start writes no welcome email. A page is ONE
+  answer: 43 for its prefix written, its turn and the whole 2,000-token thinking room,
+  4 a section at the 250 tokens a section is written in at most, and 3 for its listing.
+  The wall keeps room for one retried page — the dearest page asked again, reading its
+  prefix, with its thinking room and a full page of eight sections: 64. Those figures
+  price a page's thinking room and sections, not its whole 5,000-token ceiling, and the
+  layout and form at what the live start metered, not their 5,200- and 6,000-token
+  ceilings; every answer at its full ceiling would come to more than the 300 for the
+  layout, the form and two pages alone, which no section count changes. A Free site
+  plans at most `AI_FREE_SITE_MAX_SECTIONS` sections, a product figure that keeps its
+  expected spend near what it measured: a Free site fits 8 sections across its two pages, at most 282 credits
+  of the 300, its layout and form built first. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the
+  figures it derives, and the Free wall holds a Free site's plan to that section count
+  and to its page cap. That leaves 18 credits, and one post at its worst on the fast
   tier — its answer at the `copy.blog` ceiling and its re-ask — is 23, so a Free
   blog writes no first posts (AGL-3676). On a paid workspace a site plan's one answer comes to at most 84 credits
   for five pages, where the routing table's ceiling with thinking spent 227.
+- **A site start's home reads as a full website (AGL-3660).** A plan is an outline, and
+  the only section figure a site plan was told was the Free wall's ceiling, so a local
+  Free yoga start (2026-10-07) planned its home with two sections. The site plan's turn
+  now asks for a home at `/` of at least `AI_SITE_HOME_MIN_SECTIONS` (5) — a hero first,
+  bands such as the offer, why us and social proof, and a closing call to action — and
+  the plan step re-asks a FIRST answer whose home is under it (`plan-thin-home`,
+  `aiSiteThinHomeCheck`). A second answer still under it is kept: a four-section home
+  is a site, a stopped start is none. On the Free taste the minimum is shared out of the
+  wall's own section count (`aiSitePlanHomeRule`): 5 of the 8 a Free site fits across its
+  two pages, an empty site's included. ⛔ Where the wall cannot pay for five beside the
+  other page there is NO minimum, never a lowered one: before the wall was re-derived it
+  fit 4 on an empty site, and told "at least 3" the live yoga start of 2026-10-08 planned
+  4 + 3, then 4 + 2, and stopped on the wall twice. A minimum the wall cannot pay for is
+  a start that fails. No home is held where the owner's own home at `/` stays.
+- **A paid blog start's blog is the blog (AGL-3660, AGL-3676).** Its first posts are
+  written into a collection at /blog, and the live Slow Roads start (2026-10-08) also
+  planned an "Articles" page of featured cards that the header linked while it never
+  linked the blog. The plan's turn now says the blog is written and linked, and the
+  plan step re-asks a FIRST answer holding a page whose address is one of
+  `AI_SITE_BLOG_SLUGS` or whose name says it lists posts (`plan-blog-page-duplicate`,
+  `aiSiteBlogStandInViolations`); a second answer that keeps one is kept, and the posts
+  take the next free address (`aiSiteBlogSlug`). Whenever the ledger owes the posts part,
+  the layout is handed the blog as a nav entry by its path, second after Home
+  (`aiSiteBlogNavPage`), and the header, the phone menu and the footer link it with a
+  Page Link carrying `href`, not a `screenId`. The header is built before the posts, so
+  a start whose posts part then fails or is skipped tells its publish so
+  (`blogUnwritten`), and the publish takes every link to a blog address out of the
+  layout it puts live (`aiSiteUnwrittenBlogHrefs`): no header, menu or footer link to a
+  /blog that does not exist.
 - **Every device width, and an axe audit.** `libs/plugins/ai/scripts/record-ai-page-axe.mts`
   (AGL-3020) assembles each golden page the page step builds from a site — the ten
   briefs, both Free pages and the two-person page — through the step's own section
