@@ -52,9 +52,29 @@ func submissionsRequest(_ read: ReadFilter, formID: String?, search: String) -> 
   return ListQueryRequest(clauses: clauses, search: words.isEmpty ? nil : [words])
 }
 
-func submissionsQuery(_ hostID: String, read: ReadFilter, formID: String?, search: String, limit: Int) -> FirestoreQuery {
-  planListQuery(ContractValues.shared.submissionListQuery, submissionsRequest(read, formID: formID, search: search))
+/// A site's submissions. `scopedForm` is a form's own card (FORM_SCOPED_SUBMISSION_LIST_QUERY): that form is the
+/// list's base, which no clause can widen; otherwise `formID` is the Form pick.
+func submissionsQuery(
+  _ hostID: String, read: ReadFilter, formID: String?, search: String, limit: Int, scopedForm: String? = nil
+) -> FirestoreQuery {
+  if let scopedForm, !scopedForm.isEmpty {
+    var request = submissionsRequest(read, formID: nil, search: search)
+    request.base = [ListQueryFilter(op: .equal, path: "formId", value: .string(scopedForm))]
+    return planListQuery(ContractValues.shared.formScopedSubmissionListQuery, request)
+      .firestoreQuery(submissionsPath(hostID), limit: limit)
+  }
+  return planListQuery(ContractValues.shared.submissionListQuery, submissionsRequest(read, formID: formID, search: search))
     .firestoreQuery(submissionsPath(hostID), limit: limit)
+}
+
+/// The site's forms for the Form pick, by document id as the console reads them (an `orderBy` on a name
+/// would drop a form saved without one), named by `displayName`, then `name`.
+func formsQuery(_ hostID: String) -> FirestoreQuery {
+  FirestoreQuery(["hosts", hostID, "forms"], order: [.init("__name__")], limit: 51)
+}
+
+func formName(_ doc: FirestoreDocument) -> String {
+  [doc.string("displayName"), doc.string("name")].compactMap { $0 }.first { !$0.isEmpty } ?? doc.id
 }
 
 func siteMembersQuery(_ hostID: String, search: String, limit: Int) -> FirestoreQuery {

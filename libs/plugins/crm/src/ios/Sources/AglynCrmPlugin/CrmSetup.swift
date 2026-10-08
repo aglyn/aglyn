@@ -214,7 +214,7 @@ struct SettingsSection: View {
           "Owner",
           selection: Binding(
             get: { hostSettings?["defaultOwnerUid"] as? String ?? "" },
-            set: { uid in write(["hosts": [scope.hostID: ["defaultOwnerUid": uid.isEmpty ? FirestoreSentinel.delete : uid]]]) })
+            set: { uid in write(["hosts": [scope.hostID: ["defaultOwnerUid": uid.isEmpty ? FirestoreSentinel.delete as Any : uid as Any]]]) })
         ) {
           Text("Nobody").tag("")
           ForEach(reference.members) { Text($0.label).tag($0.uid) }

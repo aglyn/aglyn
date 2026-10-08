@@ -139,7 +139,7 @@ struct CrmAPI {
     var changes: [String: Any] = ["status": status, "statusLabel": label]
     if status == "unqualified" {
       let trimmed = reason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-      changes["unqualifiedReason"] = trimmed.isEmpty ? FirestoreSentinel.delete : trimmed
+      changes["unqualifiedReason"] = trimmed.isEmpty ? FirestoreSentinel.delete as Any : trimmed as Any
     }
     try await updateRecord(.lead, id, changes)
   }

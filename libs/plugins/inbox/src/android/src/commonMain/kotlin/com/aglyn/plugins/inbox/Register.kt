@@ -16,7 +16,14 @@ import com.aglyn.pluginhost.WidgetSize
  */
 fun registerInboxNative(r: NativePluginRegistrar) {
   r.screen(INBOX_SCREEN, title = "Inbox", requiresSite = true, icon = "inbox", layout = ScreenLayout.LIST_DETAIL) { context, params ->
-    SubmissionsScreen(context, initialSubmission = params["submission"] ?: params["submissionId"])
+    SubmissionsScreen(
+      context,
+      initialSubmission = params["submission"] ?: params["submissionId"],
+      scopedForm = params["formId"] ?: params["form"],
+    )
+  }
+  r.screen(INBOX_SUBMISSION_SCREEN, title = "Message", requiresSite = true, icon = "drafts") { context, params ->
+    SubmissionScreen(context, params["submission"] ?: params["submissionId"] ?: params["id"])
   }
   r.screen(INBOX_PEOPLE_SCREEN, title = "Members & leads", requiresSite = true, icon = "group") { context, _ -> PeopleScreen(context) }
   r.widget("inbox.glance", title = "Inbox", order = 60, size = WidgetSize.HALF, requiresSite = true) { context -> InboxGlanceWidget(context) }

@@ -34,8 +34,10 @@ private func message(_ error: Error) -> String {
 struct SubmissionsScreen: View {
   let context: NativePluginContext
   var initialSubmission: String?
+  /// A form's own submissions (the `formId` param): the form is the list's scope and the Form pick is not offered.
+  var scopedForm: String?
   @State private var list = LiveQueryList(pageSize: submissionsPageSize, map: submission)
-  @State private var forms = LiveQueryList(pageSize: 50) { (id: $0.id, name: $0.string("name") ?? "Form") }
+  @State private var forms = LiveQueryList(pageSize: 50) { (id: $0.id, name: formName($0)) }
   @State private var site = InboxSiteModel()
   @State private var read: ReadFilter = .all
   @State private var formID = ""
@@ -62,15 +64,15 @@ struct SubmissionsScreen: View {
         listPane(selectable: false)
       }
     }
-    .navigationTitle("Inbox")
+    .navigationTitle(scopedForm == nil ? "Inbox" : "Submissions")
     .searchable(text: $searchText, prompt: "Search messages")
     .onSubmit(of: .search) { search = searchText }
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     .task(id: "\(read.rawValue)|\(formID)|\(search)|\(context.hostID ?? "")") { restart() }
     .task(id: context.hostID) {
       site.start(context)
-      if let hostID = context.hostID {
-        forms.show(context.firestore) { FirestoreQuery(["hosts", hostID, "forms"], order: [.init("name")], limit: $0) }
+      if let hostID = context.hostID, scopedForm == nil {
+        forms.show(context.firestore) { _ in formsQuery(hostID) }
       }
       if selection == nil { selection = initialSubmission }
     }
@@ -82,8 +84,10 @@ struct SubmissionsScreen: View {
 
   private func restart() {
     guard let hostID = context.hostID else { return }
-    let read = read, formID = formID, search = search
-    list.show(context.firestore) { submissionsQuery(hostID, read: read, formID: formID, search: search, limit: $0) }
+    let read = read, formID = formID, search = search, scopedForm = scopedForm
+    list.show(context.firestore) {
+      submissionsQuery(hostID, read: read, formID: formID, search: search, limit: $0, scopedForm: scopedForm)
+    }
   }
 
   private var chips: some View {
@@ -92,11 +96,13 @@ struct SubmissionsScreen: View {
         ForEach(ReadFilter.allCases) { filter in
           AglynChoiceChip(filter.label, selected: read == filter) { read = filter }
         }
-        if forms.rows.count > 1 {
+        if scopedForm == nil && forms.rows.count > 1 {
           Divider().frame(height: 24)
           Menu {
             Button("Every form") { formID = "" }
-            ForEach(forms.rows, id: \.id) { form in Button(form.name) { formID = form.id } }
+            ForEach(forms.rows.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }, id: \.id) { form in
+              Button(form.name) { formID = form.id }
+            }
           } label: {
             Label(forms.rows.first { $0.id == formID }?.name ?? "Every form", systemImage: "doc.text")
           }
@@ -157,6 +163,22 @@ struct SubmissionsScreen: View {
     }
     if list.hasMore {
       Button("Show more messages") { list.loadMore() }.frame(maxWidth: .infinity)
+    }
+  }
+}
+
+/// One message on its own (`inbox.submission`), as a form's screen or a notification opens it.
+struct SubmissionScreen: View {
+  let context: NativePluginContext
+  let submissionID: String?
+  @State private var site = InboxSiteModel()
+
+  var body: some View {
+    if let submissionID, !submissionID.isEmpty {
+      SubmissionDetail(context: context, submissionID: submissionID, site: site)
+        .task(id: context.hostID) { site.start(context) }
+    } else {
+      SubmissionsScreen(context: context)
     }
   }
 }

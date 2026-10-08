@@ -728,6 +728,7 @@ struct ConvertSheet: View {
 }
 
 /// What a new record is created with, as the console's create drawer asks it.
+@MainActor
 func createFields(_ kind: CrmKind, _ reference: CrmReference) -> [CrmField] {
   let all = reference.fields(kind)
   func pick(_ keys: [String]) -> [CrmField] {

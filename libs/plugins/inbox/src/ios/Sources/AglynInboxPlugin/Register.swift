@@ -5,6 +5,7 @@ import AglynPluginHost
 
 public let inboxScreen = "inbox.submissions"
 public let inboxPeopleScreen = "inbox.people"
+public let inboxSubmissionScreen = "inbox.submission"
 
 /// Registers the ids `plugins.config.json` declares under the plugin's
 /// `mobile.contributes`: the site's form submissions (read, unread, delete,
@@ -14,7 +15,11 @@ public let inboxPeopleScreen = "inbox.people"
 @MainActor
 public func registerInboxNative(_ r: NativePluginRegistrar) {
   r.screen(inboxScreen, title: "Inbox", requiresSite: true, icon: "tray") { ctx, params in
-    SubmissionsScreen(context: ctx, initialSubmission: params["submission"] ?? params["submissionId"])
+    SubmissionsScreen(
+      context: ctx, initialSubmission: params["submission"] ?? params["submissionId"], scopedForm: params["formId"] ?? params["form"])
+  }
+  r.screen(inboxSubmissionScreen, title: "Message", requiresSite: true, icon: "envelope.open") { ctx, params in
+    SubmissionScreen(context: ctx, submissionID: params["submission"] ?? params["submissionId"] ?? params["id"])
   }
   r.screen(inboxPeopleScreen, title: "Members & leads", requiresSite: true, icon: "person.2") { ctx, _ in
     PeopleScreen(context: ctx)

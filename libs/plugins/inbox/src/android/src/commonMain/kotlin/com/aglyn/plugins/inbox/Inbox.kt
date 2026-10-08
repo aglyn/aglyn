@@ -9,6 +9,7 @@ import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.FirestoreDoc
 import com.aglyn.core.FirestoreQuery
+import com.aglyn.core.FirestoreOrder
 import com.aglyn.core.FirestoreTimestamp
 import com.aglyn.core.FirestoreWriter
 import com.aglyn.core.firestoreJson
@@ -65,8 +66,38 @@ fun submissionsRequest(read: ReadFilter, formId: String?, search: String): ListQ
   search = search.trim().ifEmpty { null }?.let { listOf(it) },
 )
 
-fun submissionsQuery(hostId: String, read: ReadFilter, formId: String?, search: String, limit: Int): FirestoreQuery =
-  planListQuery(Contracts.submissionListQuery, submissionsRequest(read, formId, search)).toFirestoreQuery(submissionsPath(hostId), limit)
+/**
+ * A site's submissions. [scopedForm] is a form's own card
+ * (FORM_SCOPED_SUBMISSION_LIST_QUERY): that form is the list's base, which no
+ * clause can widen; otherwise [formId] is the Form pick.
+ */
+fun submissionsQuery(
+  hostId: String,
+  read: ReadFilter,
+  formId: String?,
+  search: String,
+  limit: Int,
+  scopedForm: String? = null,
+): FirestoreQuery =
+  if (!scopedForm.isNullOrEmpty()) {
+    planListQuery(
+      Contracts.formScopedSubmissionListQuery,
+      submissionsRequest(read, null, search).copy(base = listOf(ListQueryFilter(ListQueryOp.EQUAL, "formId", JsonPrimitive(scopedForm)))),
+    ).toFirestoreQuery(submissionsPath(hostId), limit)
+  } else {
+    planListQuery(Contracts.submissionListQuery, submissionsRequest(read, formId, search)).toFirestoreQuery(submissionsPath(hostId), limit)
+  }
+
+/**
+ * The site's forms for the Form pick, by document id as the console reads
+ * them (an `orderBy` on a name would drop a form saved without one).
+ */
+fun formsQuery(hostId: String): FirestoreQuery =
+  FirestoreQuery("hosts/$hostId/forms", orderBy = listOf(FirestoreOrder("__name__")), limit = 51)
+
+/** A form's name as the console shows it: `displayName`, then `name`, then its id. */
+fun formName(doc: FirestoreDoc): String =
+  listOf(doc.string("displayName"), doc.string("name")).firstOrNull { !it.isNullOrEmpty() } ?: doc.id
 
 /** A site's members, newest first, by the console's Site users declaration. */
 fun siteMembersQuery(hostId: String, search: String, limit: Int): FirestoreQuery =

@@ -41,8 +41,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.formatReceiptTime
-import com.aglyn.core.FirestoreOrder
-import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.Live
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
@@ -75,6 +73,7 @@ import kotlinx.coroutines.launch
 
 const val INBOX_SCREEN = "inbox.submissions"
 const val INBOX_PEOPLE_SCREEN = "inbox.people"
+const val INBOX_SUBMISSION_SCREEN = "inbox.submission"
 
 /** The site's own document: its name (the reply's default subject) and the member's role on it. */
 data class InboxSite(val name: String?, val role: String?)
@@ -101,7 +100,7 @@ private fun messageError(error: Throwable): String = error.message?.takeIf { it.
  * windows. `submission` opens one, as a notification or a link does.
  */
 @Composable
-fun SubmissionsScreen(context: NativePluginContext, initialSubmission: String? = null) {
+fun SubmissionsScreen(context: NativePluginContext, initialSubmission: String? = null, scopedForm: String? = null) {
   val hostId = context.hostId ?: return
   val scope = rememberCoroutineScope()
   val list = remember(hostId, context.firestore) { LiveQueryList(context.firestore, scope, SUBMISSIONS_PAGE_SIZE, ::submissionOf) }
@@ -109,11 +108,13 @@ fun SubmissionsScreen(context: NativePluginContext, initialSubmission: String? =
   var formId by rememberSaveable { mutableStateOf<String?>(null) }
   var search by rememberSaveable { mutableStateOf("") }
   var asked by rememberSaveable { mutableStateOf("") }
-  LaunchedEffect(list, read, formId, asked) { list.show { limit -> submissionsQuery(hostId, read, formId, asked, limit) } }
-  val forms = remember(hostId, context.firestore) {
-    context.firestore.observe(FirestoreQuery("hosts/$hostId/forms", orderBy = listOf(FirestoreOrder("name")), limit = 50))
+  LaunchedEffect(list, read, formId, asked, scopedForm) {
+    list.show { limit -> submissionsQuery(hostId, read, formId, asked, limit, scopedForm) }
+  }
+  val forms = remember(hostId, context.firestore, scopedForm) {
+    if (scopedForm != null) kotlinx.coroutines.flow.flowOf(Live.Ready(emptyList())) else context.firestore.observe(formsQuery(hostId))
   }.collectAsState(Live.Loading).value
-  val formOptions = (forms as? Live.Ready)?.value.orEmpty().map { ChipOption(it.id, it.string("name") ?: "Form") }
+  val formOptions = (forms as? Live.Ready)?.value.orEmpty().map { ChipOption(it.id, formName(it)) }.sortedBy { it.label.lowercase() }
   val site = rememberInboxSite(context)
   val permissions = InboxPermissions.of((site as? Live.Ready)?.value?.role)
 
@@ -175,6 +176,21 @@ private fun SubmissionRow(row: Submission, selected: Boolean, onClick: () -> Uni
     onClick = onClick,
     modifier = Modifier.testTag("submission-${row.id}"),
   )
+}
+
+/**
+ * One message on its own (`inbox.submission`), as a form's screen or a
+ * notification opens it: the same detail the Inbox shows beside its list.
+ */
+@Composable
+fun SubmissionScreen(context: NativePluginContext, submissionId: String?) {
+  val hostId = context.hostId ?: return
+  if (submissionId.isNullOrEmpty()) {
+    SubmissionsScreen(context)
+    return
+  }
+  val site = rememberInboxSite(context)
+  SubmissionDetail(context, hostId, submissionId, (site as? Live.Ready)?.value, InboxPermissions.of((site as? Live.Ready)?.value?.role))
 }
 
 /** One message: who sent it, every field, what the site did with it, the reply and the list add. Opening it marks it read. */
