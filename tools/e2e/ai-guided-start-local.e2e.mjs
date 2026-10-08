@@ -62,9 +62,11 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import {
+  closeSync,
   createWriteStream,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -190,15 +192,19 @@ let reuseHint = ''
 
 function startProcess(name, command, args, { cwd, env, onStop, ports }) {
   const logFile = join(outDir, `${name}.log`)
-  const out = createWriteStream(logFile)
+  // The server writes to its log file itself, never to a pipe this run reads
+  // (AGL-3660). Under --keep the servers outlive the run, and a pipe dies with
+  // it: the next line a server logged failed with EPIPE, Next's error handler
+  // logged that failure to the same dead pipe, and the tenant spun at full CPU
+  // answering nothing.
+  const fd = openSync(logFile, 'w')
   const child = spawn(command, args, {
     cwd,
     env,
     detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', fd, fd],
   })
-  child.stdout.pipe(out)
-  child.stderr.pipe(out)
+  closeSync(fd)
   started.push({ name, child, onStop, ports })
   log(`started ${name} (pid ${child.pid}), log ${logFile}`)
   return child
