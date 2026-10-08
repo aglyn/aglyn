@@ -348,6 +348,12 @@ export function aiBuildOpLines(ops: AiBuildOps, structural: readonly string[]): 
       } Args: ${args.length ? `{ ${args.join('; ')} }` : '{}'}.`,
     )
   }
+  // Measured live on the canonical request (AGL-3616): asked for "forms for
+  // bookings", the planner made a plain form rather than the operation that
+  // takes bookings. An operation does the job; a form that imitates it does not.
+  lines.push(
+    'When the request asks for what one of these operations makes, plan that operation as an item, and place it on the page that offers it. Never stand in for it with a form, page or component that only imitates it: a form that collects what the operation would handle does not do its job. A form is for what no operation here makes, such as general enquiries.',
+  )
   return lines
 }
 

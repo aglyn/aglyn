@@ -44,6 +44,7 @@ import {
   AI_OWNED_CAPABILITIES,
   AI_OWNED_OP_WRITERS,
   aiBuildIntents,
+  aiBuildOpLines,
   aiBuildOps,
   type AiBuildOpsContext,
 } from './ai-build-capabilities'
@@ -157,5 +158,20 @@ describe('the page change operation', () => {
       hasRunner: (kind) => kind !== 'edit',
     })
     expect(unloaded.has('edit')).toBe(false)
+  })
+})
+
+describe('the operations the plan step lists', () => {
+  it('lists each item operation with its arguments, and holds the planner to the operation over a form that imitates it', () => {
+    const ops = new Map(AI_OWNED_CAPABILITIES.map((one) => [one.op, one] as const))
+    const lines = aiBuildOpLines(ops, ['page', 'layout', 'form', 'component', 'email'])
+    expect(lines[0]).toBe('Operations for items (anything else goes in create or screens):')
+    expect(lines.some((line) => line.startsWith('- template: a page template'))).toBe(true)
+    expect(lines.at(-1)).toMatch(/^When the request asks for what one of these operations makes, plan that operation as an item/)
+    expect(lines.at(-1)).toContain('Never stand in for it with a form, page or component that only imitates it')
+  })
+
+  it('says to leave items empty where nothing is offered, and adds no rule there', () => {
+    expect(aiBuildOpLines(new Map(), [])).toEqual(['Operations for items: none on this site. Leave items empty.'])
   })
 })
