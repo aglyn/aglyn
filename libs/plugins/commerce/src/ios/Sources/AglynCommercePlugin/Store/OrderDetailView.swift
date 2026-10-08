@@ -129,16 +129,7 @@ struct OrderDetailView: View {
         }
       }
 
-      if let timeline = order.timeline, !timeline.isEmpty {
-        Section("History") {
-          ForEach(Array(timeline.sorted { $0.atMs > $1.atMs }.enumerated()), id: \.offset) { _, event in
-            AglynRow(
-              event.event.replacingOccurrences(of: "_", with: " ").capitalized,
-              subtitle: Date(timeIntervalSince1970: event.atMs / 1000).formatted(date: .abbreviated, time: .shortened),
-              systemImage: "clock")
-          }
-        }
-      }
+      OrderAnnotationSections(context: context, orderID: orderID, order: order)
     }
     .formStyle(.grouped)
     .aglynListBackground()

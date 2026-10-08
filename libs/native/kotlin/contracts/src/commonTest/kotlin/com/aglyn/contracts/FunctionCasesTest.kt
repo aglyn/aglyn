@@ -34,7 +34,7 @@ class FunctionCasesTest {
   @Test
   fun everyFunctionHasCases() {
     assertEquals("UTC", root.getValue("timeZone").jsonPrimitive.content)
-    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund", "liftLegacyOrder", "orderIsTestMode", "orderCountsAsSale", "orderWindowFigures", "productSales", "productPriceRange", "productInventory", "isLowStock", "liftLegacyProduct")))
+    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund", "liftLegacyOrder", "orderIsTestMode", "orderCountsAsSale", "orderWindowFigures", "productSales", "productPriceRange", "productInventory", "isLowStock", "liftLegacyProduct", "describeRestockCheck")))
   }
 
   @Test
@@ -77,6 +77,12 @@ class FunctionCasesTest {
     cases("orderRefundSummary").forEach { (args, result) ->
       assertEquals(result.jsonPrimitive.content, orderRefundSummary(order(args[0])), args.toString())
     }
+  }
+
+  @Test
+  fun describeRestockCheckCases() = cases("describeRestockCheck").forEach { (args, result) ->
+    val check = ContractJsonFormat.decodeFromJsonElement(OrderRestockCheck.serializer(), args[0])
+    assertEquals(result.jsonPrimitive.content, describeRestockCheck(check, order(args[1])), args.toString())
   }
 
   @Test

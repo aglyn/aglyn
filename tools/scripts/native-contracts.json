@@ -7679,6 +7679,170 @@
           "loc1"
         ]
       ]
+    },
+    "describeRestockCheck": {
+      "module": "libs/plugins/commerce/src/lib/model/order-annotations.ts",
+      "args": [
+        [
+          {
+            "kind": "refund",
+            "fullyReversed": true,
+            "units": 2,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug"
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {}
+        ],
+        [
+          {
+            "kind": "refund",
+            "fullyReversed": true,
+            "units": 1,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug"
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {}
+        ],
+        [
+          {
+            "kind": "chargeback",
+            "fullyReversed": true,
+            "units": 1,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug"
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {}
+        ],
+        [
+          {
+            "kind": "chargeback",
+            "fullyReversed": false,
+            "units": 3,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug",
+                "lineIndex": 0
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {
+            "refundedLineItemIds": [
+              0
+            ]
+          }
+        ],
+        [
+          {
+            "kind": "refund",
+            "fullyReversed": false,
+            "units": 2,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug"
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {}
+        ],
+        [
+          {
+            "kind": "refund",
+            "fullyReversed": false,
+            "units": 1,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug",
+                "lineIndex": 0
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {
+            "refundedLineItemIds": [
+              0
+            ]
+          }
+        ],
+        [
+          {
+            "kind": "refund",
+            "fullyReversed": false,
+            "units": 2,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug",
+                "lineIndex": 0
+              },
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug",
+                "lineIndex": 1
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {
+            "refundedLineItemIds": [
+              0
+            ]
+          }
+        ],
+        [
+          {
+            "kind": "refund",
+            "fullyReversed": false,
+            "units": 2,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug",
+                "lineIndex": 0
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {}
+        ]
+      ]
     }
   }
 }

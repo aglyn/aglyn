@@ -91,6 +91,18 @@ document reuses it:
      the site is not frozen: `canWriteHostContent` and `hostWritesFrozen`.
      Both drop the site's cache through the publish outbox.
 
+   The order screen's two hand writes follow the same rule. The console
+   appends a note, and answers a restock question, with a client `updateDoc`
+   of the order's `timeline` (and `restockCheck`), the only two fields the
+   rules let a member write on an order. Both are read-then-append, so a
+   stale seed would drop an event another tab wrote. `model/order-annotations.ts`
+   holds the computation (`orderNoteUpdate`, `restockAnswer`, and
+   `describeRestockCheck`, whose sentence the apps replay from
+   `function-cases.generated.json`), the console's dialog imports it, and
+   `POST /api/commerce/order-note` and `POST /api/commerce/order-restock-answer`
+   run it in a transaction on the stored order under the same gate
+   (`canWriteHostContent`, `hostWritesFrozen`).
+
    A read-only check the console runs before a client write works the same
    way: `POST /api/redirects/check` runs the Redirects page's save checks.
 5. **Linear moves with the work.** A commit cites a real `AGL-nnnn` (3651
