@@ -123,6 +123,13 @@ export const AI_LAYOUT_FRAME_THINKING_TOKENS = 4_000
 export const AI_JOB_PAGE_LANGUAGE_TOKENS = 3_000 + AI_LAYOUT_PAGE_THINKING_TOKENS
 
 /**
+ * The most one section of a page is written in, its copy included: the top of
+ * the 120 to 250 tokens a section runs to. The Free site wall prices each
+ * planned section at it (AGL-3660).
+ */
+export const AI_LAYOUT_SECTION_MOST_TOKENS = 250
+
+/**
  * The time a language page pass needs: its lookup rounds, its answer and its
  * re-ask at `AI_JOB_PAGE_LANGUAGE_TOKENS` on the tier the page step is served
  * from, with the step's reads and writes.

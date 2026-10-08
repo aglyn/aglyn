@@ -4037,9 +4037,13 @@ export function detectPlanOverFreeWall(
       },
     ]
   }
+  // A site start's saved form is a step of its own (AGL-3596), counted on the wall since AGL-3660.
+  const forms =
+    plan.create.filter((entry) => entry.kind === 'form').length -
+    aiPlanUncreatable(plan, capabilities).filter((entry) => entry.kind === 'form').length
   const fits =
     sitePages !== undefined
-      ? aiFreeSiteSectionsWithin({ layouts, pages }, FREE_AI_TASTE_CREDITS_PER_MONTH)
+      ? aiFreeSiteSectionsWithin({ layouts, pages, forms: Math.max(0, forms) }, FREE_AI_TASTE_CREDITS_PER_MONTH)
       : aiFreePageSectionsWithin({ layouts, pages })
   if (asked <= fits) return []
   const job = pages > 1 ? `a Free plan of ${pages} pages` : 'a Free page'

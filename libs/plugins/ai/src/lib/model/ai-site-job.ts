@@ -58,7 +58,7 @@ export const AI_SITE_PAGES = { min: 4, max: 8 } as const
  * and the one page the brief most needs. A product decision, not a figure the
  * wall derives — the wall's proof (`jobs/ai-job-free-site.spec.ts`) shows a
  * plan and a build of this many pages fit the Free taste with room for one
- * retried section.
+ * retried page.
  */
 export const AI_SITE_FREE_PAGES = { min: 1, max: 2 } as const
 
@@ -95,64 +95,115 @@ export interface AiFreeSiteWorstCase {
   plan: number
   /** The site's look (AGL-3660): its one answer at its ceiling, on the fast tier. */
   look: number
-  /** The one layout a Free plan includes, built first on a site with none. */
+  /**
+   * The layout a site with none has built first (AGL-3660): its header and
+   * footer as ONE answer in the layout language, writing its cached prefix,
+   * at the most a live frame answer wrote, and never under what the live
+   * guided start's layout step metered.
+   */
   layout: number
-  /** A page's first section pass, which writes the cached prefix. */
-  firstSection: number
-  /** Each later section pass. */
-  laterSection: number
+  /** The saved form a guided start makes (AGL-3596), at what the live guided start's form step metered. */
+  form: number
+  /**
+   * A language page's answer before its sections (AGL-3660): its cached
+   * prefix written, its turn, and the whole room its ceiling keeps for
+   * thinking. A page is ONE answer, not a pass a section.
+   */
+  page: number
+  /** Each planned section's words in that answer, at the most a section is written in. */
+  section: number
+  /**
+   * Room for one page asked again: the answer once more, reading its cached
+   * prefix, with its thinking room and a full page of sections.
+   */
+  retry: number
   /** A page's listing. */
   listing: number
 }
 
 /**
- * The Free site start's wall at its worst (AGL-3594): the site plan as
- * `jobs/ai-job-free-site.spec.ts` derives it from the plan request as it
- * stands, on the model a Free site plans with, every answer at its ceiling;
- * the build's exchanges are the Free page's (`AI_FREE_PAGE_WORST_CASE_CREDITS`),
- * which the same spec holds these to. The spec fails when a figure it derives
+ * The Free site start's wall at its worst (AGL-3594, re-derived for the
+ * layout language in AGL-3660): the plan and the look as
+ * `jobs/ai-job-free-site.spec.ts` derives them from their requests at their
+ * ceilings; the layout, form and pages from the language requests as they
+ * stand, priced as each field says. The spec fails when a figure it derives
  * moves and this does not.
  */
 export const AI_FREE_SITE_WORST_CASE_CREDITS: Readonly<AiFreeSiteWorstCase> = {
   plan: 35,
   look: 7,
-  layout: 64,
-  firstSection: 44,
-  laterSection: 20,
+  layout: 23,
+  form: 28,
+  page: 43,
+  section: 4,
+  retry: 64,
   listing: 3,
 }
 
 /**
+ * The most sections a Free site plans across its pages (AGL-3660), whatever
+ * the wall leaves: a full home of five and a page of two or three. A product
+ * figure, so the spend a site EXPECTS stays near what it measured; the wall
+ * proves it fits.
+ */
+export const AI_FREE_SITE_MAX_SECTIONS = 8
+
+/** What a Free site start builds before its sections: the layouts it builds first, its forms and its pages. */
+export interface AiFreeSiteCreations {
+  layouts: number
+  pages: number
+  /** The saved forms it makes; a guided start makes one where it places a form. */
+  forms: number
+}
+
+/** A Free site start's credits at its worst for this many sections, its room for one retried page included. */
+export function aiFreeSiteWorstCaseCredits(
+  creations: AiFreeSiteCreations,
+  sections: number,
+  credits: Readonly<AiFreeSiteWorstCase> = AI_FREE_SITE_WORST_CASE_CREDITS,
+): number {
+  const pages = Math.max(1, Math.floor(creations.pages))
+  return (
+    credits.plan +
+    credits.look +
+    creations.layouts * credits.layout +
+    creations.forms * credits.form +
+    pages * (credits.page + credits.listing) +
+    sections * credits.section +
+    credits.retry
+  )
+}
+
+/**
  * The most sections a Free site's plan fits in the Free taste at its worst,
- * across all its pages: the plan, the look, the layouts it builds first, each page's
- * listing and first pass, and ROOM FOR ONE RETRIED SECTION, then as many later
- * passes as the rest pays for; none when that is already past the wall. Every
- * page's first pass is counted as a cache write, which errs dear.
+ * across all its pages (AGL-3660): the plan, the look, the layout and form it
+ * builds first, each page's answer and listing, ROOM FOR ONE RETRIED PAGE,
+ * and as many sections as the rest pays for — at most
+ * `AI_FREE_SITE_MAX_SECTIONS`, and at most what the pages hold. None when the
+ * rest is already past the wall.
  */
 export function aiFreeSiteSectionsWithin(
-  creations: { layouts: number; pages: number },
+  creations: AiFreeSiteCreations,
   taste: number,
   credits: Readonly<AiFreeSiteWorstCase> = AI_FREE_SITE_WORST_CASE_CREDITS,
 ): number {
   const pages = Math.max(1, Math.floor(creations.pages))
-  const before =
-    credits.plan +
-    credits.look +
-    creations.layouts * credits.layout +
-    pages * (credits.listing + credits.firstSection) +
-    credits.firstSection
+  const before = aiFreeSiteWorstCaseCredits(creations, 0, credits)
   if (before > taste) return 0
-  return pages + Math.floor((taste - before) / credits.laterSection)
+  const paid = credits.section > 0 ? Math.floor((taste - before) / credits.section) : Number.POSITIVE_INFINITY
+  return Math.min(AI_FREE_SITE_MAX_SECTIONS, pages * AI_SITE_MAX_SECTIONS, paid)
 }
 
 /** Sections a Free site's page is assumed to hold before its plan names them. */
-export const AI_FREE_SITE_NOMINAL_SECTIONS = 3
+export const AI_FREE_SITE_NOMINAL_SECTIONS = 4
 
 /**
  * About what a Free site start of this many pages costs at its worst, in
- * credits, for the dialog that asks for one: the site plan, its look, each page's
- * listing and its sections at the nominal count, from the figures the wall is
- * proven with rather than the nominal credits a paid estimate counts.
+ * credits, for the dialog that asks for one: the plan, its look, the layout
+ * and form a new site builds, each page's answer and listing, and its
+ * sections at the nominal count, from the figures the wall is proven with
+ * rather than the nominal credits a paid estimate counts. No retry room: the
+ * dialog says what a start costs, not what the wall holds back.
  */
 export function aiFreeSiteCreditEstimate(
   pages: number,
@@ -160,10 +211,8 @@ export function aiFreeSiteCreditEstimate(
 ): number {
   const count = Math.max(1, Math.floor(pages))
   return (
-    credits.plan +
-    credits.look +
-    count * (credits.listing + credits.firstSection) +
-    count * (AI_FREE_SITE_NOMINAL_SECTIONS - 1) * credits.laterSection
+    aiFreeSiteWorstCaseCredits({ layouts: 1, forms: 1, pages: count }, count * AI_FREE_SITE_NOMINAL_SECTIONS, credits) -
+    credits.retry
   )
 }
 

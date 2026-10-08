@@ -286,8 +286,9 @@ export function aiSitePlanHomeRule(
 ): { min: number; across: number | null } {
   const cap = capabilities?.freeSitePages
   if (cap === undefined) return { min: aiSiteHomeMinSections({ pages: 1, across: null }), across: null }
+  // Dear: a guided start that places a form makes one (AGL-3596).
   const across = aiFreeSiteSectionsWithin(
-    { layouts: (inventory?.layouts.length ?? 0) ? 0 : 1, pages: cap },
+    { layouts: (inventory?.layouts.length ?? 0) ? 0 : 1, pages: cap, forms: 1 },
     FREE_AI_TASTE_CREDITS_PER_MONTH,
   )
   return { min: aiSiteHomeMinSections({ pages: cap, across }), across }

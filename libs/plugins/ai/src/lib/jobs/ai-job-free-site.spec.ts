@@ -36,8 +36,10 @@
  *  - THE FREE SITE: a Free site plans one or two pages on its provider's fast
  *    tier, with no thinking, at an outline's ceiling; a plan past the cap is
  *    re-asked once and the plan that comes back is kept;
- *  - THE ARITHMETIC: that plan, its re-ask and the build of two pages at every
- *    answer's ceiling fit the Free taste with room for one retried section, at
+ *  - THE ARITHMETIC: that plan and its re-ask at their ceilings, and the
+ *    language build of an empty site — its layout, its form, two pages of one
+ *    answer each and eight sections — fit the Free taste with room for one
+ *    retried page (AGL-3660), at
  *    the figures `AI_FREE_SITE_WORST_CASE_CREDITS` declares and the developer
  *    notes quote — and a paid five-page plan's one answer comes to at most 90;
  *  - THE FAILURE: a plan our checks still refuse reads as one sentence and an
@@ -88,8 +90,12 @@ import {
 } from '../model/ai-site-inventory'
 import {
   AI_FREE_SITE_WORST_CASE_CREDITS,
+  AI_FREE_SITE_MAX_SECTIONS,
+  AI_FREE_SITE_NOMINAL_SECTIONS,
   AI_SITE_FREE_PAGES,
   AI_SITE_HOME_MIN_SECTIONS,
+  AI_SITE_MAX_SECTIONS,
+  aiFreeSiteWorstCaseCredits,
   AI_SITE_PAGES,
   AI_SITE_PLAN_MAX_TOKENS,
   AI_SITE_THIN_HOME_CODE,
@@ -105,10 +111,7 @@ import { AI_SITE_START_ANSWERS, aiSiteStartRefusal } from '../model/ai-site-star
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import { AI_MODEL_CATALOG, AI_STEP_TIERS, aiCatalogEntry, estimateAiBilledUsd } from '../providers/catalog'
 import type { AiUsage } from '../providers/contract'
-import {
-  AI_FREE_PAGE_WORST_CASE_CREDITS,
-  validateAiBuildPlan,
-} from '../runtime/ai-doctrine-validators'
+import { validateAiBuildPlan } from '../runtime/ai-doctrine-validators'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
@@ -123,6 +126,30 @@ import { AI_SITE_LOOK_TOOL_NAME } from '../model/ai-site-look'
 import { generateAiBlogPost } from '../runtime/ai-blog-post-generation'
 import { AI_BLOG_POST_TOOL_NAME } from '../tools/ai-blog-post-tool'
 import { aiSiteContentPart } from './ai-job-site-content'
+import { aiDoctrineScopeFor, aiDoctrineSystemBlocks } from '../runtime/ai-doctrine'
+import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
+import { AI_LAYOUT_FRAME_TOOL, AI_LAYOUT_PAGE_TOOL } from '../layout-language/ai-layout-language'
+import { aiModelForStep } from '../providers/routing'
+import { AI_STEP_NOMINAL_USAGE } from '../providers/model-choice'
+import type { AiSystemBlock } from '../runtime/ai-runtime'
+import {
+  AI_JOB_PAGE_LANGUAGE_BUDGET,
+  AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS,
+  AI_LAYOUT_PAGE_KIND,
+  AI_LAYOUT_PAGE_THINKING_TOKENS,
+  AI_LAYOUT_SECTION_MOST_TOKENS,
+  aiLayoutMissingSectionsPrompt,
+  aiLayoutPagePrompt,
+  aiLayoutPageTargets,
+} from './ai-job-page-language'
+import {
+  AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS,
+  AI_LAYOUT_FRAME_KIND,
+  aiLayoutFramePrompt,
+  aiLayoutFrameTargets,
+  aiLayoutNavPages,
+  aiLayoutSiteName,
+} from './ai-job-layout-language'
 
 // The reader's pure halves, past the mock that keeps its Admin SDK out.
 const { aiStarterHomeCandidate, aiStarterHomeUntouched } = jest.requireActual(
@@ -447,11 +474,13 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
 
   it('reads the home rule from the same wall figure the Free sentence quotes', () => {
     const free = aiSitePlanCapabilities(yogaJob(), FREE) as AiPlanCapabilities
-    const across = aiFreeSiteSectionsWithin({ layouts: 0, pages: 2 }, FREE_AI_TASTE_CREDITS_PER_MONTH)
+    const across = aiFreeSiteSectionsWithin({ layouts: 0, pages: 2, forms: 1 }, FREE_AI_TASTE_CREDITS_PER_MONTH)
     expect(aiSitePlanHomeRule(NEW_SITE, free)).toEqual({ min: 5, across })
+    // An empty site builds its layout first, and the language wall still fits a full home (AGL-3660).
     const bare = { ...NEW_SITE, layouts: [] }
-    const acrossBare = aiFreeSiteSectionsWithin({ layouts: 1, pages: 2 }, FREE_AI_TASTE_CREDITS_PER_MONTH)
-    expect(aiSitePlanHomeRule(bare, free)).toEqual({ min: 0, across: acrossBare })
+    const acrossBare = aiFreeSiteSectionsWithin({ layouts: 1, pages: 2, forms: 1 }, FREE_AI_TASTE_CREDITS_PER_MONTH)
+    expect(aiSitePlanHomeRule(bare, free)).toEqual({ min: 5, across: acrossBare })
+    expect(acrossBare).toBe(AI_FREE_SITE_MAX_SECTIONS)
     const paid = aiSitePlanCapabilities(siteJob({ pages: 5 }), PAID)
     expect(aiSitePlanHomeRule(NEW_SITE, paid)).toEqual({ min: 5, across: null })
   })
@@ -471,23 +500,26 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
     expect(aiPlanSiteLines(yogaJob(), EDITED_SITE, free).join('\n')).not.toContain('reads as a full website')
   })
 
-  it('asks an empty Free site — whose wall fits 4 — for no home minimum, and re-asks nothing for one', async () => {
+  it('asks an EMPTY Free site — a guided start’s, which builds its layout first — for the full home, and re-asks a thin one', async () => {
     const empty = emptyAiSiteInventory('host-1')
-    const free = aiSitePlanCapabilities(yogaJob(), FREE) as AiPlanCapabilities
-    expect(aiPlanSiteLines(yogaJob(), empty, free).join('\n')).not.toContain('reads as a full website')
+    const freeEmpty = aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] })
+    const free = aiSitePlanCapabilities(yogaJob(), freeEmpty) as AiPlanCapabilities
+    const lines = aiPlanSiteLines(yogaJob(), empty, free).join('\n')
+    expect(lines).toContain(`with at most ${AI_FREE_SITE_MAX_SECTIONS} sections across them`)
+    expect(lines).toContain('reads as a full website: at least 5 sections')
     mockRunAiRequest.mockReset()
-    const twoAndTwo: AiBuildPlan = {
+    const onEmpty = (screens: AiBuildPlan['screens']): AiBuildPlan => ({
       reuse: [],
       create: [{ kind: 'layout', name: 'Main layout', why: 'the site has none', duplicateOf: null, fields: ['header', 'navigation', 'footer'] }],
-      screens: [
-        { ...YOGA_THIN_HOME, layout: 'new:Main layout' },
-        { ...YOGA_CLASSES, layout: 'new:Main layout' },
-      ],
-    }
-    mockRunAiRequest.mockResolvedValueOnce(toolAnswer(twoAndTwo)).mockResolvedValueOnce(toolAnswer(twoAndTwo))
-    await planStepFor(FREE_ORG, FREE, yogaJob(), empty)
+      screens: screens.map((screen) => ({ ...screen, layout: 'new:Main layout' })),
+    })
+    mockRunAiRequest
+      .mockResolvedValueOnce(toolAnswer(onEmpty([YOGA_THIN_HOME, YOGA_CLASSES])))
+      .mockResolvedValueOnce(toolAnswer(onEmpty([YOGA_FULL_HOME, YOGA_CLASSES])))
+    const outcome = await planStepFor(FREE_ORG, freeEmpty, yogaJob(), empty)
     const sent = mockRunAiRequest.mock.calls.map((call) => String((call[0] as SentRequest).messages.at(-1)?.content))
-    expect(sent.some((content) => content.includes('The home page has'))).toBe(false)
+    expect(sent[1]).toContain('The home page has 2 sections')
+    expect([outcome.review?.findings, (outcome.plan as AiJobPlan | undefined)?.screens[0].sections.length]).toEqual([[], 5])
   })
 
   it('names a thin home, and no home where the plan builds none at /', () => {
@@ -638,6 +670,95 @@ async function lookCredits(): Promise<number> {
 /** The dearest look the live eval measured (AGL-3660). */
 const MEASURED_SITE_LOOK_CREDITS = 7
 
+/**
+ * What the layout language's live runs metered (AGL-3660), the floors the
+ * build's figures are never priced under: the dearest page of the
+ * 2026-10-07 business layout eval (re-asked, 32 to 45 credits), the largest
+ * frame answer it wrote, and the layout and form steps of the local Free
+ * yoga guided start that night (plan 19, look 4, layout 23, form 28, pages
+ * 37 and 22).
+ */
+const MEASURED_LANGUAGE = { pageMostCredits: 45, frameMostOutputTokens: 583, layoutCredits: 23, formCredits: 28 } as const
+
+/** One exchange, metered as the machine meters a step: billed, in credits, rounded up. */
+const creditsOf = (usage: AiUsage, model: string) => assistCreditsFromUsd(usd(usage, model))
+
+/** A language request as the doctrine sends it: its cached prefix with its tools, and its turn. */
+function languageRequest(
+  instructions: readonly AiSystemBlock[],
+  kind: string,
+  tool: unknown,
+  inventory: AiSiteInventory,
+  turn: string,
+): SentRequest {
+  return {
+    model: '',
+    maxTokens: 0,
+    system: aiDoctrineSystemBlocks(inventory, { instructions, scope: aiDoctrineScopeFor(kind) }),
+    tools: [tool, aiInventoryLookupTool()],
+    messages: [{ role: 'user', content: turn }],
+  }
+}
+
+/**
+ * The language build's figures on an EMPTY site, as a guided start builds it
+ * (AGL-3660), from the requests as they stand:
+ *
+ *  - page: a page's answer before its sections — its prefix written, its turn,
+ *    and the WHOLE thinking room its ceiling keeps, on the page step's model;
+ *  - section: one section at the most a section is written in;
+ *  - retry: the dearest page asked again — its prefix read, its turn and the
+ *    follow-up's, its thinking room and a full page of sections;
+ *  - layout: the frame's prefix written and its turn, its answer at the most
+ *    a live frame wrote, never under the live layout step;
+ *  - form: the live guided start's form step.
+ */
+function languageBuildCredits(): Pick<AiFreeSiteWorstCase, 'layout' | 'form' | 'page' | 'section' | 'retry'> {
+  const inventory = emptyAiSiteInventory('host-1')
+  const job = yogaJob()
+  const plan = { ...YOGA_FULL, status: 'confirmed' } as unknown as AiJobPlan
+  const targets = aiLayoutPageTargets({ job, inventory, own: ['scrHome'] })
+  const base = aiLayoutPagePrompt({ job, plan, screen: YOGA_FULL_HOME, targets, reusableComponents: false })
+  const pageRequest = languageRequest(AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS, AI_LAYOUT_PAGE_KIND, AI_LAYOUT_PAGE_TOOL, inventory, base)
+  const pageModel = aiModelForStep('job.page')
+  const page = spans(pageRequest)
+  const page_ = creditsOf(
+    { inputTokens: realTokens(page.uncached), outputTokens: AI_LAYOUT_PAGE_THINKING_TOKENS, cacheReadTokens: 0, cacheWriteTokens: realTokens(page.cached) },
+    pageModel,
+  )
+  const section = creditsOf({ inputTokens: 0, outputTokens: AI_LAYOUT_SECTION_MOST_TOKENS, cacheReadTokens: 0, cacheWriteTokens: 0 }, pageModel)
+  const followUp = aiLayoutMissingSectionsPrompt({ base, screen: YOGA_FULL_HOME, missing: YOGA_FULL_HOME.sections.map((_, index) => index) })
+  const retry = creditsOf(
+    {
+      inputTokens: realTokens(page.uncached + followUp.length),
+      outputTokens: AI_LAYOUT_PAGE_THINKING_TOKENS + AI_SITE_MAX_SECTIONS * AI_LAYOUT_SECTION_MOST_TOKENS,
+      cacheReadTokens: realTokens(page.cached),
+      cacheWriteTokens: 0,
+    },
+    pageModel,
+  )
+  const frameTurn = aiLayoutFramePrompt({
+    job,
+    siteName: aiLayoutSiteName(job),
+    pages: aiLayoutNavPages(job, inventory),
+    targets: aiLayoutFrameTargets(job, inventory),
+  })
+  const frame = spans(languageRequest(AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS, AI_LAYOUT_FRAME_KIND, AI_LAYOUT_FRAME_TOOL, inventory, frameTurn))
+  const layout = Math.max(
+    creditsOf(
+      {
+        inputTokens: realTokens(frame.uncached),
+        outputTokens: MEASURED_LANGUAGE.frameMostOutputTokens,
+        cacheReadTokens: 0,
+        cacheWriteTokens: realTokens(frame.cached),
+      },
+      aiModelForStep('job.layout'),
+    ),
+    MEASURED_LANGUAGE.layoutCredits,
+  )
+  return { layout, form: MEASURED_LANGUAGE.formCredits, page: page_, section, retry }
+}
+
 async function freeSiteRequests(): Promise<SentRequest[]> {
   mockRunAiRequest.mockReset()
   mockRunAiRequest.mockResolvedValueOnce(toolAnswer(THREE_PAGES)).mockResolvedValueOnce(toolAnswer(TWO_PAGES))
@@ -650,59 +771,80 @@ describe('a Free two-page site fits the Free taste, end to end', () => {
     expect(assistCreditsFromUsd(usd(MEASURED_SITE_PLAN.usage, MEASURED_SITE_PLAN.model))).toBe(MEASURED_SITE_PLAN.credits)
   })
 
-  it('derives the Free site plan’s worst case — its answer and its re-ask at the outline ceiling — at the figure the wall declares', async () => {
+  it('derives the Free site’s worst case — the plan and its re-ask at the outline ceiling, the look, and the language build — at the figures the wall declares', async () => {
     const requests = await freeSiteRequests()
     expect(requests).toHaveLength(2)
     const plan = planCredits(requests)
-    const derived: AiFreeSiteWorstCase = { ...AI_FREE_PAGE_WORST_CASE_CREDITS, plan, look: await lookCredits() }
+    const derived: AiFreeSiteWorstCase = {
+      plan,
+      look: await lookCredits(),
+      ...languageBuildCredits(),
+      listing: creditsOf(AI_STEP_NOMINAL_USAGE['job.seo'], aiModelForStep('job.seo')),
+    }
     expect(derived).toEqual(AI_FREE_SITE_WORST_CASE_CREDITS)
-    // The build's exchanges are the Free page's, which its own proof holds.
-    expect({
-      layout: AI_FREE_SITE_WORST_CASE_CREDITS.layout,
-      firstSection: AI_FREE_SITE_WORST_CASE_CREDITS.firstSection,
-      laterSection: AI_FREE_SITE_WORST_CASE_CREDITS.laterSection,
-      listing: AI_FREE_SITE_WORST_CASE_CREDITS.listing,
-    }).toEqual({
-      layout: AI_FREE_PAGE_WORST_CASE_CREDITS.layout,
-      firstSection: AI_FREE_PAGE_WORST_CASE_CREDITS.firstSection,
-      laterSection: AI_FREE_PAGE_WORST_CASE_CREDITS.laterSection,
-      listing: AI_FREE_PAGE_WORST_CASE_CREDITS.listing,
-    })
   })
 
-  it('fits the plan, two pages’ listings and every section the cap allows inside the wall, with room for one retried section, at the figures the notes quote', () => {
+  it('prices a page as ONE answer: its whole thinking room, and every section at the most a section is written in, inside its ceiling', () => {
+    const model = aiModelForStep('job.page')
+    // A full page's sections and the thinking room fit the answer's ceiling, so pricing them never overstates what one answer can spend.
+    expect(AI_LAYOUT_PAGE_THINKING_TOKENS + AI_SITE_MAX_SECTIONS * AI_LAYOUT_SECTION_MOST_TOKENS).toBeLessThanOrEqual(
+      AI_JOB_PAGE_LANGUAGE_BUDGET.maxTokens(model),
+    )
     const credits = AI_FREE_SITE_WORST_CASE_CREDITS
+    // Never under a page the live runs metered: the dearest, re-asked, was 45 (2026-10-07).
+    expect(credits.page + AI_SITE_MAX_SECTIONS * credits.section).toBeGreaterThanOrEqual(MEASURED_LANGUAGE.pageMostCredits)
+    // Never under the live guided start's layout and form steps (2026-10-07).
+    expect(credits.layout).toBeGreaterThanOrEqual(MEASURED_LANGUAGE.layoutCredits)
+    expect(credits.form).toBeGreaterThanOrEqual(MEASURED_LANGUAGE.formCredits)
+  })
+
+  it('fits an EMPTY Free site — its layout, its form, two pages, a full home and room for one retried page — inside the wall, at the figures the notes quote', () => {
     const pages = AI_SITE_FREE_PAGES.max
     for (const layouts of [0, 1]) {
-      const sections = aiFreeSiteSectionsWithin({ layouts, pages }, FREE_AI_TASTE_CREDITS_PER_MONTH)
-      const total =
-        credits.plan +
-        credits.look +
-        layouts * credits.layout +
-        pages * (credits.listing + credits.firstSection) +
-        (sections - pages) * credits.laterSection
-      expect(total).toBeLessThanOrEqual(FREE_AI_TASTE_CREDITS_PER_MONTH - credits.firstSection)
-      // A plan the cap admits has a section a page to build.
-      expect(sections).toBeGreaterThanOrEqual(pages * 2)
+      const sections = aiFreeSiteSectionsWithin({ layouts, pages, forms: 1 }, FREE_AI_TASTE_CREDITS_PER_MONTH)
+      expect(sections).toBe(AI_FREE_SITE_MAX_SECTIONS)
+      expect(aiFreeSiteWorstCaseCredits({ layouts, pages, forms: 1 }, sections)).toBeLessThanOrEqual(FREE_AI_TASTE_CREDITS_PER_MONTH)
+      // A full home of five beside the other page, which keeps at least one.
+      expect(sections - (pages - 1)).toBeGreaterThanOrEqual(AI_SITE_HOME_MIN_SECTIONS)
     }
-    const sections = aiFreeSiteSectionsWithin({ layouts: 0, pages }, FREE_AI_TASTE_CREDITS_PER_MONTH)
-    const total =
-      credits.plan +
-      credits.look +
-      pages * (credits.listing + credits.firstSection) +
-      (sections - pages) * credits.laterSection
+    const total = aiFreeSiteWorstCaseCredits({ layouts: 1, pages, forms: 1 }, AI_FREE_SITE_MAX_SECTIONS)
+    const credits = AI_FREE_SITE_WORST_CASE_CREDITS
     const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
     expect([credits.plan, notes.includes(`a Free site's plan comes to at most ${credits.plan} credits`)]).toEqual([credits.plan, true])
-    expect([sections, total, notes.includes(`fits ${sections} sections across its two pages, at most ${total} credits`)]).toEqual([
-      sections,
-      total,
-      true,
-    ])
+    expect([total, notes.includes(`fits ${AI_FREE_SITE_MAX_SECTIONS} sections across its two pages, at most ${total} credits`)]).toEqual([total, true])
+  })
+
+  it('passes an empty Free site’s yoga plan — its layout and form created, a home of five and a page of two or three — on the wall, and refuses one past eight', () => {
+    const empty = emptyAiSiteInventory('host-1')
+    const free = aiSitePlanCapabilities(yogaJob(), aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] })) as AiPlanCapabilities
+    const create: AiBuildPlan['create'] = [
+      { kind: 'layout', name: 'Main layout', why: 'the site has none', duplicateOf: null, fields: ['header', 'navigation', 'footer'] },
+      { kind: 'form', name: 'Book a class', why: 'the site has no form', duplicateOf: null, fields: ['Name', 'Email', 'Class'] },
+    ]
+    const home = { ...YOGA_FULL_HOME, layout: 'new:Main layout' }
+    const classes = (sections: string[]) => ({
+      ...page('Classes', '/classes', sections, { title: 'Yoga class schedule', description: 'Every class this week, booked online.' }),
+      layout: 'new:Main layout',
+    })
+    const withForm = (screen: AiBuildPlan['screens'][number]) => ({
+      ...screen,
+      sections: screen.sections.map((section, index) => (index === screen.sections.length - 1 ? { ...section, uses: ['new:Book a class'] } : section)),
+    })
+    for (const other of [['class schedule', 'book a class'], ['class schedule', 'teachers', 'book a class']]) {
+      const plan: AiBuildPlan = { reuse: [], create, screens: [home, withForm(classes(other))] }
+      expect(codes(plan, empty, free)).not.toContain('plan-over-free-wall')
+    }
+    const nine: AiBuildPlan = { reuse: [], create, screens: [home, withForm(classes(['schedule', 'teachers', 'prices', 'book a class']))] }
+    expect(codes(nine, empty, free)).toContain('plan-over-free-wall')
+    // And the plan's turn asks that empty site for the full home.
+    expect(aiPlanSiteLines(yogaJob(), empty, free).join('\n')).toContain('at least 5 sections')
   })
 
   it('quotes the dialog an estimate from the same figures, inside the wall', () => {
     const credits = AI_FREE_SITE_WORST_CASE_CREDITS
-    expect(aiFreeSiteCreditEstimate(2)).toBe(credits.plan + credits.look + 2 * (credits.listing + credits.firstSection) + 2 * 2 * credits.laterSection)
+    expect(aiFreeSiteCreditEstimate(2)).toBe(
+      credits.plan + credits.look + credits.layout + credits.form + 2 * (credits.page + credits.listing) + 2 * AI_FREE_SITE_NOMINAL_SECTIONS * credits.section,
+    )
     expect(aiFreeSiteCreditEstimate(2)).toBeLessThanOrEqual(FREE_AI_TASTE_CREDITS_PER_MONTH)
     expect(aiFreeSiteCreditEstimate(1)).toBeLessThan(aiFreeSiteCreditEstimate(2))
   })
@@ -746,17 +888,14 @@ describe('a Free two-page site fits the Free taste, end to end', () => {
         )
       }, 0),
     )
-    // What a two-page Free site leaves once its sections take all the cap
-    // allows, its retried section's room held back as the wall holds it.
-    const credits = AI_FREE_SITE_WORST_CASE_CREDITS
+    // What a guided start's two-page Free site leaves — its site created
+    // empty, so it builds its layout and its form first — once its sections
+    // take all the cap allows, its retried page's room held back as the wall
+    // holds it (AGL-3660).
     const pages = AI_SITE_FREE_PAGES.max
-    for (const layouts of [0, 1]) {
-      const sections = aiFreeSiteSectionsWithin({ layouts, pages }, FREE_AI_TASTE_CREDITS_PER_MONTH)
-      const total =
-        credits.plan + credits.look + layouts * credits.layout + pages * (credits.listing + credits.firstSection) + (sections - pages) * credits.laterSection
-      const left = FREE_AI_TASTE_CREDITS_PER_MONTH - credits.firstSection - total
-      expect({ layouts, post, left, fits: post <= left }).toEqual({ layouts, post, left, fits: false })
-    }
+    const sections = aiFreeSiteSectionsWithin({ layouts: 1, pages, forms: 1 }, FREE_AI_TASTE_CREDITS_PER_MONTH)
+    const left = FREE_AI_TASTE_CREDITS_PER_MONTH - aiFreeSiteWorstCaseCredits({ layouts: 1, pages, forms: 1 }, sections)
+    expect({ post, left, fits: post <= left }).toEqual({ post, left, fits: false })
     const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
     expect([post, notes.includes(`its re-ask — is ${post}, so a Free blog writes no first posts`)]).toEqual([post, true])
     // So the guided start owes a Free blog and a Free store no part of their own.

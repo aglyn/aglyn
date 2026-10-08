@@ -2784,13 +2784,25 @@ the element budget its request asks for.
   at their ceilings, never under the measured input, the first writing the cache and
   the second paying for the prefix as plain input: a Free site's plan comes to at most
   35 credits, its answer and its re-ask together. The site's look (AGL-3660) is one
-  fast-tier answer that is never re-asked: 4 credits in the live eval, 7 for the one that writes its cache, which is the figure the wall counts. Each page then costs a
-  listing and a first section pass at the Free page's figures, and the wall keeps room
-  for one retried section: a Free site fits 8 sections across its two pages, at most 256 credits
-  of the 300. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the plan it derives
-  and to the Free page's build figures, and the Free wall holds a Free site's plan to
-  that section count and to its page cap. That leaves 0 credits on a site with no
-  new layout and 16 on one with a layout, and one post at its worst on the fast
+  fast-tier answer that is never re-asked: 4 credits in the live eval, 7 for the one that writes its cache, which is the figure the wall counts.
+  The build is priced as the layout language builds it (re-derived in AGL-3660; the
+  per-section passes it replaced no longer run on a site): a guided start creates its
+  site EMPTY, so it builds its layout (23, the live guided start's layout step, above the
+  frame's prefix and its largest live answer) and its saved form (28, the live form
+  step) before its pages, and a Free start writes no welcome email. A page is ONE
+  answer: 43 for its prefix written, its turn and the whole 2,000-token thinking room,
+  4 a section at the 250 tokens a section is written in at most, and 3 for its listing.
+  The wall keeps room for one retried page — the dearest page asked again, reading its
+  prefix, with its thinking room and a full page of eight sections: 64. Those figures
+  price a page's thinking room and sections, not its whole 5,000-token ceiling, and the
+  layout and form at what the live start metered, not their 5,200- and 6,000-token
+  ceilings; every answer at its full ceiling would come to more than the 300 for the
+  layout, the form and two pages alone, which no section count changes. A Free site
+  plans at most `AI_FREE_SITE_MAX_SECTIONS` sections, a product figure that keeps its
+  expected spend near what it measured: a Free site fits 8 sections across its two pages, at most 281 credits
+  of the 300, its layout and form built first. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the
+  figures it derives, and the Free wall holds a Free site's plan to that section count
+  and to its page cap. That leaves 19 credits, and one post at its worst on the fast
   tier — its answer at the `copy.blog` ceiling and its re-ask — is 23, so a Free
   blog writes no first posts (AGL-3676). On a paid workspace a site plan's one answer comes to at most 84 credits
   for five pages, where the routing table's ceiling with thinking spent 227.
@@ -2802,14 +2814,12 @@ the element budget its request asks for.
   the plan step re-asks a FIRST answer whose home is under it (`plan-thin-home`,
   `aiSiteThinHomeCheck`). A second answer still under it is kept: a four-section home
   is a site, a stopped start is none. On the Free taste the minimum is shared out of the
-  wall's own section count (`aiSitePlanHomeRule`): 5 of the 8 a site that keeps its layout
-  fits across two pages, so the wall's worst case does not move. ⛔ Where the wall cannot
-  pay for five beside the other page there is NO minimum, never a lowered one: a Free
-  guided start creates its site empty and plans its layout, the wall then fits 4, and told
-  "at least 3" the live yoga start of 2026-10-08 planned 4 + 3, then 4 + 2, and stopped on
-  the wall twice. That start's home stays as thin as the wall's per-section figures make
-  it until the wall is re-derived for language pages (one answer a page, not a pass a
-  section). No home is held where the owner's own home at `/` stays.
+  wall's own section count (`aiSitePlanHomeRule`): 5 of the 8 a Free site fits across its
+  two pages, an empty site's included. ⛔ Where the wall cannot pay for five beside the
+  other page there is NO minimum, never a lowered one: before the wall was re-derived it
+  fit 4 on an empty site, and told "at least 3" the live yoga start of 2026-10-08 planned
+  4 + 3, then 4 + 2, and stopped on the wall twice. A minimum the wall cannot pay for is
+  a start that fails. No home is held where the owner's own home at `/` stays.
 - **Every device width, and an axe audit.** `libs/plugins/ai/scripts/record-ai-page-axe.mts`
   (AGL-3020) assembles each golden page the page step builds from a site — the ten
   briefs, both Free pages and the two-person page — through the step's own section
