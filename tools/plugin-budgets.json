@@ -134,5 +134,9 @@
   "zapier": {
     "baseline": 3724,
     "budget": 5120
+  },
+  "loyalty": {
+    "baseline": 9161,
+    "budget": 12288
   }
 }

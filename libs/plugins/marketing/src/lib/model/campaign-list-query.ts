@@ -22,6 +22,7 @@ import type { ListFilterClause } from '@aglyn/shared-util-tools/list-query/list-
 import type {
   ListQueryDeclaration,
   ListQueryFilter,
+  ListQuerySort,
 } from '@aglyn/shared-util-tools/list-query/list-query-plan'
 
 /*
@@ -100,16 +101,20 @@ export const CAMPAIGN_LIST_ORDER_FIELD = 'createdAtMs'
  */
 export const SINGLE_SEND_FILTER_VALUE = '__single__'
 
+/** The send's subject, lower-cased whole, for the Subject header sort. */
+export const CAMPAIGN_SEND_SUBJECT_LOWER = 'subjectLower'
+
 /**
- * The search field a send carries beside its `subject`, stamped by every
- * write that sets the subject.
+ * The list fields a send carries beside its `subject`, stamped by every
+ * write that sets the subject: the search tokens, and the lower-cased key
+ * the Subject header orders by (AGL-3680).
  */
 export function campaignSendSearchFields(subject: unknown): {
+  subjectLower: string
   subjectTokens: string[]
 } {
-  return {
-    subjectTokens: nameSearchTokens(typeof subject === 'string' ? subject : ''),
-  }
+  const text = typeof subject === 'string' ? subject : ''
+  return { subjectLower: nameSearchKey(text), subjectTokens: nameSearchTokens(text) }
 }
 
 /**
@@ -124,7 +129,34 @@ export function campaignContainerSearchFields(name: unknown): {
   return { nameLower: nameSearchKey(text), nameTokens: nameSearchTokens(text) }
 }
 
-const ORDER = [{ path: CAMPAIGN_LIST_ORDER_FIELD, direction: 'desc' as const }]
+const ORDER = [{ path: CAMPAIGN_LIST_ORDER_FIELD, direction: 'desc' as const, label: 'newest first' }]
+
+/*
+ * ## The header sorts (AGL-3680)
+ *
+ * Every one is `alone`: served while nothing narrows the list past its
+ * scope, falling back to newest first (with a notice) under a filter or the
+ * search. On the org hub, which has no scope, that costs no composite; under
+ * a site (`hostId ==`) or a campaign (`emailCampaignId ==`) it costs one per
+ * order and scope field.
+ *
+ *   Subject     `subjectLower`, stamped beside the tokens
+ *               (`backfill-campaign-list-fields.mjs` completes older sends)
+ *   Campaign    `nameLower`, stamped on every container (AGL-3321)
+ *
+ * The FIGURES sort the page on screen. A send's `stats.*` counters are left
+ * ABSENT until the send or the delivery webhook moves them, on purpose: the
+ * report reads an absent counter as "not recorded yet" and a 0 as "recorded:
+ * none" (`campaign-send-consent.spec`, `campaign-send-ids.spec`), so they
+ * cannot be stamped 0 for an `orderBy` without making every report claim a
+ * measurement nobody took. So do a row's State, When, Site name and a
+ * container's summed figures.
+ */
+const textSort = (path: string, column: string, label: string): ListQuerySort[] => [
+  { path, direction: 'asc', column, label, alone: true },
+  { path, direction: 'desc', column, label, alone: true },
+]
+const SUBJECT_SORTS = textSort(CAMPAIGN_SEND_SUBJECT_LOWER, 'subject', 'Subject')
 
 const CREATED: ListFilterField = {
   column: CAMPAIGN_LIST_ORDER_FIELD,
@@ -185,7 +217,10 @@ const EMAIL_CAMPAIGN: ListFilterField = {
 
 const EMAILS_SITE: ListQueryDeclaration = {
   fields: [SUBJECT, STATUS, EMAIL_CAMPAIGN, CREATED],
-  sorts: ORDER,
+  sorts: [
+    ...ORDER,
+    ...SUBJECT_SORTS,
+  ],
   search: { tokensPath: CAMPAIGN_SEND_SUBJECT_TOKENS },
 }
 const EMAILS_ORG: ListQueryDeclaration = {
@@ -199,7 +234,10 @@ const EMAILS_ORG: ListQueryDeclaration = {
 /** A campaign's own emails: the container is the query's base. */
 export const CAMPAIGN_EMAILS_QUERY: ListQueryDeclaration = {
   fields: [SUBJECT, STATUS, CREATED],
-  sorts: ORDER,
+  sorts: [
+    ...ORDER,
+    ...SUBJECT_SORTS,
+  ],
   search: { tokensPath: CAMPAIGN_SEND_SUBJECT_TOKENS },
 }
 
@@ -228,12 +266,13 @@ const CONTAINER_NAME_PREFIX: ListFilterField = {
   lowerPath: CAMPAIGN_NAME_LOWER,
   operators: ['startsWith'],
 }
+const CONTAINER_SORTS = [...ORDER, ...textSort(CAMPAIGN_NAME_LOWER, 'name', 'Campaign')]
 const CONTAINERS_SITE: ListQueryDeclaration = {
   fields: [CONTAINER_NAME_PREFIX, CREATED],
-  sorts: ORDER,
+  sorts: CONTAINER_SORTS,
 }
 const CONTAINERS_ORG: ListQueryDeclaration = {
-  sorts: ORDER,
+  sorts: CONTAINER_SORTS,
   search: { tokensPath: CAMPAIGN_NAME_TOKENS },
   fields: [
     CONTAINER_NAME,
@@ -256,7 +295,10 @@ export function campaignSingleSendsListQuery(orgHub: boolean): ListQueryDeclarat
 const SINGLE_NAME: ListFilterField = { ...SUBJECT, column: 'name' }
 const SINGLE_SITE: ListQueryDeclaration = {
   fields: [SINGLE_NAME, CREATED],
-  sorts: ORDER,
+  sorts: [
+    ...ORDER,
+    ...textSort(CAMPAIGN_SEND_SUBJECT_LOWER, 'name', 'Campaign'),
+  ],
   search: { tokensPath: CAMPAIGN_SEND_SUBJECT_TOKENS },
 }
 const SINGLE_ORG: ListQueryDeclaration = {

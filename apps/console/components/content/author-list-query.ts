@@ -66,10 +66,23 @@ export const AUTHOR_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   },
 ]
 
-/** The Authors table's query: its fields, its one order and its search. */
+/**
+ * The Authors table's query: its fields, its orders and its search.
+ *
+ * Every header sorts the query (AGL-3680): Author by `name`, A to Z by
+ * default, and Type by the stored `schemaType` either way — both on every
+ * author. The header orders past the default are `alone`, served while no
+ * filter or search is on, so on this subcollection they cost no composite.
+ * Entries is counted off the Entries tab's page, so it sorts the page.
+ */
 export const AUTHOR_LIST_QUERY: ListQueryDeclaration = {
   fields: AUTHOR_LIST_FILTER_FIELDS,
-  sorts: [{ path: 'name', direction: 'asc', column: 'name' }],
+  sorts: [
+    { path: 'name', direction: 'asc', column: 'name', label: 'Author' },
+    { path: 'name', direction: 'desc', column: 'name', label: 'Author', alone: true },
+    { path: AUTHOR_SCHEMA_TYPE_FIELD, direction: 'asc', column: 'type', label: 'Type', alone: true },
+    { path: AUTHOR_SCHEMA_TYPE_FIELD, direction: 'desc', column: 'type', label: 'Type', alone: true },
+  ],
   search: { tokensPath: 'nameTokens' },
 }
 

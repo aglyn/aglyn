@@ -36,7 +36,8 @@ import {
   type ListFilterOption,
   listFilterGridColumns,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { type ListQuerySort, planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import { escapeCsvCell } from '@aglyn/aglyn/app-utils/csv'
@@ -68,12 +69,14 @@ import {
   TABLE_ROW_HEIGHT,
 } from '../../../../constants/shared'
 import {
+  ADMIN_AUDIT_COLUMN_SORTS,
   ADMIN_AUDIT_KNOWN_SCOPES,
   ADMIN_AUDIT_KNOWN_TARGET_KINDS,
   ADMIN_AUDIT_LIST_FIELDS,
   ADMIN_AUDIT_LIST_HEADERS,
   ADMIN_AUDIT_LIST_QUERY,
   ADMIN_AUDIT_LIST_SELECT_FIELDS,
+  ADMIN_AUDIT_SORT,
 } from '../../../../utils/admin-audit-list-query'
 
 /**
@@ -345,14 +348,21 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
     onChange: setClauses,
     search: { words: searchWords, onChange: setSearchWords },
   })
+  /*
+   * EVERY HEADER SORTS (AGL-3680) on this one query: When either way, and
+   * Action, Scope, Target and Who while no filter or search is on
+   * (`ADMIN_AUDIT_COLUMN_SORTS`). The plan says which order it reads in, so
+   * the header shows that one.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const plan = useMemo(
     () =>
       planListQuery(
         ADMIN_AUDIT_LIST_QUERY,
-        { clauses, search: searchWords },
+        { clauses, search: searchWords, sort: askedSort },
         nameSearchNormalizers,
       ),
-    [clauses, searchWords],
+    [clauses, searchWords, askedSort],
   )
   const constraints = useMemo(() => listQueryConstraints(plan), [plan])
 
@@ -463,6 +473,15 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
     [plan, options],
   )
 
+  const columnSort = useListColumnSort<Record<string, any>>({
+    sorts: ADMIN_AUDIT_COLUMN_SORTS,
+    defaultSort: ADMIN_AUDIT_SORT,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows,
+  })
+
   const [expanded, setExpanded] = useState<string | null>(null)
   const expandedRow = rows.find((row) => row['$id'] === expanded) ?? null
 
@@ -544,7 +563,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Why',
         flex: 1,
         minWidth: 180,
-        sortable: false,
+        // Free text — a reason and a note — so the one column with no order.
         valueGetter: (_value, row: any) => auditWhy(row) ?? '',
         /*
           Shown in the row, not only in the expanded entry: a reason nobody
@@ -717,7 +736,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                 clauses={clauses}
                 onChange={setClauses}
               />
-              <ListQueryNotices refused={refused} notices={plan.notices} />
+              <ListQueryNotices refused={refused} notices={[...plan.notices, ...columnSort.notices]} />
               {unreadable && !loading ? (
                 <Alert severity="warning">
                   {'Could not read the audit log. This is not the same as there ' +
@@ -730,7 +749,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
               ) : (
                 <ListTable
                   aria-label="Admin actions"
-                  rows={rows}
+                  rows={columnSort.rows}
                   columns={columns}
                   /*
                    * A row opens its entry — the reason, the note and the
@@ -742,10 +761,10 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                   /*
                    * The grid holds one page of a cursor feed, so it never
                    * filters that page itself: the clauses and the search go
-                   * to the read above. Nor does it sort that page: the rows
-                   * keep the feed's newest-first order.
+                   * to the read above. Nor does it sort that page: a header
+                   * asks the read for its order (`columnSort`).
                    */
-                  disableColumnSorting
+                  columnSort={columnSort}
                   filterMode="server"
                   filterModel={gridFilter.filterModel}
                   onFilterModelChange={gridFilter.onFilterModelChange}

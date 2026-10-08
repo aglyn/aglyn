@@ -54,7 +54,7 @@ import {
   topReferrer,
   topDevice,
   type ScreenTrafficRow,
-} from '../../utils/screen-analytics-aggregate'
+} from '@aglyn/aglyn/app-utils/screen-analytics-aggregate'
 
 /**
  * Bounded on purpose (AGL-1844): the range query returns one doc per screen

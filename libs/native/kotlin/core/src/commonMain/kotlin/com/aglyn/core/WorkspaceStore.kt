@@ -143,6 +143,15 @@ class WorkspaceStore(
     picked.value = WorkspacePick(state.value.org?.id ?: picked.value.orgId, hostId)
   }
 
+  /**
+   * Picks a workspace and one of its sites at once, as a notification about
+   * that site does: the site holds once the workspace's sites have loaded and
+   * name it, and falls back to the first one otherwise.
+   */
+  fun select(orgId: String, hostId: String?) {
+    picked.value = WorkspacePick(orgId, hostId)
+  }
+
   private fun restore(uid: String): WorkspacePick =
     prefs.get(storageKey(uid))?.let { runCatching { Json.decodeFromString<WorkspacePick>(it) }.getOrNull() }
       ?: WorkspacePick()

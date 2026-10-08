@@ -46,6 +46,8 @@ export type PosTenderMethod =
   | 'card_link'
   | 'gift_card'
   | 'folio'
+  /** Store credit another plugin keeps (AGL-3640). */
+  | 'credit'
 
 export const POS_TENDER_METHODS: readonly PosTenderMethod[] = [
   'cash',
@@ -54,6 +56,7 @@ export const POS_TENDER_METHODS: readonly PosTenderMethod[] = [
   'card_link',
   'gift_card',
   'folio',
+  'credit',
 ]
 
 /** What each tender is called on a report, a receipt and a refund. */
@@ -64,6 +67,7 @@ export const POS_TENDER_LABELS: Readonly<Record<PosTenderMethod, string>> = {
   card_link: 'Card (payment link)',
   gift_card: 'Gift card',
   folio: 'Room charge',
+  credit: 'Store credit',
 }
 
 /** The tenders whose money moved through Stripe and goes back through it. */
@@ -87,6 +91,10 @@ export interface PosOrderTender {
   paymentIntentId?: string
   giftCardId?: string
   reservationId?: string
+  /** For `credit` (AGL-3640): the provider, its account handle, and its name. */
+  creditProviderId?: string
+  creditReference?: string
+  creditLabel?: string
   cardBrand?: string
   last4?: string
   cashTenderedCents?: number
@@ -139,6 +147,9 @@ export function posOrderTenders(order: PosTenderSource | null | undefined): PosO
       ...(payment.paymentIntentId ? { paymentIntentId: payment.paymentIntentId } : {}),
       ...(payment.giftCardId ? { giftCardId: payment.giftCardId } : {}),
       ...(payment.reservationId ? { reservationId: payment.reservationId } : {}),
+      ...(payment.creditProviderId ? { creditProviderId: payment.creditProviderId } : {}),
+      ...(payment.creditReference ? { creditReference: payment.creditReference } : {}),
+      ...(payment.creditLabel ? { creditLabel: payment.creditLabel } : {}),
       ...(payment.cardBrand ? { cardBrand: payment.cardBrand } : {}),
       ...(payment.last4 ? { last4: payment.last4 } : {}),
       ...(payment.cashTenderedCents != null ? { cashTenderedCents: wholeCents(payment.cashTenderedCents) } : {}),
@@ -147,8 +158,10 @@ export function posOrderTenders(order: PosTenderSource | null | undefined): PosO
 }
 
 /** A tender as one line of a receipt: `Card •• 4242`. */
-export function posTenderLabel(tender: Pick<PosOrderTender, 'method' | 'cardBrand' | 'last4'>): string {
-  const base = POS_TENDER_LABELS[tender.method] ?? tender.method
+export function posTenderLabel(
+  tender: Pick<PosOrderTender, 'method' | 'cardBrand' | 'last4'> & { creditLabel?: string },
+): string {
+  const base = (tender.method === 'credit' && tender.creditLabel) || POS_TENDER_LABELS[tender.method] || tender.method
   if (tender.last4) {
     return `${tender.cardBrand ? capitalize(tender.cardBrand) : base} •• ${tender.last4}`
   }
@@ -229,12 +242,19 @@ export interface PosShift {
   cashEvents: PosCashEvent[]
   closedBy?: string
   closedByName?: string
-  closedAtMs?: number
+  /*
+   * The history sorts by each of the five below (AGL-3680), and an `orderBy`
+   * drops a shift that lacks the field, so the shift is opened with each one
+   * `null` and the close fills them — see `POS_SHIFT_LIST_QUERY`.
+   */
+  closedAtMs?: number | null
   /** What the closing cashier counted in the drawer. */
-  countedCashCents?: number
-  expectedCashCents?: number
+  countedCashCents?: number | null
+  expectedCashCents?: number | null
   /** counted − expected: positive is over, negative is short. */
-  varianceCents?: number
+  varianceCents?: number | null
+  /** The Z report's `netSalesCents`, flattened so the history can order by it. */
+  netSalesCents?: number | null
   closingNote?: string
   /** The Z report, frozen when the shift closed. */
   report?: PosShiftReport
@@ -385,7 +405,7 @@ function csvCell(value: unknown): string {
   return /[",\r\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell
 }
 
-const dollars = (cents: number | undefined): string =>
+const dollars = (cents: number | null | undefined): string =>
   cents == null ? '' : (Math.round(cents) / 100).toFixed(2)
 
 /** The shift history as a spreadsheet: one row per shift, money in dollars. */
@@ -420,7 +440,7 @@ export function posShiftsCsv(
     'Counted cash',
     'Variance',
   ]
-  const iso = (ms: number | undefined) => (ms ? new Date(ms).toISOString() : '')
+  const iso = (ms: number | null | undefined) => (ms ? new Date(ms).toISOString() : '')
   const rows = shifts.map((shift) => {
     const report = shift.report
     const card = report
@@ -649,6 +669,7 @@ const REFUND_ORDER: readonly PosTenderMethod[] = [
   'card_keyed',
   'card_link',
   'gift_card',
+  'credit',
   'folio',
   'cash',
 ]

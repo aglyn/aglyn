@@ -45,7 +45,7 @@ import { seedSendId } from './org-campaign-backfill.mjs'
 import { orderListFieldsOf } from '../backfill-orders-list-fields.mjs'
 import { productListFieldsOf } from '../backfill-products-list-fields.mjs'
 import { giftCardSearchTokens } from '../backfill-gift-card-search-tokens.mjs'
-import { displayNameSearchFields, nameSearchTokens } from './name-search-tokens.mjs'
+import { displayNameSearchFields, nameSearchKey, nameSearchTokens } from './name-search-tokens.mjs'
 import { withCrmListFields } from './org-record-list-fields.mjs'
 
 /** Every host subcollection the seeder writes into. Order is cosmetic. */
@@ -341,6 +341,14 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
       // Every member carries the boolean, as sign-up writes it; the console's
       // Status filter cannot find a member without it.
       suspended: false,
+      // The Name sort's key, as sign-up stamps it — `null` for a nameless
+      // member (AGL-3680): an `orderBy` on it lists no member without it.
+      ...(fields.displayName
+        ? {
+            displayNameLower: nameSearchKey(fields.displayName),
+            displayNameTokens: nameSearchTokens(fields.displayName),
+          }
+        : { displayNameLower: null }),
       ...fields,
       createdAt: now,
     })

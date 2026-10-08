@@ -32,6 +32,8 @@ import {
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, Chip, IconButton, Stack, TextField, Typography } from '@mui/material'
 import { useState } from 'react'
@@ -187,9 +189,12 @@ export function OutreachDoNotContactDomainsCard(props: OutreachDoNotContactDomai
    * word on the query (AGL-3321) — never matched over the domains that
    * happen to be loaded.
    */
+  // Every header orders the query (AGL-3680): `OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY.sorts`.
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const listed = useOutreachDoNotContactDomainList(orgId, {
     clauses: gridFilter.clauses,
     search: gridFilter.searchWords,
+    sort: askedSort,
   })
   const rows = listed.rows.map((entry) => ({
     $id: entry.domain,
@@ -199,6 +204,14 @@ export function OutreachDoNotContactDomainsCard(props: OutreachDoNotContactDomai
     addedAtMs: entry.addedAtMs ?? 0,
     detail: entry.detail ?? '',
   }))
+  const columnSort = useListColumnSort({
+    sorts: OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY.sorts,
+    defaultSort: OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY.sorts[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: listed.plan.orderBy,
+    rows,
+  })
   /** Nothing listed at all — not a filter that matched nothing. */
   const none =
     listed.status === 'ready' && !listed.rows.length && !filtering && listed.page === 0
@@ -335,25 +348,25 @@ export function OutreachDoNotContactDomainsCard(props: OutreachDoNotContactDomai
                 headers: DOMAIN_FILTER_HEADERS,
                 options: DOMAIN_FILTER_OPTIONS,
               })}
-              notices={listed.plan.notices}
+              notices={[...listed.plan.notices, ...columnSort.notices]}
             />
             <ListTable
               aria-label="Do not contact domains"
               columns={domainColumns(busy !== null, (domain) => void change('remove', domain))}
-              rows={rows}
+              rows={columnSort.rows}
               loading={listed.status === 'loading'}
               /*
                * The panel and the search are the grid's; every clause and
                * the search word are on the list's query (AGL-3321). The grid
-               * neither filters nor sorts the page it is handed: the query's
-               * order — alphabetical, or newest added while a date applies —
-               * is the list's.
+               * neither filters nor sorts the page it is handed: every header
+               * orders the query (AGL-3680) — alphabetical by default, newest
+               * added while a date applies.
                */
               filterMode="server"
               filterModel={gridFilter.filterModel}
               onFilterModelChange={gridFilter.onFilterModelChange}
               quickFilter
-              disableColumnSorting
+              columnSort={columnSort}
               noRowsLabel="No domains match these filters"
               /*
                * The grid's own export writes the page on screen; with the

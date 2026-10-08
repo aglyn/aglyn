@@ -44,6 +44,8 @@ import {
   AI_SITE_EMAIL_TYPE,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
+  aiFreeSiteShortfall,
+  aiFreeSiteShortfallText,
   aiSiteNameSentence,
   aiSitePagesRefusal,
   aiSitePlanRefusal,
@@ -52,6 +54,7 @@ import {
   parseAiSiteJobInputs,
   type AiSiteJobInputs,
 } from '../model/ai-site-job'
+import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
 import {
   AI_SITE_SEO_OUTPUT_ID,
   aiSiteSeoProposalForInputs,
@@ -658,32 +661,51 @@ export function aiSiteUnitJob(
  * org, and only where this deployment has loaded the step that builds a page:
  * a scaffold whose pages nothing can build is not a scaffold.
  */
-export const aiSiteJobAdmission: AiJobAdmission = async (context) => {
-  const inputs = parseAiSiteJobInputs(context.inputs)
-  if (typeof inputs === 'string') return { status: 400, error: inputs }
-  // The workspace's own page band (AGL-3594): one or two pages on the Free
-  // taste, four to eight on a paid plan.
-  const freeTaste = aiSiteFreeTaste(context.org)
-  const pages = aiSitePagesRefusal(inputs.pages, freeTaste)
-  if (pages) return { status: 400, error: pages }
-  if (context.plan) {
-    const shape = aiSitePlanRefusal(context.plan, { freeTaste })
-    if (shape) return { status: 400, error: shape }
-  }
-  if (!context.hostId) {
-    return {
-      status: 400,
-      error: 'Open the site the scaffold is for before starting the job',
+export function createAiSiteJobAdmission(
+  deps: { freeCreditsLeft?: typeof readFreeAiCreditsLeft; now?: () => Date } = {},
+): AiJobAdmission {
+  const freeCreditsLeft = deps.freeCreditsLeft ?? readFreeAiCreditsLeft
+  const now = deps.now ?? (() => new Date())
+  return async (context) => {
+    const inputs = parseAiSiteJobInputs(context.inputs)
+    if (typeof inputs === 'string') return { status: 400, error: inputs }
+    // The workspace's own page band (AGL-3594): one or two pages on the Free
+    // taste, four to eight on a paid plan.
+    const freeTaste = aiSiteFreeTaste(context.org)
+    const pages = aiSitePagesRefusal(inputs.pages, freeTaste)
+    if (pages) return { status: 400, error: pages }
+    // A Free start that what is left of the month's Free credits cannot pay for
+    // is refused before it spends (AGL-3660), on the figure the dialog quotes —
+    // the dialog asks the same, and this is what a stale dialog meets. Only at
+    // creation: a resume is the same job carrying on from where it paused.
+    if (freeTaste && !context.plan) {
+      const credits = await freeCreditsLeft(context.firestore, { orgId: context.orgId, org: context.org, now: now() })
+      const shortfall = aiFreeSiteShortfall(credits, inputs.pages)
+      if (credits && shortfall) {
+        return { status: 429, error: aiFreeSiteShortfallText(shortfall, credits.resetsOn) }
+      }
     }
+    if (context.plan) {
+      const shape = aiSitePlanRefusal(context.plan, { freeTaste })
+      if (shape) return { status: 400, error: shape }
+    }
+    if (!context.hostId) {
+      return {
+        status: 400,
+        error: 'Open the site the scaffold is for before starting the job',
+      }
+    }
+    const owner = await resolveOrgIdForHost(context.hostId)
+    if (!owner || owner !== context.orgId)
+      return { status: 404, error: 'Unknown site' }
+    if (!aiJobStepRunnerFor('page')) {
+      return { status: 400, error: AI_SITE_NO_PAGE_STEP_COPY }
+    }
+    return null
   }
-  const owner = await resolveOrgIdForHost(context.hostId)
-  if (!owner || owner !== context.orgId)
-    return { status: 404, error: 'Unknown site' }
-  if (!aiJobStepRunnerFor('page')) {
-    return { status: 400, error: AI_SITE_NO_PAGE_STEP_COPY }
-  }
-  return null
 }
+
+export const aiSiteJobAdmission: AiJobAdmission = createAiSiteJobAdmission()
 
 /** Whether a scaffold's workspace spends the Free taste (AGL-3594); a missing org reads as paid, as the band has always been. */
 export function aiSiteFreeTaste(org: object | null | undefined): boolean {
@@ -946,6 +968,14 @@ export function createAiJobSiteStep(
       item,
       ...(item.status === 'running' || othersOpen ? { continue: true } : {}),
     })
+    /**
+     * A unit that failed or was skipped with nothing else open ends the job
+     * on this pass (AGL-3676): a guided start whose last unit — its welcome
+     * email — failed was never published, because the pass that publishes is
+     * the one after. So the end is the publish, whatever the last unit came to.
+     */
+    const closing = async (outcome: AiJobStepOutcome): Promise<AiJobStepOutcome> =>
+      outcome.continue ? outcome : finish(outcome, builtPages())
 
     // A blog's posts and a store's products ask, before their first pass,
     // whether this member may have them here (AGL-3676): a refusal spends
@@ -955,7 +985,7 @@ export function createAiJobSiteStep(
         console.error('ai site part admission failed', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
         return AI_SITE_UNIT_EMPTY_COPY
       })
-      if (refusal) return settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` })
+      if (refusal) return closing(settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` }))
     }
 
     // A page whose layout or form failed is built without it, and says so.
@@ -974,16 +1004,18 @@ export function createAiJobSiteStep(
     } catch (error) {
       if (aiUnitErrorRetryable(error)) throw error
       console.error('ai site unit threw', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
-      return settle({ slot: unit.slot, status: 'failed', failure: { ours: true, reason: 'provider', message: AI_SITE_UNIT_EMPTY_COPY } })
+      return closing(settle({ slot: unit.slot, status: 'failed', failure: { ours: true, reason: 'provider', message: AI_SITE_UNIT_EMPTY_COPY } }))
     }
     const spent = aiUnitSpend(outcome)
     const stopped = aiUnitFailure(unit.slot, outcome)
     if (stopped) {
-      return settle(
-        stopped.status === 'failed' && stopped.failure && !outcome.failure && !outcome.refused && !outcome.review
-          ? { ...stopped, failure: { ...stopped.failure, message: AI_SITE_UNIT_EMPTY_COPY } }
-          : stopped,
-        spent,
+      return closing(
+        settle(
+          stopped.status === 'failed' && stopped.failure && !outcome.failure && !outcome.refused && !outcome.review
+            ? { ...stopped, failure: { ...stopped.failure, message: AI_SITE_UNIT_EMPTY_COPY } }
+            : stopped,
+          spent,
+        ),
       )
     }
     // A page counts as built only when its plan's sections are in it
@@ -998,9 +1030,11 @@ export function createAiJobSiteStep(
           readNodes,
         ))
       if (!written) {
-        return settle(
-          { slot: unit.slot, status: 'failed', failure: { ours: true, reason: 'step-failure', message: AI_SITE_PAGE_NOT_WRITTEN_COPY } },
-          { ...spent, outputs: spent.outputs.filter((output) => output.resource !== 'screen') },
+        return closing(
+          settle(
+            { slot: unit.slot, status: 'failed', failure: { ours: true, reason: 'step-failure', message: AI_SITE_PAGE_NOT_WRITTEN_COPY } },
+            { ...spent, outputs: spent.outputs.filter((output) => output.resource !== 'screen') },
+          ),
         )
       }
     }

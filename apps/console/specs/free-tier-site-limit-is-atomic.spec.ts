@@ -216,7 +216,11 @@ const mockEnsureOrgForUser = jest.fn(async () => ({
   member: { role: 'owner' },
 }))
 
+/** The AGL-1921 report a CAUGHT 500 now makes; onRequestError never sees it. */
+const mockReportServerError = jest.fn(async () => 'written' as const)
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  reportServerError: mockReportServerError,
   /*
    * The site's sending-domain CLAIM, made at creation so the mail label is
    * pinned from the name the site was created under.
@@ -468,6 +472,15 @@ describe('the free WORKSPACE ceiling refuses from here too', () => {
         error: 'Site creation failed',
       })
       expect(siteCount()).toBe(0)
+      // Reported, not only logged: the drain forwards the status line and
+      // drops `console.error`, so this is the only place the reason survives.
+      expect(mockReportServerError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'firestore is down',
+          route: '/api/hosts/create',
+        }),
+        { service: 'console-web' },
+      )
     } finally {
       logged.mockRestore()
     }

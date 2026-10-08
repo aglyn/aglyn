@@ -232,6 +232,12 @@ export function adminAuditIndexFields(
  */
 export function withAdminAuditIndex<Entry extends AdminAuditIndexSource>(
   entry: Entry,
-): Entry & AdminAuditIndexFields {
-  return { ...entry, ...adminAuditIndexFields(entry) }
+): Entry & AdminAuditIndexFields & { scope: unknown } {
+  /*
+   * `scope` stored on EVERY row, null when the writer has none (AGL-3680):
+   * the audit page sorts by it, and an `orderBy` drops every document that
+   * lacks the field. Only the scope-aware writers name one; the rows written
+   * before are stamped by `tools/scripts/backfill-staff-list-sort-fields.mjs`.
+   */
+  return { ...entry, scope: entry.scope ?? null, ...adminAuditIndexFields(entry) }
 }

@@ -24,6 +24,9 @@ one zone and prices a parcel in one of four ways:
 
 **Local pickup** adds a free collection choice beside your rates. It does not
 widen where you ship: a destination no rate reaches is still refused.
+To let buyers choose which location to collect from, with pickup hours and a
+ready-for-pickup email, turn on pickup for the location instead: see
+[Pickup & local delivery](./pickup-and-local-delivery.md).
 
 Checkout charges only the rates of the zone the destination falls in, and
 narrows the address it collects to that destination, so a shopper cannot pick

@@ -17,7 +17,7 @@
 
 'use client'
 
-import { type EmailState } from '@aglyn/aglyn'
+import { PLATFORM_BRAND_NAME, type EmailState } from '@aglyn/aglyn'
 import { Alert, Chip, type ChipProps, Tooltip } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useCrmApi } from './use-crm-api'
@@ -42,6 +42,11 @@ export interface CrmEmailCheck {
   message: string | null
   gateway: string | null
   chip: { label: string; tone: ChipTone } | null
+  /**
+   * The address belongs to a locked or banned Aglyn account (AGL-3686).
+   * Answered on the house workspace's sites only; `null` everywhere else.
+   */
+  accountLock: 'banned' | 'locked' | null
 }
 
 /**
@@ -55,6 +60,7 @@ const REMEMBER_MS = 60_000
 function readAnswer(payload: Record<string, unknown>): CrmEmailCheck {
   const chip = payload['chip'] as { label?: unknown; tone?: unknown } | null
   const code = payload['code']
+  const accountLock = payload['accountLock']
   return {
     checked: payload['checked'] === true,
     code: code === 'no_mx' || code === 'null_mx' || code === 'gateway_held' ? code : null,
@@ -64,6 +70,7 @@ function readAnswer(payload: Record<string, unknown>): CrmEmailCheck {
       chip && typeof chip.label === 'string' && typeof chip.tone === 'string'
         ? { label: chip.label, tone: chip.tone as ChipTone }
         : null,
+    accountLock: accountLock === 'banned' || accountLock === 'locked' ? accountLock : null,
   }
 }
 
@@ -152,6 +159,43 @@ export function CrmEmailGatewayChip(props: CrmEmailGatewayChipProps) {
   )
 }
 CrmEmailGatewayChip.displayName = 'CrmEmailGatewayChip'
+
+const ACCOUNT_LOCK_CHIP: Record<'banned' | 'locked', { label: string; title: string }> = {
+  banned: {
+    label: 'Account banned',
+    title:
+      `This address belongs to a ${PLATFORM_BRAND_NAME} account banned for abuse. Nothing is sent to it — no campaign, sequence or one-to-one email — whatever its consent says. Lifting the ban restores it.`,
+  },
+  locked: {
+    label: 'Account locked',
+    title:
+      `This address belongs to a locked ${PLATFORM_BRAND_NAME} account. Our campaigns and sequences skip it until the lock is lifted; its consent is unchanged.`,
+  },
+}
+
+/**
+ * Why a record whose consent reads as given is skipped by every send
+ * (AGL-3686): its address belongs to a locked or banned Aglyn account.
+ * Only the house workspace is told, so it draws nothing anywhere else.
+ */
+export function CrmAccountLockChip(props: Omit<CrmEmailGatewayChipProps, 'emailState'>) {
+  const { hostId, email, enabled = true, size = 'small' } = props
+  const lock = useCrmEmailCheck(hostId, email, { enabled })?.accountLock
+  if (!lock) return null
+  const { label, title } = ACCOUNT_LOCK_CHIP[lock]
+  return (
+    <Tooltip title={title}>
+      <Chip
+        size={size}
+        variant="filled"
+        color={lock === 'banned' ? 'error' : 'warning'}
+        label={label}
+        data-testid="crm-account-lock"
+      />
+    </Tooltip>
+  )
+}
+CrmAccountLockChip.displayName = 'CrmAccountLockChip'
 
 /**
  * The composer's warning before a one-to-one send (AGL-3328): the address's

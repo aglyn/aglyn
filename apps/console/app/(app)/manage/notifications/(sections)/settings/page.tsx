@@ -67,6 +67,17 @@ import {
   showDesktopNotification,
 } from '../../../../../../utils/notification-alerts'
 
+/**
+ * How the settings field is written: REPLACED whole, never merged.
+ *
+ * `{ merge: true }` merges nested maps key by key, so a key this page deleted
+ * (Inherit, a type put back on its category) was simply left out of the
+ * write and stayed stored: the switch read Inherit and the fan-out went on
+ * obeying the old answer. `mergeFields` names the one field and writes it as
+ * given, while the rest of the user document stays as it is.
+ */
+const NOTIFICATION_SETTINGS_WRITE = { mergeFields: [NOTIFICATION_SETTINGS_FIELD] }
+
 const CHANNELS: Array<{ key: NotificationChannel; label: string }> = [
   { key: 'console', label: 'In console' },
   { key: 'email', label: 'Email' },
@@ -262,7 +273,7 @@ const ManageNotificationSettings: NextPageWithLayout<
       void setDoc(
         doc(firestore, 'users', uid),
         { [NOTIFICATION_SETTINGS_FIELD]: next },
-        { merge: true },
+        NOTIFICATION_SETTINGS_WRITE,
       ).catch(console.error)
     },
     [firestore, settings, uid],
@@ -284,7 +295,7 @@ const ManageNotificationSettings: NextPageWithLayout<
       void setDoc(
         doc(firestore, 'users', uid),
         { [NOTIFICATION_SETTINGS_FIELD]: next },
-        { merge: true },
+        NOTIFICATION_SETTINGS_WRITE,
       ).catch(console.error)
     },
     [firestore, uid],

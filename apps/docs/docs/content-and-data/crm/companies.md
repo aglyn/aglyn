@@ -49,8 +49,10 @@ start of a company's name, and a notice says so. When a
 combination cannot be answered by one query, the list does not apply that
 filter, and a notice above the table names it and says why; see
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search). The
-**Company** column's header sorts only the rows of the page on screen; the
-pages keep the list's own order. Clicking a row opens the company's page.
+**Company**, **Updated** and **Next activity** headers sort the whole list;
+the other headers sort the rows of the page on screen and say so (see
+[Columns and sort](./views.md#columns-and-sort)). Clicking a row opens the
+company's page.
 
 The **Contacts** column is a count kept on the company and moved with every
 link and unlink, so a page of companies costs no lookup per row. A company

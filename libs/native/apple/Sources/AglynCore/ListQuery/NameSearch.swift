@@ -74,3 +74,23 @@ public struct NameSearchNormalizers: ListQueryNormalizers {
   public func reversed(_ value: String) -> String { nameSearchReversed(value) }
   public var maxPrefix: Int { ContractValues.shared.nameTokenMaxPrefix }
 }
+
+/// The search keys a document named by `name` carries, with the name itself: the console's
+/// `nameSearchFields`, spread at every write that sets `name` (and only there).
+public func nameSearchFields(_ name: String) -> [String: Any] {
+  ["name": name, "nameLower": nameSearchKey(name), "nameTokens": nameSearchTokens(name), "nameReversed": nameSearchReversed(name)]
+}
+
+/// The same keys for a document named by `displayName`, without the name: the console's
+/// `displayNameSearchFields`.
+public func displayNameSearchFields(_ displayName: String?) -> [String: Any] {
+  let name = displayName ?? ""
+  return ["nameLower": nameSearchKey(name), "nameTokens": nameSearchTokens(name), "nameReversed": nameSearchReversed(name)]
+}
+
+/// A new resource id as the console mints one (`createResourceUid`: nanoid's URL-safe alphabet, ten characters).
+public func newResourceID(length: Int = 10) -> String {
+  let alphabet = Array("useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict")
+  var generator = SystemRandomNumberGenerator()
+  return String((0..<length).map { _ in alphabet[Int(generator.next(upperBound: UInt(alphabet.count)))] })
+}

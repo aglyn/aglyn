@@ -99,6 +99,11 @@ const ENTITLEMENTS = 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
  * the reviewer's job is to disbelieve it.
  */
 const DOCUMENTED_COPIES: Record<string, string> = {
+  'tools/scripts/generate-native-derived-values.mjs':
+    'Not a set: CASE_ORGS is a list of fixture workspaces whose billing statuses ' +
+    '(`past_due`, `active`) are inputs to the native replay cases, so the native ' +
+    'apps are checked against the console predicate rather than a copy of it ' +
+    '(AGL-3669).',
   'apps/console/app/api/_lib/stripe-payment-method.ts':
     'A deliberate SUPERSET — it adds `unpaid`. The question is "which of this ' +
     "customer's subscriptions is Stripe billing against, so whose payment " +

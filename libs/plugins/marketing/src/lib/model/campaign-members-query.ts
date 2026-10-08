@@ -22,6 +22,7 @@ import {
   LIST_QUERY_ID_PATH,
   type ListQueryDeclaration,
   type ListQueryFilter,
+  type ListQuerySort,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 
 /*
@@ -83,10 +84,23 @@ const MEMBER_NAME: ListFilterField = {
   operators: ['startsWith'],
 }
 
+/*
+ * The Name header (AGL-3680) orders by `nameLower` both ways — the field
+ * the search ranges over, stamped on every screen and form — and holds under
+ * the search, whose range leads with that same field. Each direction is the
+ * one whole-shape composite per collection named above, ascending (which
+ * the search already had) and descending. The figures are computed from the
+ * campaign's visits and sort the page.
+ */
+export const CAMPAIGN_MEMBERS_NAME_SORTS: readonly ListQuerySort[] = [
+  { path: 'nameLower', direction: 'asc', column: 'name', label: 'Name' },
+  { path: 'nameLower', direction: 'desc', column: 'name', label: 'Name' },
+]
+
 /** A campaign's screens or forms: the name's start, walked by document name. */
 export const CAMPAIGN_MEMBERS_QUERY: ListQueryDeclaration = {
   fields: [MEMBER_NAME],
-  sorts: [{ path: LIST_QUERY_ID_PATH, direction: 'asc' }],
+  sorts: [{ path: LIST_QUERY_ID_PATH, direction: 'asc' }, ...CAMPAIGN_MEMBERS_NAME_SORTS],
 }
 
 /** The collections a campaign's members are read from. */

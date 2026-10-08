@@ -41,6 +41,7 @@ import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write
 import {
   ERASURE_LIST_QUERY,
   ERASURE_LIST_SORT,
+  erasureQuerySort,
   splitErasureStateClauses,
 } from '../../../../utils/pending-erasures-list-query'
 import {
@@ -200,7 +201,8 @@ async function handler(request: Request): Promise<Response> {
         firestore,
         collection: orgs,
         declaration: ERASURE_LIST_QUERY,
-        request: { ...listed, clauses: split.rest },
+        // Hold expires and State are the request-time order (AGL-3680).
+        request: { ...listed, clauses: split.rest, sort: erasureQuerySort(listed.sort) },
         base: split.base,
         row: (org) => {
           const requestedAt = org.get('erasureRequestedAt')

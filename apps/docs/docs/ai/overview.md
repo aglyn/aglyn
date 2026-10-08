@@ -43,7 +43,7 @@ Each capability has its own page, next to the thing it builds:
 | A page template | **Templates → Create with AI** | [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai) |
 | A reusable component | **Components → Create with AI** | [Generate a component](../building-sites/components/generate-a-component-with-aglyn-ai.md) |
 | A form | **Forms → Create with AI** | [Generate a form](generate-a-form.md) |
-| Illustrations, icons, patterns, logo marks and photos | **Media → Create with AI** | [Create images with AI](create-images.md) |
+| Illustrations, icons, patterns, logo marks, photos, art and design images | **Media → Create with AI** | [Create images with AI](create-images.md) |
 | A section on the canvas | The Besigner | [Generate a section](generate-section.md) |
 | Copy, rewritten or fresh | Any text in the Besigner | [Rewrite and write copy](copy-assist.md) |
 | A change to your theme | **Setup → Theme** | [Change your theme with AI](theme-assist.md) |

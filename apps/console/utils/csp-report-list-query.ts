@@ -21,6 +21,10 @@ import type {
   ListQueryFilter,
   ListQuerySort,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import {
+  type StaffCompleteListColumns,
+  staffCompleteListSorts,
+} from './staff-complete-list-sort'
 
 /*
  * THE CSP VIOLATIONS TABLE ON STAFF → HEALTH (AGL-3321).
@@ -65,7 +69,12 @@ import type {
 export const CSP_SEARCH_TOKENS_PATH = 'searchTokens'
 
 /** Newest day first — the one order, because the window is a range on `day`. */
-export const CSP_LIST_SORT: ListQuerySort = { path: 'day', direction: 'desc', column: 'day' }
+export const CSP_LIST_SORT: ListQuerySort = {
+  path: 'day',
+  direction: 'desc',
+  column: 'day',
+  label: 'Day',
+}
 
 const PICKED = ['equals', 'isAnyOf'] as const
 
@@ -94,6 +103,52 @@ export const CSP_LIST_QUERY: ListQueryDeclaration = {
   sorts: [CSP_LIST_SORT],
   search: { tokensPath: CSP_SEARCH_TOKENS_PATH },
 }
+
+/*
+ * ## The header sorts (AGL-3680)
+ *
+ * Day newest first is the query's own order — the window's range leads it.
+ * Every other order (Day oldest first, App, Directive, Blocked or measured,
+ * Blocked origin, Count) is strategy 4s: the route reads EVERY counter the
+ * window and the clauses select, up to its `READ_LIMIT` backstop, sorts them
+ * and pages the order (`answerStaffCompleteList`). No composite is spent: a
+ * second order beside the window's range would need one per equality field.
+ * A window past the backstop is not sorted — an order over part of it would
+ * put first rows that are not — and the route says so.
+ */
+export const CSP_SORT_COLUMNS: StaffCompleteListColumns<CspListRow> = {
+  day: { label: 'Day', value: (row) => row.day ?? null },
+  app: { label: 'App', value: (row) => row.app ?? null },
+  directive: { label: 'Directive', value: (row) => row.directive ?? null },
+  disposition: { label: 'Blocked or measured', value: (row) => row.disposition ?? null },
+  origin: { label: 'Blocked origin', value: (row) => row.origin ?? null },
+  count: { label: 'Count', value: (row) => Number(row.count ?? 0) },
+}
+
+/** The fields of a counter the sorts read. */
+export interface CspListRow {
+  day?: string | null
+  app?: string | null
+  directive?: string | null
+  disposition?: string | null
+  origin?: string | null
+  count?: number | null
+}
+
+/**
+ * The header orders: Day newest first on the query, every other one sorted
+ * by the route over the complete window.
+ */
+export const CSP_COLUMN_SORTS: readonly ListQuerySort[] = [
+  CSP_LIST_SORT,
+  ...staffCompleteListSorts(CSP_SORT_COLUMNS).filter(
+    (sort) => !(sort.path === CSP_LIST_SORT.path && sort.direction === CSP_LIST_SORT.direction),
+  ),
+]
+
+/** Whether an asked order is the query's own, rather than a route sort. */
+export const isCspQuerySort = (sort: ListQuerySort | null | undefined): boolean =>
+  !sort || (sort.path === CSP_LIST_SORT.path && sort.direction === CSP_LIST_SORT.direction)
 
 /** The Window: every counter from `since` (a `YYYY-MM-DD` day) to today. */
 export const cspWindowBase = (since: string): ListQueryFilter[] => [

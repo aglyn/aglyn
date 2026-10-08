@@ -128,3 +128,18 @@ export function gramsToOunces(grams: number): number {
 export function cmToInches(cm: number): number {
   return Math.round((cm / 2.54) * 100) / 100
 }
+
+/**
+ * A provider's latitude and longitude as a map position, or `undefined` when
+ * either is missing or off the globe (AGL-3624). Zero is a real coordinate,
+ * so only a non-number or an out-of-range value is refused.
+ */
+export function mapPosition(latitude: unknown, longitude: unknown): { lat: number; lng: number } | undefined {
+  if (latitude === null || latitude === undefined || latitude === '') return undefined
+  if (longitude === null || longitude === undefined || longitude === '') return undefined
+  const lat = Number(latitude)
+  const lng = Number(longitude)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return undefined
+  return { lat, lng }
+}

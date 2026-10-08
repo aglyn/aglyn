@@ -49,8 +49,10 @@ class NativePluginRegistrar internal constructor(
     size: WidgetSize = WidgetSize.FULL,
     requiresSite: Boolean = false,
     apps: Set<NativeApp> = setOf(NativeApp.AGLYN),
+    /** A core page's slot it renders in (`hostAnalytics`) instead of Home. */
+    slot: String? = null,
     content: @Composable (context: NativePluginContext) -> Unit,
-  ) = add(NativeWidget(pluginId, id, title, order, size, requiresSite, apps, content))
+  ) = add(NativeWidget(pluginId, id, title, order, size, requiresSite, apps, slot, content))
 
   fun quickAction(
     id: String,
@@ -164,8 +166,9 @@ class NativePluginRegistry {
   fun tabs(app: NativeApp? = null): List<NativeTab> =
     all<NativeTab>(ContributionKind.TABS, app).sortedWith(compareBy({ it.order }, { it.id }))
 
-  fun widgets(app: NativeApp? = null): List<NativeWidget> =
-    all<NativeWidget>(ContributionKind.WIDGETS, app).sortedWith(compareBy({ it.order }, { it.id }))
+  /** Home's widgets ([slot] null), or a core page's slot's. */
+  fun widgets(app: NativeApp? = null, slot: String? = null): List<NativeWidget> =
+    all<NativeWidget>(ContributionKind.WIDGETS, app).filter { it.slot == slot }.sortedWith(compareBy({ it.order }, { it.id }))
 
   fun quickActions(app: NativeApp? = null): List<NativeQuickAction> =
     all<NativeQuickAction>(ContributionKind.QUICK_ACTIONS, app).sortedWith(compareBy({ it.order }, { it.id }))

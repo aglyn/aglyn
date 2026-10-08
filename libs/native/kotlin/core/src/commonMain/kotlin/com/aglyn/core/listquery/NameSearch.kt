@@ -68,13 +68,18 @@ object NameSearchNormalizers : ListQueryNormalizers {
   override val maxPrefix: Int = NAME_TOKEN_MAX_PREFIX
 }
 
-/**
- * The name keys a rename writes beside `displayName` (`displayNameSearchFields`):
- * `nameLower`, `nameTokens` and `nameReversed`, so list search and sort find
- * the new name.
- */
-fun displayNameSearchFields(displayName: String?): Map<String, Any?> = mapOf(
-  "nameLower" to nameSearchKey(displayName),
-  "nameTokens" to nameSearchTokens(displayName),
-  "nameReversed" to nameSearchReversed(displayName),
-)
+/** The search keys a document named by `name` carries, with the name itself: the console's `nameSearchFields`. */
+fun nameSearchFields(name: String): Map<String, Any?> =
+  mapOf("name" to name, "nameLower" to nameSearchKey(name), "nameTokens" to nameSearchTokens(name), "nameReversed" to nameSearchReversed(name))
+
+/** The same keys for a document named by `displayName`, without the name: the console's `displayNameSearchFields`. */
+fun displayNameSearchFields(displayName: String?): Map<String, Any?> =
+  mapOf("nameLower" to nameSearchKey(displayName), "nameTokens" to nameSearchTokens(displayName), "nameReversed" to nameSearchReversed(displayName))
+
+private const val RESOURCE_ID_ALPHABET = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict"
+
+/** A new resource id as the console mints one (`createResourceUid`: nanoid's URL-safe alphabet, ten characters). */
+fun newResourceId(length: Int = 10): String {
+  val random = kotlin.random.Random.Default
+  return buildString { repeat(length) { append(RESOURCE_ID_ALPHABET[random.nextInt(RESOURCE_ID_ALPHABET.length)]) } }
+}

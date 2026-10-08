@@ -11,8 +11,9 @@ import com.aglyn.shell.Route
 import com.aglyn.shell.ShellNavigator
 
 /** "Aglyn" on the desktop. */
-fun main() {
+fun main(args: Array<String>) {
   val services = DesktopShell.services(NativeApp.AGLYN, DesktopShell.envFromSystem(), NativePluginManifest.entries)
+  if (LAUNCH_CHECK_ARG in args) launchCheck("Aglyn") { AglynShell(services) }
   val autoSignIn = System.getProperty("aglyn.autoSignIn") == "true"
   application {
     val navigator = remember { ShellNavigator() }
@@ -25,6 +26,9 @@ fun main() {
           Item("Notifications", shortcut = shortcut(Key.Two), onClick = { navigator.select(ShellNavigator.NOTIFICATIONS) })
           Item("Pages", shortcut = shortcut(Key.Three), onClick = { navigator.select(ShellNavigator.HOME); navigator.push(Route.Screen(com.aglyn.shell.SITE_PAGES_SCREEN_ID)) })
           Item("Orders", shortcut = shortcut(Key.Four), onClick = { navigator.select(ShellNavigator.screenKey("commerce.orders")) })
+          Item("Bookings", shortcut = shortcut(Key.Five), onClick = { navigator.select(ShellNavigator.screenKey("bookings.calendar")) })
+          Item("Analytics", shortcut = shortcut(Key.Six), onClick = { navigator.select(ShellNavigator.HOME); navigator.push(Route.Analytics) })
+          Item("Automation", shortcut = shortcut(Key.Seven), onClick = { navigator.select(ShellNavigator.screenKey("workflows.automation")) })
           Item("Settings", shortcut = shortcut(Key.Comma), onClick = { navigator.select(ShellNavigator.SETTINGS) })
           Separator()
           Item("Back", shortcut = shortcut(Key.LeftBracket), onClick = { navigator.back() })

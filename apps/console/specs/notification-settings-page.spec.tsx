@@ -157,6 +157,22 @@ describe('the notification settings page (AGL-3226)', () => {
     mockIsStaff = false
   })
 
+  it('replaces the settings field whole, so a cleared answer is gone from the store', async () => {
+    mockStoredUser = {
+      notificationSettings: { account: { billing: { email: true }, team: { console: false } } },
+    }
+    render(<Page />)
+    const billingEmail = await screen.findByRole('switch', { name: 'Billing — Email' })
+    // The stored answer has loaded before the switch is flipped.
+    await waitFor(() => expect(isOn(billingEmail)).toBe(true))
+    fireEvent.click(billingEmail)
+    await waitFor(() => expect(mockSetDoc).toHaveBeenCalled())
+    // The whole field is written and REPLACES the stored one, so a key the
+    // page deleted (Inherit, Follow category) is gone from the store too.
+    expect(lastWrite()?.account).toEqual({ billing: { email: false }, team: { console: false } })
+    expect(mockSetDoc.mock.calls.at(-1)?.[2]).toEqual({ mergeFields: ['notificationSettings'] })
+  })
+
   it('shows both channels, with email off and the console on by default', async () => {
     render(<Page />)
     await screen.findByText('Forms & bookings')

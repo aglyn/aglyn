@@ -431,6 +431,78 @@ describe('composeOrderBuyerMessage (AGL-3610)', () => {
   })
 })
 
+describe('composeOrderBuyerMessage for pickup and local delivery (AGL-3624)', () => {
+  const lines = [{ productId: 'p', name: 'Bread', quantity: 2, unitAmountCents: 500, productType: 'physical' }]
+  const base = {
+    orderId: 'o',
+    businessName: 'Bakery',
+    currency: 'USD',
+    statusUrl: 'https://shop.example/order-status?o=o&t=x',
+  }
+  const pickupOrder: any = {
+    number: 12,
+    status: 'paid',
+    channel: 'online',
+    fulfillmentMethod: 'pickup',
+    lineItems: lines,
+    pickup: {
+      locationId: 'main',
+      locationName: 'Main Street',
+      address: '1 Main St',
+      hours: 'Mo-Fr 09:00-17:00',
+      instructions: 'Side door',
+      status: 'ready',
+    },
+  }
+
+  it('says where to collect, the hours and the instructions when it is ready', () => {
+    const message = composeOrderBuyerMessage({ ...base, order: pickupOrder, event: 'ready_for_pickup' })
+    expect(message?.emailKey).toBe('order-ready-for-pickup')
+    expect(message?.occurrence).toBe('order')
+    expect(message?.tokens).toMatchObject({
+      'pickup.location': 'Main Street, 1 Main St',
+      'pickup.hours': 'Pickup hours:\nMo-Fr 09:00-17:00',
+      'pickup.instructions': 'Side door',
+      'order.summary': '2× Bread',
+    })
+    expect(message?.subject).toBe('Your order #12 is ready for pickup')
+    expect(message?.sms).toBe(
+      'Bakery: order #12 is ready for pickup at Main Street. https://shop.example/order-status?o=o&t=x',
+    )
+  })
+
+  it('confirms a pickup, and says nothing of pickup for a shipped order', () => {
+    expect(composeOrderBuyerMessage({ ...base, order: pickupOrder, event: 'picked_up' })?.emailKey).toBe(
+      'order-picked-up',
+    )
+    expect(
+      composeOrderBuyerMessage({ ...base, order: { ...pickupOrder, fulfillmentMethod: 'shipping' }, event: 'ready_for_pickup' }),
+    ).toBeNull()
+  })
+
+  it('tells the buyer the driver is out, once per run, with the window', () => {
+    const order: any = {
+      number: 13,
+      status: 'paid',
+      fulfillmentMethod: 'local_delivery',
+      lineItems: lines,
+      localDelivery: { status: 'out_for_delivery', windowLabel: 'Tue, Oct 13, 9:00 AM – 12:00 PM', outForDeliveryAtMs: 77 },
+    }
+    const message = composeOrderBuyerMessage({ ...base, order, event: 'out_for_delivery' })
+    expect(message?.emailKey).toBe('order-out-for-delivery')
+    expect(message?.occurrence).toBe('77')
+    expect(message?.tokens['delivery.window']).toBe('Tue, Oct 13, 9:00 AM – 12:00 PM')
+  })
+
+  it('never calls a handover a shipment', () => {
+    const order: any = {
+      ...pickupOrder,
+      fulfillments: [{ id: 'f1', lineItemIds: [0], handover: 'pickup', atMs: 1 }],
+    }
+    expect(composeOrderBuyerMessage({ ...base, order, event: 'shipped', options: { fulfillmentId: 'f1' } })).toBeNull()
+  })
+})
+
 describe('sendOrderReceipt (AGL-3610)', () => {
   it('re-sends on request, ignoring the automatic switch and the sent marker', async () => {
     seed({}, { buyerNotifications: { receipt: false } })

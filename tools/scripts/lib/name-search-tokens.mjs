@@ -62,9 +62,11 @@ export function nameSearchTokens(name) {
   const tokens = new Set()
   for (const word of key.split(' ')) {
     if (!word) continue
-    const capped = word.slice(0, NAME_TOKEN_MAX_PREFIX)
+    // By codepoint, as the library does (AGL-3689): a UTF-16 slice splits an
+    // emoji into a lone surrogate, which Firestore refuses to store.
+    const capped = [...word].slice(0, NAME_TOKEN_MAX_PREFIX)
     for (let end = 1; end <= capped.length; end += 1) {
-      tokens.add(capped.slice(0, end))
+      tokens.add(capped.slice(0, end).join(''))
       if (tokens.size >= NAME_TOKEN_LIMIT) return [...tokens]
     }
   }

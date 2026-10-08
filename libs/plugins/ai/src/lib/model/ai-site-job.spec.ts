@@ -35,6 +35,11 @@ import {
   AI_SITE_NOMINAL_SECTIONS,
   AI_SITE_PAGES,
   AI_SITE_PASS_CREDITS,
+  aiFreeCreditsResetLabel,
+  aiFreeCreditsResetOn,
+  aiFreeSiteCreditEstimate,
+  aiFreeSiteShortfall,
+  aiFreeSiteShortfallText,
   aiJobPlanCreditEstimate,
   aiPlanCreditEstimate,
   aiPlanPasses,
@@ -430,5 +435,32 @@ describe('what a scaffold is estimated to cost', () => {
     expect(aiSiteCreditEstimate(AI_SITE_PAGES.max)).toBeGreaterThan(
       aiSiteCreditEstimate(AI_SITE_PAGES.min),
     )
+  })
+})
+
+describe('a Free site start against what is left of the month (AGL-3660)', () => {
+  it('resets on the first UTC day of the next month, read as a person reads it', () => {
+    expect(aiFreeCreditsResetOn(new Date('2026-10-08T15:00:00.000Z'))).toBe('2026-11-01')
+    expect(aiFreeCreditsResetOn(new Date('2026-12-31T23:59:59.000Z'))).toBe('2027-01-01')
+    expect(aiFreeCreditsResetLabel('2026-11-01')).toBe('November 1')
+  })
+
+  it('is short when what is left is under the figure the dialog quotes, and never when nothing is known', () => {
+    const needed = aiFreeSiteCreditEstimate(2)
+    expect(aiFreeSiteShortfall({ left: needed - 1 }, 2)).toEqual({ needed, left: needed - 1 })
+    expect(aiFreeSiteShortfall({ left: needed }, 2)).toBeNull()
+    expect(aiFreeSiteShortfall(null, 2)).toBeNull()
+    // The prod case: a person with 70 left was quoted 216 of 300.
+    expect(aiFreeSiteShortfall({ left: 70 }, 2)).toEqual({ needed: 216, left: 70 })
+  })
+
+  it('says how many are left, when they reset, that they are shared, and the way on', () => {
+    const text = aiFreeSiteShortfallText({ needed: 216, left: 70 }, '2026-11-01')
+    expect(text).toBe(
+      'Building this site can take up to about 216 AI credits, and only 70 are left of your free AI credits ' +
+        'this month. They are shared by all your Free workspaces and reset on November 1. Upgrade this ' +
+        'workspace to build your site now, or start from the starter site and try AI again after the reset.',
+    )
+    expect(aiFreeSiteShortfallText({ needed: 216, left: 1 }, '2026-11-01')).toMatch(/only 1 is left/)
   })
 })

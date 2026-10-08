@@ -74,7 +74,7 @@ describe('a sequence’s enrollments (orgs/{orgId}/outreachEnrollments)', () => 
     expect(missingListQueryIndexes(INDEXES, 'outreachEnrollments', needed, 'COLLECTION')).toEqual([])
   })
 
-  it('spends eight: the base and each filterable field under the one order, which the range shares', () => {
+  it('spends eight, plus one per header order beside the base (AGL-3680)', () => {
     expect(shapes(needed).sort()).toEqual(
       [
         'sequenceId:ASCENDING,createdAtMs:DESCENDING',
@@ -86,6 +86,13 @@ describe('a sequence’s enrollments (orgs/{orgId}/outreachEnrollments)', () => 
         // The two click filters (AGL-3332).
         'clicked:ASCENDING,createdAtMs:DESCENDING',
         'engagement.links:CONTAINS,createdAtMs:DESCENDING',
+        // The header orders, each `alone`: paired with the base only.
+        'sequenceId:ASCENDING,email:ASCENDING',
+        'sequenceId:ASCENDING,email:DESCENDING',
+        'sequenceId:ASCENDING,status:ASCENDING',
+        'sequenceId:ASCENDING,stepIndex:ASCENDING',
+        'sequenceId:ASCENDING,nextDueAtMs:ASCENDING',
+        'sequenceId:ASCENDING,stopReason:ASCENDING',
       ].sort(),
     )
   })

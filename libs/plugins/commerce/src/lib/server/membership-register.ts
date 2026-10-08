@@ -142,7 +142,15 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
       })
       tx.create(memberRef, {
         email,
-        ...(displayName ? memberNameSearchFields(displayName) : {}),
+        /*
+         * `displayNameLower` is stored `null` for a member who gave no name,
+         * not left out: the console's Site users list sorts by Name with an
+         * `orderBy` on it, and an `orderBy` drops every document that lacks
+         * the field (AGL-3680).
+         */
+        ...(displayName
+          ? memberNameSearchFields(displayName)
+          : { displayNameLower: null }),
         // The Site users list's search: the name and the address (AGL-3321).
         searchTokens: memberSearchTokens(displayName, email),
         /*

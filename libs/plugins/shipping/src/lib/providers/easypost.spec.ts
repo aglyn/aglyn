@@ -143,6 +143,25 @@ describe('EasyPost, through child users', () => {
     expect(invalid).toEqual({ verdict: 'invalid', messages: ['Address not found'] })
   })
 
+  it('places a verified address on the map, for local delivery distance zones (AGL-3624)', async () => {
+    const { fetchImpl } = recordingFetch([
+      {
+        street1: '417 MONTGOMERY ST',
+        city: 'SAN FRANCISCO',
+        state: 'CA',
+        zip: '94104',
+        country: 'US',
+        verifications: { delivery: { success: true, errors: [], details: { latitude: 37.79342, longitude: -122.40288 } } },
+      },
+      { street1: '1 A St', verifications: { delivery: { success: true, errors: [], details: { latitude: null, longitude: null } } } },
+    ])
+    const provider = createEasypostProvider({ apiKey: 'EZTKplatform', fetchImpl })
+    const placed = await provider.validateAddress(CHILD, { country: 'US', line1: '417 MONTGOMERY ST', city: 'SAN FRANCISCO', state: 'CA', postalCode: '94104' })
+    expect(placed).toEqual({ verdict: 'valid', messages: [], coordinates: { lat: 37.79342, lng: -122.40288 } })
+    const unplaced = await provider.validateAddress(CHILD, { country: 'US', line1: '1 A St' })
+    expect(unplaced.coordinates).toBeUndefined()
+  })
+
   it('rates several parcels as one never lighter or smaller than the box', () => {
     expect(
       combineParcels([

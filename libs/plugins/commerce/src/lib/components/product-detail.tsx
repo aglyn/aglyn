@@ -43,6 +43,7 @@ import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { useStorefrontPurchaseEvent } from '../utils/use-storefront-purchase-event'
 import { CART_UPDATED_EVENT } from './cart'
+import { CartFulfillmentChoice, useCartFulfillment } from './cart-fulfillment'
 import { ID as PRODUCT_REVIEWS_ID } from './product-reviews'
 import { ID as RELATED_PRODUCTS_ID } from './related-products'
 import { readLocalWishlist, toggleWishlist } from './wishlist'
@@ -331,6 +332,17 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
      * opening a second one (for a subscription product, a second RECURRING
      * subscription).
      */
+    // Pickup or the store's own delivery (AGL-3624), for a one-time sale; the
+    // server offers nothing for a product with nothing physical to collect.
+    const fulfillment = useCartFulfillment(
+      hostId,
+      resolved?.id ?? '[]',
+      resolved &&
+        variant &&
+        !(resolved.subscription && (!resolved.subscriptionOptional || billing === 'subscribe'))
+        ? { productId: resolved.id, variantId: variant.id, quantity }
+        : null,
+    )
     const attemptKey = useRef('')
     useEffect(() => {
       attemptKey.current = ''
@@ -339,7 +351,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       // key, and the server replays the original full-price session — a quoted
       // number that is not the number charged, which is the whole defect class
       // this path has been cleared of.
-    }, [resolved?.id, variant?.id, quantity, billing, shipTo, shipPostal, coupon])
+    }, [resolved?.id, variant?.id, quantity, billing, shipTo, shipPostal, coupon, fulfillment.signature])
 
     const handleBuy = async () => {
       if (!hostId || !resolved || !variant || status === 'sending') return
@@ -368,8 +380,10 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             // Likewise a request (AGL-1721): the server resolves this
             // country's rates AND restricts the session to addresses in it,
             // so naming a cheap zone here cannot ship a parcel anywhere else.
-            ...(shipTo ? { shippingCountry: shipTo } : {}),
-            ...(shipPostal.trim() ? { shippingPostalCode: shipPostal.trim() } : {}),
+            ...(shipTo && !fulfillment.request ? { shippingCountry: shipTo } : {}),
+            ...(shipPostal.trim() && !fulfillment.request ? { shippingPostalCode: shipPostal.trim() } : {}),
+            // Where and when, never the fee (AGL-3624).
+            ...(fulfillment.request ? { fulfillment: fulfillment.request } : {}),
             // The server resolves this against the discounts hub first and the
             // legacy coupons second, and refuses a code it cannot apply with a
             // reason — never a silent full-price charge.
@@ -423,6 +437,12 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
         }
         // Buy-now's half of AGL-2019. The server's own 501 wording is not
         // rendered to a visitor; this surface is public.
+        if (payload?.fulfillmentChanged) {
+          fulfillment.reload()
+          setMessage(String(payload?.error ?? ''))
+          setStatus('error')
+          return
+        }
         if (isPaymentsNotConfigured(response.status)) {
           setMessage(storefrontPaymentsNotConfiguredText())
           setStatus('unconfigured')
@@ -745,8 +765,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 // cannot succeed (AGL-2019).
                 status === 'unconfigured' ||
                 // Asked but unanswered: the server would only refuse again.
-                (shipCountries !== null && !shipTo) ||
-                (askPostal && !shipPostal.trim())
+                (fulfillment.method === 'shipping' && shipCountries !== null && !shipTo) ||
+                (fulfillment.method === 'shipping' && askPostal && !shipPostal.trim()) ||
+                !fulfillment.ready
               }
               onClick={handleBuy}
               sx={{ flex: 1 }}
@@ -786,7 +807,15 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               />
             </Suspense>
           ) : null}
-          {shipCountries ? (
+          {fulfillment.offered ? (
+            <Box sx={{ mb: 2 }}>
+              <CartFulfillmentChoice
+                state={fulfillment}
+                formatCents={(cents) => `$${(cents / 100).toFixed(2)}`}
+              />
+            </Box>
+          ) : null}
+          {shipCountries && fulfillment.method === 'shipping' ? (
             <TextField
               select
               label="Ship to"
@@ -804,7 +833,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               ))}
             </TextField>
           ) : null}
-          {askPostal ? (
+          {askPostal && fulfillment.method === 'shipping' ? (
             <TextField
               label="Postal code"
               value={shipPostal}

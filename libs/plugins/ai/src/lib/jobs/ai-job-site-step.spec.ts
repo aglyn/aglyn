@@ -54,6 +54,8 @@ import {
   AI_SITE_EMAIL_TYPE,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
+  aiFreeSiteCreditEstimate,
+  aiFreeSiteShortfallText,
 } from '../model/ai-site-job'
 import {
   AI_SITE_SEO_OUTPUT_ID,
@@ -84,6 +86,7 @@ import {
   aiSitePendingUnits,
   aiSiteUnitJob,
   createAiJobSiteStep,
+  createAiSiteJobAdmission,
   registerAiSiteJob,
 } from './ai-job-site-step'
 import {
@@ -912,6 +915,41 @@ describe('what a scaffold is admitted with', () => {
     })
   })
 
+  it('refuses a Free start what is left of the month cannot pay for, before it spends, with what is left and when it resets (AGL-3660)', async () => {
+    const seen: unknown[] = []
+    const admission = (left: number) =>
+      createAiSiteJobAdmission({
+        freeCreditsLeft: async (_firestore, input) => {
+          seen.push(input.orgId)
+          return { left, total: 300, resetsOn: '2026-11-01' }
+        },
+      })
+    const context = (pages: number, extra: Record<string, unknown> = {}) => ({
+      firestore: {} as unknown as FirebaseFirestore.Firestore,
+      orgId: 'org-1',
+      hostId: 'host-1',
+      inputs: { ...good, pages },
+      org: { plan: 'free' },
+      ...extra,
+    })
+    const refused = await admission(70)(context(2))
+    expect(refused).toEqual({ status: 429, error: aiFreeSiteShortfallText({ needed: aiFreeSiteCreditEstimate(2), left: 70 }, '2026-11-01') })
+    expect(refused?.error).toMatch(/up to about 216 AI credits, and only 70 are left .* reset on November 1\. Upgrade this workspace/)
+    expect(seen).toEqual(['org-1'])
+    // Enough left for the figure the dialog quotes: admitted.
+    await expect(admission(aiFreeSiteCreditEstimate(2))(context(2))).resolves.toBeNull()
+    await expect(admission(aiFreeSiteCreditEstimate(1))(context(1))).resolves.toBeNull()
+    // Nothing known about what is left: admitted, and the reservation decides.
+    await expect(createAiSiteJobAdmission({ freeCreditsLeft: async () => null })(context(2))).resolves.toBeNull()
+    // A resume carries on the same job: not asked again.
+    seen.length = 0
+    await expect(admission(0)(context(2, { plan: { screens: [], create: [], reuse: [], status: 'confirmed' } }))).resolves.not.toMatchObject({ status: 429 })
+    expect(seen).toEqual([])
+    // A paid workspace is never asked.
+    await expect(admission(0)({ ...context(AI_SITE_PAGES.min), org: { plan: 'pro' } })).resolves.toBeNull()
+    expect(seen).toEqual([])
+  })
+
   it('refuses a site of another workspace', async () => {
     mockOwners.set('host-1', 'org-2')
     await expect(ask(good)).resolves.toEqual({
@@ -1151,6 +1189,33 @@ describe('a guided site start publishes what it built (AGL-3596)', () => {
     // A job that already published does not publish again.
     publish.mockClear()
     await step(context({ ...lastPass({ autoConfirm: true }), sitePublish: SITE_PUBLISH }))
+    expect(publish).not.toHaveBeenCalled()
+  })
+
+  it('publishes what was built when the last unit fails, since no pass comes after it (AGL-3676)', async () => {
+    // The local store run: the welcome email, the last unit, broke a building
+    // rule twice, and the site it ended was never published.
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const step = stepWith(
+      { page: fakeRunner([], () => ({})), email: fakeRunner([], () => ({ refused: true })) },
+      { publish },
+    )
+    const job = siteJob({
+      inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, welcomeEmail: true, autoConfirm: true },
+      outputs: [LOOK, ...['screen-0', 'screen-1', 'screen-2', 'screen-3'].map((id) => output('screen', id))],
+    })
+    const outcome = await step(context(job))
+    expect(outcome.item).toMatchObject({ slot: 'e', status: 'failed' })
+    expect(outcome.continue).toBeUndefined()
+    expect(publish).toHaveBeenCalledTimes(1)
+    const [, input] = publish.mock.calls[0] as unknown as [unknown, { outputs: AiJobOutput[] }]
+    expect(input.outputs.map((entry) => entry.id)).toEqual(['screen-0', 'screen-1', 'screen-2', 'screen-3'])
+    expect(outcome.sitePublish).toEqual(SITE_PUBLISH)
+    // A unit that fails with others still open publishes nothing yet.
+    publish.mockClear()
+    await stepWith({ page: fakeRunner([], () => ({ refused: true })) }, { publish })(
+      context(siteJob({ inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, autoConfirm: true } })),
+    )
     expect(publish).not.toHaveBeenCalled()
   })
 

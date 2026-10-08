@@ -21,6 +21,7 @@ import type {
   ListQueryDeclaration,
   ListQueryFilter,
   ListQueryRequest,
+  ListQuerySort,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 
 /*==========================================
@@ -120,11 +121,50 @@ export const FORM_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   { column: 'inCampaign', kind: 'boolean', path: 'inCampaign', operators: ['equals'] },
 ]
 
-/** The forms list's query: its fields, its one order, and its search. */
+/**
+ * A header's two orders, both `alone` (AGL-3680): served while nothing
+ * narrows the list past the forms in use ({@link FORM_IN_USE}), so each costs
+ * one `(retired, field)` composite per direction and no more. Asked under a
+ * filter or the search, the list keeps document order and says so.
+ */
+const aloneSorts = (
+  column: string,
+  path: string,
+  label: string,
+  first: ListQuerySort['direction'] = 'asc',
+): ListQuerySort[] =>
+  (first === 'asc' ? (['asc', 'desc'] as const) : (['desc', 'asc'] as const)).map(
+    (direction) => ({ path, direction, column, label, alone: true }),
+  )
+
+/**
+ * EVERY HEADER SORTS ON THE QUERY (AGL-3680), by a field every form stores
+ * (see the list's header comment: `newFormListFields` at create,
+ * `backfill-form-list-fields.mjs` before) — the name by `nameLower`, and a
+ * counter nobody counted is `null`, which an order keeps. Status is not
+ * here: the list in use is all Active, so it sorts the page.
+ *
+ * ⚠️ A ranged field's FIRST order is the one its range takes
+ * (`rangeOrder`), so the dates lead newest first and Submissions smallest
+ * first — the orders the range composites below were built for.
+ */
+export const FORM_LIST_COLUMN_SORTS: readonly ListQuerySort[] = [
+  ...aloneSorts('displayName', 'nameLower', 'Display name'),
+  ...aloneSorts('slug', 'slug', 'Slug'),
+  ...aloneSorts('submissions', 'stats.submissions', 'Submissions'),
+  ...aloneSorts('leads', 'stats.leads', 'Leads'),
+  ...aloneSorts('lastSubmission', 'stats.lastSubmissionAtMs', 'Last submission', 'desc'),
+  ...aloneSorts('updatedAt', 'updatedAt', 'Updated', 'desc'),
+  ...aloneSorts('leadRouting', 'routing.lead', 'Lead routing'),
+  ...aloneSorts('inCampaign', 'inCampaign', 'In a campaign'),
+]
+
+/** The forms list's query: its fields, its orders, and its search. */
 export const FORM_LIST_QUERY: ListQueryDeclaration = {
   fields: FORM_LIST_FILTER_FIELDS,
-  // Document order, as the list has always read, which needs no composite.
-  sorts: [{ path: '__name__', direction: 'asc' }],
+  // Document order, as the list has always read, which needs no composite;
+  // then the header orders.
+  sorts: [{ path: '__name__', direction: 'asc' }, ...FORM_LIST_COLUMN_SORTS],
   search: { tokensPath: 'searchTokens' },
 }
 
@@ -182,11 +222,13 @@ export const FORM_IN_USE: ListQueryFilter = { path: 'retired', op: '==', value: 
 export function formListRequest(
   clauses: readonly ListFilterClause[],
   search: readonly string[],
+  sort: ListQuerySort | null = null,
 ): ListQueryRequest {
   const askedStatus = clauses.some((clause) => clause.field === 'status')
   return {
     clauses,
     search,
+    ...(sort ? { sort } : {}),
     ...(askedStatus ? {} : { base: [FORM_IN_USE] }),
   }
 }

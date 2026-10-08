@@ -35,4 +35,15 @@ object BesignerPaths {
 
   /** The Besigner on one page's working version, under the picked site. */
   fun screen(screenId: String, versionId: String): String = "/screens/$screenId/versions/$versionId/besigner"
+
+  /** A reusable component's version in the Besigner (`COMPONENT_BESIGNER`), or its preview. */
+  fun component(componentId: String, versionId: String, preview: Boolean = false): String =
+    "/components/$componentId/versions/$versionId/${if (preview) "preview" else "besigner"}"
+
+  /** A shared layout's version in the Besigner (`LAYOUT_BESIGNER`), or its preview. */
+  fun layout(layoutId: String, versionId: String, preview: Boolean = false): String =
+    "/layouts/$layoutId/versions/$versionId/${if (preview) "preview" else "besigner"}"
+
+  /** A template in the Besigner (`TEMPLATE_BESIGNER`; templates have no versions), or its preview. */
+  fun template(templateId: String, preview: Boolean = false): String = "/templates/$templateId/${if (preview) "preview" else "besigner"}"
 }

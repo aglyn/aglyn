@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/plugins-marketing-platforms",
-  "version": "1.0.0-beta.232",
+  "version": "1.0.0-beta.233",
   "private": true,
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
@@ -26,13 +26,13 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.232",
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.232",
-    "@aglyn/shared-ui-snackstack": "1.0.0-beta.232",
-    "@aglyn/shared-util-http": "1.0.0-beta.232",
-    "@aglyn/shared-util-tools": "1.0.0-beta.232",
-    "@aglyn/tenant-data-admin": "1.0.0-beta.232",
-    "@aglyn/tenant-feature-instance": "1.0.0-beta.232",
+    "@aglyn/aglyn": "1.0.0-beta.233",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.233",
+    "@aglyn/shared-ui-snackstack": "1.0.0-beta.233",
+    "@aglyn/shared-util-http": "1.0.0-beta.233",
+    "@aglyn/shared-util-tools": "1.0.0-beta.233",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.233",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.233",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {

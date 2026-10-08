@@ -36,7 +36,12 @@ import {
 } from '@aglyn/shared-ui-jsx/const/list-filter'
 import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
-import { USER_LIST_FILTER_FIELDS } from '../../../../utils/list-filters'
+import { sortListRows } from '@aglyn/shared-util-tools/list-query/list-column-sort'
+import {
+  USER_LIST_COLUMN_SORTS,
+  USER_LIST_FILTER_FIELDS,
+  USER_LIST_SORT_VALUES,
+} from '../../../../utils/list-filters'
 
 /**
  * How many accounts a filtered request may read. Past it the directory is
@@ -216,7 +221,22 @@ async function handler(request: Request): Promise<Response> {
           .includes(term))
     const token =
       typeof query.nextPageToken === 'string' ? query.nextPageToken : undefined
-    if (served.length || term) {
+    /*
+     * THE HEADER SORT (AGL-3680). Auth cannot order a walk, so a sort is
+     * answered like a filter: over the complete directory read, then paged.
+     * A sort the list does not offer is ignored, as a query ignores one.
+     */
+    const asked = listRequest.sort
+      ? USER_LIST_COLUMN_SORTS.find(
+          (entry) =>
+            entry.path === listRequest.sort?.path &&
+            entry.direction === listRequest.sort?.direction,
+        )
+      : undefined
+    const sortRows = <Row extends ReturnType<typeof serialize>>(rows: Row[]): Row[] =>
+      asked ? sortListRows(rows, USER_LIST_SORT_VALUES[asked.path], asked.direction) : rows
+    const notices: string[] = []
+    if (served.length || term || asked) {
       /*
        * An exact email or uid is a lookup, not a walk: the one account it can
        * be, and then every other clause and the search over that account. A
@@ -249,7 +269,9 @@ async function handler(request: Request): Promise<Response> {
       }
       const scan = await scanUsersAcrossPools(FILTER_SCAN_CAP)
       if (!scan.truncated && !scan.tenantTruncated.length) {
-        const matched = collapseCrossPoolUidRows(scan.users).map(serialize).filter(matches)
+        const matched = sortRows(
+          collapseCrossPoolUidRows(scan.users).map(serialize).filter(matches),
+        )
         const offset = token?.startsWith(MATCH_CURSOR)
           ? Math.max(0, Math.floor(Number(token.slice(MATCH_CURSOR.length))) || 0)
           : 0
@@ -260,7 +282,7 @@ async function handler(request: Request): Promise<Response> {
           tenantsIncluded: true,
           tenantTruncated: [],
           refused,
-          notices: [],
+          notices,
         }, { status: 200 })
       }
       /*
@@ -278,6 +300,14 @@ async function handler(request: Request): Promise<Response> {
         ...served.map((clause) => ({ clause, reason })),
         ...(term ? [{ clause: 'search' as const, reason }] : []),
       )
+      // The sort cannot reach the whole directory either: it orders the page
+      // walked below, and says so rather than reading as everyone's order.
+      if (asked) {
+        notices.push(
+          `Sorted by ${asked.label ?? asked.path} within each page of the directory: it holds more ` +
+            `than ${FILTER_SCAN_CAP.toLocaleString('en-US')} accounts, more than this list can sort at once.`,
+        )
+      }
     }
     // A match cursor does not name a place in the walk; it starts it over.
     const pageToken = token?.startsWith(MATCH_CURSOR) ? undefined : token
@@ -288,14 +318,14 @@ async function handler(request: Request): Promise<Response> {
     // the identified record, never the emailless twin.
     const rows = collapseCrossPoolUidRows(page.users)
     return Response.json({
-      users: rows.map(serialize),
+      users: sortRows(rows.map(serialize)),
       nextPageToken: page.nextPageToken,
       tenantsIncluded: page.tenantsIncluded,
       // Never silently truncate: a tenant whose pool outgrew the cap is named
       // so the page can say so rather than quietly dropping the tail.
       tenantTruncated: page.tenantTruncated,
       refused,
-      notices: [],
+      notices,
     }, { status: 200 })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours

@@ -552,7 +552,7 @@ describe('the persona fills the merge tags and receives nothing', () => {
     await test$({ personaEmail: CONTACT })
 
     expect(sent).toHaveLength(1)
-    expect(String(sent[0]['text'])).toContain('Bo')
+    expect(String(sent[0]['text']).split('\n')[0]).toContain('Bo')
   })
 
   it('shows the fallback when no persona is chosen', async () => {
@@ -561,8 +561,11 @@ describe('the persona fills the merge tags and receives nothing', () => {
     // happened to contain the same letters.
     await test$()
 
-    expect(String(sent[0]['text'])).toContain('there')
-    expect(String(sent[0]['text'])).not.toContain('Bo')
+    // Only the body line: the footer's unsubscribe link carries a random id,
+    // and one minted as `Ek7mO0Bo9S` failed this on a promotion (AGL-3690).
+    const [greeting] = String(sent[0]['text']).split('\n')
+    expect(greeting).toContain('there')
+    expect(greeting).not.toContain('Bo')
   })
 
   it('delivers to the chosen recipient, never to the persona', async () => {

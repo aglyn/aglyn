@@ -1,19 +1,38 @@
 # Subprocessors and Privacy: Create with AI in Media (AGL-3602)
 
-**Status: DRAFT for review. Nothing here is published.** The photo mode of
-**Media → Create with AI** stays switched off in production
-(`AI_IMAGE_VERTEX_PROJECT` and `NEXT_PUBLIC_AI_IMAGE_PHOTOS` unset) until the
-Subprocessors row below and the Privacy change are published. The illustration
-mode uses the existing AI text provider and needs no change to run.
+**Status: PUBLISHED 2026-10-08 00:00 CT as legal v12 with re-acceptance.**
+Approved by Zach 2026-10-07: Location "Global — Google selects where requests
+are processed" (the default `global` Vertex AI endpoint, which makes no
+processing-location promise), the purpose worded as images rather than
+photos, v12 with re-acceptance (v11 was taken on 2026-10-07 by the commerce
+subprocessors, AGL-3666), and the §2 opener naming Google. Google Doc masters
+first, then the pages; privacy captured from the live page (25972 bytes,
+`02d60d…`), terms the control; archived in
+`Platform Docs/Legal/Acceptance-Snapshots/v12/` and pinned in
+`apps/console/constants/legal-documents.ts`. The published record is
+`Platform Docs/Legal/Proposed/2026-10-08-vertex-ai-images/`. Every date
+below reads October 8, 2026, the publish date; SUB-2 is not applied (see
+below). The AI catalog declares the SUB-1 row dated 2026-10-08
+(`AI_IMAGE_CATALOG_PROVIDERS` in `libs/plugins/ai/src/lib/providers/catalog.ts`),
+so the subprocessor inventory carries `aiplatform.googleapis.com`.
+
+The image-provider kinds of **Media → Create with AI** (Photo, Art and Design)
+stay switched off in production (`AI_IMAGE_VERTEX_PROJECT` and
+`NEXT_PUBLIC_AI_IMAGE_PHOTOS` unset) until both pages are live. The Vector
+kinds use the existing AI text provider and need no change to run.
 
 ## What the code sends, read from the code
 
 **Photos** (`libs/plugins/ai/src/lib/providers/vertex-image.ts`), one request
 per picture to `aiplatform.googleapis.com` (Vertex AI, `global` location by
-default), as Aglyn's own service account:
+default, which Google may process anywhere), as Aglyn's own service account:
 
-- the description the member typed;
-- the shape (one of 1:1, 4:3, 3:4, 16:9, 9:16) and the 1K size;
+- the description the member typed, followed by the fixed style wording of
+  the kind chosen (`libs/plugins/ai/src/lib/server/ai-media-raster-prompt.ts`:
+  a photographic genre, an art style or a design asset; none for Photo) —
+  text of ours that carries nothing of the workspace;
+- the shape (one of 1:1, 4:3, 3:4, 16:9, 9:16) and the size the plan makes
+  (512 px on Free, 1K on a paid plan, chosen by the server);
 - fixed settings: image output only, Google's safety filters at "block some"
   on harassment, hate, sexually explicit and dangerous content.
 
@@ -28,55 +47,99 @@ platform's AI text provider (Anthropic today): the description, the kind of
 picture (illustration, icon, pattern or logo mark), the shape, and either the
 site's theme colors as hex values or the colors the member picked.
 
-## SUB-1 · New row: Google LLC (Google Cloud Vertex AI)
+## SUB-1 · New row: Google LLC (Google Cloud Vertex AI) — FINAL, ready to paste
 
-Placement: after the existing Google Cloud rows, before Anthropic.
+Approved 2026-10-07 with the purpose worded as **images**, not photos: the same
+request makes photographs, art (a watercolor, a 3D render) and design assets
+(a banner, a social post graphic).
 
-| Subprocessor | Location | Purpose | Data processed |
-| --- | --- | --- | --- |
-| Google LLC (Google Cloud Vertex AI) | United States and European Union | AI image generation: creating photos for a customer's media library from a description a user writes | The description the user writes and the shape requested, and the generated image returned. No account identifiers, email addresses, or other content of the customer's site. |
+**Location.** Production uses Vertex AI's default `global` endpoint
+(`aiplatform.googleapis.com`). Google's data residency page ("Where your data
+lives and is processed", read 2026-10-07) says global endpoints "route and
+process data anywhere globally, without restricting it to a specific
+geographic region" and "don't provide regional isolation or data residency
+guarantees". An earlier draft of this row said "United States and European
+Union", which the global endpoint does not promise; the row therefore says
+that Google selects the location. (`AI_IMAGE_VERTEX_LOCATION=us` or `eu`, the
+multi-region endpoints that do keep processing in one jurisdiction, remain
+available to a self-hosted operator; Aglyn's production leaves it unset.)
 
-**Decision needed on Location.** With the default `global` location Google
-lists the model's processing as multi-region US and EU, so "United States"
-alone would be wrong. Two ways to keep "United States":
+Placement: in "Core infrastructure & platform subprocessors", after Google
+Cloud Logging and before Anthropic. The live table's columns, read
+2026-10-07, are Subprocessor · Provider entity · Purpose · Data processed ·
+Location, and its Google rows name the service first and Google LLC as the
+entity, so the row is:
 
-1. publish the row as drafted ("United States and European Union"); or
-2. pin requests to Google's US multi-region and publish "United States". The
-   adapter does not yet support the multi-region host (it accepts `global` or
-   a single region such as `us-central1`, which Google does not list for this
-   model). It would need the endpoint form Google documents for multi-region
-   `us`, verified first.
+| Subprocessor | Provider entity | Purpose | Data processed | Location |
+| --- | --- | --- | --- | --- |
+| Google Cloud Vertex AI | Google LLC | AI image generation: creating images for a customer's media library from a description a user writes | The description the user writes and the shape requested, and the generated image returned. No account identifiers, email addresses, or other content of the customer's site. | Global — Google selects where requests are processed |
 
 **Change-log entry** (new first item):
 
-> **<PUBLISH DATE>** — Added Google LLC (Google Cloud Vertex AI) for AI image
-> generation: when a user creates a photo in the media library, the
+> **October 8, 2026** — Added Google LLC (Google Cloud Vertex AI) for AI image
+> generation: when a user creates an image in the media library, the
 > description they write and the shape they choose are sent to Google's image
-> models, and the generated image is stored in the customer's media library.
+> models on Google Cloud Vertex AI, which processes each request at a location
+> Google selects anywhere in the world, and the generated image is stored in
+> the customer's media library.
 
-After publishing: set the row's date as `publishedOn` in a catalog provider row
-for `google-vertex` (`libs/plugins/ai/src/lib/providers/catalog.ts`, the way
-the Anthropic row is declared), so the subprocessor inventory carries the host
-`aiplatform.googleapis.com`, then set the two environment variables.
+The catalog row (`AI_IMAGE_CATALOG_PROVIDERS` in
+`libs/plugins/ai/src/lib/providers/catalog.ts`) carries this wording dated
+`2026-10-08`, pinned by `libs/plugins/ai/src/lib/subprocessors.spec.ts` and
+`apps/console/constants/subprocessor-inventory-plugins.spec.ts`. If the page
+goes live on another date, move `publishedOn` and both pins to it.
 
-## PP-1 · Privacy Policy §2 "What AI features send"
+What reaches Google, read from the code: the description, followed by the
+fixed style wording of the kind chosen (text of ours, carrying nothing of the
+workspace; none for a plain Photo), the shape, and fixed settings. "The
+description the user writes and the shape requested" is therefore exact, and
+no account, member, organization or site identifier, email address, theme
+color, other site content or media file is sent.
 
-§2 speaks of "the provider" as one recipient. Add one sentence after the
-theme-change clause:
+## PP-1 · Privacy Policy — FINAL, ready to paste
 
-> For creating photos in your media library, we send your description and the
-> shape you choose to Google, our provider for image generation, and nothing
-> else from your account or site; for illustrations, we send the provider your
+**§2 "What AI features send"**: the theme-change clause sits inside one long
+semicolon list, so a sentence cannot follow it there. Add this as its own
+sentence immediately BEFORE "We do not send your account identifiers, email
+address, or authentication tokens to the provider." (the approved wording,
+unchanged):
+
+> For creating images in your media library other than SVG illustrations, we
+> send your description and the shape you choose to Google, our provider for
+> image generation, and nothing else from your account or site; for SVG
+> illustrations, icons, patterns and logo marks, we send our AI provider your
 > description, the kind and shape of picture, and your site's theme colors or
 > the colors you choose.
 
-If §3 lists the providers AI features use, add Google there for image
-generation as well. Privacy is acceptance-pinned
-(`apps/console/constants/legal-documents.ts`), so publishing this is a
-version bump (v11), a re-capture of the live page, and a re-acceptance — the
-pattern AGL-3520 followed for v10.
+**§2 "AI features"** (APPROVED by Zach 2026-10-07): the paragraph opens
+"Some features use a third-party AI provider — currently Anthropic — to
+generate assistance or content", which the sentence above would contradict.
+Proposed:
+
+> Some features use third-party AI providers — currently Anthropic and, for
+> creating images, Google — to generate assistance or content.
+
+**§3** does list the providers AI features use (read live 2026-10-07: "…and
+our AI features use Anthropic, as described in Section 2."). Change that
+clause to:
+
+> …and our AI features use Anthropic and, for creating images, Google Cloud
+> Vertex AI, as described in Section 2.
+
+Privacy is acceptance-pinned (`apps/console/constants/legal-documents.ts`),
+so publishing this is legal v12: edit the Google Doc masters first, then
+publish the pages, capture the live privacy page (terms is the control and
+must reproduce its `v9` pin, 44131 bytes / `c48915…`), archive it under
+`Platform Docs/Legal/Acceptance-Snapshots/v12/`, then bump
+`LEGAL_DOCUMENT_VERSION` to `v12` with the new privacy hash and bytes, as
+AGL-3520 did for v10 and AGL-3666 for v11. Both pages and their `/legal`
+cards read the publish date (Central time).
 
 ## SUB-2 (optional) · Anthropic row
+
+**Not applied with v12.** The draft does not call it required: the Anthropic
+row's "such as" purpose and its data cell (a brief and the theme's colors)
+already cover the SVG kinds. Apply it at the next republish of that row.
 
 The Anthropic purpose cell lists AI generation's outputs with "such as", and
 its data cell already names a brief and the theme's colors. Illustrations are
