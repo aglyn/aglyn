@@ -418,3 +418,35 @@ export async function revokeApiKey(
   })
   return true
 }
+
+/** What a key may still do, read by its public id (AGL-3643). */
+export interface ApiKeyGrant {
+  keyId: string
+  name: string
+  scopes: ApiScope[]
+}
+
+/**
+ * The key's grant as it stands now, by its public id: `null` when the key is
+ * unknown to the organization, revoked or expired. For something a key SET
+ * UP earlier that acts on its behalf later — a REST hook it subscribed —
+ * which must stop when the key does, and never outlive a revoke.
+ */
+export async function readApiKeyGrant(
+  orgId: string,
+  keyId: string,
+  now = Date.now(),
+): Promise<ApiKeyGrant | null> {
+  if (!orgId || !keyId) return null
+  const snap = await collection()
+    .where('orgId', '==', orgId)
+    .where('keyId', '==', keyId)
+    .limit(1)
+    .get()
+  const doc = snap.docs[0]
+  if (!doc) return null
+  const data = doc.data() as ApiKeyDocument
+  if (data.revokedAt) return null
+  if (data.expiresAt && data.expiresAt.toMillis() <= now) return null
+  return { keyId: data.keyId, name: String(data.name ?? ''), scopes: normalizeScopes(data.scopes ?? []) }
+}

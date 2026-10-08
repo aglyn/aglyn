@@ -361,6 +361,18 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'zapier',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "hooks.zapier.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The REST hook URL Zapier mints for a Zap the merchant built in their own Zapier account, subscribed with the merchant's own API key through `POST /v1/sites/{siteId}/hooks` and posted to only by the Zapier plugin's delivery (`libs/plugins/zapier/src/lib/server/deliver.ts`), until the Zap is turned off, the key is revoked or Zapier answers 410.",
+        dataReceived: "Only the events the merchant's Zap subscribed to, each held to the scope its key holds: an order as the REST API publishes it (number, status, totals, line items, the buyer's name, email and shipping address, shipments and refunds), a booking (service, time, the guest's name, email, phone and address when asked, what was paid), a new contact (id, email, name, source, lifecycle stage), or a form submission (the form, the page and every submitted field). No payment details, API keys or passwords are sent.",
+      },
+    ],
+  },
+  {
     pluginId: 'fulfillment-networks',
     subprocessors: [],
     hosts: [

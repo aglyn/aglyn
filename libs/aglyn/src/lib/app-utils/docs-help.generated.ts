@@ -397,6 +397,11 @@ export const PLUGIN_DOCS = {
     title: 'Webhooks',
     excerpt: 'Connect Aglyn to other systems with outbound and inbound webhooks.',
   },
+  zapier: {
+    path: '/marketing-and-automation/workflows-and-actions/zapier',
+    title: 'Zapier',
+    excerpt: 'Send your site\'s orders, bookings, contacts and form submissions to thousands of apps with Zapier, and add contacts or mark orders shipped from them. Rolling out.',
+  },
 } as const satisfies Record<string, PluginDocsTopic>
 
 export type PluginDocsKey = keyof typeof PLUGIN_DOCS
@@ -475,6 +480,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#support-queue', '#plugin-reviews', '#organizations-admin', '#filter-the-directory', '#organization-detail', '#staff-org-email', '#free-workspace-limit', '#first-party-hosts', '#entitlement-editor', '#plan-comps', '#build-for-a-client', '#sites-admin', '#filter-the-site-list', '#site-detail', '#site-ownership', '#site-transfer', '#site-content', '#staff-automations', '#emails-sent', '#users-admin', '#acquisition', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#refunds', '#impersonation', '#system-emails', '#platform-send-rate', '#platform-suppressions', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#operator-alerts', '#ai-monitoring', '#sales-tax-return', '#audit-log', '#coupons', '#discount-floors', '#existing-coupons', '#contact-suppressions', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
   taxServices: ['#before-you-start', '#connect', '#how-sales-are-taxed', '#product-tax-codes', '#exempt-customers', '#recording-orders-and-refunds', '#disconnect', '#what-is-sent-to-the-vendor'],
   webhooks: ['#outbound-webhooks', '#inbound-webhooks', '#tips', '#related'],
+  zapier: ['#connect-aglyn-to-zapier', '#triggers', '#actions-and-searches', '#what-each-needs', '#see-and-disconnect-your-zaps'],
 } as const satisfies Partial<Record<PluginDocsKey, readonly `#${string}`[]>>
 
 type PluginAnchorMap = typeof PLUGIN_DOCS_ANCHORS

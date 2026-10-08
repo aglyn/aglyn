@@ -2911,6 +2911,40 @@
       }
     },
     {
+      "id": "zapier",
+      "$comment": "AGL-3643: the REST hooks Aglyn's Zapier app subscribes to (`/v1/sites/{siteId}/hooks`, console server declarations), delivering commerce's order events, the bookings plugin's booking events, and relayed contactCreated / formSubmission host events through core's domain-event outbox to the URL Zapier minted for each Zap. It imports no other plugin. Infrastructure, like sms: no catalog entry and no switch — a hook is a standing read held to the API key's scopes and the plan features of what it reads, asked at every delivery. The console card on a site's setup page lists the site's Zaps; it draws nothing, and the user docs say nothing, until the deployment sets ZAPIER_APP_URL, the published app's link. The Zapier app itself lives in apps/zapier and is published from Zapier's developer platform by the operator.",
+      "package": "@aglyn/plugins-zapier",
+      "register": {
+        "console": "registerZapierConsole",
+        "consoleApi": "registerZapierConsoleApi",
+        "serverDeclarations": "registerZapierServerDeclarations",
+        "consoleServerDeclarations": "registerZapierConsoleServerDeclarations",
+        "subprocessors": "zapierSubprocessors"
+      },
+      "apiPrefixes": [
+        "zapier"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "One REST hook: the site, the events, the URL Zapier minted for the Zap and the API key that subscribed it (AGL-3643). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "zapierHooks",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "That one event reached one hook, so an outbox retry does not post it twice (AGL-3643). No customer data; expires by TTL.",
+          "name": "zapierHookDeliveries",
+          "orgField": "orgId"
+        }
+      ],
+      "contributes": {
+        "console": {
+          "slots": [
+            "hostSettings"
+          ]
+        }
+      }
+    },
+    {
       "id": "fulfillment-networks",
       "package": "@aglyn/plugins-fulfillment-networks",
       "register": {

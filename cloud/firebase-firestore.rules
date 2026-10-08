@@ -2459,6 +2459,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Zapier (AGL-3643): a site's REST hooks — the URL Zapier minted for each
+    // Zap, the events it takes and the API key that subscribed it — and the
+    // markers saying an event already reached a hook. Written and read by the
+    // zapier plugin's server half through the Admin SDK only. Deny ALL client
+    // access, staff and the owner included: a hook's URL is a capability
+    // (whoever holds it can post into the merchant's Zap), and a client that
+    // could write a hook could send a site's orders, bookings and contacts to
+    // a URL of its choosing, or mark an event delivered that never was. Org
+    // erasure destroys both by the `orgId` field.
+    match /zapierHooks/{hookId} {
+      allow read, write: if false;
+    }
+    match /zapierHookDeliveries/{deliveryId} {
+      allow read, write: if false;
+    }
+
     // Fulfillment networks (AGL-3634): a site's connection to the merchant's
     // OWN ShipBob or Amazon Multi-Channel Fulfillment account — its grant
     // sealed, its webhook token's hash, its settings, stock count and log —

@@ -2286,6 +2286,16 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
     "orgField": "orgId"
   },
   {
+    "pluginId": "zapier",
+    "name": "zapierHooks",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "zapier",
+    "name": "zapierHookDeliveries",
+    "orgField": "orgId"
+  },
+  {
     "pluginId": "fulfillment-networks",
     "name": "fulfillmentNetworkConnections",
     "orgField": "orgId"
