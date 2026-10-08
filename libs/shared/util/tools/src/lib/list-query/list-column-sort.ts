@@ -46,6 +46,29 @@ import type { ListQuerySort } from './list-query-plan'
  * `useListColumnSort` (`@aglyn/shared-ui-jsx/hooks/use-list-column-sort`),
  * handed to `ListTable` as `columnSort`. The pieces here are SDK-free so a
  * route and a native surface sort with the same comparison.
+ *
+ * ## Converting a list (the staff Users, Sites and Organizations pages are
+ * ## the reference implementations)
+ *
+ *   1. Declare the header orders beside the list's declaration: one
+ *      `ListQuerySort` per (column, direction), each with `column` and a
+ *      `label`. The default order first and full; every other one
+ *      `alone: true` unless it must hold under every filter.
+ *   2. Add them to the declaration's `sorts`. The list's spec runs
+ *      `missingListQueryIndexes` over `listQueryIndexes(declaration, base)`;
+ *      add only what it reports to `cloud/firebase-firestore.indexes.json`
+ *      (an `alone` order on an unscoped list adds nothing).
+ *   3. The page: hold the asked order in state, hand it to the query (or the
+ *      route's `sort` param), plan it locally for `orderBy`, and call
+ *      `useListColumnSort({ sorts, defaultSort, sort, onSortChange, orderBy,
+ *      rows, pageSorts, headers })`. `pageSorts` holds a value getter for each
+ *      joined or derived column.
+ *   4. `<ListTable rows={columnSort.rows} columnSort={columnSort} … />`, drop
+ *      `disableColumnSorting`, show `columnSort.notices` beside the route's
+ *      in `ListQueryNotices`, and delete the file's line from
+ *      `NOT_YET_CONVERTED` in `apps/console/specs/list-tables-sort-by-their-headers.spec.ts`.
+ *   5. A list that loads every row it has (strategy 4): just drop
+ *      `disableColumnSorting` and let the grid sort.
  */
 
 /** A value a page sort compares: text, a number, a date, or nothing. */
@@ -85,6 +108,8 @@ export function compareListSortValues(
   if (emptyA || emptyB) return emptyA === emptyB ? 0 : emptyA ? 1 : -1
   const left = comparable(a)
   const right = comparable(b)
+  // Equal first: `Infinity - Infinity` is NaN, which no sort can use.
+  if (left === right) return 0
   const order =
     typeof left === 'string' || typeof right === 'string'
       ? collator.compare(String(left), String(right))
