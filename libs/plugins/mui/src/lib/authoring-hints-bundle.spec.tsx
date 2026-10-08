@@ -163,8 +163,9 @@ describe('no registered element addresses the author on a published page (AGL-30
     // An element whose children fill fixed slots (MUI's Accordion is
     // `[summary, ...details]`) cannot render without them, and the besigner
     // never places one without them. Text is positional only to tell its
-    // elements from its own words (AGL-3672), and renders empty like
-    // anything else.
+    // elements from its own words (AGL-3672), and a Stack only so its
+    // divider has children to go between (AGL-3660); both render empty like
+    // anything else. Slots are what `restrictChildren` pins.
     const slotted: string[] = []
 
     for (const entry of MUI_BUNDLE) {
@@ -172,6 +173,7 @@ describe('no registered element addresses the author on a published page (AGL-30
       const flags = entry.schema.flags
       if (
         (flags?.positionalChildren ?? 0) & Aglyn.FEATURE_FLAG.ENABLED &&
+        entry.schema.restrictChildren &&
         !((flags?.textEditable ?? 0) & Aglyn.FEATURE_FLAG.ENABLED)
       ) {
         slotted.push(id)
