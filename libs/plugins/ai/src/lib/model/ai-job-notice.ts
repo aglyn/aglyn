@@ -41,8 +41,23 @@ export const AI_JOB_LINK_PARAM = 'aiJob'
 /** Where a site's "Building your site" page lives, under the site (AGL-3594). */
 export const AI_SITE_BUILD_HREF = '/ai-jobs'
 
+/**
+ * What a job the meter paused says comes next (AGL-3660), on its notice and
+ * its page alike: nothing it built is lost, and it carries on from where it
+ * stopped — by Resume once there are credits, or by itself when they return.
+ */
+export const AI_JOB_PAUSED_NEXT_COPY =
+  'Nothing is lost: what it built so far is saved. Once you have AI credits again — from Billing, ' +
+  'or when your monthly credits reset — choose Resume, or it carries on by itself within about an hour.'
+
+/** A paused job's heading, by what it builds. */
+export function aiJobPausedTitle(kind: AiJobKind): string {
+  const noun = aiJobKindNoun(kind)
+  return noun === 'AI job' ? 'Your AI job is paused' : `Your ${noun} ${noun.endsWith('s') ? 'are' : 'is'} paused`
+}
+
 /** A change the person who started a job is told about. */
-export type AiJobNoticeTransition = 'needs-review' | 'done' | 'failed'
+export type AiJobNoticeTransition = 'needs-review' | 'done' | 'failed' | 'paused'
 
 /** The fields of a stored job a notice is written from. */
 export interface AiJobNoticeSource {
@@ -137,6 +152,18 @@ export function aiJobNotice(job: AiJobNoticeSource, to: AiJobNoticeTransition): 
         aiCustomerSafeCopy(job.review?.message || job.error || 'It stopped for your decision. It waits in AI jobs.', { page: job.kind === 'page' }),
         'needs_review',
       ),
+      link,
+      ...scope,
+    }
+  }
+  if (to === 'paused') {
+    // Paused by the meter (AGL-3660): out of credits or at a cap. Nothing is
+    // lost and the job is not over, so it is a warning that names the way on.
+    return {
+      type: 'content.aiJobNeedsYou',
+      level: 'warning',
+      title: aiJobPausedTitle(job.kind),
+      body: [job.error, AI_JOB_PAUSED_NEXT_COPY].filter(Boolean).join(' '),
       link,
       ...scope,
     }
