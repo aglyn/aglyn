@@ -49,8 +49,8 @@ import {
   type AglynPostalAddress,
   normalizeAddress,
   normalizePhone,
-  type OrgCrmAssignmentRule,
-} from '../foundation'
+} from '../foundation/definitions/contact.types'
+import type { OrgCrmAssignmentRule } from '../foundation/definitions/org-billing.types'
 import { type ConsentGroup, consentGroupScope } from './consent-groups'
 import {
   CONTACT_LIFECYCLE_STAGES,
@@ -2330,8 +2330,8 @@ export function readContactCompanyLink(
   contact: Record<string, unknown> | null | undefined,
   groupId: string,
 ): ContactCompanyLinkState {
-  const document = contact ?? {}
-  const facets = document[CONTACT_FACETS_FIELD]
+  const stored = contact ?? {}
+  const facets = stored[CONTACT_FACETS_FIELD]
   const heldElsewhere = new Set<string>()
   if (facets && typeof facets === 'object' && !Array.isArray(facets)) {
     for (const [holder, facet] of Object.entries(
@@ -2345,9 +2345,9 @@ export function readContactCompanyLink(
       if (typeof named === 'string' && named) heldElsewhere.add(named)
     }
   }
-  const mirror = document[CONTACT_COMPANY_IDS_FIELD]
+  const mirror = stored[CONTACT_COMPANY_IDS_FIELD]
   return {
-    companyId: readContactFacet(document, groupId).companyId ?? null,
+    companyId: readContactFacet(stored, groupId).companyId ?? null,
     companyIds: Array.isArray(mirror)
       ? mirror.filter((id): id is string => typeof id === 'string' && !!id)
       : [],
@@ -5060,10 +5060,12 @@ const SEARCH_KEY = nameSearchKey
 export function crmSearchTokens(values: readonly unknown[]): string[] {
   const tokens = new Set<string>()
   const addWord = (word: string) => {
-    const capped = word.slice(0, NAME_TOKEN_MAX_PREFIX)
+    // By codepoint, as `nameSearchTokens` cuts: a UTF-16 slice leaves a lone
+    // surrogate of an emoji, and Firestore refuses the write.
+    const capped = [...word].slice(0, NAME_TOKEN_MAX_PREFIX)
     for (let end = 1; end <= capped.length; end += 1) {
       if (tokens.size >= CRM_SEARCH_TOKENS_MAX) return
-      tokens.add(capped.slice(0, end))
+      tokens.add(capped.slice(0, end).join(''))
     }
   }
   const addText = (text: string) => {

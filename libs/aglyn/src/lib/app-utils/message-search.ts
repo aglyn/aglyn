@@ -140,10 +140,11 @@ function wordsOf(text: string): string[] {
  */
 function addPrefixes(tokens: Set<string>, words: readonly string[], max: number): void {
   for (const word of words) {
-    const capped = word.slice(0, NAME_TOKEN_MAX_PREFIX)
+    // By codepoint, as `nameSearchTokens` cuts (a lone surrogate fails the write).
+    const capped = [...word].slice(0, NAME_TOKEN_MAX_PREFIX)
     for (let end = 1; end <= capped.length; end += 1) {
       if (tokens.size >= max) return
-      tokens.add(capped.slice(0, end))
+      tokens.add(capped.slice(0, end).join(''))
     }
   }
 }

@@ -105,8 +105,8 @@ export function nameSearchFields(name) {
   const nameLower = name.trim().replace(/\s+/g, ' ').toLowerCase()
   const tokens = new Set()
   for (const word of nameLower.split(' ')) {
-    const capped = word.slice(0, 12)
-    for (let end = 1; end <= capped.length; end += 1) tokens.add(capped.slice(0, end))
+    const capped = [...word].slice(0, 12)
+    for (let end = 1; end <= capped.length; end += 1) tokens.add(capped.slice(0, end).join(''))
   }
   return { name, nameLower, nameTokens: [...tokens] }
 }

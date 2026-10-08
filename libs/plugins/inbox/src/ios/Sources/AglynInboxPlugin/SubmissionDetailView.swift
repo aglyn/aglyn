@@ -15,6 +15,8 @@ struct SubmissionDetailView: View {
   let submissionID: String
   let runner: PluginActionRunner
   let role: SiteRoleModel
+  /// The site's name, the reply's default subject.
+  var siteName: String?
   /// False beside the list, where the screen's own title stays.
   var titled = true
   let onRead: (String, Bool) -> Void
@@ -24,6 +26,8 @@ struct SubmissionDetailView: View {
 
   @State private var model = SubmissionModel()
   @State private var markedRead = false
+  @State private var replies = LiveQueryList(pageSize: 10, map: sentReply)
+  @State private var listSheet = false
 
   private var api: SubmissionsAPI? {
     context.hostID.map {
@@ -48,10 +52,25 @@ struct SubmissionDetailView: View {
     .navigationTitle(titled ? (model.submission?.from ?? "Submission") : "Submissions")
     .task(id: submissionID) {
       markedRead = false
-      if let hostID = context.hostID { model.start(context.firestore, hostID: hostID, id: submissionID) }
+      if let hostID = context.hostID {
+        model.start(context.firestore, hostID: hostID, id: submissionID)
+        replies.show(context.firestore) { _ in
+          FirestoreQuery(repliesPath(hostID, submissionID), order: [.init("sentAtMs", descending: true)], limit: 10)
+        }
+      }
     }
     .onChange(of: model.submission?.read == false && role.canEditContent, initial: true) { _, unread in markIfUnread(unread) }
-    .onDisappear { model.stop() }
+    .onDisappear {
+      model.stop()
+      replies.stop()
+    }
+    .sheet(isPresented: $listSheet) {
+      if let submission = model.submission, let hostID = context.hostID {
+        ListAssignmentSheet(
+          row: submission, actions: InboxActions(api: context.api, reader: context.firestore, hostID: hostID)
+        ) { runner.notice = $0 }
+      }
+    }
   }
 
   /// Marks the opened submission read once per opening, so "Mark as unread" sticks.
@@ -104,6 +123,11 @@ struct SubmissionDetailView: View {
           if submission.repliedAt != nil { StatusChip("Replied", tone: .success) }
           if let kind = submission.capturedKind { StatusChip(kind == "lead" ? "Became a lead" : "Became a contact") }
           if !submission.read { StatusChip("Unread", tone: .warning) }
+          ForEach(submission.chips, id: \.self) { chip in
+            StatusChip(
+              chip.label,
+              tone: chip.color == .success ? .success : chip.color == .info ? .info : chip.color == .warning ? .warning : .neutral)
+          }
         }
         let received = [
           submission.createdAt.map { "Received " + relativeTime($0, now: now) }, submission.path.map { "from \($0)" },
@@ -122,6 +146,20 @@ struct SubmissionDetailView: View {
           .keyboardShortcut("r", modifiers: [.command, .shift])
           .accessibilityIdentifier("submission-reply")
         }
+        if let kind = submission.capturedKind, let id = submission.capturedID {
+          Button(kind == "lead" ? "Open the lead in the CRM" : "Open the contact in the CRM") {
+            context.navigate(kind == "lead" ? "crm.lead" : "crm.contact", [kind: id])
+          }
+          .accessibilityIdentifier("submission-open-crm")
+        }
+        if InboxPermissions(role: role.role).canReply && submission.sender.email != nil {
+          Button {
+            listSheet = true
+          } label: {
+            Label("Add to a marketing list", systemImage: "list.bullet")
+          }
+          .accessibilityIdentifier("submission-add-to-list")
+        }
       }
       Section("What they sent") {
         if submission.fields.isEmpty {
@@ -132,6 +170,17 @@ struct SubmissionDetailView: View {
             Text(field.text.isEmpty ? "—" : field.text).textSelection(.enabled).multilineTextAlignment(.trailing)
           }
           .accessibilityIdentifier("submission-field-\(field.key)")
+        }
+      }
+      if !replies.rows.isEmpty {
+        Section("Replies sent") {
+          ForEach(replies.rows) { reply in
+            AglynRow(
+              reply.subject.isEmpty ? "Reply" : reply.subject,
+              subtitle: [reply.to, reply.sentAt.map { relativeTime($0, now: now) }, String(reply.message.prefix(140))]
+                .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "),
+              systemImage: InboxSymbols.reply)
+          }
         }
       }
     }
@@ -151,12 +200,15 @@ struct ReplySheet: View {
   @State private var message = ""
   @FocusState private var messageFocused: Bool
 
-  init(submission: Submission, api: SubmissionsAPI, runner: PluginActionRunner, close: @escaping () -> Void) {
+  init(
+    submission: Submission, siteName: String? = nil, api: SubmissionsAPI, runner: PluginActionRunner,
+    close: @escaping () -> Void
+  ) {
     self.submission = submission
     self.api = api
     self.runner = runner
     self.close = close
-    _subject = State(initialValue: "Re: \(submission.formName)")
+    _subject = State(initialValue: defaultReplySubject(siteName: siteName, formName: submission.formName))
   }
 
   private var canSend: Bool {

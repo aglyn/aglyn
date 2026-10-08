@@ -141,6 +141,7 @@ const REPO_WIDE = new Set([
   'check:native-fonts',
   'generate:native-brand-assets:check',
   'generate:native-contracts:check',
+  'generate:native-derived-values:check',
   'sync:next-tsconfigs:check',
   'check:ai-palette',
   // Sweeps every tree that is not a plugin for a plugin's domain: a
