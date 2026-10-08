@@ -187,7 +187,7 @@ describe('an alone sort', () => {
     const plan = planListQuery(ALONE, { clauses: [], sort: { path: 'status', direction: 'asc' } })
     expect(plan.orderBy).toMatchObject({ path: 'status', direction: 'asc' })
     expect(plan.notices).toEqual([])
-    expect(plan.sortFallback).toBeNull()
+    expect(plan.sortFallback).toBeUndefined()
   })
 
   it('falls back to the default header order under a filter, and says so', () => {

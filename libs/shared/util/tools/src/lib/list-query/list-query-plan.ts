@@ -201,7 +201,7 @@ export interface ListQueryPlan {
   /**
    * The order asked for that the plan did not serve, and why: `alone` — it
    * is served only with no filter or search on; `range` — a range filter
-   * leads the order with its own field. Null when the asked order is served.
+   * leads the order with its own field. Absent when the asked order is served.
    */
   sortFallback?: { asked: ListQuerySort; reason: 'alone' | 'range' } | null
 }
@@ -586,7 +586,18 @@ export function planListQuery(
     notices.push(`Sorted by ${label}: a ${label} filter orders the list by it.`)
   }
 
-  return { filters, orderBy, served, searched, refused, notices, sortFallback }
+  // Absent rather than null when the asked order was served, so a plan that
+  // sorted as asked reads exactly as it did before AGL-3680 (the native twins
+  // compare plans key by key).
+  return {
+    filters,
+    orderBy,
+    served,
+    searched,
+    refused,
+    notices,
+    ...(sortFallback ? { sortFallback } : {}),
+  }
 }
 
 /** How an order reads in a notice. */
