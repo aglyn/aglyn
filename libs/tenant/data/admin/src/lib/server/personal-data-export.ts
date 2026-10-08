@@ -291,6 +291,27 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Each product linked between the store and the connected inventory system (AGL-3642): the system’s product id, the SKU, the version last synced, the store’s product and variant ids, and why it was not synced. Catalog data, no person’s.',
   },
   {
+    collection: 'podConnections',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'EXISTENCE ONLY for the tokens — each site’s connection to the merchant’s own Printful store or Printify shop (AGL-3641): service, store id and name, currency, whether orders are sent automatically or held for review, whether prices sync, how shipments are heard about, and the last error. The sealed API token and webhook token and the id of the key that sealed them carry `token` in their names and are redacted (see redactSecrets).',
+  },
+  {
+    collection: 'podProductLinks',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each product imported from a print-on-demand service (AGL-3641): the service’s product and variant ids, the store product and variants it became, names, SKUs, what the service charges for each variant and the store’s price. Catalog data, no person’s.',
+  },
+  {
+    collection: 'podOrders',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'The part of each paid order a print-on-demand service makes and ships (AGL-3641): the store order and its number, the service’s order id, the lines sent with quantity and cost, its status, costs, attempts and errors, and each parcel’s carrier and tracking number. No buyer name, address or email is kept here; they are on the store’s order. The merchant’s own record of a SHOPPER’s order, so disclosed to the ORG only.',
+  },
+  {
     collection: 'deliveryAppStores',
     keyedBy: 'field',
     subjects: ['org'],
@@ -1110,6 +1131,9 @@ export async function exportOrgData(
     'inventorySyncConnections',
     'inventorySyncOrders',
     'inventorySyncProducts',
+    'podConnections',
+    'podProductLinks',
+    'podOrders',
     'deliveryAppStores',
     'deliveryAppOrders',
   ]) {
