@@ -89,13 +89,23 @@ const repoPath = (absolutePath: string) => relative(REPO_ROOT, absolutePath)
 const MEDIA_COLLECTION = "collection('media')"
 const MINTS_AN_ID = 'createResourceUid'
 
+/**
+ * `media/folders` mints a FOLDER id for its `create-folder` action (the
+ * native apps' New folder, AGL-3668) — a `mediaFolders` document, never a
+ * media one. Only that exact chain is set aside: any other CALL of
+ * `createResourceUid(` left in the file still makes it a creator.
+ */
+const MINTS_A_FOLDER_ID = 'foldersRef.doc(createResourceUid())'
+const mintsAMediaId = (source: string) =>
+  source.split(MINTS_A_FOLDER_ID).join('').includes(`${MINTS_AN_ID}(`)
+
 const CREATORS = walk(
   resolve(REPO_ROOT, CONSOLE_API),
   (name) => name === 'route.ts',
 )
   .filter((file) => {
     const source = read(file)
-    return source.includes(MEDIA_COLLECTION) && source.includes(MINTS_AN_ID)
+    return source.includes(MEDIA_COLLECTION) && mintsAMediaId(source)
   })
   .map(repoPath)
   .sort()

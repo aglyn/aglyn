@@ -39,10 +39,26 @@ import {
   mediaCdnPathUpdate,
   scopeCascadeSlice,
   isFolderScopePreviewRequest,
+  scopeAllows,
 } from '../../../../utils/server/media-scope'
 import { moveAssetsWithinBudget } from '../../../../utils/server/media-move'
 import { resolvePluginMediaPublishRefusal } from '@aglyn/aglyn/plugin-manager/plugin-media-publish'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import {
+  MEDIA_ALT_MAX_LENGTH,
+  mediaFilterKeys,
+  normalizeMediaTags,
+} from '@aglyn/aglyn/app-utils/media-metadata'
+import {
+  MEDIA_FOLDER_MAX_DEPTH,
+  folderDepth,
+  newMediaFolderDoc,
+} from '@aglyn/aglyn/app-utils/media-folders'
+import {
+  createResourceUid,
+  defaultMediaScopeOf,
+  defaultScopeForNewResource,
+} from '@aglyn/aglyn/server'
 
 /** Bounded per request — console-triggered admin op, not a batch job. */
 const MAX_ASSETS_PER_OP = 500
@@ -77,6 +93,12 @@ class FolderTooLargeError extends Error {
  * - `set-scope` {folderId, visibleTo, cascade?, preview?, chunkStart?,
  *   chunkSize?} — the folder sharing cascade (AGL-1045); `preview` counts
  *   the subtree without writing, the cursor pair makes it resumable
+ * - `create-folder` {name, parentId|null, forHostId?} — the library's New
+ *   folder, with its name, depth and sibling checks and the org's default
+ *   sharing (AGL-3668, the native apps)
+ * - `update-details` {mediaId, fileName?, alt?, description?, tags?} — the
+ *   details drawer's save, with the library's filter and search keys
+ *   re-derived from the document it leaves (AGL-3668, the native apps)
  */
 async function handler(request: Request): Promise<Response> {
   const { method, query, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -649,6 +671,76 @@ async function handler(request: Request): Promise<Response> {
         },
         { status: 200 },
       )
+    }
+
+    if (action === 'create-folder') {
+      const name = normalizeFolderName(String(body?.name ?? ''))
+      const rawParent = body?.parentId
+      const parentId = typeof rawParent === 'string' && rawParent ? rawParent : null
+      if (!name) return Response.json({ error: 'Name the folder (up to 60 characters)' }, { status: 400 })
+      const siblings = await foldersRef.limit(500).get()
+      const folders = siblings.docs.map((docSnapshot) => ({ $id: docSnapshot.id, ...docSnapshot.data() })) as any[]
+      const foldersById = Object.fromEntries(folders.map((folder) => [folder.$id, folder]))
+      if (parentId && !foldersById[parentId]) {
+        return Response.json({ error: 'Unknown parent folder' }, { status: 404 })
+      }
+      if (isSiblingNameTaken(name, parentId, folders)) {
+        return Response.json({ error: 'A folder with that name already exists here' }, { status: 409 })
+      }
+      if ((parentId ? folderDepth(parentId, foldersById) : 0) + 1 > MEDIA_FOLDER_MAX_DEPTH) {
+        return Response.json({ error: `Folders can nest at most ${MEDIA_FOLDER_MAX_DEPTH} levels` }, { status: 400 })
+      }
+      const forHostId = typeof body?.forHostId === 'string' && body.forHostId ? body.forHostId : null
+      const ref = foldersRef.doc(createResourceUid())
+      await ref.set(
+        newMediaFolderDoc({
+          name,
+          parentId,
+          createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+          visibleTo:
+            scope.collection === 'orgs'
+              ? defaultScopeForNewResource({
+                  defaultResourceScope: defaultMediaScopeOf(scope.billing as Parameters<typeof defaultMediaScopeOf>[0]),
+                  hostId: forHostId,
+                })
+              : undefined,
+        } as Parameters<typeof newMediaFolderDoc>[0]),
+      )
+      return Response.json({ ok: true, folderId: ref.id }, { status: 200 })
+    }
+
+    if (action === 'update-details') {
+      const mediaId = String(body?.mediaId ?? '')
+      if (!mediaId) return Response.json({ error: 'Missing mediaId' }, { status: 400 })
+      const snapshot = await mediaRef.doc(mediaId).get()
+      if (!snapshot.exists || snapshot.get('deletedAt')) {
+        return Response.json({ error: 'Unknown media' }, { status: 404 })
+      }
+      // A scoped member edits only what their scope reads, as the rules hold it.
+      if (scope.collection === 'orgs' && !scopeAllows(scope, snapshot.get('visibleTo'))) {
+        return Response.json({ error: 'Unknown media' }, { status: 404 })
+      }
+      const current = snapshot.data() ?? {}
+      const fileName =
+        typeof body?.fileName === 'string' && body.fileName.trim()
+          ? body.fileName.trim().slice(0, 200)
+          : String(current['fileName'] ?? '')
+      const alt =
+        typeof body?.alt === 'string' ? body.alt.trim().slice(0, MEDIA_ALT_MAX_LENGTH) : String(current['alt'] ?? '')
+      const description =
+        typeof body?.description === 'string' ? body.description.trim() : String(current['description'] ?? '')
+      const tags = Array.isArray(body?.tags) || typeof body?.tags === 'string'
+        ? normalizeMediaTags(body.tags as string | string[])
+        : ((current['tags'] ?? []) as string[])
+      await snapshot.ref.update({
+        fileName,
+        alt,
+        description,
+        tags,
+        ...mediaFilterKeys({ ...current, fileName, alt }),
+        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      })
+      return Response.json({ ok: true }, { status: 200 })
     }
 
     if (action === 'custom-metadata') {

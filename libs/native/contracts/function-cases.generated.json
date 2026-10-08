@@ -1108,6 +1108,158 @@
         }
       ]
     },
+    "mediaKindOf": {
+      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "cases": [
+        {
+          "args": [
+            "image/png"
+          ],
+          "result": "image"
+        },
+        {
+          "args": [
+            "VIDEO/MP4"
+          ],
+          "result": "video"
+        },
+        {
+          "args": [
+            "application/pdf"
+          ],
+          "result": "pdf"
+        },
+        {
+          "args": [
+            "application/zip"
+          ],
+          "result": "document"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": "document"
+        }
+      ]
+    },
+    "mediaSearchToken": {
+      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "cases": [
+        {
+          "args": [
+            "Hero-Banner_2024.final.JPG"
+          ],
+          "result": "hero"
+        },
+        {
+          "args": [
+            "  café  à la carte "
+          ],
+          "result": "café"
+        },
+        {
+          "args": [
+            "IMG_0042.png"
+          ],
+          "result": "img"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            "Ünïcødé—name (copy)"
+          ],
+          "result": "ünïcødé"
+        }
+      ]
+    },
+    "messageSender": {
+      "module": "libs/aglyn/src/lib/app-utils/message-search.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "name": "Priya Shah",
+              "email": "priya@example.com",
+              "message": "Hi"
+            }
+          ],
+          "result": {
+            "email": "priya@example.com",
+            "name": "Priya Shah"
+          }
+        },
+        {
+          "args": [
+            {
+              "Full Name": "Marcus Lee",
+              "E-mail": "marcus@example.com"
+            }
+          ],
+          "result": {
+            "email": "marcus@example.com",
+            "name": "Marcus Lee"
+          }
+        },
+        {
+          "args": [
+            {
+              "first_name": "Ana",
+              "Email Address": "ana@example.com"
+            }
+          ],
+          "result": {
+            "email": "ana@example.com",
+            "name": "Ana"
+          }
+        },
+        {
+          "args": [
+            {
+              "message": "no sender"
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "name": "  ",
+              "email": "x@example.com"
+            }
+          ],
+          "result": {
+            "email": "x@example.com"
+          }
+        },
+        {
+          "args": [
+            {
+              "contact-name": "Bo",
+              "email": [
+                "a@example.com",
+                "b@example.com"
+              ]
+            }
+          ],
+          "result": {
+            "email": "a@example.com b@example.com",
+            "name": "Bo"
+          }
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": {}
+        }
+      ]
+    },
     "orderChannelLabel": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "cases": [

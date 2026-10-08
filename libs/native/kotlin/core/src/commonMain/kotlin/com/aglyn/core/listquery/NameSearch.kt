@@ -67,3 +67,14 @@ object NameSearchNormalizers : ListQueryNormalizers {
   override fun reversed(value: String) = nameSearchReversed(value)
   override val maxPrefix: Int = NAME_TOKEN_MAX_PREFIX
 }
+
+/**
+ * The name keys a rename writes beside `displayName` (`displayNameSearchFields`):
+ * `nameLower`, `nameTokens` and `nameReversed`, so list search and sort find
+ * the new name.
+ */
+fun displayNameSearchFields(displayName: String?): Map<String, Any?> = mapOf(
+  "nameLower" to nameSearchKey(displayName),
+  "nameTokens" to nameSearchTokens(displayName),
+  "nameReversed" to nameSearchReversed(displayName),
+)
