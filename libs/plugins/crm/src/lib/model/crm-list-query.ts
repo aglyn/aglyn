@@ -213,6 +213,21 @@ const isSentinel = (value: unknown): boolean =>
 /** The search fields every CRM record carries — what a client edit of searched text rewrites. */
 export const CRM_CLIENT_SEARCH_FIELDS = ['searchTokens', 'scopedSearchTokens'] as const
 
+/**
+ * The header sort keys a client edit of their inputs rewrites (AGL-3680) —
+ * see `crmSortKey` in `@aglyn/aglyn`. `crmClientListFields` writes only the
+ * ones the collection computes, so one list serves every edit.
+ */
+export const CRM_CLIENT_SORT_FIELDS = [
+  'nameSortKey',
+  'companyLower',
+  'jobTitleLower',
+  'titleLower',
+  'amountSortCents',
+  'expectedCloseSortAtMs',
+  'priorityRank',
+] as const
+
 
 /**
  * The list fields a deal's contact roles are found by (AGL-3521) — what a

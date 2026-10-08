@@ -40,6 +40,7 @@ import {
   CONTACT_LIST_DECLARATION,
   CONTACT_LIST_FILTER_FIELDS,
   CONTACT_LIST_FILTER_HEADERS,
+  CONTACT_LIST_SORTS,
   CONTACT_PREFIX_SEARCH,
   contactClauseImpliesScope,
   contactSoloClause,
@@ -49,6 +50,7 @@ import {
 } from '../constants/contact-filters'
 import { crmAskClauses, crmQueryRefusals } from '../model/crm-list-query'
 import { useCrmFoldsScope, useCrmListQuery } from '../hooks/use-crm-list-query'
+import { crmViewQuerySort, useCrmColumnSort } from '../hooks/use-crm-column-sort'
 import {
   type ContactRecord,
   contactPrimaryGroup,
@@ -128,6 +130,15 @@ import { CrmSuiteLockedButton, CrmSuiteNotice, crmSuiteIncluded } from './crm-su
  * editor and this filter cannot disagree about what `order` is called.
  */
 const SOURCE_LABELS = CONTACT_SOURCE_LABELS
+
+/**
+ * The page sorts a column needs other than its cell's text (AGL-3680): the
+ * stage by its place in the lifecycle, not its label's spelling.
+ */
+const CONTACT_PAGE_SORTS = {
+  lifecycleStage: (row: ContactRecord) =>
+    row.lifecycleStage ? CONTACT_LIFECYCLE_STAGES.indexOf(row.lifecycleStage) : null,
+}
 
 /**
  * What the list keeps out of sight until a view says otherwise: the
@@ -337,6 +348,11 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   const impliesScope = useMemo(() => contactClauseImpliesScope(groupId), [groupId])
   // The quick search is the grid's box, answered by the same query.
   const [searchWords, setSearchWords] = useState<string[]>([])
+  // The header order the view asks (AGL-3680), read before the query it orders.
+  const contactSort = useMemo(
+    () => crmViewQuerySort(CONTACT_LIST_SORTS, views.state.sort, CONTACT_LIST_SORTS[0]),
+    [views.state.sort],
+  )
   const paged = useCrmListQuery<any>({
     scope: dataScope,
     collection: 'contacts',
@@ -348,6 +364,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
     impliesScope,
     soloClause: contactSoloClause,
     prefixSearch: CONTACT_PREFIX_SEARCH,
+    sort: contactSort.sort,
   })
   const contactDocs = paged.rows
   const contactsStatus = paged.status
@@ -673,6 +690,21 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
     search: { words: searchWords, onChange: setSearchWords },
   })
   const grid = useCrmViewGrid(views, filterColumns, HIDDEN_COLUMNS)
+  /*
+   * EVERY HEADER SORTS (AGL-3680): the stored ones on the query
+   * (`CONTACT_LIST_SORTS`), the holder's facet values and the joined names
+   * over the page, saying so — the stage by its place in the lifecycle.
+   */
+  const columnSort = useCrmColumnSort<ContactRecord>({
+    views,
+    sorts: CONTACT_LIST_SORTS,
+    defaultSort: CONTACT_LIST_SORTS[0],
+    asked: contactSort,
+    orderBy: paged.plan.orderBy,
+    rows: contacts,
+    columns: grid.columns,
+    pageSorts: CONTACT_PAGE_SORTS,
+  })
 
   /*
    * A SEGMENT IS A VIEW'S TAG AND SOURCE CLAUSES, kept where a campaign
@@ -997,7 +1029,10 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                 }. The money moved; the customer's timeline does not show it.`}
               </Alert>
             ) : null}
-            <ListQueryNotices refused={refused} notices={paged.plan.notices} />
+            <ListQueryNotices
+              refused={refused}
+              notices={[...paged.plan.notices, ...columnSort.notices]}
+            />
             {contacts.length === 0 &&
             !views.state.filters.length &&
             !searchWords.some((word) => word.trim()) ? (
@@ -1042,7 +1077,8 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                 <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={contacts} selected={selectedIds} onSelectedChange={setSelectedIds} suiteLocked={!suiteIncluded} />
                 <CrmColumnOrderProvider value={grid.columnOrder}>
                   <ListTable
-                    rows={contacts}
+                    rows={columnSort.rows}
+                    columnSort={columnSort}
                     columns={grid.columns}
                     slots={CRM_LIST_SLOTS}
                     selectable={{ selected: selectedIds, onChange: setSelectedIds }}
@@ -1053,8 +1089,9 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                      * grid must not filter again itself. Opening the panel is
                      * what reads the roster and the companies its pickers name.
                      * Columns are the view's, controlled so a saved arrangement
-                     * is what the grid shows; the query orders the rows —
-                     * newest change first — so the grid sorts nothing itself.
+                     * is what the grid shows. The headers sort through
+                     * `columnSort` (AGL-3680): a stored column re-asks the
+                     * query, any other sorts the page and says so.
                      */
                     filterMode="server"
                     filterModel={gridFilter.filterModel}
@@ -1068,8 +1105,6 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                     }
                     columnVisibilityModel={grid.columnVisibilityModel}
                     onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
-                    sortingMode="server"
-                    disableColumnSorting
                     loading={contactsStatus === 'loading'}
                     // Paged by the footer below, so the grid must not also slice.
                     hideFooter
