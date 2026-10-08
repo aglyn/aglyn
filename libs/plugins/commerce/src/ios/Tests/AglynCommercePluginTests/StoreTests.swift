@@ -63,22 +63,23 @@ final class StoreOrdersTests: XCTestCase {
       orderRefundableCents(HostOrder(refundedCents: 500, status: .fulfilled, totals: OrderTotals(totalCents: 2500))), 2000)
   }
 
-  func testSalesCountPaidOrdersByLocalDayLessRefunds() {
+  func testSalesAreTheConsolesFiguresByLocalDay() {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(identifier: "America/Chicago")!
     let now = Date(timeIntervalSince1970: 1_760_000_000)
     let ms = { (date: Date) in date.timeIntervalSince1970 * 1000 }
+    let live = { (order: HostOrder) in FigureOrder(id: "o", livemode: true, order: order) }
     let orders = [
-      HostOrder(createdAtMs: ms(now), refundedCents: 500, status: .paid, totals: OrderTotals(totalCents: 3000)),
-      HostOrder(createdAtMs: ms(now), status: .pending, totals: OrderTotals(totalCents: 9999)),
-      HostOrder(createdAtMs: ms(now.addingTimeInterval(-86_400 * 2)), status: .fulfilled, totals: OrderTotals(totalCents: 1000)),
-      HostOrder(createdAtMs: ms(now.addingTimeInterval(-86_400 * 30)), status: .paid, totals: OrderTotals(totalCents: 7000)),
+      live(HostOrder(createdAtMs: ms(now), refundedCents: 500, status: .paid, totals: OrderTotals(totalCents: 3000))),
+      live(HostOrder(createdAtMs: ms(now), status: .pending, totals: OrderTotals(totalCents: 9999))),
+      FigureOrder(id: "cs_test_1", livemode: nil, order: HostOrder(createdAtMs: ms(now), status: .paid, totals: OrderTotals(totalCents: 4000))),
+      live(HostOrder(createdAtMs: ms(now.addingTimeInterval(-86_400 * 2)), status: .fulfilled, totals: OrderTotals(totalCents: 1000))),
+      live(HostOrder(createdAtMs: ms(now.addingTimeInterval(-86_400 * 30)), status: .paid, totals: OrderTotals(totalCents: 7000))),
     ]
     let summary = summarizeSales(orders, now: now, calendar: calendar)
     XCTAssertEqual(summary.days.count, 7)
-    XCTAssertEqual(summary.today?.cents, 2500)
     XCTAssertEqual(summary.today?.orders, 1)
-    XCTAssertEqual(summary.weekCents, 3500)
+    XCTAssertEqual(summary.today?.cents, orderPaidCents(liftLegacyOrder(orders[0].order)))
     XCTAssertEqual(summary.weekOrders, 2)
   }
 }

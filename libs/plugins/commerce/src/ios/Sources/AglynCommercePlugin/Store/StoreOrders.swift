@@ -265,6 +265,7 @@ func refundOrder(api: ConsoleAPIClient, hostID: String, orderID: String, attempt
 func orderCanRefund(_ order: HostOrder) -> Bool {
   let status = order.status ?? .pending
   return canTransitionOrder(from: status, to: .refunded) && orderRefundState(order) != .full
+    && !orderDisputeBlocksRefund(order)
 }
 
 /// The paid amount still refundable, for the confirmation's words.
