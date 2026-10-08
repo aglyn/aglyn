@@ -158,7 +158,9 @@ function siteContext(brief: Brief): AiSiteContextInput {
 }
 
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi
-const PHONE = /\+?\d[\d\s().-]{8,}\d/g
+// Standing alone: a digit run inside a hash, an id or a key (`…a5602904079f…`)
+// is not a phone number, and the plan's JSON carries several.
+const PHONE = /(?<![\w.])\+?\d[\d\s().-]{8,}\d(?![\w])/g
 const digits = (value: string) => value.replace(/\D/g, '')
 
 /** Every email and phone number in the plan that the profile did not give. */
