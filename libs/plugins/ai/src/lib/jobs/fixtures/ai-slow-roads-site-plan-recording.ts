@@ -45,7 +45,7 @@ export const AI_SLOW_ROADS_SITE_PLAN_FIRST_ANSWER: AiBuildPlan = {
         'name',
         'email',
         'topic',
-        'favourite route or journey',
+        'favorite route or journey',
         'message',
         'consent to be contacted and subscribe to new posts',
       ],
