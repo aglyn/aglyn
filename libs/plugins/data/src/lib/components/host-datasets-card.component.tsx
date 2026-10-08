@@ -66,6 +66,7 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -114,6 +115,9 @@ export interface HostDatasetsCardProps {
  * sharing is "Only the site they were created in". Everywhere else a new
  * dataset starts on All sites: the org Data page has no site to limit it to.
  */
+/** The records walk serves no header order: every header sorts the page. */
+const NO_QUERY_SORTS: never[] = []
+
 export function newDatasetSharingNote(siteOnly: boolean): string {
   return siteOnly
     ? 'Datasets belong to your organization. Your default sharing starts a ' +
@@ -337,7 +341,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
    * `sortDatasetRecords` is deliberately NOT applied to the page. Re-sorting a
    * window of an id-ordered walk by `order` is the same lie the old code told:
    * rows would run in one order within a page and another across pages.
-   * The grid's column sort is off for the same reason.
+   * For the same reason a header sorts THIS PAGE only, and says so
+   * (AGL-3680, `recordColumnSort` below): no stored field could serve it.
    *
    * ## Filtering: every clause and the search word are on the query
    *
@@ -1148,7 +1153,6 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               description: field?.description,
               flex: 1,
               minWidth: 140,
-              sortable: false,
               renderCell: ({ row }: { row: any }) =>
                 field?.type === 'reference'
                   ? referenceLabel(fieldId, row.values?.[fieldId]) || '--'
@@ -1194,6 +1198,45 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       recordFilter,
     ],
   )
+
+  /*
+   * EVERY HEADER SORTS — THE PAGE ON SCREEN (AGL-3680). A record's values are
+   * per-schema and no field is on every record (see the walk above), so no
+   * query can order by one; each value column sorts the loaded page by what
+   * it shows (a reference by its label, a number or switch by its value) and
+   * the notice says it is this page only.
+   */
+  const recordPageSorts = useMemo(
+    () =>
+      Object.fromEntries(
+        fields.map((fieldId) => {
+          const field = model.fields[fieldId]
+          return [
+            recordColumn(fieldId),
+            (row: any) => {
+              const value = row.values?.[fieldId]
+              if (field?.type === 'reference') return referenceLabel(fieldId, value) || null
+              if (typeof value === 'number' || typeof value === 'boolean') return value
+              return field ? formatDatasetValue(field, value) || null : null
+            },
+          ]
+        }),
+      ),
+    [fields, model, referenceLabel],
+  )
+  const recordSortHeaders = useMemo(
+    () =>
+      Object.fromEntries(
+        fields.map((fieldId) => [recordColumn(fieldId), model.fields[fieldId]?.name ?? fieldId]),
+      ),
+    [fields, model],
+  )
+  const recordColumnSort = useListColumnSort<any>({
+    sorts: NO_QUERY_SORTS,
+    rows: records,
+    pageSorts: recordPageSorts,
+    headers: recordSortHeaders,
+  })
 
   return (
     <CardDisplay
@@ -1296,10 +1339,14 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             onChange={gridFilter.setClauses}
             options={recordFilter.options}
           />
-          <ListQueryNotices refused={recordRefusals} notices={recordPlan.notices} />
+          <ListQueryNotices
+            refused={recordRefusals}
+            notices={[...recordPlan.notices, ...recordColumnSort.notices]}
+          />
           <ListTable
             aria-label="Records"
-            rows={records}
+            rows={recordColumnSort.rows}
+            columnSort={recordColumnSort}
             columns={recordGridColumns}
             onOpen={(id) => setViewerId(id)}
             // One page of the walk, turned by the footer below: the grid
@@ -1309,7 +1356,6 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             filterModel={gridFilter.filterModel}
             onFilterModelChange={gridFilter.onFilterModelChange}
             quickFilter
-            disableColumnSorting
             noRowsLabel={
               filteringRecords ? 'No records match these filters' : 'No records yet.'
             }

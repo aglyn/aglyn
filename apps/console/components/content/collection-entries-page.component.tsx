@@ -104,6 +104,8 @@ import {
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
@@ -1302,6 +1304,14 @@ export function CollectionEntriesPage() {
     The site's authors, in the entries grid's grammar: the row opens the
     author, and editing or deleting it is in the row's menu.
   */
+  // Entries is counted off the Entries tab's page, so it sorts the page.
+  const authorPageSorts = useMemo(
+    () => ({
+      entries: (row: Aglyn.ContentAuthorRecord) =>
+        entries.filter((entry: any) => entry.authorId === row.$id).length,
+    }),
+    [entries],
+  )
   const authorColumns = useMemo<GridColDef[]>(
     () => [
       {
@@ -2335,6 +2345,7 @@ export function CollectionEntriesPage() {
                           hostId={hostId}
                           columns={authorColumns}
                           onOpen={openAuthor}
+                          pageSorts={authorPageSorts}
                         />
                       )}
                     </Stack>
@@ -2830,15 +2841,27 @@ CollectionEntriesPage.displayName = 'CollectionEntriesPage'
  * pages its own, so a filter answers for every author and not the ten on
  * screen.
  */
+/** The page-sorted header, for its notice (AGL-3680). */
+const AUTHOR_SORT_HEADERS = { entries: 'Entries' }
+
 function AuthorsTable(props: {
   hostId: string
   columns: GridColDef[]
   onOpen: (author: Aglyn.ContentAuthorRecord) => void
+  /** Columns that sort the loaded page (AGL-3680): field → value. */
+  pageSorts?: Readonly<Record<string, (row: Aglyn.ContentAuthorRecord) => number | string | null>>
 }) {
-  const { hostId, columns, onOpen } = props
+  const { hostId, columns, onOpen, pageSorts } = props
   const firestore = useFirestore()
   const selectFields = useMemo(() => Object.keys(AUTHOR_LIST_FILTER_OPTIONS), [])
   const gridFilter = useListGridFilter({ selectFields })
+  /*
+   * EVERY HEADER SORTS (AGL-3680): Author and Type order the QUERY (see
+   * `AUTHOR_LIST_QUERY`); Entries sorts the page and says so.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(
+    AUTHOR_LIST_QUERY.sorts[0],
+  )
   const {
     rows,
     hasMore,
@@ -2851,7 +2874,11 @@ function AuthorsTable(props: {
   } = useListQuery<any>({
     collection: collection(firestore, 'hosts', hostId, 'authors'),
     declaration: AUTHOR_LIST_QUERY,
-    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords },
+    request: {
+      clauses: gridFilter.clauses,
+      search: gridFilter.searchWords,
+      sort: askedSort,
+    },
     deps: [firestore, hostId],
     idField: '$id',
   })
@@ -2864,6 +2891,16 @@ function AuthorsTable(props: {
         .filter((row): row is Aglyn.ContentAuthorRecord => Boolean(row)),
     [rows],
   )
+  const columnSort = useListColumnSort<Aglyn.ContentAuthorRecord>({
+    sorts: AUTHOR_LIST_QUERY.sorts,
+    defaultSort: AUTHOR_LIST_QUERY.sorts[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows: authorRows,
+    pageSorts,
+    headers: AUTHOR_SORT_HEADERS,
+  })
   const gridColumns = useMemo(
     () =>
       listFilterGridColumns(
@@ -2894,7 +2931,7 @@ function AuthorsTable(props: {
         onChange={gridFilter.setClauses}
         options={AUTHOR_LIST_FILTER_OPTIONS}
       />
-      <ListQueryNotices refused={refused} notices={plan.notices} />
+      <ListQueryNotices refused={refused} notices={[...plan.notices, ...columnSort.notices]} />
       {status === 'error' ? (
         <Alert severity="error">
           {'These authors could not be loaded. Clear the filters and try again.'}
@@ -2902,19 +2939,18 @@ function AuthorsTable(props: {
       ) : null}
       <ListTable
         aria-label="Authors"
-        rows={authorRows}
+        rows={columnSort.rows}
+        columnSort={columnSort}
         columns={gridColumns}
         rowHeight={TABLE_ROW_HEIGHT}
         onOpen={(_id, row) => onOpen(row)}
         loading={status === 'loading'}
-        // The query answers the panel, the search and the order — by name,
-        // the one order this list's composites serve — over every author.
+        // The query answers the panel, the search and the Author and Type
+        // headers over every author; Entries sorts the page, and says so.
         filterMode="server"
         filterModel={gridFilter.filterModel}
         onFilterModelChange={gridFilter.onFilterModelChange}
         quickFilter
-        sortingMode="server"
-        disableColumnSorting
         noRowsLabel={
           narrowed ? 'No authors match these filters' : 'No authors to show'
         }

@@ -70,14 +70,17 @@ describe('every Inbox list has the composites its queries need', () => {
   it('stays inside the budget: one composite per filterable field and order', () => {
     // email, searchTokens — the Site users list's own two.
     expect(listQueryIndexes(SITE_MEMBER_LIST_QUERY)).toHaveLength(2)
-    // visibleTo, email, searchTokens, scopedSearchTokens.
-    expect(listQueryIndexes(LEAD_LIST_QUERY, LEAD_LIST_BASE_INDEX)).toHaveLength(4)
+    // visibleTo, email, searchTokens, scopedSearchTokens; and the header
+    // orders (AGL-3680), `alone`, beside the scope only: oldest first and
+    // the address either way.
+    expect(listQueryIndexes(LEAD_LIST_QUERY, LEAD_LIST_BASE_INDEX)).toHaveLength(7)
     // email, searchTokens, scopedSearchTokens, sources, capturedByHostIds.
     expect(listQueryIndexes(ORG_LEAD_LIST_QUERY)).toHaveLength(5)
     // senderTokens, read, formId, searchTokens.
     expect(listQueryIndexes(SUBMISSION_LIST_QUERY)).toHaveLength(4)
-    // orgId, senderTokens, read, hostId, searchTokens.
-    expect(listQueryIndexes(ORG_SUBMISSION_LIST_QUERY, [{ path: 'orgId' }])).toHaveLength(5)
+    // orgId, senderTokens, read, hostId, searchTokens; and the header orders
+    // (AGL-3680), `alone`, beside the scope only: oldest first, Read either way.
+    expect(listQueryIndexes(ORG_SUBMISSION_LIST_QUERY, [{ path: 'orgId' }])).toHaveLength(8)
   })
 })
 
@@ -93,7 +96,7 @@ describe('the site members list', () => {
       { path: 'searchTokens', op: 'array-contains', value: 'love' },
       { path: 'email', op: '==', value: 'ada@example.com' },
     ])
-    expect(planned.orderBy).toEqual({ path: 'createdAt', direction: 'desc' })
+    expect(planned.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
   })
 })
 
@@ -143,7 +146,7 @@ describe('the leads list', () => {
       { path: 'email', op: '>=', value: 'dana' },
       { path: 'email', op: '<=', value: 'dana\uf8ff' },
     ])
-    expect(planned.orderBy).toEqual({ path: 'email', direction: 'asc' })
+    expect(planned.orderBy).toMatchObject({ path: 'email', direction: 'asc' })
     expect(planned.served.map((clause) => clause.field)).toEqual([LEAD_ADDRESS_SEARCH_COLUMN])
   })
 
@@ -197,7 +200,7 @@ describe('the submissions list', () => {
       { path: 'read', op: '==', value: false },
       { path: 'formId', op: '==', value: 'form-1' },
     ])
-    expect(planned.orderBy).toEqual({ path: 'createdAt', direction: 'desc' })
+    expect(planned.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
   })
 
   it('refuses From beside the search, by name', () => {

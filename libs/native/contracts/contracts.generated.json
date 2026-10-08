@@ -819,7 +819,29 @@
       {
         "column": "name",
         "direction": "asc",
+        "label": "List",
         "path": "name"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "desc",
+        "label": "List",
+        "path": "name"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "asc",
+        "label": "Membership",
+        "path": "kind"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "desc",
+        "label": "Membership",
+        "path": "kind"
       }
     ]
   },
@@ -845,6 +867,14 @@
       {
         "column": "displayName",
         "direction": "asc",
+        "label": "Template",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "desc",
+        "label": "Template",
         "path": "nameLower"
       }
     ]
@@ -1152,6 +1182,118 @@
       {
         "direction": "asc",
         "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "asc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "desc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "slug",
+        "direction": "asc",
+        "label": "Slug",
+        "path": "slug"
+      },
+      {
+        "alone": true,
+        "column": "slug",
+        "direction": "desc",
+        "label": "Slug",
+        "path": "slug"
+      },
+      {
+        "alone": true,
+        "column": "submissions",
+        "direction": "asc",
+        "label": "Submissions",
+        "path": "stats.submissions"
+      },
+      {
+        "alone": true,
+        "column": "submissions",
+        "direction": "desc",
+        "label": "Submissions",
+        "path": "stats.submissions"
+      },
+      {
+        "alone": true,
+        "column": "leads",
+        "direction": "asc",
+        "label": "Leads",
+        "path": "stats.leads"
+      },
+      {
+        "alone": true,
+        "column": "leads",
+        "direction": "desc",
+        "label": "Leads",
+        "path": "stats.leads"
+      },
+      {
+        "alone": true,
+        "column": "lastSubmission",
+        "direction": "desc",
+        "label": "Last submission",
+        "path": "stats.lastSubmissionAtMs"
+      },
+      {
+        "alone": true,
+        "column": "lastSubmission",
+        "direction": "asc",
+        "label": "Last submission",
+        "path": "stats.lastSubmissionAtMs"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "desc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "asc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "leadRouting",
+        "direction": "asc",
+        "label": "Lead routing",
+        "path": "routing.lead"
+      },
+      {
+        "alone": true,
+        "column": "leadRouting",
+        "direction": "desc",
+        "label": "Lead routing",
+        "path": "routing.lead"
+      },
+      {
+        "alone": true,
+        "column": "inCampaign",
+        "direction": "asc",
+        "label": "In a campaign",
+        "path": "inCampaign"
+      },
+      {
+        "alone": true,
+        "column": "inCampaign",
+        "direction": "desc",
+        "label": "In a campaign",
+        "path": "inCampaign"
       }
     ]
   },
@@ -1180,8 +1322,31 @@
     },
     "sorts": [
       {
+        "column": "createdAt",
         "direction": "desc",
+        "label": "Received",
         "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Received",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "asc",
+        "label": "Read",
+        "path": "read"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "desc",
+        "label": "Read",
+        "path": "read"
       }
     ]
   },
@@ -1842,8 +2007,31 @@
     },
     "sorts": [
       {
+        "column": "createdAt",
         "direction": "desc",
+        "label": "Captured",
         "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Captured",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "asc",
+        "label": "Email",
+        "path": "email"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "desc",
+        "label": "Email",
+        "path": "email"
       }
     ]
   },
@@ -1897,6 +2085,62 @@
       {
         "direction": "asc",
         "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "asc",
+        "label": "Address",
+        "path": "email"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "desc",
+        "label": "Address",
+        "path": "email"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "asc",
+        "label": "Name",
+        "path": "name"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "desc",
+        "label": "Name",
+        "path": "name"
+      },
+      {
+        "alone": true,
+        "column": "addedAt",
+        "direction": "asc",
+        "label": "Joined",
+        "path": "addedAt"
+      },
+      {
+        "alone": true,
+        "column": "addedAt",
+        "direction": "desc",
+        "label": "Joined",
+        "path": "addedAt"
+      },
+      {
+        "alone": true,
+        "column": "via",
+        "direction": "asc",
+        "label": "How",
+        "path": "via"
+      },
+      {
+        "alone": true,
+        "column": "via",
+        "direction": "desc",
+        "label": "How",
+        "path": "via"
       }
     ]
   },
@@ -2956,8 +3200,31 @@
     },
     "sorts": [
       {
+        "column": "createdAt",
         "direction": "desc",
+        "label": "Received",
         "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Received",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "asc",
+        "label": "Read",
+        "path": "read"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "desc",
+        "label": "Read",
+        "path": "read"
       }
     ]
   },
@@ -3577,8 +3844,31 @@
     },
     "sorts": [
       {
+        "column": "createdAt",
         "direction": "desc",
+        "label": "Joined",
         "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Joined",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "asc",
+        "label": "Email",
+        "path": "email"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "desc",
+        "label": "Email",
+        "path": "email"
       }
     ]
   },
@@ -3621,8 +3911,31 @@
     },
     "sorts": [
       {
+        "column": "createdAt",
         "direction": "desc",
+        "label": "Received",
         "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Received",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "asc",
+        "label": "Read",
+        "path": "read"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "desc",
+        "label": "Read",
+        "path": "read"
       }
     ]
   },
@@ -3670,7 +3983,43 @@
       {
         "column": "since",
         "direction": "desc",
+        "label": "Since",
         "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "since",
+        "direction": "asc",
+        "label": "Since",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "asc",
+        "label": "Address",
+        "path": "email"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "desc",
+        "label": "Address",
+        "path": "email"
+      },
+      {
+        "alone": true,
+        "column": "reason",
+        "direction": "asc",
+        "label": "Reason",
+        "path": "reason"
+      },
+      {
+        "alone": true,
+        "column": "reason",
+        "direction": "desc",
+        "label": "Reason",
+        "path": "reason"
       }
     ]
   },
