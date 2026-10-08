@@ -133,9 +133,9 @@ particular sites cannot use the per-site fields or **Form ID** under a site;
 the notice says that too. Their search matches the start of a contact's name,
 and a notice says so.
 
-The list shows the most recently changed contacts first and keeps that order
-— the column headers do not re-sort it — a page at a time, with the usual
-footer to turn the page.
+The list shows the most recently changed contacts first, a page at a time,
+with the usual footer to turn the page; a column header sorts it another way
+(see [Columns and sort](#columns-and-sort)).
 
 ## Filters on the other lists
 
@@ -166,11 +166,27 @@ answered by the query and adds up with the rest.
 **Manage columns** in any list's column menu chooses what shows, and **Move
 left** / **Move right** in the same menu put a column where you want it. A view
 keeps both — the choice and the order — and a view saved before a column existed
-shows the new column too, after the ones it names. On the Leads, Contacts and
-Tasks lists the column headers do not sort: each keeps its query's order —
-newest first, or for tasks soonest due first (**Done**: most recently due
-first). On the Companies and Deals tables a column header sorts the rows of
-the page on screen only; the pages themselves keep the list's own order.
+shows the new column too, after the ones it names.
+
+Every column header sorts, and a view keeps the order you pick. Each list opens
+in its own order — newest first, or for tasks soonest due first (**Done**: most
+recently due first) — and a header sorts one of two ways:
+
+- **The whole list.** A column the list stores on every record — a name, a
+  title, a company, a date, an amount, the email verdict, a task's priority —
+  re-reads the list in that order, every page of it. Such an order holds while
+  no filter or search narrows the list (the Leads list's **Status** and the
+  **My tasks**, **All open** and **Done** task views don't count; the dated
+  task views keep their due order); add one and the list goes back to its own
+  order, and a notice above the table says so.
+- **This page.** A column read from somewhere else — an owner's or a
+  campaign's name, a picklist value in the order your organization keeps its
+  values, a contact's per-site stage, tags or custom fields — sorts only the
+  rows of the page on screen. Its header says so, and so does a notice; the
+  pages keep the list's order.
+
+A view saved sorted by a column the list cannot sort as a whole opens in the
+list's own order, and a notice says so.
 
 ## Segments and views
 

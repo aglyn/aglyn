@@ -49,12 +49,14 @@ import {
   DEAL_FILTER_CODECS,
   DEAL_LIST_DECLARATION,
   DEAL_LIST_FILTER_FIELDS,
+  DEAL_LIST_SORTS,
   DEAL_PICKLIST_FILTER_NONE,
   DEAL_PREFIX_SEARCH,
   dealPipelineBase,
   dealQueryClause,
 } from '../constants/deal-filters'
 import { useCrmFoldsScope, useCrmListQuery } from '../hooks/use-crm-list-query'
+import { crmViewQuerySort, useCrmColumnSort } from '../hooks/use-crm-column-sort'
 import { useCrmPicklist } from '../hooks/use-crm-picklist'
 import { crmAskClauses, crmQueryRefusals } from '../model/crm-list-query'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
@@ -264,6 +266,11 @@ export function DealsSection(props: ConsolePluginPageProps) {
   // Each stored clause asked through the field its writer keeps — a Type
   // or a Lead source by its key (AGL-3516).
   const asked = useMemo(() => crmAskClauses(viewFilters, dealQueryClause), [viewFilters])
+  // The header order the view asks (AGL-3680), read before the query it orders.
+  const dealSort = useMemo(
+    () => crmViewQuerySort(DEAL_LIST_SORTS, views.state.sort, DEAL_LIST_SORTS[0]),
+    [views.state.sort],
+  )
   const paged = useCrmListQuery<DealDoc>({
     scope: scope.scope,
     collection: CRM_COLLECTIONS.deals,
@@ -273,6 +280,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
     clauses: asked.clauses,
     search: searchWords,
     base: pipelineBase,
+    sort: dealSort.sort,
     prefixSearch: DEAL_PREFIX_SEARCH,
     enabled: view === 'table' && Boolean(pipeline),
   })
@@ -487,6 +495,37 @@ export function DealsSection(props: ConsolePluginPageProps) {
     [columns, filterOptions],
   )
   const grid = useCrmViewGrid(views, filterColumns, DEAL_HIDDEN_COLUMNS)
+  /*
+   * EVERY HEADER SORTS (AGL-3680). The grid used to sort the view's order
+   * over the one page on screen while the footer paged the query, which read
+   * as the whole pipeline's order. Deal, Amount, Expected close, Status and
+   * Next activity sort the QUERY now (`DEAL_LIST_SORTS`); the rest sort the
+   * page and say so — Stage in the pipeline's order, Type and Lead source in
+   * the order the org keeps their values.
+   */
+  const pageSorts = useMemo(() => {
+    const rank = (list: CrmPicklist, label: unknown) =>
+      String(label ?? '').trim() ? crmPicklistRank(list, label) : null
+    return {
+      stageId: (row: DealDoc) => {
+        const stages = pipelineState.pipelineById(row.pipelineId)?.stages ?? []
+        const at = stages.findIndex((stage) => stage.id === row.stageId)
+        return at === -1 ? null : at
+      },
+      type: (row: DealDoc) => rank(typeList.picklist, row.type),
+      leadSource: (row: DealDoc) => rank(leadSourceList.picklist, row.leadSource),
+    }
+  }, [pipelineState, typeList.picklist, leadSourceList.picklist])
+  const columnSort = useCrmColumnSort<DealDoc>({
+    views,
+    sorts: DEAL_LIST_SORTS,
+    defaultSort: DEAL_LIST_SORTS[0],
+    asked: dealSort,
+    orderBy: paged.plan.orderBy,
+    rows: tableRows,
+    columns: grid.columns,
+    pageSorts,
+  })
   const gridFilter = useListGridFilter({
     clauses: viewFilters,
     onChange: views.setFilters,
@@ -666,7 +705,10 @@ export function DealsSection(props: ConsolePluginPageProps) {
                   marksServed={false}
                 />
               </CrmListToolbar>
-              <ListQueryNotices refused={refused} notices={paged.plan.notices} />
+              <ListQueryNotices
+                refused={refused}
+                notices={[...paged.plan.notices, ...columnSort.notices]}
+              />
                 <>
                   <DealsBulkBar
                     hostId={hostId}
@@ -680,7 +722,8 @@ export function DealsSection(props: ConsolePluginPageProps) {
                   />
                   <CrmColumnOrderProvider value={grid.columnOrder}>
                     <ListTable
-                      rows={tableRows}
+                      rows={columnSort.rows}
+                      columnSort={columnSort}
                       columns={grid.columns}
                       slots={CRM_LIST_SLOTS}
                       selectable={{ selected: selectedIds, onChange: setSelectedIds }}
@@ -718,11 +761,10 @@ export function DealsSection(props: ConsolePluginPageProps) {
                           </Button>
                         ) : undefined
                       }
-                      // Columns and sort are the view's, controlled (AGL-2617).
+                      // Columns are the view's, controlled (AGL-2617); so is the
+                      // header order, which `columnSort` keeps in it (AGL-3680).
                       columnVisibilityModel={grid.columnVisibilityModel}
                       onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
-                      sortModel={grid.sortModel}
-                      onSortModelChange={grid.onSortModelChange}
                       hideFooter
                     />
                   </CrmColumnOrderProvider>
