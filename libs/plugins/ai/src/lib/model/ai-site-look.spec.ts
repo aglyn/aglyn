@@ -205,6 +205,11 @@ describe('site looks (AGL-3660)', () => {
     expect(aiSiteKindFor('a family law firm').id).toBe('professional')
     expect(aiSiteKindFor('a counselor for teens').id).toBe('wellness')
     expect(aiSiteKindFor('my food blog').id).toBe('blog')
+    // "Personal" is an adjective here, not a resume (the live paid blog start of 2026-10-08).
+    expect(aiSiteKindFor('Slow Roads, a personal travel blog about long train journeys through Europe, written by one person').id).toBe('blog')
+    expect(aiSiteKindFor('my personal website').id).toBe('personal')
+    expect(aiSiteKindFor('my resume').id).toBe('personal')
+    expect(aiSiteKindFor('An independent illustrator and designer: a portfolio of editorial illustrations and brand work').id).toBe('portfolio')
     expect(aiSiteKindFor('something else entirely').id).toBe('business')
     // The briefs the live eval runs (AGL-3660).
     expect(aiSiteKindFor('a yoga studio with drop-in classes').id).toBe('yoga')
