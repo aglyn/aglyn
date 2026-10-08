@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { createHash } from 'node:crypto'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import {
@@ -255,6 +256,9 @@ export function aiPlanSiteLines(
       `This is a Free workspace: plan at most ${cap} ${cap === 1 ? 'page' : 'pages'} — the home page at / and the one page the brief most needs, such as services, booking or contact — with at most ${sections} sections across them.${aiPlanCanPlaceForm(inventory, capabilities) ? ' Put the contact form on one of them.' : ''}`,
     )
   }
+  // The kind of site the person picked (AGL-3660): the pages it usually has.
+  const kind = aiSiteKindOfInputs(job.inputs)
+  if (kind) lines.push(`This is a ${kind.label.toLowerCase()} site. ${kind.pages}`)
   lines.push(
     "Keep the plan an outline: each page's title, address, a short search title and description, and its sections named in a few words. The build writes the copy.",
   )
@@ -771,34 +775,32 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
 }
 
 /**
- * A site job's capabilities on the Free taste (AGL-3594): its plan holds at
- * most the pages the member asked for within the Free band, which the Free
- * wall then holds it to, and it changes no theme — the site was born with
- * one (AGL-3497), and a palette pass is credits the two pages need. Every
- * other job's capabilities pass through.
+ * A site job's capabilities (AGL-3594, AGL-3660): it changes no theme in its
+ * plan — every scaffold designs its look first, in a unit of its own — and on
+ * the Free taste its plan holds at most the pages the member asked for within
+ * the Free band, which the Free wall then holds it to. Every other job's
+ * capabilities pass through.
  */
 export function aiSitePlanCapabilities(
   job: Pick<AiJob, 'kind' | 'inputs'>,
   capabilities: AiPlanCapabilities | null,
 ): AiPlanCapabilities | null {
-  if (job.kind !== 'site' || !capabilities?.freeTaste) return capabilities
+  if (job.kind !== 'site' || !capabilities) return capabilities
+  const create = {
+    ...capabilities.create,
+    'theme-change': {
+      allowed: false,
+      left: null,
+      reason: 'a site start designs its own look before its pages',
+    },
+  }
+  if (!capabilities.freeTaste) return { ...capabilities, create }
   const asked = Number((job.inputs ?? {})['pages'])
   const pages =
     Number.isInteger(asked) && asked >= AI_SITE_FREE_PAGES.min
       ? Math.min(asked, AI_SITE_FREE_PAGES.max)
       : AI_SITE_FREE_PAGES.max
-  return {
-    ...capabilities,
-    freeSitePages: pages,
-    create: {
-      ...capabilities.create,
-      'theme-change': {
-        allowed: false,
-        left: null,
-        reason: "a Free workspace's site start keeps the theme the site was created with",
-      },
-    },
-  }
+  return { ...capabilities, freeSitePages: pages, create }
 }
 
 /**

@@ -41,6 +41,7 @@ import {
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
+import { aiSiteKindDesignLines } from '../model/ai-site-kinds'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiJobBriefLine } from './ai-job-generation'
@@ -131,7 +132,7 @@ export function aiLayoutHomeId(
 
 /** The frame's user turn: the site, its brief, its pages and its form. */
 export function aiLayoutFramePrompt(input: {
-  job: Pick<AiJob, 'brief' | '$id'>
+  job: Pick<AiJob, 'brief' | '$id'> & Partial<Pick<AiJob, 'inputs'>>
   siteName: string
   pages: readonly AiLayoutPage[]
   targets: AiLayoutTargets
@@ -140,6 +141,7 @@ export function aiLayoutFramePrompt(input: {
   return [
     `Site: ${input.siteName === AI_SITE_NAME_TOKEN ? 'the business the brief describes' : `"${input.siteName}"`}`,
     aiJobBriefLine(job),
+    ...aiSiteKindDesignLines(job.inputs),
     pages.length
       ? `Its pages, which the navigation links: ${pages.map((page) => `${page.label} (page:${page.id})`).join(', ')}.`
       : 'It has no pages yet.',

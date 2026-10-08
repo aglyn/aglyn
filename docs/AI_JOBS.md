@@ -2437,9 +2437,10 @@ the element budget its request asks for.
   the real plan step (a three-page answer re-asked to two) and prices both requests
   at their ceilings, never under the measured input, the first writing the cache and
   the second paying for the prefix as plain input: a Free site's plan comes to at most
-  35 credits, its answer and its re-ask together. Each page then costs a listing and a
-  first section pass at the Free page's figures, and the wall keeps room for one
-  retried section: a Free site with its layout fits 8 sections across its two pages, at most 249 credits
+  35 credits, its answer and its re-ask together. The site's look (AGL-3660) is one
+  fast-tier answer that is never re-asked, at most 8 credits. Each page then costs a
+  listing and a first section pass at the Free page's figures, and the wall keeps room
+  for one retried section: a Free site fits 7 sections across its two pages, at most 237 credits
   of the 300. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the plan it derives
   and to the Free page's build figures, and the Free wall holds a Free site's plan to
   that section count and to its page cap. On a paid workspace a site plan's one answer comes to at most 84 credits

@@ -53,6 +53,7 @@ import {
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
+import { aiSiteKindDesignLines } from '../model/ai-site-kinds'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiGenerationWorstCaseOnTierMs, aiJobStepBudget } from './ai-job-budget'
 import { aiJobBriefLine, aiPlanReferenceLines } from './ai-job-generation'
@@ -218,6 +219,8 @@ export function aiLayoutPagePrompt(input: {
   return [
     `Page: "${screen.title}" at ${screen.slug}`,
     aiJobBriefLine(job),
+    // The kind of site the person picked sets how its pages are arranged (AGL-3660).
+    ...aiSiteKindDesignLines(job.inputs),
     ...aiPlanReferenceLines(plan),
     `Sections to design, in order:`,
     ...sections,
