@@ -10,6 +10,24 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
+<!--
+  AGL-3677 — Smile.io and Yotpo Loyalty connections are built and hidden until a
+  deployment sets LOYALTY_CONNECTORS_TOKEN_KEY on the console (the key merchants'
+  API keys are sealed under; no developer app of Aglyn's is needed). This entry is
+  held unpublished, like the guide it links (`unlisted: true`): once the key is set
+  on aglyn.com, remove this comment's markers, move "(newest)" here from the heading
+  below, and delete `unlisted: true` and the "Rolling out" note from
+  commerce-and-bookings/commerce/connect-smile-io-or-yotpo.md.
+
+## October 2026 — your own Smile.io or Yotpo Loyalty account
+
+- **[Smile.io and Yotpo Loyalty](commerce-and-bookings/commerce/connect-smile-io-or-yotpo.md)** —
+  already run a loyalty program? Connect your own account and every Aglyn order earns
+  points there, refunds take them back, and customers spend that balance at checkout
+  and at the register. One program at a time, so nobody is rewarded twice; anything
+  the account could not take waits on the card with a Send again button.
+-->
+
 ## October 2026 — a self-service kiosk (newest)
 
 - **[Self-service kiosk](commerce-and-bookings/commerce/pos-and-reservations.md#self-service-kiosk)** —

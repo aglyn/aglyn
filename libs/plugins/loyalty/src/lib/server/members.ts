@@ -18,6 +18,7 @@
 import type { CheckoutCreditTransaction } from '@aglyn/aglyn/plugin-manager/plugin-checkout-credits'
 import type { LoyaltyHold } from '../model/loyalty-math'
 import type { LoyaltyLedgerKind, StoredLoyaltyLedgerEntry, StoredLoyaltyMember } from '../model/loyalty-member'
+import { loyaltyOrderIsTestMode, type LoyaltyConnectorId } from '../model/loyalty-connectors'
 import { loyaltyRefs, memberKeyFor, mintLoyaltyCode } from './db'
 
 /**
@@ -141,13 +142,49 @@ export function writeMember(transaction: CheckoutCreditTransaction, plan: Pick<M
   for (const write of plan.codeWrites) transaction.set(write.ref, write.data)
 }
 
-/** Writes one ledger row under a key its cause names, so a retried cause writes the same row. */
+/**
+ * Where a points movement also goes when the store runs a connected program
+ * (AGL-3677): the merchant's own Smile.io or Yotpo account, for the member at
+ * this address. `null` for the built-in program.
+ */
+export interface LoyaltySyncTarget {
+  provider: LoyaltyConnectorId
+  email: string
+}
+
+export function loyaltySyncTarget(
+  program: { connected: LoyaltyConnectorId | null },
+  email: string | null | undefined,
+): LoyaltySyncTarget | null {
+  return program.connected && email ? { provider: program.connected, email } : null
+}
+
+/** Movements that count toward what a member has EARNED at the vendor, not only their balance. */
+const EARNED_KINDS: ReadonlySet<LoyaltyLedgerKind> = new Set(['earn', 'reverse', 'adjust', 'welcome'])
+
+const SYNC_TITLES: Partial<Record<LoyaltyLedgerKind, string>> = {
+  earn: 'Points for an order',
+  reverse: 'Points taken back for a refund',
+  redeem: 'Points spent on an order',
+  restore: 'Spent points given back for a refund',
+  void: 'Spent points given back for a voided payment',
+  adjust: 'Adjusted by the store',
+}
+
+/**
+ * Writes one ledger row under a key its cause names, so a retried cause writes
+ * the same row. With a {@link LoyaltySyncTarget}, a row that moves points also
+ * writes its twin in `loyaltySync`, under the SAME id and in the same commit:
+ * the movement is on its way to the merchant's account exactly once, however
+ * many times its cause is retried.
+ */
 export function writeLedger(
   transaction: CheckoutCreditTransaction,
   scope: LoyaltyScope,
   entryKey: string,
   entry: Omit<StoredLoyaltyLedgerEntry, 'orgId' | 'hostId' | 'orderId' | 'channel' | 'note' | 'actorUid'> &
     Partial<Pick<StoredLoyaltyLedgerEntry, 'orderId' | 'channel' | 'note' | 'actorUid'>> & { kind: LoyaltyLedgerKind },
+  sync?: LoyaltySyncTarget | null,
 ): void {
   transaction.set(loyaltyRefs.ledger(scope.orgId, scope.hostId, entryKey), {
     orgId: scope.orgId,
@@ -158,4 +195,29 @@ export function writeLedger(
     actorUid: null,
     ...entry,
   } satisfies StoredLoyaltyLedgerEntry)
+  if (!sync || !entry.points) return
+  const orderId = entry.orderId ?? null
+  transaction.set(loyaltyRefs.sync(scope.orgId, scope.hostId, entryKey), {
+    orgId: scope.orgId,
+    hostId: scope.hostId,
+    provider: sync.provider,
+    memberKey: entry.memberKey,
+    email: sync.email,
+    kind: entry.kind,
+    points: entry.points,
+    earned: EARNED_KINDS.has(entry.kind),
+    title: SYNC_TITLES[entry.kind] ?? 'Rewards',
+    orderId,
+    // A test-mode sale never moves real points at the merchant's account.
+    live: !(orderId && loyaltyOrderIsTestMode(orderId)),
+    status: 'pending',
+    attempts: 0,
+    error: null,
+    shortfallPoints: 0,
+    vendorId: null,
+    claimId: null,
+    claimedAtMs: null,
+    createdAtMs: entry.atMs,
+    updatedAtMs: entry.atMs,
+  })
 }

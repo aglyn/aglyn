@@ -952,6 +952,16 @@ allow read, write: if false;
 
 
 
+match /loyaltyConnections/{hostId} {
+allow read, write: if false;
+}
+match /loyaltySync/{rowId} {
+allow read, write: if false;
+}
+
+
+
+
 
 
 

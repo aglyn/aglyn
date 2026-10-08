@@ -2925,16 +2925,18 @@
         "console": "registerLoyaltyConsole",
         "consoleApi": "registerLoyaltyConsoleApi",
         "serverDeclarations": "registerLoyaltyServerDeclarations",
-        "tenantEmails": "loyaltyTenantEmails"
+        "tenantEmails": "loyaltyTenantEmails",
+        "subprocessors": "loyaltySubprocessors"
       },
       "apiPrefixes": ["loyalty"],
       "requiredPersonEraser": true,
       "activityMutationPaths": [
-        "libs/plugins/loyalty/src/lib/server/routes.ts"
+        "libs/plugins/loyalty/src/lib/server/routes.ts",
+        "libs/plugins/loyalty/src/lib/server/connection-routes.ts"
       ],
       "catalog": {
         "order": 31,
-        "$comment": "Built-in rewards for the commerce plugin's sales (AGL-3640): points earned on online and register orders, spent at checkout and at the register, referral codes, and store credit beside commerce's gift cards. It never imports commerce: it redeems through core's checkout-credits seam (`core.checkout-credits`), earns and reverses on commerce's order events by name, and draws in commerce's `commercePromotions` and `orderDetail` zones. No outside vendor and no env: every store's program is OFF until its merchant turns it on, and the cart and register draw nothing until then. No `requires` edge, for shipping's reason: a workspace cannot switch it off, so it runs only on a site where commerce is on (site-context.ts). Smile.io and Yotpo connectors are a later, separate issue.",
+        "$comment": "Built-in rewards for the commerce plugin's sales (AGL-3640): points earned on online and register orders, spent at checkout and at the register, referral codes, and store credit beside commerce's gift cards. It never imports commerce: it redeems through core's checkout-credits seam (`core.checkout-credits`), earns and reverses on commerce's order events by name, and draws in commerce's `commercePromotions` and `orderDetail` zones. No outside vendor and no env: every store's program is OFF until its merchant turns it on, and the cart and register draw nothing until then. No `requires` edge, for shipping's reason: a workspace cannot switch it off, so it runs only on a site where commerce is on (site-context.ts). Or a merchant connects their OWN Smile.io or Yotpo Loyalty account in place of the built-in points (AGL-3677): one program at a time, every points movement written to their account through the `loyaltySync` outbox, the built-in program awarding nothing of its own beside it. That half is hidden until the deployment sets LOYALTY_CONNECTORS_TOKEN_KEY, the key merchants' API keys are sealed under; Aglyn holds no account or app with either vendor.",
         "label": "Rewards",
         "alwaysOnForWorkspace": true,
         "description": "Points, referrals and store credit for your store.",

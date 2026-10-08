@@ -18,3 +18,4 @@
 export * from './loyalty-program'
 export * from './loyalty-math'
 export * from './loyalty-member'
+export * from './loyalty-connectors'
