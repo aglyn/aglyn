@@ -2603,6 +2603,96 @@
       ]
     },
     {
+      "collectionGroup": "campaignAttributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "channel",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "convertedAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "campaignAttributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "channel",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "refId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "campaignAttributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "campaignId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "convertedAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "campaignAttributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "campaignId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "convertedAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "campaignAttributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "campaignId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "refId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "entries",
       "queryScope": "COLLECTION",
       "fields": [
@@ -4592,6 +4682,104 @@
     },
     {
       "collectionGroup": "activity",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "target.id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "activity",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "target.id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "trigger",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "activity",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "target.id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "result",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "activity",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "target.id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "summary",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "activity",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "result",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "activity",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "result",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "trigger",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "activity",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "result",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "summary",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "activity",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         {
@@ -5047,6 +5235,24 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "campaignIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "deletedAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nameLower",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "screens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "kind",
           "order": "ASCENDING"
         },
@@ -5094,6 +5300,62 @@
         },
         {
           "fieldPath": "createdAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "campaigns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "hostId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "subjectLower",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "campaigns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "hostId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "subjectLower",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "campaigns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "emailCampaignId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "subjectLower",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "campaigns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "emailCampaignId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "subjectLower",
           "order": "DESCENDING"
         }
       ]
@@ -5150,6 +5412,20 @@
         },
         {
           "fieldPath": "createdAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "emailCampaigns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "visibleTo",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "nameLower",
           "order": "DESCENDING"
         }
       ]
@@ -5319,6 +5595,90 @@
         {
           "fieldPath": "createdAtMs",
           "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "outreachEnrollments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sequenceId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "email",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "outreachEnrollments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sequenceId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "email",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "outreachEnrollments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sequenceId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "outreachEnrollments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sequenceId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stepIndex",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "outreachEnrollments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sequenceId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nextDueAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "outreachEnrollments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sequenceId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stopReason",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -7895,6 +8255,20 @@
         {
           "fieldPath": "nameLower",
           "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "campaignIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "nameLower",
+          "order": "DESCENDING"
         }
       ]
     },
