@@ -21,7 +21,7 @@ import { PosTenderPanel } from './pos-tender-panel.component'
 /**
  * An open sale when the connection drops (AGL-3625): every tender on it is
  * the server's, so the card reader, the typed card, the QR link, the gift
- * card and the room charge are all off, and a sale that has taken nothing
+ * card, store credit and the room charge are all off, and a sale that has taken nothing
  * can be rung again as an offline cash sale.
  */
 
@@ -45,6 +45,7 @@ const CONTEXT = {
   readers: [{ id: 'r1', label: 'Counter', registerId: 'front', status: 'online', livemode: false }],
   publishableKey: 'pk_test_x',
   smsReceipts: false,
+  credits: [{ providerId: 'loyalty', label: 'Rewards', lookup: true }],
 } as const
 
 const display = { connected: false, asking: null, show: jest.fn(), ask: jest.fn(), pairingCode: jest.fn() }
@@ -73,10 +74,10 @@ const button = (name: string) => screen.getByRole('button', { name }) as HTMLBut
 it('turns every tender off while offline and offers the basket as an offline cash sale', () => {
   const sellOffline = jest.fn()
   panel({ offline: true, onSellOffline: sellOffline })
-  for (const name of ['Cash', 'Card reader', 'Type card', 'Card (QR)', 'Gift card', 'Room', 'Void sale']) {
+  for (const name of ['Cash', 'Card reader', 'Type card', 'Card (QR)', 'Gift card', 'Rewards', 'Room', 'Void sale']) {
     expect(button(name).disabled).toBe(true)
   }
-  expect(screen.getByText(/gift cards and room charges are off/)).toBeTruthy()
+  expect(screen.getByText(/gift cards, store credit and room charges are off/)).toBeTruthy()
   fireEvent.click(button('Sell for cash offline'))
   expect(sellOffline).toHaveBeenCalled()
 })
@@ -93,7 +94,7 @@ it('does not offer an offline sale once a payment is on the open one', () => {
 
 it('leaves every tender on while online', () => {
   panel({ offline: false })
-  for (const name of ['Cash', 'Card reader', 'Type card', 'Card (QR)', 'Gift card', 'Room']) {
+  for (const name of ['Cash', 'Card reader', 'Type card', 'Card (QR)', 'Gift card', 'Rewards', 'Room']) {
     expect(button(name).disabled).toBe(false)
   }
   expect(screen.queryByText(/are off/)).toBeNull()

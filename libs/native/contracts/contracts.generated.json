@@ -3078,6 +3078,7 @@
     "card_keyed": "Typed cards need the connection.",
     "card_link": "The QR card link needs the connection.",
     "card_present": "Card readers need the connection.",
+    "credit": "Store credit and rewards balances can only be checked online.",
     "folio": "Room charges are checked against the stay online.",
     "gift_card": "A gift card balance can only be checked online."
   },

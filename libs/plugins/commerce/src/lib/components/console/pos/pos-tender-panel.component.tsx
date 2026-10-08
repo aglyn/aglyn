@@ -344,10 +344,10 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
           }
         >
           {sale.payments.length === 0
-            ? 'Offline: card readers, typed cards, the QR link, gift cards and room charges are off. ' +
+            ? 'Offline: card readers, typed cards, the QR link, gift cards, store credit and room charges are off. ' +
               'Take this basket as an offline cash sale, or wait for the connection.'
             : 'Offline: this sale has a payment on it and finishes when the connection returns. ' +
-              'Card readers, typed cards, the QR link, gift cards and room charges are off.'}
+              'Card readers, typed cards, the QR link, gift cards, store credit and room charges are off.'}
         </Alert>
       ) : null}
       {!paid ? (
@@ -463,7 +463,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
               <Button
                 key={credit.providerId}
                 variant="outlined"
-                disabled={busy || chargeCents <= 0}
+                disabled={offline || busy || chargeCents <= 0}
                 onClick={() => {
                   setCreditProvider(credit)
                   setDialog('credit')

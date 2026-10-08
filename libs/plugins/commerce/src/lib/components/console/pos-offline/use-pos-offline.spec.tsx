@@ -341,7 +341,7 @@ describe('the banner and the cash sale', () => {
     })
     render(<PosOfflineBanner offline={hook.result.current} />)
     expect(screen.getByText('Offline')).toBeTruthy()
-    expect(screen.getByText(/gift cards and room charges are off/)).toBeTruthy()
+    expect(screen.getByText(/gift cards, store credit and room charges are off/)).toBeTruthy()
     expect(screen.getByText(/1 sale \(\$25\.92\) waiting to sync/)).toBeTruthy()
   })
 

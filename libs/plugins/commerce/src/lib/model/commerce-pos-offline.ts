@@ -36,6 +36,8 @@ import type { ModifierSelection } from './product-modifiers'
  *    offline. A gift card is never over-redeemed silently because it is never
  *    redeemed offline at all.
  *  - Room charges do not: the stay is validated on the server.
+ *  - Store credit and rewards do not, for the gift card's reason: a balance
+ *    is the server's to check.
  *  - Codes and store promotions do not: a redemption cap is counted on the
  *    server. The cashier's own discount, bounded by the site's ceiling, does.
  *
@@ -83,6 +85,7 @@ export const POS_OFFLINE_DISABLED_TENDERS: Readonly<Record<string, string>> = {
   card_link: 'The QR card link needs the connection.',
   gift_card: 'A gift card balance can only be checked online.',
   folio: 'Room charges are checked against the stay online.',
+  credit: 'Store credit and rewards balances can only be checked online.',
 }
 
 /** One basket line as the register rang it. */

@@ -51,7 +51,7 @@ export function PosOfflineBanner(props: { offline: PosOfflineState }) {
         <AlertTitle>{'Offline'}</AlertTitle>
         {offline.ready
           ? 'Cash sales keep ringing and are saved on this register until the connection returns. ' +
-            'Card readers, typed cards, the QR link, gift cards and room charges are off.'
+            'Card readers, typed cards, the QR link, gift cards, store credit and room charges are off.'
           : `Sales are paused: ${offline.unavailableReason ?? 'this register cannot sell offline.'}`}
         {waiting.length ? (
           <Typography variant="body2" sx={{ mt: 0.5 }}>

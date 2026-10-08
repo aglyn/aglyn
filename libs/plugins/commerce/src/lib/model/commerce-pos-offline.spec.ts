@@ -128,9 +128,9 @@ describe('what the register says', () => {
     expect(posOfflineFlagLabels(['stock-short'])).toEqual([POS_OFFLINE_FLAG_LABELS['stock-short']])
   })
 
-  it('turns every card tender and the gift card off offline', () => {
+  it('turns every card tender, the gift card and store credit off offline', () => {
     expect(Object.keys(POS_OFFLINE_DISABLED_TENDERS).sort()).toEqual(
-      ['card_keyed', 'card_link', 'card_present', 'folio', 'gift_card'].sort(),
+      ['card_keyed', 'card_link', 'card_present', 'credit', 'folio', 'gift_card'].sort(),
     )
   })
 })

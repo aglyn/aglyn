@@ -188,10 +188,11 @@ waiting on the device.
   receipt prints through the browser's print dialog, and its barcode is the one
   the order answers to once it syncs.
 - **What is off until the connection returns:** card readers, Tap to Pay,
-  typed cards, the QR card link, **gift cards**, room charges, discount codes
-  and store promotions. Card payments need the connection, a gift card's
-  balance can only be checked online, so a gift card is never redeemed offline,
-  and codes and promotions are counted against their limits online.
+  typed cards, the QR card link, **gift cards**, store credit and rewards,
+  room charges, discount codes and store promotions. Card payments need the
+  connection, a gift card or store credit balance can only be checked online,
+  so neither is redeemed offline, and codes and promotions are counted against
+  their limits online.
 - **When the connection returns,** the register sends its saved sales on its
   own. Each one becomes a paid order, dated when it was rung, in the shift it
   was rung in and under the cashier who rang it. The emailed receipt goes to
