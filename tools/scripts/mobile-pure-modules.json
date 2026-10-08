@@ -296,6 +296,58 @@
     {
       "path": "libs/plugins/marketing/src/lib/model/experiment-list-query.ts",
       "why": "The A/B testing list declaration the apps plan (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/model/sequence-list-query.ts",
+      "why": "The Sequences list declaration the apps plan (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/model/enrollment-list-query.ts",
+      "why": "A sequence's Enrollments list declaration (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/model/do-not-contact-domain-list-query.ts",
+      "why": "The do-not-contact domains list declaration (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/model/outreach.types.ts",
+      "why": "Reached by the outreach declarations and validation: the sequence, step and enrollment shapes and limits."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/engine/sequence-validation.ts",
+      "why": "A sequence's validation (validateOutreachSequence), replayed by the apps' sequence editor (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/engine/click-tracking.ts",
+      "why": "Reached by outreach.types and sequence-validation: the body's links."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/engine/open-tracking.ts",
+      "why": "Reached by outreach.types: an open's machine reasons."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/engine/open-source.ts",
+      "why": "Reached by open-tracking: an open's source."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/engine/ip-range.ts",
+      "why": "Reached by open-source: IP blocks."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/engine/mail-gateway.ts",
+      "why": "Reached by outreach.types: the gateway day counts shape."
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/mail-gateway.ts",
+      "why": "Reached by the outreach mail-gateway: gateway names."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "why": "Reached by sequence-validation: the merge fields a step may use."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/email-text.ts",
+      "why": "Reached by sequence-validation: a thread's subject."
     }
   ]
 }

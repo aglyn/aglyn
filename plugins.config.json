@@ -1438,6 +1438,16 @@
       "apiPrefixes": [
         "outreach"
       ],
+      "mobile": {
+        "$comment": "AGL-3669: Sequences natively, INTERNAL ONLY: shown only where the console shows the Outreach tab (release_outreach, the outreach feature and the outreach.use permission), so no quick action. All sequences (new, edit, activate, pause, archive, delete; enrollments and their pause, resume, stop, do-not-contact; enroll CRM contacts or leads), Mailboxes (connect through the system sign-in sheet on Apple, pause, settings, test, disconnect) and Compliance (sender details, do-not-contact domains, link domains); a Home card drawn only behind the same gates.",
+        "ios": { "module": "AglynOutreachPlugin", "register": "registerOutreachNative" },
+        "android": { "package": "com.aglyn.plugins.outreach", "register": "registerOutreachNative" },
+        "contributes": {
+          "screens": ["outreach.sequences", "outreach.mailboxes", "outreach.compliance"],
+          "widgets": ["outreach.glance"],
+          "deepLinks": ["outreach.page", "outreach.sequences-page", "outreach.mailboxes-page", "outreach.compliance-page", "outreach.sequence-page"]
+        }
+      },
       "activityMutationPaths": [
         "libs/plugins/outreach/src/lib/mailboxes/mailbox-routes.ts",
         "libs/plugins/outreach/src/lib/routes/sequence-routes.ts",
@@ -2094,6 +2104,16 @@
         "campaigns",
         "experiments"
       ],
+      "mobile": {
+        "$comment": "AGL-3669: the Marketing page natively. Overview; Campaigns (new, edit, delete; a campaign's emails, opening in Emails); Conversions; Overlays (announcement bars and popups: new, edit, on and off, order, delete, each re-rendering the site); A/B testing (new, start, pause, pick a winner, delete, the results against the control). Overlays and A/B testing lock on the plans the console locks them on.",
+        "ios": { "module": "AglynMarketingPlugin", "register": "registerMarketingNative" },
+        "android": { "package": "com.aglyn.plugins.marketing", "register": "registerMarketingNative" },
+        "contributes": {
+          "screens": ["marketing.overview", "marketing.campaigns", "marketing.conversions", "marketing.overlays", "marketing.experiments"],
+          "quickActions": ["marketing.open"],
+          "deepLinks": ["marketing.page", "marketing.overview-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.overlays-page", "marketing.experiments-page", "marketing.campaign-page", "marketing.inbox-campaigns-page"]
+        }
+      },
       "analyticsProvider": {
         "module": "analytics-provider",
         "settings": [

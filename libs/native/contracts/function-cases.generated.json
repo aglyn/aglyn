@@ -4720,6 +4720,963 @@
           "result": null
         }
       ]
+    },
+    "validateOutreachSequence": {
+      "module": "libs/plugins/outreach/src/lib/engine/sequence-validation.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "name": "",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "name_required",
+              "message": "Name the sequence.",
+              "path": "name",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "name_too_long",
+              "message": "Keep the name under 120 characters.",
+              "path": "name",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "mailbox_required",
+              "message": "Choose the mailbox this sequence sends from.",
+              "path": "mailboxId",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "steps_required",
+              "message": "Add at least one step.",
+              "path": "steps",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "t0",
+                  "kind": "task",
+                  "taskKind": "call",
+                  "title": "Call",
+                  "delayBusinessDays": 1
+                },
+                {
+                  "id": "t1",
+                  "kind": "task",
+                  "taskKind": "call",
+                  "title": "Call",
+                  "delayBusinessDays": 1
+                },
+                {
+                  "id": "t2",
+                  "kind": "task",
+                  "taskKind": "call",
+                  "title": "Call",
+                  "delayBusinessDays": 1
+                },
+                {
+                  "id": "t3",
+                  "kind": "task",
+                  "taskKind": "call",
+                  "title": "Call",
+                  "delayBusinessDays": 1
+                },
+                {
+                  "id": "t4",
+                  "kind": "task",
+                  "taskKind": "call",
+                  "title": "Call",
+                  "delayBusinessDays": 1
+                },
+                {
+                  "id": "t5",
+                  "kind": "task",
+                  "taskKind": "call",
+                  "title": "Call",
+                  "delayBusinessDays": 1
+                },
+                {
+                  "id": "t6",
+                  "kind": "task",
+                  "taskKind": "call",
+                  "title": "Call",
+                  "delayBusinessDays": 1
+                },
+                {
+                  "id": "t7",
+                  "kind": "task",
+                  "taskKind": "call",
+                  "title": "Call",
+                  "delayBusinessDays": 1
+                },
+                {
+                  "id": "t8",
+                  "kind": "task",
+                  "taskKind": "call",
+                  "title": "Call",
+                  "delayBusinessDays": 1
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "too_many_steps",
+              "message": "A sequence holds at most 8 steps.",
+              "path": "steps",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                },
+                {
+                  "id": "s2",
+                  "kind": "email",
+                  "delayBusinessDays": 3,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                },
+                {
+                  "id": "s3",
+                  "kind": "email",
+                  "delayBusinessDays": 3,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                },
+                {
+                  "id": "s4",
+                  "kind": "email",
+                  "delayBusinessDays": 3,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                },
+                {
+                  "id": "s5",
+                  "kind": "email",
+                  "delayBusinessDays": 3,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "too_many_email_steps",
+              "message": "A sequence sends at most 4 emails to one person.",
+              "path": "steps",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                },
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "duplicate_step_id",
+              "message": "Two steps share an id.",
+              "path": "steps.1.id",
+              "severity": "error"
+            },
+            {
+              "code": "delay_invalid",
+              "message": "Wait 1–30 business days before this email.",
+              "path": "steps.1.delayBusinessDays",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                },
+                {
+                  "id": "s2",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "delay_invalid",
+              "message": "Wait 1–30 business days before this email.",
+              "path": "steps.1.delayBusinessDays",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 31,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "delay_invalid",
+              "message": "Wait 0–30 business days before this step.",
+              "path": "steps.0.delayBusinessDays",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "subject_required",
+              "message": "The first email needs a subject.",
+              "path": "steps.0.subject",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                },
+                {
+                  "id": "s2",
+                  "kind": "email",
+                  "delayBusinessDays": 3,
+                  "subject": "",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                },
+                {
+                  "id": "s2",
+                  "kind": "email",
+                  "delayBusinessDays": 3,
+                  "subject": "",
+                  "replyInThread": false,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "subject_required",
+              "message": "An email that starts a new thread needs a subject.",
+              "path": "steps.1.subject",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "subject_too_long",
+              "message": "Keep the subject under 200 characters.",
+              "path": "steps.0.subject",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "body_required",
+              "message": "Write the email, or pick a template.",
+              "path": "steps.0.body",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": "tpl"
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "body_and_template",
+              "message": "Write the email here or pick a template, not both.",
+              "path": "steps.0.body",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "",
+                  "templateId": "tpl"
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "body_too_long",
+              "message": "Keep the email under 10,000 characters.",
+              "path": "steps.0.body",
+              "severity": "error"
+            },
+            {
+              "code": "personal_line_unused",
+              "message": "The first email doesn't use {{enrollment.personalLine}}, so the line written for each person won't appear.",
+              "path": "steps.0.body",
+              "severity": "warning"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "t1",
+                  "kind": "task",
+                  "taskKind": "fax",
+                  "title": "Call",
+                  "delayBusinessDays": 1
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "task_kind_invalid",
+              "message": "Pick LinkedIn, Call or To-do.",
+              "path": "steps.0.taskKind",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "t1",
+                  "kind": "task",
+                  "taskKind": "call",
+                  "title": "",
+                  "delayBusinessDays": 1
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "task_title_required",
+              "message": "Give the task a title.",
+              "path": "steps.0.title",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "t1",
+                  "kind": "task",
+                  "taskKind": "call",
+                  "title": "ttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+                  "delayBusinessDays": 1
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "task_title_too_long",
+              "message": "Keep the title under 200 characters.",
+              "path": "steps.0.title",
+              "severity": "error"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "t1",
+                  "kind": "task",
+                  "taskKind": "call",
+                  "title": "Call",
+                  "delayBusinessDays": 1
+                },
+                {
+                  "id": "s2",
+                  "kind": "email",
+                  "delayBusinessDays": 0,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "name": "Intro",
+              "mailboxId": "mb1",
+              "steps": [
+                {
+                  "id": "s1",
+                  "kind": "email",
+                  "delayBusinessDays": 1.5,
+                  "subject": "Hello",
+                  "replyInThread": true,
+                  "body": "Hi {{enrollment.personalLine}}",
+                  "templateId": null
+                }
+              ],
+              "settings": {
+                "window": null,
+                "allowedCountries": [
+                  "US"
+                ],
+                "allowCustomers": false,
+                "trackClicks": true,
+                "countOpens": false,
+                "listUnsubscribe": true
+              }
+            }
+          ],
+          "result": [
+            {
+              "code": "delay_invalid",
+              "message": "Wait 0–30 business days before this step.",
+              "path": "steps.0.delayBusinessDays",
+              "severity": "error"
+            }
+          ]
+        }
+      ]
     }
   }
 }

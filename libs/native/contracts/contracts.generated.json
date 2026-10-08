@@ -1356,6 +1356,199 @@
       }
     ]
   },
+  "OUTREACH_DEFAULT_ALLOWED_COUNTRIES": [
+    "US"
+  ],
+  "OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY": {
+    "fields": [
+      {
+        "column": "domain",
+        "kind": "text",
+        "lowerPath": "domain",
+        "operators": [
+          "equals"
+        ],
+        "path": "domain"
+      },
+      {
+        "column": "reason",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "reason",
+        "presence": "always"
+      },
+      {
+        "column": "addedAtMs",
+        "kind": "date",
+        "operators": [
+          "is",
+          "after",
+          "onOrAfter",
+          "before",
+          "onOrBefore"
+        ],
+        "path": "addedAtMs",
+        "presence": "always",
+        "storedAs": "millis"
+      }
+    ],
+    "search": {
+      "tokensPath": "searchTokens"
+    },
+    "sorts": [
+      {
+        "direction": "asc",
+        "path": "__name__"
+      }
+    ]
+  },
+  "OUTREACH_ENROLLMENT_LIST_QUERY": {
+    "fields": [
+      {
+        "column": "status",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "status",
+        "presence": "always"
+      },
+      {
+        "column": "target",
+        "kind": "exact",
+        "operators": [
+          "equals"
+        ],
+        "path": "target",
+        "presence": "always"
+      },
+      {
+        "column": "stopReason",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "stopReason"
+      },
+      {
+        "column": "email",
+        "kind": "text",
+        "lowerPath": "email",
+        "operators": [
+          "equals"
+        ],
+        "path": "email"
+      },
+      {
+        "column": "enrolled",
+        "kind": "date",
+        "operators": [
+          "is",
+          "after",
+          "onOrAfter",
+          "before",
+          "onOrBefore"
+        ],
+        "path": "createdAtMs",
+        "presence": "always",
+        "storedAs": "millis"
+      },
+      {
+        "column": "clicked",
+        "kind": "boolean",
+        "operators": [
+          "equals"
+        ],
+        "path": "clicked"
+      },
+      {
+        "column": "link",
+        "kind": "exact",
+        "operators": [
+          "isAnyOf"
+        ],
+        "path": "engagement.links",
+        "tokensPath": "engagement.links"
+      }
+    ],
+    "search": {
+      "tokensPath": "searchTokens"
+    },
+    "sorts": [
+      {
+        "direction": "desc",
+        "path": "createdAtMs"
+      }
+    ]
+  },
+  "OUTREACH_MAX_EMAIL_STEPS": 4,
+  "OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS": 30,
+  "OUTREACH_MAX_STEPS": 8,
+  "OUTREACH_MIN_EMAIL_FOLLOW_UP_BUSINESS_DAYS": 1,
+  "OUTREACH_SEQUENCE_LIST_QUERY": {
+    "fields": [
+      {
+        "column": "name",
+        "kind": "text",
+        "lowerPath": "nameLower",
+        "operators": [
+          "contains",
+          "equals"
+        ],
+        "path": "name",
+        "tokensPath": "nameTokens"
+      },
+      {
+        "column": "mailbox",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "mailboxId"
+      },
+      {
+        "column": "status",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "status",
+        "presence": "always"
+      },
+      {
+        "column": "created",
+        "kind": "date",
+        "operators": [
+          "is",
+          "after",
+          "onOrAfter",
+          "before",
+          "onOrBefore"
+        ],
+        "path": "createdAtMs",
+        "presence": "always",
+        "storedAs": "millis"
+      }
+    ],
+    "search": {
+      "tokensPath": "nameTokens"
+    },
+    "sorts": [
+      {
+        "direction": "desc",
+        "path": "createdAtMs"
+      }
+    ]
+  },
+  "OUTREACH_SEQUENCE_NAME_MAX": 120,
+  "OUTREACH_TASK_TITLE_MAX": 200,
   "PRODUCT_LIST_BASE": [
     {
       "op": "==",

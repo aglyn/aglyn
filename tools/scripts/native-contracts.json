@@ -199,6 +199,36 @@
       "values": [
         "EXPERIMENT_LIST_QUERY"
       ]
+    },
+    "libs/plugins/outreach/src/lib/model/sequence-list-query.ts": {
+      "values": [
+        "OUTREACH_SEQUENCE_LIST_QUERY"
+      ]
+    },
+    "libs/plugins/outreach/src/lib/model/enrollment-list-query.ts": {
+      "values": [
+        "OUTREACH_ENROLLMENT_LIST_QUERY"
+      ]
+    },
+    "libs/plugins/outreach/src/lib/model/do-not-contact-domain-list-query.ts": {
+      "values": [
+        "OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY"
+      ]
+    },
+    "libs/plugins/outreach/src/lib/model/outreach.types.ts": {
+      "values": [
+        "OUTREACH_MAX_STEPS",
+        "OUTREACH_MAX_EMAIL_STEPS",
+        "OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS",
+        "OUTREACH_MIN_EMAIL_FOLLOW_UP_BUSINESS_DAYS",
+        "OUTREACH_DEFAULT_ALLOWED_COUNTRIES"
+      ]
+    },
+    "libs/plugins/outreach/src/lib/engine/sequence-validation.ts": {
+      "values": [
+        "OUTREACH_SEQUENCE_NAME_MAX",
+        "OUTREACH_TASK_TITLE_MAX"
+      ]
     }
   },
   "ints": [],
@@ -2970,6 +3000,749 @@
           {
             "lift": -0.125,
             "confidence": 0.2
+          }
+        ]
+      ]
+    },
+    "validateOutreachSequence": {
+      "module": "libs/plugins/outreach/src/lib/engine/sequence-validation.ts",
+      "args": [
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "t0",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t1",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t2",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t3",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t4",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t5",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t6",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t7",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t8",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s2",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s3",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s4",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s5",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s2",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 31,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s2",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s2",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "",
+                "replyInThread": false,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": "tpl"
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "",
+                "templateId": "tpl"
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "t1",
+                "kind": "task",
+                "taskKind": "fax",
+                "title": "Call",
+                "delayBusinessDays": 1
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "t1",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "",
+                "delayBusinessDays": 1
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "t1",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "ttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+                "delayBusinessDays": 1
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "t1",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "s2",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 1.5,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
           }
         ]
       ]

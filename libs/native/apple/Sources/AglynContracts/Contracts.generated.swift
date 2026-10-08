@@ -1597,6 +1597,16 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let orderStatusLabels: [String: String]
   public let orderStatusOptions: [ListFilterOption]
   public let orgSubmissionListQuery: ListQueryDeclaration
+  public let outreachDefaultAllowedCountries: [String]
+  public let outreachDoNotContactDomainListQuery: ListQueryDeclaration
+  public let outreachEnrollmentListQuery: ListQueryDeclaration
+  public let outreachMaxEmailSteps: Int
+  public let outreachMaxStepDelayBusinessDays: Int
+  public let outreachMaxSteps: Int
+  public let outreachMinEmailFollowUpBusinessDays: Int
+  public let outreachSequenceListQuery: ListQueryDeclaration
+  public let outreachSequenceNameMax: Int
+  public let outreachTaskTitleMax: Int
   public let productListBase: [ListQueryFilter]
   public let productListHeaders: [String: String]
   public let productListOptions: [String: [ListFilterOption]]
@@ -1662,6 +1672,16 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case orderStatusLabels = "ORDER_STATUS_LABELS"
     case orderStatusOptions = "ORDER_STATUS_OPTIONS"
     case orgSubmissionListQuery = "ORG_SUBMISSION_LIST_QUERY"
+    case outreachDefaultAllowedCountries = "OUTREACH_DEFAULT_ALLOWED_COUNTRIES"
+    case outreachDoNotContactDomainListQuery = "OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY"
+    case outreachEnrollmentListQuery = "OUTREACH_ENROLLMENT_LIST_QUERY"
+    case outreachMaxEmailSteps = "OUTREACH_MAX_EMAIL_STEPS"
+    case outreachMaxStepDelayBusinessDays = "OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS"
+    case outreachMaxSteps = "OUTREACH_MAX_STEPS"
+    case outreachMinEmailFollowUpBusinessDays = "OUTREACH_MIN_EMAIL_FOLLOW_UP_BUSINESS_DAYS"
+    case outreachSequenceListQuery = "OUTREACH_SEQUENCE_LIST_QUERY"
+    case outreachSequenceNameMax = "OUTREACH_SEQUENCE_NAME_MAX"
+    case outreachTaskTitleMax = "OUTREACH_TASK_TITLE_MAX"
     case productListBase = "PRODUCT_LIST_BASE"
     case productListHeaders = "PRODUCT_LIST_HEADERS"
     case productListOptions = "PRODUCT_LIST_OPTIONS"

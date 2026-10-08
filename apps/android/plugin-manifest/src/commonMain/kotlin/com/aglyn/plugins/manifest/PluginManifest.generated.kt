@@ -11,6 +11,8 @@ import com.aglyn.plugins.commerce.registerCommerceNative
 import com.aglyn.plugins.crm.registerCrmNative
 import com.aglyn.plugins.email.registerEmailNative
 import com.aglyn.plugins.inbox.registerInboxNative
+import com.aglyn.plugins.marketing.registerMarketingNative
+import com.aglyn.plugins.outreach.registerOutreachNative
 import com.aglyn.plugins.redirects.registerRedirectsNative
 
 object NativePluginManifest {
@@ -39,6 +41,16 @@ object NativePluginManifest {
             id = "inbox",
             contributes = mapOf("screens" to listOf("inbox.people", "inbox.submission", "inbox.submissions"), "widgets" to listOf("inbox.glance"), "quickActions" to listOf("inbox.open", "inbox.people"), "deepLinks" to listOf("inbox.page", "inbox.people-page", "inbox.submissions-page")),
             register = ::registerInboxNative,
+        ),
+        NativePluginManifestEntry(
+            id = "marketing",
+            contributes = mapOf("screens" to listOf("marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview"), "quickActions" to listOf("marketing.open"), "deepLinks" to listOf("marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page")),
+            register = ::registerMarketingNative,
+        ),
+        NativePluginManifestEntry(
+            id = "outreach",
+            contributes = mapOf("screens" to listOf("outreach.compliance", "outreach.mailboxes", "outreach.sequences"), "widgets" to listOf("outreach.glance"), "deepLinks" to listOf("outreach.compliance-page", "outreach.mailboxes-page", "outreach.page", "outreach.sequence-page", "outreach.sequences-page")),
+            register = ::registerOutreachNative,
         ),
         NativePluginManifestEntry(
             id = "redirects",

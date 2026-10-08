@@ -8,6 +8,8 @@ import AglynCommercePlugin
 import AglynCrmPlugin
 import AglynEmailPlugin
 import AglynInboxPlugin
+import AglynMarketingPlugin
+import AglynOutreachPlugin
 import AglynRedirectsPlugin
 
 public enum NativePluginManifest {
@@ -31,6 +33,16 @@ public enum NativePluginManifest {
       id: "inbox",
       contributes: ["screens": ["inbox.people", "inbox.submission", "inbox.submissions"], "widgets": ["inbox.glance"], "quickActions": ["inbox.open", "inbox.people"], "deepLinks": ["inbox.page", "inbox.people-page", "inbox.submissions-page"]],
       register: AglynInboxPlugin.registerInboxNative
+    ),
+    NativePluginManifestEntry(
+      id: "marketing",
+      contributes: ["screens": ["marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview"], "quickActions": ["marketing.open"], "deepLinks": ["marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page"]],
+      register: AglynMarketingPlugin.registerMarketingNative
+    ),
+    NativePluginManifestEntry(
+      id: "outreach",
+      contributes: ["screens": ["outreach.compliance", "outreach.mailboxes", "outreach.sequences"], "widgets": ["outreach.glance"], "deepLinks": ["outreach.compliance-page", "outreach.mailboxes-page", "outreach.page", "outreach.sequence-page", "outreach.sequences-page"]],
+      register: AglynOutreachPlugin.registerOutreachNative
     ),
     NativePluginManifestEntry(
       id: "redirects",
