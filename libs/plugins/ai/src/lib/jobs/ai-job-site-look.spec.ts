@@ -20,7 +20,7 @@ jest.mock('@aglyn/aglyn/plugin-manager/plugin-site-cache', () => ({ __esModule: 
 import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import type { AiJob } from '../model/ai-jobs.types'
 import { aiSiteKind } from '../model/ai-site-kinds'
-import { aiSiteLookSignature, aiSiteSeed, aiSiteStyleFor, type AiSiteStyle } from '../model/ai-site-look'
+import { aiSiteLookSignature, aiSiteSeed, aiSiteStyleFor, type AiSiteLookAnswer, type AiSiteStyle } from '../model/ai-site-look'
 import { aiRunSiteLook, aiSiteLookPrompt, aiSiteThemeUntouched } from './ai-job-site-look'
 
 const trades = aiSiteKind('trades') as NonNullable<ReturnType<typeof aiSiteKind>>
@@ -51,7 +51,7 @@ describe('the look unit (AGL-3660)', () => {
   })
 
   it('draws the site apart from the workspace’s other sites, saves it, and reports one output', async () => {
-    const answer = { base: 'carbon', hue: 210, fonts: 'oswald', buttons: 'caps' }
+    const answer: AiSiteLookAnswer = { base: 'carbon', hue: 210, fonts: 'oswald', buttons: 'caps' }
     const sibling = aiSiteStyleFor({ kind: trades, answer, seed: aiSiteSeed('job-1') })
     let saved: AiSiteStyle | null = null
     const outcome = await aiRunSiteLook({ job: job(), stepIndex: 0, now: new Date(), firestore: {} as never }, job(), {
