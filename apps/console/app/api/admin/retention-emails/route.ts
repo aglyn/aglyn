@@ -26,6 +26,7 @@ import {
 import {
   firebaseAdmin,
   isEmailSuppressed,
+  listUsersAcrossPools,
   meterPlatformEmail,
 } from '@aglyn/tenant-data-admin'
 import { hostOrigin } from '@aglyn/tenant-data-admin/server/held-page-subject'
@@ -286,7 +287,6 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ ok: true, skipped: 'email-unconfigured' }, { status: 200 })
   }
 
-  const auth = firebaseAdmin.app().auth()
   const nowMs = Date.now()
   const rows: PlanRow[] = []
   let scanned = 0
@@ -295,12 +295,16 @@ async function handler(request: Request): Promise<Response> {
   let pageToken: string | undefined
   try {
     for (let page = 0; page < MAX_AUTH_PAGES; page += 1) {
-      const listed = await auth.listUsers(1000, pageToken)
-      for (const user of listed.users) {
+      // Every pool, so an SSO account is not silently left out (AGL-1122).
+      const listed = await listUsersAcrossPools(1000, pageToken)
+      for (const { record: user, tenantId } of listed.users) {
         scanned += 1
         if (candidates >= MAX_CANDIDATES || sends >= MAX_SENDS) break
         const email = String(user.email ?? '').trim().toLowerCase()
         if (!email || user.disabled || user.customClaims?.['staff']) continue
+        // An SSO account's address is its identity provider's to confirm, and
+        // its links are not ours to mint: no verification reminder for it.
+        if (tenantId && !user.emailVerified) continue
         const createdAtMs = ms(user.metadata.creationTime)
         if (createdAtMs === null) continue
         const seen = [ms(user.metadata.lastSignInTime), ms(user.metadata.lastRefreshTime)]
@@ -337,7 +341,7 @@ async function handler(request: Request): Promise<Response> {
         })
         rows.push({ uid: user.uid, ...decision, outcome })
       }
-      pageToken = listed.pageToken
+      pageToken = listed.nextPageToken
       if (!pageToken || candidates >= MAX_CANDIDATES || sends >= MAX_SENDS) break
     }
   } catch (error) {

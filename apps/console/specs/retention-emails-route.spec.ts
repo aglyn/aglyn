@@ -41,7 +41,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
-      auth: () => ({ listUsers: (...args: unknown[]) => mockListUsers(...args) }),
       firestore: () => ({
         collection: (name: string) => ({
           doc: (id: string) => ({
@@ -60,6 +59,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   isEmailSuppressed: (email: string) => mockSuppressed(email),
+  listUsersAcrossPools: async (...args: unknown[]) => {
+    const page = await mockListUsers(...args)
+    return {
+      users: page.users.map((record: unknown) => ({ record, tenantId: null })),
+      nextPageToken: page.pageToken,
+    }
+  },
   meterPlatformEmail: async () => undefined,
 }))
 
