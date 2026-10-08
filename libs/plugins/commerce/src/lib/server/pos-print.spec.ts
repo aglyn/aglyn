@@ -174,6 +174,15 @@ describe('printing a completed sale', () => {
     expect(queued[0]!['openDrawer']).toBe(false)
   })
 
+  it('prints nothing and opens no drawer for a sale rung offline and synced later (AGL-3625)', async () => {
+    memory.seed('hosts/shop/orders/off1', {
+      ...cashSale,
+      offline: { saleKey: 'off1', soldAtMs: 1, syncedAtMs: 2, syncedBy: 'cashier', flags: [] },
+    })
+    expect(await printPosSale({ hostId: 'shop', orderId: 'off1' }, deps)).toEqual({ jobIds: [] })
+    expect(queued).toHaveLength(0)
+  })
+
   it('never throws at the sale that caused it', async () => {
     memory.seed('hosts/shop/orders/o1', cashSale)
     deps.queue = (async () => {

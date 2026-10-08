@@ -27,6 +27,8 @@ import {
 } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import {
   type ListFilterClause,
   listFilterGridColumns,
@@ -81,6 +83,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   OPEN_DISPUTE_CLAUSE,
   ORDER_CHANNEL_OPTIONS,
+  ORDER_LIST_COLUMN_SORTS,
   ORDER_DISPUTE_OPTIONS,
   ORDER_LIST_FIELDS,
   ORDER_LIST_HEADERS,
@@ -137,6 +140,12 @@ const ORDER_HIDDEN_COLUMNS = hiddenFilterVisibility(
 export interface HostOrdersCardProps {
   hostId: string
 }
+
+/** Total is computed from the refunds, so it sorts the page on screen (AGL-3680). */
+const ORDER_PAGE_SORTS = {
+  netCents: (row: { netCents: number }) => row.netCents,
+}
+const ORDER_PAGE_SORT_HEADERS = { netCents: 'Total' }
 
 /**
  * Orders console (AGL-287): filterable list over webhook-written order
@@ -214,6 +223,17 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   })
   const filtering =
     clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
+  /*
+   * Every header sorts (AGL-3680). Date, Order, Customer, Channel and Status
+   * are the query's order over every order (`ORDER_LIST_COLUMN_SORTS`);
+   * Total is computed from the refunds, so it sorts the page on screen.
+   * Newest first until a header is clicked. A header order other than Date
+   * holds only with no filter or search on — the plan falls back to newest
+   * first and `ListQueryNotices` says so.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(
+    ORDER_LIST_COLUMN_SORTS[0],
+  )
 
   /*
    * The open disputes, on their OWN query (AGL-1796). Raised whatever the
@@ -255,7 +275,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   } = useListQuery<any>({
     collection: ordersRef,
     declaration: ORDER_LIST_QUERY,
-    request: { clauses, search: gridFilter.searchWords },
+    request: { clauses, search: gridFilter.searchWords, sort: askedSort },
     deps: [firestore, hostId],
     idField: '$id',
     confirmDisappearances: true,
@@ -342,6 +362,16 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
       }),
     [orders, productNames],
   )
+  const columnSort = useListColumnSort({
+    sorts: ORDER_LIST_COLUMN_SORTS,
+    defaultSort: ORDER_LIST_COLUMN_SORTS[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows: orderRows,
+    pageSorts: ORDER_PAGE_SORTS,
+    headers: ORDER_PAGE_SORT_HEADERS,
+  })
   const productOptions = useMemo(
     () =>
       productWindow.rows.map((product: any) => ({
@@ -750,7 +780,11 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
    * panel, so the reader can take the filter back off.
    */
   const empty =
-    listStatus === 'success' && !filtering && page === 0 && orders.length === 0
+    listStatus === 'success' &&
+    !filtering &&
+    askedSort === ORDER_LIST_COLUMN_SORTS[0] &&
+    page === 0 &&
+    orders.length === 0
 
   return (
     <CardDisplay
@@ -927,25 +961,27 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
             onChange={setClauses}
             options={filterOptions}
           />
-          <ListQueryNotices refused={refused} notices={plan.notices} />
+          <ListQueryNotices
+            refused={refused}
+            notices={[...plan.notices, ...columnSort.notices]}
+          />
           <ListTable
             aria-label="Orders"
-            rows={orderRows}
+            rows={columnSort.rows}
             columns={columns}
             onOpen={(id) => setSelectedId(id)}
             selectable={{ selected: checkedIds, onChange: setCheckedIds }}
             loading={listStatus === 'loading'}
             /*
-             * The grid must NOT also filter, search or sort: the query
-             * answers all three, and the list has one order — newest first —
-             * which the query already holds.
+             * The grid must NOT also filter, search or sort on its own: the
+             * query answers the filters and the search, and every header
+             * order is the query's or the page's (`columnSort`).
              */
             filterMode="server"
             filterModel={gridFilter.filterModel}
             onFilterModelChange={gridFilter.onFilterModelChange}
             quickFilter
-            sortingMode="server"
-            disableColumnSorting
+            columnSort={columnSort}
             // `ListPagination` below pages the query.
             hideFooter
             initialState={{

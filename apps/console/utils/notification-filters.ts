@@ -21,7 +21,10 @@ import type {
   ListFilterClause,
   ListFilterOption,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { LIST_QUERY_DISJUNCTIONS } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import {
+  LIST_QUERY_DISJUNCTIONS,
+  type ListQuerySort,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
 
 /*
  * What the notifications feed filters by, and how the feed's query serves it
@@ -77,7 +80,47 @@ export interface NotificationFilterPlan {
   wheres: NotificationWhere[]
   /** Shown above the feed by `ListQueryNotices`, beside the clause's chip. */
   refused: NotificationFilterRefusal[]
+  /** The feed's one order: the header asked for, or newest first. */
+  orderBy: ListQuerySort
+  /** Said about the order, when the one asked could not be served. */
+  notices: string[]
 }
+
+/*
+ * EVERY HEADER SORTS ON THE FEED'S QUERY (AGL-3680).
+ *
+ * `users/{uid}/notifications` is one person's subcollection: the uid is the
+ * PATH, not a predicate, so an order with no filter on is a single-field
+ * index Firestore keeps anyway. Every emitter stamps `title`, `type` and
+ * `read: false` on create (`notifyUsers`, `AglynNotification`), and
+ * `tools/scripts/backfill-notification-read.mjs` stamped `read` on the
+ * backlog, so an `orderBy` on any of them drops nothing.
+ *
+ * Newest first is the default and holds under every filter (its composites
+ * are above). The others are `alone`: paired with Type or Status they would
+ * cost a composite per (filter × order), so with a filter on the feed falls
+ * back to newest first and says so — the contract `planListQuery` keeps.
+ * Workspace is resolved per row from the reader's memberships and the host
+ * index, so it sorts the page.
+ */
+export const NOTIFICATION_DEFAULT_SORT: ListQuerySort = {
+  path: 'createdAt',
+  direction: 'desc',
+  column: 'createdAt',
+  label: 'When',
+}
+
+export const NOTIFICATION_SORTS: readonly ListQuerySort[] = [
+  NOTIFICATION_DEFAULT_SORT,
+  { path: 'createdAt', direction: 'asc', column: 'createdAt', label: 'When, oldest first', alone: true },
+  { path: 'title', direction: 'asc', column: 'title', label: 'Notification', alone: true },
+  { path: 'title', direction: 'desc', column: 'title', label: 'Notification', alone: true },
+  { path: 'type', direction: 'asc', column: 'type', label: 'Type', alone: true },
+  { path: 'type', direction: 'desc', column: 'type', label: 'Type', alone: true },
+  // `read` false first: New, then Read.
+  { path: 'read', direction: 'asc', column: 'readAt', label: 'Status', alone: true },
+  { path: 'read', direction: 'desc', column: 'readAt', label: 'Status', alone: true },
+]
 
 /**
  * The feed's `where`s for the clauses in force — every clause, since the
@@ -90,6 +133,7 @@ export interface NotificationFilterPlan {
  */
 export function planNotificationFilters(
   clauses: readonly ListFilterClause[],
+  sort: ListQuerySort | null = null,
 ): NotificationFilterPlan {
   const wheres: NotificationWhere[] = []
   const refused: NotificationFilterRefusal[] = []
@@ -115,5 +159,21 @@ export function planNotificationFilters(
       }
     }
   }
-  return { wheres, refused }
+  const asked =
+    (sort &&
+      NOTIFICATION_SORTS.find(
+        (entry) => entry.path === sort.path && entry.direction === sort.direction,
+      )) ||
+    NOTIFICATION_DEFAULT_SORT
+  if (asked.alone && wheres.length) {
+    return {
+      wheres,
+      refused,
+      orderBy: NOTIFICATION_DEFAULT_SORT,
+      notices: [
+        `Sorted by ${NOTIFICATION_DEFAULT_SORT.label}: ${asked.label} sorts only with no filter on.`,
+      ],
+    }
+  }
+  return { wheres, refused, orderBy: asked, notices: [] }
 }

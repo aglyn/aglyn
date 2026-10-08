@@ -24,14 +24,14 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Forms and submissions | `forms` | AGL-3668 | [x] | [ ] |
 | Datasets and data | `data`, `[orgSlug]/data` | AGL-3668 | [ ] | [ ] |
 | Fonts, theme presets, plugin marketplace, logic | `fonts`, `theme-presets`, `marketplace`, `logic` | AGL-3668 | [ ] | [ ] |
-| CRM | `crm` | AGL-3669 | [ ] | [ ] |
-| Inbox | `inbox` | AGL-3669 | [ ] | [ ] |
+| CRM | `crm` | AGL-3669 | [x] | [x] |
+| Inbox | `inbox` | AGL-3669 | [x] | [x] |
 | Emails, campaigns, funnels, texts | `email`, `marketing`, `funnels`, `sms` (email design = Besigner) | AGL-3669 | [ ] | [ ] |
-| Sequences (internal only) | `outreach`, where the console shows it | AGL-3669 | [ ] | [ ] |
-| Bookings, events calendar | `bookings`, `events-calendar` | AGL-3670 | [ ] | [ ] |
-| Analytics | `hosts/[host]/analytics` | AGL-3670 | [ ] | [ ] |
-| Automations | `workflows` | AGL-3670 | [ ] | [ ] |
-| Notifications and their settings | `manage/notifications/*` | AGL-3670 | [ ] | [ ] |
+| Sequences (internal only) | `outreach`, where the console shows it | AGL-3669 | [x] | [x] |
+| Bookings, events calendar | `bookings`, `events-calendar` | AGL-3670 | [x] | [x] |
+| Analytics | `hosts/[host]/analytics` | AGL-3670 | [x] | [x] |
+| Automations | `workflows` | AGL-3670 | [x] | [x] |
+| Notifications and their settings | `manage/notifications/*` | AGL-3670 | [x] | [x] |
 | AI | `ai` (credits, jobs, settings) | AGL-3671 | [ ] | [ ] |
 | Site admin | `hosts/[host]/admin/{activity,backup,danger,domain,error-pages,general,plugins,security}`, `hosts/[host]/users` | AGL-3671 | [ ] | [ ] |
 | Workspace settings | `[orgSlug]/settings/*`, `[orgSlug]/plugins/*` | AGL-3671 | [ ] | [ ] |

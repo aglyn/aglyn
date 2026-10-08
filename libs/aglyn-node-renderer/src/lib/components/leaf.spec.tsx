@@ -16,8 +16,16 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { render, screen } from '@testing-library/react'
-import { Children, type ReactNode } from 'react'
+import { act, render, screen } from '@testing-library/react'
+import { observable, runInAction } from 'mobx'
+import {
+  Children,
+  createContext,
+  forwardRef,
+  type ReactNode,
+  useContext,
+} from 'react'
+import Leaf, { type LeafProps } from './leaf'
 import TreeRoot from './tree-root'
 
 /**
@@ -112,6 +120,166 @@ describe('Leaf positional children (AGL-1237)', () => {
       <TreeRoot node={node('root', 'plain', [node('kid', 'plain', [], { 'data-testid': 'kid' })]) as any} />,
     )
     expect(container.querySelector('[data-testid="kid"]')).toBeTruthy()
+  })
+})
+
+/**
+ * A Stack's divider (AGL-3660). MUI's Stack places its divider between
+ * `Children.toArray(children)`, exactly as the Accordion splits its slots, so
+ * a Stack of three handed one `<Branch>` drew no divider anywhere.
+ */
+describe('positional children reach a component that counts them (AGL-3660)', () => {
+  /** Stand-in for MUI's Stack: a rule between each pair of children. */
+  const Divided = ({ children, ...rest }: { children?: ReactNode }) => {
+    const kids = Children.toArray(children)
+    return (
+      <div {...rest}>
+        {kids.flatMap((kid, index) =>
+          index ? [<hr key={`rule-${index}`} />, kid] : [kid],
+        )}
+      </div>
+    )
+  }
+
+  const register = (positional: boolean) =>
+    Aglyn.components.registerComponent(Divided as any, {
+      $id: 'divided',
+      pluginId: 'test',
+      ...(positional
+        ? { flags: { positionalChildren: Aglyn.FEATURE_FLAG.ENABLED } }
+        : {}),
+    } as any)
+
+  const three = () =>
+    node('root', 'divided', [
+      node('a', 'plain', [], { 'data-testid': 'a' }),
+      node('b', 'plain', [], { 'data-testid': 'b' }),
+      node('c', 'plain', [], { 'data-testid': 'c' }),
+    ])
+
+  const rules = (container: HTMLElement) =>
+    container.querySelectorAll('[data-aglyn="leaf:root"] > hr').length
+
+  beforeEach(() => registerSchemas(false))
+  afterEach(() => Aglyn.components.unregisterComponent('divided'))
+
+  it('NEGATIVE CONTROL: without the flag three children read as one', () => {
+    register(false)
+    const { container } = render(<TreeRoot node={three() as any} />)
+    expect(rules(container)).toBe(0)
+  })
+
+  it('with the flag, three children draw two rules, without a key warning', () => {
+    register(true)
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { container } = render(<TreeRoot node={three() as any} />)
+      expect(rules(container)).toBe(2)
+      expect(
+        errors.mock.calls.filter((call) => /key/i.test(String(call[0]))),
+      ).toEqual([])
+    } finally {
+      errors.mockRestore()
+    }
+  })
+
+  it('keeps each child mounted across a re-render (stable keys)', () => {
+    register(true)
+    const tree = three()
+    const { container, rerender } = render(<TreeRoot node={tree as any} />)
+    const before = container.querySelector('[data-testid="b"]')
+    rerender(<TreeRoot node={tree as any} />)
+    expect(container.querySelector('[data-testid="b"]')).toBe(before)
+  })
+
+  /**
+   * The besigner's leaf shape: a render COPY of the node, the Branch inside
+   * a provider (a repeat's first record), and its own extras beside it (a
+   * repeat's preview copies and badge). Each child must still arrive alone,
+   * inside the provider, with the extras kept.
+   */
+  const RecordContext = createContext<string | undefined>(undefined)
+  const ReadsRecord = ({ children, ...rest }: { children?: ReactNode }) => (
+    <div {...rest} data-record={useContext(RecordContext) ?? ''}>
+      {children}
+    </div>
+  )
+  const CanvasLikeLeaf = forwardRef<any, LeafProps>(
+    ({ node: original, children, ...rest }, ref) => {
+      // The besigner's render copy is a SPREAD of a canvas node, whose
+      // `children` is a class getter the spread drops — so the copy has none.
+      const { children: _dropped, ...copy } = {
+        ...original,
+        props: { ...(original as any).props },
+      } as any
+      const isRoot = original.$id === 'root'
+      return (
+        <Leaf ref={ref} node={copy as any} {...rest}>
+          {isRoot ? (
+            <RecordContext.Provider value="first">{children}</RecordContext.Provider>
+          ) : (
+            children
+          )}
+          {null}
+          {isRoot ? <i data-testid="extra" /> : null}
+        </Leaf>
+      )
+    },
+  )
+
+  it('re-renders when a child is added to the node it renders', () => {
+    // The canvas adds a child by mutating an observable node; the element
+    // has to see it without anything above it re-rendering.
+    register(true)
+    const kids = observable([
+      node('a', 'plain', [], { 'data-testid': 'a' }),
+      node('b', 'plain', [], { 'data-testid': 'b' }),
+    ])
+    const tree = {
+      ...node('root', 'divided'),
+      get children() {
+        return kids
+      },
+    }
+    const { container } = render(<TreeRoot node={tree as any} />)
+    expect(rules(container)).toBe(1)
+    act(() => {
+      runInAction(() => {
+        kids.push(node('c', 'plain', [], { 'data-testid': 'c' }))
+      })
+    })
+    expect(rules(container)).toBe(2)
+    expect(container.querySelector('[data-testid="c"]')).toBeTruthy()
+  })
+
+  it('on a canvas-shaped leaf, splits the wrapped Branch and keeps the extras', () => {
+    register(true)
+    Aglyn.components.registerComponent(ReadsRecord as any, {
+      $id: 'reads',
+      pluginId: 'test',
+    } as any)
+    try {
+      const tree = node('root', 'divided', [
+        node('a', 'reads', [], { 'data-testid': 'a' }),
+        node('b', 'reads', [], { 'data-testid': 'b' }),
+      ])
+      const { container } = render(
+        <TreeRoot node={tree as any} LeafComponent={CanvasLikeLeaf as any} />,
+      )
+      // a | b | extra — the extra follows the children, as it did.
+      expect(rules(container)).toBe(2)
+      const root = container.querySelector('[data-aglyn="leaf:root"]')!
+      expect(
+        Array.from(root.children)
+          .filter((el) => el.tagName !== 'HR')
+          .map((el) => el.getAttribute('data-testid')),
+      ).toEqual(['a', 'b', 'extra'])
+      // The provider reached each child, applied per child.
+      expect(screen.getByTestId('a').getAttribute('data-record')).toBe('first')
+      expect(screen.getByTestId('b').getAttribute('data-record')).toBe('first')
+    } finally {
+      Aglyn.components.unregisterComponent('reads')
+    }
   })
 })
 

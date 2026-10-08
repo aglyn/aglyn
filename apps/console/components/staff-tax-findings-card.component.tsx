@@ -30,6 +30,8 @@ import {
   upsertListFilterClause,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
   Alert,
   AlertTitle,
@@ -39,10 +41,11 @@ import {
   Typography,
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import useStaffListQuery from '../hooks/use-staff-list-query'
 import {
+  TAX_FINDING_COLUMN_SORTS,
   TAX_FINDING_FILTER_FIELDS,
   TAX_FINDING_FILTER_HEADERS,
   TAX_FINDING_SELECT_FIELDS,
@@ -131,11 +134,20 @@ export default function StaffTaxFindingsCard({
    */
   const gridFilter = useListGridFilter({ selectFields: TAX_FINDING_SELECT_FIELDS })
   const { clauses, setClauses } = gridFilter
+  // Every header sorts, on the route over the whole period (AGL-3680, 4s).
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const findings = useStaffListQuery<FindingListRow>({
     endpoint: payload?.period ? '/api/admin/tax-return' : null,
     clauses,
     search: gridFilter.searchWords,
+    sort: askedSort,
     params: payload?.period ? { period: payload.period, view: 'findings' } : undefined,
+  })
+  const columnSort = useListColumnSort<FindingListRow>({
+    sorts: TAX_FINDING_COLUMN_SORTS,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    rows: findings.rows,
   })
 
   /*
@@ -253,7 +265,6 @@ export default function StaffTaxFindingsCard({
           headerName: 'Findings',
           flex: 1.4,
           minWidth: 220,
-          sortable: false,
           renderCell: ({ row }: { row: FindingListRow }) => (
             <Stack useFlexGap direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', gap: 0.5, py: 1 }}>
               {row.groups.map((finding) => (
@@ -365,11 +376,11 @@ export default function StaffTaxFindingsCard({
                 headers: TAX_FINDING_FILTER_HEADERS,
                 options,
               })}
-              notices={findings.notices}
+              notices={[...findings.notices, ...columnSort.notices]}
             />
             <ListTable
               aria-label="Findings"
-              rows={findings.rows}
+              rows={columnSort.rows}
               columns={columns}
               loading={loading || findings.loading}
               filterMode="server"
@@ -380,10 +391,11 @@ export default function StaffTaxFindingsCard({
               // An invoice carries its org beneath it and a row may raise
               // several findings, so a row is as tall as its content.
               getRowHeight={() => 'auto'}
-              // One page of the route's answer, turned by the footer below,
-              // in the route's order: a header sort would order only the page.
+              // One page of the route's answer, turned by the footer below.
+              // A header sort is the ROUTE's, over the whole period
+              // (`TAX_FINDING_SORT_COLUMNS`); a truncated period says so.
               hideFooter
-              disableColumnSorting
+              columnSort={columnSort}
               noRowsLabel="No rows match these filters"
             />
             <StaffListPaginationControls

@@ -28,10 +28,14 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
+  MenuItem,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material'
+import { invalidOpeningHoursLines } from '@aglyn/aglyn/app-utils/local-business'
 import {
   collection,
   deleteDoc,
@@ -40,6 +44,7 @@ import {
   limit,
   query,
   setDoc,
+  updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
@@ -239,6 +244,38 @@ export function LocationsCard(props: LocationsCardProps) {
     />
   )
 
+  /*
+   * Pickup at a location (AGL-3624): whether buyers may collect orders here,
+   * its hours and what to do on arrival. Checkout offers every location that
+   * has it on, and routes the order and its stock there.
+   */
+  const [pickupFor, setPickupFor] = useState<any | null>(null)
+  const [pickupDraft, setPickupDraft] = useState<CommerceModel.PickupLocationSettings>({})
+  const openPickup = useCallback(
+    (location: any) => () => {
+      setPickupFor(location)
+      setPickupDraft(CommerceModel.normalizePickupSettings(location.pickup))
+    },
+    [],
+  )
+  const badHourLines = invalidOpeningHoursLines(pickupDraft.hours ?? '')
+  const handleSavePickup = useCallback(async () => {
+    if (!pickupFor) return
+    try {
+      // `updateDoc` replaces the map whole, so a cleared field is cleared;
+      // a merge-set would deep-merge it back.
+      await updateDoc(doc(firestore, 'hosts', hostId, 'locations', pickupFor.$id), {
+        pickup: CommerceModel.normalizePickupSettings(pickupDraft),
+      })
+      setPickupFor(null)
+    } catch (error: any) {
+      enqueueSnackbar(error?.message ?? 'Could not save pickup', {
+        variant: 'warning',
+        persist: false,
+      })
+    }
+  }, [enqueueSnackbar, firestore, hostId, pickupDraft, pickupFor])
+
   return (
     <CardDisplay
       header={'Inventory locations'}
@@ -263,6 +300,12 @@ export function LocationsCard(props: LocationsCardProps) {
               <Typography variant="body2" sx={{ flex: 1 }} noWrap>
                 {location.name}
               </Typography>
+              {CommerceModel.normalizePickupSettings(location.pickup).enabled ? (
+                <Chip label="Pickup" size="small" color="primary" variant="outlined" />
+              ) : null}
+              <Button size="small" onClick={openPickup(location)}>
+                {'Pickup'}
+              </Button>
               <Button size="small" onClick={openAddress(location)}>
                 {location.postalAddress?.line1 ? 'Edit address' : 'Add address'}
               </Button>
@@ -326,6 +369,92 @@ export function LocationsCard(props: LocationsCardProps) {
         <DialogActions>
           <Button onClick={() => setAddressFor(null)}>{'Cancel'}</Button>
           <Button variant="contained" onClick={handleSaveAddress}>
+            {'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={Boolean(pickupFor)} onClose={() => setPickupFor(null)} fullWidth maxWidth="sm">
+        <DialogTitle>{`Pickup at ${pickupFor?.name ?? 'this location'}`}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5} sx={{ pt: 1 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={Boolean(pickupDraft.enabled)}
+                  onChange={(event) =>
+                    setPickupDraft((prior) => ({ ...prior, enabled: event.target.checked }))
+                  }
+                />
+              }
+              label="Buyers can pick up orders here"
+            />
+            {pickupDraft.enabled && !pickupFor?.postalAddress?.line1 && !pickupFor?.address ? (
+              <Typography variant="caption" color="warning.main">
+                {'Add this location’s address so buyers know where to go.'}
+              </Typography>
+            ) : null}
+            <TextField
+              label="Pickup hours"
+              value={pickupDraft.hours ?? ''}
+              onChange={(event) => setPickupDraft((prior) => ({ ...prior, hours: event.target.value }))}
+              multiline
+              minRows={2}
+              size="small"
+              placeholder={'Mo-Fr 09:00-17:00\nSa 10:00-14:00'}
+              error={badHourLines.length > 0}
+              helperText={
+                badHourLines.length
+                  ? `Line ${badHourLines.join(', ')} does not read as days and times, like Mo-Fr 09:00-17:00.`
+                  : 'One line per set of days, like Mo-Fr 09:00-17:00.'
+              }
+            />
+            <TextField
+              label="Arrival instructions"
+              value={pickupDraft.instructions ?? ''}
+              onChange={(event) =>
+                setPickupDraft((prior) => ({ ...prior, instructions: event.target.value }))
+              }
+              multiline
+              minRows={2}
+              size="small"
+              placeholder="Ring the bell at the side door and give your order number."
+              slotProps={{ htmlInput: { maxLength: CommerceModel.PICKUP_INSTRUCTIONS_MAX } }}
+            />
+            <TextField
+              select
+              label="Usually ready in"
+              value={String(pickupDraft.readyWithinMinutes ?? '')}
+              onChange={(event) =>
+                setPickupDraft((prior) => ({
+                  ...prior,
+                  readyWithinMinutes: event.target.value ? Number(event.target.value) : undefined,
+                }))
+              }
+              size="small"
+            >
+              <MenuItem value="">{'Don’t say'}</MenuItem>
+              {[
+                [30, '30 minutes'],
+                [60, '1 hour'],
+                [120, '2 hours'],
+                [240, '4 hours'],
+                [1440, '1 day'],
+                [2880, '2 days'],
+              ].map(([minutes, label]) => (
+                <MenuItem key={minutes} value={String(minutes)}>
+                  {label}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Typography variant="caption" color="text.secondary">
+              {'Buyers choose this location at checkout. The order’s stock comes off this location, ' +
+                'and the buyer is emailed when you mark the order ready.'}
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPickupFor(null)}>{'Cancel'}</Button>
+          <Button variant="contained" disabled={badHourLines.length > 0} onClick={handleSavePickup}>
             {'Save'}
           </Button>
         </DialogActions>

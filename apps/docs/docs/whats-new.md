@@ -10,7 +10,70 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — your own email platform, kept in step (newest)
+<!--
+  AGL-3677 — Smile.io and Yotpo Loyalty connections are built and hidden until a
+  deployment sets LOYALTY_CONNECTORS_TOKEN_KEY on the console (the key merchants'
+  API keys are sealed under; no developer app of Aglyn's is needed). This entry is
+  held unpublished, like the guide it links (`unlisted: true`): once the key is set
+  on aglyn.com, remove this comment's markers, move "(newest)" here from the heading
+  below, and delete `unlisted: true` and the "Rolling out" note from
+  commerce-and-bookings/commerce/connect-smile-io-or-yotpo.md.
+
+## October 2026 — your own Smile.io or Yotpo Loyalty account
+
+- **[Smile.io and Yotpo Loyalty](commerce-and-bookings/commerce/connect-smile-io-or-yotpo.md)** —
+  already run a loyalty program? Connect your own account and every Aglyn order earns
+  points there, refunds take them back, and customers spend that balance at checkout
+  and at the register. One program at a time, so nobody is rewarded twice; anything
+  the account could not take waits on the card with a Send again button.
+-->
+
+## October 2026 — a self-service kiosk (newest)
+
+- **[Self-service kiosk](commerce-and-bookings/commerce/pos-and-reservations.md#self-service-kiosk)** —
+  pair a tablet to a register and let customers order themselves: products by
+  category with their sizes and modifiers, the total with tax, a tip, and payment on
+  the register's card reader, or an order number to pay at the counter. Orders sent
+  to the counter wait on the register under **Kiosk orders**. An idle kiosk clears the
+  customer's order and details, and staff unlock it with their register PIN.
+
+## October 2026 — buy online, pick up in store, and local delivery
+
+- **[Pick up in store](commerce-and-bookings/commerce/pickup-and-local-delivery.md#set-up-pickup)** —
+  turn on pickup for any of your locations, with its hours and arrival instructions,
+  and buyers choose where to collect at the cart. The order's stock is reserved and
+  sold at that location, and the buyer is emailed when you mark it ready.
+- **[Local delivery](commerce-and-bookings/commerce/pickup-and-local-delivery.md#set-up-local-delivery)** —
+  deliver orders yourself: zones by postal code, each with its own fee, minimum order
+  and free-over amount, and delivery times buyers book at the cart.
+- **[Pickup & delivery queue](commerce-and-bookings/commerce/pickup-and-local-delivery.md#queue)** —
+  a card on the Orders page lists what to prepare, what is ready, and what is out for
+  delivery, per location, with each order's next step one click away.
+
+## October 2026 — the register keeps selling offline
+
+- **[Selling while offline](commerce-and-bookings/commerce/pos-operations.md#selling-while-offline)** —
+  when the connection drops, the register keeps ringing cash sales from the catalog and
+  tax rate it saved, prints the receipt, and syncs each sale once when the connection
+  returns, in the shift it was rung in. Stock that went short meanwhile is flagged on
+  the order and in the register. Card tenders, gift cards, store credit, rewards and room charges are
+  off while offline.
+
+## October 2026 — rewards, referrals and store credit
+
+- **[Rewards](commerce-and-bookings/commerce/rewards-and-referrals.md)** — your store's
+  own loyalty program, under **Products → Promotions**. Customers earn points on every
+  order, online and at the register, and spend them with their rewards code in the cart
+  or with the new **Rewards** tender at the register. Refunds take earned points back
+  and give spent rewards back.
+- **[Referrals](commerce-and-bookings/commerce/rewards-and-referrals.md#referrals)** —
+  members share a referral code that takes money off a friend's first order and earns
+  the member store credit when that order is paid.
+- **[Store credit](commerce-and-bookings/commerce/rewards-and-referrals.md#members-and-store-credit)** —
+  give any customer store credit by hand, beside your gift cards, and see every member's
+  balance and history.
+
+## October 2026 — your own email platform, kept in step
 
 - **[Mailchimp, Klaviyo and Omnisend](marketing-and-automation/email-campaigns/email-platforms.md)** —
   connect your own account to a site with its API key and your contacts stay in

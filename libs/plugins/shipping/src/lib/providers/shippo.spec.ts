@@ -247,6 +247,17 @@ describe('Shippo, through platform accounts', () => {
     expect(check.suggested).toMatchObject({ line1: '731 MARKET ST', postalCode: '94103-2007', residential: false })
   })
 
+  it('passes on the position the validator returns, and none when it returns none (AGL-3624)', async () => {
+    const { fetchImpl } = recordingFetch([
+      { body: { analysis: { validation_result: { value: 'valid' } }, geo: { latitude: 37.78, longitude: -122.41 } } },
+      { body: { analysis: { validation_result: { value: 'valid' } } } },
+    ])
+    const provider = createShippoProvider({ token: 'tok', fetchImpl })
+    const address = { country: 'US', line1: '731 Market St', postalCode: '94103' }
+    expect((await provider.validateAddress(ACCOUNT, address)).coordinates).toEqual({ lat: 37.78, lng: -122.41 })
+    expect((await provider.validateAddress(ACCOUNT, address)).coordinates).toBeUndefined()
+  })
+
   it('turns a refusal into an error carrying the provider’s words', async () => {
     const { fetchImpl } = recordingFetch([{ status: 400, body: { detail: 'Invalid zip' } }])
     const provider = createShippoProvider({ token: 'tok', fetchImpl })

@@ -25,7 +25,6 @@ import {
   couponCaseLabel,
   deepestCouponPercentWithinFullUse,
   describeDiscountFullUse,
-  rateCouponAgainstFullUse,
 } from '@aglyn/aglyn/app-utils/full-use-cost'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
@@ -37,6 +36,8 @@ import {
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import type { GridColDef } from '@mui/x-data-grid'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -73,8 +74,10 @@ import {
   COUPON_FILTER_FIELDS,
   COUPON_FILTER_HEADERS,
   COUPON_FILTER_OPTIONS,
+  COUPON_COLUMN_SORTS,
   type CouponListRow,
   type CouponRow,
+  couponFullUse,
 } from '../../../../utils/coupon-list-query'
 
 /** The picked fields, which the panel shows as selects. */
@@ -125,19 +128,6 @@ interface PendingToggle {
 }
 
 /** A coupon row's discount and duration, as the full-use verdict reads them. */
-function couponFullUse(
-  row: Pick<CouponRow, 'percentOff' | 'amountOffUsd' | 'duration' | 'durationInMonths'>,
-) {
-  return rateCouponAgainstFullUse(
-    row.percentOff != null
-      ? { percentOff: row.percentOff }
-      : row.amountOffUsd != null
-        ? { amountOffUsd: row.amountOffUsd }
-        : {},
-    { duration: row.duration, durationInMonths: row.durationInMonths },
-  )
-}
-
 /**
  * What each duration takes the discount off, under the Duration picker —
  * Stripe's three durations already say "first month", "first N months" and
@@ -177,12 +167,21 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
       ),
     [enqueueSnackbar],
   )
+  // Every header sorts, on the route over every coupon (AGL-3680, 4s).
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const couponList = useStaffListQuery<CouponListRow>({
     endpoint: isStaff ? '/api/admin/coupons' : null,
     clauses: gridFilter.clauses,
     search: gridFilter.searchWords,
+    sort: askedSort,
     params: COUPON_LIST_PARAMS,
     onError: onListError,
+  })
+  const couponSort = useListColumnSort<CouponListRow>({
+    sorts: COUPON_COLUMN_SORTS,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    rows: couponList.rows,
   })
   const { refresh: refreshCoupons } = couponList
   const [busy, setBusy] = useState(false)
@@ -392,7 +391,6 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
       field: 'discount',
       headerName: 'Discount',
       width: 120,
-      sortable: false,
       valueGetter: (_value, row: CouponListRow) => discountLabel(row),
     },
     {
@@ -410,7 +408,6 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
       field: 'fullUse',
       headerName: 'Full-use cost',
       width: 170,
-      sortable: false,
       filterable: false,
       renderCell: ({ row }: { row: CouponListRow }) => {
         const verdict = couponFullUse(row)
@@ -440,7 +437,6 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
       headerName: 'Codes',
       flex: 1.4,
       minWidth: 240,
-      sortable: false,
       renderCell: ({ row }: { row: CouponListRow }) =>
         row.codes.length === 0 ? (
           <Typography variant="caption" color="text.secondary">
@@ -803,10 +799,13 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                   clauses={gridFilter.clauses}
                   onChange={gridFilter.setClauses}
                 />
-                <ListQueryNotices refused={couponRefusals} notices={couponList.notices} />
+                <ListQueryNotices
+                  refused={couponRefusals}
+                  notices={[...couponList.notices, ...couponSort.notices]}
+                />
                 <ListTable
                   aria-label="Existing coupons"
-                  rows={couponList.rows}
+                  rows={couponSort.rows}
                   columns={couponColumns}
                   loading={couponList.loading}
                   filterMode="server"
@@ -817,9 +816,10 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                   // as tall as its codes.
                   getRowHeight={() => 'auto'}
                   // The route answers one page at a time; the footer below
-                  // walks the pages, and a header sort would order only one.
+                  // walks the pages. A header sort is the ROUTE's, over every
+                  // coupon before the page is cut (`COUPON_SORT_COLUMNS`).
                   hideFooter
-                  disableColumnSorting
+                  columnSort={couponSort}
                   noRowsLabel={
                     couponList.loading ? 'Loading coupons…' : 'No coupons match these filters'
                   }

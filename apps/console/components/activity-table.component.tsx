@@ -19,6 +19,7 @@
 import { CardDisplay, type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { ListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import type { GridColDef, GridFilterModel } from '@mui/x-data-grid'
 import { Alert, Stack, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
@@ -79,10 +80,13 @@ export interface ActivityTableProps {
    */
   filterNotices?: ReactNode
   /**
-   * The source keeps ONE order, so the grid must not re-sort the page it
-   * holds and present that as the feed's order.
+   * The header sorts (AGL-3680), from `useListColumnSort`: a header backed
+   * by the source's order asks the source for it, one backed only by the
+   * row sorts the page and says so. Present, the grid draws
+   * `columnSort.rows` rather than `rows`. Absent, the grid sorts the rows it
+   * holds itself, which is honest only for a caller holding every row.
    */
-  disableColumnSorting?: boolean
+  columnSort?: ListColumnSort
   page: number
   pageSize: number
   onPageChange: (page: number) => void
@@ -144,7 +148,7 @@ export function ActivityTable(props: ActivityTableProps) {
     filteredLabel = 'No activity matches these filters',
     filterChips,
     filterNotices,
-    disableColumnSorting,
+    columnSort,
     page,
     pageSize,
     onPageChange,
@@ -190,7 +194,7 @@ export function ActivityTable(props: ActivityTableProps) {
              */
             hideFooter
             rowHeight={TABLE_ROW_HEIGHT}
-            {...(disableColumnSorting ? { disableColumnSorting: true } : {})}
+            {...(columnSort ? { columnSort } : {})}
             /*
              * A filter panel that narrows ONE PAGE is worse than none.
              *

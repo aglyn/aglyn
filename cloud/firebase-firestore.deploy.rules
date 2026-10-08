@@ -930,6 +930,45 @@ allow read, write: if false;
 
 
 
+match /loyaltyPrograms/{hostId} {
+allow read, write: if false;
+}
+match /loyaltyMembers/{memberId} {
+allow read, write: if false;
+}
+match /loyaltyCodes/{codeId} {
+allow read, write: if false;
+}
+match /loyaltyLedger/{entryId} {
+allow read, write: if false;
+}
+match /loyaltyRedemptions/{redemptionId} {
+allow read, write: if false;
+}
+match /loyaltyReferralClaims/{claimId} {
+allow read, write: if false;
+}
+
+
+
+
+match /loyaltyConnections/{hostId} {
+allow read, write: if false;
+}
+match /loyaltySync/{rowId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
 match /outreachMailboxes/{mailboxId} {
 allow read: if canReadOutreach();
 allow write: if false;
@@ -3811,7 +3850,7 @@ subcollection != 'salesChannels' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
+'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
 'aiMemory']) &&
@@ -3819,6 +3858,14 @@ subcollection != 'salesChannels' && (isStaff() ||
 
 
 !string(document).matches('.*/formSubmissions/[^/]+')));
+
+
+
+
+
+
+
+
 
 
 
@@ -3972,7 +4019,7 @@ subcollection != 'salesChannels' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
+'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
 'aiMemory'])));
@@ -4030,7 +4077,7 @@ subcollection != 'salesChannels' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-'posStaffPins', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
+'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
 }

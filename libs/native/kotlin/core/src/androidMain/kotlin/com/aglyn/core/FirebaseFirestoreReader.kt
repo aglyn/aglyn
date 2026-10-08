@@ -28,7 +28,7 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
   override fun observeDoc(path: String): Flow<Live<FirestoreDoc?>> = callbackFlow {
     trySend(Live.Loading)
     val registration = db.document(path).addSnapshotListener { snapshot, error ->
-      if (error != null) trySend(Live.Failed(error)) else trySend(Live.Ready(snapshot?.toDoc()))
+      if (error != null) trySend(Live.Failed(error)) else trySend(Live.Ready(snapshot?.toDoc(), snapshot?.metadata?.isFromCache == true))
     }
     awaitClose { registration.remove() }
   }
@@ -39,7 +39,7 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
       if (error != null) {
         trySend(Live.Failed(error))
       } else {
-        trySend(Live.Ready(snapshot?.documents?.mapNotNull { it.toDoc() } ?: emptyList()))
+        trySend(Live.Ready(snapshot?.documents?.mapNotNull { it.toDoc() } ?: emptyList(), snapshot?.metadata?.isFromCache == true))
       }
     }
     awaitClose { registration.remove() }
@@ -124,6 +124,7 @@ internal fun toSdkWrite(data: Map<String, Any?>): Map<String, Any?> = data.mapVa
 
 private fun sdkWriteValue(value: Any?): Any? = when (value) {
   FirestoreDelete -> com.google.firebase.firestore.FieldValue.delete()
+  ServerTimestamp -> com.google.firebase.firestore.FieldValue.serverTimestamp()
   is FirestoreTimestamp -> Timestamp(value.seconds, value.nanos)
   is Map<*, *> -> value.entries.associate { it.key.toString() to sdkWriteValue(it.value) }
   is List<*> -> value.map(::sdkWriteValue)

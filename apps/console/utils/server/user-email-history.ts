@@ -69,13 +69,42 @@ export function readEmailHistoryCursor(raw: string | null): EmailHistoryCursor {
   }
 }
 
-/** Newest first; among equal instants, id descending — each query's own tie order. */
-const newestFirst = (
-  a: FirebaseFirestore.QueryDocumentSnapshot,
-  b: FirebaseFirestore.QueryDocumentSnapshot,
-): number =>
-  Number(b.get('firstSeenAtMs') ?? 0) - Number(a.get('firstSeenAtMs') ?? 0) ||
-  (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)
+/** Firestore's order across value types: null, booleans, numbers, then text. */
+const typeRank = (value: unknown): number =>
+  value === null || value === undefined
+    ? 0
+    : typeof value === 'boolean'
+      ? 1
+      : typeof value === 'number'
+        ? 2
+        : 3
+
+/** Two stored values in Firestore's ascending order. */
+function compareStored(a: unknown, b: unknown): number {
+  const rank = typeRank(a) - typeRank(b)
+  if (rank !== 0) return rank
+  if (typeof a === 'number' && typeof b === 'number') return a - b
+  if (typeof a === 'boolean' && typeof b === 'boolean') return Number(a) - Number(b)
+  const left = String(a ?? '')
+  const right = String(b ?? '')
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+/**
+ * The merge's order: the plan's own (AGL-3680), so the addresses' pages
+ * interleave exactly as one query over all of them would — by the ordered
+ * field, then by document id in the same direction, which is each query's
+ * own tie order.
+ */
+const inPlanOrder =
+  (order: { path: string; direction: 'asc' | 'desc' }) =>
+  (a: FirebaseFirestore.QueryDocumentSnapshot, b: FirebaseFirestore.QueryDocumentSnapshot): number => {
+    const sign = order.direction === 'desc' ? -1 : 1
+    return (
+      sign * compareStored(a.get(order.path), b.get(order.path)) ||
+      sign * (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+    )
+  }
 
 export async function readUserEmailHistoryPage(options: {
   firestore: FirebaseFirestore.Firestore
@@ -107,7 +136,8 @@ export async function readUserEmailHistoryPage(options: {
       return docs.map((doc) => ({ key, doc }))
     }),
   )
-  const merged = pages.flat().sort((a, b) => newestFirst(a.doc, b.doc))
+  const order = inPlanOrder(plan.orderBy)
+  const merged = pages.flat().sort((a, b) => order(a.doc, b.doc))
   const shown = merged.slice(0, request.pageSize)
   const hasMore = merged.length > request.pageSize
   const next: EmailHistoryCursor = { ...cursor }

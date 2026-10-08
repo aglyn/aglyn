@@ -21,6 +21,9 @@ order, its shipments and their tracking.
 | You mark an order delivered | **Order delivered** | The order and its items. |
 | You refund an order | **Order refunded** | The amount, the items you refunded by name (if you picked any), and whether the order is now refunded in full. One email per refund. |
 | You cancel an order | **Order canceled** | The order and its items. Canceling doesn't refund a payment: refund first if the customer paid. |
+| You mark a pickup order ready | **Order ready for pickup** | The location and its address, your pickup hours and arrival instructions. See [Pickup & local delivery](./pickup-and-local-delivery.md). |
+| A pickup order is collected | **Order picked up** | A short confirmation, with the items. |
+| Your driver takes a local delivery out | **Order out for delivery** | The items and the delivery time the customer booked. When you mark it delivered, they get **Order delivered**. |
 
 A dropship supplier who posts tracking for their part of an order sends the
 customer the same **Order shipped** email.

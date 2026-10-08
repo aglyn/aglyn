@@ -89,10 +89,14 @@ struct HomeView: View {
   private var quickActions: some View {
     let actions = model.registry.quickActions(for: .aglyn).filter { hasSite || !$0.requiresSite }
     return Group {
-      if !actions.isEmpty {
+      if !actions.isEmpty || hasSite {
         VStack(alignment: .leading, spacing: AglynSpace.oneAndHalf) {
           AglynSectionHeader("Quick actions")
           AglynGrid(minimum: 76) {
+            if hasSite {
+              QuickActionTile("Analytics", systemImage: "chart.bar.xaxis") { navigation.push(.analytics) }
+                .accessibilityIdentifier("quick-action-analytics")
+            }
             ForEach(actions) { action in
               QuickActionTile(action.title, systemImage: action.icon) {
                 navigation.push(.screen(action.screen, action.params))

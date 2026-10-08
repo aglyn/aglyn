@@ -88,13 +88,46 @@ export const ACTIVITY_LIST_SORT: ListQuerySort = {
   path: 'createdAt',
   direction: 'desc',
   column: 'createdAt',
+  label: 'When',
 }
+
+/*
+ * THE HEADER ORDERS OF ONE SUBJECT'S LOG (AGL-3680).
+ *
+ * A site's log and the organization's own feed each read ONE collection with
+ * no base, so an `alone` order there is a single-field index Firestore keeps
+ * anyway — oldest first, and Action either way, cost no composite. Every
+ * writer stamps `action` (it is the entry's sentence or its catalog code), so
+ * an `orderBy` on it drops nothing. Alone, because pairing them with every
+ * filter would cost a composite per (equality × order); with a filter or the
+ * search on, the plan falls back to newest first and says so.
+ *
+ * The person-scoped feeds (one account everywhere, one member in an
+ * organization, the changes to one member) and the org-wide merge keep
+ * `createdAt` DESC alone: a base would make each of these a composite, and
+ * the merge pages by the clock. Their other headers sort the page.
+ */
+export const SUBJECT_ACTIVITY_SORTS: readonly ListQuerySort[] = [
+  ACTIVITY_LIST_SORT,
+  { path: 'createdAt', direction: 'asc', column: 'createdAt', label: 'When, oldest first', alone: true },
+  { path: 'action', direction: 'asc', column: 'action', label: 'Action', alone: true },
+  { path: 'action', direction: 'desc', column: 'action', label: 'Action', alone: true },
+]
 
 /** Action, When and the search: the query every activity list starts from. */
 export const ACTIVITY_LIST_QUERY: ListQueryDeclaration = {
   fields: ACTIVITY_LIST_FILTER_FIELDS,
   sorts: [ACTIVITY_LIST_SORT],
   search: { tokensPath: ACTIVITY_SEARCH_TOKENS_PATH },
+}
+
+/**
+ * One subject's log with its header orders: a site's log, and the
+ * organization's own feed with no target.
+ */
+export const SUBJECT_ACTIVITY_QUERY: ListQueryDeclaration = {
+  ...ACTIVITY_LIST_QUERY,
+  sorts: SUBJECT_ACTIVITY_SORTS,
 }
 
 /** Who: one of the organization's members, an equality on every subject. */

@@ -28,12 +28,18 @@ import {
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { describePaymentRisk, type PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
-import { type HostBookingService, isBookingReminderDue } from '../model'
+import { isBookingReminderDue } from '../model'
+import {
+  BOOKING_WEEKDAYS,
+  type BookingServiceDraft,
+  bookingServiceDraftFrom,
+  bookingServiceFields,
+  newBookingServiceDraft,
+} from '../model/booking-service-form'
 import { type BookingServiceStatus, bookingServiceStatus } from '../model/bookings'
 import {
   BOOKING_FIELD_ASKS,
   type BookingFieldAsk,
-  bookingContactAsks,
 } from '../model/booking-contact-fields'
 import {
   BOOKING_PRICE_DISPLAYS,
@@ -81,50 +87,11 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const WEEKDAYS = BOOKING_WEEKDAYS
 
-/** "09:00-12:00, 13:00-17:00" → open intervals in minutes. */
-function parseWindows(input: string): Array<{ start: number; end: number }> {
-  const windows: Array<{ start: number; end: number }> = []
-  for (const chunk of input.split(',')) {
-    const match = chunk.trim().match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/)
-    if (!match) continue
-    const start = Number(match[1]) * 60 + Number(match[2])
-    const end = Number(match[3]) * 60 + Number(match[4])
-    if (end > start && end <= 24 * 60) windows.push({ start, end })
-  }
-  return windows
-}
-
-function formatWindows(
-  windows: Array<{ start: number; end: number }> | undefined,
-): string {
-  const pad = (minutes: number) =>
-    `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(
-      minutes % 60,
-    ).padStart(2, '0')}`
-  return (windows ?? [])
-    .map((window) => `${pad(window.start)}-${pad(window.end)}`)
-    .join(', ')
-}
-
-interface ServiceDraft {
+/** The dialog's fields, and the service it edits (`null` for a new one). */
+interface ServiceDraft extends BookingServiceDraft {
   id: string | null
-  name: string
-  durationMinutes: string
-  priceUsd: string
-  timezone: string
-  description: string
-  /** Per-weekday window text, e.g. "09:00-17:00". */
-  windowText: string[]
-  /** The service's two CRM switches (AGL-2660) — see `HostBookingService`. */
-  crmMeetingActivity: boolean
-  crmFollowUpTask: boolean
-  /** What the widget asks the booker for (AGL-3493). */
-  askPhone: BookingFieldAsk
-  askAddress: BookingFieldAsk
-  /** How the price is stated (AGL-3475); a label books with no charge. */
-  priceDisplay: BookingPriceDisplay
 }
 
 /** How each way of stating the price reads in the service dialog's picker. */
@@ -301,54 +268,16 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
     }
     setDraft({
       id: null,
-      name: '',
-      durationMinutes: '30',
-      priceUsd: '0',
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-      description: '',
-      windowText: WEEKDAYS.map((_, index) =>
-        index >= 1 && index <= 5 ? '09:00-17:00' : '',
+      ...newBookingServiceDraft(
+        Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
       ),
-      // A booking is a meeting the record has; the follow-up is opt-in.
-      crmMeetingActivity: true,
-      crmFollowUpTask: false,
-      // Name and email only, until the service says otherwise.
-      askPhone: 'off',
-      askAddress: 'off',
-      priceDisplay: 'fixed',
     })
   }, [entitled, org, services.length, enqueueSnackbar])
 
   const handleSave = useCallback(async () => {
     if (!draft || !draft.name.trim()) return
-    const windows: HostBookingService['windows'] = {}
-    draft.windowText.forEach((text, weekday) => {
-      const parsed = parseWindows(text)
-      if (parsed.length) windows[weekday] = parsed
-    })
-    const fields = {
-      name: draft.name.trim().slice(0, 80),
-      durationMinutes: Math.max(
-        5,
-        Math.min(480, Math.round(Number(draft.durationMinutes) || 30)),
-      ),
-      priceUsd: Math.max(0, Math.round(Number(draft.priceUsd) || 0)),
-      timezone: draft.timezone.trim() || 'UTC',
-      ...(draft.description.trim() && {
-        description: draft.description.trim().slice(0, 500),
-      }),
-      windows,
-      // Written explicitly rather than only when on: an edit that switches
-      // the meeting off has to land a `false`, and `merge: true` would keep
-      // an absent key exactly as it was.
-      crmMeetingActivity: draft.crmMeetingActivity,
-      crmFollowUpTask: draft.crmFollowUpTask,
-      // Written explicitly for the same reason: switching a field back off
-      // has to land `'off'` over the stored answer.
-      askPhone: draft.askPhone,
-      askAddress: draft.askAddress,
-      priceDisplay: draft.priceDisplay,
-    }
+    // The one rule for what a save stores, which the native editors share.
+    const fields = bookingServiceFields(draft)
     try {
       if (draft.id) {
         /**
@@ -622,22 +551,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                   onClick={() =>
                     setDraft({
                       id: service.$id,
-                      name: service.name ?? '',
-                      durationMinutes: String(service.durationMinutes ?? 30),
-                      priceUsd: String(service.priceUsd ?? 0),
-                      timezone: service.timezone ?? 'UTC',
-                      description: service.description ?? '',
-                      windowText: WEEKDAYS.map((_, index) =>
-                        formatWindows(service.windows?.[index]),
-                      ),
-                      // Absent reads as ON for the meeting and OFF for the
-                      // follow-up — the model's defaults, seeded so the
-                      // switches show what the service actually does.
-                      crmMeetingActivity: service.crmMeetingActivity !== false,
-                      crmFollowUpTask: service.crmFollowUpTask === true,
-                      askPhone: bookingContactAsks(service).phone,
-                      askAddress: bookingContactAsks(service).address,
-                      priceDisplay: bookingPriceDisplay(service.priceDisplay),
+                      ...bookingServiceDraftFrom(service),
                     })
                   }
                 >

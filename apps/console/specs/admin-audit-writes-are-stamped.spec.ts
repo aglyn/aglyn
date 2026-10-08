@@ -54,6 +54,16 @@ const DOORS = new Set([
   'libs/tenant/data/admin/src/lib/server/admin-audit.ts',
 ])
 
+/**
+ * Scripts that only PATCH rows that already exist, each with what it writes.
+ * A patch cannot mint an unstamped row, so the shape check does not apply;
+ * the script's own self-test holds what it stamps.
+ */
+const PATCHES_EXISTING_ROWS: Readonly<Record<string, string>> = {
+  'tools/scripts/backfill-staff-list-sort-fields.mjs':
+    'stamps `scope: null` on audit rows that predate it, the value withAdminAuditIndex writes (AGL-3680)',
+}
+
 /** A reference to the collection, in either SDK's spelling. */
 const REFERENCE =
   /collection\(\s*(?:[\w$.()]+\s*,\s*)?(?:'adminAudit'|"adminAudit"|ADMIN_AUDIT_COLLECTION)\s*\)/g
@@ -131,6 +141,7 @@ describe('AGL-3321 · every adminAudit write carries the fields its list queries
       .filter(Boolean)
       .filter((file) => !/\.(?:spec|test)\.[cm]?[jt]sx?$/.test(file))
       .filter((file) => !DOORS.has(file))
+      .filter((file) => !(file in PATCHES_EXISTING_ROWS))
       .filter((file) => {
         const text = readFileSync(join(REPO_ROOT, file), 'utf8')
         return text.includes('adminAudit') || text.includes('ADMIN_AUDIT_COLLECTION')

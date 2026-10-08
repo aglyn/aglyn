@@ -145,6 +145,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     val title = when (route) {
       is Route.Screen -> services.registry.screen(route.screenId)?.title ?: "Not found"
       is Route.Besigner -> "Besigner"
+      Route.Analytics -> "Analytics"
       Route.Switcher -> "Switch workspace or site"
       Route.NotificationSettings -> "Notifications"
       null -> destinations.firstOrNull { it.key == navigator.top }?.label ?: ""
@@ -180,6 +181,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
         when (route) {
           is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, workspace.site != null) { navigator.back() }
           is Route.Besigner -> services.besigner(route.path, { navigator.back() }) { link -> navigator.back(); context.openLink(link) }
+          Route.Analytics -> AnalyticsScreen(services, context)
           Route.Switcher -> SwitcherScreen(services.workspace, workspace) { navigator.back() }
           Route.NotificationSettings -> NotificationSettingsScreen(services, uid)
           null -> when {

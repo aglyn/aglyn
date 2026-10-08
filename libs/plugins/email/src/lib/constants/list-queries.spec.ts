@@ -60,7 +60,45 @@ describe('every Emails list has the composites its queries need', () => {
     expect(listQueryIndexes(SUPPRESSION_LIST_QUERY)).toHaveLength(2)
     expect(listQueryIndexes(EMAIL_LIST_QUERY)).toHaveLength(3)
     expect(listQueryIndexes(LIST_MEMBER_QUERY)).toHaveLength(0)
-    expect(listQueryIndexes(EMAIL_TEMPLATE_QUERY, [{ path: 'kind' }])).toHaveLength(2)
+    // The scoped template list's Z-to-A header is the one composite the
+    // header sorts cost (AGL-3680): an `alone` order pairs with the base.
+    expect(listQueryIndexes(EMAIL_TEMPLATE_QUERY, [{ path: 'kind' }])).toHaveLength(3)
+  })
+})
+
+describe('every header sorts on the query (AGL-3680)', () => {
+  const columns = (declaration: typeof SUPPRESSION_LIST_QUERY) =>
+    [...new Set(declaration.sorts.map((sort) => sort.column).filter(Boolean))].sort()
+
+  it('offers a query order for every stored column', () => {
+    expect(columns(SUPPRESSION_LIST_QUERY)).toEqual(['email', 'reason', 'since'])
+    expect(columns(EMAIL_LIST_QUERY)).toEqual(['kind', 'name'])
+    expect(columns(LIST_MEMBER_QUERY)).toEqual(['addedAt', 'email', 'name', 'via'])
+    expect(columns(EMAIL_TEMPLATE_QUERY)).toEqual(['displayName'])
+  })
+
+  it('serves a header order with nothing narrowing the list', () => {
+    const asked = LIST_MEMBER_QUERY.sorts.find(
+      (sort) => sort.column === 'addedAt' && sort.direction === 'desc',
+    )
+    const planned = planListQuery(
+      LIST_MEMBER_QUERY,
+      { clauses: [], search: [], sort: asked },
+      nameSearchNormalizers,
+    )
+    expect(planned.orderBy).toBe(asked)
+    expect(planned.notices).toEqual([])
+  })
+
+  it('falls back to the default order under a filter, and says so', () => {
+    const asked = SUPPRESSION_LIST_QUERY.sorts.find((sort) => sort.column === 'email')
+    const planned = planListQuery(
+      SUPPRESSION_LIST_QUERY,
+      { clauses: [{ field: 'reason', op: 'equals', value: 'bounce' }], sort: asked },
+      nameSearchNormalizers,
+    )
+    expect(planned.orderBy.path).toBe('createdAt')
+    expect(planned.notices.join(' ')).toMatch(/Address sorts only with no filter or search/)
   })
 })
 
@@ -82,7 +120,12 @@ describe('the suppression list', () => {
       { path: 'reason', op: 'in', value: ['bounce', 'complaint'] },
       { path: 'createdAt', op: '>=', value: new Date(2026, 8, 1) },
     ])
-    expect(planned.orderBy).toEqual({ path: 'createdAt', direction: 'desc', column: 'since' })
+    expect(planned.orderBy).toEqual({
+      path: 'createdAt',
+      direction: 'desc',
+      column: 'since',
+      label: 'Since',
+    })
   })
 
   it('refuses an Address filter beside the search, by name', () => {

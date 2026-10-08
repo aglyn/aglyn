@@ -158,7 +158,7 @@ describe('scoped to one form', () => {
     // The order is not optional and not a nicety: an unordered `limit()` is
     // answered in document-id order, which is an arbitrary sample of a
     // site's messages that a client sort then arranges to look like a feed.
-    expect(mockListQuery?.plan.orderBy).toEqual({ path: 'createdAt', direction: 'desc' })
+    expect(mockListQuery?.plan.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
   })
 
   it('does not read the site’s form catalog at all', () => {

@@ -22,12 +22,15 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListRowActions } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { Stack, Tab, Tabs } from '@mui/material'
-import { type QueryConstraint, where } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import type { PreviewKind } from '../constants/preview-state'
 import { buildScreenLiveUrl } from '../constants/tenant-links'
 import { staffSitePreviewHref } from '../utils/staff-site-links'
+import {
+  STAFF_SITE_CONTENT_LISTS,
+  type StaffSiteContentTab,
+} from '../utils/staff-site-content-list-query'
 import {
   chipsColumn,
   nameColumn,
@@ -47,13 +50,7 @@ import {
  */
 
 /** The tabs, in the order a reader looks for things. */
-type ContentTab =
-  | 'screens'
-  | 'emails'
-  | 'layouts'
-  | 'components'
-  | 'templates'
-  | 'forms'
+type ContentTab = StaffSiteContentTab
 
 const TAB_LABELS: Record<ContentTab, string> = {
   screens: 'Pages',
@@ -71,6 +68,36 @@ const TAB_LABELS: Record<ContentTab, string> = {
  */
 const previewRefusal = (kind: PreviewKind, row: StaffDocRow): string | undefined =>
   kind === 'template' || row['versionId'] ? undefined : 'It has never been saved'
+
+/** The tabs' fixed Status chips (the Pages tab's read the routing map). */
+const emailChips = (row: StaffDocRow) =>
+  row['deletedAt'] ? [{ label: 'trashed', color: 'error' as const }] : [{ label: 'email' }]
+
+const layoutChips = (row: StaffDocRow) => [
+  { label: row['layoutId'] ? 'nested' : 'root' },
+  ...(row['deletedAt'] ? [{ label: 'trashed', color: 'error' as const }] : []),
+]
+
+const formChips = (row: StaffDocRow) => {
+  const submissions = row['stats']?.submissions
+  return [
+    ...(typeof submissions === 'number'
+      ? [{ label: `${submissions} submission${submissions === 1 ? '' : 's'}` }]
+      : [{ label: 'no submissions' }]),
+    ...(row['retired'] ? [{ label: 'retired', color: 'warning' as const }] : []),
+    ...(row['archivedAt'] ? [{ label: 'archived', color: 'warning' as const }] : []),
+  ]
+}
+
+/** How each page-sorted header reads in its notice. */
+const PAGE_SORT_HEADERS: Record<ContentTab, Record<string, string>> = {
+  screens: { displayName: 'Page', status: 'Status' },
+  emails: { displayName: 'Email design', status: 'Status' },
+  layouts: { status: 'Status' },
+  components: {},
+  templates: { displayName: 'Template' },
+  forms: { status: 'Status' },
+}
 
 const openInNewTab = (href: string) => {
   window.open(href, '_blank', 'noopener,noreferrer')
@@ -153,25 +180,31 @@ export function StaffSiteContentCard(props: StaffSiteContentCardProps) {
     [host],
   )
 
-  const emailOnly = useMemo(() => [where('kind', '==', 'email')], [])
+  /*
+   * The Status chips are DERIVED — the routing map, the submission count —
+   * so they sort the page (AGL-3680), by the words the chips say. So does
+   * the name where the tab's query cannot order by it
+   * (`staff-site-content-list-query.ts` says why).
+   */
+  const pageSorts = useMemo(() => {
+    const chipText = (chips: (row: StaffDocRow) => Array<{ label: string }>) => (row: StaffDocRow) =>
+      chips(row)
+        .map((chip) => chip.label)
+        .join(', ')
+    return {
+      screens: { displayName: nameOf, status: chipText(screenChips) },
+      emails: { displayName: nameOf, status: chipText(emailChips) },
+      layouts: { status: chipText(layoutChips) },
+      components: {},
+      templates: { displayName: nameOf },
+      forms: { status: chipText(formChips) },
+    }
+  }, [screenChips])
   const columns = useMemo(
     () => ({
       screens: [nameColumn('Page'), chipsColumn('Status', screenChips), updatedColumn],
-      emails: [
-        nameColumn('Email design'),
-        chipsColumn('Status', (row) =>
-          row['deletedAt'] ? [{ label: 'trashed', color: 'error' as const }] : [{ label: 'email' }],
-        ),
-        updatedColumn,
-      ],
-      layouts: [
-        nameColumn('Layout'),
-        chipsColumn('Status', (row) => [
-          { label: row['layoutId'] ? 'nested' : 'root' },
-          ...(row['deletedAt'] ? [{ label: 'trashed', color: 'error' as const }] : []),
-        ]),
-        updatedColumn,
-      ],
+      emails: [nameColumn('Email design'), chipsColumn('Status', emailChips), updatedColumn],
+      layouts: [nameColumn('Layout'), chipsColumn('Status', layoutChips), updatedColumn],
       components: [
         nameColumn('Component'),
         chipsColumn('Kind', (row) => [
@@ -189,20 +222,7 @@ export function StaffSiteContentCard(props: StaffSiteContentCardProps) {
         ]),
         updatedColumn,
       ],
-      forms: [
-        nameColumn('Form'),
-        chipsColumn('Status', (row) => {
-          const submissions = row['stats']?.submissions
-          return [
-            ...(typeof submissions === 'number'
-              ? [{ label: `${submissions} submission${submissions === 1 ? '' : 's'}` }]
-              : [{ label: 'no submissions' }]),
-            ...(row['retired'] ? [{ label: 'retired', color: 'warning' as const }] : []),
-            ...(row['archivedAt'] ? [{ label: 'archived', color: 'warning' as const }] : []),
-          ]
-        }),
-        updatedColumn,
-      ],
+      forms: [nameColumn('Form'), chipsColumn('Status', formChips), updatedColumn],
     }),
     [screenChips],
   )
@@ -219,16 +239,14 @@ export function StaffSiteContentCard(props: StaffSiteContentCardProps) {
     [previewActions, liveItem],
   )
 
-  const siteTable = (
-    key: ContentTab,
-    collectionId: string,
-    kind: PreviewKind,
-    constraints?: readonly QueryConstraint[],
-  ) => (
+  const siteTable = (key: ContentTab, kind: PreviewKind) => (
     <StaffDocTable
       key={key}
-      path={['hosts', hostId, collectionId]}
-      constraints={constraints}
+      path={['hosts', hostId, STAFF_SITE_CONTENT_LISTS[key].collection]}
+      declaration={STAFF_SITE_CONTENT_LISTS[key].declaration}
+      base={STAFF_SITE_CONTENT_LISTS[key].base}
+      pageSorts={pageSorts[key]}
+      headers={PAGE_SORT_HEADERS[key]}
       columns={columns[key]}
       actions={actions[key]}
       onOpen={openPreview(kind)}
@@ -263,12 +281,12 @@ export function StaffSiteContentCard(props: StaffSiteContentCardProps) {
               <Tab key={key} value={key} label={TAB_LABELS[key]} />
             ))}
           </Tabs>
-          {tab === 'screens' ? siteTable('screens', 'screens', 'screen') : null}
-          {tab === 'emails' ? siteTable('emails', 'screens', 'screen', emailOnly) : null}
-          {tab === 'layouts' ? siteTable('layouts', 'layouts', 'layout') : null}
-          {tab === 'components' ? siteTable('components', 'components', 'component') : null}
-          {tab === 'templates' ? siteTable('templates', 'templates', 'template') : null}
-          {tab === 'forms' ? siteTable('forms', 'forms', 'form') : null}
+          {tab === 'screens' ? siteTable('screens', 'screen') : null}
+          {tab === 'emails' ? siteTable('emails', 'screen') : null}
+          {tab === 'layouts' ? siteTable('layouts', 'layout') : null}
+          {tab === 'components' ? siteTable('components', 'component') : null}
+          {tab === 'templates' ? siteTable('templates', 'template') : null}
+          {tab === 'forms' ? siteTable('forms', 'form') : null}
         </Stack>
       </CardDisplay>
     </>

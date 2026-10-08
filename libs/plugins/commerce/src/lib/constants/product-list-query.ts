@@ -23,6 +23,7 @@ import type { ListFilterOption } from '@aglyn/shared-ui-jsx/const/list-grid-filt
 import type {
   ListQueryDeclaration,
   ListQueryFilter,
+  ListQuerySort,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 
 /*
@@ -71,10 +72,25 @@ import type {
  * Tags are stored as typed, so a whole-member match would be case-sensitive
  * where the reader expects it not to be.
  *
+ * ## Every header sorts (AGL-3680)
+ *
+ * `PRODUCT_LIST_COLUMN_SORTS`: Product either way, Status, Type and Price —
+ * each a field every product carries. `status` and `type` every writer sets
+ * (and the products backfill stamped on the legacy rows that had none);
+ * `priceFromCents` `productSearchFields` derives at every write that carries
+ * the variants, which every create and save does, and the products backfill
+ * stamped on the rest — it is the storefront's price order too. Every order
+ * but the default is `alone`: served with no filter or search on, under the
+ * `deletedAt` scope only, so each costs one `(deletedAt, field)` composite per
+ * direction rather than one per filterable field. Stock and Variants are
+ * read from inside `variants`, which no query can order by, so they sort the
+ * page on screen.
+ *
  * ## The indexes
  *
  * One `(field, nameLower ASC)` composite per filterable field and for the
- * scope, merged by Firestore for any combination:
+ * scope, merged by Firestore for any combination, and the scope's composite
+ * per header order:
  * `listQueryIndexes(PRODUCT_LIST_QUERY, PRODUCT_LIST_INDEX_BASE)`, held to
  * `cloud/firebase-firestore.indexes.json` by `product-list-query.spec.ts`.
  */
@@ -117,9 +133,24 @@ export const PRODUCT_LIST_FIELDS: readonly ListFilterField[] = [
   },
 ]
 
+/**
+ * The orders the grid's headers ask for, A to Z FIRST — see "Every header
+ * sorts" above.
+ */
+export const PRODUCT_LIST_COLUMN_SORTS: readonly ListQuerySort[] = [
+  { path: 'nameLower', direction: 'asc', column: 'name', label: 'Product' },
+  { path: 'nameLower', direction: 'desc', column: 'name', label: 'Product', alone: true },
+  { path: 'status', direction: 'asc', column: 'status', label: 'Status', alone: true },
+  { path: 'status', direction: 'desc', column: 'status', label: 'Status', alone: true },
+  { path: 'type', direction: 'asc', column: 'type', label: 'Type', alone: true },
+  { path: 'type', direction: 'desc', column: 'type', label: 'Type', alone: true },
+  { path: 'priceFromCents', direction: 'asc', column: 'priceUsd', label: 'Price', alone: true },
+  { path: 'priceFromCents', direction: 'desc', column: 'priceUsd', label: 'Price', alone: true },
+]
+
 export const PRODUCT_LIST_QUERY: ListQueryDeclaration = {
   fields: PRODUCT_LIST_FIELDS,
-  sorts: [{ path: 'nameLower', direction: 'asc', column: 'name' }],
+  sorts: PRODUCT_LIST_COLUMN_SORTS,
   search: { tokensPath: 'nameTokens' },
 }
 
