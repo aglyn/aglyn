@@ -35,7 +35,7 @@ struct NotificationSettingsView: View {
           .font(AglynFont.subheadline)
           .foregroundStyle(.secondary)
         if model.push.authorization == .denied {
-          Label("Notifications are turned off for \(model.brandName) in this device's settings.", systemImage: "bell.slash")
+          Label("Notifications are turned off for \(model.appName) in this device's settings.", systemImage: "bell.slash")
             .foregroundStyle(AglynColor.warning)
           #if os(iOS)
             Button("Open Settings") {
