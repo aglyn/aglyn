@@ -567,7 +567,8 @@ async function walk(page, db, auth, identity, created) {
   const user = await auth.getUserByEmail(email)
   created.uid = user.uid
   if (user.emailVerified) throw new Error('a new account arrived pre-verified')
-  done(`uid ${user.uid.slice(0, 6)}…`)
+  // The host proves which path the leg took: a phone is on the auth host.
+  done(`uid ${user.uid.slice(0, 6)}… on ${new URL(page.url()).host}`)
 
   begin('hold-name')
   /**
