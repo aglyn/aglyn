@@ -33,6 +33,19 @@ import type { AiUsage } from './contract'
 export const AI_IMAGE_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16'] as const
 export type AiImageAspectRatio = (typeof AI_IMAGE_ASPECT_RATIOS)[number]
 
+/**
+ * The sizes a picture is made at (AGL-3602): 512 px on the Free plan and 1K
+ * on every paid plan. The door chooses from the workspace's plan
+ * (`aiImageSizeForPlan`); nothing a request sends can choose it.
+ */
+export const AI_IMAGE_SIZES = ['512', '1K'] as const
+export type AiImageSize = (typeof AI_IMAGE_SIZES)[number]
+
+/** The size a picture is made at for a workspace on the Free plan, or on a paid one. */
+export function aiImageSizeForPlan(free: boolean): AiImageSize {
+  return free ? '512' : '1K'
+}
+
 /** The most pictures one request makes. */
 export const AI_IMAGE_MAX_COUNT = 4
 
@@ -42,7 +55,9 @@ export const AI_IMAGE_PROMPT_MAX_CHARS = 1_000
 /**
  * The two ways the Media dialog makes a picture (AGL-3602): a `photo` from
  * the image provider, and an `illustration` drawn as SVG by the text
- * provider every other AI door already uses.
+ * provider every other AI door already uses. `photo` is the image provider's
+ * mode whatever the kind — a watercolor is made there too — and is stored on
+ * every picture's record, so the value is never renamed.
  */
 export const AI_IMAGE_MODES = ['photo', 'illustration'] as const
 export type AiImageMode = (typeof AI_IMAGE_MODES)[number]
@@ -50,6 +65,36 @@ export type AiImageMode = (typeof AI_IMAGE_MODES)[number]
 /** What an illustration is: a scene, an icon, a tileable pattern or a simple mark. */
 export const AI_SVG_STYLES = ['illustration', 'icon', 'pattern', 'logo'] as const
 export type AiSvgStyle = (typeof AI_SVG_STYLES)[number]
+
+/**
+ * What a picture from the image provider is (AGL-3602): `photo` leaves the
+ * style to the description, and every other kind adds its own fixed style
+ * wording to it — a photographic genre, an art style or a design asset.
+ */
+export const AI_RASTER_STYLES = [
+  'photo',
+  'natural',
+  'product',
+  'lifestyle',
+  'architecture',
+  'food',
+  'aerial',
+  'render-3d',
+  'watercolor',
+  'oil-painting',
+  'flat-art',
+  'line-drawing',
+  'cartoon',
+  'background',
+  'banner',
+  'social',
+  'mockup',
+] as const
+export type AiRasterStyle = (typeof AI_RASTER_STYLES)[number]
+
+export function isAiRasterStyle(value: unknown): value is AiRasterStyle {
+  return (AI_RASTER_STYLES as readonly unknown[]).includes(value)
+}
 
 /** The most colors a person may name for an illustration. */
 export const AI_SVG_MAX_COLORS = 6
@@ -75,6 +120,8 @@ export interface AiImageRequest {
   model: string
   prompt: string
   aspectRatio: AiImageAspectRatio
+  /** The size, chosen by the door from the workspace's plan. */
+  size: AiImageSize
   /** 1 to `AI_IMAGE_MAX_COUNT`. */
   count: number
 }

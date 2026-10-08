@@ -1263,6 +1263,31 @@ describe('pictures are metered per picture, on the same meter (AGL-3602)', () =>
     expect(signalDoc.kind).toBe('image')
   })
 
+  it('prices a 512 px picture at its share of the 1K rate, and records the size', async () => {
+    const free = { ...NO_TOKENS, images: 2, imageSize: '512' as const }
+    expect(estimateAssistCostUsd(free, 'gemini-3.1-flash-image')).toBe(0.13446)
+    expect(estimateAssistProviderCostUsd(free, 'gemini-3.1-flash-image')).toBe(0.08964)
+    const store = firestore()
+    const signalId = await recordAssistCost(
+      store,
+      ORG,
+      {
+        route: '/api/ai/media/images',
+        hostId: 'host-1',
+        model: 'gemini-3.1-flash-image',
+        tier: 'entitled',
+        usage: free,
+        docsPaths: [],
+        stopReason: 'end_turn',
+        uid: 'u1',
+        kind: 'image',
+      },
+      NOW,
+    )
+    const signalDoc = mockDocs.get(`orgs/${ORG}/assistSignals/${signalId}`) as Record<string, any>
+    expect(signalDoc).toMatchObject({ images: 2, imageSize: '512' })
+  })
+
   it('a declined description draws nothing', async () => {
     const store = firestore()
     await recordAssistCost(

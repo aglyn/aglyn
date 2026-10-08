@@ -32,3 +32,8 @@ kotlin {
     }
   }
 }
+
+// The setup screens replay the console's own answers from libs/native/contracts.
+tasks.withType<Test>().configureEach {
+  systemProperty("aglyn.contractsDir", rootProject.file("../../libs/native/contracts").absolutePath)
+}

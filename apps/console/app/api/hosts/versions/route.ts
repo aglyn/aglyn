@@ -18,6 +18,7 @@
 import {
   checkEntitlement,
   createResourceUid,
+  decodeStoredNodes,
   encodeStoredNodes,
   hostRoleCanWrite,
   pluginRequestFromWeb,
@@ -33,6 +34,7 @@ import {
   type HostActivityTarget,
 } from '@aglyn/tenant-data-admin'
 import { withMatchableConditions } from '@aglyn/aglyn/app-utils/reusable-prop-values'
+import { firstVersionSeed } from '@aglyn/aglyn/app-utils/first-version-seed'
 import { Timestamp } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -136,7 +138,11 @@ const VERSION_KEYS = new Set([
  * Body: `{ hostId, kind, parentId, id?, data?, sourceVersionId? }`. Pass
  * `sourceVersionId` to snapshot an existing version — the copy is made
  * server-side from the stored document, so the node map never crosses the
- * wire and the snapshot cannot be doctored on the way past.
+ * wire and the snapshot cannot be doctored on the way past. Pass
+ * `seedFromParent: true` for the resource's FIRST version seeded from the
+ * resource's own stored design (`firstVersionSeed`), which is what the
+ * console's Open Besigner mints for a component with no version; the native
+ * apps ask for it this way because they never decode a node map (AGL-3668).
  */
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -164,8 +170,9 @@ async function handler(request: Request): Promise<Response> {
     typeof body?.sourceVersionId === 'string' && body.sourceVersionId
       ? String(body.sourceVersionId)
       : undefined
+  const seedFromParent = body?.seedFromParent === true && !sourceVersionId
   const data = body?.data
-  if (!sourceVersionId && (!data || typeof data !== 'object' || Array.isArray(data))) {
+  if (!sourceVersionId && !seedFromParent && (!data || typeof data !== 'object' || Array.isArray(data))) {
     return Response.json(
       { error: 'Missing data (or sourceVersionId)' },
       { status: 400 },
@@ -241,7 +248,22 @@ async function handler(request: Request): Promise<Response> {
     }
 
     let payload: Record<string, unknown>
-    if (sourceVersionId) {
+    if (seedFromParent) {
+      // Only ever the FIRST version: with one already there, the resource
+      // opens on it and a seed would be a second copy of its design.
+      if (!existing.empty) {
+        return Response.json(
+          { error: 'This already has a version — open that one' },
+          { status: 409 },
+        )
+      }
+      const parent = parentSnapshot.data() as Record<string, unknown>
+      payload = firstVersionSeed(kind, parentId, hostId, {
+        nodes: decodeStoredNodes<Record<string, unknown>>(parent['nodes']),
+        rootId: parent['rootId'],
+        props: parent['props'],
+      }) as Record<string, unknown>
+    } else if (sourceVersionId) {
       const source = await versionsRef.doc(sourceVersionId).get()
       if (!source.exists) {
         return Response.json({ error: 'Source version missing' }, { status: 404 })
