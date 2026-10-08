@@ -56,6 +56,8 @@ import {
   aiSitePlanShapeRefusal,
   aiSiteBlogStandInViolations,
   aiSiteThinHomeViolations,
+  AI_SITE_GALLERY_SENTENCE,
+  aiSiteEmptyGalleryViolations,
 } from '../model/ai-site-job'
 import { aiSiteContentPart } from './ai-job-site-content'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
@@ -283,6 +285,9 @@ export function aiPlanSiteLines(
       "This site's blog is written for it with its first posts at /blog, and the header links it. Plan no page that stands in for it (no Blog, Articles, Journal, Posts or Stories page); feature the posts in a section of the home page instead.",
     )
   }
+  // A section that shows the work counts its pieces (AGL-3660): a planned
+  // gallery of no items let a page about the work show none.
+  lines.push(AI_SITE_GALLERY_SENTENCE)
   // The kind of site the person picked (AGL-3660): the pages it usually has.
   const kind = aiSiteKindOfInputs(job.inputs)
   if (kind) lines.push(`This is a ${kind.label.toLowerCase()} site. ${kind.pages}`)
@@ -326,6 +331,20 @@ export function aiSiteThinHomeCheck(
     answers += 1
     if (answers >= AI_GENERATION_MAX_ATTEMPTS) return []
     return aiSiteThinHomeViolations(plan, rule)
+  }
+}
+
+/**
+ * A site plan's section that shows the work without its pieces (AGL-3660),
+ * asked about on the FIRST answer only, like a thin home: the re-ask names
+ * the section, and an answer that keeps it thin is kept.
+ */
+export function aiSiteEmptyGalleryCheck(): (plan: AiBuildPlan) => AiDoctrineViolation[] {
+  let answers = 0
+  return (plan) => {
+    answers += 1
+    if (answers >= AI_GENERATION_MAX_ATTEMPTS) return []
+    return aiSiteEmptyGalleryViolations(plan)
   }
 }
 
@@ -421,9 +440,11 @@ function planViolations(
   ops: AiBuildOps | null = null,
   home: { min: number; across: number | null } | null = null,
   blog = false,
+  site = false,
 ): (plan: AiBuildPlan) => AiDoctrineViolation[] {
   const thinHome = home && home.min > 0 ? aiSiteThinHomeCheck(home) : null
   const blogStandIn = blog ? aiSiteBlogStandInCheck() : null
+  const emptyGallery = site ? aiSiteEmptyGalleryCheck() : null
   return (plan) => {
     // A build's plan is held to the operations this site has (AGL-3616):
     // an unknown op, arguments its schema refuses, a cycle or a reference
@@ -436,6 +457,7 @@ function planViolations(
       ...(message ? [{ rule: null, code: 'plan-job-shape', message }] : []),
       ...(thinHome ? thinHome(plan) : []),
       ...(blogStandIn ? blogStandIn(plan) : []),
+      ...(emptyGallery ? emptyGallery(plan) : []),
     ]
   }
 }
@@ -831,6 +853,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         ops,
         site ? aiSitePlanHomeRule(inventory, capabilities) : null,
         site && aiSiteContentPart(job.inputs ?? null, freeTaste) === 'posts',
+        site,
       ),
     })
     const spent: AiJobStepOutcome = {
