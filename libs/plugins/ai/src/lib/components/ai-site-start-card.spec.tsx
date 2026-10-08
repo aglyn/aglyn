@@ -555,6 +555,44 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     ).toBeTruthy()
   })
 
+  it('quotes what is left of the month, shared across the owner’s Free workspaces, and when it resets (AGL-3660)', async () => {
+    await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left: 250, total: 300, resetsOn: '2026-11-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
+    expect(
+      screen.getByText(
+        `Up to about ${aiFreeSiteCreditEstimate(2)} AI credits. You have 250 of your 300 free AI credits left this month, until November 1.`,
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText(/Building this site can take/)).toBeNull()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    expect((screen.getByRole('button', { name: 'Plan my site' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('does not start a site what is left cannot pay for: says so, offers the upgrade, and starts no job (AGL-3660)', async () => {
+    await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left: 70, total: 300, resetsOn: '2026-11-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    const warning = screen.getByText(/Building this site can take up to about 218 AI credits, and only 70 are left/)
+    expect(warning.textContent).toMatch(/shared by all your Free workspaces and reset on November 1/)
+    // 70 covers no one-page start either, so it offers none.
+    expect(warning.textContent).not.toMatch(/choose 1 page/)
+    expect(screen.getByRole('link', { name: 'Upgrade' }).getAttribute('href')).toBe('/acme/billing#plans')
+    const start = screen.getByRole('button', { name: 'Plan my site' }) as HTMLButtonElement
+    expect(start.disabled).toBe(true)
+    fireEvent.click(start)
+    expect(mockFetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+  })
+
+  it('points at one page when what is left covers one and not two (AGL-3660)', async () => {
+    const left = aiFreeSiteCreditEstimate(1)
+    await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left, total: 300, resetsOn: '2026-11-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
+    expect(screen.getByText(/Or choose 1 page, which what you have left covers\./)).toBeTruthy()
+  })
+
   it('starts a two-page site job with no welcome email', async () => {
     await openFreeCard()
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')

@@ -68,7 +68,8 @@ export interface AiJobAdmissionContext {
 }
 
 export interface AiJobAdmissionRefusal {
-  status: 400 | 403 | 404
+  /** 429: what the month's AI credits have left cannot pay for it (AGL-3660). */
+  status: 400 | 403 | 404 | 429
   /** Customer-safe: the door answers with it as it stands. */
   error: string
 }

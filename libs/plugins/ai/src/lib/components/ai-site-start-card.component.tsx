@@ -83,8 +83,12 @@ import {
   AI_SITE_FREE_PAGES,
   AI_SITE_FREE_PAGES_NOTE,
   AI_SITE_SUBMISSION_CHOICES,
+  aiFreeCreditsResetLabel,
   aiFreeSiteCreditEstimate,
+  aiFreeSiteShortfall,
+  aiFreeSiteShortfallText,
   aiSiteCreditEstimate,
+  type AiFreeCreditsLeft,
   aiSitePagesBand,
   type AiSiteSubmissions,
 } from '../model/ai-site-job'
@@ -128,7 +132,7 @@ const AI_SITE_KIND_ICONS: Record<string, string> = {
 import { AiJobFollow } from './ai-job-follow.component'
 import { AiModelSelector } from './ai-model-selector.component'
 import { useAiModelChoice } from './use-ai-model-choice'
-import { aiSiteBuildHref } from './ai-job-links'
+import { aiCreditsBillingHref, aiSiteBuildHref } from './ai-job-links'
 import { publishAiJob } from './ai-jobs-store'
 
 /**
@@ -353,6 +357,10 @@ export function AiSiteStartCard({
   const [started, setStarted] = useState<AiJobSummary | null>(null)
   // The Free taste's page band (AGL-3594), read off the verdict request.
   const [freeTaste, setFreeTaste] = useState(false)
+  // What the Free workspace has left this month (AGL-3660), as the same read
+  // the create door refuses on: the less of its own band and its owner's
+  // allowance across their Free workspaces. `null` when the route said none.
+  const [freeCredits, setFreeCredits] = useState<AiFreeCreditsLeft | null>(null)
 
   useEffect(() => {
     if (!orgId || !uid) return
@@ -367,6 +375,8 @@ export function AiSiteStartCard({
         if (active) {
           if (payload?.freeTaste === true) {
             setFreeTaste(true)
+            const credits = payload?.freeCredits as AiFreeCreditsLeft | undefined
+            if (credits && Number.isFinite(credits.left)) setFreeCredits(credits)
             // A reopened start keeps the pages it asked for, within the band.
             setAnswers((current) => ({
               ...current,
@@ -391,6 +401,9 @@ export function AiSiteStartCard({
     [],
   )
 
+  // A Free start what is left cannot pay for is not started (AGL-3660): the
+  // dialog says so before anything spends, and the create door refuses it too.
+  const shortfall = freeTaste ? aiFreeSiteShortfall(freeCredits, answers.pages) : null
   const refusal = aiSiteStartRefusal(answers, { freeTaste })
   const band = aiSitePagesBand(freeTaste)
   // On a paid plan the person picks the model that builds the site (AGL-3660),
@@ -406,7 +419,7 @@ export function AiSiteStartCard({
   const pickedModel = freeTaste ? null : modelChoice.model
 
   const plan = useCallback(async () => {
-    if (!orgId || aiSiteStartRefusal(answers, { freeTaste })) return
+    if (!orgId || aiSiteStartRefusal(answers, { freeTaste }) || shortfall) return
     setBusy(true)
     setNotice(null)
     try {
@@ -456,7 +469,7 @@ export function AiSiteStartCard({
     } finally {
       setBusy(false)
     }
-  }, [orgId, hostId, answers, freeTaste, orgSlug, host, leave, router, pickedModel])
+  }, [orgId, hostId, answers, freeTaste, shortfall, orgSlug, host, leave, router, pickedModel])
 
   const chooseStarter = useCallback(() => {
     setStartingStarter(true)
@@ -485,8 +498,12 @@ export function AiSiteStartCard({
           welcomeEmail: answers.welcomeEmail,
         }) * modelMultiplier,
       )
+  // A Free start quotes what is LEFT (AGL-3660), shared across the owner's
+  // Free workspaces — never the month's whole allowance as if none were spent.
   const estimateText = freeTaste
-    ? `Up to about ${estimate.toLocaleString('en-US')} of the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits your Free workspace has each month`
+    ? freeCredits
+      ? `Up to about ${estimate.toLocaleString('en-US')} AI credits. You have ${freeCredits.left.toLocaleString('en-US')} of your ${freeCredits.total.toLocaleString('en-US')} free AI credits left this month, until ${aiFreeCreditsResetLabel(freeCredits.resetsOn)}`
+      : `Up to about ${estimate.toLocaleString('en-US')} of the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits you get free each month`
     : `About ${estimate.toLocaleString('en-US')} credits, estimated`
 
   const choosing = step === 'choose' && !started
@@ -564,6 +581,23 @@ export function AiSiteStartCard({
               </Typography>
             </Stack>
             {notice && <Alert severity="info">{notice}</Alert>}
+            {step === 'describe' && !started && shortfall && freeCredits && (
+              <Alert
+                severity="warning"
+                action={
+                  orgSlug ? (
+                    <Button color="inherit" size="small" href={aiCreditsBillingHref(orgSlug)}>
+                      {'Upgrade'}
+                    </Button>
+                  ) : undefined
+                }
+              >
+                {aiFreeSiteShortfallText(shortfall, freeCredits.resetsOn)}
+                {answers.pages > 1 && !aiFreeSiteShortfall(freeCredits, 1)
+                  ? ' Or choose 1 page, which what you have left covers.'
+                  : null}
+              </Alert>
+            )}
             {choosing ? (
               <Box
                 sx={{
@@ -765,7 +799,7 @@ export function AiSiteStartCard({
           <Button
             variant="contained"
             size="large"
-            disabled={busy || Boolean(refusal)}
+            disabled={busy || Boolean(refusal) || Boolean(shortfall)}
             onClick={plan}
             startIcon={<MdiIcon path={mdiCreation.path} />}
           >

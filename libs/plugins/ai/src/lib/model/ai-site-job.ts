@@ -217,6 +217,64 @@ export function aiFreeSiteCreditEstimate(
 }
 
 /**
+ * What a Free workspace has left of its Free AI credits this month: the less
+ * of its own band's balance and its owner's, since the owner's allowance is
+ * shared by every Free workspace they hold (AGL-2925) and the reservation
+ * refuses at whichever wall is reached first. `resetsOn` is the UTC day the
+ * month — and with it both balances — rolls over, `YYYY-MM-DD`.
+ */
+export interface AiFreeCreditsLeft {
+  left: number
+  total: number
+  resetsOn: string
+}
+
+/** The first UTC day of the month after `now`, `YYYY-MM-DD`: when the Free credits come back. */
+export function aiFreeCreditsResetOn(now: Date): string {
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+  return next.toISOString().slice(0, 10)
+}
+
+/** A reset day as a person reads it: "November 1". */
+export function aiFreeCreditsResetLabel(resetsOn: string): string {
+  const at = new Date(`${resetsOn}T00:00:00.000Z`)
+  return Number.isFinite(at.getTime())
+    ? at.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })
+    : 'the first of next month'
+}
+
+/**
+ * The credits a Free site start needs and does not have (AGL-3660), or `null`
+ * when what is left covers it — or when nothing is known about what is left,
+ * since the reservation still refuses at the wall. The figure is the one the
+ * dialog quotes (`aiFreeSiteCreditEstimate`), so the number a person is shown
+ * is the number they are held to.
+ */
+export function aiFreeSiteShortfall(
+  credits: Pick<AiFreeCreditsLeft, 'left'> | null | undefined,
+  pages: number,
+): { needed: number; left: number } | null {
+  if (!credits || !Number.isFinite(credits.left)) return null
+  const needed = aiFreeSiteCreditEstimate(pages)
+  const left = Math.max(0, Math.floor(credits.left))
+  return left < needed ? { needed, left } : null
+}
+
+/** Why a Free site start is refused before it spends: what is left, when it comes back, and the way on. */
+export function aiFreeSiteShortfallText(
+  shortfall: { needed: number; left: number },
+  resetsOn: string,
+): string {
+  const left = shortfall.left === 1 ? '1 is' : `${shortfall.left.toLocaleString('en-US')} are`
+  return (
+    `Building this site can take up to about ${shortfall.needed.toLocaleString('en-US')} AI credits, ` +
+    `and only ${left} left of your free AI credits this month. They are shared by all your Free ` +
+    `workspaces and reset on ${aiFreeCreditsResetLabel(resetsOn)}. Upgrade this workspace to build ` +
+    'your site now, or start from the starter site and try AI again after the reset.'
+  )
+}
+
+/**
  * The most sections one scaffolded page may hold. The plan model allows more
  * for a page job, which builds one page; a scaffold builds eight, and each
  * section is a pass of its own.

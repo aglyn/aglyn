@@ -26,6 +26,7 @@ import {
   mdiChevronDown,
   mdiClockOutline,
   mdiMinusCircleOutline,
+  mdiPauseCircle,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
@@ -63,7 +64,7 @@ import { aiSiteStartAnswersFromInputs } from '../model/ai-site-start'
 import { AiSiteStartCard } from './ai-site-start-card.component'
 import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
 import { followAiJobEvents } from './ai-job-events'
-import { aiSiteBuildDoneLinks } from './ai-job-links'
+import { aiCreditsBillingHref, aiSiteBuildDoneLinks } from './ai-job-links'
 import { AiJobPlan } from './ai-job-plan.component'
 import { aiBuildCanRetry } from '../model/ai-build-progress'
 import { resumeAiJobRequest } from './ai-job-requests'
@@ -149,6 +150,8 @@ const ROW_ICON: Readonly<Record<Exclude<AiSiteBuildRowState, 'active'>, { path: 
   waiting: { path: mdiClockOutline.path, color: 'text.disabled', label: 'Waiting' },
   failed: { path: mdiAlertCircle.path, color: 'error.main', label: 'Couldn’t be built' },
   skipped: { path: mdiMinusCircleOutline.path, color: 'text.disabled', label: 'Not built' },
+  // Paused by the meter (AGL-3660): no spinner — it is not running.
+  paused: { path: mdiPauseCircle.path, color: 'warning.main', label: 'Paused' },
 }
 
 function RowIcon({ state }: { state: AiSiteBuildRowState }) {
@@ -334,6 +337,8 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
   const links = phase === 'done' ? aiSiteBuildDoneLinks(ready, orgSlug) : { view: null, pages: null }
   const sitePublish = ready.kind === 'site' && phase === 'done' ? (ready.sitePublish ?? null) : null
   const liveUrl = sitePublish && sitePublish.published.length > 0 ? sitePublish.liveUrl : null
+  // Paused by the meter (AGL-3660): out of credits or at a cap, carried on by Resume.
+  const paused = ready.status === 'needs_input'
   const retryRefusal = ready.review?.retryRefusal
   const buildRetry = aiBuildCanRetry(ready)
   const canRetry = (phase === 'stopped' && ready.review?.reason === 'doctrine') || buildRetry
@@ -490,7 +495,23 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
           )}
         </Stack>
       )}
-      {(phase === 'stopped' || phase === 'failed' || phase === 'canceled') && (
+      {paused && (
+        // Paused by the meter (AGL-3660): the way to more credits — the
+        // workspace's own Billing page, where plans and the AI add-on are
+        // sold — and Resume, which carries on this same job from its paused
+        // step once credits are there again.
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: { sm: 'center' } }}>
+          <Button variant="contained" disabled={busy} onClick={() => void confirmPlan(ready)}>
+            {busy ? 'Resuming…' : 'Resume'}
+          </Button>
+          {orgSlug ? (
+            <Button variant="outlined" component={AppLink} href={aiCreditsBillingHref(orgSlug)}>
+              {'Get more AI credits'}
+            </Button>
+          ) : null}
+        </Stack>
+      )}
+      {!paused && (phase === 'stopped' || phase === 'failed' || phase === 'canceled') && (
         <Stack spacing={1}>
           {retryRefusal && (
             <Typography variant="body2" color="text.secondary">

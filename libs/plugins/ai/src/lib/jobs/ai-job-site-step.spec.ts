@@ -56,6 +56,8 @@ import {
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
   aiSiteBlogNavPage,
+  aiFreeSiteCreditEstimate,
+  aiFreeSiteShortfallText,
 } from '../model/ai-site-job'
 import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePages, aiLayoutWithSitePages } from './ai-job-layout-site-pages'
 import {
@@ -88,6 +90,7 @@ import {
   aiSiteUnitJob,
   aiSiteWritesPosts,
   createAiJobSiteStep,
+  createAiSiteJobAdmission,
   registerAiSiteJob,
   type AiSiteUnit,
 } from './ai-job-site-step'
@@ -973,6 +976,41 @@ describe('what a scaffold is admitted with', () => {
       status: 400,
       error: `A site is planned with ${AI_SITE_PAGES.min} to ${AI_SITE_PAGES.max} pages.`,
     })
+  })
+
+  it('refuses a Free start what is left of the month cannot pay for, before it spends, with what is left and when it resets (AGL-3660)', async () => {
+    const seen: unknown[] = []
+    const admission = (left: number) =>
+      createAiSiteJobAdmission({
+        freeCreditsLeft: async (_firestore, input) => {
+          seen.push(input.orgId)
+          return { left, total: 300, resetsOn: '2026-11-01' }
+        },
+      })
+    const context = (pages: number, extra: Record<string, unknown> = {}) => ({
+      firestore: {} as unknown as FirebaseFirestore.Firestore,
+      orgId: 'org-1',
+      hostId: 'host-1',
+      inputs: { ...good, pages },
+      org: { plan: 'free' },
+      ...extra,
+    })
+    const refused = await admission(70)(context(2))
+    expect(refused).toEqual({ status: 429, error: aiFreeSiteShortfallText({ needed: aiFreeSiteCreditEstimate(2), left: 70 }, '2026-11-01') })
+    expect(refused?.error).toMatch(/up to about 218 AI credits, and only 70 are left .* reset on November 1\. Upgrade this workspace/)
+    expect(seen).toEqual(['org-1'])
+    // Enough left for the figure the dialog quotes: admitted.
+    await expect(admission(aiFreeSiteCreditEstimate(2))(context(2))).resolves.toBeNull()
+    await expect(admission(aiFreeSiteCreditEstimate(1))(context(1))).resolves.toBeNull()
+    // Nothing known about what is left: admitted, and the reservation decides.
+    await expect(createAiSiteJobAdmission({ freeCreditsLeft: async () => null })(context(2))).resolves.toBeNull()
+    // A resume carries on the same job: not asked again.
+    seen.length = 0
+    await expect(admission(0)(context(2, { plan: { screens: [], create: [], reuse: [], status: 'confirmed' } }))).resolves.not.toMatchObject({ status: 429 })
+    expect(seen).toEqual([])
+    // A paid workspace is never asked.
+    await expect(admission(0)({ ...context(AI_SITE_PAGES.min), org: { plan: 'pro' } })).resolves.toBeNull()
+    expect(seen).toEqual([])
   })
 
   it('refuses a site of another workspace', async () => {
