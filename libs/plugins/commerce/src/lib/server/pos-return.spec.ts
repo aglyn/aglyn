@@ -20,6 +20,8 @@ import { posOpsHarness, type PosOpsHarness } from '../testing/pos-ops-harness'
 import { mintPosAssertion } from './pos-ops-gate'
 import { handlePosReturn, type PosReturnDeps, type PosReturnSideEffects } from './pos-return'
 import { handlePosShift } from './pos-shift'
+import { registerPluginCheckoutCredit } from '@aglyn/aglyn/plugin-manager/plugin-checkout-credits'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 
 jest.mock('@aglyn/tenant-data-admin', () => ({ firebaseAdmin: {} }))
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({ resolveOrgPermissions: jest.fn() }))
@@ -306,6 +308,52 @@ describe('each tender gets its own money back', () => {
     const refused = await ret({ lines: [{ index: 0, quantity: 1 }] })
     expect(refused.status).toBe(409)
     expect(order()['returnedQuantities']).toEqual({ '1': 1 })
+    expect(order()['refundedCents']).toBe(value)
+  })
+
+  it('gives store credit back to the plugin that keeps it, once per return, and refuses when it is gone (AGL-3640)', async () => {
+    const restored: Array<Record<string, unknown>> = []
+    resetPluginServicesForTests()
+    registerPluginCheckoutCredit(
+      {
+        key: 'rewards',
+        label: 'Rewards',
+        recognizes: () => false,
+        offered: async () => true,
+        resolve: async () => ({ ok: false, status: 404, error: 'unused' }),
+        hold: async () => ({ ok: false, status: 404, error: 'unused' }),
+        release: async () => undefined,
+        stage: async () => null,
+        restore: async (input) => {
+          restored.push(input)
+          return input.cents
+        },
+      },
+      { pluginId: 'loyalty' },
+    )
+    h.memory.seed('hosts/shop/orders/o1', {
+      ...SALE,
+      payments: [
+        {
+          id: 'pay-credit',
+          method: 'credit',
+          amountCents: 5929,
+          status: 'succeeded',
+          creditProviderId: 'loyalty.rewards',
+          creditReference: 'm:abc',
+          creditLabel: 'Rewards',
+          last4: 'CCCC',
+        },
+      ],
+    })
+    const value = posReturnLineValues(SALE)[1]!
+    expect((await ret({ lines: [{ index: 1, quantity: 1 }] })).status).toBe(200)
+    expect(restored).toEqual([
+      { hostId: 'shop', reference: 'm:abc', orderId: 'o1', cents: value, key: 'pos-return:o1:pay-credit:0' },
+    ])
+    resetPluginServicesForTests()
+    const refused = await ret({ lines: [{ index: 0, quantity: 1 }] })
+    expect(refused.status).toBe(409)
     expect(order()['refundedCents']).toBe(value)
   })
 

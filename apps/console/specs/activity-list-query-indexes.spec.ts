@@ -40,6 +40,7 @@ import {
 import {
   ACTIVITY_LIST_QUERY,
   ORG_ACTIVITY_QUERY,
+  SUBJECT_ACTIVITY_QUERY,
   activityActorBase,
   activityTargetBase,
   splitWhereClause,
@@ -60,8 +61,8 @@ const LISTS: Array<{
   base: { path: string }[]
   scope: 'COLLECTION' | 'COLLECTION_GROUP'
 }> = [
-  { list: 'a site’s log (hosts/{hostId}/activity)', declaration: ACTIVITY_LIST_QUERY, base: [], scope: 'COLLECTION' },
-  { list: 'the organization’s own feed', declaration: ACTIVITY_LIST_QUERY, base: [], scope: 'COLLECTION' },
+  { list: 'a site’s log (hosts/{hostId}/activity)', declaration: SUBJECT_ACTIVITY_QUERY, base: [], scope: 'COLLECTION' },
+  { list: 'the organization’s own feed', declaration: SUBJECT_ACTIVITY_QUERY, base: [], scope: 'COLLECTION' },
   {
     list: 'changes to one member (target.id)',
     declaration: ACTIVITY_LIST_QUERY,
@@ -132,7 +133,12 @@ describe('every clause and the search word land on the query', () => {
       'actorId ==',
       'createdAt >=',
     ])
-    expect(answer.orderBy).toEqual({ path: 'createdAt', direction: 'desc', column: 'createdAt' })
+    expect(answer.orderBy).toEqual({
+      path: 'createdAt',
+      direction: 'desc',
+      column: 'createdAt',
+      label: 'When',
+    })
   })
 
   it('a whole day is two bounds under the same order, not a cursor', () => {
@@ -160,6 +166,45 @@ describe('every clause and the search word land on the query', () => {
       { field: 'action', op: 'startsWith', value: 'Saved' },
     ])
     expect(answer.filters).toEqual([])
+  })
+})
+
+describe('one subject’s log sorts by its headers (AGL-3680)', () => {
+  it('costs no composite: every header order is alone on a collection with no base', () => {
+    expect(shapes(SUBJECT_ACTIVITY_QUERY).sort()).toEqual(shapes(ACTIVITY_LIST_QUERY).sort())
+  })
+
+  it('serves Action and oldest first over the whole log with nothing narrowing it', () => {
+    for (const sort of SUBJECT_ACTIVITY_QUERY.sorts) {
+      const answer = planListQuery(SUBJECT_ACTIVITY_QUERY, { clauses: [], sort }, nameSearchNormalizers)
+      expect(answer.orderBy).toBe(sort)
+      expect(answer.sortFallback).toBeUndefined()
+    }
+  })
+
+  it('falls back to newest first, and says so, under a filter or the search', () => {
+    const action = SUBJECT_ACTIVITY_QUERY.sorts.find((sort) => sort.path === 'action')
+    const filtered = planListQuery(
+      SUBJECT_ACTIVITY_QUERY,
+      { clauses: [{ field: 'action', op: 'equals', value: 'x' }], sort: action },
+      nameSearchNormalizers,
+    )
+    expect(filtered.orderBy.path).toBe('createdAt')
+    expect(filtered.sortFallback?.reason).toBe('alone')
+    expect(filtered.notices).toContain(
+      'Sorted by When: Action sorts only with no filter or search on.',
+    )
+    const searched = planListQuery(
+      SUBJECT_ACTIVITY_QUERY,
+      { clauses: [], search: ['home'], sort: action },
+      nameSearchNormalizers,
+    )
+    expect(searched.orderBy.path).toBe('createdAt')
+  })
+
+  it('the person-scoped feeds offer newest first only, so a base costs nothing new', () => {
+    expect(ACTIVITY_LIST_QUERY.sorts).toHaveLength(1)
+    expect(ORG_ACTIVITY_QUERY.sorts).toHaveLength(1)
   })
 })
 

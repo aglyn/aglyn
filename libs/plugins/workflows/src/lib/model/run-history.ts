@@ -91,7 +91,20 @@ export const RUN_HISTORY_QUERY: ListQueryDeclaration = {
       operators: ['equals', 'isAnyOf'],
     },
   ] satisfies ListFilterField[],
-  sorts: [{ path: 'createdAt', direction: 'desc', column: 'createdAtMs' }],
+  /*
+   * The headers (AGL-3680): Time both ways, and Trigger, Result and What
+   * happened — on every run, `backfill-activity-run-fields.mjs` completing
+   * the old ones — `alone`, one direction each: beside the `target.id` and
+   * `result` base every order is a composite per base field.
+   * Who is read from the actor fields and sorts the page.
+   */
+  sorts: [
+    { path: 'createdAt', direction: 'desc', column: 'createdAtMs', label: 'Time' },
+    { path: 'createdAt', direction: 'asc', column: 'createdAtMs', label: 'Time', alone: true },
+    { path: 'trigger', direction: 'asc', column: 'trigger', label: 'Trigger', alone: true },
+    { path: 'result', direction: 'asc', column: 'result', label: 'Result', alone: true },
+    { path: 'summary', direction: 'asc', column: 'summary', label: 'What happened', alone: true },
+  ],
   search: { tokensPath: RUN_SUMMARY_TOKENS },
 }
 

@@ -920,6 +920,35 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Rewards (AGL-3640): one store's loyalty program, its members' points,
+      // store credit and live checkout holds, the rewards and referral codes
+      // that spend them, every movement of a balance, what each sale took
+      // from a member, and a friend's one referral credit. Server-written AND
+      // server-read: the loyalty plugin's routes serve what the console shows
+      // and its checkout-credit provider moves the balances inside commerce's
+      // transactions. A client that could read a member could carry off a
+      // rewards code, which spends like a gift card; one that could write
+      // could mint store credit. Each collection is matched by name, with no
+      // wildcard beneath it.
+      match /loyaltyPrograms/{hostId} {
+        allow read, write: if false;
+      }
+      match /loyaltyMembers/{memberId} {
+        allow read, write: if false;
+      }
+      match /loyaltyCodes/{codeId} {
+        allow read, write: if false;
+      }
+      match /loyaltyLedger/{entryId} {
+        allow read, write: if false;
+      }
+      match /loyaltyRedemptions/{redemptionId} {
+        allow read, write: if false;
+      }
+      match /loyaltyReferralClaims/{claimId} {
+        allow read, write: if false;
+      }
+
       // Outreach (AGL-2974): the mailboxes reps connect, the sequences they
       // send and each prospect's enrollment in one. Read through
       // `canReadOutreach()` above.

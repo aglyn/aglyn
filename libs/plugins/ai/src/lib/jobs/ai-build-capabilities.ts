@@ -339,7 +339,13 @@ export function aiBuildOpLines(ops: AiBuildOps, structural: readonly string[]): 
   for (const one of items) {
     const args = Object.entries(one.argsSchema.properties).map(([name, property]) => {
       const required = one.argsSchema.required?.includes(name) ? '' : ' (optional)'
-      const choices = property.enum ? ` one of ${property.enum.join('|')}` : ''
+      // An array's values are named too (AGL-3616): told only "days: array",
+      // the live canonical plan wrote "monday" for the enum's "mon".
+      const choices = property.enum
+        ? ` one of ${property.enum.join('|')}`
+        : property.items?.enum
+          ? ` of ${property.items.enum.join('|')}`
+          : ''
       return `${name}: ${property.type}${choices}${required} — ${property.description}`
     })
     lines.push(
@@ -348,6 +354,12 @@ export function aiBuildOpLines(ops: AiBuildOps, structural: readonly string[]): 
       } Args: ${args.length ? `{ ${args.join('; ')} }` : '{}'}.`,
     )
   }
+  // Measured live on the canonical request (AGL-3616): asked for "forms for
+  // bookings", the planner made a plain form rather than the operation that
+  // takes bookings. An operation does the job; a form that imitates it does not.
+  lines.push(
+    'When the request asks for what one of these operations makes, plan that operation as an item, and place it on the page that offers it. Never stand in for it with a form, page or component that only imitates it: a form that collects what the operation would handle does not do its job. A form is for what no operation here makes, such as general inquiries.',
+  )
   return lines
 }
 

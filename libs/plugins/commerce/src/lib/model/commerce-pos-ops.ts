@@ -46,6 +46,8 @@ export type PosTenderMethod =
   | 'card_link'
   | 'gift_card'
   | 'folio'
+  /** Store credit another plugin keeps (AGL-3640). */
+  | 'credit'
 
 export const POS_TENDER_METHODS: readonly PosTenderMethod[] = [
   'cash',
@@ -54,6 +56,7 @@ export const POS_TENDER_METHODS: readonly PosTenderMethod[] = [
   'card_link',
   'gift_card',
   'folio',
+  'credit',
 ]
 
 /** What each tender is called on a report, a receipt and a refund. */
@@ -64,6 +67,7 @@ export const POS_TENDER_LABELS: Readonly<Record<PosTenderMethod, string>> = {
   card_link: 'Card (payment link)',
   gift_card: 'Gift card',
   folio: 'Room charge',
+  credit: 'Store credit',
 }
 
 /** The tenders whose money moved through Stripe and goes back through it. */
@@ -87,6 +91,10 @@ export interface PosOrderTender {
   paymentIntentId?: string
   giftCardId?: string
   reservationId?: string
+  /** For `credit` (AGL-3640): the provider, its account handle, and its name. */
+  creditProviderId?: string
+  creditReference?: string
+  creditLabel?: string
   cardBrand?: string
   last4?: string
   cashTenderedCents?: number
@@ -139,6 +147,9 @@ export function posOrderTenders(order: PosTenderSource | null | undefined): PosO
       ...(payment.paymentIntentId ? { paymentIntentId: payment.paymentIntentId } : {}),
       ...(payment.giftCardId ? { giftCardId: payment.giftCardId } : {}),
       ...(payment.reservationId ? { reservationId: payment.reservationId } : {}),
+      ...(payment.creditProviderId ? { creditProviderId: payment.creditProviderId } : {}),
+      ...(payment.creditReference ? { creditReference: payment.creditReference } : {}),
+      ...(payment.creditLabel ? { creditLabel: payment.creditLabel } : {}),
       ...(payment.cardBrand ? { cardBrand: payment.cardBrand } : {}),
       ...(payment.last4 ? { last4: payment.last4 } : {}),
       ...(payment.cashTenderedCents != null ? { cashTenderedCents: wholeCents(payment.cashTenderedCents) } : {}),
@@ -147,8 +158,10 @@ export function posOrderTenders(order: PosTenderSource | null | undefined): PosO
 }
 
 /** A tender as one line of a receipt: `Card •• 4242`. */
-export function posTenderLabel(tender: Pick<PosOrderTender, 'method' | 'cardBrand' | 'last4'>): string {
-  const base = POS_TENDER_LABELS[tender.method] ?? tender.method
+export function posTenderLabel(
+  tender: Pick<PosOrderTender, 'method' | 'cardBrand' | 'last4'> & { creditLabel?: string },
+): string {
+  const base = (tender.method === 'credit' && tender.creditLabel) || POS_TENDER_LABELS[tender.method] || tender.method
   if (tender.last4) {
     return `${tender.cardBrand ? capitalize(tender.cardBrand) : base} •• ${tender.last4}`
   }
@@ -649,6 +662,7 @@ const REFUND_ORDER: readonly PosTenderMethod[] = [
   'card_keyed',
   'card_link',
   'gift_card',
+  'credit',
   'folio',
   'cash',
 ]

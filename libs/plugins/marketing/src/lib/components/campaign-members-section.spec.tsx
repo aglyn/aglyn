@@ -357,7 +357,7 @@ describe('finding the records that name this campaign', () => {
         { path: 'deletedAt', op: '==', value: null },
       ]),
     )
-    expect(plan?.orderBy).toEqual({ path: 'nameLower', direction: 'asc' })
+    expect(plan?.orderBy).toMatchObject({ path: 'nameLower', direction: 'asc' })
     expect(screen.getByText('Zebra promo')).toBeTruthy()
     expect(screen.getByText(/matches the start of a name/)).toBeTruthy()
   })

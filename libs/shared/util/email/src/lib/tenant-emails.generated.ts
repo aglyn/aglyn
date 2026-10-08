@@ -1223,5 +1223,237 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
     "control": "external",
     "authoredIn": "the workflow that sends it",
     "footerReason": "You’re receiving this because you’re in touch with {{host.businessName}}."
+  },
+  {
+    "key": "loyalty-points-earned",
+    "name": "Rewards points earned",
+    "description": "Tells a customer the points an order earned them, their balance and their rewards code.",
+    "pluginId": "loyalty",
+    "plugin": "Rewards",
+    "control": "besigner",
+    "defaultSubject": "You earned {{loyalty.points}} points",
+    "mergeTokens": [
+      {
+        "name": "name",
+        "description": "The member's name, when the store knows it",
+        "sample": "Alex"
+      },
+      {
+        "name": "loyalty.balance",
+        "description": "Points the member holds now",
+        "sample": "1,250"
+      },
+      {
+        "name": "loyalty.value",
+        "description": "What those points are worth",
+        "sample": "$12.50"
+      },
+      {
+        "name": "loyalty.credit",
+        "description": "Store credit the member holds",
+        "sample": "$10.00"
+      },
+      {
+        "name": "loyalty.code",
+        "description": "The member’s rewards code, to spend their balance",
+        "sample": "RW-7K3P-Q9XZ-2M4D"
+      },
+      {
+        "name": "loyalty.referral",
+        "description": "A sentence with the member’s referral code and what it gives; empty when referrals are off",
+        "sample": "Share your referral code RF-7K3P9X: a friend gets $10.00 off their first order, and you get $10.00 in store credit."
+      },
+      {
+        "name": "loyalty.points",
+        "description": "Points this order earned",
+        "sample": "45"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "You earned {{loyalty.points}} points",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "Thanks for your order with {{host.businessName}}.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "You have {{loyalty.balance}} points (worth {{loyalty.value}}) and {{loyalty.credit}} in store credit.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Your rewards code is {{loyalty.code}}. Enter it at checkout on {{host.url}}, or give it at the register, to spend your balance.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{loyalty.referral}}",
+        "variant": "body"
+      },
+      {
+        "block": "button",
+        "label": "Shop {{host.businessName}}",
+        "href": "{{host.url}}"
+      }
+    ],
+    "footerReason": "You’re receiving this because you earned rewards with an order from {{host.businessName}}."
+  },
+  {
+    "key": "loyalty-store-credit",
+    "name": "Store credit given",
+    "description": "Tells a customer the store gave them store credit, with their rewards code to spend it.",
+    "pluginId": "loyalty",
+    "plugin": "Rewards",
+    "control": "besigner",
+    "defaultSubject": "You have {{loyalty.amount}} in store credit",
+    "mergeTokens": [
+      {
+        "name": "name",
+        "description": "The member's name, when the store knows it",
+        "sample": "Alex"
+      },
+      {
+        "name": "loyalty.balance",
+        "description": "Points the member holds now",
+        "sample": "1,250"
+      },
+      {
+        "name": "loyalty.value",
+        "description": "What those points are worth",
+        "sample": "$12.50"
+      },
+      {
+        "name": "loyalty.credit",
+        "description": "Store credit the member holds",
+        "sample": "$10.00"
+      },
+      {
+        "name": "loyalty.code",
+        "description": "The member’s rewards code, to spend their balance",
+        "sample": "RW-7K3P-Q9XZ-2M4D"
+      },
+      {
+        "name": "loyalty.referral",
+        "description": "A sentence with the member’s referral code and what it gives; empty when referrals are off",
+        "sample": "Share your referral code RF-7K3P9X: a friend gets $10.00 off their first order, and you get $10.00 in store credit."
+      },
+      {
+        "name": "loyalty.amount",
+        "description": "The credit given",
+        "sample": "$10.00"
+      },
+      {
+        "name": "loyalty.note",
+        "description": "The note the store wrote; empty when none",
+        "sample": "Sorry about the delay!"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "You have {{loyalty.amount}} in store credit",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "{{loyalty.note}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "You have {{loyalty.balance}} points (worth {{loyalty.value}}) and {{loyalty.credit}} in store credit.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Your rewards code is {{loyalty.code}}. Enter it at checkout on {{host.url}}, or give it at the register, to spend your balance.",
+        "variant": "body"
+      },
+      {
+        "block": "button",
+        "label": "Shop {{host.businessName}}",
+        "href": "{{host.url}}"
+      }
+    ],
+    "footerReason": "You’re receiving this because {{host.businessName}} gave you store credit."
+  },
+  {
+    "key": "loyalty-referral-reward",
+    "name": "Referral reward",
+    "description": "Tells a customer a friend’s first order earned them store credit.",
+    "pluginId": "loyalty",
+    "plugin": "Rewards",
+    "control": "besigner",
+    "defaultSubject": "A friend’s first order earned you {{loyalty.amount}}",
+    "mergeTokens": [
+      {
+        "name": "name",
+        "description": "The member's name, when the store knows it",
+        "sample": "Alex"
+      },
+      {
+        "name": "loyalty.balance",
+        "description": "Points the member holds now",
+        "sample": "1,250"
+      },
+      {
+        "name": "loyalty.value",
+        "description": "What those points are worth",
+        "sample": "$12.50"
+      },
+      {
+        "name": "loyalty.credit",
+        "description": "Store credit the member holds",
+        "sample": "$10.00"
+      },
+      {
+        "name": "loyalty.code",
+        "description": "The member’s rewards code, to spend their balance",
+        "sample": "RW-7K3P-Q9XZ-2M4D"
+      },
+      {
+        "name": "loyalty.referral",
+        "description": "A sentence with the member’s referral code and what it gives; empty when referrals are off",
+        "sample": "Share your referral code RF-7K3P9X: a friend gets $10.00 off their first order, and you get $10.00 in store credit."
+      },
+      {
+        "name": "loyalty.amount",
+        "description": "The reward",
+        "sample": "$10.00"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "Your referral paid off",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "A friend used your referral code at {{host.businessName}}, so you have {{loyalty.amount}} more in store credit.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "You have {{loyalty.balance}} points (worth {{loyalty.value}}) and {{loyalty.credit}} in store credit.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Your rewards code is {{loyalty.code}}. Enter it at checkout on {{host.url}}, or give it at the register, to spend your balance.",
+        "variant": "body"
+      },
+      {
+        "block": "button",
+        "label": "Shop {{host.businessName}}",
+        "href": "{{host.url}}"
+      }
+    ],
+    "footerReason": "You’re receiving this because a friend used your referral code at {{host.businessName}}."
   }
 ]

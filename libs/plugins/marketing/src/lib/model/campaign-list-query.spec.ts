@@ -84,8 +84,12 @@ describe('the Marketing lists’ composite indexes', () => {
   })
 
   it('spends four on sends and four on campaigns: one per queried field, under the one order', () => {
-    expect(distinct(SENDS.map(([, declaration, base]) => listQueryIndexes(declaration, base)))).toBe(4)
-    expect(distinct(CONTAINERS.map(([, declaration, base]) => listQueryIndexes(declaration, base)))).toBe(4)
+    // Plus the header orders (AGL-3680), each `alone` so it pairs with the
+    // scope only: on sends Subject both ways beside `hostId` and beside
+    // `emailCampaignId`; on campaigns Campaign descending beside the site
+    // scope (ascending is the search's).
+    expect(distinct(SENDS.map(([, declaration, base]) => listQueryIndexes(declaration, base)))).toBe(4 + 4)
+    expect(distinct(CONTAINERS.map(([, declaration, base]) => listQueryIndexes(declaration, base)))).toBe(4 + 1)
   })
 })
 
@@ -114,7 +118,7 @@ describe('what a site hub asks', () => {
       { path: 'subjectTokens', op: 'array-contains', value: 'spring' },
       { path: 'status', op: '==', value: 'sent' },
     ])
-    expect(asked.orderBy).toEqual({ path: 'createdAtMs', direction: 'desc' })
+    expect(asked.orderBy).toMatchObject({ path: 'createdAtMs', direction: 'desc' })
     expect(campaignSendsScope(null)).toEqual([])
   })
 
@@ -138,7 +142,7 @@ describe('what a site hub asks', () => {
       { path: 'nameLower', op: '>=', value: 'spring la' },
       { path: 'nameLower', op: '<=', value: 'spring la\uf8ff' },
     ])
-    expect(asked.orderBy).toEqual({ path: 'nameLower', direction: 'asc' })
+    expect(asked.orderBy).toMatchObject({ path: 'nameLower', direction: 'asc' })
     // The stamped key sits inside that range.
     const stored = campaignContainerSearchFields('Spring Launch').nameLower
     expect(stored >= 'spring la' && stored <= 'spring la\uf8ff').toBe(true)
@@ -213,12 +217,42 @@ describe('single sends', () => {
   })
 })
 
+describe('every header sorts (AGL-3680)', () => {
+  it('orders a site’s emails by Subject with nothing narrowing them', () => {
+    const asked = plan(campaignEmailsListQuery(false), {
+      clauses: [],
+      base: campaignSendsScope('host-a'),
+      sort: { path: 'subjectLower', direction: 'desc' },
+    })
+    expect(asked.orderBy).toMatchObject({ path: 'subjectLower', direction: 'desc' })
+  })
+
+  it('falls back to newest first under a filter, and says so', () => {
+    const asked = plan(CAMPAIGN_EMAILS_QUERY, {
+      clauses: [{ field: 'status', op: 'equals', value: 'sent' }],
+      base: [{ path: 'emailCampaignId', op: '==', value: 'c-1' }],
+      sort: { path: 'subjectLower', direction: 'asc' },
+    })
+    expect(asked.orderBy).toMatchObject({ path: 'createdAtMs', direction: 'desc' })
+    expect(asked.notices).toEqual([
+      'Sorted by newest first: Subject sorts only with no filter or search on.',
+    ])
+  })
+
+  it('offers no order on a counter, which stays absent until something is counted', () => {
+    for (const declaration of [campaignEmailsListQuery(true), CAMPAIGN_EMAILS_QUERY, campaignSingleSendsListQuery(true)]) {
+      expect(declaration.sorts.some((sort) => sort.path.startsWith('stats.'))).toBe(false)
+    }
+  })
+})
+
 describe('the fields the writers stamp', () => {
   it('a send’s subject tokens are the name-search tokens of its subject', () => {
     expect(campaignSendSearchFields('Spring Sale — 20% off')).toEqual({
+      subjectLower: 'spring sale — 20% off',
       subjectTokens: nameSearchTokens('Spring Sale — 20% off'),
     })
-    expect(campaignSendSearchFields(undefined)).toEqual({ subjectTokens: [] })
+    expect(campaignSendSearchFields(undefined)).toEqual({ subjectLower: '', subjectTokens: [] })
   })
 
   it('a campaign carries its name’s key and tokens', () => {

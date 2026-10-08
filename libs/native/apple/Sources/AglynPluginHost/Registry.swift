@@ -79,8 +79,9 @@ public final class NativePluginRegistry {
     tabList.values.filter { $0.apps.contains(app) }.sorted(by: Self.byOrder(\.order, \.id))
   }
 
-  public func widgets(for app: AglynAppKind) -> [NativeWidget] {
-    widgetList.values.filter { $0.apps.contains(app) }.sorted(by: Self.byOrder(\.order, \.id))
+  /// Home's widgets (`slot` nil), or a core page's slot's.
+  public func widgets(for app: AglynAppKind, slot: String? = nil) -> [NativeWidget] {
+    widgetList.values.filter { $0.apps.contains(app) && $0.slot == slot }.sorted(by: Self.byOrder(\.order, \.id))
   }
 
   public func quickActions(for app: AglynAppKind) -> [NativeQuickAction] {
@@ -179,14 +180,14 @@ public final class NativePluginRegistrar {
 
   public func widget<V: View>(
     _ id: String, title: String, icon: String? = nil, order: Int, size: WidgetSize = .full,
-    requiresSite: Bool = false, apps: Set<AglynAppKind> = [.aglyn],
+    requiresSite: Bool = false, apps: Set<AglynAppKind> = [.aglyn], slot: String? = nil,
     @ViewBuilder _ content: @escaping @MainActor (NativePluginContext) -> V
   ) {
     admit(.widgets, id) {
       try registry.add(
         NativeWidget(
           pluginID: pluginID, id: id, title: title, icon: icon, order: order, size: size,
-          requiresSite: requiresSite, apps: apps, make: { AnyView(content($0)) }))
+          requiresSite: requiresSite, apps: apps, slot: slot, make: { AnyView(content($0)) }))
     }
   }
 

@@ -46,9 +46,15 @@ import {
   collection,
   getCountFromServer,
   getDocs,
+  limit,
+  orderBy,
+  type Query,
   query,
   where,
 } from 'firebase/firestore'
+import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
@@ -69,6 +75,7 @@ import {
 import {
   CAMPAIGN_CONVERSION_KINDS,
   CAMPAIGN_CONVERSION_KIND_COPY,
+  CAMPAIGN_CONVERSION_SORTS,
   CAMPAIGN_CONVERSION_RECORD_KINDS,
   campaignConversionsCoverage,
   campaignTouchLabel,
@@ -142,6 +149,12 @@ const conversionsDocsHelp = pluginDocsHelp('emailCampaigns', {
 /** The stored record plus the document name the reader listed it under. */
 type ConversionRow = CampaignConversionRecord & { $id: string }
 
+/** Credited to is a label drawn from several fields: it sorts the page (AGL-3680). */
+const CONVERSION_PAGE_SORTS = {
+  campaign: (row: ConversionRow) => campaignTouchLabel(row) || null,
+}
+const CONVERSION_PAGE_SORT_HEADERS = { campaign: 'Credited to' }
+
 const day = (ms: unknown): string => {
   const value = Number(ms ?? 0)
   return Number.isFinite(value) && value > 0
@@ -195,9 +208,18 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
    * campaign id and a query pretending otherwise would return nothing while
    * reading as "this campaign caused no web conversions".
    *=========================================*/
+  const [emailSortAsked, setEmailSortAsked] = useState<ListQuerySort | null>(null)
+  const [webSortAsked, setWebSortAsked] = useState<ListQuerySort | null>(null)
+  /*
+   * A header order asked of a list replaces the document-name walk with an
+   * `orderBy` on that field (AGL-3680, `CAMPAIGN_CONVERSION_SORTS`): both
+   * fields are on every attribution, so the ordered walk is as total.
+   */
+  const orderedPage = (base: Query, sort: ListQuerySort | null, pageLimit: number) =>
+    sort ? query(base, orderBy(sort.path, sort.direction), limit(pageLimit)) : collectionPage(base, pageLimit)
   const emailList = usePagedCollection<ConversionRow>(
     (pageLimit) =>
-      collectionPage(
+      orderedPage(
         campaignId
           ? query(
               attributions(),
@@ -209,9 +231,10 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
               where('kind', '==', kind),
               where('channel', '==', 'email'),
             ),
+        emailSortAsked,
         pageLimit,
       ),
-    [firestore, hostId, kind, campaignId],
+    [firestore, hostId, kind, campaignId, emailSortAsked?.path, emailSortAsked?.direction],
     { idField: '$id' },
   )
 
@@ -219,17 +242,34 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
     (pageLimit) =>
       campaignId
         ? null
-        : collectionPage(
+        : orderedPage(
             query(
               attributions(),
               where('kind', '==', kind),
               where('channel', '==', 'web'),
             ),
+            webSortAsked,
             pageLimit,
           ),
-    [firestore, hostId, kind, campaignId],
+    [firestore, hostId, kind, campaignId, webSortAsked?.path, webSortAsked?.direction],
     { idField: '$id' },
   )
+  const emailSort = useListColumnSort<ConversionRow>({
+    sorts: CAMPAIGN_CONVERSION_SORTS,
+    sort: emailSortAsked,
+    onSortChange: setEmailSortAsked,
+    rows: emailList.rows,
+    pageSorts: CONVERSION_PAGE_SORTS,
+    headers: CONVERSION_PAGE_SORT_HEADERS,
+  })
+  const webSort = useListColumnSort<ConversionRow>({
+    sorts: CAMPAIGN_CONVERSION_SORTS,
+    sort: webSortAsked,
+    onSortChange: setWebSortAsked,
+    rows: webList.rows,
+    pageSorts: CONVERSION_PAGE_SORTS,
+    headers: CONVERSION_PAGE_SORT_HEADERS,
+  })
 
   /*==========================================
    * THE UNCREDITED HALF.
@@ -680,13 +720,14 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
         <Divider />
 
         <Section title="From campaign emails">
+          <ListQueryNotices refused={[]} notices={emailSort.notices} />
           <ListTable
-            rows={emailList.rows}
+            rows={emailSort.rows}
             columns={columns as any}
             hideFooter
-            // One page of a walk in stored order; a header sort would order
-            // only that page.
-            disableColumnSorting
+            // Converted and Record order the query; Credited to sorts the
+            // page and says so (AGL-3680).
+            columnSort={emailSort}
             onOpen={(_id, row) => {
               const href = campaignHref(row as ConversionRow)
               if (href) router.push(href)
@@ -708,7 +749,8 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
           <Typography variant="caption" color="text.secondary">
             {'Listed in the order they are stored, which is not the order ' +
               'they happened in — every row is reachable by paging, but the ' +
-              'first page is not the most recent conversions.'}
+              'first page is not the most recent conversions. Sort by ' +
+              'Converted for those.'}
           </Typography>
         </Section>
 
@@ -733,13 +775,14 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
                 'is free text with no campaign behind it, so there is ' +
                 'nothing to open and no fixed set to total.'}
             </Typography>
+            <ListQueryNotices refused={[]} notices={webSort.notices} />
             <ListTable
-              rows={webList.rows}
+              rows={webSort.rows}
               columns={columns as any}
               hideFooter
-              // One page of a walk in stored order; a header sort would
-              // order only that page.
-              disableColumnSorting
+              // Converted and Record order the query; Credited to sorts the
+              // page and says so (AGL-3680).
+              columnSort={webSort}
               noRowsLabel="Nothing credited to a tagged link"
               noRowsDescription={
                 'A conversion lands here when the visitor arrived on a URL ' +

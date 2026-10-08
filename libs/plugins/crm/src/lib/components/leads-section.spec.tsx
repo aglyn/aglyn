@@ -692,7 +692,7 @@ describe('the collection the section reads', () => {
       value: ['org', 'host:site-1'],
     })
     // Newest seen first, the one order every lead carries.
-    expect(lastListQueryPlan()?.orderBy).toEqual({ path: 'lastSeenAtMs', direction: 'desc' })
+    expect(lastListQueryPlan()?.orderBy).toMatchObject({ path: 'lastSeenAtMs', direction: 'desc' })
   })
 
   it('asks Open of the query as the three open statuses every lead stores', () => {

@@ -112,6 +112,13 @@ jest.mock('./notifications', () => ({
     consoleWrites.push({ payload, options })
   },
 }))
+const cloudLogged: Array<{ type: string }> = []
+jest.mock('./operator-alerts-log', () => ({
+  writeOperatorAlertLog: async (alert: { type: string }) => {
+    cloudLogged.push(alert)
+    return true
+  },
+}))
 jest.mock('./staff-alert-email', () => ({
   resolveStaffAlertRecipients: async () => recipients,
   sendOperatorAlertEmail: async (input: Record<string, unknown>) => {
@@ -150,6 +157,7 @@ beforeEach(() => {
   operatorEmails.length = 0
   digestEmails.length = 0
   posts.length = 0
+  cloudLogged.length = 0
   recipients = ['ops@example.com']
   for (const key of ENV) {
     saved[key] = process.env[key]
@@ -211,6 +219,8 @@ describe('raiseOperatorAlert (AGL-3377)', () => {
     expect((await raise()).outcome).toBe('deduped')
     expect(operatorEmails).toHaveLength(1)
     expect(consoleWrites).toHaveLength(1)
+    // Cloud Logging hears it as often as the operator does (AGL-3683).
+    expect(cloudLogged.map((alert) => alert.type)).toEqual(['data.orgErasureFailed'])
   })
 
   it('holds an alert until minOccurrences raises land inside the window', async () => {
@@ -230,6 +240,7 @@ describe('raiseOperatorAlert (AGL-3377)', () => {
     expect(consoleWrites[0].options).toEqual({})
     expect(operatorEmails).toHaveLength(0)
     expect(posts).toHaveLength(0)
+    expect(cloudLogged).toHaveLength(0)
   })
 
   it('a digest type is queued, not mailed, and the digest sends it once a day', async () => {

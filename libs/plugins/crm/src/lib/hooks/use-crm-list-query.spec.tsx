@@ -76,7 +76,7 @@ describe('a collaborator’s search', () => {
       { path: 'nameLower', op: '>=', value: 'acm' },
       { path: 'nameLower', op: '<=', value: 'acm' },
     ])
-    expect(plan.orderBy).toEqual({ path: 'nameLower', direction: 'asc' })
+    expect(plan.orderBy).toMatchObject({ path: 'nameLower', direction: 'asc' })
     expect(plan.notices).toContain(CONTACT_PREFIX_SEARCH.notice)
     expect(plan.refused).toEqual([])
   })
@@ -105,7 +105,7 @@ describe('a range that stands alone', () => {
   it('is served beside the scope clause alone, ordering the list by its field', () => {
     const plan = contacts({ foldsScope: true, clauses: [created] })
     expect(plan.refused).toEqual([])
-    expect(plan.orderBy).toEqual({ path: 'createdAt', direction: 'desc' })
+    expect(plan.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
   })
 
   it('is refused by name beside another filter, which stands', () => {
@@ -115,6 +115,6 @@ describe('a range that stands alone', () => {
     })
     expect(plan.refused).toEqual([{ clause: created, reason: expect.stringMatching(/stands alone/) }])
     expect(plan.filters).toContainEqual({ path: 'emailStatus', op: '==', value: 'none' })
-    expect(plan.orderBy).toEqual({ path: 'updatedAt', direction: 'desc' })
+    expect(plan.orderBy).toMatchObject({ path: 'updatedAt', direction: 'desc' })
   })
 })

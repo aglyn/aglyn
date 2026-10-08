@@ -950,6 +950,24 @@ node tools/scripts/probe-uptime.mjs --only render/
 curl -s -H "x-cron-secret: $CRON_SECRET" https://app.aglyn.com/api/admin/render-monitor
 ```
 
+### Aglyn AI failing (AGL-3683)
+
+Staff hear about Aglyn AI breaking from three operator alerts, all from the AI plugin:
+
+- `ai.providerUnavailable`: the provider refused the platform key or the account ran out of credit.
+- `ai.jobFailed`: a job failed on our side. That covers provider errors, a step that produced nothing, a build that delivered nothing, and a guided start that broke a building rule.
+- `ai.buildPartlyFailed`: a build finished `done` with some parts failed on our side.
+
+None of the three fires when the model declines a brief or when the site has AI switched off. Each is deduped per job kind for an hour, and the repeats are counted into the next alert.
+
+Like every operator alert, they go to the Staff console bell, the operator email and `OPERATOR_ALERT_WEBHOOK_URL`. Every operator alert that fires is also written to the `operator-alerts` log (`writeOperatorAlertLog`, through the error beacon's credential, because Vercel stdout never reaches GCP). The policy `Aglyn AI failing (AGL-3683)` (`alertPolicies/9373378137392338654`) pages on the AI ones. It copies its channels from `Server errors: uncaught 5xx (AGL-1921)`, which today means the email channel plus Slack `#alerts (outages)`. Rerun `node tools/scripts/setup-ai-failure-alert-policy.mjs` whenever that routing changes.
+
+**When it fires:**
+
+1. Open the alert in the Staff console. It names the job, the workspace, the step and the runner's own error.
+2. Search the logs for `ai job failed` (or `ai build stopped`) to tell one job from every job of that kind.
+3. If the provider is the cause, check `ai.providerUnavailable` and the provider's status page.
+
 ## Production monitoring and alerting (AGL-1502, 2026-08-13)
 
 The external monitor AGL-1148 called for. Lives in **GCP Cloud Monitoring on
@@ -985,6 +1003,7 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 | Cloud Scheduler, per-minute beats | `scheduler_beat_attempt_errors` for `pluginJobsBeat` and `consoleAiJobsBeat` | > 2 failed attempts in 10 min, per job | log-based metric |
 | Cloud Scheduler, `consoleFastCrons` (every 15 min) | `scheduler_beat_attempt_errors` for `consoleFastCrons` | > 1 failed tick in 30 min | log-based metric |
 | Firestore rules denials | `rules/evaluation_count{result = DENY}` | > 5,000 in a trailing hour | metric |
+| Aglyn AI failing | `operator-alerts` log, `jsonPayload.type=~"^ai\."`, production | any (alerts are deduped per job kind per hour before they are written) | log match |
 
 The two Cloud Scheduler rows were one until 2026-09-20. `pluginJobsBeat` and
 `consoleAiJobsBeat` fire every minute, so a single network-level miss at their
