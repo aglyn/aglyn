@@ -291,7 +291,7 @@ describe('AGL-2431 · the merchant can see the reminder queue', () => {
     // `server.ts` loads firebase-admin at module scope; importing it into a
     // client component would pull the Admin SDK into the browser bundle.
     expect(source('components/bookings-console-page.tsx')).toContain(
-      "import { type HostBookingService, isBookingReminderDue } from '../model'",
+      "import { isBookingReminderDue } from '../model'",
     )
     expect(source('components/bookings-console-page.tsx')).not.toContain(
       "from '../server'",

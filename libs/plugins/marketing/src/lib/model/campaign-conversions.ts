@@ -26,6 +26,7 @@ import {
   EMAIL_ATTRIBUTION_WINDOW_DAYS,
 } from '@aglyn/shared-util-email'
 import type { CampaignCaveat } from './campaign-report'
+import type { ListQuerySort } from '@aglyn/shared-util-tools/list-query/list-query-plan'
 
 /**
  * WHAT A CAMPAIGN CAUSED — the read half of the identify-moment join.
@@ -562,3 +563,22 @@ export function campaignTouchLabel(
     .filter(Boolean)
   return parts.join(' / ')
 }
+
+/*
+ * THE CONVERSIONS LISTS' HEADER SORTS (AGL-3680).
+ *
+ * Both lists walk the document name by default. Converted and Record order
+ * the QUERY instead when their header is clicked: `convertedAtMs` and
+ * `refId` are on every attribution — the one writer
+ * (`campaign-conversion-attribution.ts`) refuses a record without either —
+ * so an `orderBy` on them drops nothing. Each order beside a list's two
+ * equalities (`kind` + `channel`, or `kind` + `campaignId`) is one whole-shape
+ * composite per list, pinned by `list-query-indexes.spec.ts`; Record sorts
+ * one way to keep that count down. Credited to is a label drawn from
+ * several fields and sorts the page.
+ */
+export const CAMPAIGN_CONVERSION_SORTS: readonly ListQuerySort[] = [
+  { path: 'convertedAtMs', direction: 'desc', column: 'convertedAtMs', label: 'Converted' },
+  { path: 'convertedAtMs', direction: 'asc', column: 'convertedAtMs', label: 'Converted' },
+  { path: 'refId', direction: 'asc', column: 'refId', label: 'Record' },
+]

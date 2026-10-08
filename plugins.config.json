@@ -281,13 +281,20 @@
         "bookings"
       ],
       "mobile": {
-        "$comment": "AGL-3652: today's bookings at the Aglyn POS counter, paid on the device's own card reader through bookings/in-person-payment.",
+        "$comment": "AGL-3670: the site's bookings on a calendar (day, week, month, upcoming) with each booking's check-in, reschedule, cancel and refund, the services and their hours, Home's card for today and the Bookings page opening natively; in Aglyn POS, today's bookings paid at the counter on the device's own reader (AGL-3652).",
+        "ios": {
+          "module": "AglynBookingsPlugin",
+          "register": "registerBookingsNative"
+        },
         "android": {
           "package": "com.aglyn.plugins.bookings",
           "register": "registerBookingsNative"
         },
         "contributes": {
-          "screens": ["bookings.counter"]
+          "screens": ["bookings.calendar", "bookings.booking", "bookings.services", "bookings.counter"],
+          "widgets": ["bookings.today"],
+          "quickActions": ["bookings.open"],
+          "deepLinks": ["bookings.page"]
         }
       },
       "catalog": {
@@ -1835,6 +1842,22 @@
       "apiPrefixes": [
         "events"
       ],
+      "mobile": {
+        "$comment": "AGL-3670: the site's events, added, edited, published and deleted natively with the Events page's own rule, and the Events page opening natively from a link.",
+        "ios": {
+          "module": "AglynEventsCalendarPlugin",
+          "register": "registerEventsCalendarNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.eventscalendar",
+          "register": "registerEventsCalendarNative"
+        },
+        "contributes": {
+          "screens": ["events-calendar.events"],
+          "quickActions": ["events-calendar.open"],
+          "deepLinks": ["events-calendar.page"]
+        }
+      },
       "catalog": {
         "order": 13,
         "label": "Events Calendar",
@@ -2354,6 +2377,33 @@
         "tenantEmails": "workflowsTenantEmails",
         "planEntitlements": "workflowsPlanEntitlements",
         "usageAxes": "workflowsUsageAxes"
+      },
+      "mobile": {
+        "$comment": "AGL-3670: Automation natively — the site's workflows, actions and webhooks, each one's run history and test run, the run allowances, the org automations a site runs (paused or resumed here), and the organization's own automations and every site's lists; the Automation pages opening natively from a link.",
+        "ios": {
+          "module": "AglynWorkflowsPlugin",
+          "register": "registerWorkflowsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.workflows",
+          "register": "registerWorkflowsNative"
+        },
+        "contributes": {
+          "screens": [
+            "workflows.automation",
+            "workflows.workflow",
+            "workflows.action",
+            "workflows.webhook",
+            "workflows.runs",
+            "workflows.org-automation"
+          ],
+          "quickActions": [
+            "workflows.open"
+          ],
+          "deepLinks": [
+            "workflows.page"
+          ]
+        }
       },
       "transferResources": [
         {

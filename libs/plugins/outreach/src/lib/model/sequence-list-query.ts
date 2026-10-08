@@ -68,6 +68,18 @@ export const OUTREACH_SEQUENCE_LIST_QUERY: ListQueryDeclaration = {
       operators: ['is', 'after', 'onOrAfter', 'before', 'onOrBefore'],
     },
   ],
-  sorts: [{ path: 'createdAtMs', direction: 'desc' }],
+  /*
+   * The headers (AGL-3680): Name (`nameLower`, stamped by the save route)
+   * and Status order the query, `alone` — on this unscoped collection that
+   * costs no composite. Mailbox is a label looked up from the mailbox id,
+   * and the counts are counted, so both sort the page.
+   */
+  sorts: [
+    { path: 'createdAtMs', direction: 'desc', label: 'newest first' },
+    { path: OUTREACH_SEQUENCE_NAME_LOWER, direction: 'asc', column: 'name', label: 'Name', alone: true },
+    { path: OUTREACH_SEQUENCE_NAME_LOWER, direction: 'desc', column: 'name', label: 'Name', alone: true },
+    { path: 'status', direction: 'asc', column: 'status', label: 'Status', alone: true },
+    { path: 'status', direction: 'desc', column: 'status', label: 'Status', alone: true },
+  ],
   search: { tokensPath: OUTREACH_SEQUENCE_NAME_TOKENS },
 }

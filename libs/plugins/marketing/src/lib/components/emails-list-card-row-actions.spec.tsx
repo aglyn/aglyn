@@ -433,7 +433,7 @@ describe('the newest thing is at the top', () => {
   it('asks Firestore for the site’s emails newest first', async () => {
     await mountCard()
     const plan = lastListQueryPlan()
-    expect(plan?.orderBy).toEqual({ path: 'createdAtMs', direction: 'desc' })
+    expect(plan?.orderBy).toMatchObject({ path: 'createdAtMs', direction: 'desc' })
     // The site as an equality on the site the email is sent as.
     expect(plan?.filters).toEqual([{ path: 'hostId', op: '==', value: 'host-1' }])
   })

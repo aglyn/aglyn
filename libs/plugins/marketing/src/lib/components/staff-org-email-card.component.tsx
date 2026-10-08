@@ -27,6 +27,9 @@ import {
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { useFirestore, usePagedCollection } from '@aglyn/tenant-feature-instance'
 import {
   Box,
@@ -116,35 +119,84 @@ function MessageDialog(props: { row: Row | null; onClose: () => void }) {
 }
 
 /** One paged table of an organization subcollection. */
+/*
+ * EVERY HEADER SORTS (AGL-3680). Both tables walk their collection by id;
+ * the name column orders the QUERY by its lower-cased key instead — a send's
+ * `subjectLower`, a campaign's `nameLower`, each stamped by every writer
+ * (`campaignSendSearchFields`, `campaignContainerSearchFields`) and on older
+ * records by `backfill-campaign-list-fields.mjs`. With no filter on these
+ * staff tables, an order on the unscoped collection needs no composite.
+ * The rest is drawn from several fields, or a value a send may not carry
+ * (a draft names no audience), and sorts the page.
+ */
+const nameSorts = (path: string, column: string, label: string): ListQuerySort[] => [
+  { path, direction: 'asc', column, label },
+  { path, direction: 'desc', column, label },
+]
+const SEND_SORTS = nameSorts('subjectLower', 'subject', 'Subject')
+const CAMPAIGN_SORTS = nameSorts('nameLower', 'name', 'Campaign')
+const millisOf = (value: any): number | null =>
+  typeof value?.toMillis === 'function'
+    ? value.toMillis()
+    : typeof value?.seconds === 'number'
+      ? value.seconds * 1000
+      : typeof value === 'number'
+        ? value
+        : null
+const SEND_PAGE_SORTS = {
+  status: (row: Row) => String(row['status'] ?? 'draft'),
+  audience: (row: Row) => (row['audience'] ? String(row['audience']) : null),
+  when: (row: Row) => millisOf(row['sentAt']) ?? millisOf(row['sendAtMs']) ?? millisOf(row['createdAtMs']),
+}
+const SEND_PAGE_SORT_HEADERS = { status: 'Status', audience: 'Audience', when: 'When' }
+const CAMPAIGN_PAGE_SORTS = {
+  visibleTo: (row: Row) => (Array.isArray(row['visibleTo']) ? row['visibleTo'].join(', ') : null),
+  window: (row: Row) => millisOf(row['startAtMs']) ?? millisOf(row['endAtMs']),
+}
+const CAMPAIGN_PAGE_SORT_HEADERS = { visibleTo: 'Runs on', window: 'Window' }
+
 function OrgCollectionTable(props: {
   orgId: string
   collectionId: string
   columns: GridColDef[]
   emptyLabel: string
   onOpen?: (row: Row) => void
+  sorts: readonly ListQuerySort[]
+  pageSorts: Readonly<Record<string, (row: Row) => string | number | null>>
+  sortHeaders: Readonly<Record<string, string>>
 }) {
-  const { orgId, collectionId, columns, emptyLabel, onOpen } = props
+  const { orgId, collectionId, columns, emptyLabel, onOpen, sorts, pageSorts, sortHeaders } = props
   const firestore = useFirestore()
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const paged = usePagedCollection<Row>(
     (pageLimit) =>
       orgId
         ? query(
             collection(firestore, 'orgs', orgId, collectionId),
-            orderBy(documentId()),
+            askedSort ? orderBy(askedSort.path, askedSort.direction) : orderBy(documentId()),
             limit(pageLimit),
           )
         : null,
-    [firestore, orgId, collectionId],
+    [firestore, orgId, collectionId, askedSort?.path, askedSort?.direction],
     { idField: '$id' },
   )
+  const columnSort = useListColumnSort<Row>({
+    sorts,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    rows: paged.rows,
+    pageSorts,
+    headers: sortHeaders,
+  })
   const byId = useMemo(() => new Map(paged.rows.map((row) => [row.$id, row])), [paged.rows])
   return (
     <Stack spacing={1}>
+      <ListQueryNotices refused={[]} notices={columnSort.notices} />
       <ListTable
-        rows={paged.rows}
+        rows={columnSort.rows}
         columns={columns}
         loading={paged.status === 'loading'}
-        disableColumnSorting
+        columnSort={columnSort}
         noRowsLabel={emptyLabel}
         onOpen={
           onOpen
@@ -364,6 +416,9 @@ export function StaffOrgEmailCard(props: { orgId: string }) {
               orgId={orgId}
               collectionId="campaigns"
               columns={sendColumns}
+              sorts={SEND_SORTS}
+              pageSorts={SEND_PAGE_SORTS}
+              sortHeaders={SEND_PAGE_SORT_HEADERS}
               emptyLabel="This organization has sent no campaigns"
               onOpen={(row) => (row['body'] ? setMessage(row) : undefined)}
             />
@@ -373,6 +428,9 @@ export function StaffOrgEmailCard(props: { orgId: string }) {
               orgId={orgId}
               collectionId="emailCampaigns"
               columns={campaignColumns}
+              sorts={CAMPAIGN_SORTS}
+              pageSorts={CAMPAIGN_PAGE_SORTS}
+              sortHeaders={CAMPAIGN_PAGE_SORT_HEADERS}
               emptyLabel="This organization has no email campaigns"
             />
           )}

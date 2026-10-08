@@ -39,6 +39,14 @@
  *   deals       `searchTokens`, `scopedSearchTokens`, `nextTaskAtMs: null`
  *   crmTasks    `searchTokens`, `scopedSearchTokens`, `dueAtMs: null` where
  *               absent (every task view orders by it)
+ *   header sort keys (AGL-3680) — what a table header sorts by on the
+ *               query, stored `null` for none because an `orderBy` leaves out
+ *               a record without its field: leads `nameSortKey`,
+ *               `companyLower`, `jobTitleLower` and, where absent,
+ *               `lastSeenAtMs` (its `firstSeenAtMs`, else `createdAt` — a
+ *               lead without it was on no page of the Leads list); contacts
+ *               `nameSortKey`; deals `amountSortCents`,
+ *               `expectedCloseSortAtMs`; tasks `titleLower`, `priorityRank`
  *   contactFields  the custom field DEFINITIONS the CRM › Fields table asks
  *               for (AGL-3335): `object` (`contact` for a definition made
  *               before companies and deals had fields), `required` as a

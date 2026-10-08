@@ -51,8 +51,8 @@ import androidx.compose.ui.unit.dp
  * as one control to a screen reader.
  */
 
-/** One choice of a [SelectField]. */
-data class SelectOption(val value: String, val label: String, val supporting: String? = null)
+/** One choice of a [SelectField]: what is stored, what is read, an optional second line, and an optional greyed-out state. */
+data class SelectOption(val value: String, val label: String, val supporting: String? = null, val enabled: Boolean = true)
 
 /**
  * One value from a fixed list, as the console's select menus pick it. A
@@ -69,6 +69,7 @@ fun SelectField(
   enabled: Boolean = true,
   noneLabel: String? = null,
   supporting: String? = null,
+  isError: Boolean = false,
 ) {
   var open by remember { mutableStateOf(false) }
   val current = options.firstOrNull { it.value == selected }
@@ -80,6 +81,7 @@ fun SelectField(
       enabled = enabled,
       label = { Text(label) },
       supportingText = supporting?.let { { Text(it) } },
+      isError = isError,
       trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
       singleLine = true,
       modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled),
@@ -96,6 +98,7 @@ fun SelectField(
               option.supporting?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
           },
+          enabled = option.enabled,
           onClick = { open = false; onSelect(option.value) },
           modifier = Modifier.testTag("select-${option.value}"),
         )

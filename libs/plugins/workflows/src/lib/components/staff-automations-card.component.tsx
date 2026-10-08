@@ -20,12 +20,14 @@ import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { mdiEyeOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { useFirestore, usePagedCollection } from '@aglyn/tenant-feature-instance'
 import {
   Box,
@@ -119,6 +121,25 @@ function StepsDialog(props: { row: AutomationRow | null; onClose: () => void }) 
 }
 
 /** One paged, read-only table of automations. */
+const millisOf = (value: any): number | null =>
+  typeof value?.toMillis === 'function' ? value.toMillis() : null
+
+/*
+ * EVERY HEADER SORTS, OVER THE PAGE (AGL-3680). These read-only staff tables
+ * walk each collection by document id. Their name falls back across fields
+ * that differ by collection (`name`, `displayName`, the id), their status is
+ * drawn from the trigger and the pause lists, and `updatedAt` is not stamped
+ * by every writer (an imported automation carries none) — so no stored field
+ * orders all three, and each header sorts the page on screen and says so.
+ */
+const AUTOMATION_PAGE_SORTS = {
+  name: (row: AutomationRow) => nameOf(row),
+  status: (row: AutomationRow) => String(row['trigger']?.event ?? 'manual'),
+  updatedAt: (row: AutomationRow) => millisOf(row['updatedAt']),
+}
+const AUTOMATION_PAGE_SORT_HEADERS = { name: 'Automation', status: 'Status', updatedAt: 'Updated' }
+const NO_QUERY_SORTS = [] as const
+
 function AutomationTable(props: {
   title: string
   buildQuery: (firestore: Firestore, pageLimit: number) => Query | null
@@ -136,6 +157,12 @@ function AutomationTable(props: {
     { idField: '$id' },
   )
   const byId = useMemo(() => new Map(paged.rows.map((row) => [row.$id, row])), [paged.rows])
+  const columnSort = useListColumnSort<AutomationRow>({
+    sorts: NO_QUERY_SORTS,
+    rows: paged.rows,
+    pageSorts: AUTOMATION_PAGE_SORTS,
+    headers: AUTOMATION_PAGE_SORT_HEADERS,
+  })
   const columns: GridColDef[] = useMemo(
     () => [
       {
@@ -199,11 +226,12 @@ function AutomationTable(props: {
   return (
     <Stack spacing={1}>
       <Typography variant="subtitle2">{title}</Typography>
+      <ListQueryNotices refused={[]} notices={columnSort.notices} />
       <ListTable
-        rows={paged.rows}
+        rows={columnSort.rows}
         columns={columns}
         loading={paged.status === 'loading'}
-        disableColumnSorting
+        columnSort={columnSort}
         noRowsLabel={emptyLabel}
         onOpen={(id) => {
           const row = byId.get(String(id))

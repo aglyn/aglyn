@@ -342,7 +342,7 @@ describe('the campaigns table', () => {
     expect(containers.request.base).toEqual([
       { path: 'visibleTo', op: 'array-contains-any', value: ['org', 'host:host-1'] },
     ])
-    expect(planOf(containers).orderBy).toEqual({ path: 'createdAtMs', direction: 'desc' })
+    expect(planOf(containers).orderBy).toMatchObject({ path: 'createdAtMs', direction: 'desc' })
     // No single-sends query while the table shows campaigns.
     expect(listQueried['campaigns']).toBeUndefined()
     // The figures: the emails of the campaigns ON THE PAGE, as this site.

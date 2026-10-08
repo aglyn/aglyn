@@ -84,8 +84,19 @@ export const COMPANY_PREFIX_SEARCH = {
 
 /** The list's orders: newest change first, and by name under a prefix. */
 export const COMPANY_LIST_SORTS: readonly ListQuerySort[] = [
-  { path: 'updatedAt', direction: 'desc' },
-  { path: 'nameLower', direction: 'asc' },
+  { path: 'updatedAt', direction: 'desc', column: 'updatedAt', label: 'Updated' },
+  { path: 'nameLower', direction: 'asc', column: 'name', label: 'Company' },
+  /*
+   * The other header orders (AGL-3680), each `alone` — served with no filter
+   * or search on, by one `(visibleTo, field)` composite per direction. The
+   * columns not here sort the page: the owner's name, the tags, the picklist
+   * labels in the org's order, the contact count (a counter the links move)
+   * and the optional Account fields, which a company may not carry.
+   */
+  { path: 'nameLower', direction: 'desc', column: 'name', label: 'Company', alone: true },
+  { path: 'updatedAt', direction: 'asc', column: 'updatedAt', label: 'Updated', alone: true },
+  { path: 'nextTaskAtMs', direction: 'asc', column: 'nextTaskAtMs', label: 'Next activity', alone: true },
+  { path: 'nextTaskAtMs', direction: 'desc', column: 'nextTaskAtMs', label: 'Next activity', alone: true },
 ]
 
 export const COMPANY_LIST_DECLARATION: ListQueryDeclaration = {

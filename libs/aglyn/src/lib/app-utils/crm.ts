@@ -5194,6 +5194,42 @@ function leadSourceDirectionField(
     : {}
 }
 
+/*------------------------------------------
+ * THE HEADER SORT KEYS (AGL-3680).
+ *
+ * Every CRM table sorts by its column headers, and a header backed by a
+ * stored field sorts on the QUERY — but Firestore orders text by its bytes
+ * (every capital before every lower-case letter) and leaves a document
+ * WITHOUT the ordered field out of the answer. So a text column sorts by a
+ * key stored beside it on every record: the value as a reader compares it
+ * (lower-cased, single-spaced — `nameSearchKey`), `null` for none, never
+ * absent. A meaning with an order of its own (a task's priority) sorts by
+ * its rank. Computed from the record like every other list field, so each
+ * writer that stamps `crmListFields` stamps these, and the restamp after a
+ * patch keeps them level.
+ *-----------------------------------------*/
+
+/** A text value as a header sort compares it: its key, `null` for none. */
+export function crmSortKey(value: unknown): string | null {
+  return (typeof value === 'string' && SEARCH_KEY(value)) || null
+}
+
+/** A number as a header sort reads it: itself when finite, `null` for none. */
+export function crmSortNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/**
+ * The key a person's row sorts by under its Name header: the name, or the
+ * address the row shows in its place when there is none.
+ */
+export function crmPersonSortKey(record: Record<string, unknown>): string | null {
+  return crmSortKey(record['name']) ?? crmSortKey(record['email'])
+}
+
+/** The field a lead's and a contact's Name header sorts by. */
+export const CRM_NAME_SORT_FIELD = 'nameSortKey'
+
 /** What a lead's search box reads (AGL-3246). */
 export const CRM_LEAD_SEARCH_SOURCES = ['name', 'email', 'company', 'jobTitle', 'tags'] as const
 
@@ -5233,6 +5269,9 @@ export function crmLeadListFields(
   emailStatus: string
   industryKey: string | null
   ratingKey: string | null
+  nameSortKey: string | null
+  companyLower: string | null
+  jobTitleLower: string | null
 } {
   const lead = record as Record<string, unknown>
   return {
@@ -5249,6 +5288,10 @@ export function crmLeadListFields(
     // The Industry and Rating the Leads list filters by (AGL-3513).
     industryKey: crmPicklistKey(lead['industry']),
     ratingKey: crmPicklistKey(lead['rating']),
+    // The Lead, Company and Title headers' sort keys (AGL-3680).
+    nameSortKey: crmPersonSortKey(lead),
+    companyLower: crmSortKey(lead['company']),
+    jobTitleLower: crmSortKey(lead['jobTitle']),
   }
 }
 
@@ -5297,6 +5340,8 @@ export function crmDealListFields(record: object): {
   contactRoleContactIds: string[]
   scopedContactRoleContactIds: string[]
   contactRoleKeys: string[]
+  amountSortCents: number | null
+  expectedCloseSortAtMs: number | null
 } {
   const deal = record as Record<string, unknown>
   return {
@@ -5305,6 +5350,10 @@ export function crmDealListFields(record: object): {
     typeKey: crmPicklistKey(deal['type']),
     leadSourceKey: crmPicklistKey(deal['leadSource']),
     ...crmDealContactRoleListFields(deal),
+    // The Amount and Expected close headers' sort keys (AGL-3680): both
+    // optional on a deal, so stored beside them as `null` for none.
+    amountSortCents: crmSortNumber(deal['amountCents']),
+    expectedCloseSortAtMs: crmSortNumber(deal['expectedCloseAtMs']),
   }
 }
 
@@ -5335,13 +5384,32 @@ export function crmDealContactRoleListFields(deal: Record<string, unknown>): {
   }
 }
 
-/** What a task's search box reads: its title. */
+/** A task's priorities, lowest first: the rank its Priority header sorts by (AGL-3680). */
+export const CRM_TASK_PRIORITY_RANK: readonly CrmTaskPriority[] = ['low', 'normal', 'high']
+
+/** A task's priority rank — `normal`'s for one that names none. */
+export function crmTaskPriorityRank(priority: unknown): number {
+  const at = CRM_TASK_PRIORITY_RANK.indexOf(priority as CrmTaskPriority)
+  return at === -1 ? CRM_TASK_PRIORITY_RANK.indexOf('normal') : at
+}
+
+/**
+ * What a task's search box reads — its title — and what its Task and
+ * Priority headers sort by (AGL-3680): the title's key and the priority's
+ * rank.
+ */
 export function crmTaskListFields(record: object): {
   searchTokens: string[]
   scopedSearchTokens: string[]
+  titleLower: string | null
+  priorityRank: number
 } {
   const task = record as Record<string, unknown>
-  return crmSearchFields(task['visibleTo'], [task['title']])
+  return {
+    ...crmSearchFields(task['visibleTo'], [task['title']]),
+    titleLower: crmSortKey(task['title']),
+    priorityRank: crmTaskPriorityRank(task['priority']),
+  }
 }
 
 /*------------------------------------------
@@ -5485,6 +5553,7 @@ export function crmContactListFields(record: object): {
   scopedSearchTokens: string[]
   facetKeys: string[]
   emailStatus: string
+  nameSortKey: string | null
 } {
   const contact = record as Record<string, unknown>
   return {
@@ -5494,6 +5563,8 @@ export function crmContactListFields(record: object): {
     ]),
     facetKeys: crmContactFacetKeys(contact),
     emailStatus: crmEmailStatusKey(contact),
+    // The Contact header's sort key (AGL-3680): the canonical name, or the address.
+    nameSortKey: crmPersonSortKey(contact),
   }
 }
 
@@ -5516,8 +5587,18 @@ export const CRM_LIST_FIELD_INPUTS: Readonly<Record<CrmListCollection, readonly 
   ],
   contacts: ['visibleTo', ...CRM_CONTACT_SEARCH_SOURCES, 'phone', CONTACT_FACETS_FIELD, 'emailState'],
   companies: ['visibleTo', ...CRM_COMPANY_SEARCH_SOURCES, 'type', 'industry', 'rating', 'accountSource'],
-  deals: ['visibleTo', 'title', 'type', 'leadSource', 'contactRoles', 'contactId'],
-  crmTasks: ['visibleTo', 'title'],
+  deals: [
+    'visibleTo',
+    'title',
+    'type',
+    'leadSource',
+    'contactRoles',
+    'contactId',
+    // The header sort keys (AGL-3680).
+    'amountCents',
+    'expectedCloseAtMs',
+  ],
+  crmTasks: ['visibleTo', 'title', 'priority'],
 }
 
 /**

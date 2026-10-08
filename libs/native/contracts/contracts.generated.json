@@ -4,6 +4,42 @@
     "Values from the pure modules tools/scripts/native-contracts.json names."
   ],
   "AREA_SERVED_MAX": 20,
+  "BOOKING_FIELD_ASKS": [
+    "off",
+    "optional",
+    "required"
+  ],
+  "BOOKING_IN_PERSON_MAX_CENTS": 1000000,
+  "BOOKING_IN_PERSON_MIN_CENTS": 50,
+  "BOOKING_MAX_DAYS_AHEAD": 60,
+  "BOOKING_PRICE_DISPLAYS": [
+    "fixed",
+    "varies",
+    "estimate",
+    "contact"
+  ],
+  "BOOKING_PRICE_LABELS": {
+    "contact": "Contact for price",
+    "estimate": "Free estimate",
+    "varies": "Price varies"
+  },
+  "BOOKING_SERVICE_DESCRIPTION_MAX": 500,
+  "BOOKING_SERVICE_NAME_MAX": 80,
+  "BOOKING_STATE_LABELS": {
+    "canceled": "Canceled",
+    "confirmed": "Confirmed",
+    "expired": "Payment not finished",
+    "pendingPayment": "Awaiting payment"
+  },
+  "BOOKING_WEEKDAYS": [
+    "Sun",
+    "Mon",
+    "Tue",
+    "Wed",
+    "Thu",
+    "Fri",
+    "Sat"
+  ],
   "COMPONENT_LIST_QUERY": {
     "fields": [
       {
@@ -159,6 +195,7 @@
       "value": "TechArticle"
     }
   ],
+  "CROSS_MAX_DEPTH": 3,
   "DEFAULT_TITLE_PATTERN": "{{page.name}} {{site.separator}} {{site.name}}",
   "ENTRY_LIST_FILTER_HEADERS": {
     "authorId": "Author",
@@ -266,6 +303,12 @@
       "value": "scheduled"
     }
   ],
+  "EVENT_COVER_ALT_MAX_LENGTH": 300,
+  "EVENT_DEFAULT_DURATION_MS": 3600000,
+  "EVENT_DESCRIPTION_MAX_LENGTH": 2000,
+  "EVENT_LOCATION_MAX_LENGTH": 200,
+  "EVENT_ORGANIZER_MAX_LENGTH": 100,
+  "EVENT_TITLE_MAX_LENGTH": 150,
   "FORM_IN_USE": {
     "op": "==",
     "path": "retired",
@@ -431,6 +474,357 @@
     {
       "label": "Retired",
       "value": "true"
+    }
+  ],
+  "FUNCTION_BUILTIN_NAMES": [
+    "min",
+    "max",
+    "round",
+    "floor",
+    "ceil",
+    "abs",
+    "format"
+  ],
+  "FUNCTION_MAX_OPERATIONS": 1000,
+  "HOST_EVENTS": [
+    {
+      "label": "Form submitted",
+      "order": 10,
+      "payloadKeys": [
+        "formId",
+        "formName",
+        "path",
+        "and every submitted field by name"
+      ],
+      "pluginId": "forms",
+      "recipientActed": true,
+      "type": "formSubmission"
+    },
+    {
+      "label": "Page viewed",
+      "order": 20,
+      "payloadKeys": [
+        "path"
+      ],
+      "type": "pageView"
+    },
+    {
+      "label": "Member signed up",
+      "order": 30,
+      "payloadKeys": [
+        "email"
+      ],
+      "pluginId": "commerce",
+      "recipientActed": true,
+      "type": "memberSignUp"
+    },
+    {
+      "label": "Member signed in",
+      "order": 40,
+      "payloadKeys": [
+        "email"
+      ],
+      "pluginId": "commerce",
+      "type": "memberSignIn"
+    },
+    {
+      "label": "Member signed out",
+      "order": 50,
+      "pluginId": "commerce",
+      "type": "memberSignOut"
+    },
+    {
+      "label": "New lead",
+      "order": 60,
+      "payloadKeys": [
+        "leadId",
+        "email",
+        "name",
+        "source",
+        "hostId",
+        "formId",
+        "campaignIds"
+      ],
+      "pluginId": "crm",
+      "recipientActed": true,
+      "type": "lead"
+    },
+    {
+      "label": "New booking",
+      "order": 70,
+      "payloadKeys": [
+        "serviceName",
+        "email",
+        "startsAtMs"
+      ],
+      "pluginId": "bookings",
+      "recipientActed": true,
+      "type": "booking"
+    },
+    {
+      "label": "CRM task completed",
+      "order": 80,
+      "payloadKeys": [
+        "taskId",
+        "title",
+        "kind",
+        "priority",
+        "dueAtMs",
+        "completedAtMs",
+        "completedByUid",
+        "assigneeUid",
+        "createdByUid",
+        "contactId",
+        "companyId",
+        "dealId",
+        "taskHostId"
+      ],
+      "pluginId": "crm",
+      "type": "taskCompleted"
+    },
+    {
+      "label": "Contact created",
+      "order": 90,
+      "payloadKeys": [
+        "contactId",
+        "email",
+        "name",
+        "source",
+        "hostId",
+        "lifecycleStage",
+        "campaignIds",
+        "formId"
+      ],
+      "pluginId": "crm",
+      "type": "contactCreated"
+    },
+    {
+      "label": "Contact changed stage",
+      "order": 100,
+      "payloadKeys": [
+        "contactId",
+        "email",
+        "lifecycleStage",
+        "previousStage"
+      ],
+      "pluginId": "crm",
+      "type": "contactStageChanged"
+    },
+    {
+      "label": "Deal moved",
+      "order": 110,
+      "payloadKeys": [
+        "dealId",
+        "title",
+        "amountCents",
+        "currency",
+        "stageId",
+        "previousStageId",
+        "ownerUid",
+        "contactId",
+        "companyId"
+      ],
+      "pluginId": "crm",
+      "type": "dealStageChanged"
+    },
+    {
+      "label": "Deal won",
+      "order": 120,
+      "payloadKeys": [
+        "dealId",
+        "title",
+        "amountCents",
+        "currency",
+        "stageId",
+        "previousStageId",
+        "ownerUid",
+        "contactId",
+        "companyId"
+      ],
+      "pluginId": "crm",
+      "type": "dealWon"
+    },
+    {
+      "label": "Deal lost",
+      "order": 130,
+      "payloadKeys": [
+        "dealId",
+        "title",
+        "amountCents",
+        "currency",
+        "stageId",
+        "previousStageId",
+        "ownerUid",
+        "contactId",
+        "companyId",
+        "lostReason"
+      ],
+      "pluginId": "crm",
+      "type": "dealLost"
+    },
+    {
+      "label": "Order paid",
+      "order": 140,
+      "payloadKeys": [
+        "orderId",
+        "orderNumber",
+        "status",
+        "channel",
+        "email",
+        "name",
+        "totalCents",
+        "currency"
+      ],
+      "pluginId": "commerce",
+      "type": "orderPaid"
+    },
+    {
+      "label": "Order fulfilled",
+      "order": 141,
+      "payloadKeys": [
+        "orderId",
+        "orderNumber",
+        "status",
+        "email",
+        "name",
+        "totalCents",
+        "fulfillmentId",
+        "carrier",
+        "trackingNumber",
+        "trackingUrl"
+      ],
+      "pluginId": "commerce",
+      "type": "orderFulfilled"
+    },
+    {
+      "label": "Order delivered",
+      "order": 142,
+      "payloadKeys": [
+        "orderId",
+        "orderNumber",
+        "status",
+        "email",
+        "name",
+        "totalCents"
+      ],
+      "pluginId": "commerce",
+      "type": "orderDelivered"
+    },
+    {
+      "label": "Order refunded",
+      "order": 143,
+      "payloadKeys": [
+        "orderId",
+        "orderNumber",
+        "status",
+        "email",
+        "name",
+        "totalCents",
+        "refundCents",
+        "fullRefund"
+      ],
+      "pluginId": "commerce",
+      "type": "orderRefunded"
+    },
+    {
+      "label": "Order canceled",
+      "order": 144,
+      "payloadKeys": [
+        "orderId",
+        "orderNumber",
+        "status",
+        "email",
+        "name",
+        "totalCents"
+      ],
+      "pluginId": "commerce",
+      "type": "orderCancelled"
+    },
+    {
+      "label": "Return requested",
+      "order": 145,
+      "payloadKeys": [
+        "orderId",
+        "orderNumber",
+        "email",
+        "name",
+        "returnId",
+        "returnStatus"
+      ],
+      "pluginId": "commerce",
+      "type": "returnRequested"
+    },
+    {
+      "label": "Return approved",
+      "order": 146,
+      "payloadKeys": [
+        "orderId",
+        "orderNumber",
+        "email",
+        "name",
+        "returnId",
+        "returnStatus"
+      ],
+      "pluginId": "commerce",
+      "type": "returnApproved"
+    },
+    {
+      "label": "Return declined",
+      "order": 147,
+      "payloadKeys": [
+        "orderId",
+        "orderNumber",
+        "email",
+        "name",
+        "returnId",
+        "returnStatus"
+      ],
+      "pluginId": "commerce",
+      "type": "returnDeclined"
+    },
+    {
+      "label": "Return received",
+      "order": 148,
+      "payloadKeys": [
+        "orderId",
+        "orderNumber",
+        "email",
+        "name",
+        "returnId",
+        "returnStatus"
+      ],
+      "pluginId": "commerce",
+      "type": "returnReceived"
+    },
+    {
+      "label": "Return refunded",
+      "order": 149,
+      "payloadKeys": [
+        "orderId",
+        "orderNumber",
+        "email",
+        "name",
+        "returnId",
+        "returnStatus",
+        "returnRefundCents"
+      ],
+      "pluginId": "commerce",
+      "type": "returnRefunded"
+    },
+    {
+      "label": "Left a funnel",
+      "order": 150,
+      "payloadKeys": [
+        "funnelId",
+        "funnelName",
+        "step",
+        "stepLabel",
+        "nextStepLabel",
+        "afterHours",
+        "email"
+      ],
+      "pluginId": "funnels",
+      "type": "funnelLeft"
     }
   ],
   "LAYOUT_LIST_QUERY": {
@@ -1208,6 +1602,8 @@
     "status",
     "type"
   ],
+  "REMINDER_WINDOW_END_HOURS": 25,
+  "REMINDER_WINDOW_START_HOURS": 23,
   "SCOPED_SEARCH_JOIN": "~",
   "SEARCH_ENGINE_VERIFICATION_LABELS": {
     "bing": "Bing Webmaster Tools",
@@ -2684,5 +3080,6 @@
       "plugin": "Workflows",
       "pluginId": "workflows"
     }
-  ]
+  ],
+  "WORKFLOW_MAX_STEPS": 25
 }

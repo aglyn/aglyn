@@ -28,6 +28,7 @@
  *   a SEND (`orgs/{orgId}/campaigns/{id}`)
  *     `createdAtMs`      every list's order;
  *     `subjectTokens`    search and "Subject contains", from `subject`;
+ *     `subjectLower`     the Subject header's order (AGL-3680), from `subject`;
  *     `emailCampaignId`  `null` where it names no campaign — a single send,
  *                        which the lists ask for as `== null`;
  *
@@ -126,6 +127,8 @@ export function planSend(path, data, createTimeMs) {
   }
   const tokens = nameSearchTokens(data.subject)
   if (!sameSearchTokens(data.subjectTokens, tokens)) update.subjectTokens = tokens
+  const subjectKey = nameSearchKey(data.subject)
+  if (data.subjectLower !== subjectKey) update.subjectLower = subjectKey
   const container = data.emailCampaignId
   if (container === undefined || container === '') update.emailCampaignId = null
   return Object.keys(update).length ? { update } : { skip: 'current' }
@@ -172,31 +175,31 @@ function selfTest() {
     [
       'a sent send from before the fields',
       { subject: 'Spring Sale', status: 'sent', sentAt: sent },
-      { update: { createdAtMs: 1_700_000_000_000, subjectTokens: nameSearchTokens('Spring Sale'), emailCampaignId: null } },
+      { update: { createdAtMs: 1_700_000_000_000, subjectTokens: nameSearchTokens('Spring Sale'), subjectLower: 'spring sale', emailCampaignId: null } },
     ],
     [
       'a draft dates from its earliest moment, not its send time',
       { subject: 'Hi', emailCampaignId: 'c1', draftedAt: drafted, sentAt: sent, sendAtMs: 1_800_000_000_000 },
-      { update: { createdAtMs: 1_600_000_000_000, subjectTokens: nameSearchTokens('Hi') } },
+      { update: { createdAtMs: 1_600_000_000_000, subjectTokens: nameSearchTokens('Hi'), subjectLower: 'hi' } },
     ],
     [
       'a scheduled send with nothing but its due time',
       { subject: '', emailCampaignId: null, status: 'scheduled', sendAtMs: 1_800_000_000_000 },
-      { update: { createdAtMs: 1_800_000_000_000, subjectTokens: [] } },
+      { update: { createdAtMs: 1_800_000_000_000, subjectTokens: [], subjectLower: '' } },
     ],
     [
       'no moment at all falls back to the document',
       { subject: 'X', emailCampaignId: null, subjectTokens: nameSearchTokens('X') },
-      { update: { createdAtMs: 1_234 } },
+      { update: { createdAtMs: 1_234, subjectLower: 'x' } },
     ],
     [
       'a current send',
-      { subject: 'Hello there', subjectTokens: nameSearchTokens('Hello there'), emailCampaignId: 'c1', createdAtMs: 5 },
+      { subject: 'Hello there', subjectTokens: nameSearchTokens('Hello there'), subjectLower: 'hello there', emailCampaignId: 'c1', createdAtMs: 5 },
       { skip: 'current' },
     ],
     [
       'an empty-string container is a single send',
-      { subject: 'A', subjectTokens: ['a'], emailCampaignId: '', createdAtMs: 5 },
+      { subject: 'A', subjectTokens: ['a'], subjectLower: 'a', emailCampaignId: '', createdAtMs: 5 },
       { update: { emailCampaignId: null } },
     ],
   ]
@@ -310,7 +313,7 @@ async function main() {
   const args = parseDeployArgs({
     command: COMMAND,
     summary:
-      'Stamp createdAtMs, subjectTokens and a null emailCampaignId onto email sends, and ' +
+      'Stamp createdAtMs, subjectTokens, subjectLower and a null emailCampaignId onto email sends, and ' +
       'createdAtMs, nameLower and nameTokens onto campaigns, written before the ' +
       'Marketing lists queried them. Writes to the live project with --apply.',
     effect: { gerund: 'writing', past: 'WRITTEN', failure: 'could not run' },
