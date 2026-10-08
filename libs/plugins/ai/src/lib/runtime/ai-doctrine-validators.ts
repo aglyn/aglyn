@@ -4098,11 +4098,17 @@ export function detectPlanOverFreeWall(
   const keepHome = homeMin
     ? ` Keep the home page at / at ${homeMin} or more sections, and take the rest from the other ${pages > 2 ? 'pages' : 'page'}.`
     : ''
+  // A site start's redo keeps the plan full (AGL-3660): the wall's sections
+  // are its budget to use, and a redo told only "at most" cuts far under it.
+  const redo =
+    sitePages !== undefined && fits >= 2
+      ? `Plan ${fits - 1} to ${fits}: the ${fits} are the budget to use, not a ceiling to stay under. Draw a list's repeated items in one section, and take out only the sections the brief needs least.`
+      : `Plan at most ${fits}: draw a list's repeated items in one section, and leave out a section the brief does not ask for.`
   return [
     {
       rule: null,
       code: 'plan-over-free-wall',
-      message: `This plan asks for ${asked} sections, and ${job}${beside} fits ${fits} in the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits a Free workspace has a month. Plan at most ${fits}: draw a list's repeated items in one section, and leave out a section the brief does not ask for.${keepHome}`,
+      message: `This plan asks for ${asked} sections, and ${job}${beside} fits ${fits} in the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits a Free workspace has a month. ${redo}${keepHome}`,
       paths: plan.screens.map((_, index) => `screens[${index}].sections`),
     },
   ]

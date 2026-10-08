@@ -325,6 +325,36 @@ export function aiSiteHomeMinSections(input: { pages: number; across: number | n
   return input.across - others >= AI_SITE_HOME_MIN_SECTIONS ? AI_SITE_HOME_MIN_SECTIONS : 0
 }
 
+/**
+ * What a site start's plan is told to BUILD with (AGL-3660): the sections are
+ * a budget to use, never a ceiling to stay under. Told only "at most 8", the
+ * live prod start of 2026-10-08 planned a home of two sections, and Zach: "that
+ * didn't mean do as little as possible." On the Free taste the sentence shares
+ * the wall's sections out — a home of five or six, the other page two or
+ * three, about seven or eight in all; a paid start's home is asked to be rich.
+ * `min` is the home's fewest (`aiSiteHomeMinSections`), 0 where the plan
+ * plans no home or the wall cannot pay for a full one.
+ */
+export function aiSiteFullPlanSentence(input: { pages: number; across: number | null; min: number }): string {
+  const { across, min } = input
+  if (across === null) {
+    return min > 0
+      ? `Plan a full website, never a minimal one: a rich home page of ${min + 1} or more sections where the brief gives them, and every page with the sections it needs.`
+      : 'Plan a full website, never a minimal one: every page with the sections it needs.'
+  }
+  const lead = `The ${across} sections are the budget to use, not a ceiling to stay under: plan a full website, never a minimal one`
+  const others = Math.max(0, Math.floor(input.pages) - 1)
+  if (min <= 0 || across < min) return `${lead}.`
+  const homeHi = Math.max(min, Math.min(min + 1, across - others))
+  if (!others) return `${lead}: the home page at / with ${min} to ${homeHi} sections.`
+  const otherHi = Math.max(1, Math.min(3, Math.floor((across - min) / others)))
+  const otherLo = Math.max(1, Math.min(2, otherHi, Math.floor((across - homeHi) / others)))
+  const totalLo = Math.max(min + others, across - 1)
+  const range = (lo: number, hi: number) => (lo === hi ? `${lo}` : `${lo} to ${hi}`)
+  const pagesWord = others === 1 ? 'the other page' : 'each other page'
+  return `${lead}: the home page at / with ${range(min, homeHi)} sections, ${pagesWord} ${range(otherLo, otherHi)}, about ${range(totalLo, across)} in total.`
+}
+
 /** Whether a planned page is the site's home: the one at `/`. */
 export function aiSitePlanIsHome(screen: { slug: string }): boolean {
   const slug = screen.slug.trim()

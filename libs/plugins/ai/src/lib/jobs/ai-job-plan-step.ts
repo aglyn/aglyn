@@ -49,6 +49,7 @@ import {
   AI_SITE_PLAN_MAX_TOKENS,
   AI_SITE_HOME_BANDS,
   aiFreeSiteSectionsWithin,
+  aiSiteFullPlanSentence,
   aiSiteHomeMinSections,
   aiSiteNameSentence,
   aiSitePlanIsHome,
@@ -263,14 +264,18 @@ export function aiPlanSiteLines(
   const home = aiSitePlanHomeRule(inventory, capabilities)
   if (cap !== undefined) {
     lines.push(
-      `This is a Free workspace: plan at most ${cap} ${cap === 1 ? 'page' : 'pages'} — the home page at / and the one page the brief most needs, such as services, booking or contact — with at most ${home.across} sections across them.${aiPlanCanPlaceForm(inventory, capabilities) ? ' Put the contact form on one of them.' : ''}`,
+      `This is a Free workspace: plan at most ${cap} ${cap === 1 ? 'page' : 'pages'} — the home page at / and the one page the brief most needs, such as services, booking or contact — and ${home.across} sections across them.${aiPlanCanPlaceForm(inventory, capabilities) ? ' Put the contact form on one of them.' : ''}`,
     )
   }
   // A new site is a full website (AGL-3660): its home is planned as one, not
   // left to a ceiling the outline is free to stay far under.
-  if (home.min > 0 && !pages.some((page) => !page.replaceable && aiSitePlanIsHome(page))) {
+  const plansHome = !pages.some((page) => !page.replaceable && aiSitePlanIsHome(page))
+  if (home.min > 0 && plansHome) {
     lines.push(`The home page at / reads as a full website: at least ${home.min} sections — ${AI_SITE_HOME_BANDS}.`)
   }
+  // The sections are a budget to use (AGL-3660): a prod start of 2026-10-08
+  // read "at most 8" as leave to plan a home of two.
+  lines.push(aiSiteFullPlanSentence({ pages: cap ?? 1, across: home.across, min: plansHome ? home.min : 0 }))
   // A paid blog's first posts are written at /blog and linked from the
   // header (AGL-3660, AGL-3676), so the plan plans no page standing in for it.
   if (aiSiteContentPart(job.inputs ?? null, capabilities?.freeTaste === true) === 'posts') {

@@ -101,6 +101,7 @@ import {
   AI_SITE_THIN_HOME_CODE,
   aiFreeSiteCreditEstimate,
   aiFreeSiteSectionsWithin,
+  aiSiteFullPlanSentence,
   aiSiteHomeMinSections,
   aiSiteThinHomeViolations,
   aiSitePagesRefusal,
@@ -509,7 +510,7 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
     const freeEmpty = aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] })
     const free = aiSitePlanCapabilities(yogaJob(), freeEmpty) as AiPlanCapabilities
     const lines = aiPlanSiteLines(yogaJob(), empty, free).join('\n')
-    expect(lines).toContain(`with at most ${AI_FREE_SITE_MAX_SECTIONS} sections across them`)
+    expect(lines).toContain(`and ${AI_FREE_SITE_MAX_SECTIONS} sections across them`)
     expect(lines).toContain('reads as a full website: at least 5 sections')
     mockRunAiRequest.mockReset()
     const onEmpty = (screens: AiBuildPlan['screens']): AiBuildPlan => ({
@@ -524,6 +525,49 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
     const sent = mockRunAiRequest.mock.calls.map((call) => String((call[0] as SentRequest).messages.at(-1)?.content))
     expect(sent[1]).toContain('The home page has 2 sections')
     expect([outcome.review?.findings, (outcome.plan as AiJobPlan | undefined)?.screens[0].sections.length]).toEqual([[], 5])
+  })
+
+  describe('the sections are a budget to use, never a ceiling to stay under (AGL-3660)', () => {
+    // A prod start of 2026-10-08 planned a home of two sections under "at
+    // most 8"; Zach: "that didn't mean do as little as possible."
+    it('shares the Free wall out as a full website: a home of 5 to 6, the other page 2 to 3, about 7 to 8 in all', () => {
+      expect(aiSiteFullPlanSentence({ pages: 2, across: 8, min: 5 })).toBe(
+        'The 8 sections are the budget to use, not a ceiling to stay under: plan a full website, never a minimal one: the home page at / with 5 to 6 sections, the other page 2 to 3, about 7 to 8 in total.',
+      )
+      const empty = emptyAiSiteInventory('host-1')
+      const free = aiSitePlanCapabilities(yogaJob(), aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] })) as AiPlanCapabilities
+      const lines = aiPlanSiteLines(yogaJob(), empty, free).join('\n')
+      expect(lines).toContain('are the budget to use, not a ceiling to stay under')
+      expect(lines).toContain('the home page at / with 5 to 6 sections, the other page 2 to 3, about 7 to 8 in total')
+      expect(lines).not.toContain('at most 8 sections')
+    })
+
+    it('asks a paid start for a rich home, never a minimal one', () => {
+      const paid = aiPlanSiteLines(siteJob({ pages: 5 }), NEW_SITE, aiSitePlanCapabilities(siteJob({ pages: 5 }), PAID)).join('\n')
+      expect(paid).toContain('Plan a full website, never a minimal one: a rich home page of 6 or more sections')
+      expect(aiSiteFullPlanSentence({ pages: 5, across: null, min: 0 })).not.toContain('home page')
+    })
+
+    it('names no home share where the owner’s home stays or the wall cannot pay for a full one', () => {
+      expect(aiSiteFullPlanSentence({ pages: 2, across: 4, min: 0 })).toBe(
+        'The 4 sections are the budget to use, not a ceiling to stay under: plan a full website, never a minimal one.',
+      )
+      expect(aiPlanSiteLines(yogaJob(), EDITED_SITE, aiSitePlanCapabilities(yogaJob(), FREE) as AiPlanCapabilities).join('\n')).not.toContain(
+        'the home page at / with',
+      )
+    })
+
+    it('the wall’s redo asks for the budget, not as few as fit', () => {
+      const empty = emptyAiSiteInventory('host-1')
+      const free = aiSitePlanCapabilities(yogaJob(), aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] })) as AiPlanCapabilities
+      const [violation] = validateAiBuildPlan(AI_YOGA_SITE_PLAN_FIRST_ANSWER, empty, null, free).filter(
+        (entry) => entry.code === 'plan-over-free-wall',
+      )
+      expect(violation?.message).toContain(
+        `Plan ${AI_FREE_SITE_MAX_SECTIONS - 1} to ${AI_FREE_SITE_MAX_SECTIONS}: the ${AI_FREE_SITE_MAX_SECTIONS} are the budget to use, not a ceiling to stay under.`,
+      )
+      expect(violation?.message).not.toContain('Plan at most')
+    })
   })
 
   describe('the recorded yoga redo (2026-10-08): told only "plan at most 8", it cut a home of 6 to 4', () => {
