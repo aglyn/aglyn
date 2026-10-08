@@ -84,6 +84,32 @@ public enum ApnsEnvironment: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum ContentSchemaType: String, Codable, CaseIterable, Hashable, Sendable {
+  case article = "Article"
+  case blogPosting = "BlogPosting"
+  case newsArticle = "NewsArticle"
+  case techArticle = "TechArticle"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct ContentSchemaTypeOptionsItem: Codable, Hashable, Sendable {
+  public var description: String
+  public var label: String
+  public var value: String
+
+  public init(description: String, label: String, value: String) {
+    self.description = description
+    self.label = label
+    self.value = value
+  }
+}
+
 public struct CrmDealStage: Codable, Hashable, Sendable {
   public var forecastCategory: CrmForecastCategory?
   public var id: String
@@ -127,6 +153,16 @@ public enum CrmForecastCategory: String, Codable, CaseIterable, Hashable, Sendab
   public init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct EntryStatusOptionsItem: Codable, Hashable, Sendable {
+  public var label: String
+  public var value: String
+
+  public init(label: String, value: String) {
+    self.label = label
+    self.value = value
   }
 }
 
@@ -681,14 +717,38 @@ public struct ListQueryPlan: Codable, Hashable, Sendable {
   public var refused: [ListQueryRefusal]
   public var searched: String?
   public var served: [ListFilterRequest]
+  public var sortFallback: ListQueryPlanSortFallback?
 
-  public init(filters: [ListQueryFilter], notices: [String], orderBy: ListQuerySort, refused: [ListQueryRefusal], searched: String? = nil, served: [ListFilterRequest]) {
+  public init(filters: [ListQueryFilter], notices: [String], orderBy: ListQuerySort, refused: [ListQueryRefusal], searched: String? = nil, served: [ListFilterRequest], sortFallback: ListQueryPlanSortFallback? = nil) {
     self.filters = filters
     self.notices = notices
     self.orderBy = orderBy
     self.refused = refused
     self.searched = searched
     self.served = served
+    self.sortFallback = sortFallback
+  }
+}
+
+public struct ListQueryPlanSortFallback: Codable, Hashable, Sendable {
+  public var asked: ListQuerySort
+  public var reason: ListQueryPlanSortFallbackReason
+
+  public init(asked: ListQuerySort, reason: ListQueryPlanSortFallbackReason) {
+    self.asked = asked
+    self.reason = reason
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum ListQueryPlanSortFallbackReason: String, Codable, CaseIterable, Hashable, Sendable {
+  case alone = "alone"
+  case range = "range"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
@@ -717,13 +777,17 @@ public struct ListQueryRequest: Codable, Hashable, Sendable {
 }
 
 public struct ListQuerySort: Codable, Hashable, Sendable {
+  public var alone: Bool?
   public var column: String?
   public var direction: ListQuerySortDirection
+  public var label: String?
   public var path: String
 
-  public init(column: String? = nil, direction: ListQuerySortDirection, path: String) {
+  public init(alone: Bool? = nil, column: String? = nil, direction: ListQuerySortDirection, label: String? = nil, path: String) {
+    self.alone = alone
     self.column = column
     self.direction = direction
+    self.label = label
     self.path = path
   }
 }
@@ -737,6 +801,16 @@ public enum ListQuerySortDirection: String, Codable, CaseIterable, Hashable, Sen
   public init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct LocalBusinessTypeOptionsItem: Codable, Hashable, Sendable {
+  public var label: String
+  public var value: String
+
+  public init(label: String, value: String) {
+    self.label = label
+    self.value = value
   }
 }
 
@@ -1627,12 +1701,55 @@ public struct SiteFilterOptionsHasCustomDomainItem: Codable, Hashable, Sendable 
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum TenantEmailControl: String, Codable, CaseIterable, Hashable, Sendable {
+  case besigner = "besigner"
+  case external = "external"
+  case fixed = "fixed"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct TenantEmailEntry: Codable, Hashable, Sendable {
+  public var authoredIn: String?
+  public var control: TenantEmailControl?
+  public var defaultSubject: String?
+  public var description: String?
+  public var footerReason: String?
+  public var key: String?
+  public var name: String?
+  public var plugin: String?
+  public var pluginId: String?
+  public var requiresFeature: String?
+
+  public init(authoredIn: String? = nil, control: TenantEmailControl? = nil, defaultSubject: String? = nil, description: String? = nil, footerReason: String? = nil, key: String? = nil, name: String? = nil, plugin: String? = nil, pluginId: String? = nil, requiresFeature: String? = nil) {
+    self.authoredIn = authoredIn
+    self.control = control
+    self.defaultSubject = defaultSubject
+    self.description = description
+    self.footerReason = footerReason
+    self.key = key
+    self.name = name
+    self.plugin = plugin
+    self.pluginId = pluginId
+    self.requiresFeature = requiresFeature
+  }
+}
+
 /// The values in contracts.generated.json, keyed as the TypeScript exports are.
 public struct ContractValues: Codable, Hashable, Sendable {
+  public let areaServedMax: Int
   public let campaignEmailsQuery: ListQueryDeclaration
   public let companyListDeclaration: ListQueryDeclaration
+  public let componentListQuery: ListQueryDeclaration
   public let contactLifecycleStageLabels: [String: String]
   public let contactListDeclaration: ListQueryDeclaration
+  public let contentSchemaTypeDefault: ContentSchemaType
+  public let contentSchemaTypeOptions: [ContentSchemaTypeOptionsItem]
   public let crmActivitiesPerRecordCeiling: Int
   public let crmActivityDirectionLabels: [String: String]
   public let crmActivityKindLabels: [String: String]
@@ -1644,8 +1761,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let crmTaskKindLabels: [String: String]
   public let dealListDeclaration: ListQueryDeclaration
   public let defaultDealStages: [CrmDealStage]
+  public let defaultTitlePattern: String
   public let emailListQuery: ListQueryDeclaration
   public let emailTemplateQuery: ListQueryDeclaration
+  public let entryListFilterHeaders: [String: String]
+  public let entryListQuery: ListQueryDeclaration
+  public let entryStatusOptions: [EntryStatusOptionsItem]
   public let experimentListQuery: ListQueryDeclaration
   public let formInUse: ListQueryFilter
   public let formLeadRoutingOptions: [FormLeadRoutingOptionsItem]
@@ -1653,12 +1774,14 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let formListQuery: ListQueryDeclaration
   public let formScopedSubmissionListQuery: ListQueryDeclaration
   public let formStatusOptions: [FormStatusOptionsItem]
+  public let layoutListQuery: ListQueryDeclaration
   public let leadListDeclaration: ListQueryDeclaration
   public let leadListQuery: ListQueryDeclaration
   public let leadSourceOptions: [ListFilterOption]
   public let listMemberQuery: ListQueryDeclaration
   public let listQueryDisjunctions: Int
   public let listQueryIdPath: String
+  public let localBusinessTypeOptions: [LocalBusinessTypeOptionsItem]
   public let mediaAltMaxLength: Int
   public let mediaAltOptions: [ListFilterOption]
   public let mediaDisjunctionLimit: Int
@@ -1710,6 +1833,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let outreachSequenceListQuery: ListQueryDeclaration
   public let outreachSequenceNameMax: Int
   public let outreachTaskTitleMax: Int
+  public let paymentAcceptedMaxLength: Int
+  public let priceRangeMaxLength: Int
   public let productListBase: [ListQueryFilter]
   public let productListHeaders: [String: String]
   public let productListOptions: [String: [ListFilterOption]]
@@ -1718,6 +1843,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let replyBodyMax: Int
   public let replySubjectMax: Int
   public let scopedSearchJoin: String
+  public let searchEngineVerificationLabels: [String: String]
+  public let searchEngineVerificationMetaNames: [String: String]
   public let siteCardsPageSize: Int
   public let siteFilterHeaders: [String: String]
   public let siteFilterOptions: SiteFilterOptions
@@ -1728,12 +1855,21 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let submissionReadOptions: [ListFilterOption]
   public let suppressionListQuery: ListQueryDeclaration
   public let taskListDeclaration: ListQueryDeclaration
+  public let templateKindOptions: [ListFilterOption]
+  public let templateListBase: [ListQueryFilter]
+  public let templateListQuery: ListQueryDeclaration
+  public let tenantEmailCollection: String
+  public let tenantEmails: [TenantEmailEntry]
 
   enum CodingKeys: String, CodingKey {
+    case areaServedMax = "AREA_SERVED_MAX"
     case campaignEmailsQuery = "CAMPAIGN_EMAILS_QUERY"
     case companyListDeclaration = "COMPANY_LIST_DECLARATION"
+    case componentListQuery = "COMPONENT_LIST_QUERY"
     case contactLifecycleStageLabels = "CONTACT_LIFECYCLE_STAGE_LABELS"
     case contactListDeclaration = "CONTACT_LIST_DECLARATION"
+    case contentSchemaTypeDefault = "CONTENT_SCHEMA_TYPE_DEFAULT"
+    case contentSchemaTypeOptions = "CONTENT_SCHEMA_TYPE_OPTIONS"
     case crmActivitiesPerRecordCeiling = "CRM_ACTIVITIES_PER_RECORD_CEILING"
     case crmActivityDirectionLabels = "CRM_ACTIVITY_DIRECTION_LABELS"
     case crmActivityKindLabels = "CRM_ACTIVITY_KIND_LABELS"
@@ -1745,8 +1881,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case crmTaskKindLabels = "CRM_TASK_KIND_LABELS"
     case dealListDeclaration = "DEAL_LIST_DECLARATION"
     case defaultDealStages = "DEFAULT_DEAL_STAGES"
+    case defaultTitlePattern = "DEFAULT_TITLE_PATTERN"
     case emailListQuery = "EMAIL_LIST_QUERY"
     case emailTemplateQuery = "EMAIL_TEMPLATE_QUERY"
+    case entryListFilterHeaders = "ENTRY_LIST_FILTER_HEADERS"
+    case entryListQuery = "ENTRY_LIST_QUERY"
+    case entryStatusOptions = "ENTRY_STATUS_OPTIONS"
     case experimentListQuery = "EXPERIMENT_LIST_QUERY"
     case formInUse = "FORM_IN_USE"
     case formLeadRoutingOptions = "FORM_LEAD_ROUTING_OPTIONS"
@@ -1754,12 +1894,14 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case formListQuery = "FORM_LIST_QUERY"
     case formScopedSubmissionListQuery = "FORM_SCOPED_SUBMISSION_LIST_QUERY"
     case formStatusOptions = "FORM_STATUS_OPTIONS"
+    case layoutListQuery = "LAYOUT_LIST_QUERY"
     case leadListDeclaration = "LEAD_LIST_DECLARATION"
     case leadListQuery = "LEAD_LIST_QUERY"
     case leadSourceOptions = "LEAD_SOURCE_OPTIONS"
     case listMemberQuery = "LIST_MEMBER_QUERY"
     case listQueryDisjunctions = "LIST_QUERY_DISJUNCTIONS"
     case listQueryIdPath = "LIST_QUERY_ID_PATH"
+    case localBusinessTypeOptions = "LOCAL_BUSINESS_TYPE_OPTIONS"
     case mediaAltMaxLength = "MEDIA_ALT_MAX_LENGTH"
     case mediaAltOptions = "MEDIA_ALT_OPTIONS"
     case mediaDisjunctionLimit = "MEDIA_DISJUNCTION_LIMIT"
@@ -1811,6 +1953,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case outreachSequenceListQuery = "OUTREACH_SEQUENCE_LIST_QUERY"
     case outreachSequenceNameMax = "OUTREACH_SEQUENCE_NAME_MAX"
     case outreachTaskTitleMax = "OUTREACH_TASK_TITLE_MAX"
+    case paymentAcceptedMaxLength = "PAYMENT_ACCEPTED_MAX_LENGTH"
+    case priceRangeMaxLength = "PRICE_RANGE_MAX_LENGTH"
     case productListBase = "PRODUCT_LIST_BASE"
     case productListHeaders = "PRODUCT_LIST_HEADERS"
     case productListOptions = "PRODUCT_LIST_OPTIONS"
@@ -1819,6 +1963,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case replyBodyMax = "REPLY_BODY_MAX"
     case replySubjectMax = "REPLY_SUBJECT_MAX"
     case scopedSearchJoin = "SCOPED_SEARCH_JOIN"
+    case searchEngineVerificationLabels = "SEARCH_ENGINE_VERIFICATION_LABELS"
+    case searchEngineVerificationMetaNames = "SEARCH_ENGINE_VERIFICATION_META_NAMES"
     case siteCardsPageSize = "SITE_CARDS_PAGE_SIZE"
     case siteFilterHeaders = "SITE_FILTER_HEADERS"
     case siteFilterOptions = "SITE_FILTER_OPTIONS"
@@ -1829,5 +1975,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case submissionReadOptions = "SUBMISSION_READ_OPTIONS"
     case suppressionListQuery = "SUPPRESSION_LIST_QUERY"
     case taskListDeclaration = "TASK_LIST_DECLARATION"
+    case templateKindOptions = "TEMPLATE_KIND_OPTIONS"
+    case templateListBase = "TEMPLATE_LIST_BASE"
+    case templateListQuery = "TEMPLATE_LIST_QUERY"
+    case tenantEmailCollection = "TENANT_EMAIL_COLLECTION"
+    case tenantEmails = "TENANT_EMAILS"
   }
 }

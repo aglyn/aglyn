@@ -84,7 +84,15 @@ Every setting can be overridden with `-Paglyn.<name>=…` or `AGLYN_<NAME>`:
 ./gradlew :desktop:snapshots -Paglyn.snapshotDir=/tmp/shots   # offscreen PNGs of every screen
 ./gradlew :desktop:posSnapshots -Paglyn.snapshotDir=/tmp/shots # the register driven through a sale, offscreen
 ./gradlew :desktop:packageMsi                       # on Windows
+./gradlew :desktop:launchCheck [-Paglyn.desktopApp=pos]  # starts the PACKAGED app and fails if it does not start
 ```
+
+A package carries its own jlink runtime with only the JDK modules listed in
+`desktop/build.gradle.kts` (`DESKTOP_RUNTIME_MODULES`). Every package task runs
+`:desktop:launchCheck` first, which launches the packaged launcher with
+`--launch-check` (the shell rendered offscreen, then exit 0), so a missing
+module fails the build instead of the app. After adding a dependency, rerun
+`./gradlew :desktop:suggestRuntimeModules` and keep the list a superset.
 
 Desktop signs in through the Identity Toolkit REST API and reads Firestore
 through its REST API with the person's own ID token (the same rules). A

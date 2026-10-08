@@ -1,17 +1,10 @@
 ---
 sidebar_position: 4.5
 title: Tax services (Avalara AvaTax and TaxJar)
-description: Connect your own Avalara AvaTax or TaxJar account so checkout and the register charge the sales tax it calculates, and your paid orders and refunds are recorded there. Rolling out.
-unlisted: true
+description: Connect your own Avalara AvaTax or TaxJar account so checkout and the register charge the sales tax it calculates, and your paid orders and refunds are recorded there.
 ---
 
 # Tax services: Avalara AvaTax and TaxJar
-
-:::caution Rolling out
-Tax services are **not yet available** on aglyn.com-hosted workspaces. Until
-they are, no **Tax service** card appears in your store's settings, and your
-store taxes sales at its own rates exactly as before.
-:::
 
 If you already calculate sales tax in an **Avalara AvaTax** or **TaxJar**
 account, connect it and Aglyn asks it for the tax on every sale — at your

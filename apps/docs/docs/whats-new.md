@@ -10,7 +10,26 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — bookings in the API (newest)
+## October 2026 — your own email platform, kept in step (newest)
+
+- **[Mailchimp, Klaviyo and Omnisend](marketing-and-automation/email-campaigns/email-platforms.md)** —
+  connect your own account to a site with its API key and your contacts stay in
+  step both ways: everyone the site may market to is added with their name, tags and
+  order history, an unsubscribe on either side reaches the other, and Klaviyo and
+  Omnisend receive your started checkouts and orders for their abandoned-cart and
+  post-purchase flows. A sync log under each connection shows what ran and anything
+  that needs you.
+
+## October 2026 — your own tax service
+
+- **[Avalara AvaTax and TaxJar](commerce-and-bookings/commerce/tax-services.md)** —
+  connect your own AvaTax or TaxJar account and checkout and the register charge the
+  sales tax it calculates, with product tax codes and exempt customers. Paid orders,
+  refunds and register returns are recorded in your account. If the service does not
+  answer in time, the sale is taxed at your own rates and the order says so. You remain
+  responsible for registering, filing and paying your sales tax.
+
+## October 2026 — bookings in the API
 
 - **[Bookings over the API](/api/resources/bookings)** — read a site's bookings with
   a key that has the new `bookings:read` scope: the service, the time and time zone,
@@ -94,45 +113,6 @@ for the how-to.
   shipped. Tracking lands on the order as the service ships, each order shows what
   the service charged against what your buyer paid, test orders stay drafts, and a
   canceled or fully refunded order is canceled at the service too.
--->
-
-<!--
-  AGL-3631 — Tax services are built and hidden until a deployment sets
-  TAX_ENGINES_TOKEN_KEY (the key merchants' credentials are sealed under; no
-  vendor account of Aglyn's is needed). This entry is held unpublished, like the
-  guide it links (`unlisted: true`): once the key is set on aglyn.com, remove this
-  comment's markers, move "(newest)" here from the top heading, and delete
-  `unlisted: true` and the "Rolling out" note from
-  commerce-and-bookings/commerce/tax-services.md.
-
-## October 2026 — your own tax service
-
-- **[Avalara AvaTax and TaxJar](commerce-and-bookings/commerce/tax-services.md)** —
-  connect your own AvaTax or TaxJar account and checkout and the register charge the
-  sales tax it calculates, with product tax codes and exempt customers. Paid orders,
-  refunds and register returns are recorded in your account. If the service does not
-  answer in time, the sale is taxed at your own rates and the order says so. You remain
-  responsible for registering, filing and paying your sales tax.
--->
-
-<!--
-  AGL-3639 — Email platform connections are built and hidden until a deployment
-  sets MARKETING_PLATFORMS_TOKEN_KEY on the console (the key merchants' API keys
-  are sealed under; no vendor account of Aglyn's is needed). This entry is held
-  unpublished, like the guide it links (`unlisted: true`): once the key is set on
-  aglyn.com, remove this comment's markers, move "(newest)" here from the top
-  heading, and delete `unlisted: true` and the "Rolling out" note from
-  marketing-and-automation/email-campaigns/email-platforms.md.
-
-## October 2026 — your own email platform, kept in step
-
-- **[Mailchimp, Klaviyo and Omnisend](marketing-and-automation/email-campaigns/email-platforms.md)** —
-  connect your own account to a site with its API key and your contacts stay in
-  step both ways: everyone the site may market to is added with their name, tags and
-  order history, an unsubscribe on either side reaches the other, and Klaviyo and
-  Omnisend receive your started checkouts and orders for their abandoned-cart and
-  post-purchase flows. A sync log under each connection shows what ran and anything
-  that needs you.
 -->
 
 <!--

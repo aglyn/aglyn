@@ -1841,6 +1841,77 @@
         }
       ]
     },
+    "extractSearchEngineVerificationToken": {
+      "module": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
+      "cases": [
+        {
+          "args": [
+            "abc_DEF-123"
+          ],
+          "result": "abc_DEF-123"
+        },
+        {
+          "args": [
+            "  token-with-space  "
+          ],
+          "result": "token-with-space"
+        },
+        {
+          "args": [
+            "<meta name=\"google-site-verification\" content=\"g00gleTok_en\" />"
+          ],
+          "result": "g00gleTok_en"
+        },
+        {
+          "args": [
+            "<meta name='msvalidate.01' content='B1NGHEX0123456789ABCDEF0123456789'>"
+          ],
+          "result": "B1NGHEX0123456789ABCDEF0123456789"
+        },
+        {
+          "args": [
+            "<meta name=google-site-verification content=bare>"
+          ],
+          "result": "bare"
+        },
+        {
+          "args": [
+            "content=\"only-content\""
+          ],
+          "result": "only-content"
+        },
+        {
+          "args": [
+            "<meta name=\"other\">"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            "has spaces inside"
+          ],
+          "result": "has spaces inside"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          "result": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
     "formatOrderMoney": {
       "module": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
       "cases": [
@@ -2082,6 +2153,77 @@
               ],
               "lowStockThreshold": -1
             }
+          ],
+          "result": false
+        }
+      ]
+    },
+    "isSearchEngineVerificationToken": {
+      "module": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
+      "cases": [
+        {
+          "args": [
+            "abc_DEF-123"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "  token-with-space  "
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "<meta name=\"google-site-verification\" content=\"g00gleTok_en\" />"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "<meta name='msvalidate.01' content='B1NGHEX0123456789ABCDEF0123456789'>"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "<meta name=google-site-verification content=bare>"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "content=\"only-content\""
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "<meta name=\"other\">"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "has spaces inside"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           ],
           "result": false
         }

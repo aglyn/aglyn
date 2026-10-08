@@ -21,7 +21,7 @@ import {
   AI_MODEL_CATALOG,
   estimateAiBilledUsd,
 } from '../providers/catalog'
-import type { AiImageMode } from '../providers/image-contract'
+import type { AiImageMode, AiImageSize } from '../providers/image-contract'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 
 /**
@@ -31,7 +31,8 @@ import { assistCreditsFromUsd } from '../usage/assist-credits'
  *
  * Each is an ESTIMATE at nominal usage, priced at the billed rates:
  *
- * - a photo is one picture at its per-picture rate, plus a prompt and the
+ * - a photo is one picture at its per-picture rate for the size the plan
+ *   makes (512 px on Free, 1K on a paid plan), plus a prompt and the
  *   thinking Google's model does before it draws;
  * - an illustration is the text provider's answer — the instructions, the
  *   description, and a few thousand tokens of SVG.
@@ -70,9 +71,21 @@ export const AI_MEDIA_SVG_NOMINAL_USAGE: AiUsage = {
 export const AI_MEDIA_SVG_ESTIMATE_MODEL =
   AI_MODEL_CATALOG.find((entry) => entry.tier === 'fast')?.id ?? AI_MODEL_CATALOG[0].id
 
-/** The credits one picture is expected to draw in `mode`, on `model`. */
-export function aiMediaCreditsPerPicture(mode: AiImageMode, model?: string): number {
+/**
+ * The credits one picture is expected to draw in `mode`, on `model`, at
+ * `size` for a photo (1K when absent; an illustration has no size).
+ */
+export function aiMediaCreditsPerPicture(
+  mode: AiImageMode,
+  model?: string,
+  size?: AiImageSize,
+): number {
   return mode === 'photo'
-    ? assistCreditsFromUsd(estimateAiBilledUsd(AI_MEDIA_PHOTO_NOMINAL_USAGE, model ?? AI_IMAGE_DEFAULT_MODEL))
+    ? assistCreditsFromUsd(
+        estimateAiBilledUsd(
+          { ...AI_MEDIA_PHOTO_NOMINAL_USAGE, ...(size ? { imageSize: size } : {}) },
+          model ?? AI_IMAGE_DEFAULT_MODEL,
+        ),
+      )
     : assistCreditsFromUsd(estimateAiBilledUsd(AI_MEDIA_SVG_NOMINAL_USAGE, model ?? AI_MEDIA_SVG_ESTIMATE_MODEL))
 }

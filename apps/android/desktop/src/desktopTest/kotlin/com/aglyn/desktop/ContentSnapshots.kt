@@ -18,7 +18,7 @@ import java.io.File
 
 /**
  * A development tool, not a test: the content areas (sites, pages, media,
- * forms and submissions, data) rendered offscreen against the seeded
+ * components, layouts, templates, setup, content, forms and submissions, data) rendered offscreen against the seeded
  * emulator stack named by -Daglyn.*, at phone (420), tablet (900) and
  * desktop (1280) widths, light and dark. `-Daglyn.snapshotOnly=media` keeps
  * the shots whose name contains it.
@@ -45,6 +45,15 @@ fun main() = runBlocking {
     Shot("pages", "site.pages", mapOf("page" to "page-about")),
     Shot("media", "site.media", mapOf("media" to "seed-media-storefront")),
     Shot("media-workspace", "site.media", mapOf("tab" to "org", "media" to "seed-media-brand-mark")),
+    Shot("components", "site.components", mapOf("id" to "cmp-hero")),
+    Shot("layouts", "site.layouts", mapOf("id" to "lay-main")),
+    Shot("templates", "site.templates", mapOf("id" to "tpl-service")),
+    Shot("setup-details", "site.setup", mapOf("section" to "details")),
+    Shot("setup-seo", "site.setup", mapOf("section" to "seo")),
+    Shot("setup-tracking", "site.setup", mapOf("section" to "tracking")),
+    Shot("setup-theme", "site.theme"),
+    Shot("setup-emails", "site.setup", mapOf("section" to "emails")),
+    Shot("content", "site.content", mapOf("collectionSlug" to "blog", "entryId" to "post-spring")),
     Shot("forms", "forms.list", mapOf("form" to "contact")),
     Shot("submissions", "inbox.submissions", mapOf("formId" to "contact", "formName" to "Contact us", "submission" to "sub-priya")),
   ).filter { only == null || it.name.contains(only) }
