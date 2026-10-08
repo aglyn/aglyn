@@ -104,10 +104,17 @@ describe('every product write path carries them', () => {
     'libs/plugins/commerce/src/lib/components/console/products-hub-card.component.tsx'
   const ROUTE = 'apps/console/app/api/hosts/resources/route.ts'
   const CONFIG = 'plugins.config.json'
+  // The dialog's and the Adjust stock dialog's payloads, shared with the
+  // apps' save and stock routes (AGL-3652).
+  const WRITE = 'libs/plugins/commerce/src/lib/model/product-write.ts'
+  const APP_ROUTE = 'libs/plugins/commerce/src/lib/server/products-write.ts'
 
   it('the editor dialog derives the name rather than assigning it', () => {
-    const source = read(DIALOG)
-    expect(source).toContain('CommerceModel.productSearchFields({')
+    // The dialog's payload is `productSaveFields`, which the apps' save route
+    // runs too; the dialog and that route must both go through it.
+    expect(read(DIALOG)).toContain('CommerceModel.productSaveFields(')
+    expect(read(APP_ROUTE)).toContain('productSaveFields(product, nowMs)')
+    const source = read(WRITE)
     /*
      * The payload must not ALSO set a bare `name:` of its own, which would win
      * or lose by spread order — the exact bug this guards is a rename that
@@ -117,12 +124,10 @@ describe('every product write path carries them', () => {
      * as an argument to the helper is nested one level deeper, and matching
      * that would flag the correct code.
      */
-    const base = source.slice(
-      source.indexOf('const base = {'),
-      source.indexOf('    try {'),
-    )
-    expect(base).toContain('productSearchFields({')
-    expect(base).not.toMatch(/\n {6}name:/)
+    const start = source.indexOf('export function productSaveFields(')
+    const body = source.slice(start, source.indexOf('\n}\n', start))
+    expect(body).toContain('productSearchFields({')
+    expect(body).not.toMatch(/\n {4}name:/)
   })
 
   it('the import derives them too', () => {
@@ -172,17 +177,28 @@ describe('every product write path carries them', () => {
       'libs/plugins/commerce/src/lib/server/reserve-stock.ts',
       'libs/plugins/commerce/src/lib/server/cancel-order.ts',
       'libs/plugins/commerce/src/lib/transfer/products.server.ts',
-      HUB,
-      DIALOG,
+      WRITE,
     ]) {
       expect(read(path)).toContain('productStockFields(')
     }
+    // The editor and the Adjust stock dialog, and the apps' routes, write
+    // stock through `product-write.ts` (AGL-3652).
+    expect(read(DIALOG)).toContain('CommerceModel.productSaveFields(')
+    expect(read(HUB)).toContain('CommerceModel.stockAdjustmentWrite(')
+    expect(read(APP_ROUTE)).toContain('stockAdjustmentWrite(product, productId,')
+    const save = read(WRITE)
+    expect(save.slice(save.indexOf('export function productSaveFields('))).toContain(
+      'productStockFields(',
+    )
+    expect(save.slice(save.indexOf('export function stockAdjustmentWrite('))).toContain(
+      'productStockFields(',
+    )
   })
 
   it('THE CONTROL: those files exist and mention products', () => {
     // Otherwise every assertion above passes on an empty string the day a
     // file is renamed.
-    for (const path of [DIALOG, HUB, ROUTE]) {
+    for (const path of [DIALOG, HUB, ROUTE, WRITE, APP_ROUTE]) {
       expect(read(path).length).toBeGreaterThan(1000)
     }
     expect(read(CONFIG)).toContain('"name": "products"')

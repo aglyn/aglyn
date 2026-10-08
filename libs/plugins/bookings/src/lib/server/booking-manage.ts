@@ -29,6 +29,8 @@ import { getSiteLockdown } from '@aglyn/tenant-data-admin/server/tenant-write-lo
 import { resolveBrandingProfile } from '@aglyn/aglyn/server'
 import {
   bookingDurationMs,
+  bookingState,
+  cancelRefusal,
   checkInRefusal,
   type ManagedBooking,
   rescheduleRefusal,
@@ -36,6 +38,7 @@ import {
 import { type BookedInterval, type HostBookingService, isSlotOpen } from '../model/bookings'
 import { bookingTimeZone, formatBookingWhen, storedBookingTimeZone } from '../model/booking-time'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import { type BookingEventInput, raiseBookingEvent } from './booking-events'
 
 /*
  * Checking a guest in and moving a booking (AGL-3621), for the site's team.
@@ -99,6 +102,11 @@ export interface BookingManageDeps {
   timeZoneFor: (hostId: string, service: HostBookingService | undefined) => Promise<string>
   notifyRescheduled: (notice: RescheduleNotice) => Promise<void>
   now: () => number
+  /**
+   * Raises a booking event once the change is written (AGL-3643): the move,
+   * the cancel. Never throws. Absent, nothing is raised.
+   */
+  raiseEvent?: (input: BookingEventInput) => Promise<void>
 }
 
 /** Field the booking stamps when the guest arrives. */
@@ -265,6 +273,18 @@ export function createBookingRescheduleHandler(deps: BookingManageDeps): PluginA
       if (!moved) {
         return res.status(200).json({ ok: true, startsAtMs, endsAtMs: Number(first.get('endsAtMs') ?? 0), notified: false })
       }
+      // Keyed by the booking and its new time: a retried move raises it once.
+      await deps.raiseEvent?.({
+        event: 'booking.rescheduled',
+        hostId,
+        bookingId,
+        booking: {
+          ...moved.booking,
+          startsAtMs,
+          endsAtMs: moved.endsAtMs,
+          rescheduledFromMs: moved.previousStartsAtMs,
+        },
+      })
       const to = String(moved.booking['email'] ?? '').trim()
       let notified = false
       if (to) {
@@ -287,6 +307,48 @@ export function createBookingRescheduleHandler(deps: BookingManageDeps): PluginA
         }
       }
       return res.status(200).json({ ok: true, startsAtMs, endsAtMs: moved.endsAtMs, notified })
+    } catch (error) {
+      return answer(res, error)
+    }
+  }
+}
+
+/**
+ * Canceling a booking that has no money on it (AGL-3643): a free booking, or
+ * a paid one already refunded in full. The site's team used to write
+ * `status: 'canceled'` straight from the console; a route is where the
+ * cancel can be told to the plugins that listen for it (`booking.canceled`),
+ * and where the rule that a paid booking cancels through its refund is held
+ * rather than trusted to the screen. One transaction: a booking checked in
+ * or paid a moment ago is refused, and canceling it twice changes nothing.
+ */
+export function createBookingCancelHandler(deps: BookingManageDeps): PluginApiHandler {
+  return async (req, res) => {
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+    const body = bodyOf(req)
+    const hostId = String(body['hostId'] ?? '')
+    const bookingId = String(body['bookingId'] ?? '')
+    if (!hostId || !bookingId) return res.status(400).json({ error: 'Missing hostId or bookingId' })
+    try {
+      const { uid } = await authorize(deps, req, hostId)
+      const firestore = deps.firestore()
+      const ref = firestore.doc(`hosts/${hostId}/bookings/${bookingId}`)
+      const canceled = await firestore.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(ref)
+        if (!snapshot.exists) throw new Refusal(404, 'Unknown booking')
+        const booking = (snapshot.data() ?? {}) as ManagedBooking & Record<string, unknown>
+        const nowMs = deps.now()
+        const refusal = cancelRefusal(booking, nowMs)
+        if (refusal) throw new Refusal(409, refusal)
+        // Already canceled: a retried tap writes nothing and tells no one twice.
+        if (bookingState(booking, nowMs) === 'canceled') return null
+        transaction.update(ref, { status: 'canceled', canceledAtMs: nowMs, canceledBy: uid })
+        return { ...booking, status: 'canceled', canceledAtMs: nowMs }
+      })
+      if (canceled) {
+        await deps.raiseEvent?.({ event: 'booking.canceled', hostId, bookingId, booking: canceled })
+      }
+      return res.status(200).json({ ok: true, canceled: true })
     } catch (error) {
       return answer(res, error)
     }
@@ -344,5 +406,6 @@ export function bookingManageDeps(): BookingManageDeps {
     },
     notifyRescheduled: sendRescheduledNotice,
     now: () => Date.now(),
+    raiseEvent: (input) => raiseBookingEvent(firebaseAdmin.app().firestore(), input),
   }
 }

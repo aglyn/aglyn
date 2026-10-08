@@ -548,7 +548,8 @@ export function buildCustomerApiOpenApi(
       required: ['object'],
       properties: {
         object: { type: 'string', const: 'api_key' },
-        orgId: { type: 'string', description: 'Organization this key belongs to.' },
+        org: { type: 'string', description: 'Organization this key belongs to.' },
+        name: { type: ['string', 'null'], description: 'The name the organization gave the key, e.g. `Zapier`.' },
         scopes: { type: 'array', items: { type: 'string' }, description: 'What the key may do.' },
       },
       additionalProperties: true,

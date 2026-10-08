@@ -48,6 +48,7 @@ import com.aglyn.contracts.productPriceRange
 import com.aglyn.core.Live
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.plugins.commerce.pos.Load
+import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
 import com.aglyn.ui.AglynListItem
@@ -94,23 +95,27 @@ private fun typeLabel(type: ProductType) = when (type) {
 
 /** The site's catalog beside the picked product; [initialProductId] opens one, as a link or a scan does. */
 @Composable
-fun ProductsScreen(context: NativePluginContext, initialProductId: String? = null) {
+fun ProductsScreen(context: NativePluginContext, initialProductId: String? = null, startNew: Boolean = false) {
   val hostId = context.hostId ?: return
   val scope = rememberCoroutineScope()
   val model = remember(hostId, context.firestore) { ProductsListModel(hostId, context.firestore, scope) }
+  val editor = remember(hostId) { ProductEditorModel(ConsoleProductWriteApi(context.api, hostId), scope) }
   LaunchedEffect(model) { model.reload() }
+  LaunchedEffect(editor.done) { if (editor.done != null) model.reload() }
+  LaunchedEffect(startNew) { if (startNew) editor.create() }
   AglynListDetail(
     initialSelected = initialProductId,
-    list = { selected, onSelect -> ProductsList(context, model, selected, onSelect) },
+    list = { selected, onSelect -> ProductsList(context, model, editor, selected, onSelect) },
     detail = { selected ->
       if (selected == null) EmptyState("Pick a product to see it here", icon = AglynIcons.named("inventory"))
-      else ProductDetailPane(context, selected)
+      else ProductDetailPane(context, selected, editor)
     },
   )
+  ProductDialogs(editor)
 }
 
 @Composable
-private fun ProductsList(context: NativePluginContext, model: ProductsListModel, selected: String?, onSelect: (String) -> Unit) {
+private fun ProductsList(context: NativePluginContext, model: ProductsListModel, editor: ProductEditorModel, selected: String?, onSelect: (String) -> Unit) {
   val listState = rememberLazyListState()
   val nearEnd by remember {
     derivedStateOf {
@@ -127,11 +132,23 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
           Icon(AglynIcons.named("qr_code_scanner"), contentDescription = "Scan a barcode")
         }
       }
-      ChoiceChipRow(
-        options = ProductFilter.entries.map { ChipOption(it.name, it.label) },
-        selected = model.filter.name,
-        onSelect = { model.pick(ProductFilter.valueOf(it)) },
-      )
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        ChoiceChipRow(
+          options = ProductFilter.entries.map { ChipOption(it.name, it.label) },
+          selected = model.filter.name,
+          onSelect = { model.pick(ProductFilter.valueOf(it)) },
+          modifier = Modifier.weight(1f),
+        )
+        Button(onClick = editor::create, Modifier.padding(start = space(1f)).testTag("new-product")) {
+          Icon(AglynIcons.named("add"), contentDescription = null)
+          Text("New product", Modifier.padding(start = space(1f)))
+        }
+      }
+      if (editor.draft == null && editor.stock == null) {
+        editor.done?.let { message ->
+          NoticeBanner(message, StatusTone.SUCCESS, action = { androidx.compose.material3.TextButton(onClick = { editor.done = null }) { Text("Dismiss") } })
+        }
+      }
     }
     when (val rows = model.rows) {
       Load.Loading -> SkeletonList(rows = 6)
@@ -173,7 +190,7 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
 
 /** One product, live: what it is, its variants with their prices, codes and stock. */
 @Composable
-fun ProductDetailPane(context: NativePluginContext, productId: String) {
+fun ProductDetailPane(context: NativePluginContext, productId: String, editor: ProductEditorModel? = null) {
   val hostId = context.hostId ?: return
   val flow = remember(hostId, productId, context.firestore) { context.firestore.observeDoc("${productsPath(hostId)}/$productId") }
   val live by flow.collectAsState(Live.Loading)
@@ -205,6 +222,12 @@ fun ProductDetailPane(context: NativePluginContext, productId: String) {
           Text(priceLabel(productPriceRange(product)), style = MaterialTheme.typography.titleLarge)
           Text(stockLabel(productInventory(product)), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
           product.description?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+          if (editor != null) {
+            Button(onClick = { editor.edit(productId, doc.data) }, Modifier.testTag("edit-product")) {
+              Icon(AglynIcons.named("tune"), contentDescription = null)
+              Text("Edit product", Modifier.padding(start = space(1f)))
+            }
+          }
         }
         SectionCard(if (product.variants.orEmpty().size > 1) "Variants" else "Price and stock") {
           product.variants.orEmpty().forEachIndexed { index, variant ->
@@ -218,6 +241,12 @@ fun ProductDetailPane(context: NativePluginContext, productId: String) {
                 stockLabel(variant.inventory),
               )
               Text(notes.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              if (editor != null && variant.inventory != null && variant.id != null) {
+                OutlinedButton(
+                  onClick = { editor.adjust(productId, variant.id!!, variantLabel(variant)) },
+                  modifier = Modifier.padding(top = space(1f)).testTag("adjust-${variant.id}"),
+                ) { Text("Adjust stock") }
+              }
             }
           }
         }
@@ -302,5 +331,79 @@ fun ScanScreen(context: NativePluginContext) {
       status = status,
       title = "Scan a product",
     )
+  }
+}
+
+@Composable
+private fun ProductDialogs(editor: ProductEditorModel) {
+  editor.draft?.let { draft ->
+    ActionDialog(
+      title = if (draft.create) "New product" else "Edit ${draft.name.ifBlank { "product" }}",
+      icon = "inventory",
+      confirmLabel = if (draft.create) "Add product" else "Save",
+      confirmEnabled = draft.name.isNotBlank(),
+      busy = editor.busy,
+      error = editor.error,
+      onDismiss = editor::close,
+      onConfirm = editor::save,
+    ) {
+      Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        OutlinedTextField(draft.name, { editor.change(draft.copy(name = it)) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("product-name"))
+        OutlinedTextField(draft.description, { editor.change(draft.copy(description = it)) }, label = { Text("Description") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+        ChoiceChipRow(
+          options = listOf(ProductStatus.ACTIVE, ProductStatus.DRAFT, ProductStatus.ARCHIVED).map { ChipOption(it.raw, statusLabel(it)) },
+          selected = draft.status.raw,
+          onSelect = { raw -> editor.change(draft.copy(status = ProductStatus.entries.first { it.raw == raw })) },
+        )
+        if (draft.create) {
+          ChoiceChipRow(
+            options = listOf(ProductType.PHYSICAL, ProductType.DIGITAL, ProductType.SERVICE).map { ChipOption(it.raw, typeLabel(it)) },
+            selected = draft.type.raw,
+            onSelect = { raw -> editor.change(draft.copy(type = ProductType.entries.first { it.raw == raw })) },
+          )
+        }
+        draft.variants.forEachIndexed { index, variant ->
+          fun update(next: VariantDraft) = editor.change(draft.copy(variants = draft.variants.toMutableList().also { it[index] = next }))
+          if (draft.variants.size > 1) Text(variant.label, style = MaterialTheme.typography.titleSmall)
+          Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+            OutlinedTextField(variant.price, { update(variant.copy(price = it)) }, label = { Text("Price") }, prefix = { Text("$") }, singleLine = true,
+              keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal), modifier = Modifier.weight(1f).testTag("variant-price-$index"))
+            OutlinedTextField(variant.compareAt, { update(variant.copy(compareAt = it)) }, label = { Text("Compare at") }, prefix = { Text("$") }, singleLine = true,
+              keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal), modifier = Modifier.weight(1f))
+          }
+          Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+            OutlinedTextField(variant.sku, { update(variant.copy(sku = it)) }, label = { Text("SKU") }, singleLine = true, modifier = Modifier.weight(1f))
+            OutlinedTextField(variant.barcode, { update(variant.copy(barcode = it)) }, label = { Text("Barcode") }, singleLine = true, modifier = Modifier.weight(1f))
+          }
+          if (draft.create) {
+            OutlinedTextField(variant.stock, { update(variant.copy(stock = it.filter(Char::isDigit))) }, label = { Text("Stock (optional)") },
+              supportingText = { Text("Leave empty to not track stock.") }, singleLine = true,
+              keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+          }
+        }
+      }
+    }
+  }
+  editor.stock?.let { stock ->
+    ActionDialog(
+      title = "Adjust stock",
+      body = stock.label,
+      icon = "inventory",
+      confirmLabel = "Apply",
+      confirmEnabled = stockDelta(stock.change) != null,
+      busy = editor.busy,
+      error = editor.error,
+      onDismiss = editor::close,
+      onConfirm = editor::applyStock,
+    ) {
+      OutlinedTextField(stock.change, { editor.changeStock(stock.copy(change = it)) }, label = { Text("Change") }, placeholder = { Text("+5 or -2") }, singleLine = true,
+        modifier = Modifier.fillMaxWidth().testTag("stock-change"))
+      ChoiceChipRow(
+        options = STOCK_REASONS.map { (key, label) -> ChipOption(key, label) },
+        selected = stock.reason,
+        onSelect = { editor.changeStock(stock.copy(reason = it)) },
+        wrap = true,
+      )
+    }
   }
 }

@@ -2478,6 +2478,22 @@ allow read, write: if false;
 
 
 
+match /zapierHooks/{hookId} {
+allow read, write: if false;
+}
+match /zapierHookDeliveries/{deliveryId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
 
 match /fulfillmentNetworkConnections/{connectionId} {
 allow read, write: if false;
@@ -2533,6 +2549,22 @@ match /inventorySyncOrders/{handOffId} {
 allow read, write: if false;
 }
 match /inventorySyncProducts/{linkId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+match /deliveryAppStores/{deliveryAppStoreId} {
+allow read, write: if false;
+}
+match /deliveryAppOrders/{deliveryAppOrderId} {
 allow read, write: if false;
 }
 

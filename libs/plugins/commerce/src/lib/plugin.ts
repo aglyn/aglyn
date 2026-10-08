@@ -39,6 +39,7 @@ import { registerCommerceZones } from './components/console/product-zones'
 import { registerCommerceOrderZones } from './components/console/order-zones'
 import { registerCommerceReturnZones } from './components/console/return-zones'
 import { registerCommerceStoreZones } from './components/console/store-zones'
+import { registerCommercePosZones } from './components/console/pos-zones'
 import { registerCommerceTransferUi } from './transfer/register-transfer-ui'
 import { COMMERCE_SEARCH_SOURCES } from './model/commerce-search-sources'
 import { COMMERCE_CONFIG_SCHEMA } from './plugin-config'
@@ -71,6 +72,8 @@ export function registerCommerceConsole(): void {
   registerCommerceReturnZones()
   // The orders list's bulk actions and the store's Settings (AGL-3612).
   registerCommerceStoreZones()
+  // The register's orders from other channels — a delivery app's (AGL-3644).
+  registerCommercePosZones()
   // Its import and export resources' names and the products wizard's own
   // step (AGL-3531); the server halves register from the console's server
   // declarations.
