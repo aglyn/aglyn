@@ -234,6 +234,8 @@ const CLEARABLE_TRACKING_PATHS = [
   'analytics.adTags.meta',
   'analytics.adTags.google-ads',
   'analytics.adTags.linkedin',
+  'analytics.adTags.tiktok',
+  'analytics.adTags.pinterest',
 ] as const
 
 /**
@@ -473,6 +475,58 @@ const trackingSchema: FormSchema = {
           type: FieldValidatorType.PATTERN,
           pattern: Aglyn.LINKEDIN_PARTNER_ID_PATTERN.source,
           message: 'A LinkedIn partner ID is 4–10 digits',
+        },
+      ],
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      /*
+       * TikTok and Pinterest (AGL-3694), the site owner's own, on the same
+       * terms as the pixel above: a separate advertising choice, removed and
+       * swept on withdrawal, and — with an access token on the Ad
+       * conversions card — paired with the same events sent from the server.
+       */
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'analytics.adTags.tiktok',
+      label: 'TikTok pixel ID',
+      helperText:
+        'Optional — the pixel code from TikTok Ads Manager → Events, like ' +
+        'C4ABCDEFGH1234567890. Consent works the same way as the pixel above.',
+      help: docsHelp('adTracking', {
+        anchor: '#browser-tags',
+        excerpt:
+          'Run your TikTok pixel on your site, under the same advertising ' +
+          'consent as the other advertising tags.',
+      }),
+      type: 'text',
+      validate: [
+        {
+          type: FieldValidatorType.PATTERN,
+          pattern: Aglyn.TIKTOK_PIXEL_ID_PATTERN.source,
+          message: 'A TikTok pixel ID is 16–24 capital letters and digits',
+        },
+      ],
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'analytics.adTags.pinterest',
+      label: 'Pinterest tag ID',
+      helperText:
+        'Optional — the numeric tag ID from Pinterest Ads → Conversions. ' +
+        'Consent works the same way as the pixel above.',
+      help: docsHelp('adTracking', {
+        anchor: '#browser-tags',
+        excerpt:
+          'Run your Pinterest tag on your site, under the same advertising ' +
+          'consent as the other advertising tags.',
+      }),
+      type: 'text',
+      validate: [
+        {
+          type: FieldValidatorType.PATTERN,
+          pattern: Aglyn.PINTEREST_TAG_ID_PATTERN.source,
+          message: 'A Pinterest tag ID is 10–16 digits',
         },
       ],
       FormFieldGridProps: { size: { xs: 12, sm: 6 } },

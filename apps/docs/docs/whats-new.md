@@ -28,7 +28,16 @@ for the how-to.
   the account could not take waits on the card with a Send again button.
 -->
 
-## October 2026 — a self-service kiosk (newest)
+## October 2026 — your own TikTok and Pinterest tags, and server-side conversions (newest)
+
+- **[Ad tracking](marketing-and-automation/analytics/ad-tracking.md)** — your Meta
+  pixel, TikTok pixel, Pinterest tag, Google Ads and LinkedIn tags now run on your
+  site, for visitors who allow advertising, and report product views, add-to-carts,
+  checkouts, purchases and leads. Connect the Meta Conversions API, the TikTok Events
+  API or the Pinterest Conversions API and purchases and leads are also sent from the
+  server, paired with the browser tag so each is counted once.
+
+## October 2026 — a self-service kiosk
 
 - **[Self-service kiosk](commerce-and-bookings/commerce/pos-and-reservations.md#self-service-kiosk)** —
   pair a tablet to a register and let customers order themselves: products by

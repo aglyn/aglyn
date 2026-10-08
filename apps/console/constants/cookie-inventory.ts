@@ -512,9 +512,27 @@ export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
   'Meta Pixel': {
     names: ['_fbp', '_fbc'],
     loaderToken: 'META_PIXEL_VENDOR',
-    surface: `${WORKSPACE_DOMAIN} — ${PLATFORM_BRAND_NAME}'s own marketing site, gated by \`isPlatformMarketingHost\`; ${CONSOLE_HOST} and the docs site, each gated on that surface's own advertising grant; a Host operator may enable their own tag on their site`,
+    surface: `${WORKSPACE_DOMAIN} — ${PLATFORM_BRAND_NAME}'s own marketing site, gated by \`isPlatformMarketingHost\`; ${CONSOLE_HOST} and the docs site, each gated on that surface's own advertising grant; and customer sites whose owner configured their own Meta pixel id and enabled the advertising question (AGL-3694)`,
     purpose:
       'Shows you our ads on other sites, and measures whether they worked',
+  },
+  /*
+   * A SITE OWNER's own tags (AGL-3694): mounted only on a customer's site
+   * whose owner set the id on Setup → Tracking and turned the advertising
+   * question on, and only for a visitor whose record grants advertising.
+   * Aglyn runs neither on its own surfaces.
+   */
+  'TikTok Pixel': {
+    names: ['_ttp', '_tt_enable_cookie', 'ttcsid', 'ttcsid_<pixel>'],
+    loaderToken: 'TIKTOK_PIXEL_VENDOR',
+    surface: 'customer sites whose owner configured their own TikTok pixel id and enabled the advertising question',
+    purpose: "Shows you the site's ads on TikTok, and measures whether they worked",
+  },
+  'Pinterest Tag': {
+    names: ['_pin_unauth', '_pinterest_ct_ua', '_pinterest_ct_rt', '_epik', '_derived_epik'],
+    loaderToken: 'PINTEREST_TAG_VENDOR',
+    surface: 'customer sites whose owner configured their own Pinterest tag id and enabled the advertising question',
+    purpose: "Shows you the site's ads on Pinterest, and measures whether they worked",
   },
   'LinkedIn Insight Tag': {
     names: [

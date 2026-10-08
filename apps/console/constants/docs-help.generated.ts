@@ -65,6 +65,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/site-search/add-search',
     title: 'Add search to your site',
   },
+  adTracking: {
+    path: '/marketing-and-automation/analytics/ad-tracking',
+    title: 'Ad tracking',
+  },
   agencySites: {
     path: '/ai/agency-sites',
     title: 'An AI website builder for agencies',
@@ -829,6 +833,7 @@ export const DOCS_HELP_ANCHORS = {
   addALocale: ['#steps', '#tips', '#related'],
   addOns: ['#what-you-can-add', '#assigning-register-seats', '#assigning-collaborator-seats', '#aglyn-ai', '#aglyn-ai-questions', '#how-changes-bill', '#plan-switches-and-cancellation', '#related'],
   addSearch: ['#steps', '#tips', '#related'],
+  adTracking: ['#browser-tags', '#consent', '#conversions-api', '#test-events', '#related'],
   agencySites: ['#one-brief', '#shared-and-not', '#organization-model', '#per-client-spend', '#off-for-one-site', '#white-label', '#who-publishes', '#related'],
   aglynAssist: ['#what-it-can-do', '#aglyn-ai', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#edits-in-the-besigner', '#where-an-answer-came-from', '#answers-straight-from-the-documentation', '#message-limits', '#feedback', '#privacy'],
   ai: ['#drafts-only', '#what-it-can-build', '#the-add-on', '#credits-and-caps', '#who-can-use-it', '#switch-ai-off-for-one-site', '#what-is-sent', '#related'],
@@ -973,7 +978,7 @@ export const DOCS_HELP_ANCHORS = {
   screensAndLayouts: ['#which-one-do-you-want', '#related'],
   securityAndCompliance: ['#what-it-covers', '#contract-documents', '#legal-reacceptance', '#why-the-gaps-are-listed-first', '#reporting-a-vulnerability'],
   selfHosting: ['#the-short-version', '#the-full-runbook', '#who-runs-this-install', '#your-dmca-position-is-your-own', '#addresses', '#tenant-domain', '#tenant-host-cname', '#console-url', '#console-host', '#aglyn-standalone', '#reverse-proxy', '#platform-brand', '#optional-keys', '#scheduled-jobs', '#issue-reports', '#request-geo', '#bucket-cors', '#docs-build', '#honest-limits', '#related'],
-  selfHostingEnvironment: ['#build-vs-runtime', '#firebase', '#firebase-client', '#firebase-admin', '#firebase-unused', '#firestore-storage', '#addresses', '#proxy', '#xff', '#geo', '#secrets', '#sso', '#auth-settings', '#stripe', '#stripe-webhook-events', '#stripe-prices', '#billing-switches', '#email', '#email-provider', '#sequences', '#sequences-microsoft', '#sequences-link-domains', '#sms', '#shipping', '#accounting', '#tax-engines', '#marketing-platforms', '#zapier', '#fulfillment-networks', '#inventory-sync', '#marketplaces', '#print-on-demand', '#delivery-apps', '#mobile', '#analytics', '#first-touch', '#assist', '#video-delivery', '#cron', '#plugins', '#plugin-loader', '#sales-channels', '#operator', '#brand', '#tax', '#tax-collection', '#tax-filing', '#tax-what-to-do', '#caching', '#domains', '#domains-wildcard', '#domains-webhook', '#domains-vercel', '#domains-custom', '#vercel', '#docs-build', '#image-set', '#build-stamp', '#internal', '#related'],
+  selfHostingEnvironment: ['#build-vs-runtime', '#firebase', '#firebase-client', '#firebase-admin', '#firebase-unused', '#firestore-storage', '#addresses', '#proxy', '#xff', '#geo', '#secrets', '#sso', '#auth-settings', '#stripe', '#stripe-webhook-events', '#stripe-prices', '#billing-switches', '#email', '#email-provider', '#sequences', '#sequences-microsoft', '#sequences-link-domains', '#sms', '#shipping', '#accounting', '#tax-engines', '#ad-conversions', '#marketing-platforms', '#zapier', '#fulfillment-networks', '#inventory-sync', '#marketplaces', '#print-on-demand', '#delivery-apps', '#mobile', '#analytics', '#first-touch', '#assist', '#video-delivery', '#cron', '#plugins', '#plugin-loader', '#sales-channels', '#operator', '#brand', '#tax', '#tax-collection', '#tax-filing', '#tax-what-to-do', '#caching', '#domains', '#domains-wildcard', '#domains-webhook', '#domains-vercel', '#domains-custom', '#vercel', '#docs-build', '#image-set', '#build-stamp', '#internal', '#related'],
   seo: ['#per-screen-seo', '#how-a-page-title-is-built', '#variables-so-a-title-is-not-a-copy-of-your-site-name', '#site-wide-defaults', '#every-icon-size-is-generated-for-you', '#your-sites-install-details-the-web-app-manifest', '#what-language-your-site-says-it-is-in', '#seo-check', '#target-keywords', '#check-one-page', '#search-engine-visibility', '#the-whole-site', '#a-single-page', '#verify-your-site-with-google-search-console', '#sitemap--robots', '#one-index-one-file-per-section', '#social-cards', '#what-each-kind-of-page-emits', '#structured-data', '#local-businesses', '#ai-agents', '#markdown-for-any-page', '#llmstxt', '#openapijson', '#well-knownapi-catalog', '#crawler-access', '#analytics-integration', '#related'],
   seoByAi: ['#write-a-pages-listing', '#write-a-products-listing', '#fix-what-the-seo-check-finds', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],
   sequences: ['#what-it-is-for', '#sent-from-your-own-mailbox', '#where-it-lives', '#self-hosted', '#connect-a-mailbox', '#send-as', '#daily-cap', '#mailbox-status', '#auto-pause', '#mailbox-actions', '#link-domains', '#compliance-settings', '#allowed-countries', '#do-not-contact-domains', '#import-export-do-not-contact', '#sequences', '#build-a-sequence', '#count-opens', '#send-a-test', '#sequence-status', '#enroll', '#start-at-step', '#mail-gateways', '#cold-contacts', '#enrollments', '#person-history', '#curate', '#sending', '#what-stops-a-sequence', '#unsubscribe', '#related'],

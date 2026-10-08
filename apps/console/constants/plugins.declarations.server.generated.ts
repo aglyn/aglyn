@@ -48,6 +48,8 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-tax-engines/declarations.server')).registerTaxEnginesServerDeclarations()
     ;(await import('@aglyn/plugins-marketing-platforms/declarations.server')).registerMarketingPlatformsServerDeclarations()
     ;(await import('@aglyn/plugins-marketing-platforms/declarations.console-server')).registerMarketingPlatformsConsoleServerDeclarations()
+    ;(await import('@aglyn/plugins-ad-conversions/declarations.server')).registerAdConversionsServerDeclarations()
+    ;(await import('@aglyn/plugins-ad-conversions/declarations.console-server')).registerAdConversionsConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-zapier/declarations.server')).registerZapierServerDeclarations()
     ;(await import('@aglyn/plugins-zapier/declarations.console-server')).registerZapierConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-fulfillment-networks/declarations.server')).registerFulfillmentNetworksServerDeclarations()

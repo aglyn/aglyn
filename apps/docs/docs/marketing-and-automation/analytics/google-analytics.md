@@ -129,9 +129,9 @@ property:
   a site's property.
 - **`traffic_type` and `content_group`** — internal-traffic marking and content
   grouping are applied only to Aglyn's own marketing site.
-- **Advertising tags** — Meta, Google Ads and LinkedIn tags are installed only
-  on Aglyn's own marketing site. On your site the advertising machinery renders
-  nothing and installs nothing.
+- **Aglyn's own advertising tags.** Aglyn's Meta, Google Ads and LinkedIn tags
+  run only on Aglyn's own sites. Your site runs only the advertising tags you
+  set yourself — see [Ad tracking](./ad-tracking.md).
 - **Server-side events**, including refunds and subscription cancellations.
   They are sent from the server with credentials that are not per-site, so
   there is no way to route them to your property.
@@ -143,4 +143,5 @@ property:
 
 - [Analytics](./overview.md) — the built-in Traffic card and per-page figures
 - [Cookie consent](./cookie-consent.md) — what has to be true before any of this runs
+- [Ad tracking](./ad-tracking.md) — your own Meta, TikTok and Pinterest tags, and their server-side events
 - [Interactions](../../building-sites/besigner/interactions-and-custom-html.md) — sending an event of your own

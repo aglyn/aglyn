@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { advertisingConsentField } from '@aglyn/aglyn/app-utils/advertising-consent'
+import { advertisingEventId, mintAdvertisingLeadKey } from '@aglyn/aglyn/app-utils/advertising-events'
 import { sendAnalyticsBeacon } from '@aglyn/aglyn/app-utils/analytics-beacon'
 import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
 import { recordSiteJourneyStep, siteJourneyField } from '@aglyn/aglyn/app-utils/site-journey'
@@ -417,6 +419,10 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
         ).slice(0, 2000)
       }
       setStatus('sending')
+      // The id this submission's lead is reported under by the site's own
+      // advertising tags AND by the server's Conversions API (AGL-3694), so
+      // each vendor pairs the two instead of counting the lead twice.
+      const adLeadKey = mintAdvertisingLeadKey()
       try {
         const response = await siteFetch('/api/forms/submit', {
           method: 'POST',
@@ -451,6 +457,10 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
             // the server ties it to the address submitted, so a funnel's
             // drop-off follow-up can reach this person.
             ...siteJourneyField(),
+            // The visitor's advertising consent, only where it grants
+            // advertising (AGL-3694); absent otherwise, so the server reports
+            // no lead for anyone who did not say yes.
+            ...advertisingConsentField(hostId, { lead: adLeadKey }),
           }),
         })
         if (response.ok) {
@@ -491,10 +501,14 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
           // A funnel step (AGL-3605): the form, by its id. Dropped unless the
           // site records journeys and the visitor's consent grants.
           recordSiteJourneyStep('form', formId)
-          await trackEventBeforeNavigation('generate_lead', {
-            form_name: formName || 'Form',
-            form_location: window.location.pathname,
-          })
+          await trackEventBeforeNavigation(
+            'generate_lead',
+            {
+              form_name: formName || 'Form',
+              form_location: window.location.pathname,
+            },
+            { advertisingEventId: advertisingEventId('lead', adLeadKey) },
+          )
           if (afterSubmit === 'redirect' && !suppressNavigation) {
             const target = resolveRedirectTarget(
               redirectScreenHref,

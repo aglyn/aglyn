@@ -1237,6 +1237,16 @@ const MEASUREMENT_IMAGE_ORIGINS = [
   'https://snap.licdn.com',
   'https://*.ads.linkedin.com',
   'https://www.linkedin.com',
+  /*
+   * A site owner's own TikTok pixel and Pinterest tag (AGL-3694): each
+   * vendor's library host, which its beacons also post to (`analytics.
+   * tiktok.com/api/v2/pixel`), and Pinterest's beacon host (`ct.pinterest.
+   * com/v3/`). Only on a site that configured an advertising tag, through
+   * `runsMeasurement`, like every vendor above.
+   */
+  'https://analytics.tiktok.com',
+  'https://s.pinimg.com',
+  'https://ct.pinterest.com',
   // Every Google country domain, for the remarketing pixel. `www.google.com`
   // is the first entry of that list, so it is not repeated here.
   ...GOOGLE_CCTLD_ORIGINS,

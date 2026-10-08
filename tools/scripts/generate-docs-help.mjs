@@ -137,6 +137,9 @@ const PLUGIN_TOPICS = {
   aiBusinessProfile: '/ai/business-profile',
   aiExperiments: '/ai/ab-tests-with-ai',
   aiMarketing: '/ai/marketing-with-ai',
+  // The Ad conversions card on a site's setup page and the Tracking tab's
+  // TikTok and Pinterest fields (AGL-3694).
+  adTracking: '/marketing-and-automation/analytics/ad-tracking',
   aiInsights: '/marketing-and-automation/analytics/insights',
   aiLogic: '/ai/logic-with-ai',
   aiProducts: '/ai/products-with-ai',

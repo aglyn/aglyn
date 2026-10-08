@@ -574,17 +574,14 @@ export default function SiteAnalytics({
           consent-changed event, which needs a listener that is still mounted
           when the answer is no.
 
-          On a customer's site this renders nothing AND installs nothing: the
-          host is not ours, so there is no listener and no script. That
-          boundary is the DPA §3.2 promise — Aglyn does not "sell"/"share"
-          Customer Personal Data — expressed in code rather than in a review
-          checklist. The console needs no clause of its own: it does not render
-          this route at all.
-
-          NOTHING IS CONFIGURED TO LOAD TODAY. No host document carries an
-          `analytics.adTags` entry, so every visitor on every site takes the
-          empty branch. Deploying the Meta Pixel means writing a pixel id onto
-          the `aglyn-marketing` host — a data change, reviewed on its own. */}
+          On a customer's site it mounts only the tags that site's OWNER
+          configured on Setup → Tracking (AGL-3694), with their own account
+          ids, under the same consent gate; a site that configured none gets
+          no listener and no script. Our own tags are on no host but ours —
+          the DPA §3.2 promise, that Aglyn does not "sell"/"share" Customer
+          Personal Data for its own advertising, expressed in code. The
+          console needs no clause of its own: it does not render this route
+          at all. */}
       <AdvertisingTags
         host={host}
         stored={consent.stored}

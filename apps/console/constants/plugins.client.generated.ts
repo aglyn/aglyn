@@ -195,6 +195,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-marketing-platforms'),
   },
   {
+    id: 'ad-conversions',
+    apiPrefixes: ["ad-conversions"],
+    register: {"console":"registerAdConversionsConsole"},
+    contributes: {"console":{"slots":["hostSettings"]}},
+    load: () => import('@aglyn/plugins-ad-conversions'),
+  },
+  {
     id: 'zapier',
     apiPrefixes: ["zapier"],
     register: {"console":"registerZapierConsole"},

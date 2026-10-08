@@ -296,6 +296,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "keeps": "Members keep their points and store credit."
     }
   },
+  {
+    "id": "ad-conversions",
+    "label": "Ad conversions",
+    "alwaysOnForWorkspace": true,
+    "description": "Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, for visitors who allowed advertising.",
+    "siteOff": {
+      "stops": "Switching Ad conversions off for this site stops its purchases and leads being sent to the Meta, TikTok and Pinterest accounts it connected.",
+      "keeps": "The connections are kept, and the site’s browser tags on the Tracking tab are not affected."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -331,6 +341,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "inventory-sync": "console-only",
   "delivery-apps": "console-only",
   "loyalty": "console-only",
+  "ad-conversions": "console-only",
 }
 
 /**
@@ -2300,6 +2311,21 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "marketing-platforms",
     "name": "marketingPlatformEvents",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "ad-conversions",
+    "name": "adConversionConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "ad-conversions",
+    "name": "adConversionConsents",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "ad-conversions",
+    "name": "adConversionEvents",
     "orgField": "orgId"
   },
   {
