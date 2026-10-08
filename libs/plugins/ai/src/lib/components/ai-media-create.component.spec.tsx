@@ -30,15 +30,20 @@
 
 import { CONSOLE_WIDGET_SLOTS, listConsoleWidgets } from '@aglyn/aglyn'
 import type { ConsoleMediaLibraryZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ComponentType } from 'react'
 
 const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
+let mockOrg: { data: Record<string, unknown> | undefined; status: string } = {
+  data: { plan: 'pro' },
+  status: 'success',
+}
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useUser: () => ({ data: mockUser }),
   useFirestore: () => ({}),
+  useFirestoreDoc: () => mockOrg,
 }))
 
 import { AI_PLUGIN_ID } from '../constants'
@@ -197,6 +202,30 @@ describe('the kinds', () => {
     expect(aiMediaCreditsPerPicture('photo')).toBe(108)
     expect(aiMediaCreditsPerPicture('illustration')).toBe(18)
     expect(aiMediaCreditEstimate('photo', 3)).toMatch(/^3 pictures uses about 324 AI credits \(about 108 each\)/)
+  })
+
+  it('estimates a Free workspace’s 512 px photo at about 75 credits', () => {
+    expect(aiMediaCreditsPerPicture('photo', undefined, '512')).toBe(75)
+    expect(aiMediaCreditsPerPicture('illustration', undefined, '512')).toBe(18)
+    expect(aiMediaCreditEstimate('photo', 2, '512')).toMatch(/^2 pictures uses about 150 AI credits \(about 75 each\)/)
+  })
+
+  it('shows a Free workspace the 512 px estimate, and the 1K one until the plan has arrived', async () => {
+    process.env.NEXT_PUBLIC_AI_IMAGE_PHOTOS = 'on'
+    try {
+      mockOrg = { data: { plan: 'free' }, status: 'success' }
+      const free = await open()
+      expect(within(free).getByText(aiMediaCreditEstimate('photo', 1, '512'))).toBeTruthy()
+      expect(within(openKinds(free)).getByRole('option', { name: 'Photo about 75 credits' }).textContent).toBe(
+        'Photoabout 75 credits',
+      )
+      cleanup()
+      mockOrg = { data: undefined, status: 'loading' }
+      const pending = await open()
+      expect(within(pending).getByText(aiMediaCreditEstimate('photo', 1, '1K'))).toBeTruthy()
+    } finally {
+      mockOrg = { data: { plan: 'pro' }, status: 'success' }
+    }
   })
 })
 

@@ -48,6 +48,7 @@ import {
   vertexImageLocation,
   vertexImageModel,
   vertexImageProject,
+  vertexImageRequestBody,
   vertexImageUrl,
 } from './vertex-image'
 
@@ -95,8 +96,18 @@ const REQUEST = {
   model: 'gemini-3.1-flash-image',
   prompt: 'A red barn at dawn',
   aspectRatio: '16:9' as const,
+  size: '1K' as const,
   count: 2,
 }
+
+describe('size', () => {
+  it('asks for the size the door chose: 512 px on Free, 1K on a paid plan', () => {
+    const body = (size: '512' | '1K') =>
+      (vertexImageRequestBody({ prompt: 'p', aspectRatio: '1:1', size }) as any).generationConfig.imageConfig
+    expect(body('512')).toEqual({ aspectRatio: '1:1', imageSize: '512' })
+    expect(body('1K')).toEqual({ aspectRatio: '1:1', imageSize: '1K' })
+  })
+})
 
 describe('configuration', () => {
   it('is off until a project is named, and ignores a malformed one', () => {

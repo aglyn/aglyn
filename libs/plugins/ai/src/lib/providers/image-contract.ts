@@ -33,6 +33,19 @@ import type { AiUsage } from './contract'
 export const AI_IMAGE_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16'] as const
 export type AiImageAspectRatio = (typeof AI_IMAGE_ASPECT_RATIOS)[number]
 
+/**
+ * The sizes a picture is made at (AGL-3602): 512 px on the Free plan and 1K
+ * on every paid plan. The door chooses from the workspace's plan
+ * (`aiImageSizeForPlan`); nothing a request sends can choose it.
+ */
+export const AI_IMAGE_SIZES = ['512', '1K'] as const
+export type AiImageSize = (typeof AI_IMAGE_SIZES)[number]
+
+/** The size a picture is made at for a workspace on the Free plan, or on a paid one. */
+export function aiImageSizeForPlan(free: boolean): AiImageSize {
+  return free ? '512' : '1K'
+}
+
 /** The most pictures one request makes. */
 export const AI_IMAGE_MAX_COUNT = 4
 
@@ -107,6 +120,8 @@ export interface AiImageRequest {
   model: string
   prompt: string
   aspectRatio: AiImageAspectRatio
+  /** The size, chosen by the door from the workspace's plan. */
+  size: AiImageSize
   /** 1 to `AI_IMAGE_MAX_COUNT`. */
   count: number
 }

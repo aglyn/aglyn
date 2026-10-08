@@ -17,6 +17,7 @@
 
 import type { PluginSubprocessorDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-subprocessors'
 import type { AiModelDescriptor, AiUsage } from './contract'
+import type { AiImageSize } from './image-contract'
 
 /**
  * The model catalog (AGL-2939): every model id the plugin will route to,
@@ -413,6 +414,12 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
  *
  * A credit is $0.001 of billed spend (`ASSIST_CREDIT_COST_USD`), so the
  * default model's picture is 101 credits before its prompt and thinking.
+ *
+ * Every per-picture figure on a row is the 1K picture's. A 512 px picture —
+ * what the Free plan makes — is written as fewer image tokens at the same
+ * per-token rate (`AI_IMAGE_SIZE_OUTPUT_TOKENS`), so it is priced at the 1K
+ * figure scaled by its share of tokens: $0.04482 from the provider and
+ * $0.06723 billed on the default model, before its prompt and thinking.
  */
 export interface AiImageCatalogEntry extends AiCatalogRates {
   id: string
@@ -454,6 +461,23 @@ export function aiImageRatesAtMarkup(
       outputPerMTok * AI_IMAGE_BILLED_MARKUP,
     ),
   }
+}
+
+/**
+ * The image-output tokens Google writes a picture as, by size (AGL-3602),
+ * read from the usage of real Gemini 3.1 Flash Image answers on 2026-10-07:
+ * 747 at 512 px and 1,120 at 1K. A row's per-picture figures are the 1K
+ * picture's; a 512 px picture is priced at its share of them.
+ */
+export const AI_IMAGE_SIZE_OUTPUT_TOKENS: Readonly<Record<AiImageSize, number>> = {
+  '512': 747,
+  '1K': 1_120,
+}
+
+/** A 1K per-picture figure at `size`, by the size's share of image tokens. */
+function atImageSize(usdAt1K: number, size: AiImageSize | undefined): number {
+  const tokens = AI_IMAGE_SIZE_OUTPUT_TOKENS[size ?? '1K'] ?? AI_IMAGE_SIZE_OUTPUT_TOKENS['1K']
+  return roundUsd((usdAt1K * tokens) / AI_IMAGE_SIZE_OUTPUT_TOKENS['1K'])
 }
 
 /** The image model a photo is made with when the operator names none. */
@@ -535,22 +559,23 @@ export function aiImageCatalogEntry(modelId: string): AiImageCatalogEntry | unde
   return AI_IMAGE_MODEL_CATALOG.find((entry) => entry.id === modelId)
 }
 
-/** What the provider charges us for one picture from `modelId`. */
-export function aiImageProviderUsdPerImage(modelId: string): number {
-  return (aiImageCatalogEntry(modelId) ?? AI_IMAGE_FALLBACK_RATES).providerUsdPerImage
+/** What the provider charges us for one picture from `modelId`, at `size` (1K when absent). */
+export function aiImageProviderUsdPerImage(modelId: string, size?: AiImageSize): number {
+  return atImageSize((aiImageCatalogEntry(modelId) ?? AI_IMAGE_FALLBACK_RATES).providerUsdPerImage, size)
 }
 
-/** What one picture from `modelId` draws from a customer's credits. */
-export function aiImageBilledUsdPerImage(modelId: string): number {
-  return (aiImageCatalogEntry(modelId) ?? AI_IMAGE_FALLBACK_RATES).billedUsdPerImage
+/** What one picture from `modelId` at `size` (1K when absent) draws from a customer's credits. */
+export function aiImageBilledUsdPerImage(modelId: string, size?: AiImageSize): number {
+  return atImageSize((aiImageCatalogEntry(modelId) ?? AI_IMAGE_FALLBACK_RATES).billedUsdPerImage, size)
 }
 
 /**
  * Usage as the meter prices it: a text exchange's tokens, and, for a door
- * that makes pictures, how many it delivered. `images` is absent on every
- * text exchange, which prices exactly as it always did.
+ * that makes pictures, how many it delivered and at what size (1K when
+ * absent). `images` is absent on every text exchange, which prices exactly
+ * as it always did.
  */
-export type AiMeteredUsage = AiUsage & { images?: number }
+export type AiMeteredUsage = AiUsage & { images?: number; imageSize?: AiImageSize }
 
 /** Pictures on a usage record: whole, finite, non-negative, else 0. */
 function aiImageCount(usage: AiMeteredUsage): number {
@@ -640,7 +665,7 @@ function priceUsage(usage: AiUsage, rate: AiTokenRates): number {
 export function estimateAiProviderCostUsd(usage: AiMeteredUsage, modelId: string): number {
   return roundUsd(
     priceUsage(usage, aiProviderRatesForModel(modelId)) +
-      aiImageCount(usage) * aiImageProviderUsdPerImage(modelId),
+      aiImageCount(usage) * aiImageProviderUsdPerImage(modelId, usage.imageSize),
   )
 }
 
@@ -652,7 +677,7 @@ export function estimateAiProviderCostUsd(usage: AiMeteredUsage, modelId: string
 export function estimateAiBilledUsd(usage: AiMeteredUsage, modelId: string): number {
   return roundUsd(
     priceUsage(usage, aiBilledRatesForModel(modelId)) +
-      aiImageCount(usage) * aiImageBilledUsdPerImage(modelId),
+      aiImageCount(usage) * aiImageBilledUsdPerImage(modelId, usage.imageSize),
   )
 }
 

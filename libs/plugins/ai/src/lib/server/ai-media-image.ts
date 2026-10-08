@@ -20,6 +20,7 @@
 // every stored picture also passes the upload route's.
 
 import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { MEDIA_ALT_MAX_LENGTH } from '@aglyn/aglyn/app-utils/media-alt'
 import { aiMediaCreditsPerPicture } from '../model/ai-media-credits'
 import { aiSvgThemePalette, isAiSvgColor } from '../model/ai-svg'
@@ -32,6 +33,7 @@ import {
   AI_SVG_MAX_COLORS,
   AI_SVG_STYLES,
   AiImageSafetyRefusal,
+  aiImageSizeForPlan,
   isAiImageAspectRatio,
   isAiRasterStyle,
   type AiImageAspectRatio,
@@ -411,7 +413,10 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const model = input.mode === 'photo' ? provider.defaultModel() : (svgModel as string)
-  const perPicture = aiMediaCreditsPerPicture(input.mode, model)
+  // The size is the plan's, never the request's: 512 px on Free, 1K on a
+  // paid plan, each estimated and charged at its own per-picture rate.
+  const imageSize = aiImageSizeForPlan(resolveEffectivePlan(gate.org) === 'free')
+  const perPicture = aiMediaCreditsPerPicture(input.mode, model, imageSize)
   const estimate = perPicture * input.count
   const credits = publicAssistQuota(gate.reservation).credits
   if (credits && assistBandRefuses(gate.org) && credits.remaining < estimate) {
@@ -456,6 +461,7 @@ export async function POST(request: Request): Promise<Response> {
         model,
         prompt: aiMediaRasterPrompt(input.prompt, style),
         aspectRatio,
+        size: imageSize,
         count: input.count,
       })
       photoUsage = result.usage
@@ -558,7 +564,7 @@ export async function POST(request: Request): Promise<Response> {
   // rate with the request's prompt and thinking, an illustration's tokens.
   const usage =
     input.mode === 'photo'
-      ? { ...photoUsage, images: stored.length }
+      ? { ...photoUsage, images: stored.length, imageSize }
       : sumUsage(stored.map((entry) => entry.picture.usage))
   let signalId: string | null = null
   try {

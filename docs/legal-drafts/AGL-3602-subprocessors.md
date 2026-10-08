@@ -24,7 +24,8 @@ default, which Google may process anywhere), as Aglyn's own service account:
   the kind chosen (`libs/plugins/ai/src/lib/server/ai-media-raster-prompt.ts`:
   a photographic genre, an art style or a design asset; none for Photo) —
   text of ours that carries nothing of the workspace;
-- the shape (one of 1:1, 4:3, 3:4, 16:9, 9:16) and the 1K size;
+- the shape (one of 1:1, 4:3, 3:4, 16:9, 9:16) and the size the plan makes
+  (512 px on Free, 1K on a paid plan, chosen by the server);
 - fixed settings: image output only, Google's safety filters at "block some"
   on harassment, hate, sexually explicit and dangerous content.
 

@@ -234,10 +234,10 @@ describe('gates and refusals before anything is spent', () => {
 
   it('refuses a Free workspace whose credits do not cover the pictures, before the provider', async () => {
     mockGate.mockResolvedValue(admitted({ plan: 'free' }))
-    mockCredits = { used: 150, limit: 300, remaining: 150 }
+    mockCredits = { used: 200, limit: 300, remaining: 100 }
     const response = await POST(post(BODY))
     expect(response.status).toBe(429)
-    expect((await response.json()).error).toMatch(/needs about \d+ credits.*150 left/)
+    expect((await response.json()).error).toMatch(/needs about 150 credits.*100 left/)
     expect(mockRelease).toHaveBeenCalledTimes(1)
     expect(mockProvider.generate).not.toHaveBeenCalled()
   })
@@ -286,6 +286,7 @@ describe('photos', () => {
       model: 'gemini-3.1-flash-image',
       prompt: 'a red barn at dawn',
       aspectRatio: '16:9',
+      size: '1K',
       count: 2,
     })
     const [url, init] = mockFetch.mock.calls[0]
@@ -307,6 +308,7 @@ describe('photos', () => {
       model: 'gemini-3.1-flash-image',
       prompt: `a red barn at dawn\n\n${AI_MEDIA_RASTER_STYLE_WORDING.watercolor}`,
       aspectRatio: '16:9',
+      size: '1K',
       count: 1,
     })
     expect(JSON.parse(mockFetch.mock.calls[0][1].body).fileName).toBe('ai-a-red-barn-at-dawn-1.png')
@@ -342,9 +344,25 @@ describe('photos', () => {
       kind: 'image',
       uid: 'u1',
       hostId: 'host-1',
-      usage: { ...PHOTO_USAGE, images: 2 },
+      usage: { ...PHOTO_USAGE, images: 2, imageSize: '1K' },
     })
     expect(mockRelease).not.toHaveBeenCalled()
+  })
+
+  it('makes a Free workspace’s pictures at 512 px and charges them at that size, whatever the request says', async () => {
+    mockGate.mockResolvedValue(admitted({ plan: 'free' }))
+    mockCredits = { used: 0, limit: 300, remaining: 300 }
+    mockProvider.generate.mockResolvedValue(photos([image('A'), image('B')]))
+    const response = await POST(post({ ...BODY, size: '1K', imageSize: '1K' }))
+    expect(response.status).toBe(200)
+    expect(mockProvider.generate.mock.calls[0][0].size).toBe('512')
+    expect(mockRecordCost.mock.calls[0][2].usage).toMatchObject({ images: 2, imageSize: '512' })
+  })
+
+  it('makes a paid workspace’s pictures at 1K', async () => {
+    mockProvider.generate.mockResolvedValue(photos([image('A')]))
+    await POST(post({ ...BODY, count: 1, size: '512' }))
+    expect(mockProvider.generate.mock.calls[0][0].size).toBe('1K')
   })
 
   it('writes the alt text and the provenance onto each stored document', async () => {

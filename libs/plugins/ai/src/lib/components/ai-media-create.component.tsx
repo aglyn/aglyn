@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
+import { lockdownRefusalText, parseLockdownRefusal, resolveEffectivePlan } from '@aglyn/aglyn'
 import type { ConsoleMediaLibraryZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { mdiCreation } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { useUser } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Button,
@@ -42,6 +42,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
+import { doc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { aiMediaCreditsPerPicture } from '../model/ai-media-credits'
 import {
@@ -56,10 +57,12 @@ import {
   AI_IMAGE_ASPECT_RATIOS,
   AI_IMAGE_MAX_COUNT,
   AI_IMAGE_PROMPT_MAX_CHARS,
+  aiImageSizeForPlan,
   AI_SVG_MAX_COLORS,
   aiImagePhotosOffered,
   type AiImageAspectRatio,
   type AiImageMode,
+  type AiImageSize,
 } from '../providers/image-contract'
 
 /**
@@ -112,13 +115,13 @@ export const AI_MEDIA_DESCRIBE_COLORS_NOTE =
   'To steer the colors, name them in the description, such as navy and coral.'
 
 /** The menu's items: each section's heading, then its kinds with what one costs. */
-function kindMenuItems(kinds: readonly AiMediaKind[]): ReactNode[] {
+function kindMenuItems(kinds: readonly AiMediaKind[], size: AiImageSize): ReactNode[] {
   const groups = AI_MEDIA_KIND_GROUPS.filter((group) => kinds.some((kind) => kind.group === group))
   const item = (kind: AiMediaKind) => (
     <MenuItem key={kind.id} value={kind.id} sx={{ gap: 2 }}>
       <ListItemText primary={kind.label} />
       <Typography variant="caption" color="text.secondary">
-        {`about ${aiMediaCreditsPerPicture(kind.mode).toLocaleString()} credits`}
+        {`about ${aiMediaCreditsPerPicture(kind.mode, undefined, size).toLocaleString()} credits`}
       </Typography>
     </MenuItem>
   )
@@ -131,9 +134,28 @@ function kindMenuItems(kinds: readonly AiMediaKind[]): ReactNode[] {
   ])
 }
 
+/**
+ * The size the door will make a picture at for this workspace (AGL-3602):
+ * 512 px on the Free plan, 1K on a paid one. The door decides from the plan
+ * itself; this reads the same plan so the estimate matches, and reads 1K —
+ * the dearer estimate — until the workspace has arrived.
+ */
+export function useAiMediaImageSize(orgId: string): AiImageSize {
+  const firestore = useFirestore()
+  const { data: org, status } = useFirestoreDoc<Record<string, unknown>>(
+    () => doc(firestore, 'orgs', orgId),
+    [firestore, orgId],
+  )
+  return aiImageSizeForPlan(status === 'success' && resolveEffectivePlan(org as never) === 'free')
+}
+
 /** The sentence the estimate reads as, before anything is spent. */
-export function aiMediaCreditEstimate(mode: AiImageMode, count: number): string {
-  const each = aiMediaCreditsPerPicture(mode)
+export function aiMediaCreditEstimate(
+  mode: AiImageMode,
+  count: number,
+  size: AiImageSize = '1K',
+): string {
+  const each = aiMediaCreditsPerPicture(mode, undefined, size)
   const pictures = count === 1 ? '1 picture' : `${count} pictures`
   return (
     `${pictures} uses about ${(count * each).toLocaleString()} AI credits ` +
@@ -209,6 +231,7 @@ export function AiMediaCreateDialog({
   const userRef = useRef(user)
   userRef.current = user
   const photos = aiImagePhotosOffered()
+  const imageSize = useAiMediaImageSize(orgId)
   const kinds = useMemo(() => aiMediaKindsOffered(photos), [photos])
   const [kindId, setKindId] = useState<AiMediaKindId>(photos ? 'photo' : 'illustration')
   const kind = kinds.find((entry) => entry.id === kindId) ?? kinds[0]
@@ -315,7 +338,7 @@ export function AiMediaCreateDialog({
               },
             }}
           >
-            {kindMenuItems(kinds)}
+            {kindMenuItems(kinds, imageSize)}
           </TextField>
           <TextField
             label={mode === 'photo' ? 'Describe the picture' : 'Describe what to draw'}
@@ -433,7 +456,7 @@ export function AiMediaCreateDialog({
             ))}
           </TextField>
           <Typography variant="body2" color="text.secondary">
-            {aiMediaCreditEstimate(mode, count)}
+            {aiMediaCreditEstimate(mode, count, imageSize)}
           </Typography>
           {busy ? (
             <Stack spacing={1}>

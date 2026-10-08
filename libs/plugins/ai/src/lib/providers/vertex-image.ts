@@ -80,8 +80,9 @@ import {
  *
  * - `responseModalities: ['IMAGE']` — a picture and no prose, which is also
  *   what lets the model render at the size asked for;
- * - `imageConfig: { aspectRatio, imageSize: '1K' }` — the shape, at the
- *   1K size the per-picture rate is priced at;
+ * - `imageConfig: { aspectRatio, imageSize }` — the shape, at the size the
+ *   door chose from the workspace's plan: `512` on Free, `1K` on a paid
+ *   plan (`aiImageSizeForPlan`), each priced at its own per-picture rate;
  * - `thinkingConfig: { thinkingLevel: 'HIGH' }` — Google's mapping for the
  *   Imagen 4 model this replaces;
  * - `safetySettings` at `BLOCK_MEDIUM_AND_ABOVE` on harassment, hate,
@@ -134,14 +135,14 @@ const WITHHELD_FINISH = new Set([
 
 /** The request body for one picture, exactly as it is sent. */
 export function vertexImageRequestBody(
-  request: Pick<AiImageRequest, 'prompt' | 'aspectRatio'>,
+  request: Pick<AiImageRequest, 'prompt' | 'aspectRatio' | 'size'>,
 ): Record<string, unknown> {
   return {
     contents: [{ role: 'USER', parts: [{ text: request.prompt }] }],
     generationConfig: {
       responseModalities: ['IMAGE'],
       candidateCount: 1,
-      imageConfig: { aspectRatio: request.aspectRatio, imageSize: '1K' },
+      imageConfig: { aspectRatio: request.aspectRatio, imageSize: request.size },
       thinkingConfig: { thinkingLevel: 'HIGH' },
     },
     safetySettings: VERTEX_IMAGE_SAFETY_CATEGORIES.map((category) => ({
