@@ -106,5 +106,25 @@
   "fonts": {
     "baseline": 4059,
     "budget": 5120
+  },
+  "post-purchase": {
+    "baseline": 3128,
+    "budget": 4096
+  },
+  "fulfillment-networks": {
+    "baseline": 5611,
+    "budget": 7168
+  },
+  "marketplaces": {
+    "baseline": 7708,
+    "budget": 10240
+  },
+  "print-on-demand": {
+    "baseline": 5791,
+    "budget": 8192
+  },
+  "inventory-sync": {
+    "baseline": 6766,
+    "budget": 9216
   }
 }

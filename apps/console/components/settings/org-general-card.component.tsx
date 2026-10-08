@@ -149,7 +149,11 @@ export function OrgGeneralCard() {
       disabled={!canManage}
       onChange={(event) => setName(event.target.value)}
     />
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+    <Stack
+      direction={{ xs: 'column', sm: 'row' }}
+      spacing={1}
+      sx={{ alignItems: 'flex-start' }}
+    >
       <TextField
         label="Workspace URL"
         value={slug}
@@ -167,14 +171,14 @@ export function OrgGeneralCard() {
               : `Full address: ${slug || '…'}.${WORKSPACE_DOMAIN}. ` +
                 'Old URLs keep redirecting after a change.'
         }
-        sx={{ flexGrow: 1 }}
+        sx={{ flexGrow: 1, alignSelf: { xs: 'stretch', sm: 'auto' } }}
       />
       {isOwner ? (
         <Button
           variant="outlined"
           disabled={busy || !slugChanged || !isValidOrgSlug(slug)}
           onClick={() => void handleSlugChange()}
-          sx={{ mt: 1 }}
+          sx={{ mt: { xs: 0, sm: 1 }, flexShrink: 0, whiteSpace: 'nowrap' }}
         >
           {'Change URL'}
         </Button>

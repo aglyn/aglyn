@@ -114,6 +114,7 @@ export function ContactKnownByCard(props: ContactKnownByCardProps) {
               const name = mount.siteName(hostId)
               return (
                 <Stack
+                  useFlexGap
                   key={hostId}
                   direction="row"
                   spacing={1}

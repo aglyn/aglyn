@@ -226,6 +226,56 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     "alwaysOn": true,
     "description": "Upload your own fonts and pick from the Google Fonts catalog for your site's theme."
   },
+  {
+    "id": "post-purchase",
+    "label": "Tracking and protection",
+    "alwaysOnForWorkspace": true,
+    "description": "Order tracking and package protection.",
+    "siteOff": {
+      "stops": "Stops protection and tracking for new orders.",
+      "keeps": "Bought protection stays in force."
+    }
+  },
+  {
+    "id": "fulfillment-networks",
+    "label": "Fulfillment networks",
+    "alwaysOnForWorkspace": true,
+    "description": "Paid orders shipped by your own ShipBob or Amazon Multi-Channel Fulfillment account, with tracking back on the order and stock counts in step.",
+    "siteOff": {
+      "stops": "Switching Fulfillment networks off for this site stops its paid orders going to ShipBob or Amazon, and stops their shipments and stock counts coming back.",
+      "keeps": "The connections and every order already sent are kept, and what a network already shipped stays on the order."
+    }
+  },
+  {
+    "id": "marketplaces",
+    "label": "Marketplaces",
+    "alwaysOnForWorkspace": true,
+    "description": "Sell on Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire from one stock count: their orders come in as yours, and tracking goes back.",
+    "siteOff": {
+      "stops": "Switching Marketplaces off for this site stops importing its marketplace orders, sending tracking to the marketplaces, and keeping their listings in step with its stock.",
+      "keeps": "The connections and every order already imported are kept, and switching it back on resumes from where the orders were last read."
+    }
+  },
+  {
+    "id": "print-on-demand",
+    "label": "Print on demand",
+    "alwaysOnForWorkspace": true,
+    "description": "Sell products your own Printful or Printify account makes and ships, with orders sent and tracking returned automatically.",
+    "siteOff": {
+      "stops": "Switching Print on demand off for this site stops new paid orders being sent to Printful or Printify, and stops imported products updating.",
+      "keeps": "The connections, the imported products and the orders already sent are kept, and parcels already on their way still reach the orders."
+    }
+  },
+  {
+    "id": "inventory-sync",
+    "label": "Inventory sync",
+    "alwaysOnForWorkspace": true,
+    "description": "Stock, products and paid orders kept in step with your own Cin7 Core, inFlow or Brightpearl account.",
+    "siteOff": {
+      "stops": "Switching Inventory sync off for this site stops its stock counts, products and paid orders syncing with Cin7 Core, inFlow or Brightpearl.",
+      "keeps": "The connection and its settings are kept, and everything already synced stays on both sides."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -254,6 +304,11 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "sales-channels": "routes",
   "marketing-platforms": "console-only",
   "fonts": "console-only",
+  "post-purchase": "console-only",
+  "fulfillment-networks": "console-only",
+  "marketplaces": "console-only",
+  "print-on-demand": "console-only",
+  "inventory-sync": "console-only",
 }
 
 /**
@@ -2217,6 +2272,56 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "marketing-platforms",
     "name": "marketingPlatformEvents",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "fulfillment-networks",
+    "name": "fulfillmentNetworkConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "fulfillment-networks",
+    "name": "fulfillmentNetworkOrders",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "marketplaces",
+    "name": "marketplaceConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "marketplaces",
+    "name": "marketplaceOrders",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "print-on-demand",
+    "name": "podConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "print-on-demand",
+    "name": "podProductLinks",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "print-on-demand",
+    "name": "podOrders",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "inventory-sync",
+    "name": "inventorySyncConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "inventory-sync",
+    "name": "inventorySyncOrders",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "inventory-sync",
+    "name": "inventorySyncProducts",
     "orgField": "orgId"
   },
 ]

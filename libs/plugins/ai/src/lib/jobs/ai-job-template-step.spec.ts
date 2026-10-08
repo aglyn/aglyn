@@ -432,7 +432,9 @@ describe('the template step', () => {
     expect(outcome.outputs).toEqual([])
     expect(outcome.review).toEqual({
       reason: 'doctrine',
-      message: expect.stringContaining('Rule 8'),
+      // The rule's own words are staff reading; the customer reads the plain refusal (AGL-3596).
+      message: 'Aglyn AI couldn’t build this cleanly, so we stopped rather than give you something broken.',
+      detail: expect.stringContaining('Rule 8'),
       findings: [
         { rule: 8, code: 'unknown-binding', message: expect.stringContaining('{{product.sku}}'), nodeIds: ['sku'] },
         { rule: 8, code: 'typed-title', message: expect.stringContaining('{{product.name}}'), nodeIds: ['title'] },

@@ -66,6 +66,7 @@ const CHANNEL_LABELS: Record<AcquisitionChannel, string> = {
 const DOOR_LABELS: Record<AcquisitionDoor, string> = {
   'signup-password': 'Sign-up form, password',
   'signup-google': 'Sign-up form, Google',
+  'signup-google-redirect': 'Sign-up form, Google (redirect)',
   invite: 'Invitation',
   sso: 'Single sign-on',
   unknown: 'Unknown',

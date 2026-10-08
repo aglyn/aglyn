@@ -702,6 +702,7 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
                       ) : null}
                     </Stack>
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={0.5}
                       sx={{ alignItems: 'baseline', flexWrap: 'wrap', color: 'text.secondary' }}

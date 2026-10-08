@@ -169,7 +169,7 @@ export function OutreachCuratedStepEditor(props: OutreachCuratedStepEditorProps)
   if (draft.decision !== 'pending') {
     return (
       <Paper variant="outlined" sx={{ p: 1.5 }} aria-label={`${label} — ${draft.decision === 'use' ? 'curated' : 'template kept'}`}>
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+        <Stack useFlexGap direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
           <Typography variant="body2" sx={{ flexGrow: 1 }}>
             {label}
           </Typography>

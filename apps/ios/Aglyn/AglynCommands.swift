@@ -28,9 +28,6 @@ struct AglynCommands: Commands {
         }
       }
       Divider()
-      Button("Console") { navigation?.select(.more) }
-        .keyboardShortcut("0", modifiers: .command)
-      Divider()
       Button("Switch Workspace or Site…") { navigation?.showSwitcher = true }
         .keyboardShortcut("k", modifiers: .command)
         .disabled(navigation == nil)

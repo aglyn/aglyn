@@ -26,7 +26,7 @@ import com.aglyn.hardware.HidBurstDetector
 import com.aglyn.hardware.NetworkReceiptPrinter
 import com.aglyn.hardware.StaticPeripherals
 import com.aglyn.pluginhost.NativeApp
-import com.aglyn.plugins.manifest.NativePlugins
+import com.aglyn.plugins.manifest.NativePluginManifest
 import com.aglyn.shell.DesktopShell
 import com.aglyn.shell.PosShell
 import kotlinx.coroutines.runBlocking
@@ -59,7 +59,7 @@ fun main() {
   val services = DesktopShell.services(
     NativeApp.POS,
     DesktopShell.envFromSystem(),
-    NativePlugins.entries,
+    NativePluginManifest.entries,
     StaticPeripherals(printers = listOf(NetworkReceiptPrinter("Counter printer", "127.0.0.1", printer.localPort)), hidScanner = HidBurstDetector()),
   )
   runBlocking { services.auth.signInWithEmail(services.debugSignIn!!.first, services.debugSignIn!!.second) }

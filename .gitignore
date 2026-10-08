@@ -138,3 +138,7 @@ vite.config.*.timestamp*
 /apps/console/CLAUDE.md
 /apps/tenant/AGENTS.md
 /apps/tenant/CLAUDE.md
+
+# Recorded AI provider answers a development run replays (AGL-3660,
+# libs/plugins/ai/src/lib/runtime/ai-dev-replay.ts). Never committed.
+/.cache/ai-replay/

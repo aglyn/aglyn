@@ -620,7 +620,7 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
             <Typography variant="overline" color="text.secondary">
               {'Add-on'}
             </Typography>
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <Stack useFlexGap direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
               <Chip
                 size="small"
                 color={data.addon.on ? 'primary' : 'default'}

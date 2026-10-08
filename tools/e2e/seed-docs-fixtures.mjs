@@ -205,7 +205,11 @@ await put(
     orgId,
     role: 'editor',
     displayName: 'Demo Bakery',
+    nameLower: 'demo bakery',
     createdAt: daysAgo(21),
+    // The site switcher's idle list is `orderBy('updatedAt')`, which leaves
+    // out any row without the field — `membershipRow` always stamps it.
+    updatedAt: daysAgo(21),
   },
 )
 // The site's own roster, which the site Users card lists. Shaped as
@@ -422,6 +426,9 @@ await put(
     nameLower: 'downgraded bakery',
     role: 'admin',
     createdAt: daysAgo(60),
+    // As above: without it the switcher reads "No sites yet." over a
+    // workspace whose Sites page lists this one.
+    updatedAt: daysAgo(60),
   },
 )
 // One product, because the draft dialog cannot be filled in without one — the
@@ -521,14 +528,15 @@ for (const row of auditRows) {
 }
 
 // ── The staff-only guard's subject (AGL-3319) ─────────────────────────────
-// The capture preflight has to SEE the one nav tab that ships flagged off,
-// Sequences (`release_outreach`), before it can prove the tab is hidden from
-// every shot. The org strip draws that tab only for an org with the plugin on
-// AND its `outreach` entitlement, which no plan carries, so without these two
-// fields there is no marker to find and the preflight refuses to capture
-// anything. Staff still see it ⚑-badged; the harness hides it, which is the
+// The capture preflight has to SEE every nav tab that ships flagged off,
+// Sequences (`release_outreach`) and Accounting (`release_accounting`), before
+// it can prove each is hidden from every shot. The org strip draws Sequences
+// only for an org with the plugin on AND its `outreach` entitlement, which no
+// plan carries, and Accounting only for an org with the plugin on (its
+// `commerce` entitlement comes with the seeded plan), so without these fields
+// there is no marker to find and the preflight refuses to capture anything. Staff still see it ⚑-badged; the harness hides it, which is the
 // strip a customer's console renders.
-console.log('Plugins (Sequences for the staff-only guard, member accounts):')
+console.log('Plugins (Sequences and Accounting for the staff-only guard, member accounts):')
 await firestore.collection('orgs').doc(orgId).set(
   {
     // `accounts` too: the member-accounts guide signs a visitor up on the
@@ -536,7 +544,7 @@ await firestore.collection('orgs').doc(orgId).set(
     // for an org without the plugin that owns them.
     // `forms` for the same reason: the survey guide's Form element lives in
     // that bundle, and the base seed's list predates the move.
-    enabledPlugins: FieldValue.arrayUnion('outreach', 'accounts', 'forms'),
+    enabledPlugins: FieldValue.arrayUnion('outreach', 'accounting', 'accounts', 'forms'),
     entitlements: { features: { outreach: true } },
   },
   { merge: true },

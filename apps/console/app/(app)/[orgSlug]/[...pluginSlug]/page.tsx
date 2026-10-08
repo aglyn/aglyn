@@ -388,6 +388,17 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     <PluginHubRail sections={resolvedSections}>
       <Alert
         severity="info"
+        // On a phone the action drops below the message instead of squeezing
+        // it; from sm up these are MUI's own action offsets.
+        sx={{
+          flexWrap: { xs: 'wrap', sm: 'nowrap' },
+          '& .MuiAlert-action': {
+            width: { xs: '100%', sm: 'auto' },
+            ml: { xs: 0, sm: 'auto' },
+            pl: { xs: 4.25, sm: 2 },
+            pt: { xs: 0, sm: 0.5 },
+          },
+        }}
         action={
           orgSlug ? (
             <AppLink

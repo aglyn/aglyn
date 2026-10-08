@@ -345,6 +345,14 @@ export interface AiRequestBase {
   effort?: AiEffort
   thinking?: AiThinking
   signal?: AbortSignal
+  /**
+   * How long a cache entry the breakpoints write should live, where the
+   * provider offers a choice: the provider's default (five minutes on the
+   * Messages API) when absent. Only a development run asks for `1h`
+   * (`runtime/ai-dev-replay.ts`); it changes no answer, only what a second
+   * request within the hour pays for the prefix.
+   */
+  cacheTtl?: '1h'
 }
 
 /** The request an adapter receives: the runtime has already validated it. */
@@ -634,6 +642,21 @@ export interface AiProvider {
    * door can still send a plain error status and hand back its reservation.
    */
   stream(request: AiProviderRequest): Promise<AsyncIterable<AiStreamEvent>>
+  /**
+   * Many requests answered together, asynchronously, at the provider's batch
+   * discount, where it has one: each entry is that request's result, or the
+   * error it failed with, in the order asked. Only a development run's live
+   * eval calls it (`runtime/ai-live-batch.ts`); no door does.
+   */
+  completeBatch?(requests: readonly AiProviderRequest[], options?: AiBatchOptions): Promise<Array<AiResult | Error>>
+}
+
+/** How a batch is waited on. */
+export interface AiBatchOptions {
+  /** Between two looks at a batch still processing; 10 s when absent. */
+  pollMs?: number
+  /** The most a batch is waited for before every request in it fails; an hour when absent. */
+  timeoutMs?: number
 }
 
 /** A count off the wire: finite, non-negative, whole; anything else is 0. */

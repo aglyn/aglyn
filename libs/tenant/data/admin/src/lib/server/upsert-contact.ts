@@ -23,6 +23,7 @@ import {
   CONTACT_EXTRA_PHONE_FIELDS,
   type ConsentGroup,
   consentGroupScope,
+  crmDefaultScopeOf,
   CONTACT_FACETS_FIELD,
   CONTACT_FORM_IDS_CAP,
   CONTACT_FORM_IDS_FIELD,
@@ -1070,12 +1071,14 @@ export async function upsertHostContact(
        *
        * A group of one — the default — is this site alone. A declared group
        * is the sites that already present as one sender. Widening beyond that
-       * is available and is an ACT: an org may set `defaultResourceScope` to
-       * `'org'`, or a later capture on a sibling site unions that site in.
+       * is available and is an ACT: an org may set its CRM default
+       * (`crmDefaultScopeOf`) to `'org'`, or a later capture on a sibling
+       * site unions that site in.
        */
       visibleTo:
-        (orgBilling?.org as { defaultResourceScope?: 'org' | 'host' } | null)
-          ?.defaultResourceScope === 'org'
+        crmDefaultScopeOf(
+          orgBilling?.org as Record<string, unknown> | null | undefined,
+        ) === 'org'
           ? [ORG_SCOPE_TOKEN]
           : consentGroupScope(group),
       email,

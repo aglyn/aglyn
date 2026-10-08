@@ -553,14 +553,13 @@ Only workspace owners and admins can change sharing.
 
 A new folder or file starts shared with **All sites**, so it appears everywhere the moment
 you create it — or with the site you were working in, if your workspace has been set to
-make new resources site-scoped by default. That default is **Default sharing for new data
-and media**, at the top of the workspace's **Media** page, and it changes nothing that
-already exists. The site you were working in is the one whose **Media** tab you uploaded
+make new media site-scoped by default. That default is **Default sharing for new media**,
+at the top of the workspace's **Media** page, and it changes nothing that already exists. The site you were working in is the one whose **Media** tab you uploaded
 on, or the one you were editing when you opened the media picker. A folder or file
 created on the workspace **Media** page has no site to limit it to, so it starts on **All
-sites** either way. The default applies to new datasets the same way: one created on a
-site's **Data** page follows it, and one created on the organization **Data** page starts
-on **All sites**. If the **Shared with** dialog ever opens on
+sites** either way. New datasets have a default of their own, **Default sharing for new
+datasets** on the organization **Data** page, so files can start on every site while
+datasets start on one, or the other way round. If the **Shared with** dialog ever opens on
 "Not shared with any site", that folder or file has no sharing stored at all: it is hidden
 from every site, and any file inside it turns up under **No folder** there. Pick a value
 and save to fix it.

@@ -195,6 +195,7 @@ function ArchiveCard() {
         ) : null}
         {files?.map((entry) => (
           <Stack
+            useFlexGap
             key={entry.name}
             direction="row"
             spacing={1}
@@ -222,6 +223,7 @@ function ArchiveCard() {
             sx={{ borderBottom: 1, borderColor: 'divider', pb: 1 }}
           >
             <Stack
+              useFlexGap
               direction="row"
               spacing={1}
               sx={{ alignItems: 'center', flexWrap: 'wrap' }}

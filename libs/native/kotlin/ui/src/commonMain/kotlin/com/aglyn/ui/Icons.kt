@@ -64,6 +64,15 @@ import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sell
 import androidx.compose.material.icons.outlined.ShoppingBasket
+import androidx.compose.material.icons.outlined.Bluetooth
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.FlashlightOn
+import androidx.compose.material.icons.outlined.FlashlightOff
+import androidx.compose.material.icons.outlined.LocalShipping
+import androidx.compose.material.icons.outlined.Cancel
+import androidx.compose.material.icons.outlined.DoneAll
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.WifiOff
@@ -143,6 +152,15 @@ object AglynIcons {
     "tune" to Icons.Outlined.Tune,
     "clear_all" to Icons.Outlined.ClearAll,
     "bookmark" to Icons.Outlined.BookmarkBorder,
+    "bluetooth" to Icons.Outlined.Bluetooth,
+    "photo_camera" to Icons.Outlined.PhotoCamera,
+    "flashlight_on" to Icons.Outlined.FlashlightOn,
+    "flashlight_off" to Icons.Outlined.FlashlightOff,
+    "local_shipping" to Icons.Outlined.LocalShipping,
+    "cancel" to Icons.Outlined.Cancel,
+    "done_all" to Icons.Outlined.DoneAll,
+    "location_on" to Icons.Outlined.LocationOn,
+    "undo" to Icons.AutoMirrored.Outlined.Undo,
   )
 
   fun named(name: String?): ImageVector = byName[name] ?: Icons.Outlined.Extension

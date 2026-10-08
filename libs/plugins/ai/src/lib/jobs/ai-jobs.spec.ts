@@ -346,6 +346,16 @@ afterEach(() => {
   jest.restoreAllMocks()
 })
 
+
+/** The look a scaffold designs first (AGL-3660), spending nothing: these specs are about what comes after it. */
+const lookPass = async () => ({
+  outputs: [{ resource: 'theme' as const, id: 'look', hostId: 'host-1', label: 'Your look' }],
+  usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+  estCostUsd: 0,
+  model: 'test-model',
+  stopReason: null,
+})
+
 describe('createAiJob', () => {
   it('writes a queued job with its step plan, a credit hold and a TTL', async () => {
     const job = await newTextJob()
@@ -480,7 +490,10 @@ describe('a step run again after its draft was written finds that draft and writ
   // loaded unit kind is that one, so a scaffold builds its layout alone.
   beforeAll(() => {
     registerAiJobStep('layout', layoutStep)
-    registerAiJobStep('site', createAiJobSiteStep({ runnerFor: (kind) => (kind === 'layout' ? layoutStep : null) }))
+    registerAiJobStep(
+      'site',
+      createAiJobSiteStep({ runnerFor: (kind) => (kind === 'layout' ? layoutStep : null), look: lookPass }),
+    )
   })
   beforeEach(() => {
     writes.length = 0
@@ -561,6 +574,8 @@ describe('a step run again after its draft was written finds that draft and writ
     const recorded = (await getAiJob(firestore, ORG, job.$id))?.plan?.create[0].id
     expect(recorded).toMatch(RESOURCE_ID)
     expect(recorded).not.toContain(job.$id)
+    // The scaffold designs its look first (AGL-3660); the layout's pass is the one after it.
+    await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
 
     await runAgain[path](job.$id)
 
@@ -573,6 +588,7 @@ describe('a step run again after its draft was written finds that draft and writ
         // The site's own listing, which every scaffold reports once and which
         // no unit builds (AGL-2918).
         expect.objectContaining({ resource: 'seo', id: 'site:listing' }),
+        expect.objectContaining({ resource: 'theme', id: 'look' }),
         expect.objectContaining({ resource: 'layout', id: recorded }),
       ],
     })
@@ -797,7 +813,7 @@ describe('runAiJobStep — the text step end to end', () => {
     expect(signals[0][1]).toMatchObject({
       route: 'ai/jobs',
       hostId: 'host-1',
-      model: 'claude-sonnet-5',
+      model: 'claude-sonnet-5-5',
       tier: 'entitled',
       stopReason: 'end_turn',
     })
@@ -819,7 +835,7 @@ describe('runAiJobStep — the text step end to end', () => {
     await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
     const request = mockRunAiRequest.mock.calls[0][0] as Record<string, unknown>
     expect(request).toMatchObject({
-      model: 'claude-sonnet-5',
+      model: 'claude-sonnet-5-5',
       thinking: 'adaptive',
       stream: false,
     })
@@ -2024,7 +2040,9 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
     expect(parked?.status).toBe('needs_review')
     expect(parked?.review).toEqual({
       reason: 'doctrine',
-      message: expect.stringContaining('Rule 12'),
+      // The rule's own words are staff reading; the customer reads the plain refusal (AGL-3596).
+      message: 'Aglyn AI couldn’t build this cleanly, so we stopped rather than give you something broken.',
+      detail: expect.stringContaining('Rule 12'),
       findings: [
         {
           rule: 12,
@@ -2775,6 +2793,7 @@ describe('a guided site start settles page by page, as a build does (AGL-3616)',
       createAiJobSiteStep({
         runnerFor: ((kind: string) => runners[kind] ?? null) as never,
         readNodes: async () => ({ versionId: 'v', nodes: new Proxy({}, { has: () => true }) as never }),
+        look: lookPass,
         publish: async (_firestore, input) => {
           published.push(input.outputs.map((output) => output.label))
           return { liveUrl: 'https://x.aglyn.app/', published: [], drafts: [] }
@@ -2809,6 +2828,7 @@ describe('a guided site start settles page by page, as a build does (AGL-3616)',
     const job = await guidedStart()
     expect(job.status).toBe('done')
     expect(job.items?.map((row) => [row.label, row.status])).toEqual([
+      ['Your look', 'succeeded'],
       ['Contact', 'succeeded'],
       ['Home', 'failed'],
       ['About', 'succeeded'],
@@ -2820,6 +2840,12 @@ describe('a guided site start settles page by page, as a build does (AGL-3616)',
     expect(job.orchestration).toEqual({ creditsSpent: 6, settled: 'charged' })
     // Only what was built goes live.
     expect(published).toEqual([['About', 'Services', 'Contact']])
+    // Each item records when it settled, in the write that records its pass,
+    // so the next item's row counts from there (AGL-3596).
+    expect(job.items?.every((row) => row.settledAt === NOW.toISOString())).toBe(true)
+    // The summary says the machine confirms the plan itself, so a surface
+    // reads its instant on the plan as the build going on (AGL-3596).
+    expect(aiJobSummary(job, NOW).autoConfirm).toBe(true)
   })
 
   it('Try again builds only the failed page', async () => {
@@ -2831,6 +2857,7 @@ describe('a guided site start settles page by page, as a build does (AGL-3616)',
     const job = (await getAiJob(firestore, ORG, first.$id)) as AiJob
     expect(job.status).toBe('done')
     expect(job.items?.find((row) => row.slot === 'p0')).toMatchObject({ status: 'succeeded', attempt: 2 })
+    expect(retried.job.items?.find((row) => row.slot === 'p0')?.settledAt).toBeNull()
   })
 
   it('a site that built no page fails, every credit given back, and is started over from its answers', async () => {
@@ -2841,5 +2868,41 @@ describe('a guided site start settles page by page, as a build does (AGL-3616)',
     expect(job.orchestration).toEqual({ creditsSpent: 6, settled: 'refunded' })
     // Not tried item by item: its Try again reopens the guided start.
     expect((await retryAiBuildJob(firestore, ORG, job.$id, NOW)).changed).toBe(false)
+  })
+})
+
+/*
+ * A job written before its steps kept a building rule's own words apart
+ * (AGL-3596) still reaches the console without them: every surface reads the
+ * summary.
+ */
+describe('a building rule never reaches the wire (AGL-3596)', () => {
+  const RULE = "This could not be built within the building rules. Rule 12 (Responsive by the theme's breakpoints): Every child of a Grid container is a Grid item."
+
+  it('sends the plain refusal, the rule as the review’s staff detail, and no item detail', () => {
+    const summary = aiJobSummary(
+      {
+        $id: 'job-old',
+        orgId: 'org-1',
+        kind: 'page',
+        status: 'needs_review',
+        brief: 'A page',
+        inputs: {},
+        steps: [],
+        createdBy: 'uid-1',
+        error: RULE,
+        review: { reason: 'doctrine', message: RULE, findings: [] },
+        items: [
+          {
+            slot: 'p0', op: 'page', label: 'Home', status: 'failed', attempt: 1, creditsSpent: 9, creditsRefunded: 9, outputs: [],
+            failure: { ours: true, reason: 'doctrine-refused', message: RULE, detail: RULE },
+          },
+        ],
+      } as never,
+      NOW,
+    )
+    expect(summary.error).toBe("Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page.")
+    expect(summary.review).toMatchObject({ message: "Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page.", detail: RULE })
+    expect(summary.items?.[0].failure).toEqual({ ours: true, reason: 'doctrine-refused', message: "Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page." })
   })
 })

@@ -762,6 +762,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
           </TextField>
           {/* Schedule + auto-winner (AGL-273). */}
           <Stack
+            useFlexGap
             direction="row"
             spacing={1}
             sx={{ alignItems: 'center', flexWrap: 'wrap' }}

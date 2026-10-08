@@ -58,12 +58,18 @@ Whether the **center** zone means "drop inside" depends on the kind of element y
 **App Bar**, **Toolbar**, and similar. Dropping onto a container's center nests your element inside
 it. This is how you build structure — a Stack of buttons, a Section full of blocks, and so on.
 
+**Typography** is a container too. Drop an element on its center and it nests inside, after the
+Typography's own text: a heading can carry a badge, an icon, or a second line of text. A Typography
+nested inside another continues the same line, the way a phrase continues a sentence, so add a space
+at the start of its text if you want one between them. Double-click the outer text to edit it as
+usual; the elements inside are left alone.
+
 ### Leaf elements don't — dropping on one makes a sibling
 
 **Leaf elements** have no slot for child elements. There are three kinds:
 
-- **Text elements** render their content as inline text — a **Page Link**, a **Button**, or a
-  **Text** element. Their words *are* their content; there's nowhere to nest a child.
+- **Text elements** render their content as inline text — a **Page Link**, a **Button**, or an
+  **Inline Text** run. Their words *are* their content; there's nowhere to nest a child.
 - **Self-closing elements** draw themselves and take no children at all — an **Image**, an
   **Icon**, or a **Video**.
 - **Elements whose content is an attribute** look like containers but draw only what their

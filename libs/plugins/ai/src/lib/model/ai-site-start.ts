@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { aiSiteKind, aiSiteKindFor, type AiSiteKind } from './ai-site-kinds'
 import {
   AI_SITE_INPUT_MAX_CHARS,
   AI_SITE_SUBMISSIONS,
@@ -132,6 +133,12 @@ export interface AiSiteStartAnswers {
   audience: string
   /** The example they liked, by {@link AiSiteStartExample.id}; `null` for none. */
   example: string | null
+  /**
+   * The kind of site they picked (AGL-3660), by its `AI_SITE_KINDS` id;
+   * `null` until they pick one, when the kind their first answer suggests is
+   * the one used ({@link aiSiteStartKind}).
+   */
+  kind: string | null
   /** How many pages to plan. */
   pages: number
   /** Where the contact form's submissions go. */
@@ -151,9 +158,15 @@ export const AI_SITE_START_ANSWERS: AiSiteStartAnswers = {
   siteType: '',
   audience: '',
   example: null,
+  kind: null,
   pages: 5,
   submissions: 'inbox',
   welcomeEmail: true,
+}
+
+/** The kind of site the answers pick, else the one what the site is for suggests. */
+export function aiSiteStartKind(answers: Pick<AiSiteStartAnswers, 'kind' | 'siteType'>): AiSiteKind {
+  return aiSiteKind(answers.kind) ?? aiSiteKindFor(answers.siteType)
 }
 
 /** The example an answer names, or `null` when it names none this list knows. */
@@ -213,6 +226,8 @@ export function aiSiteStartBrief(answers: AiSiteStartAnswers): string {
       `Follow the shape of the ${example.label} starter: ${example.blurb.toLowerCase()}.`,
     )
   }
+  // The kind they picked, or the one their answer suggests (AGL-3660).
+  sentences.push(`Make it a ${aiSiteStartKind(answers).label.toLowerCase()} site.`)
   sentences.push(
     'Plan a page for each thing a visitor comes to do, and a contact form on the page that asks to be contacted.',
   )
@@ -232,17 +247,22 @@ export function aiSiteStartBrief(answers: AiSiteStartAnswers): string {
  * without a prompt of their own.
  *
  * The per-site variables an agency batch fills — the business name, the city,
- * the brand — are left empty: this is one person's own site, and its name is
- * on the site already.
+ * the brand — are left empty here: the questions never ask them. The name is
+ * the site's own, and the create door fills it from the site
+ * (`aiJobAdmittedInputs`, AGL-3596) when the job is started — a job that
+ * reached the model with no name had the model invent one for its header and
+ * footer.
  */
 export function aiSiteStartInputs(
   answers: AiSiteStartAnswers,
 ): Omit<AiSiteJobInputs, 'batchId'> {
   const example = aiSiteStartExample(answers)
+  const kind = aiSiteStartKind(answers)
   return {
     businessType: answers.siteType.trim(),
     audience: answers.audience.trim(),
-    starter: example?.id ?? '',
+    starter: example?.id ?? kind.starter,
+    siteKind: kind.id,
     pages: answers.pages,
     businessName: '',
     city: '',
@@ -257,6 +277,7 @@ export const AI_SITE_START_INPUT_KEYS = [
   'businessType',
   'audience',
   'starter',
+  'siteKind',
   'pages',
   'businessName',
   'city',
@@ -300,6 +321,7 @@ export function aiSiteStartAnswersFromInputs(
     siteType,
     audience: text('audience'),
     example: AI_SITE_START_EXAMPLES.some((entry) => entry.id === starter) ? starter : null,
+    kind: aiSiteKind(text('siteKind'))?.id ?? null,
     pages: Math.min(band.max, Math.max(band.min, pages)),
     submissions: (AI_SITE_SUBMISSIONS as readonly string[]).includes(submissions)
       ? (submissions as AiSiteSubmissions)

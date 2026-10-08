@@ -869,6 +869,7 @@ export function SubmissionsCard({
             would be worse than the silence.
            */}
           <Stack
+            useFlexGap
             direction="row"
             spacing={1}
             sx={{ mt: 2, flexWrap: 'wrap', rowGap: 1 }}

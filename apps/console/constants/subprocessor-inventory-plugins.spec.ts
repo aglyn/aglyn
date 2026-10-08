@@ -40,8 +40,8 @@ const PUBLISHED_ANTHROPIC_ENTRY = {
   entity: 'Anthropic, PBC',
   region: 'United States',
   purpose:
-    "AI-assisted features in the console and the site editor: the Aglyn Assist helper, including changes it proposes to a page, component, or layout open in the editor; editor assistance (rewriting element copy, drafting blog bodies, generating a section layout); and AI generation, which creates drafts and proposals for a customer's site from a brief or from what the site already holds, such as copy, layouts, templates, automations, search titles and descriptions, theme changes, product descriptions and tags, draft products, and store categories and discounts; explanations of a site's automations, including why an automation's run failed; AI insights, which answer a customer's questions about its own figures, such as site traffic, sales, bookings, forms, campaigns, A/B tests and datasets, and write a weekly summary of them for members who ask for one; and AI assistance in the CRM, which summarizes a contact, company, deal or lead for a user and suggests a next step, drafts a one-to-one email for the user to review and send, and suggests how the columns of a spreadsheet the user imports match CRM fields",
-  publishedOn: '2026-10-05',
+    "AI features of the Services, including the Aglyn Assist helper: creating, editing and reviewing content, drafts and settings for a customer’s site, store and CRM, and explaining and summarizing the customer’s own setup and data",
+  publishedOn: '2026-10-07',
   reason:
     "Reached through the AI plugin's Anthropic adapter (`libs/plugins/ai/src/lib/providers/anthropic.ts`) by the doors that call the AI runtime. `libs/plugins/ai/src/lib/server/assist-chat.ts` is gated by `release_assist` AND the key, and a generation job's text step by `release_ai_generative`; `libs/plugins/ai/src/lib/server/ai-assist.ts` carries NO release flag, so setting `ANTHROPIC_API_KEY` in production is by itself what starts this flow. `assist-anthropic-subprocessor-gate.spec.ts` holds the per-door detail and is the deeper guard for this one vendor.",
   dataReceived:
@@ -119,8 +119,20 @@ describe('plugin-declared hosts and uses reach the registry (AGL-2978)', () => {
   })
 
   it('folds each declared host in as written, with no published row', () => {
+    // Another plugin's use of a declared host (AGL-3638: the marketplaces
+    // plugin reaches the Amazon hosts fulfillment networks declares) follows
+    // the declaration's own words, which still lead the entry.
+    const used = new Set(uses.map((use) => use.host))
     for (const declaration of hosts) {
-      expect([declaration.host, EGRESS_HOSTS[declaration.host]]).toStrictEqual([
+      const entry = EGRESS_HOSTS[declaration.host]
+      if (used.has(declaration.host)) {
+        expect([declaration.host, entry.disposition]).toEqual([declaration.host, declaration.disposition])
+        expect(entry.reason.startsWith(declaration.reason)).toBe(true)
+        expect(entry.dataReceived.startsWith(declaration.dataReceived)).toBe(true)
+        expect('publishedOn' in entry).toBe(false)
+        continue
+      }
+      expect([declaration.host, entry]).toStrictEqual([
         declaration.host,
         {
           disposition: declaration.disposition,
@@ -137,8 +149,12 @@ describe('plugin-declared hosts and uses reach the registry (AGL-2978)', () => {
       expect([use.host, Boolean(entry)]).toEqual([use.host, true])
       expect(entry.reason).toContain(` ${use.reason}`)
       expect(entry.dataReceived).toContain(` ${use.dataReceived}`)
-      // A use neither takes the host over nor changes what it is.
-      expect(hosts.some((declaration) => declaration.host === use.host)).toBe(false)
+      // A use neither takes the host over nor changes what it is: no plugin
+      // both declares and uses one host, and a used host keeps its disposition.
+      const owner = PLUGIN_SUBPROCESSORS.find((plugin) => (plugin.uses ?? []).includes(use))
+      expect((owner?.hosts ?? []).some((declaration) => declaration.host === use.host)).toBe(false)
+      const declared = hosts.find((declaration) => declaration.host === use.host)
+      if (declared) expect(entry.disposition).toBe(declared.disposition)
       expect(recipients.has(use.host)).toBe(false)
       expect(entry.reason.startsWith(use.reason)).toBe(false)
     }

@@ -100,7 +100,7 @@ export function aiSeoValuesForEditor(
 function Coverage({ keywords }: { keywords: readonly SeoKeywordCoverage[] }) {
   if (!keywords.length) return null
   return (
-    <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5 }} aria-label="Keyword coverage">
+    <Stack useFlexGap direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5 }} aria-label="Keyword coverage">
       {keywords.map((entry) => {
         const covered = entry.inTitle || entry.inDescription
         return (

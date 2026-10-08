@@ -23,7 +23,9 @@
  */
 
 import {
+  AI_JOB_SELF_CONFIRM_GRACE_MS,
   aiJobActivityCounts,
+  aiJobConfirmingOwnPlan,
   aiJobActivityState,
   aiJobPhase,
   aiJobsActivity,
@@ -82,6 +84,26 @@ describe('aiJobPhase', () => {
     expect(aiJobPhase(done)).toBe('done')
     expect(aiJobPhase(failed)).toBe('failed')
     expect(aiJobPhase(job({ status: 'canceled' }))).toBe('canceled')
+  })
+})
+
+describe('a guided start parked on its plan for the instant it confirms it (AGL-3596)', () => {
+  const NOW = Date.parse('2026-10-07T17:11:24.000Z')
+  const parked = (patch: Partial<AiJobPhaseSource> = {}) =>
+    job({ ...planReady, autoConfirm: true, updatedAt: '2026-10-07T17:11:06.538Z', ...patch })
+
+  it('reads as building — never a plan for the person, never a stop', () => {
+    expect(aiJobConfirmingOwnPlan(parked(), NOW)).toBe(true)
+    expect(aiJobPhase(parked({ updatedAt: new Date().toISOString() }))).toBe('building')
+    expect(aiJobActivityState(parked({ updatedAt: new Date().toISOString() }))).toBe('running')
+  })
+
+  it('reads as waiting for the person once the confirmation is overdue, or when the job confirms nothing itself', () => {
+    expect(aiJobConfirmingOwnPlan(parked(), NOW + AI_JOB_SELF_CONFIRM_GRACE_MS)).toBe(false)
+    expect(aiJobPhase(parked({ updatedAt: '2026-01-01T00:00:00.000Z' }))).toBe('plan-ready')
+    expect(aiJobConfirmingOwnPlan(parked({ autoConfirm: undefined }), NOW)).toBe(false)
+    // A refused plan is a stop whoever confirms it.
+    expect(aiJobConfirmingOwnPlan(parked({ review: { reason: 'doctrine' } }), NOW)).toBe(false)
   })
 })
 

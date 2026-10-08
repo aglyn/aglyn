@@ -156,6 +156,7 @@ jest.mock('./organizations', () => ({
 jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/contacts'),
   ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/consent-groups'),
+  crmDefaultScopeOf: jest.requireActual('../../../../../../aglyn/src/lib/app-utils/crm').crmDefaultScopeOf,
   ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/marketing-consent'),
   ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/container-membership'),
   ORG_SCOPE_TOKEN: 'org',

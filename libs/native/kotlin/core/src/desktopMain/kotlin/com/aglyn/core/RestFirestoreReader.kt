@@ -3,6 +3,7 @@ package com.aglyn.core
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -10,7 +11,10 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -28,8 +32,12 @@ import java.time.Instant
 /**
  * [FirestoreReader] on the JVM desktop, over Firestore REST v1 with the
  * person's own ID token, so the same security rules apply as everywhere.
- * REST has no listener: an observed query re-reads every [refreshMillis]
- * while it is collected (and the shell re-reads on focus).
+ *
+ * With [listen], an observed document or query is a gRPC `Listen` stream
+ * opened with a freshly minted token ([freshIdToken]) and re-opened before
+ * that token expires. A stream that cannot be held ([LISTEN_ATTEMPTS] tries
+ * in a row with no snapshot) falls back to REST, re-reading every
+ * [refreshMillis] while collected. Without [listen], every observation polls.
  */
 class RestFirestoreReader(
   private val http: HttpClient,
@@ -37,7 +45,10 @@ class RestFirestoreReader(
   emulatorHost: String?,
   private val idToken: suspend () -> String?,
   private val refreshMillis: Long = 30_000,
-) : FirestoreReader {
+  private val listen: FirestoreListen? = null,
+  private val freshIdToken: suspend () -> String? = idToken,
+  private val reopenMillis: Long = 50 * 60_000,
+) : FirestoreReader, FirestoreWriter {
   private val root = (emulatorHost?.let { "http://$it" } ?: "https://firestore.googleapis.com") +
     "/v1/projects/$projectId/databases/(default)/documents"
 
@@ -72,9 +83,69 @@ class RestFirestoreReader(
     return body.jsonArray.mapNotNull { (it.jsonObject["document"] as? JsonObject)?.let(::docOf) }
   }
 
-  override fun observeDoc(path: String): Flow<Live<FirestoreDoc?>> = poll { get(path) }
+  /** A PATCH whose update mask names every leaf [data] holds: Firestore's own form of a merge. */
+  override suspend fun merge(path: String, data: Map<String, Any?>) {
+    val response = http.patch("$root/$path") {
+      header("Authorization", "Bearer ${bearer()}")
+      url { for (field in mergeFieldPaths(data)) parameters.append("updateMask.fieldPaths", field) }
+      contentType(ContentType.Application.Json)
+      // A deleted field is in the mask and absent from the fields, which is how REST removes it.
+      setBody(buildJsonObject { put("fields", JsonObject(withoutDeletes(data).mapValues { encodeValue(it.value) })) }.toString())
+    }
+    if (response.status.value !in 200..299) {
+      val body = runCatching { Json.parseToJsonElement(response.bodyAsText()) }.getOrNull()
+      throw IllegalStateException(body?.let(::errorOf) ?: "Could not save.")
+    }
+  }
 
-  override fun observe(query: FirestoreQuery): Flow<Live<List<FirestoreDoc>>> = poll { run(query) }
+  override fun observeDoc(path: String): Flow<Live<FirestoreDoc?>> =
+    live(listen?.let { grpc -> { token: String -> grpc.document(path, token) } }) { get(path) }
+
+  override fun observe(query: FirestoreQuery): Flow<Live<List<FirestoreDoc>>> {
+    val collectionId = query.collectionPath.substringAfterLast('/')
+    return live(listen?.let { grpc -> { token: String -> grpc.query(query, structuredQuery(collectionId, query).toString(), token) } }) { run(query) }
+  }
+
+  /** A `Listen` stream re-opened with a fresh token, or REST polling when there is none or it cannot be held. */
+  private fun <T> live(stream: ((String) -> Flow<T>)?, read: suspend () -> T): Flow<Live<T>> {
+    if (stream == null) return poll(read)
+    return flow {
+      emit(Live.Loading)
+      var failures = 0
+      while (true) {
+        try {
+          val token = freshIdToken() ?: throw IllegalStateException("Sign in to continue.")
+          // Re-open before the token's hour is up; the new stream resends every row.
+          var snapshots = 0
+          val ended = withTimeoutOrNull(reopenMillis) {
+            stream(token).collect {
+              snapshots += 1
+              failures = 0
+              emit(Live.Ready(it))
+            }
+            true
+          }
+          if (ended == true && snapshots == 0) throw IllegalStateException("The realtime stream closed before its first snapshot.")
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+          throw cancelled
+        } catch (error: Exception) {
+          if (error is ListenTargetRemoved) {
+            // The stream works and the rules refuse the target; REST would be refused the same way.
+            emit(Live.Failed(IllegalStateException("Missing or insufficient permissions.", error)))
+            delay(refreshMillis)
+            continue
+          }
+          failures += 1
+          if (failures >= LISTEN_ATTEMPTS) {
+            System.err.println("Aglyn: realtime updates are unavailable (${error.message}); re-reading every ${refreshMillis / 1000} s")
+            emitAll(poll(read).drop(1))
+            return@flow
+          }
+          delay(1_000L shl (failures - 1))
+        }
+      }
+    }
+  }
 
   private fun <T> poll(read: suspend () -> T): Flow<Live<T>> = flow {
     emit(Live.Loading)
@@ -161,6 +232,15 @@ class RestFirestoreReader(
   }
 
   companion object {
+    /** Consecutive `Listen` failures, with no snapshot between, before an observation falls back to polling. */
+    const val LISTEN_ATTEMPTS = 3
+
+    /** [data] without its [FirestoreDelete] leaves, at every depth. */
+    @Suppress("UNCHECKED_CAST")
+    fun withoutDeletes(data: Map<String, Any?>): Map<String, Any?> = data
+      .filterValues { it != FirestoreDelete }
+      .mapValues { (_, value) -> if (value is Map<*, *>) withoutDeletes(value as Map<String, Any?>) else value }
+
     fun encodeValue(value: Any?): JsonObject = when (value) {
       null -> buildJsonObject { put("nullValue", JsonNull) }
       is Boolean -> buildJsonObject { put("booleanValue", value) }

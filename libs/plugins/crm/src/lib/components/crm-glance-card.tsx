@@ -222,7 +222,7 @@ export function CrmGlanceCard(props: CrmGlanceCardProps) {
       }}
     >
       <Stack spacing={1.5}>
-        <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+        <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
           <ReportStatTile
             label={'Contacts'}
             value={value ? value.contacts.toLocaleString() : null}

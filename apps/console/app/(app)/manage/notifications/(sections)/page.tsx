@@ -292,6 +292,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
     >
       <Stack spacing={1.5}>
         <Stack
+          useFlexGap
           direction="row"
           spacing={1}
           sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}

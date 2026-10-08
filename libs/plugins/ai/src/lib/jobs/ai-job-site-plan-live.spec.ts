@@ -31,6 +31,22 @@
  * It calls the provider and costs real money (about 19 credits a brief), so
  * it runs only when asked: `AGLYN_LIVE_AI=1` with `ANTHROPIC_API_KEY` set.
  * Run it before promoting a change to the site job, its prompt or its rules.
+ *
+ * THE CHEAP VERIFICATION LADDER (AGL-3660; docs/AI_JOBS.md, "Verifying a
+ * prompt change"). Climb it in order and stop at the first rung that can
+ * see the mistake:
+ *
+ *   1. unit tests — the step's own spec on golden answers, and
+ *      `runtime/ai-prompt-cache.spec.ts` for the cached bytes: free;
+ *   2. replay — this spec again: under the launcher every request whose
+ *      bytes were answered before is replayed from `.cache/ai-replay` for
+ *      nothing, and only a CHANGED prompt goes to the provider;
+ *   3. one live run per plan (Free, then `AGLYN_LIVE_AI_ORG_PLAN=business`)
+ *      for the prompts you changed — read `run.live` in the table: 0 means
+ *      nothing new was asked and the run proves nothing;
+ *   4. the full live sweep, only before landing: `AGLYN_AI_REPLAY=refresh`
+ *      asks every request again, and `AGLYN_LIVE_AI_BATCH=1` sends the round
+ *      as one Message Batch at half price (minutes, not seconds).
  */
 
 jest.mock('../runtime/site-inventory', () => ({ __esModule: true, readSiteInventory: jest.fn() }))
@@ -44,26 +60,39 @@ jest.mock('./ai-jobs', () => ({
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import type { AiJob } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory } from '../model/ai-site-inventory'
+import { aiLiveRunLedger } from '../runtime/ai-dev-replay'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 import { createAiJobPlanStep } from './ai-job-plan-step'
 
 const LIVE = process.env['AGLYN_LIVE_AI'] === '1' && Boolean(process.env['ANTHROPIC_API_KEY'])
 const NOW = new Date()
-const FREE_ORG: Partial<AglynOrgBilling> & { ownerUid: string } = { plan: 'free', ownerUid: 'owner-1' }
+/**
+ * The workspace the plans are made on: Free, as a guided start makes most of
+ * them, or a paid one with `AGLYN_LIVE_AI_ORG_PLAN=business` (AGL-3660) — a
+ * Free site plans on the fast tier, so only a paid one exercises the balanced
+ * default's plan.
+ */
+const ORG_PLAN = process.env['AGLYN_LIVE_AI_ORG_PLAN'] === 'business' ? 'business' : 'free'
+/** The pages the guided start asks for: Free's most, or a paid start's default of five. */
+const PAGES = ORG_PLAN === 'business' ? 5 : 2
+const ORG: Partial<AglynOrgBilling> & { ownerUid: string } = { plan: ORG_PLAN, ownerUid: 'owner-1' }
 
-/** Briefs as people answer the guided start: a business, who it is for, a look, two pages. */
-const BRIEFS: ReadonlyArray<{ businessType: string; audience: string; starter: string }> = [
-  { businessType: 'a neighborhood dog groomer in Austin that takes grooming appointments', audience: 'local dog owners who want a regular groom', starter: 'business' },
-  { businessType: 'a family dental practice', audience: 'parents booking check-ups for their kids', starter: 'business' },
-  { businessType: 'a wedding photographer', audience: 'engaged couples comparing photographers', starter: 'portfolio' },
-  { businessType: 'a roofing contractor', audience: 'homeowners after a storm', starter: 'business' },
-  { businessType: 'a yoga studio with drop-in classes', audience: 'beginners nervous about their first class', starter: 'landing' },
-  { businessType: 'a bakery that sells cakes to order', audience: 'people planning a birthday', starter: 'shop-physical' },
-  { businessType: 'a nonprofit food bank', audience: 'volunteers and donors', starter: 'business' },
-  { businessType: 'a freelance bookkeeper', audience: 'small business owners behind on their books', starter: 'business' },
-  { businessType: 'a mobile car detailing service', audience: 'busy commuters', starter: 'landing' },
-  { businessType: 'a guitar teacher', audience: 'adults who always wanted to learn', starter: 'business' },
+/**
+ * Briefs as people answer the guided start: a business, who it is for, a look,
+ * two pages — and the site's own name, which the create door adds (AGL-3596).
+ */
+const BRIEFS: ReadonlyArray<{ businessName: string; businessType: string; audience: string; starter: string }> = [
+  { businessName: 'Hillside Dog Grooming', businessType: 'a neighborhood dog groomer in Austin that takes grooming appointments', audience: 'local dog owners who want a regular groom', starter: 'business' },
+  { businessName: 'Maple Street Dental', businessType: 'a family dental practice', audience: 'parents booking check-ups for their kids', starter: 'business' },
+  { businessName: 'Ana Ruiz Photography', businessType: 'a wedding photographer', audience: 'engaged couples comparing photographers', starter: 'portfolio' },
+  { businessName: 'Summit Roofing', businessType: 'a roofing contractor', audience: 'homeowners after a storm', starter: 'business' },
+  { businessName: 'Still Point Yoga', businessType: 'a yoga studio with drop-in classes', audience: 'beginners nervous about their first class', starter: 'landing' },
+  { businessName: 'Crumb & Co', businessType: 'a bakery that sells cakes to order', audience: 'people planning a birthday', starter: 'shop-physical' },
+  { businessName: 'Eastside Food Bank', businessType: 'a nonprofit food bank', audience: 'volunteers and donors', starter: 'business' },
+  { businessName: 'Ledgerly Books', businessType: 'a freelance bookkeeper', audience: 'small business owners behind on their books', starter: 'business' },
+  { businessName: 'Gleam Mobile Detailing', businessType: 'a mobile car detailing service', audience: 'busy commuters', starter: 'landing' },
+  { businessName: 'Fretwork Lessons', businessType: 'a guitar teacher', audience: 'adults who always wanted to learn', starter: 'business' },
 ]
 
 function siteJob(inputs: Record<string, unknown>, index: number): AiJob {
@@ -73,8 +102,8 @@ function siteJob(inputs: Record<string, unknown>, index: number): AiJob {
     hostId: 'host-live',
     kind: 'site',
     status: 'running',
-    brief: `A 2-page website for ${String(inputs['businessType'])}.`,
-    inputs: { pages: 2, welcomeEmail: false, submissions: 'inbox', ...inputs },
+    brief: `A ${PAGES}-page website for ${String(inputs['businessType'])}.`,
+    inputs: { pages: PAGES, welcomeEmail: false, submissions: 'inbox', ...inputs },
     steps: [{ name: 'plan', status: 'running', creditsSpent: 0 }],
     outputs: [],
     creditsReserved: 300,
@@ -91,8 +120,8 @@ const describeLive = LIVE ? describe : describe.skip
 describeLive("a guided start's plan from the real model", () => {
   jest.setTimeout(10 * 60_000)
 
-  it('keeps the plan rules for every brief, on a Free workspace’s empty site', async () => {
-    const capabilities = aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] })
+  it(`keeps the plan rules for every brief, on a ${ORG_PLAN} workspace’s empty site`, async () => {
+    const capabilities = aiPlanCapabilitiesFrom(ORG, { layout: [], template: [] })
     const results = await Promise.all(
       BRIEFS.map(async (brief, index) => {
         const outcome = (await createAiJobPlanStep({
@@ -105,7 +134,7 @@ describeLive("a guided start's plan from the real model", () => {
           stepIndex: 0,
           now: NOW,
           firestore: aiEvalMemoryFirestore({}).firestore,
-          org: FREE_ORG,
+          org: ORG,
         })) as unknown as Record<string, unknown>
         const review = outcome['review'] as { reason?: string; findings?: Array<{ code: string; message: string }> } | undefined
         return {
@@ -114,11 +143,14 @@ describeLive("a guided start's plan from the real model", () => {
           refused: outcome['uncredited'] === true || outcome['refused'] === true,
           findings: (review?.findings ?? []).map((finding) => `${finding.code}: ${finding.message}`),
           estCostUsd: Number(outcome['estCostUsd'] ?? 0),
+          // Reported, not held: whether the plan's own words carry the name (AGL-3596).
+          named: JSON.stringify(outcome['plan'] ?? null).includes(brief.businessName),
         }
       }),
     )
     // The whole table, every run, so a red run shows every brief's outcome.
-    console.log(JSON.stringify(results, null, 1))
+    // Live against replayed (AGL-3660): a run with live 0 asked nothing new.
+    console.log(JSON.stringify({ run: aiLiveRunLedger(), orgPlan: ORG_PLAN, results }, null, 1))
     expect(results.filter((result) => !result.planned || result.refused)).toEqual([])
   })
 })

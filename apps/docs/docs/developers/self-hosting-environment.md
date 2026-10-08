@@ -850,10 +850,18 @@ public internet, must never have them.
 | `XERO_CLIENT_ID` | Feature | Runtime, console | The Xero app's client id. |
 | `XERO_CLIENT_SECRET` | Feature | Runtime, console | The Xero app's client secret. |
 | `XERO_SCOPES` | Optional | Runtime, console | Space-separated scopes that replace the default request, for a Xero app made before Xero's granular scopes. |
+| `CODAT_API_KEY` | Feature | Runtime, console | The Codat client's API key. Set, the Accounting page also offers other accounting software (QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books, Wave and the rest Codat reaches), each workspace as one Codat company. |
 | `ACCOUNTING_TOKEN_KEY` | Feature | Runtime, console | 32 random bytes, base64. Seals every stored token. A comma-separated list rotates: the first key seals, the rest only open, and a token opened under an older key is sealed again under the first. |
 
 Register `https://<console>/api/accounting/oauth/callback` as the redirect URI
 in both developer apps. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
+
+For Codat, set the redirect in the Codat Portal under **Settings > Auth flow >
+Redirects** to
+`https://<console>/api/accounting/oauth/callback?code={companyId}&state={state}&statusCode={statusCode}`,
+and turn on the accounting integrations you want to offer under
+**Settings > Integrations > Accounting**. Codat is a subprocessor: publish its
+row before setting the key in production.
 
 ### Tax services {#tax-engines}
 
@@ -895,6 +903,121 @@ merchant's credential.
 
 Register `https://<console>/api/marketing-platforms/oauth/callback` as the
 redirect URI in each app. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
+
+### Fulfillment networks: ShipBob and Amazon Multi-Channel Fulfillment {#fulfillment-networks}
+
+A store can send its paid orders to the merchant's **own** ShipBob or Amazon
+Multi-Channel Fulfillment account, read the shipments and tracking back onto
+the order, and keep its stock counts in step. Neither network takes a key a
+merchant could paste: each needs an app the deployment registers with the
+network, and the merchant signs in to grant it. A network is offered only when
+its app's variables **and** the token key are set; with neither network set, no
+Fulfillment networks card appears and nothing is sent. Set these on the
+**console only**: the job that sends orders runs there, and the tenant runtime
+never opens a grant.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `FULFILLMENT_NETWORKS_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored grant with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`). **Losing the key loses every connection**: each merchant connects again. |
+| `SHIPBOB_CLIENT_ID` | Optional | Runtime, console | The ShipBob developer app's client id. ShipBob is offered only with it and its secret. |
+| `SHIPBOB_CLIENT_SECRET` | Optional | Runtime, console | The ShipBob app's client secret. |
+| `SHIPBOB_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to ShipBob's sandbox, which takes test orders only. Unset is production. |
+| `AMAZON_SP_API_APPLICATION_ID` | Optional | Runtime, console | The selling-partner app's id (`amzn1.sp.solution.…`). Amazon is offered only with it and the two Login with Amazon values below. |
+| `AMAZON_SP_API_LWA_CLIENT_ID` | Optional | Runtime, console | The app's Login with Amazon client id. |
+| `AMAZON_SP_API_LWA_CLIENT_SECRET` | Optional | Runtime, console | The app's Login with Amazon client secret. |
+| `AMAZON_SP_API_REGION` | Optional | Runtime, console | `na` (default), `eu` or `fe`: the Selling Partner API region the deployment's sellers are in. |
+| `AMAZON_SP_API_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to Amazon's sandbox. Unset is production. |
+| `AMAZON_SP_API_DRAFT_APP` | Optional | Runtime, console | `true` while the app is a draft, so the consent page is asked for with `version=beta`. |
+
+Register `https://<console>/api/fulfillment-networks/oauth/callback` as the
+redirect URI in both apps. ShipBob's webhooks are subscribed for each
+connection at `https://<console>/api/fulfillment-networks/webhooks/shipbob`
+with a token of their own; nothing needs registering for them.
+
+### Inventory sync: Cin7 Core, inFlow and Brightpearl {#inventory-sync}
+
+A store can keep its stock counts, products and paid orders in step with the
+merchant's **own** Cin7 Core, inFlow Inventory or Brightpearl account. Cin7
+Core and inFlow need nothing registered by the deployment: the merchant pastes
+API keys from their own account, and both are offered once the token key that
+seals those keys is set. Brightpearl needs a developer app the deployment
+registers with Brightpearl, and is offered only when its references **and** the
+token key are set. With no token key, no Inventory and ERP card appears and
+nothing is sent. Set these on the **console only**: the job runs there, and the
+tenant runtime never opens a stored key.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `INVENTORY_SYNC_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored API key and grant with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`). **Losing the key loses every connection**: each merchant connects again. |
+| `BRIGHTPEARL_APP_REF` | Optional | Runtime, console | The Brightpearl app's reference, its OAuth client id. Brightpearl is offered only with it and the developer reference. |
+| `BRIGHTPEARL_DEV_REF` | Optional | Runtime, console | The developer reference every Brightpearl API call carries. |
+| `BRIGHTPEARL_CLIENT_SECRET` | Optional | Runtime, console | The app's client secret, when the app has confidential OAuth turned on. |
+
+Register `https://<console>/api/inventory-sync/oauth/callback` as the redirect
+URI of the Brightpearl app. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
+
+### Marketplaces: Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire {#marketplaces}
+
+A store can keep its listings on the merchant's **own** marketplace seller
+accounts in step with its stock, bring their orders in as its own orders, and
+send tracking back. No marketplace takes a key a merchant could paste: each
+needs an app the deployment registers with the marketplace, and the merchant
+signs in to grant it. A marketplace is offered only when its app's variables
+**and** the token key are set; with none set, no Marketplaces card appears and
+nothing is sent. Set these on the **console only**: the job runs there, and the
+tenant runtime never opens a grant.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `MARKETPLACES_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored grant with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`). **Losing the key loses every connection**: each merchant connects again. |
+| `MARKETPLACES_AMAZON_APPLICATION_ID` | Optional | Runtime, console | The selling-partner app's id (`amzn1.sp.solution.…`). Amazon is offered only with it and the two Login with Amazon values below. |
+| `MARKETPLACES_AMAZON_LWA_CLIENT_ID` | Optional | Runtime, console | The app's Login with Amazon client id. |
+| `MARKETPLACES_AMAZON_LWA_CLIENT_SECRET` | Optional | Runtime, console | The app's Login with Amazon client secret. |
+| `MARKETPLACES_AMAZON_REGION` | Optional | Runtime, console | `na` (default), `eu` or `fe`. |
+| `MARKETPLACES_AMAZON_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to Amazon's sandbox. Unset is production. |
+| `MARKETPLACES_AMAZON_DRAFT_APP` | Optional | Runtime, console | `true` while the app is a draft, so the consent page is asked for with `version=beta`. |
+| `MARKETPLACES_EBAY_CLIENT_ID` | Optional | Runtime, console | The eBay keyset's App ID. eBay is offered only with it, its Cert ID and the RuName. |
+| `MARKETPLACES_EBAY_CLIENT_SECRET` | Optional | Runtime, console | The keyset's Cert ID. |
+| `MARKETPLACES_EBAY_RU_NAME` | Optional | Runtime, console | The RuName whose accept URL is the redirect address below. |
+| `MARKETPLACES_EBAY_ENVIRONMENT` | Optional | Runtime, console | `sandbox` for eBay's sandbox. Unset is production. |
+| `MARKETPLACES_EBAY_MARKETPLACE_ID` | Optional | Runtime, console | The eBay site listings go to, `EBAY_US` by default. |
+| `MARKETPLACES_ETSY_KEYSTRING` | Optional | Runtime, console | The Etsy app's keystring. Etsy is offered only with it and the shared secret. Etsy has no sandbox. |
+| `MARKETPLACES_ETSY_SHARED_SECRET` | Optional | Runtime, console | The Etsy app's shared secret. |
+| `MARKETPLACES_TIKTOK_APP_KEY` | Optional | Runtime, console | The TikTok Shop app's key. TikTok Shop is offered only with it, its secret and its service id. It has no sandbox. |
+| `MARKETPLACES_TIKTOK_APP_SECRET` | Optional | Runtime, console | The app's secret. |
+| `MARKETPLACES_TIKTOK_SERVICE_ID` | Optional | Runtime, console | The app's service id, from its authorization link in Partner Center. |
+| `MARKETPLACES_TIKTOK_REGION` | Optional | Runtime, console | `us` (default) or `global`: which consent page sellers are sent to. |
+| `MARKETPLACES_WALMART_CLIENT_ID` | Optional | Runtime, console | The Walmart solution-provider app's client id. Walmart is offered only with it and its secret. |
+| `MARKETPLACES_WALMART_CLIENT_SECRET` | Optional | Runtime, console | The app's client secret. |
+| `MARKETPLACES_WALMART_ENVIRONMENT` | Optional | Runtime, console | `sandbox` for Walmart's sandbox. Unset is production. |
+| `MARKETPLACES_WALMART_CHANNEL_TYPE` | Optional | Runtime, console | The `WM_CONSUMER.CHANNEL.TYPE` value Walmart issued the solution provider, when it issued one. |
+| `MARKETPLACES_FAIRE_APPLICATION_ID` | Optional | Runtime, console | The Faire app's application id. Faire is offered only with it and its secret. It has no sandbox. |
+| `MARKETPLACES_FAIRE_APPLICATION_SECRET` | Optional | Runtime, console | The Faire app's application secret. |
+
+Register `https://<console>/api/marketplaces/oauth/callback` as the redirect
+address in every app (for eBay, as the accept URL of the RuName).
+
+### Print on demand: Printful and Printify {#print-on-demand}
+
+A merchant can connect their **own** Printful store or Printify shop, import its
+products, and have paid orders sent to it to make and ship. Each merchant
+connects with a token made in their own account — neither service needs a
+developer app or partnership of the deployment's — so the deployment holds only
+the key those tokens are sealed under. Leave it unset and no Print on demand
+card appears and no order is sent anywhere. Set it on the console **and** the
+tenant runtime: paid orders are sent from wherever commerce's order events are
+delivered, and the console connects, imports and runs the retry job.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `PRINT_ON_DEMAND_TOKEN_KEY` | Feature | Runtime | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored Printful and Printify token, and each connection's webhook secret, with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a token opened under an old key is sealed again under the new one the next time it is used. **Losing the key loses every connection**: each merchant connects again, and until they do their paid orders are not sent. |
+
+The services are told about shipments at
+`https://<console>/api/print-on-demand/webhooks/printful` and
+`…/webhooks/printify`, which the console registers itself when a merchant
+connects and builds from `NEXT_PUBLIC_CONSOLE_URL`. A console the services
+cannot reach (a laptop) still works: each open order is asked after by the
+console job every 15 minutes.
 
 ---
 

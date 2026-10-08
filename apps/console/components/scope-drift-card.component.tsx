@@ -184,7 +184,7 @@ export function ScopeDriftCard() {
             'job only reports; stamping is a deliberate act and happens here.'}
         </Typography>
 
-        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+        <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
           <Button
             size="small"
             variant="outlined"

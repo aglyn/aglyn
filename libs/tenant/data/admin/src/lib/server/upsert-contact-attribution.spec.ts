@@ -138,6 +138,7 @@ jest.mock('@aglyn/aglyn/server', () => {
     // document, or scoped a new contact org-wide, would pass this file while
     // shipping the leak.
     ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/consent-groups'),
+    crmDefaultScopeOf: jest.requireActual('../../../../../../aglyn/src/lib/app-utils/crm').crmDefaultScopeOf,
     ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/marketing-consent'),
     ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/container-membership'),
     ORG_SCOPE_TOKEN: 'org',

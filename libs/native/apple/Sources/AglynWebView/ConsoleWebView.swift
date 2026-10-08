@@ -45,11 +45,20 @@ public struct ConsoleWebView {
   let handlers: [String: BridgeHandler]
   let info: [String: JSONValue]
   let model: ConsoleWebViewModel
+  /// The console paths the main frame may show (the apps allow only the
+  /// Besigner); nil allows any path on a trusted origin.
+  let allowsPath: (@MainActor (String) -> Bool)?
+  /// A main-frame navigation to a path `allowsPath` refuses, handed back so
+  /// the app opens its own screen instead.
+  let onRefusedPath: (@MainActor (String) -> Void)?
 
   public init(
     url: URL, trustedOrigins: [String], cookies: [HTTPCookie], model: ConsoleWebViewModel,
-    bridgeName: String = "AglynApp", handlers: [String: BridgeHandler] = [:], info: [String: JSONValue] = [:]
+    bridgeName: String = "AglynApp", handlers: [String: BridgeHandler] = [:], info: [String: JSONValue] = [:],
+    allowsPath: (@MainActor (String) -> Bool)? = nil, onRefusedPath: (@MainActor (String) -> Void)? = nil
   ) {
+    self.allowsPath = allowsPath
+    self.onRefusedPath = onRefusedPath
     self.url = url
     self.trustedOrigins = trustedOrigins
     self.cookies = cookies
@@ -115,7 +124,15 @@ public struct ConsoleWebView {
       decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
     ) {
       guard let url = action.request.url else { return decisionHandler(.cancel) }
-      if url.scheme == "about" || BridgeProtocol.isTrusted(url.absoluteString, trustedOrigins: parent.trustedOrigins) {
+      if url.scheme == "about" { return decisionHandler(.allow) }
+      if BridgeProtocol.isTrusted(url.absoluteString, trustedOrigins: parent.trustedOrigins) {
+        if action.targetFrame?.isMainFrame ?? true, let allowsPath = parent.allowsPath {
+          let path = (url.path.isEmpty ? "/" : url.path) + (url.query.map { "?\($0)" } ?? "")
+          if !allowsPath(path) {
+            parent.onRefusedPath?(path)
+            return decisionHandler(.cancel)
+          }
+        }
         return decisionHandler(.allow)
       }
       // Off the console: the system browser, never inside the signed-in WebView.

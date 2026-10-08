@@ -66,7 +66,15 @@ it('declares every event and subscribes one named bridge to each', () => {
     'return.refunded',
     'return.requested',
   ])
-  expect(listPluginDomainEventSubscribers('order.paid')).toEqual(['commerce:workflow-triggers', 'commerce:webhooks'])
+  expect(listPluginDomainEventSubscribers('order.paid')).toEqual([
+    'commerce:workflow-triggers',
+    'commerce:webhooks',
+    'commerce:shippingeasy',
+  ])
+  // ShippingEasy hears only what changes what it should hold (AGL-3633).
+  expect(listPluginDomainEventSubscribers('order.cancelled')).toContain('commerce:shippingeasy')
+  expect(listPluginDomainEventSubscribers('order.refunded')).toContain('commerce:shippingeasy')
+  expect(listPluginDomainEventSubscribers('order.fulfilled')).not.toContain('commerce:shippingeasy')
   // Not a workflow trigger and not offered to the merchant's webhooks.
   expect(listPluginDomainEventSubscribers('checkout.started')).toEqual([])
 })

@@ -74,7 +74,7 @@ export function NotFoundContent() {
               'back on track.'
         }
         action={
-          <Stack direction="row" spacing={1.5}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
             {/* When the workspace IS openable, the useful way out is back
                 into it — the workspaces list is a detour through a choice the
                 URL already made correctly. */}

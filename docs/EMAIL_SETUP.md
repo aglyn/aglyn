@@ -11,13 +11,31 @@ Aglyn uses **two** email systems that do different jobs and don't conflict:
 | System | Job | Sends as | Config |
 | --- | --- | --- | --- |
 | **Google Workspace** | Human **mailboxes** + **inbound** mail (`info@aglyn.com` inbox). Your `MX` records point here. | n/a (receiving) | Workspace admin |
-| **Firebase Auth** | Auth emails only — verification, password reset. **Does not send its own mail**: configured `CUSTOM_SMTP`, relaying through Resend (`smtp.resend.com`). | `noreply@aglyn.com` (via Resend) | Firebase console |
-| **Resend** | Everything else the **app** sends programmatically — and the Firebase Auth relay above. | `noreply@aglyn.com` | `RESEND_API_KEY` + `USAGE_EMAIL_FROM` |
+| **Firebase Auth** | Mints the action LINKS only — verification and password reset come from `generateEmailVerificationLink` / `generatePasswordResetLink`, and the console sends the email itself as a catalog system email through Resend. Firebase's own templates are not sent by any flow; its `CUSTOM_SMTP` relay (`smtp.resend.com`) is a dormant fallback. | `noreply@notify.aglyn.com` (fallback only) | Firebase console |
+| **Resend** | Everything the **app** sends programmatically, auth emails included. | `noreply@notify.aglyn.com` | `RESEND_API_KEY` + `USAGE_EMAIL_FROM` |
 
 Sending **from** `@aglyn.com` does **not** mean sending **through** Google.
 Resend sends on your behalf and proves it's authorized with DKIM/SPF DNS
-records. It only adds a `send.aglyn.com` subdomain for bounce handling — your
+records. It only adds a `send.` subdomain for bounce handling — your
 Google inbound MX is untouched, and your mailboxes keep working normally.
+
+### One subdomain per stream (AGL-3664)
+
+Each kind of mail leaves on its own name, so a complaint spike in one cannot
+spam-folder the others. Gmail grades a subdomain partly by its parent, so this
+limits the blast radius rather than sealing it; cold outreach therefore lives
+on separate registered domains, never under `aglyn.com`.
+
+| Stream | Sends as | Where it is set |
+| --- | --- | --- |
+| A person writing 1:1 | their own `@aglyn.com` Workspace mailbox | Gmail |
+| Platform mail — invites, billing, account notices, auth | `noreply@notify.aglyn.com` | team-shared `USAGE_EMAIL_FROM` |
+| Aglyn's own marketing — product updates, newsletters | `@news.aglyn.com` | the aglyn-marketing site's sending domain (org `jWmGooWE3L`) |
+| Cold outreach | `getaglyn.com`, `tryaglyn.com`, `aglynhq.com` (Microsoft 365) | Sequences mailboxes |
+
+Each Resend subdomain carries its own `resend._domainkey.<sub>` DKIM, a
+`send.<sub>` MX + SPF and an `rsend.<sub>` CNAME, all in Vercel DNS. The
+`aglyn.com` apex stays verified in Resend so a rollback is one env change.
 
 `RESEND_API_KEY` is an API key from a [Resend](https://resend.com) account.
 Resend is the transactional-email provider (same category as SendGrid /
@@ -446,7 +464,7 @@ the `aglyn.com` domain. Copy the key (`re_...`) — it's shown once.
 **Local** (`apps/console/.env.development.local`):
 ```
 RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxx
-USAGE_EMAIL_FROM="Aglyn <noreply@aglyn.com>"
+USAGE_EMAIL_FROM="Aglyn <noreply@notify.aglyn.com>"
 STAFF_ALERT_EMAIL=you@aglyn.com   # optional
 ```
 
@@ -472,7 +490,7 @@ because neither produces an error; mail just silently never sends:
 
 1. **It does not set `USAGE_EMAIL_FROM`.** Every sender is guarded on *both*
    vars, so a valid API key on its own delivers exactly nothing. Add
-   `USAGE_EMAIL_FROM="Aglyn <noreply@aglyn.com>"` by hand.
+   `USAGE_EMAIL_FROM="Aglyn <noreply@notify.aglyn.com>"` by hand.
 2. **It only sets the key on the project you installed it into.** The
    integration writes a *project-level* var, not a team-level shared one. The
    tenant app sends its own mail (receipts, booking confirmations, campaigns,

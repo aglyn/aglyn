@@ -285,10 +285,10 @@ export function HostAnalyticsCard(props: {
               setRange(Number(event.target.value))
             }}
           >
-            <MenuItem value={7}>{'7 days'}</MenuItem>
-            <MenuItem value={14}>{'14 days'}</MenuItem>
-            <MenuItem value={30}>{'30 days'}</MenuItem>
-            <MenuItem value={90}>{'90 days'}</MenuItem>
+            <MenuItem value={7}>{'Last 7 days'}</MenuItem>
+            <MenuItem value={14}>{'Last 14 days'}</MenuItem>
+            <MenuItem value={30}>{'Last 30 days'}</MenuItem>
+            <MenuItem value={90}>{'Last 90 days'}</MenuItem>
           </TextField>
           </Stack>
         ),

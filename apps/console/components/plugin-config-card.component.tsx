@@ -388,6 +388,7 @@ function SchemaForm({
     const isOverridden = overridden.includes(field.key)
     return (
       <Stack
+        useFlexGap
         direction="row"
         spacing={1}
         sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}

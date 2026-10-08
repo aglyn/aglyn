@@ -52,13 +52,37 @@ export interface AiLayoutSitePage {
   slug: string
 }
 
-/** The pages a scaffold's plan puts in the navigation, in plan order: ids minted, entries asked for, no record templates. */
-export function aiLayoutSitePagesOfPlan(screens: readonly AiBuildPlanScreen[]): AiLayoutSitePage[] {
-  return screens
-    .filter((screen) => screen.nav && !screen.record && typeof screen.id === 'string' && screen.id)
-    .slice(0, AI_LAYOUT_SITE_PAGES_MAX)
+/** Whether a slug is the site's root, the home page. */
+export function aiLayoutIsHomeSlug(slug: string): boolean {
+  return slug.replace(/^\/+|\/+$/g, '') === ''
+}
+
+/** A page that confirms what a visitor just did, which no navigation links. */
+const CONFIRMATION = /thank|confirm|success|submitted/i
+
+/**
+ * The pages a plan puts in the navigation, record templates aside, the home
+ * page first whatever its `nav` flag says (AGL-3660): a guided start's plan
+ * marked its Home `nav: false`, and the header linked only Contact. Every
+ * other page keeps its `nav` flag, except in a guided start (`guided`), whose
+ * pages are the ones the person asked for: each is linked, but a
+ * confirmation page — a thank-you, a "submitted" — stays out.
+ */
+export function aiLayoutSitePagesOfPlan(
+  screens: readonly AiBuildPlanScreen[],
+  options: { guided?: boolean } = {},
+): AiLayoutSitePage[] {
+  const linked = (screen: AiBuildPlanScreen) =>
+    aiLayoutIsHomeSlug(screen.slug) ||
+    (options.guided ? !CONFIRMATION.test(`${screen.slug} ${screen.title}`) : !!screen.nav)
+  const pages = screens
+    .filter((screen) => !screen.record && typeof screen.id === 'string' && screen.id && linked(screen))
     .map((screen) => ({ id: screen.id as string, label: screen.title.trim(), slug: screen.slug }))
     .filter((page) => page.label)
+  return [...pages.filter((page) => aiLayoutIsHomeSlug(page.slug)), ...pages.filter((page) => !aiLayoutIsHomeSlug(page.slug))].slice(
+    0,
+    AI_LAYOUT_SITE_PAGES_MAX,
+  )
 }
 
 /** The planned pages a layout unit's inputs carry; none for any other layout. */

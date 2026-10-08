@@ -55,9 +55,16 @@ export function useShippingFetch() {
 
 export interface ShippingAvailability {
   loading: boolean
+  /** A platform to ship through exists for the workspace. */
   available: boolean
   provider?: string
   testMode?: boolean
+  /** That platform is the merchant's own Easyship or Sendcloud account (AGL-3632). */
+  ownAccount?: boolean
+  /** The deployment offers merchant-account services to connect (AGL-3632). */
+  ownAccounts?: boolean
+  /** The deployment has a platform provider to fall back to without one. */
+  platform?: boolean
 }
 
 /**
@@ -74,7 +81,7 @@ export function useShippingAvailability(hostId: string | undefined): ShippingAva
       setState({ loading: false, available: false })
       return
     }
-    request<{ available: boolean; provider?: string; testMode?: boolean }>(SHIPPING_API_ROUTES.availability, {
+    request<Omit<ShippingAvailability, 'loading'>>(SHIPPING_API_ROUTES.availability, {
       query: { hostId },
     })
       .then((answer) => {

@@ -265,7 +265,7 @@ export default function StaffOperatorAlertsCard() {
                     sx={{ alignItems: { md: 'center' } }}
                   >
                     <Stack spacing={0.5} sx={{ flex: 1, minWidth: 0 }}>
-                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                      <Stack useFlexGap direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
                         <Typography variant="subtitle2">{row.label}</Typography>
                         <Chip size="small" label={OPERATOR_ALERT_CATEGORY_LABELS[row.category] ?? row.category} />
                         {row.pluginId ? <Chip size="small" variant="outlined" label={row.pluginId} /> : null}
@@ -329,7 +329,7 @@ export default function StaffOperatorAlertsCard() {
           {data.health.length ? (
             <Stack spacing={1}>
               {data.health.map((check) => (
-                <Stack key={check.checkId} direction="row" spacing={1} sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}>
+                <Stack useFlexGap key={check.checkId} direction="row" spacing={1} sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}>
                   <Chip
                     size="small"
                     color={check.status === 'ok' ? 'success' : 'error'}

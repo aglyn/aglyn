@@ -118,5 +118,6 @@ For each quote and each recorded sale: your ship-from address, the buyer's
 address (or yours for an in-person sale), the order id, each line's product,
 name, quantity, amount and tax code, and any exemption you recorded. AvaTax also
 receives the buyer's email address as its customer code. No payment details are
-sent. Avalara and TaxJar are listed on the subprocessors page as recipients when
-a merchant connects them.
+sent. The data goes to your own Avalara or TaxJar account, with your own
+credentials, so the vendor acts for you and is not an Aglyn subprocessor; the
+subprocessors page names both among the services a merchant connects.

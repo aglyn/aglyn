@@ -1554,7 +1554,7 @@ describe('the green path', () => {
     const request = JSON.parse(String(mockFetch.mock.calls[0][1].body))
     const system = request.system as Array<{ text: string; cache_control?: unknown }>
     expect(request.stream).toBe(true)
-    expect(request.model).toBe('claude-sonnet-5')
+    expect(request.model).toBe('claude-sonnet-5-5')
     expect(system).toHaveLength(5)
     expect(system[0].cache_control).toEqual({ type: 'ephemeral' })
     expect(system[1].cache_control).toEqual({ type: 'ephemeral' })
@@ -1692,7 +1692,8 @@ describe('the green path', () => {
     const response = await POST(post(QUESTION_BODY(FREE_ORG)))
     await response.text()
     const request = JSON.parse(String(mockFetch.mock.calls[0][1].body))
-    expect(request.thinking).toEqual({ type: 'disabled' })
+    // Claude Sonnet 5.5 turns thinking off only as between_tools (AGL-3660).
+    expect(request.thinking).toEqual({ type: 'between_tools' })
     expect(request.output_config).toEqual({ effort: 'low' })
     expect(request.max_tokens).toBe(1024)
   })

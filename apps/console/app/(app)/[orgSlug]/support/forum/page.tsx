@@ -149,6 +149,7 @@ const SupportForum: NextPageWithLayout<Record<string, never>> = () => {
               </Typography>
 
               <Stack
+                useFlexGap
                 direction="row"
                 spacing={0.5}
                 sx={{ flexWrap: 'wrap', rowGap: 1 }}
@@ -246,6 +247,7 @@ const SupportForum: NextPageWithLayout<Record<string, never>> = () => {
             sx={{ mt: 1 }}
           />
           <Stack
+            useFlexGap
             direction="row"
             spacing={0.5}
             sx={{ flexWrap: 'wrap', rowGap: 1 }}

@@ -630,10 +630,11 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                     />
                   ) : null}
                 </Stack>
-                <Stack direction="row" spacing={2}>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                   <TextField
                     size="small"
                     label="Redemption code (optional)"
+
                     placeholder="LAUNCH25"
                     value={form.code}
                     onChange={(event) =>

@@ -172,7 +172,7 @@ export function OutreachMailboxesSection(props: OutreachMailboxesSectionProps) {
   const configured = googleReady || microsoftReady
   const canManageAll = availability.status === 'ready' && availability.canManageAll
   const connectButtons = (
-    <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', justifyContent: 'center' }}>
+    <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', justifyContent: 'center' }}>
       <Button variant="contained" disabled={!googleReady || connecting} onClick={() => void connect('google')}>
         {CONNECT_WITH_GOOGLE_LABEL}
       </Button>

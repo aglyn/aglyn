@@ -228,7 +228,7 @@ export function PipelineCard(props: PipelineCardProps) {
       }}
     >
       <Stack spacing={2}>
-        <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+        <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
           <ReportStatTile
             label={'Open deals'}
             value={open.value ? open.value.count.toLocaleString() : null}

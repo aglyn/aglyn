@@ -20,11 +20,12 @@
 
 import { createSecretBoxKey } from '@aglyn/shared-util-tools/secret-box'
 import { randomBytes } from 'node:crypto'
-import { parseAccountingConnectFragment } from '../model/accounting.types'
+import { parseAccountingConnectFragment, type AccountingProviderId } from '../model/accounting.types'
 import { asFirestore, memoryFirestore } from '../testing/memory-firestore'
 import type { AccountingProviderConfigResult } from './accounting-config'
 import { createAccountingRoutes, type AccountingRouteDeps } from './accounting-routes'
 import { openToken, readConnection } from './connection-store'
+import { AccountingProviderError } from './providers/http'
 import type { AccountingProvider } from './providers/provider'
 
 const NOW = Date.UTC(2026, 9, 6, 18)
@@ -33,13 +34,13 @@ const keyring = { current: key, keys: [key] }
 
 const configured: AccountingProviderConfigResult = {
   configured: true,
-  config: { clientId: 'id', clientSecret: 'secret', keyring, environment: 'sandbox', scopes: null },
+  config: { clientId: 'id', clientSecret: 'secret', keyring, environment: 'sandbox', scopes: null, apiKey: null },
 }
 
-function fakeProvider(id: 'quickbooks' | 'xero', overrides: Partial<AccountingProvider> = {}): AccountingProvider {
+function fakeProvider(id: AccountingProviderId, overrides: Partial<AccountingProvider> = {}): AccountingProvider {
   return {
     id,
-    picksTenantAfterExchange: id === 'xero',
+    picksTenantAfterExchange: id !== 'quickbooks',
     authorizeUrl: ({ state }) => `https://consent.example/?state=${encodeURIComponent(state)}`,
     exchangeCode: jest.fn(async () => ({
       tokens: { accessToken: 'access-1', refreshToken: 'refresh-1', accessExpiresAtMs: NOW + 3_600_000, refreshExpiresAtMs: null, scopes: [] },
@@ -67,9 +68,25 @@ function fakeProvider(id: 'quickbooks' | 'xero', overrides: Partial<AccountingPr
   }
 }
 
-function setup(options: { permissions?: Record<string, boolean>; commerce?: boolean; xeroConfigured?: boolean } = {}) {
+function setup(
+  options: { permissions?: Record<string, boolean>; commerce?: boolean; xeroConfigured?: boolean; codatConfigured?: boolean } = {},
+) {
   const store = memoryFirestore()
-  const providers = { quickbooks: fakeProvider('quickbooks'), xero: fakeProvider('xero') }
+  const providers = {
+    quickbooks: fakeProvider('quickbooks'),
+    xero: fakeProvider('xero'),
+    codat: fakeProvider('codat', {
+      authorizeUrl: jest.fn(async ({ state }: { state: string }) => `https://link.codat.io/company/c-1?state=${encodeURIComponent(state)}`),
+      exchangeCode: jest.fn(async () => ({
+        tokens: { accessToken: 'c-1', refreshToken: 'c-1', accessExpiresAtMs: Number.MAX_SAFE_INTEGER, refreshExpiresAtMs: null, scopes: [] },
+        tenants: [{ id: 'conn-1', name: 'NetSuite', connectionId: 'conn-1' }],
+      })),
+      companyInfo: jest.fn(async () => ({ name: 'Acme Inc (NetSuite)', homeCurrency: 'USD', multiCurrency: true })),
+    }),
+  }
+  // Codat is env-gated: unconfigured unless a spec says otherwise.
+  const unconfigured = (provider: AccountingProviderId) =>
+    (provider === 'xero' && options.xeroConfigured === false) || (provider === 'codat' && !options.codatConfigured)
   const activity: string[] = []
   const deps: AccountingRouteDeps = {
     firestore: () => asFirestore(store),
@@ -87,13 +104,12 @@ function setup(options: { permissions?: Record<string, boolean>; commerce?: bool
       }),
       readOrg: async (orgId) =>
         orgId === 'org-1'
-          ? { slug: 'acme', entitlements: { features: { commerce: options.commerce ?? true } } }
+          ? { slug: 'acme', name: 'Acme', entitlements: { features: { commerce: options.commerce ?? true } } }
           : null,
       lockdownRefusal: async () => null,
     },
-    readProviderConfig: (provider) =>
-      provider === 'xero' && options.xeroConfigured === false ? { configured: false, missing: ['XERO_CLIENT_ID'] } : configured,
-    providerFor: (provider) => (provider === 'xero' && options.xeroConfigured === false ? null : providers[provider]),
+    readProviderConfig: (provider) => (unconfigured(provider) ? { configured: false, missing: ['ENV'] } : configured),
+    providerFor: (provider) => (unconfigured(provider) ? null : providers[provider]),
     stateSigningConfigured: () => true,
     redirectUri: () => 'https://app.aglyn.com/api/accounting/oauth/callback',
     now: () => NOW,
@@ -268,5 +284,73 @@ describe('accounting routes', () => {
     await connectQuickBooks(context)
     const refused = await context.routes.connect(context.request('POST', 'accounting/connect', { orgId: 'org-1', provider: 'xero' }))
     expect(refused.status).toBe(409)
+  })
+
+  describe('through Codat (AGL-3636)', () => {
+    it('is hidden until CODAT_API_KEY is configured, and refuses a connect', async () => {
+      const context = setup()
+      const response = await context.routes.status(context.request('GET', 'accounting/status?orgId=org-1'))
+      expect(await response.json()).toMatchObject({ providers: { quickbooks: true, xero: true, codat: false } })
+      const refused = await context.routes.connect(context.request('POST', 'accounting/connect', { orgId: 'org-1', provider: 'codat' }))
+      expect(refused.status).toBe(503)
+      expect(context.providers.codat.authorizeUrl).not.toHaveBeenCalled()
+    })
+
+    it('connects end to end: Link for this workspace, the company back as the code, bound to its books', async () => {
+      const context = setup({ codatConfigured: true })
+      const started = await context.routes.connect(context.request('POST', 'accounting/connect', { orgId: 'org-1', provider: 'codat' }))
+      expect(started.status).toBe(200)
+      const { url } = (await started.json()) as { url: string }
+      expect(url.startsWith('https://link.codat.io/company/c-1?state=')).toBe(true)
+      expect(context.providers.codat.authorizeUrl).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org-1', orgName: 'Acme' }))
+      const state = new URL(url).searchParams.get('state') ?? ''
+      // The redirect the Codat Portal is set to send: `code={companyId}&state={state}&statusCode={statusCode}`.
+      const callback = await context.routes.oauthCallback(
+        new Request(
+          `https://app.aglyn.com/api/accounting/oauth/callback?code=c-1&state=${encodeURIComponent(state)}&statusCode=200&connectionId=conn-1`,
+        ),
+      )
+      expect(callback.status).toBe(303)
+      const returned = parseAccountingConnectFragment((callback.headers.get('location') ?? '').split('#')[1] ?? '')
+      expect(returned).toMatchObject({ kind: 'code', code: 'c-1' })
+      const completed = await context.routes.connectComplete(
+        context.request('POST', 'accounting/connect/complete', { orgId: 'org-1', ...returned }),
+      )
+      expect(completed.status).toBe(200)
+      expect(context.providers.codat.exchangeCode).toHaveBeenCalledWith(expect.objectContaining({ code: 'c-1', orgId: 'org-1' }))
+      expect(await completed.json()).toMatchObject({
+        connection: { provider: 'codat', status: 'connected', tenantId: 'conn-1', tenantName: 'Acme Inc (NetSuite)', environment: null },
+      })
+      const record = readConnection(context.store.read('orgs/org-1/accountingConnections/codat'))!
+      expect(record.sealedAccessToken).not.toContain('c-1')
+    })
+
+    it('hands a declined or failed Link back to the page as an error, never a code', async () => {
+      const context = setup({ codatConfigured: true })
+      const started = await context.routes.connect(context.request('POST', 'accounting/connect', { orgId: 'org-1', provider: 'codat' }))
+      const state = new URL(((await started.json()) as { url: string }).url).searchParams.get('state') ?? ''
+      for (const [statusCode, reason] of [
+        ['403', 'access_denied'],
+        ['500', 'provider_error'],
+      ]) {
+        const callback = await context.routes.oauthCallback(
+          new Request(
+            `https://app.aglyn.com/api/accounting/oauth/callback?code=c-1&state=${encodeURIComponent(state)}&statusCode=${statusCode}`,
+          ),
+        )
+        const returned = parseAccountingConnectFragment((callback.headers.get('location') ?? '').split('#')[1] ?? '')
+        expect(returned).toEqual({ kind: 'error', reason })
+      }
+    })
+
+    it('answers a Codat failure at connect as a provider error', async () => {
+      const context = setup({ codatConfigured: true })
+      ;(context.providers.codat.authorizeUrl as jest.Mock).mockRejectedValueOnce(
+        new AccountingProviderError('transient', 'Codat is down.', 503),
+      )
+      const refused = await context.routes.connect(context.request('POST', 'accounting/connect', { orgId: 'org-1', provider: 'codat' }))
+      expect(refused.status).toBe(502)
+      expect(await refused.json()).toMatchObject({ reason: 'provider-error', error: 'Accounting software: Codat is down.' })
+    })
   })
 })

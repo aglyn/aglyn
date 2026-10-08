@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { defaultScopeForNewResource } from '@aglyn/aglyn/server'
+import {
+  defaultMediaScopeOf,
+  defaultScopeForNewResource,
+} from '@aglyn/aglyn/server'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin'
 import { type MediaScope, type MediaScopeError, scopeAllows } from './media-scope'
 
@@ -32,8 +35,8 @@ export const UPLOAD_SITE_OUT_OF_REACH =
  *
  * The media library names the site as `forHostId` on the requests that create
  * an asset, wherever a site is on screen: a site's Media tab, and the picker
- * opened for a site. With the org's `defaultResourceScope` set to `'host'`,
- * `defaultScopeForNewResource` shares the new asset with that site alone, so
+ * opened for a site. With the org's media default (`defaultMediaScopeOf`)
+ * set to `'host'`, `defaultScopeForNewResource` shares the new asset with that site alone, so
  * the id is a client claim that decides who can use the file. It is honored
  * only when both of these hold:
  *
@@ -70,9 +73,9 @@ export async function resolveUploadSite(
   // The scope the upload will be written with — so a site the org's setting
   // ignores (All sites) is never refused over a narrowing that will not happen.
   const visibleTo = defaultScopeForNewResource({
-    defaultResourceScope: (scope.billing as {
-      defaultResourceScope?: 'org' | 'host'
-    }).defaultResourceScope,
+    defaultResourceScope: defaultMediaScopeOf(
+      scope.billing as Parameters<typeof defaultMediaScopeOf>[0],
+    ),
     hostId,
   })
   if (!scopeAllows(scope, visibleTo)) {

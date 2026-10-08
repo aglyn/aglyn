@@ -645,7 +645,9 @@ describe('the passes', () => {
     const cells = nodes[rowId as string].nodes ?? []
     expect(outcome.review).toEqual({
       reason: 'doctrine',
-      message: expect.stringContaining('Rule 12'),
+      // The rule's own words are staff reading; the customer reads the plain refusal (AGL-3596).
+      message: expect.stringContaining('Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page.'),
+      detail: expect.stringContaining('Rule 12'),
       findings: [expect.objectContaining({ rule: 12, code: 'grid-not-container', nodeIds: [rowId] })],
       outline: [
         { id: rowId, depth: 0, componentId: 'muiGrid', props: ['ariaLabel'], children: cells.map(() => 'muiGrid') },
@@ -824,7 +826,8 @@ describe('when a pass stops', () => {
     expect(last.outputs).toEqual([expect.objectContaining({ resource: 'screen', id: 'drftScreen' })])
     expect(last.review).toEqual({
       reason: 'doctrine',
-      message: expect.stringContaining('(1 more rule was also broken.)'),
+      message: expect.stringContaining('Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page.'),
+      detail: expect.stringContaining('(1 more rule was also broken.)'),
       findings: [
         expect.objectContaining({ rule: 10, code: 'link-without-destination', nodeIds: [button] }),
         expect.objectContaining({ rule: 12, code: 'grid-not-container', nodeIds: [row] }),
@@ -858,7 +861,9 @@ describe('when a pass stops', () => {
     )
     expect(outcome.review).toEqual({
       reason: 'doctrine',
-      message: expect.stringContaining('Rule 12'),
+      // The rule's own words are staff reading; the customer reads the plain refusal (AGL-3596).
+      message: expect.stringContaining('Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page.'),
+      detail: expect.stringContaining('Rule 12'),
       findings: [{ rule: 12, code: 'grid-as-stack', message: expect.stringContaining('no "column" direction'), nodeIds: ['a5'] }],
       outline: [
         {

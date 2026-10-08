@@ -4,7 +4,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.window.application
 import com.aglyn.pluginhost.NativeApp
-import com.aglyn.plugins.manifest.NativePlugins
+import com.aglyn.plugins.manifest.NativePluginManifest
 import com.aglyn.shell.AglynShell
 import com.aglyn.shell.DesktopShell
 import com.aglyn.shell.Route
@@ -12,7 +12,7 @@ import com.aglyn.shell.ShellNavigator
 
 /** "Aglyn" on the desktop. */
 fun main() {
-  val services = DesktopShell.services(NativeApp.AGLYN, DesktopShell.envFromSystem(), NativePlugins.entries)
+  val services = DesktopShell.services(NativeApp.AGLYN, DesktopShell.envFromSystem(), NativePluginManifest.entries)
   val autoSignIn = System.getProperty("aglyn.autoSignIn") == "true"
   application {
     val navigator = remember { ShellNavigator() }
@@ -23,7 +23,8 @@ fun main() {
         Menu("Go", mnemonic = 'G') {
           Item("Home", shortcut = shortcut(Key.One), onClick = { navigator.select(ShellNavigator.HOME) })
           Item("Notifications", shortcut = shortcut(Key.Two), onClick = { navigator.select(ShellNavigator.NOTIFICATIONS) })
-          Item("Console", shortcut = shortcut(Key.Three), onClick = { navigator.select(ShellNavigator.CONSOLE) })
+          Item("Pages", shortcut = shortcut(Key.Three), onClick = { navigator.select(ShellNavigator.HOME); navigator.push(Route.Pages) })
+          Item("Orders", shortcut = shortcut(Key.Four), onClick = { navigator.select(ShellNavigator.screenKey("commerce.orders")) })
           Item("Settings", shortcut = shortcut(Key.Comma), onClick = { navigator.select(ShellNavigator.SETTINGS) })
           Separator()
           Item("Back", shortcut = shortcut(Key.LeftBracket), onClick = { navigator.back() })

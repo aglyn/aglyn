@@ -414,7 +414,9 @@ describe('the component step', () => {
     // The review keeps where the answer broke the rule, and the node's shape without its copy (AGL-3078).
     expect(outcome.review).toEqual({
       reason: 'doctrine',
-      message: expect.stringContaining('Rule 1'),
+      // The rule's own words are staff reading; the customer reads the plain refusal (AGL-3596).
+      message: 'Aglyn AI couldn’t build this cleanly, so we stopped rather than give you something broken.',
+      detail: expect.stringContaining('Rule 1'),
       findings: [
         { rule: 1, code: 'binding-field', message: expect.stringContaining('{{prop.photo}}'), nodeIds: ['quote'] },
         { rule: 1, code: 'prop-unbound', message: expect.stringContaining('{{prop.quote}}, {{prop.badge}}') },

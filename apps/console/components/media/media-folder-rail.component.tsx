@@ -192,7 +192,10 @@ export function MediaFolderRail(props: MediaFolderRailProps) {
       ))
 
   return (
-    <Stack spacing={0.5} sx={{ minWidth: 180, maxWidth: 220 }}>
+    <Stack
+      spacing={0.5}
+      sx={{ minWidth: { xs: 0, sm: 180 }, maxWidth: { xs: 'none', sm: 220 } }}
+    >
       <Stack
         direction="row"
         onClick={() => onSelect('all')}

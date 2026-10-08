@@ -58,6 +58,7 @@ import { POST as assistEditApplied } from './server/assist-edit-applied'
 import { POST as assistFeedback } from './server/assist-feedback'
 import { PATCH as aiHostPermissions } from './server/ai-host-permissions'
 import { GET as aiAdminOrg } from './server/ai-admin-org'
+import { GET as aiAdminConversations } from './server/ai-admin-conversations'
 import { GET as aiAdminOrgsSpend } from './server/ai-admin-orgs-spend'
 import { GET as aiAdminSignals } from './server/ai-admin-signals'
 import { GET as aiAdminUser } from './server/ai-admin-user'
@@ -244,6 +245,9 @@ export function registerAiConsoleApi(): void {
   registerPluginApiRoute('ai/admin/orgs-spend', { web: aiAdminOrgsSpend })
   registerPluginApiRoute('ai/admin/user', { web: aiAdminUser })
   registerPluginApiRoute('ai/admin/signals', { web: aiAdminSignals })
+  // What an org asked Aglyn AI and what it answered (AGL-3675): one page at a
+  // time, read on request, each page an audited access.
+  registerPluginApiRoute('ai/admin/conversations', { web: aiAdminConversations })
   // One workspace's overage standing and the four acts staff have over it
   // (AGL-3011): the ceiling override, lifting a pause — the only way a
   // dispute pause comes off — and resetting the step. Every act audited.

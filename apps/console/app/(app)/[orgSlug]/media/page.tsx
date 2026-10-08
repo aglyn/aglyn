@@ -60,13 +60,11 @@ const OrgMedia: NextPageWithLayout<Record<string, never>> = () => {
         ) : (
           currentOrg?.$id ? (
           <>
-          {/* The default sharing a new dataset, folder or upload starts
-              with (AGL-1048). It sits above the library because it is
-              what the library's next Create or Upload will apply, and it
-              is a data/media setting rather than organization identity —
-              which is where it used to render, under Settings → Profile
-              beside the logo and the contact email. */}
-          <OrgDefaultSharingCard />
+          {/* The default sharing a new folder or upload starts with
+              (AGL-1048, AGL-3662). It sits above the library because it is
+              what the library's next Create or Upload will apply. Datasets
+              have their own, on the organization Data page. */}
+          <OrgDefaultSharingCard kind="media" />
           {/* Full library (org DAM parity): same card framing, folders,
               uploads, editing, references and quota meter as a site's
               media page (AGL-368). */}

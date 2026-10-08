@@ -197,7 +197,12 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
    * has no rail, publishes its besigner button upward instead.
    */
   const headerActions = (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+    <Stack
+      direction="row"
+      spacing={1}
+      useFlexGap
+      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+    >
       <Button
         component={AppLink as any}
         {...({ componentVariant: 'naked', nativeButton: false } as any)}

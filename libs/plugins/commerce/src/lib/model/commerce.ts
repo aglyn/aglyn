@@ -826,9 +826,14 @@ export function productInventory(
  * picks when the count disagreed with the shelf for a reason nobody recorded.
  * Kept out of the "Adjust stock" dialog's menu on purpose: a merchant reaching
  * for it by hand means something else happened.
+ *
+ * `sync` is a count another warehouse reported (AGL-3634): a fulfillment
+ * network holding the goods said how many it can ship, and the count was set
+ * to that. Written only through core's `core.stock-levels`, with `source`
+ * naming who counted, and kept out of the dialog's menu for the same reason.
  */
 export type InventoryAdjustmentReason =
-  'sale' | 'refund' | 'restock' | 'correction' | 'damage' | 'cancellation'
+  'sale' | 'refund' | 'restock' | 'correction' | 'damage' | 'cancellation' | 'sync'
 
 /** `hosts/{hostId}/inventoryAdjustments/{id}` doc. */
 export interface InventoryAdjustment {
@@ -856,6 +861,11 @@ export interface InventoryAdjustment {
   orderId?: string
   /** Location for multi-location stock (AGL-286); absent = default. */
   locationId?: string
+  /**
+   * Who counted, for a `sync` row: the warehouse that reported it (AGL-3634);
+   * for a `sale` another channel made, that channel (AGL-3638).
+   */
+  source?: string
   atMs: number
 }
 

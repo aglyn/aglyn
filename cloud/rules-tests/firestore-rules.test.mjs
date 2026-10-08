@@ -13553,6 +13553,8 @@ describe('shipping records are the server’s alone (AGL-3612)', () => {
     ['shippingHostSettings', HOST],
     ['shippingLabels', 'lbl_1'],
     ['shippingAddressChecks', `${HOST}__order-1`],
+    // The merchant's own Easyship, Sendcloud or ShipperHQ credentials (AGL-3632).
+    ['shippingConnections', 'easyship'],
   ]
   const TOP_DOCS = [
     ['shippingTrackers', 'trk_1'],
@@ -13597,6 +13599,94 @@ describe('shipping records are the server’s alone (AGL-3612)', () => {
         await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, name), limit(10))))
         await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
         await mustDeny(`${who} creating ${name}`, setDoc(doc(db, name, 'new'), { orgId: ORG }))
+      }
+    }
+  })
+})
+
+describe('post-purchase records are the server’s alone (AGL-3635)', () => {
+  // A site's AfterShip, Route and Narvar switches with the merchant's sealed
+  // credentials, and what each service was told about an order. Written and
+  // read through the Admin SDK by the post-purchase plugin's routes and
+  // event handlers; the owner and staff are refused like everyone.
+  const ORG_DOCS = [
+    ['postPurchaseHostSettings', HOST],
+    ['postPurchaseOrders', `${HOST}__order-1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of ORG_DOCS) {
+        await setDoc(doc(db, 'orgs', ORG, name, id), { orgId: ORG, hostId: HOST, recordId: 'order-1' })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of ORG_DOCS) {
+        const ref = doc(db, 'orgs', ORG, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, 'orgs', ORG, name), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { route: { sealedToken: 'mine' } }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, 'orgs', ORG, name, 'new'), { orgId: ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
+describe('print-on-demand records are the server’s alone (AGL-3641)', () => {
+  // A site's connection holds the merchant's sealed Printful or Printify
+  // token; a product link decides which service makes a product's orders; an
+  // order's part says what was sent and shipped. All three are written and
+  // read by the print-on-demand plugin's routes, event handlers and job
+  // through the Admin SDK.
+  const DOCS = [
+    ['podConnections', `${HOST}__printful`],
+    ['podProductLinks', `${HOST}__printful__501`],
+    ['podOrders', `${HOST}__order-1__printful`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of DOCS) {
+        await setDoc(doc(db, name, id), {
+          orgId: ORG,
+          hostId: HOST,
+          sealedApiToken: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of DOCS) {
+        const ref = doc(db, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, name), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, name, `${HOST}__new`), { orgId: ORG, hostId: HOST }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
       }
     }
   })
@@ -13781,6 +13871,201 @@ describe('sales channel feeds and connections are server-only (AGL-3637)', () =>
       )
       await mustDeny(`a ${role} rewriting a feed token`, updateDoc(feedDoc(db), { token: 'x' }))
       await mustDeny(`a ${role} deleting a connection`, deleteDoc(connectionDoc(db)))
+    }
+  })
+})
+
+describe('ShippingEasy keys and order records are server-only (AGL-3633)', () => {
+  const connection = (db) => doc(db, 'commerceShippingEasyConnections', HOST)
+  const record = (db) => doc(db, 'commerceShippingEasyConnections', HOST, 'orders', 'order-1')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(connection(context.firestore()), {
+        hostId: HOST,
+        apiKey: 'f9a7c8b6d5e4f3a2b1c0d9e8f7a6b5c4',
+        sealedApiSecret: 'sb1.tss1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        secretKeyId: 'tss1',
+        storeApiKey: 'c71dc6da574eea04e2c926906bcb4eec',
+        createdAtMs: 1,
+        createdBy: OWNER,
+      })
+      await setDoc(record(context.firestore()), { orderId: 'order-1', externalId: '1001', state: 'sent', updatedAtMs: 1 })
+    })
+  })
+
+  it('no client reads a site’s keys or what was sent: not its admin, not staff, not a stranger', async () => {
+    await mustDeny('the site owner reading the ShippingEasy connection', getDoc(connection(authed(OWNER))))
+    await mustDeny('a site editor reading the ShippingEasy connection', getDoc(connection(authed(EDITOR))))
+    await mustDeny('staff reading the ShippingEasy connection', getDoc(connection(authed(STAFF, { staff: true }))))
+    await mustDeny('a visitor reading the ShippingEasy connection', getDoc(connection(anon())))
+    await mustDeny('the site owner reading an order record', getDoc(record(authed(OWNER))))
+    await mustDeny(
+      'the site owner listing the order records',
+      getDocs(collection(authed(OWNER), 'commerceShippingEasyConnections', HOST, 'orders')),
+    )
+    await mustDeny(
+      'the site owner listing ShippingEasy connections',
+      getDocs(collection(authed(OWNER), 'commerceShippingEasyConnections')),
+    )
+  })
+
+  it('no client writes one: the console connects and disconnects on the Admin SDK', async () => {
+    await mustDeny(
+      'the site owner replacing the sealed secret',
+      setDoc(connection(authed(OWNER)), { hostId: HOST, apiKey: 'mine', sealedApiSecret: 'x' }),
+    )
+    await mustDeny(
+      'staff replacing the store key',
+      updateDoc(connection(authed(STAFF, { staff: true })), { storeApiKey: 'x' }),
+    )
+    await mustDeny('the site owner disconnecting from the browser', deleteDoc(connection(authed(OWNER))))
+    await mustDeny('the site owner marking an order sent', setDoc(record(authed(OWNER)), { state: 'sent' }))
+    await mustDeny(
+      'a stranger minting a connection for another site',
+      setDoc(doc(authed('uid-stranger'), 'commerceShippingEasyConnections', 'other-host'), { apiKey: 'x' }),
+    )
+  })
+})
+
+describe('fulfillment network records are the server’s alone (AGL-3634)', () => {
+  // A connection holds the merchant's sealed ShipBob or Amazon grant and the
+  // hash of the token ShipBob's webhooks carry; a hand-off says which units
+  // of an order a network holds, which a label buyer and the stock count act
+  // on. All written and read by the fulfillment-networks plugin's routes,
+  // event intake and job through the Admin SDK.
+  const DOCS = [
+    ['fulfillmentNetworkConnections', `${HOST}_shipbob`],
+    ['fulfillmentNetworkConnections', `${HOST}_shipbob`, 'log', 'entry-1'],
+    ['fulfillmentNetworkOrders', `${HOST}_order-1_shipbob`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), {
+          orgId: ORG,
+          hostId: HOST,
+          sealedAccessToken: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
+describe('marketplace records are the server’s alone (AGL-3638)', () => {
+  // A connection holds the merchant's sealed marketplace grant and what each
+  // listing was last sent; an imported order's record says which shipments
+  // to confirm to the marketplace. All written and read by the marketplaces
+  // plugin's routes, event intake and job through the Admin SDK.
+  const DOCS = [
+    ['marketplaceConnections', `${HOST}_ebay`],
+    ['marketplaceConnections', `${HOST}_ebay`, 'log', 'entry-1'],
+    ['marketplaceConnections', `${HOST}_ebay`, 'listingState', 'c00'],
+    ['marketplaceOrders', `${HOST}_ebay_0123456789abcdef01234567`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), {
+          orgId: ORG,
+          hostId: HOST,
+          sealedAccessToken: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
+describe('inventory sync records are the server’s alone (AGL-3642)', () => {
+  // A connection holds the merchant's sealed Cin7 Core or inFlow API keys,
+  // or Brightpearl grant; a hand-off decides whether an order is recorded in
+  // the merchant's system; a product link decides which system product's
+  // count overwrites a store product's. All written and read by the
+  // inventory-sync plugin's routes, event intake and job through the Admin SDK.
+  const DOCS = [
+    ['inventorySyncConnections', HOST],
+    ['inventorySyncConnections', HOST, 'log', 'entry-1'],
+    ['inventorySyncOrders', `${HOST}_order-1`],
+    ['inventorySyncProducts', `${HOST}_cin7-core_product-1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), {
+          orgId: ORG,
+          hostId: HOST,
+          sealedCredential: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
     }
   })
 })

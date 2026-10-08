@@ -75,6 +75,7 @@ import {
   AI_PAGE_SECTION_TOOL,
   aiEmptyPage,
   aiPageCheckContext,
+  aiPageLinkablePages,
   aiPageRecordNote,
   aiPageRecordTemplate,
   aiPageRecordTokens,
@@ -85,7 +86,15 @@ import {
   aiPageWithSection,
   type AiPageSection,
 } from './ai-job-page-sections'
+import { aiLayoutSitePages } from './ai-job-layout-site-pages'
+import { aiResolveLayoutPictures } from '../layout-language/ai-layout-pictures'
 import { AI_PLAN_ITEMS_MIN, aiPlanCopiedPageViolations } from './ai-job-plan-conformance'
+import {
+  AI_JOB_PAGE_LANGUAGE_BUDGET,
+  aiJobUsesLayoutLanguage,
+  aiLayoutPageTargets,
+  aiRunLayoutPage,
+} from './ai-job-page-language'
 import {
   aiCreationUnit,
   aiRunJobUnit,
@@ -221,12 +230,11 @@ export const AI_JOB_PAGE_CREATION_EMPTY_COPY =
   'Part of this page could not be built. Describe the page again.'
 
 /**
- * What a page refused on its last pass tells the member beside the rules it
- * broke (AGL-3143). The draft is reported with the review, and mending what
- * the findings name in it is what lets the next pass finish the job.
+ * What a page refused on its last pass tells the member after the plain
+ * refusal (AGL-3143, AGL-3596). The draft is reported with the review, and
+ * mending its layout in the editor is what lets the next pass finish the job.
  */
-export const AI_JOB_PAGE_REFUSED_DRAFT_COPY =
-  'The draft is yours to open: mend what these name in it, then try again.'
+export const AI_JOB_PAGE_REFUSED_DRAFT_COPY = 'The draft is yours to open: fix its layout in the editor, then try again.'
 
 /**
  * The most passes a page job may take (AGL-3031): every creation the plan
@@ -261,11 +269,13 @@ export function aiPageJobUnits(plan: Pick<AiJobPlan, 'create'>): AiSiteUnit[] {
  */
 export function aiPageJobRunMinimumMs(job: AiJob): number {
   const confirmed = aiConfirmedPlan(job)
-  if (!confirmed) return AI_JOB_PAGE_STEP_MINIMUM_MS
+  // A page built in the layout language is one answer for the whole page (AGL-3660).
+  const pagePass = aiJobUsesLayoutLanguage(job) ? AI_JOB_PAGE_LANGUAGE_BUDGET.minimumMs : AI_JOB_PAGE_STEP_MINIMUM_MS
+  if (!confirmed) return pagePass
   const units = aiPageJobUnits(confirmed)
   const outputs = job.outputs ?? []
   const [unit] = aiSitePendingUnits(units, outputs)
-  if (!unit) return AI_JOB_PAGE_STEP_MINIMUM_MS
+  if (!unit) return pagePass
   return aiJobStepRunMinimumMs(aiSiteUnitJob(job, unit, aiSiteBuiltRefs(units, outputs)))
 }
 
@@ -584,12 +594,23 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const sections = screen.sections.map((section) => section.name)
     // A third-party player the confirmed plan lists for this page is the only one it may embed (AGL-3433).
     const embeds = aiPlanEmbedsFor(plan, { slug: screen.slug })
-    const context = aiPageCheckContext(inventory, {
-      reusableComponents,
-      sections,
-      embeds,
-      recordTokens: aiPageRecordTokens(record),
-    })
+    // The site's other pages a link may go to, built or minted on a guided
+    // start's plan, and the one a link that names none can only mean (AGL-3596).
+    const { linkablePages, linkTarget } = aiPageLinkablePages(inventory, aiLayoutSitePages(job.inputs), [screen.id, draftId])
+    // A page unit of a guided start or a build is designed in the layout
+    // language and compiled (AGL-3660); a record template keeps the raw tree,
+    // since its copy binds fields the language does not name.
+    const language = aiJobUsesLayoutLanguage(job) && !record
+    const context = {
+      ...aiPageCheckContext(inventory, {
+        reusableComponents,
+        sections,
+        embeds,
+        recordTokens: aiPageRecordTokens(record),
+        linkablePages,
+      }),
+      ...(language ? { codeBuilt: true } : {}),
+    }
 
     // ── The last pass: the whole page, its listing, and the draft reported ──
     if (index === -1 && written) {
@@ -631,11 +652,14 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         // review names is mended in the draft, and the next pass then passes.
         return aiUnspentOutcome(model, {
           outputs: reports,
-          review: aiDoctrineReview({
-            message: `${aiDoctrineNeedsInputMessage(violations)} ${AI_JOB_PAGE_REFUSED_DRAFT_COPY}`,
-            violations,
-            answer: { tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page } },
-          }),
+          review: aiDoctrineReview(
+            {
+              message: aiDoctrineNeedsInputMessage(violations),
+              violations,
+              answer: { tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page } },
+            },
+            { page: true, then: AI_JOB_PAGE_REFUSED_DRAFT_COPY },
+          ),
         })
       }
       let spent: AiJobStepOutcome = aiUnspentOutcome(model)
@@ -689,6 +713,63 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       const allowance = await aiDraftAllowanceRefusal(firestore, { kind: 'screen', hostId, org })
       if (allowance) return aiUnspentOutcome(model, { review: aiLimitReview(allowance) })
     }
+    if (language) {
+      // ── The whole page in one answer, in the layout language ──
+      const targets = aiLayoutPageTargets({ job, inventory, own: [screen.id, draftId] })
+      const result = await aiRunLayoutPage({
+        job,
+        plan,
+        screen,
+        sectionIds,
+        targets,
+        context,
+        reusableComponents,
+        inventory,
+        model,
+        ...(signal ? { signal } : {}),
+      })
+      const spent = aiGenerationSpent(result)
+      if (result.status === 'refused') return { ...spent, refused: true }
+      if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
+      // The compiler leaves each picture slot empty; a photo the site serves
+      // itself fills it here, after the page is checked (AGL-3660).
+      const pictured = await aiResolveLayoutPictures(result.value.nodes, {
+        rootId: CANVAS_ROOT_ELEMENT_ID,
+        sectionIds,
+        sectionNames: screen.sections.map((section) => section.name),
+        seed: `${aiOriginJobId(job)}:${screen.id ?? screen.slug}`,
+      })
+      if (!written) {
+        const draft = await writeAiDraft(firestore, {
+          kind: 'screen',
+          hostId,
+          id: draftId,
+          uid: job.createdBy,
+          org,
+          name,
+          nodes: pictured,
+          slug,
+          layoutId: aiPageDraftLayoutId(screen, inventory),
+          aiJobId: aiOriginJobId(job),
+          now,
+        })
+        if (draft.ok === false) {
+          if (draft.status === 404) throw new Error(`site ${hostId} vanished while its page was generated`)
+          return { ...spent, review: aiLimitReview(draft.error) }
+        }
+      } else {
+        // A draft written by an earlier, interrupted pass is replaced whole.
+        const update = await updateAiDraftNodes(firestore, {
+          kind: 'screen',
+          hostId,
+          id: draftId,
+          now,
+          update: () => pictured,
+        })
+        if (update.ok === false) return { ...spent, failure: AI_JOB_PAGE_DELETED_COPY }
+      }
+      return { ...spent, continue: true }
+    }
     const maxTokens = aiJobPageSectionMaxTokens(model)
     const maxElements = aiJobPageSectionMaxElements(maxTokens)
     const result = await runValidatedGeneration<AiPageSection>('page-section', {
@@ -699,7 +780,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       messages: [
         {
           role: 'user',
-          content: aiPageSectionPrompt({ job, plan, screen, index, maxElements, reusableComponents, record }),
+          content: aiPageSectionPrompt({ job, plan, screen, index, maxElements, reusableComponents, record, linkablePages }),
         },
       ],
       tool: AI_PAGE_SECTION_TOOL,
@@ -715,12 +796,13 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         context,
         section: screen.sections[index],
         inventory,
+        linkTarget,
       }),
       ...(signal ? { signal } : {}),
     })
     const spent = aiGenerationSpent(result)
     if (result.status === 'refused') return { ...spent, refused: true }
-    if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
+    if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result, { page: true }) }
 
     if (!written) {
       const draft = await writeAiDraft(firestore, {

@@ -548,7 +548,7 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
                   </TableCell>
                 ) : null}
                 <TableCell>
-                  <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
+                  <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
                     {value.active ? null : (
                       <Chip size="small" variant="outlined" color="warning" label="Inactive" />
                     )}

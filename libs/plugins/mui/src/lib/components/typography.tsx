@@ -26,8 +26,16 @@ import {
   mdiFormatHeader6,
   mdiFormatText,
 } from '@aglyn/shared-data-mdi'
+import { AglynText } from '@aglyn/shared-ui-jsx'
 import Typography, { type TypographyProps } from '@mui/material/Typography'
-import { forwardRef } from 'react'
+import {
+  Children,
+  createContext,
+  forwardRef,
+  isValidElement,
+  useContext,
+  type ReactNode,
+} from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_TEXT_CONTENT } from '../constants/field-presets'
 import { dropClearedProps } from '../utils/drop-cleared-props'
@@ -94,6 +102,13 @@ export const schema: Aglyn.ComponentSchema = {
     lazyHydration: Aglyn.FEATURE_FLAG.ENABLED,
     textEditable: Aglyn.FEATURE_FLAG.ENABLED,
     richTextEditable: Aglyn.FEATURE_FLAG.ENABLED,
+    // Holds other elements after its own text (AGL-3672). The text keeps its
+    // own `<aglyn-text>`, which is all the in-place editor rewrites, so an
+    // edit never touches the elements beside it.
+    dropping: Aglyn.FEATURE_FLAG.ENABLED,
+    // One React child per child node, so the component can tell its
+    // elements from its text — see `AglynTypography`.
+    positionalChildren: Aglyn.FEATURE_FLAG.ENABLED,
   },
   attributes: [
     FIELD_TEXT_CONTENT,
@@ -282,6 +297,24 @@ function blockSafeComponent(
   return Aglyn.authorHtmlBreaksContainer(sanitized, element) ? 'div' : undefined
 }
 
+/** The elements a Typography may not sit inside of another as. */
+const BLOCK_TEXT_ELEMENTS = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+
+/**
+ * True inside the child elements of a Typography. A paragraph or heading
+ * nested in another is not one the parser keeps: `<p>` closes on any `<p>`
+ * start tag and a heading on any heading, so the inner element lands beside
+ * the outer one and React hydrates against a page it did not describe. A
+ * nested Typography renders as a `<span>` instead — it continues the
+ * sentence it was dropped into, which is what nesting text means.
+ */
+const TypographyNestingContext = createContext(false)
+
+/** A child NODE, as the renderer hands it over: an element carrying `node`. */
+function isChildNode(child: ReactNode): boolean {
+  return isValidElement(child) && (child.props as any)?.node != null
+}
+
 const AglynTypography = forwardRef<
   HTMLElement,
   TypographyProps & { html?: string }
@@ -290,6 +323,9 @@ const AglynTypography = forwardRef<
   // A cleared `align` persists as null and MUI capitalizes it — an SSR throw
   // that 500s the page (AGL-1226, same shape as the button colour).
   const rest = dropClearedProps(spread)
+  const nested = useContext(TypographyNestingContext)
+  const parts = Children.toArray(children)
+  const childNodes = parts.filter(isChildNode)
   const hasHtml = typeof html === 'string' && Boolean(html)
   // Sanitized DURING render, on the server and in the browser alike
   // (AGL-1901). The effect this replaced existed because DOMPurify needs a
@@ -300,6 +336,18 @@ const AglynTypography = forwardRef<
   // DOM dependency, so both sides now compute the same bytes from the same
   // prop and agree on the CONTENT instead of on the absence of it.
   const sanitized = hasHtml ? sanitizeTypographyHtml(html as string) : null
+  if (childNodes.length > 0 || nested) {
+    return (
+      <HoldingTypography
+        ref={ref}
+        rest={rest as TypographyProps}
+        sanitized={sanitized}
+        nested={nested}
+        text={parts.filter((part) => !isChildNode(part))}
+        childNodes={childNodes}
+      />
+    )
+  }
   if (sanitized !== null) {
     // A `<p>` cannot hold the block content a rich-text body may contain —
     // see `blockSafeComponent`. `undefined` leaves MUI's own choice alone.
@@ -317,6 +365,60 @@ const AglynTypography = forwardRef<
   return (
     <Typography ref={ref} variantMapping={VARIANT_ELEMENT} {...rest}>
       {children}
+    </Typography>
+  )
+})
+
+/**
+ * A Typography that holds elements, or sits inside one that does
+ * (AGL-3672). Its own text comes first, then the elements dropped into it.
+ *
+ * The element changes only where the parser would otherwise rewrite the
+ * page: a holder that would be a `<p>` becomes a `<div>`, since the elements
+ * inside may be blocks and a block start tag closes a `<p>`; a nested one
+ * that would be a paragraph or heading becomes a `<span>`. A rich-text body
+ * goes in its own `<aglyn-text>` rather than over the whole element, so the
+ * children survive both the render and an in-place edit.
+ */
+const HoldingTypography = forwardRef<
+  HTMLElement,
+  {
+    rest: TypographyProps
+    sanitized: string | null
+    nested: boolean
+    text: ReactNode[]
+    childNodes: ReactNode[]
+  }
+>(function HoldingTypography(props, ref) {
+  const { rest, sanitized, nested, text, childNodes } = props
+  const element =
+    (rest.component as string | undefined) ??
+    VARIANT_ELEMENT[(rest.variant as string) ?? 'body1'] ??
+    'span'
+  const component =
+    (sanitized !== null ? blockSafeComponent(sanitized, rest) : undefined) ??
+    (nested && BLOCK_TEXT_ELEMENTS.has(element)
+      ? 'span'
+      : childNodes.length > 0 && element === 'p'
+        ? 'div'
+        : undefined)
+  return (
+    <Typography
+      ref={ref}
+      variantMapping={VARIANT_ELEMENT}
+      {...rest}
+      {...(component ? { component } : {})}
+    >
+      {sanitized !== null ? (
+        <AglynText dangerouslySetInnerHTML={{ __html: sanitized }} />
+      ) : (
+        text
+      )}
+      {childNodes.length > 0 && (
+        <TypographyNestingContext.Provider value={true}>
+          {childNodes}
+        </TypographyNestingContext.Provider>
+      )}
     </Typography>
   )
 })

@@ -15,25 +15,25 @@
  * limitations under the License.
  */
 
-import { createHash, randomBytes, timingSafeEqual } from 'crypto'
-import * as Aglyn from '@aglyn/aglyn/server'
+import { randomBytes, timingSafeEqual } from 'crypto'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import { needsReseal, openSecret, sealSecret, type SecretBoxKeyring } from '@aglyn/shared-util-tools/secret-box'
-import {
-  consumeRateLimit,
-  firebaseAdmin,
-  getHostDisabledPlugins,
-  getHostDocAdmin,
-  getOrgForHost,
-  getServerReleaseFlagValues,
-  lockdownRefusal,
-} from '@aglyn/tenant-data-admin'
+import { consumeRateLimit, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
 import { recordOrderShipment } from './fulfill-order'
 import { readCommerceSecretKeyring } from './order-webhooks'
+import {
+  connectorHostIdOf,
+  connectorSiteRefusal,
+  connectorText as text,
+  digestSecret,
+  requestIsSecure,
+} from './shipping-connector-gates'
 
-// lockdown-423: handled — the route asks `lockdownRefusal` itself, for the org and site its credentials name, before any read.
+export { digestSecret, requestIsSecure } from './shipping-connector-gates'
+
+// lockdown-423: handled — the route asks `lockdownRefusal` itself (through `connectorSiteRefusal`), for the org and site its credentials name, before any read.
 
 /*
  * SHIPSTATION'S CUSTOM STORE ENDPOINT (AGL-3613):
@@ -107,11 +107,6 @@ export interface ShipStationConnection {
   lastShipNoticeAtMs?: number
   /** Where the last export page ended, so the next page starts after it. */
   exportCursor?: { key: string; page: number; after: [number, string] }
-}
-
-/** SHA-256 hex of a secret. */
-export function digestSecret(secret: string): string {
-  return createHash('sha256').update(secret, 'utf8').digest('hex')
 }
 
 /** A fresh username and password for a site. */
@@ -190,80 +185,10 @@ export function credentialsMatch(
   return Boolean(stored && stored.password !== null && presented && userOk && passOk)
 }
 
-/** A plain-text answer — ShipStation shows the body of a refusal to the merchant. */
-function text(status: number, body: string, headers: Record<string, string> = {}): Response {
-  return new Response(body, { status, headers: { 'content-type': 'text/plain; charset=utf-8', ...headers } })
-}
-
 const unauthorized = (): Response =>
   text(401, `The ShipStation username or password is wrong. Copy them again from ${PLATFORM_BRAND_NAME}.`, {
     'www-authenticate': `Basic realm="${PLATFORM_BRAND_NAME.replace(/"/g, '')} ShipStation", charset="UTF-8"`,
   })
-
-/**
- * Whether the request arrived over HTTPS. Behind Vercel the transport is
- * stated by `x-forwarded-proto`; a local or test run (`NODE_ENV` not
- * production) is not held to it.
- */
-export function requestIsSecure(request: Request, env: Record<string, string | undefined> = process.env): boolean {
-  if (env['NODE_ENV'] !== 'production') return true
-  const forwarded = String(request.headers.get('x-forwarded-proto') ?? '')
-    .split(',')[0]
-    .trim()
-    .toLowerCase()
-  if (forwarded) return forwarded === 'https'
-  try {
-    return new URL(request.url).protocol === 'https:'
-  } catch {
-    return false
-  }
-}
-
-/** A site id as a document id may hold it. */
-const HOST_ID = /^[A-Za-z0-9_-]{1,128}$/
-
-function hostIdOf(params: Record<string, string | string[]>): string | null {
-  const raw = params['hostId']
-  const value = Array.isArray(raw) ? raw[0] : raw
-  return typeof value === 'string' && HOST_ID.test(value) ? value : null
-}
-
-/**
- * The gates a dispatcher would have asked, for the site the credentials
- * proved: commerce switched on for it, on the plan, released for the org,
- * and the site not locked down. `null` when every one passes.
- */
-async function siteRefusal(request: Request, hostId: string): Promise<Response | null> {
-  const [owner, disabledPlugins, host] = await Promise.all([
-    getOrgForHost(hostId),
-    getHostDisabledPlugins(hostId),
-    getHostDocAdmin(hostId),
-  ])
-  if (!owner?.org || !host) return text(404, `This site no longer exists in ${PLATFORM_BRAND_NAME}.`)
-  const org = owner.org as Record<string, unknown>
-  if (!Aglyn.resolveHostEnabledPlugins(owner.org as never, { disabledPlugins }).includes('commerce')) {
-    return text(403, `Commerce is switched off for this site in ${PLATFORM_BRAND_NAME}.`)
-  }
-  if (!Aglyn.checkEntitlement(owner.org as never, 'commerce')) {
-    return text(403, `This site’s ${PLATFORM_BRAND_NAME} plan does not include selling.`)
-  }
-  const flags = await getServerReleaseFlagValues()
-  const released = Aglyn.isReleaseFlagOnForOrg(
-    'release_commerce_v2',
-    flags['release_commerce_v2'],
-    owner.orgId,
-    Aglyn.parseOrgReleaseFlagOverrides(org['releaseFlags']),
-    Aglyn.resolveEffectivePlan(owner.org as never),
-  )
-  if (!released) return text(403, 'Commerce is not available for this site yet.')
-  return lockdownRefusal({
-    request,
-    staff: false,
-    uid: null,
-    org,
-    host: host as Record<string, unknown>,
-  })
-}
 
 /*==========================================
  * EXPORT
@@ -419,8 +344,22 @@ export type ShipNoticeOutcome =
   | { status: 200; body: string }
   | { status: 400 | 404 | 409; body: string }
 
-/** Records one ShipNotice as a fulfillment, once. */
-export async function recordShipNotice(hostId: string, notice: CommerceModel.ShipNotice, bodyDigest: string): Promise<ShipNoticeOutcome> {
+/** The shipping app a notice came from: the prefix of the parcel's idempotency key. */
+export type ShipNoticeSource = 'shipstation' | 'shippingeasy'
+
+/**
+ * Records one ShipNotice as a fulfillment, once. Every connector that hands
+ * shipments back reads its own wire format into a `ShipNotice` and records
+ * it here, so the parcel-once rule, the bound by what is left and the
+ * shipped email are one implementation (AGL-3613, AGL-3633).
+ */
+export async function recordShipNotice(
+  hostId: string,
+  notice: CommerceModel.ShipNotice,
+  bodyDigest: string,
+  options: { source?: ShipNoticeSource } = {},
+): Promise<ShipNoticeOutcome> {
+  const source = options.source ?? 'shipstation'
   const hostRef = firebaseAdmin.app().firestore().collection('hosts').doc(hostId)
   const doc = await findNoticeOrder(hostRef, notice)
   const label = notice.orderNumber ?? notice.orderId ?? '?'
@@ -462,8 +401,8 @@ export async function recordShipNotice(hostId: string, notice: CommerceModel.Shi
     // The parcel's identity: its tracking number, or — for a "mark as
     // shipped" with none — the notice itself, so a redelivery is one parcel.
     idempotencyKey: trackingNumber
-      ? `shipstation:${CommerceModel.normalizeTrackingNumber(trackingNumber)}`
-      : `shipstation-notice:${bodyDigest}`,
+      ? `${source}:${CommerceModel.normalizeTrackingNumber(trackingNumber)}`
+      : `${source}-notice:${bodyDigest}`,
     onceByTracking: true,
   })
   switch (outcome.outcome) {
@@ -489,7 +428,7 @@ export async function shipStationRoute(
   request: Request,
   context: { params: Record<string, string | string[]> },
 ): Promise<Response> {
-  const hostId = hostIdOf(context.params)
+  const hostId = connectorHostIdOf(context.params)
   if (!hostId) return text(404, 'Not found')
   if (!requestIsSecure(request)) return text(403, `Use the https:// address ${PLATFORM_BRAND_NAME} gave you.`)
 
@@ -524,7 +463,7 @@ export async function shipStationRoute(
       .catch((error: unknown) => console.warn('shipstation: password not resealed', hostId, error))
   }
 
-  const refused = await siteRefusal(request, hostId)
+  const refused = await connectorSiteRefusal(request, hostId)
   if (refused) return refused
 
   const url = new URL(request.url)

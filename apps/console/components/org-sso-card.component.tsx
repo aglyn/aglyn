@@ -966,7 +966,12 @@ export function OrgSsoCard() {
             </Alert>
           ) : null}
 
-          <Stack direction="row" spacing={1}>
+          <Stack
+            direction="row"
+            spacing={1}
+            useFlexGap
+            sx={{ flexWrap: 'wrap' }}
+          >
             <Button
               variant="outlined"
               disabled={busy || !canManage || !isActive}

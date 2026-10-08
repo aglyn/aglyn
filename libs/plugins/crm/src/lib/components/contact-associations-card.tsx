@@ -229,7 +229,7 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
         <Stack spacing={0.5}>
           <Typography variant="subtitle2">{'Sources'}</Typography>
           {sources.length || leadKey ? (
-            <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5 }}>
+            <Stack useFlexGap direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5 }}>
               {sources.map((source) => (
                 <Chip
                   key={source}

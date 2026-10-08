@@ -501,6 +501,9 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
                 value={tab}
                 onChange={(_event, next) => setTab(next)}
                 aria-label="Where the people come from"
+                variant="scrollable"
+                scrollButtons="auto"
+                allowScrollButtonsMobile
               >
                 <Tab value="view" label="Saved view" />
                 <Tab value="search" label="Search" />
@@ -601,6 +604,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
                   ) : null}
                   {pickedLeads.size ? (
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={1}
                       sx={{ flexWrap: 'wrap', rowGap: 1 }}
@@ -695,6 +699,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
                   ) : null}
                   {picked.size ? (
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={1}
                       sx={{ flexWrap: 'wrap', rowGap: 1 }}
@@ -1016,7 +1021,7 @@ function PersonRow(props: {
                     ))}
                   </FormGroup>
                 ) : null}
-                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+                <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
                   <Button
                     size="small"
                     onClick={props.onPreviewEmail}

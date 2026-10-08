@@ -117,10 +117,12 @@ fun AglynNavigationSuite(
 @Composable
 fun AglynListDetail(
   modifier: Modifier = Modifier,
+  /** The item picked on arrival, as when a link or a notification names one. */
+  initialSelected: String? = null,
   list: @Composable (selected: String?, onSelect: (String) -> Unit) -> Unit,
   detail: @Composable (selected: String?) -> Unit,
 ) {
-  var selected by rememberSaveable { mutableStateOf<String?>(null) }
+  var selected by rememberSaveable(initialSelected) { mutableStateOf(initialSelected) }
   val wide = currentWidthClass() != WidthClass.COMPACT
   if (wide) {
     Row(modifier.fillMaxSize()) {

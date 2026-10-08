@@ -15,11 +15,9 @@
  * limitations under the License.
  */
 
-import type { AcquisitionDoor } from '@aglyn/aglyn/app-utils/account-acquisition'
 import { readFirstTouchCookie } from '@aglyn/shared-util-first-touch'
 import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
-import { recordAccountAcquisition } from '@aglyn/tenant-data-admin/server/account-acquisition'
-import { findUserByUidAcrossPools } from '@aglyn/tenant-data-admin/server/auth-pools'
+import { recordSignUpAcquisition } from '@aglyn/tenant-data-admin/server/account-acquisition'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — records the caller's own sign-up attribution while the account is being created; pre-org, so no org, host or user scope exists to bind a verdict to, and the session mint carries the scope gate for this flow
@@ -33,20 +31,14 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * the VERIFIED token and the auth record, never from the body: who the
  * account is, how it signed in — which is what decides the door — and when it
  * was created, which decides whether this is account creation at all. A call
- * for an account older than the window writes nothing.
+ * for an account older than the window writes nothing. The body's `door` only
+ * names which of the provider's doors it was (a Google popup or redirect).
  *
  * Accepted from an UNVERIFIED account on purpose: the password door calls
  * this before the verification email has even been opened, and on a phone the
  * click that verifies often happens in a different browser, one that never
  * saw the visit.
  */
-
-/** The doors this form has, by the provider a verified token names. */
-function doorFor(provider: string | null): AcquisitionDoor | null {
-  if (provider === 'password') return 'signup-password'
-  if (provider === 'google.com') return 'signup-google'
-  return null
-}
 
 async function handler(request: Request): Promise<Response> {
   if (request.method !== 'POST') {
@@ -67,24 +59,18 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Not during impersonation' }, { status: 403 })
     }
     const provider = String(decoded.firebase?.sign_in_provider ?? '') || null
-    const door = doorFor(provider)
-    if (!door) {
-      return Response.json({ error: 'Not a sign-up door' }, { status: 400 })
-    }
-    // Across every pool, not the project's alone (AGL-1122): a lookup that
-    // cannot see an account answers "not new", which writes nothing.
-    const pooled = await findUserByUidAcrossPools(decoded.uid)
-    const createdAtMs = Date.parse(pooled?.record.metadata.creationTime ?? '')
-    const result = await recordAccountAcquisition({
+    const result = await recordSignUpAcquisition({
       uid: decoded.uid,
-      accountCreatedAtMs: Number.isFinite(createdAtMs) ? createdAtMs : null,
-      touch: body?.touch ?? readFirstTouchCookie(request.headers.get('cookie')),
-      door,
       provider,
       email: decoded.email ?? null,
+      touch: body?.touch ?? readFirstTouchCookie(request.headers.get('cookie')),
+      doorHint: body?.door,
       headers: request.headers,
-      recordedBy: 'signup',
     })
+    // Null for a provider the sign-up form does not offer (SSO records its own).
+    if (!result) {
+      return Response.json({ error: 'Not a sign-up door' }, { status: 400 })
+    }
     return Response.json({ status: result.status }, { status: 200 })
   } catch (error) {
     const unauthenticated = invalidIdTokenResponse(error)

@@ -259,6 +259,9 @@ function walk(
         return
       }
       push(level > 0 ? `${'#'.repeat(level)} ${text}` : text)
+      // A Typography renders the elements it holds after its text
+      // (AGL-3672), so they read after it here too.
+      recurse()
       return
     }
     case 'markdown': {

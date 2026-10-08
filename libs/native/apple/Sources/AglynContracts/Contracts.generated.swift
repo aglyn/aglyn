@@ -90,6 +90,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var buyerNotifications: [String: HostOrderBuyerNotificationsValue]?
   public var cashierId: String?
   public var channel: OrderChannel?
+  public var channelSource: OrderChannelSource?
   public var checkoutSessionId: String?
   public var couponCode: String?
   public var createdAtMs: Double?
@@ -101,6 +102,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var discountBy: String?
   public var discountPct: Double?
   public var dispute: OrderDispute?
+  public var extras: [OrderExtra]?
   public var feeCents: Double?
   public var fulfillments: [OrderFulfillment]?
   public var invoiceId: String?
@@ -120,19 +122,20 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var restockCheck: OrderRestockCheck?
   public var shiftId: String?
   public var shippingAddress: OrderAddress?
-  public var status: OrderStatus
+  public var status: OrderStatus?
   public var subscriptionId: String?
   public var taxMode: HostOrderTaxMode?
   public var timeline: [OrderTimelineEvent]?
   public var totals: OrderTotals?
   public var unresolvedLines: [OrderUnresolvedLine]?
 
-  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, feeCents: Double? = nil, fulfillments: [OrderFulfillment]? = nil, invoiceId: String? = nil, lineItems: [OrderLineItem]? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, productId: String? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus, subscriptionId: String? = nil, taxMode: HostOrderTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil) {
+  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillments: [OrderFulfillment]? = nil, invoiceId: String? = nil, lineItems: [OrderLineItem]? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, productId: String? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: HostOrderTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil) {
     self.amountCents = amountCents
     self.billingAddress = billingAddress
     self.buyerNotifications = buyerNotifications
     self.cashierId = cashierId
     self.channel = channel
+    self.channelSource = channelSource
     self.checkoutSessionId = checkoutSessionId
     self.couponCode = couponCode
     self.createdAtMs = createdAtMs
@@ -144,6 +147,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
     self.discountBy = discountBy
     self.discountPct = discountPct
     self.dispute = dispute
+    self.extras = extras
     self.feeCents = feeCents
     self.fulfillments = fulfillments
     self.invoiceId = invoiceId
@@ -243,6 +247,144 @@ public enum HostOrderTaxMode: String, Codable, CaseIterable, Hashable, Sendable 
   }
 }
 
+public struct HostProduct: Codable, Hashable, Sendable {
+  public var categoryIds: [String]?
+  public var channel: ProductChannelFacts?
+  public var collectionIds: [String]?
+  public var createdAtMs: Double?
+  public var description: String?
+  public var digitalFiles: [HostProductDigitalFilesItem]?
+  public var downloadLimit: Double?
+  public var gatedVideos: [HostProductGatedVideosItem]?
+  public var giftCard: Bool?
+  public var imageUrl: String?
+  public var inventory: Double?
+  public var lowStockThreshold: Double?
+  public var mediaUrls: [String]?
+  public var modifierGroups: [ProductModifierGroup]?
+  public var name: String?
+  public var options: [ProductOption]?
+  public var oversellPolicy: HostProductOversellPolicy?
+  public var posQuickKey: Bool?
+  public var priceUsd: Double?
+  public var relatedProductIds: [String]?
+  public var seo: HostProductSeo?
+  public var shipping: ProductShippingFacts?
+  public var slug: String?
+  public var status: ProductStatus?
+  public var subscription: HostProductSubscription?
+  public var subscriptionOptional: Bool?
+  public var supplierId: String?
+  public var tags: [String]?
+  public var taxExempt: Bool?
+  public var type: ProductType?
+  public var updatedAtMs: Double?
+  public var variants: [ProductVariant]?
+
+  public init(categoryIds: [String]? = nil, channel: ProductChannelFacts? = nil, collectionIds: [String]? = nil, createdAtMs: Double? = nil, description: String? = nil, digitalFiles: [HostProductDigitalFilesItem]? = nil, downloadLimit: Double? = nil, gatedVideos: [HostProductGatedVideosItem]? = nil, giftCard: Bool? = nil, imageUrl: String? = nil, inventory: Double? = nil, lowStockThreshold: Double? = nil, mediaUrls: [String]? = nil, modifierGroups: [ProductModifierGroup]? = nil, name: String? = nil, options: [ProductOption]? = nil, oversellPolicy: HostProductOversellPolicy? = nil, posQuickKey: Bool? = nil, priceUsd: Double? = nil, relatedProductIds: [String]? = nil, seo: HostProductSeo? = nil, shipping: ProductShippingFacts? = nil, slug: String? = nil, status: ProductStatus? = nil, subscription: HostProductSubscription? = nil, subscriptionOptional: Bool? = nil, supplierId: String? = nil, tags: [String]? = nil, taxExempt: Bool? = nil, type: ProductType? = nil, updatedAtMs: Double? = nil, variants: [ProductVariant]? = nil) {
+    self.categoryIds = categoryIds
+    self.channel = channel
+    self.collectionIds = collectionIds
+    self.createdAtMs = createdAtMs
+    self.description = description
+    self.digitalFiles = digitalFiles
+    self.downloadLimit = downloadLimit
+    self.gatedVideos = gatedVideos
+    self.giftCard = giftCard
+    self.imageUrl = imageUrl
+    self.inventory = inventory
+    self.lowStockThreshold = lowStockThreshold
+    self.mediaUrls = mediaUrls
+    self.modifierGroups = modifierGroups
+    self.name = name
+    self.options = options
+    self.oversellPolicy = oversellPolicy
+    self.posQuickKey = posQuickKey
+    self.priceUsd = priceUsd
+    self.relatedProductIds = relatedProductIds
+    self.seo = seo
+    self.shipping = shipping
+    self.slug = slug
+    self.status = status
+    self.subscription = subscription
+    self.subscriptionOptional = subscriptionOptional
+    self.supplierId = supplierId
+    self.tags = tags
+    self.taxExempt = taxExempt
+    self.type = type
+    self.updatedAtMs = updatedAtMs
+    self.variants = variants
+  }
+}
+
+public struct HostProductDigitalFilesItem: Codable, Hashable, Sendable {
+  public var fileName: String
+  public var url: String
+  public var version: String?
+
+  public init(fileName: String, url: String, version: String? = nil) {
+    self.fileName = fileName
+    self.url = url
+    self.version = version
+  }
+}
+
+public struct HostProductGatedVideosItem: Codable, Hashable, Sendable {
+  public var title: String?
+  public var url: String
+
+  public init(title: String? = nil, url: String) {
+    self.title = title
+    self.url = url
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum HostProductOversellPolicy: String, Codable, CaseIterable, Hashable, Sendable {
+  case backorder = "backorder"
+  case deny = "deny"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct HostProductSeo: Codable, Hashable, Sendable {
+  public var description: String?
+  public var imageUrl: String?
+  public var title: String?
+
+  public init(description: String? = nil, imageUrl: String? = nil, title: String? = nil) {
+    self.description = description
+    self.imageUrl = imageUrl
+    self.title = title
+  }
+}
+
+public struct HostProductSubscription: Codable, Hashable, Sendable {
+  public var interval: HostProductSubscriptionInterval
+  public var trialDays: Double?
+
+  public init(interval: HostProductSubscriptionInterval, trialDays: Double? = nil) {
+    self.interval = interval
+    self.trialDays = trialDays
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum HostProductSubscriptionInterval: String, Codable, CaseIterable, Hashable, Sendable {
+  case month = "month"
+  case year = "year"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct HostRedirect: Codable, Hashable, Sendable {
   public var destination: String
   public var enabled: Bool?
@@ -273,6 +415,20 @@ public enum HostRedirectKind: String, Codable, CaseIterable, Hashable, Sendable 
   public init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct ListFilterClause: Codable, Hashable, Sendable {
+  public var field: String
+  public var label: String?
+  public var op: String
+  public var value: String
+
+  public init(field: String, label: String? = nil, op: String, value: String) {
+    self.field = field
+    self.label = label
+    self.op = op
+    self.value = value
   }
 }
 
@@ -624,6 +780,7 @@ public struct OrderAddress: Codable, Hashable, Sendable {
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum OrderChannel: String, Codable, CaseIterable, Hashable, Sendable {
   case draft = "draft"
+  case marketplace = "marketplace"
   case online = "online"
   case pos = "pos"
   case subscription = "subscription"
@@ -632,6 +789,50 @@ public enum OrderChannel: String, Codable, CaseIterable, Hashable, Sendable {
   public init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct OrderChannelSource: Codable, Hashable, Sendable {
+  public var channelId: String
+  public var channelLabel: String
+  public var currency: String
+  public var externalOrderId: String
+  public var externalRef: String
+  public var fees: [OrderChannelSourceFeesItem]?
+  public var feesTotalCents: Double?
+  public var lines: [OrderChannelSourceLinesItem]
+  public var taxRemittedByChannel: Bool
+
+  public init(channelId: String, channelLabel: String, currency: String, externalOrderId: String, externalRef: String, fees: [OrderChannelSourceFeesItem]? = nil, feesTotalCents: Double? = nil, lines: [OrderChannelSourceLinesItem], taxRemittedByChannel: Bool) {
+    self.channelId = channelId
+    self.channelLabel = channelLabel
+    self.currency = currency
+    self.externalOrderId = externalOrderId
+    self.externalRef = externalRef
+    self.fees = fees
+    self.feesTotalCents = feesTotalCents
+    self.lines = lines
+    self.taxRemittedByChannel = taxRemittedByChannel
+  }
+}
+
+public struct OrderChannelSourceFeesItem: Codable, Hashable, Sendable {
+  public var amountCents: Double
+  public var label: String
+
+  public init(amountCents: Double, label: String) {
+    self.amountCents = amountCents
+    self.label = label
+  }
+}
+
+public struct OrderChannelSourceLinesItem: Codable, Hashable, Sendable {
+  public var externalLineId: String
+  public var lineIndex: Double
+
+  public init(externalLineId: String, lineIndex: Double) {
+    self.externalLineId = externalLineId
+    self.lineIndex = lineIndex
   }
 }
 
@@ -660,6 +861,24 @@ public struct OrderDispute: Codable, Hashable, Sendable {
     self.reversedTransferCents = reversedTransferCents
     self.status = status
     self.transferReversalId = transferReversalId
+  }
+}
+
+public struct OrderExtra: Codable, Hashable, Sendable {
+  public var amountCents: Double
+  public var id: String
+  public var key: String
+  public var label: String
+  public var pluginId: String
+  public var quoteRef: String?
+
+  public init(amountCents: Double, id: String, key: String, label: String, pluginId: String, quoteRef: String? = nil) {
+    self.amountCents = amountCents
+    self.id = id
+    self.key = key
+    self.label = label
+    self.pluginId = pluginId
+    self.quoteRef = quoteRef
   }
 }
 
@@ -929,6 +1148,21 @@ public enum OrderStatus: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum OrderStatusColorValue: String, Codable, CaseIterable, Hashable, Sendable {
+  case `default` = "default"
+  case error = "error"
+  case info = "info"
+  case success = "success"
+  case warning = "warning"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct OrderTimelineEvent: Codable, Hashable, Sendable {
   public var atMs: Double
   public var detail: String?
@@ -942,16 +1176,18 @@ public struct OrderTimelineEvent: Codable, Hashable, Sendable {
 }
 
 public struct OrderTotals: Codable, Hashable, Sendable {
-  public var discountCents: Double
-  public var feeCents: Double
-  public var itemsCents: Double
-  public var shippingCents: Double
-  public var taxCents: Double
+  public var discountCents: Double?
+  public var extrasCents: Double?
+  public var feeCents: Double?
+  public var itemsCents: Double?
+  public var shippingCents: Double?
+  public var taxCents: Double?
   public var tipCents: Double?
-  public var totalCents: Double
+  public var totalCents: Double?
 
-  public init(discountCents: Double, feeCents: Double, itemsCents: Double, shippingCents: Double, taxCents: Double, tipCents: Double? = nil, totalCents: Double) {
+  public init(discountCents: Double? = nil, extrasCents: Double? = nil, feeCents: Double? = nil, itemsCents: Double? = nil, shippingCents: Double? = nil, taxCents: Double? = nil, tipCents: Double? = nil, totalCents: Double? = nil) {
     self.discountCents = discountCents
+    self.extrasCents = extrasCents
     self.feeCents = feeCents
     self.itemsCents = itemsCents
     self.shippingCents = shippingCents
@@ -1028,6 +1264,35 @@ public enum PosReceiptChannel: String, Codable, CaseIterable, Hashable, Sendable
   }
 }
 
+public struct ProductChannelFacts: Codable, Hashable, Sendable {
+  public var brand: String?
+  public var condition: ProductChannelFactsCondition?
+  public var googleProductCategory: String?
+  public var gtin: String?
+  public var mpn: String?
+
+  public init(brand: String? = nil, condition: ProductChannelFactsCondition? = nil, googleProductCategory: String? = nil, gtin: String? = nil, mpn: String? = nil) {
+    self.brand = brand
+    self.condition = condition
+    self.googleProductCategory = googleProductCategory
+    self.gtin = gtin
+    self.mpn = mpn
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum ProductChannelFactsCondition: String, Codable, CaseIterable, Hashable, Sendable {
+  case new = "new"
+  case refurbished = "refurbished"
+  case used = "used"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct ProductModifierGroup: Codable, Hashable, Sendable {
   public var id: String
   public var max: Double
@@ -1056,6 +1321,45 @@ public struct ProductModifierOption: Codable, Hashable, Sendable {
   }
 }
 
+public struct ProductOption: Codable, Hashable, Sendable {
+  public var name: String
+  public var values: [String]
+
+  public init(name: String, values: [String]) {
+    self.name = name
+    self.values = values
+  }
+}
+
+public struct ProductShippingFacts: Codable, Hashable, Sendable {
+  public var heightCm: Double?
+  public var hsCode: String?
+  public var lengthCm: Double?
+  public var originCountry: String?
+  public var widthCm: Double?
+
+  public init(heightCm: Double? = nil, hsCode: String? = nil, lengthCm: Double? = nil, originCountry: String? = nil, widthCm: Double? = nil) {
+    self.heightCm = heightCm
+    self.hsCode = hsCode
+    self.lengthCm = lengthCm
+    self.originCountry = originCountry
+    self.widthCm = widthCm
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum ProductStatus: String, Codable, CaseIterable, Hashable, Sendable {
+  case active = "active"
+  case archived = "archived"
+  case draft = "draft"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum ProductType: String, Codable, CaseIterable, Hashable, Sendable {
   case digital = "digital"
@@ -1066,6 +1370,32 @@ public enum ProductType: String, Codable, CaseIterable, Hashable, Sendable {
   public init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct ProductVariant: Codable, Hashable, Sendable {
+  public var barcode: String?
+  public var compareAtPriceUsd: Double?
+  public var id: String?
+  public var imageUrl: String?
+  public var inventory: Double?
+  public var inventoryByLocation: [String: Double]?
+  public var options: [String: String]?
+  public var priceUsd: Double?
+  public var sku: String?
+  public var weightGrams: Double?
+
+  public init(barcode: String? = nil, compareAtPriceUsd: Double? = nil, id: String? = nil, imageUrl: String? = nil, inventory: Double? = nil, inventoryByLocation: [String: Double]? = nil, options: [String: String]? = nil, priceUsd: Double? = nil, sku: String? = nil, weightGrams: Double? = nil) {
+    self.barcode = barcode
+    self.compareAtPriceUsd = compareAtPriceUsd
+    self.id = id
+    self.imageUrl = imageUrl
+    self.inventory = inventory
+    self.inventoryByLocation = inventoryByLocation
+    self.options = options
+    self.priceUsd = priceUsd
+    self.sku = sku
+    self.weightGrams = weightGrams
   }
 }
 
@@ -1151,12 +1481,14 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let listQueryIdPath: String
   public let nameTokenLimit: Int
   public let nameTokenMaxPrefix: Int
+  public let openDisputeClause: ListFilterClause
   public let orderChannelLabels: [String: String]
   public let orderChannelOptions: [ListFilterOption]
   public let orderDisputeOptions: [ListFilterOption]
   public let orderListHeaders: [String: String]
   public let orderListQuery: ListQueryDeclaration
   public let orderListSelectFields: [String]
+  public let orderStatusColor: [String: OrderStatusColorValue]
   public let orderStatusLabels: [String: String]
   public let orderStatusOptions: [ListFilterOption]
   public let productListBase: [ListQueryFilter]
@@ -1171,12 +1503,14 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case listQueryIdPath = "LIST_QUERY_ID_PATH"
     case nameTokenLimit = "NAME_TOKEN_LIMIT"
     case nameTokenMaxPrefix = "NAME_TOKEN_MAX_PREFIX"
+    case openDisputeClause = "OPEN_DISPUTE_CLAUSE"
     case orderChannelLabels = "ORDER_CHANNEL_LABELS"
     case orderChannelOptions = "ORDER_CHANNEL_OPTIONS"
     case orderDisputeOptions = "ORDER_DISPUTE_OPTIONS"
     case orderListHeaders = "ORDER_LIST_HEADERS"
     case orderListQuery = "ORDER_LIST_QUERY"
     case orderListSelectFields = "ORDER_LIST_SELECT_FIELDS"
+    case orderStatusColor = "ORDER_STATUS_COLOR"
     case orderStatusLabels = "ORDER_STATUS_LABELS"
     case orderStatusOptions = "ORDER_STATUS_OPTIONS"
     case productListBase = "PRODUCT_LIST_BASE"

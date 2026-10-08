@@ -39,6 +39,7 @@ import { readAccountingOAuthState } from './oauth-state'
 import { accountingOAuthRedirectUri } from './oauth-redirect'
 import type { AccountingHttpOptions } from './providers/http'
 import type { AccountingProvider } from './providers/provider'
+import { createCodatProvider } from './providers/codat'
 import { createQuickBooksProvider } from './providers/quickbooks'
 import { createXeroProvider } from './providers/xero'
 import type { AccountingJobDeps } from './sync-job'
@@ -55,7 +56,8 @@ export function platformAccountingProvider(
 ): AccountingProvider | null {
   const config = readAccountingProviderConfig(provider)
   if (!config.configured) return null
-  const { clientId, clientSecret, environment, scopes } = config.config
+  const { clientId, clientSecret, environment, scopes, apiKey } = config.config
+  if (provider === 'codat') return apiKey ? createCodatProvider({ apiKey }, options) : null
   return provider === 'quickbooks'
     ? createQuickBooksProvider({ clientId, clientSecret, environment }, options)
     : createXeroProvider({ clientId, clientSecret, scopes }, options)

@@ -35,6 +35,7 @@ import { dateInZone } from '../model/accounting-money'
 import {
   ACCOUNTING_PROVIDERS,
   ACCOUNTING_PROVIDER_LABELS,
+  accountingProviderName,
   buildAccountingConnectFragment,
   isAccountingProviderId,
   type AccountingConnectReturn,
@@ -154,7 +155,7 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
       }
     } catch (error) {
       if (error instanceof AccountingProviderError) return providerFailure(error, record.provider)
-      return refusal(409, 'not-connected', `Reconnect ${ACCOUNTING_PROVIDER_LABELS[record.provider]}.`)
+      return refusal(409, 'not-connected', `Reconnect ${accountingProviderName(record.provider)}.`)
     }
   }
 
@@ -187,7 +188,7 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
     const gate = await accountingMemberGate(request, body['orgId'], deps.gate)
     if (gate instanceof Response) return gate
     const provider = body['provider']
-    if (!isAccountingProviderId(provider)) return refusal(400, 'invalid-request', 'Choose QuickBooks Online or Xero.')
+    if (!isAccountingProviderId(provider)) return refusal(400, 'invalid-request', 'Choose the accounting software to connect.')
     const redirectUri = deps.redirectUri(request.url)
     const adapter = deps.providerFor(provider)
     if (!redirectUri || !adapter || !connectable(provider, request.url)) {
@@ -198,13 +199,19 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
       return refusal(
         409,
         'invalid-request',
-        `Disconnect ${ACCOUNTING_PROVIDER_LABELS[existing.provider]} before connecting ${ACCOUNTING_PROVIDER_LABELS[provider]}.`,
+        `Disconnect ${accountingProviderName(existing.provider)} before connecting ${accountingProviderName(provider)}.`,
       )
     }
     const nowMs = deps.now()
     const { state, claims } = mintAccountingOAuthState({ orgId: gate.orgId, uid: gate.uid, provider, nowMs })
     await recordAccountingOAuthState(deps.firestore(), { claims, redirectUri, nowMs })
-    return ok({ url: adapter.authorizeUrl({ state, redirectUri }) })
+    const org = await deps.gate.readOrg(gate.orgId)
+    const orgName = typeof org?.['name'] === 'string' && org['name'].trim() ? org['name'].trim() : null
+    try {
+      return ok({ url: await adapter.authorizeUrl({ state, redirectUri, orgId: gate.orgId, orgName }) })
+    } catch (error) {
+      return providerFailure(error, provider)
+    }
   }
 
   const oauthCallback: PluginWebApiHandler = async (request) => {
@@ -224,7 +231,16 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
     const slug = typeof org?.['slug'] === 'string' ? org['slug'] : ''
     if (!slug) return plain(404, 'That organization could not be found.')
     const code = params.get('code') ?? ''
-    const providerError = params.get('error')
+    // OAuth names a failure in `error`; Codat's redirect in `statusCode`,
+    // where 403 is the member declining.
+    const statusCode = params.get('statusCode')
+    const providerError =
+      params.get('error') ||
+      (statusCode && statusCode !== '200' && statusCode !== '201'
+        ? statusCode === '403'
+          ? 'access_denied'
+          : 'provider_error'
+        : null)
     let fragment: AccountingConnectReturn
     if (providerError) fragment = { kind: 'error', reason: providerError === 'access_denied' ? 'access_denied' : 'provider_error' }
     else if (!read.ok) fragment = { kind: 'error', reason: 'expired' }
@@ -316,7 +332,7 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
     }
     const previous = await loadOrgConnection(firestore, gate.orgId)
     if (previous && previous.provider !== provider) {
-      return refusal(409, 'invalid-request', `Disconnect ${ACCOUNTING_PROVIDER_LABELS[previous.provider]} first.`)
+      return refusal(409, 'invalid-request', `Disconnect ${accountingProviderName(previous.provider)} first.`)
     }
     let exchanged: Awaited<ReturnType<AccountingProvider['exchangeCode']>>
     try {
@@ -324,12 +340,15 @@ export function createAccountingRoutes(deps: AccountingRouteDeps): AccountingRou
         code,
         redirectUri: consumed.redirectUri,
         realmId: typeof body['realmId'] === 'string' ? body['realmId'] : null,
+        orgId: gate.orgId,
       })
     } catch (error) {
       return providerFailure(error, provider)
     }
     if (!exchanged.tenants.length) {
-      return refusal(400, 'provider-error', `${ACCOUNTING_PROVIDER_LABELS[provider]} did not grant access to any organization.`)
+      return refusal(400, 'provider-error', provider === 'codat'
+          ? 'No accounting software was linked. Connect again and finish signing in to it.'
+          : `${ACCOUNTING_PROVIDER_LABELS[provider]} did not grant access to any organization.`)
     }
     let record = newConnectionRecord({
       keyring: config.config.keyring,

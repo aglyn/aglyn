@@ -24,7 +24,13 @@ import {
   PLUGIN_PRODUCT_CATALOG,
   pluginProductCatalog,
 } from '@aglyn/aglyn/plugin-manager/plugin-product-catalog'
+import {
+  PLUGIN_PRODUCT_WRITER,
+  pluginProductWriter,
+} from '@aglyn/aglyn/plugin-manager/plugin-product-writer'
 import { resolvePluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { pluginStockLevels } from '@aglyn/aglyn/plugin-manager/plugin-stock-levels'
+import { pluginChannelOrders } from '@aglyn/aglyn/plugin-manager/plugin-channel-orders'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerCommerceServerDeclarations } from './declarations.server'
@@ -54,6 +60,25 @@ describe('registerCommerceServerDeclarations', () => {
     registerCommerceServerDeclarations()
     expect(pluginProductCatalog()).toBeDefined()
     expect(resolvePluginServices(PLUGIN_PRODUCT_CATALOG)[0]?.pluginId).toBe(BUNDLE_ID)
+  })
+
+  it('applies counts other warehouses report through the stock-levels seam (AGL-3634)', () => {
+    registerCommerceServerDeclarations()
+    expect(typeof pluginStockLevels()?.setAvailable).toBe('function')
+  })
+
+  it('records orders other channels sold through the channel-orders seam (AGL-3638)', () => {
+    registerCommerceServerDeclarations()
+    const orders = pluginChannelOrders()
+    expect(typeof orders?.importOrder).toBe('function')
+    expect(typeof orders?.cancelOrder).toBe('function')
+    expect(typeof orders?.recordFees).toBe('function')
+  })
+
+  it('keeps the products another plugin brings from its source (AGL-3641)', () => {
+    registerCommerceServerDeclarations()
+    expect(pluginProductWriter()).toBeDefined()
+    expect(resolvePluginServices(PLUGIN_PRODUCT_WRITER)[0]?.pluginId).toBe(BUNDLE_ID)
   })
 
   it('registers again without refusing itself', () => {

@@ -28,6 +28,11 @@ import {
   mdiMinusCircleOutline,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+import {
+  SITE_LIVE_NOTICE_BODY,
+  SITE_LIVE_NOTICE_TITLE,
+  SiteLiveNotice,
+} from '@aglyn/shared-ui-jsx/components/site-live-notice.component'
 import type { MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -142,7 +147,7 @@ export function useAiJobById(
 const ROW_ICON: Readonly<Record<Exclude<AiSiteBuildRowState, 'active'>, { path: string; color: string; label: string }>> = {
   done: { path: mdiCheckCircle.path, color: 'success.main', label: 'Done' },
   waiting: { path: mdiClockOutline.path, color: 'text.disabled', label: 'Waiting' },
-  failed: { path: mdiAlertCircle.path, color: 'error.main', label: 'Stopped' },
+  failed: { path: mdiAlertCircle.path, color: 'error.main', label: 'Couldn’t be built' },
   skipped: { path: mdiMinusCircleOutline.path, color: 'text.disabled', label: 'Not built' },
 }
 
@@ -183,7 +188,8 @@ function Frame({
   children,
 }: {
   siteName?: string
-  heading: string
+  /** Left out when the content leads with a heading of its own. */
+  heading?: string
   lede?: string
   children?: ReactNode
 }) {
@@ -196,9 +202,11 @@ function Frame({
               {siteName}
             </Typography>
           ) : null}
-          <Typography variant="h4" component="h1">
-            {heading}
-          </Typography>
+          {heading ? (
+            <Typography variant="h4" component="h1">
+              {heading}
+            </Typography>
+          ) : null}
           {lede ? (
             <Typography variant="body1" color="text.secondary">
               {lede}
@@ -337,10 +345,18 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
       ? aiSiteStartAnswersFromInputs(ready.siteInputs)
       : null
   const refund = phase === 'failed' || phase === 'stopped' || phase === 'canceled' ? aiJobRefundCopy(ready) : null
+  // A whole site put live says so in the words every new site goes live in
+  // (AGL-3663); a partial build or a page left a draft keeps its own account.
+  const liveNotice =
+    liveUrl !== null &&
+    !sitePublish?.drafts.length &&
+    copy.heading === SITE_LIVE_NOTICE_TITLE &&
+    copy.lede === SITE_LIVE_NOTICE_BODY
 
   return (
-    <Frame siteName={siteName} heading={copy.heading} lede={copy.lede}>
+    <Frame siteName={siteName} {...(liveNotice ? {} : { heading: copy.heading, lede: copy.lede })}>
       {record}
+      {liveNotice && <SiteLiveNotice liveUrl={liveUrl} pagesHref={links.pages} headingComponent="h1" />}
       {notice && <Alert severity="warning">{notice}</Alert>}
       <Card variant="outlined" sx={{ borderRadius: 2 }}>
         {phase === 'working' &&
@@ -448,7 +464,7 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
           </Button>
         </Box>
       )}
-      {phase === 'done' && (
+      {phase === 'done' && !liveNotice && (
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
           {liveUrl ? (
             // The live site, in a tab of its own: the console stays where it is.

@@ -58,7 +58,7 @@ export function PageHoldBannerView(props: PageHoldBannerViewProps) {
             data-page-hold={hold.kind}
             sx={{ borderRadius: 0 }}
             action={
-              <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}>
+              <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}>
                 {orgSlug ? (
                   <AppLink
                     componentVariant="button"

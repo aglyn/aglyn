@@ -284,6 +284,7 @@ export function ListingReviewStatus(props: ListingReviewStatusProps) {
             return (
               <Stack key={entry.version} spacing={0.5}>
                 <Stack
+                  useFlexGap
                   direction="row"
                   spacing={1}
                   sx={{ alignItems: 'center', flexWrap: 'wrap' }}

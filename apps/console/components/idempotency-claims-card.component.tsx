@@ -247,6 +247,7 @@ export default function IdempotencyClaimsCard() {
     >
       <Stack spacing={2}>
         <Stack
+          useFlexGap
           direction="row"
           spacing={2}
           sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -270,7 +271,7 @@ export default function IdempotencyClaimsCard() {
         ) : null}
 
         {summary ? (
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
             {/*
               Two numbers, not one. A pending claim is ordinary traffic and
               a stranded one is a stuck key; a single "pending" figure makes

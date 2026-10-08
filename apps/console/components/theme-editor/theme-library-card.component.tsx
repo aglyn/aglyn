@@ -454,6 +454,7 @@ export function ThemeLibraryCard(props: {
           {previewing && candidate ? (
             <Stack spacing={2}>
               <Stack
+                useFlexGap
                 direction="row"
                 spacing={1}
                 sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}
@@ -481,7 +482,7 @@ export function ThemeLibraryCard(props: {
                   ' so you can switch back. Unsaved changes in the editor ' +
                   'below are discarded.'}
               </Alert>
-              <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+              <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
                 <Button variant="contained" disabled={busy} onClick={apply}>
                   {'Use this theme'}
                 </Button>
@@ -508,6 +509,7 @@ export function ThemeLibraryCard(props: {
           ) : (
             <Stack spacing={2}>
               <Stack
+                useFlexGap
                 direction="row"
                 spacing={1}
                 sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -529,7 +531,7 @@ export function ThemeLibraryCard(props: {
                     'Anything you change below is stored as your edit on top ' +
                     'of it.'}
               </Typography>
-              <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+              <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
                 <Button
                   size="small"
                   variant="outlined"

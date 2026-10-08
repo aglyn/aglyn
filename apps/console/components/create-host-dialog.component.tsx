@@ -117,6 +117,9 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
         variant: 'success',
         persist: false,
       })
+      // The site exists: the dialog closes now rather than standing, with
+      // Create clickable again, until the dashboard has loaded behind it.
+      onClose()
       // The workspace may have just been auto-created for a first-time user,
       // so trust the response's orgSlug over the (possibly null) current org.
       const orgSlug = payload.orgSlug ?? currentOrg?.slug
@@ -155,6 +158,7 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
     router,
     destination,
     enqueueSnackbar,
+    onClose,
   ])
 
   return (
@@ -210,6 +214,7 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
         />
         {suggestions.length ? (
           <Stack
+            useFlexGap
             direction="row"
             spacing={1}
             sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}

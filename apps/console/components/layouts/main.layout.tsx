@@ -38,6 +38,8 @@ import {
   Stack,
   type StackProps,
   Toolbar,
+  useMediaQuery,
+  useTheme,
   Typography,
 } from '@mui/material'
 import { Fragment } from 'react'
@@ -150,6 +152,13 @@ export interface TopAppBarProps {
    */
   wordmark?: JSX.Node
   backButton?: Partial<ButtonProps>
+  /**
+   * The editor's bar on a screen too narrow for it: the wordmark, search
+   * and account cluster step aside and the center menubar folds into one
+   * menu button, so the back arrow, the document and the publish actions
+   * keep their room. The back arrow still leaves the editor.
+   */
+  compact?: boolean
 }
 
 const TopAppBar = (props: TopAppBarProps) => {
@@ -163,6 +172,7 @@ const TopAppBar = (props: TopAppBarProps) => {
     quickActions,
     wordmark,
     backButton,
+    compact = false,
   } = props
   // The logo returns to the active org's home (AGL-631); the jump page when no
   // org has resolved yet — or when the URL names no workspace at all
@@ -222,7 +232,9 @@ const TopAppBar = (props: TopAppBarProps) => {
                 sx={{
                   minWidth: 'unset',
                   // position: 'absolute',
-                  marginLeft: { xs: -2, sm: -2 },
+                  // Cancels the Toolbar's left gutter so the arrow sits on it rather
+                  // than inset by it — the gutter is 8px on a phone, 16px above.
+                  marginLeft: { xs: -1, sm: -2 },
                   paddingRight: { xs: 1, sm: 0.75 },
                   paddingLeft: { xs: 0.5, sm: 0.25 },
                   py: { xs: 0, sm: 0 },
@@ -248,6 +260,7 @@ const TopAppBar = (props: TopAppBarProps) => {
                 color: "inherit",
                 maxWidth: { xs: '100%' },
                 paddingLeft: backButton ? 0.5 : undefined,
+                ...(compact && { display: 'none' }),
 
                 // The wordmark is a fixed-size brand mark, so it is never what
                 // gives when the bar runs out of room (AGL-1414) — the org
@@ -364,7 +377,11 @@ const TopAppBar = (props: TopAppBarProps) => {
                 // and every `text-overflow: ellipsis` further down silently
                 // did nothing, because nothing ever constrained the box.
                 minWidth: 0,
-                paddingLeft: { xs: 0.5, sm: 1.5 }
+                paddingLeft: { xs: 0.5, sm: 1.5 },
+                // A squeezed center truncates its document name instead of
+                // painting over the actions beside it. Its menus portal out,
+                // so nothing they open is clipped.
+                ...(compact && { overflow: 'hidden' }),
               }}>
               {!customCenter &&
               !centerPrefix &&
@@ -386,7 +403,10 @@ const TopAppBar = (props: TopAppBarProps) => {
                       that crosses menus. The item data is unchanged; only the
                       mechanics moved. Quick actions keep the plain `Menu`. */}
                   {customCenter || (
-                    <AppBarMenubarComponent entries={centerNavigationItems} />
+                    <AppBarMenubarComponent
+                      entries={centerNavigationItems}
+                      compact={compact}
+                    />
                   )}
                 </Stack>
               )}
@@ -408,7 +428,7 @@ const TopAppBar = (props: TopAppBarProps) => {
                 flexShrink: 0,
               }}
             >
-              <GlobalSearchTriggerComponent />
+              {compact ? null : <GlobalSearchTriggerComponent />}
             </Stack>
             {actionsPrefix ? (
               <Stack
@@ -425,7 +445,7 @@ const TopAppBar = (props: TopAppBarProps) => {
                 {actionsPrefix}
               </Stack>
             ) : null}
-            {_isArrEmpty(quickActions) ? null : (
+            {compact || _isArrEmpty(quickActions) ? null : (
               <Stack
                 component="nav"
                 direction="row"
@@ -505,6 +525,10 @@ export function MainLayout(props: MainLayoutProps) {
   // The account menu, theme control, and org-scoped chrome links moved into
   // the self-contained UserMenu component (AGL-858), which reads its own
   // user/org/theme — so MainLayout no longer needs them here.
+  const theme = useTheme()
+  const narrow = useMediaQuery(theme.breakpoints.down('md'))
+  // Only the editor folds its bar: a console page's bar already fits a phone.
+  const compact = Boolean(besigner) && narrow
   return (
     <Stack
       {...rest}
@@ -531,6 +555,7 @@ export function MainLayout(props: MainLayoutProps) {
         enableAppBarElevation={enableAppBarElevation}
         wordmark={wordmark}
         backButton={backButton}
+        compact={compact}
         centerPrefix={centerPrefix}
         centerNavigationItems={centerNavigationItems || []}
         customCenter={
@@ -556,7 +581,7 @@ export function MainLayout(props: MainLayoutProps) {
                 on the reader — beside the bell, on the same persistent
                 chrome. Draws nothing when no plugin has anything to say. */}
             <ConsoleTopBarSlot />
-            <NotificationsMenu />
+            {compact ? null : <NotificationsMenu />}
             {/* Pre-permission ask (AGL-663): the browser allows exactly one
                 native prompt per origin, so we offer in-app first where a
                 decline is reversible. Renders nothing unless it applies. */}

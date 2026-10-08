@@ -47,7 +47,9 @@
 //                  tools/e2e/lib/hung-font-origin.mjs preloaded, so every
 //                  fetch to fonts.googleapis.com answers with a promise that
 //                  never settles. The page must still render within budget,
-//                  on the linked stylesheet. Rendered on a second copy of the
+//                  in its sized local fallbacks, and name no Google origin
+//                  (AGL-3656: a render that cannot read Google links nothing
+//                  from Google). Rendered on a second copy of the
 //                  site (`ridgeline-stalled`) because pass 1 cached the first
 //                  copy's pages, and a cached page proves nothing.
 //
@@ -148,13 +150,15 @@ const HUNG_FONT_ORIGIN_INSTALLED = '[hung-font-origin] installed'
 const HUNG_FONT_ORIGIN_HELD = '[hung-font-origin] holding open forever'
 /** The theme's fonts reached the page inlined (AGL-3485). */
 const SELF_HOSTED_FONTS = 'aglyn-theme-fonts'
-/** ...or as the linked stylesheet a page falls back to. */
+/** ...or as Google's linked stylesheet, which a published page never uses. */
 const LINKED_FONTS = 'fonts.googleapis.com/css2?family=Montserrat'
+/** Any reference to Google's font origins in the served HTML. */
+const GOOGLE_FONT_ORIGIN = /fonts\.(googleapis|gstatic)\.com/
 const fontsDelivery = (body) =>
   body.includes(SELF_HOSTED_FONTS)
     ? 'fonts inlined'
     : body.includes(LINKED_FONTS)
-      ? 'fonts linked (fallback)'
+      ? 'fonts linked'
       : null
 
 const PHASES = [
@@ -196,11 +200,12 @@ const PHASES = [
         recursive: true,
         force: true,
       }),
-    // The page renders, in budget, on the linked stylesheet — a hung font
-    // origin costs speed, never the page and never the typeface.
+    // The page renders, in budget, in the sized local fallbacks its inlined
+    // rules declare, and sends the visitor to no Google origin: a hung font
+    // origin costs the typeface on that render, never the page (AGL-3656).
     checks: clientPages(C.stalledHostId).map((check) => ({
       ...check,
-      fonts: 'linked',
+      fonts: 'no-google',
     })),
     // Proof the fault was live, read back from the server: the preload
     // loaded, and at least one stylesheet request was really held.
@@ -440,9 +445,11 @@ const runCheck = async ({ path, host, markers, absent, fonts }) => {
     ? null
     : !delivery
       ? 'the theme fonts reached the page neither inlined nor linked'
-      : fonts === 'linked' && delivery !== 'fonts linked (fallback)'
-        ? `expected the linked fallback, got ${delivery}`
-        : null
+      : fonts === 'no-google' && GOOGLE_FONT_ORIGIN.test(body)
+        ? 'the page names a Google font origin; a published page never does'
+        : fonts === 'no-google' && delivery !== 'fonts inlined'
+          ? `expected the inlined rules, got ${delivery}`
+          : null
   const ok =
     okStatus && !missing.length && okAbsent && !emotionProblem && !fontsProblem
   console.log(

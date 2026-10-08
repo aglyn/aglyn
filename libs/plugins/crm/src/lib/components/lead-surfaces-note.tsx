@@ -228,6 +228,7 @@ export function UnroutedLeadSurfaces(props: {
   const { hostId, forms, formHref, turningOn, onTurnOn } = props
   return (
     <Stack
+      useFlexGap
       direction="row"
       spacing={1}
       sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}

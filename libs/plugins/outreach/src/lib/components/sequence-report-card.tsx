@@ -164,7 +164,7 @@ export function OutreachSequenceReportCard(props: OutreachSequenceReportCardProp
           <Typography variant="h6" component="h2">
             Results
           </Typography>
-          <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap', rowGap: 2 }}>
+          <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap', rowGap: 2 }}>
             <OutreachFigure label="Emails sent" value={count(report.sent)} />
             <OutreachFigure
               label="People emailed"

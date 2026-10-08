@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { aiSiteKind } from './ai-site-kinds'
 import {
   AI_BUILD_PLAN_CREATION_NOUNS,
   aiPlanUndeclaredRefs,
@@ -92,6 +93,8 @@ export const AI_SITE_PLAN_MAX_TOKENS = { free: 2_000, paid: 4_000 } as const
 export interface AiFreeSiteWorstCase {
   /** The site plan: its answer and its one re-ask, each at its ceiling. */
   plan: number
+  /** The site's look (AGL-3660): its one answer at its ceiling, on the fast tier. */
+  look: number
   /** The one layout a Free plan includes, built first on a site with none. */
   layout: number
   /** A page's first section pass, which writes the cached prefix. */
@@ -112,6 +115,7 @@ export interface AiFreeSiteWorstCase {
  */
 export const AI_FREE_SITE_WORST_CASE_CREDITS: Readonly<AiFreeSiteWorstCase> = {
   plan: 35,
+  look: 7,
   layout: 64,
   firstSection: 44,
   laterSection: 20,
@@ -120,7 +124,7 @@ export const AI_FREE_SITE_WORST_CASE_CREDITS: Readonly<AiFreeSiteWorstCase> = {
 
 /**
  * The most sections a Free site's plan fits in the Free taste at its worst,
- * across all its pages: the plan, the layouts it builds first, each page's
+ * across all its pages: the plan, the look, the layouts it builds first, each page's
  * listing and first pass, and ROOM FOR ONE RETRIED SECTION, then as many later
  * passes as the rest pays for; none when that is already past the wall. Every
  * page's first pass is counted as a cache write, which errs dear.
@@ -133,6 +137,7 @@ export function aiFreeSiteSectionsWithin(
   const pages = Math.max(1, Math.floor(creations.pages))
   const before =
     credits.plan +
+    credits.look +
     creations.layouts * credits.layout +
     pages * (credits.listing + credits.firstSection) +
     credits.firstSection
@@ -145,7 +150,7 @@ export const AI_FREE_SITE_NOMINAL_SECTIONS = 3
 
 /**
  * About what a Free site start of this many pages costs at its worst, in
- * credits, for the dialog that asks for one: the site plan, each page's
+ * credits, for the dialog that asks for one: the site plan, its look, each page's
  * listing and its sections at the nominal count, from the figures the wall is
  * proven with rather than the nominal credits a paid estimate counts.
  */
@@ -156,6 +161,7 @@ export function aiFreeSiteCreditEstimate(
   const count = Math.max(1, Math.floor(pages))
   return (
     credits.plan +
+    credits.look +
     count * (credits.listing + credits.firstSection) +
     count * (AI_FREE_SITE_NOMINAL_SECTIONS - 1) * credits.laterSection
   )
@@ -218,6 +224,12 @@ export interface AiSiteJobInputs {
    * few words in a brief, not a lookup.
    */
   starter: string
+  /**
+   * The kind of site the person picked (AGL-3660), by its `AI_SITE_KINDS`
+   * id; empty when nobody picked one, and the business type suggests it.
+   * It sets the look the site is designed in and how its pages are arranged.
+   */
+  siteKind: string
   /** How many pages the member asked for. */
   pages: number
   /** The per-site variables an agency batch varies; empty when none was given. */
@@ -297,6 +309,17 @@ export const AI_SITE_SUBMISSION_CHOICES: ReadonlyArray<{
  */
 export const AI_SITE_EMAIL_TYPE = 'reply'
 
+/**
+ * What a site job's plan and every unit it builds are told about the
+ * business's name (AGL-3596): that it is the name, used as written. Said on
+ * the job's own turn, never in a cached system block, because it is one
+ * site's. A model handed only what the business does named it itself —
+ * "Hillside Dog Grooming" was built as "Austin Paws Grooming".
+ */
+export function aiSiteNameSentence(name: string): string {
+  return `The business is named “${name}”: the site names it exactly that way, in the header, the footer, the copy and the search listing, and never by any other name.`
+}
+
 /** Where a job's inputs say submissions go, or `null` where they do not say. */
 export function aiSiteSubmissions(
   inputs: Readonly<Record<string, unknown>> | null | undefined,
@@ -330,6 +353,8 @@ export function parseAiSiteJobInputs(
   const brand = text('brand')
   const audience = text('audience')
   const starter = text('starter')
+  // A kind this deployment does not know is nobody having picked one.
+  const siteKind = aiSiteKind(inputs?.['siteKind'])?.id ?? ''
   for (const [key, value] of [
     ['businessName', businessName],
     ['city', city],
@@ -368,6 +393,7 @@ export function parseAiSiteJobInputs(
     businessType,
     audience: audience as string,
     starter: starter as string,
+    siteKind,
     pages,
     businessName: businessName as string,
     city: city as string,
