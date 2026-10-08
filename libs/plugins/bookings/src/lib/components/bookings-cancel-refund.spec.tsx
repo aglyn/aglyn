@@ -29,7 +29,8 @@
  * The FREE path is asserted as loudly as the paid one. It is the branch a
  * careless fix breaks — routing every cancel through a refund route would
  * make a free site's cancel button fail on a booking that never had a
- * payment — and it is the branch that must keep writing directly.
+ * payment. It goes through the cancel route (AGL-3643), never the refund
+ * route, so the cancel reaches the plugins listening for it.
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -274,19 +275,20 @@ describe('cancelling a PAID booking (AGL-2315)', () => {
 })
 
 describe('cancelling a FREE booking (AGL-2315)', () => {
-  it('still writes directly and calls no refund route', async () => {
+  it('cancels through the cancel route, never the refund route, and writes nothing itself', async () => {
     // The branch a careless fix breaks. A free booking has no payment to
     // reverse, and routing it through the refund route would answer 409 "never
-    // paid" and leave the merchant unable to cancel anything.
+    // paid" and leave the merchant unable to cancel anything. The cancel route
+    // (AGL-3643) writes the status and raises `booking.canceled`.
     collections.bookings = [FREE_BOOKING]
     renderPage()
     clickCancel()
 
-    await waitFor(() => expect(updateDoc).toHaveBeenCalled())
-    expect(fetchMock).not.toHaveBeenCalled()
-    expect(updateDoc).toHaveBeenCalledWith(expect.anything(), {
-      status: 'canceled',
-    })
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/bookings/cancel')
+    expect(JSON.parse(init.body)).toEqual({ hostId: 'host-1', bookingId: FREE_BOOKING.$id })
+    expect(updateDoc).not.toHaveBeenCalled()
     expect(String(confirmCalls[0].confirmationText)).toBe('Cancel booking')
     expect(String(confirmCalls[0].description)).not.toContain('$')
   })
@@ -298,7 +300,23 @@ describe('cancelling a FREE booking (AGL-2315)', () => {
     renderPage()
     clickCancel()
 
-    await waitFor(() => expect(updateDoc).toHaveBeenCalled())
-    expect(fetchMock).not.toHaveBeenCalled()
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/bookings/cancel')
+  })
+
+  it('says what the route refused, and keeps the booking', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: async () => ({ error: 'This guest is already checked in' }),
+    })
+    collections.bookings = [FREE_BOOKING]
+    renderPage()
+    clickCancel()
+
+    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    expect(enqueueSnackbar.mock.calls[0][0]).toBe('This guest is already checked in')
+    expect(enqueueSnackbar.mock.calls[0][1].variant).toBe('warning')
+    expect(updateDoc).not.toHaveBeenCalled()
   })
 })

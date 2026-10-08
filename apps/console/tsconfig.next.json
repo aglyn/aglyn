@@ -158,6 +158,12 @@
       "@aglyn/plugins-marketing-platforms/*": [
         "../../libs/plugins/marketing-platforms/src/lib/*"
       ],
+      "@aglyn/plugins-zapier": [
+        "../../libs/plugins/zapier/src/index.ts"
+      ],
+      "@aglyn/plugins-zapier/*": [
+        "../../libs/plugins/zapier/src/lib/*"
+      ],
       "@aglyn/plugins-fulfillment-networks": [
         "../../libs/plugins/fulfillment-networks/src/index.ts"
       ],

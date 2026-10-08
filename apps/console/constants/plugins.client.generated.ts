@@ -143,7 +143,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'ai',
     apiPrefixes: ["ai","assist"],
     register: {"console":"registerAiConsole","staff":"registerAiConsole"},
-    contributes: {"console":{"shell":true,"routes":["/ai-jobs"],"slots":["consoleDock","consoleTopBar","automationEditor","automationRun","besignerInspector","besignerToolbar","experimentResult","experimentVariants","funnelInsight","funnelsCreate","hostAutomations","hostCampaigns","hostComponents","hostEmailTemplates","hostDashboard","hostFirstRun","hostForms","hostLayouts","hostLogic","hostMembers","hostOverlays","hostScreens","hostSeo","hostTemplates","hostTheme","importMapping","marketingInsights","logicFunctionEditor","logicReferenceIssue","mediaLibrary","orgAutomations","orgBillingUsage","orgDashboard","orgMember","orgMembersListColumn","orgSites","overlayEditor","productEditor","productImport","productsCreate","productsHub","recordEmail","recordInsights","seoFields","staffOrg","staffOrgUsageColumn","staffOrgsListColumn","staffUser"]}},
+    contributes: {"console":{"shell":true,"routes":["/ai-jobs"],"slots":["consoleDock","consoleTopBar","automationEditor","automationRun","besignerInspector","besignerToolbar","experimentResult","experimentVariants","funnelInsight","funnelsCreate","hostAutomations","hostBusinessProfile","hostCampaigns","hostComponents","hostEmailTemplates","hostDashboard","hostFirstRun","hostForms","hostLayouts","hostLogic","hostMembers","hostOverlays","hostScreens","hostSeo","hostTemplates","hostTheme","importMapping","marketingInsights","logicFunctionEditor","logicReferenceIssue","mediaLibrary","orgAutomations","orgBillingUsage","orgDashboard","orgMember","orgMembersListColumn","orgSites","overlayEditor","productEditor","productImport","productsCreate","productsHub","recordEmail","recordInsights","seoFields","staffOrg","staffOrgUsageColumn","staffOrgsListColumn","staffUser"]}},
     load: () => import('@aglyn/plugins-ai'),
   },
   {
@@ -186,6 +186,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     register: {"console":"registerMarketingPlatformsConsole"},
     contributes: {"console":{"slots":["hostSettings"]}},
     load: () => import('@aglyn/plugins-marketing-platforms'),
+  },
+  {
+    id: 'zapier',
+    apiPrefixes: ["zapier"],
+    register: {"console":"registerZapierConsole"},
+    contributes: {"console":{"slots":["hostSettings"]}},
+    load: () => import('@aglyn/plugins-zapier'),
   },
   {
     id: 'fulfillment-networks',

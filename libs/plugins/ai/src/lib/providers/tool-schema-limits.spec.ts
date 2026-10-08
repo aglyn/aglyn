@@ -199,6 +199,11 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
     variable: () => [aiLogicVariableTool()],
     explain: () => [aiWorkflowExplanationTool()],
   },
+  // An edit to a page or a layout (AGL-3616): the Assist edit rung's tool.
+  'jobs/ai-job-edit-step.ts': {
+    'screen edit': () => [assistEditTool('screen')],
+    'layout edit': () => [assistEditTool('layout')],
+  },
   'jobs/ai-job-text-step.ts': { text: () => [] },
   // Overlay copy (AGL-3603), a text job answered through one tool: a bar's
   // set and a popup's differ.

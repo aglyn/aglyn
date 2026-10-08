@@ -88,6 +88,11 @@ import {
 } from './assist-edit'
 import { ASSIST_BUILD_TOOL_NAME, type AssistBuildProposal } from '../model/assist-build'
 import {
+  assistBuildDraftsBlock,
+  parseAssistBuildDrafts,
+  type AssistBuildDraft,
+} from '../model/assist-follow-up'
+import {
   assistBuildBlock,
   assistBuildIntents,
   assistBuildIntentsBlock,
@@ -106,6 +111,7 @@ import {
   viewFactsBlock,
   viewScreenBlock,
   visibleAssistText,
+  withAssistOpenDraftAction,
 } from './assist-view-context'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 // By its own entry point rather than the barrel (AGL-2903), for the reason
@@ -115,8 +121,11 @@ import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token
 // failing loudly. Nothing replaces the entry point, so the spec exercises
 // the real request shape, the real SSE parser and the real error boundary.
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
+import { aiSiteContextSystemBlock } from '../model/ai-site-context'
+import { readAiSiteContext } from '../runtime/site-context'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
+  AI_MAX_CACHE_BREAKPOINTS,
   AiUpstreamError,
   aiProviderReady,
   runAiRequest,
@@ -223,6 +232,11 @@ import {
  *   3. product brand                      the org's name for the product
  *   4. request facts                      workspace, plan, host, path
  *   5. docs retrieval                     follows the question
+ *
+ * On the edit and build rungs a SITE block (AGL-3661) follows the stable
+ * blocks: the business profile, status and remembered preferences of the
+ * site being changed, cached per site as the span's last breakpoint, or
+ * volatile when the stable blocks already hold the runtime's four.
  *
  * Caching is a prefix match, so breakpoint 2 covers blocks 1+2 together. The
  * split between 2 and 3 is the whole design and it is easy to get wrong:
@@ -446,6 +460,11 @@ interface AssistRequestBody {
    * to what may enter a prompt, and below the rung it is never parsed at all.
    */
   canvas: unknown
+  /**
+   * The drafts a build in this thread made, by ref and label (AGL-3616):
+   * what a follow-up may offer to open. Held to `parseAssistBuildDrafts`.
+   */
+  drafts: AssistBuildDraft[]
 }
 
 /** A posted turn the route will read: a known role with words in it. */
@@ -537,6 +556,7 @@ export function parseAssistBody(payload: unknown): AssistRequestBody | null {
     context,
     model: model && model !== AI_MODEL_AUTO ? model : null,
     canvas: body.canvas ?? null,
+    drafts: parseAssistBuildDrafts(body.drafts),
   }
 }
 
@@ -1087,9 +1107,10 @@ async function handler(request: Request): Promise<Response> {
     // an instruction and not a question about "this" element — is answered
     // from the docs there. `questionStandsAlone` is the deflector's own test
     // for a question that needs nothing around it, and the open canvas is
-    // exactly what an edit request leans on.
+    // exactly what an edit request leans on. So is a follow-up on a draft
+    // this thread's build made (AGL-3616): "make the about page shorter".
     const deflection =
-      (editRung || buildRung) && !questionStandsAlone(body.question)
+      (editRung || buildRung || body.drafts.length) && !questionStandsAlone(body.question)
         ? null
         : deflectToDocs(body.question, scored, body.history.length > 0)
     if (deflection?.answered) {
@@ -1194,8 +1215,9 @@ async function handler(request: Request): Promise<Response> {
     // cache: the pick is a request for that model's answer, and a cached one
     // was written by whichever model Auto chose. Nor does a turn on the edit
     // rung (AGL-2906): that answer is composed against the canvas the request
-    // described, which the key cannot describe either.
-    const cacheKey = body.history.length || body.model || editRung || buildRung
+    // described, which the key cannot describe either. Nor does a turn that
+    // listed a build's drafts (AGL-3616): its answer may open one of them.
+    const cacheKey = body.history.length || body.model || editRung || buildRung || body.drafts.length
       ? ''
       : assistAnswerCacheKey({
           question: body.question,
@@ -1362,6 +1384,22 @@ async function handler(request: Request): Promise<Response> {
       entitled && body.context
         ? buildViewBlock(body.context, org as Record<string, unknown>, { edit: Boolean(editRung) })
         : null
+    // A follow-up on a draft this thread's build made (AGL-3616): offered on
+    // a site, where the navigation has a destination, and nowhere else.
+    const drafts = guide?.scope.hostId ? body.drafts : []
+    const draftsBlock = assistBuildDraftsBlock(drafts)
+    const proposalView = guide ? withAssistOpenDraftAction(guide.view, drafts) : null
+
+    // The site's business profile, status and memory (AGL-3661), for a turn
+    // that may change the site: the edit and build rungs, whose host was
+    // checked for `ai.generate` above. Free and paid read the same block. A
+    // site breakpoint when the stable blocks leave one, volatile otherwise.
+    const siteHostId = buildRung?.hostId ?? editRung?.target.hostId ?? null
+    const siteContext = siteHostId
+      ? await readAiSiteContext(firestore, { orgId: body.orgId, hostId: siteHostId })
+      : null
+    const stableBreakpoints = 1 + (guide?.screen ? 1 : 0) + (editRung ? 1 : 0) + (buildRung ? 1 : 0)
+    const siteBlock = aiSiteContextSystemBlock(siteContext, { cache: stableBreakpoints < AI_MAX_CACHE_BREAKPOINTS })
 
     const messages = [
       ...body.history.map((turn) => ({
@@ -1392,11 +1430,16 @@ async function handler(request: Request): Promise<Response> {
         : []),
       // The build protocol (AGL-3616): the same for every site, so cached.
       ...(buildRung ? [{ text: assistBuildBlock(), cacheBreakpoint: true as const }] : []),
+      // The site's own block closes the cached span (AGL-3661): every block
+      // above is shared by every workspace, this one is cached per site.
+      ...siteBlock,
       // Per-org, and therefore AFTER every breakpoint — see
       // `assistBrandBlock`. Unconditional: a free workspace assembles no
       // view block, and it must still be told what the product is called.
       { text: assistBrandBlock(org as never), volatile: true },
       ...(guide ? [{ text: guide.facts, volatile: true as const }] : []),
+      // The drafts a follow-up may open: the person's own labels, so volatile.
+      ...(draftsBlock ? [{ text: draftsBlock, volatile: true as const }] : []),
       // The canvas the author has open — their own content, so volatile.
       ...(editRung
         ? [{ text: editSelectionBlock(editRung.context), volatile: true as const }]
@@ -1530,7 +1573,7 @@ async function handler(request: Request): Promise<Response> {
           // proposal costs the user a button; an honoured bad one costs
           // them trust.
           const proposal = guide
-            ? resolveAssistProposal(extractAssistAction(raw), guide.view, guide.scope)
+            ? resolveAssistProposal(extractAssistAction(raw), proposalView, guide.scope, drafts)
             : null
 
           // The edit proposal, if the model called the tool — held to the

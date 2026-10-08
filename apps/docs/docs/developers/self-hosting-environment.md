@@ -904,6 +904,20 @@ merchant's credential.
 Register `https://<console>/api/marketing-platforms/oauth/callback` as the
 redirect URI in each app. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
 
+### Zapier {#zapier}
+
+The REST hooks Aglyn's Zapier app subscribes to (`/v1/sites/{siteId}/hooks`) are
+served by every deployment and post only to Zapier's hook host, with each
+merchant's own API key. What this variable gates is the console's **Zapier** card on
+a site's setup page, which lists and disconnects a site's Zaps: until it is set the
+card draws nothing. The app itself (`apps/zapier`) is published from Zapier's
+developer platform under your own Zapier developer account; point it at your console
+with its `AGLYN_API_URL` environment variable there.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `ZAPIER_APP_URL` | Optional | Runtime, console | The `https://` link to your published Zapier app (its public page or invite link). Set it once the app is published; the card's **Open in Zapier** button goes there. |
+
 ### Fulfillment networks: ShipBob and Amazon Multi-Channel Fulfillment {#fulfillment-networks}
 
 A store can send its paid orders to the merchant's **own** ShipBob or Amazon

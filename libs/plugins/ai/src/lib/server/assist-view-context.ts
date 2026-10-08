@@ -22,6 +22,11 @@ import {
   ASSIST_EDIT_TOOL_NAME,
   type AssistEditDocumentKind,
 } from '../model/assist-edit'
+import {
+  ASSIST_OPEN_DRAFT_ACTION_ID,
+  ASSIST_OPEN_DRAFT_PARAM,
+  type AssistBuildDraft,
+} from '../model/assist-follow-up'
 
 /**
  * Aglyn Assist level 2 — the GUIDE capability (AGL-1988, under AGL-1860).
@@ -1063,6 +1068,31 @@ export function extractAssistAction(raw: string): string | null {
   return body || null
 }
 
+/**
+ * The navigation to a draft a build in this chat made (AGL-3616), offered
+ * beside the view's own when the request listed any. Its destination is the
+ * site's Pages list, where every draft waits: the panel, which holds the
+ * draft's own address, sends the person to that draft's Besigner instead and
+ * asks the request again there. The server never builds an address from a
+ * draft, so a ref cannot steer anyone anywhere the registry does not point.
+ */
+export const ASSIST_OPEN_DRAFT_ACTION: AssistNavigateAction = orgAction(
+  ASSIST_OPEN_DRAFT_ACTION_ID,
+  'Open the draft in the Besigner',
+  'a draft this chat built, in the Besigner, where your request is asked again',
+  '/[orgSlug]/hosts/[host]/screens',
+  [ASSIST_OPEN_DRAFT_PARAM],
+)
+
+/** The view with the open-draft navigation added, where the request listed drafts. */
+export function withAssistOpenDraftAction(
+  view: AssistView | null,
+  drafts: readonly AssistBuildDraft[],
+): AssistView | null {
+  if (!view || !drafts.length) return view
+  return { ...view, actions: [...view.actions, ASSIST_OPEN_DRAFT_ACTION] }
+}
+
 /** A proposal that survived validation — inert, and safe to show. */
 export interface AssistProposal {
   id: string
@@ -1074,6 +1104,12 @@ export interface AssistProposal {
   values: ReadonlyArray<{ name: string; value: string }>
   /** Whether `href` carries the values, or the card must ask the user to type them. */
   prefill: boolean
+  /**
+   * For the open-draft navigation (AGL-3616): the ref of the draft to open,
+   * one the request listed. The panel resolves it to the draft's Besigner
+   * and asks the request again there.
+   */
+  draft?: AssistBuildDraft
 }
 
 const MAX_PARAM_VALUE_CHARS = 200
@@ -1097,6 +1133,7 @@ export function resolveAssistProposal(
   rawBlock: string | null,
   view: AssistView | null,
   scope: { orgSlug: string; hostId: string },
+  drafts: readonly AssistBuildDraft[] = [],
 ): AssistProposal | null {
   if (!rawBlock || !view) return null
   const navigations = view.actions.filter(isNavigateAction)
@@ -1128,6 +1165,22 @@ export function resolveAssistProposal(
 
   const href = buildActionHref(action, scope, values)
   if (!href) return null
+
+  // The open-draft navigation names a draft the request listed, or nothing.
+  if (action.id === ASSIST_OPEN_DRAFT_ACTION_ID) {
+    const ref = values.find((value) => value.name === ASSIST_OPEN_DRAFT_PARAM)?.value
+    const draft = drafts.find((one) => one.ref === ref)
+    if (!draft) return null
+    return {
+      id: action.id,
+      label: `Open “${draft.label}” in the Besigner`,
+      outcome: `the ${draft.noun} “${draft.label}” in the Besigner, where your request is asked again`,
+      href,
+      values: [],
+      prefill: false,
+      draft,
+    }
+  }
 
   return {
     id: action.id,
