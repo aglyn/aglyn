@@ -163,5 +163,5 @@ object AglynIcons {
     "undo" to Icons.AutoMirrored.Outlined.Undo,
   )
 
-  fun named(name: String?): ImageVector = byName[name] ?: Icons.Outlined.Extension
+  fun named(name: String?): ImageVector = byName[name] ?: CONTENT_ICONS[name] ?: Icons.Outlined.Extension
 }
