@@ -84,6 +84,12 @@ import {
   checkoutExtrasCents,
   decodeCheckoutExtrasMetadata,
 } from '@aglyn/aglyn/plugin-manager/plugin-checkout-extras'
+import {
+  checkoutCreditProvider,
+  checkoutCreditSold,
+  decodeCheckoutCreditMetadata,
+  type CheckoutCreditStage,
+} from '@aglyn/aglyn/plugin-manager/plugin-checkout-credits'
 import { raiseOrderEvent } from './order-events'
 import { handlePosStripeEvent } from './pos-terminal'
 import { notifyPosSaleCompleted } from './pos-sale'
@@ -2228,6 +2234,20 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           console.error('Gift card hold release failed', giftCardCode, error)
         })
     }
+    // Store credit another plugin held for the checkout (AGL-3640) goes back
+    // the same way: its provider lets the hold go.
+    const expiredCredit = decodeCheckoutCreditMetadata(object?.metadata)
+    if (expiredCredit) {
+      await checkoutCreditProvider(expiredCredit.providerId)
+        ?.provider.release({
+          hostId: expiredHostId,
+          reference: expiredCredit.reference,
+          holdKey: expiredCredit.holdKey,
+        })
+        .catch((error: unknown) => {
+          console.error('Checkout credit hold release failed', expiredCredit.providerId, error)
+        })
+    }
     return
   }
 
@@ -3554,12 +3574,63 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // The optional lines the buyer took (AGL-3635), read back off the
         // session they were charged on; never re-quoted here.
         const cartExtras = decodeCheckoutExtrasMetadata(object?.metadata)
+        // Store credit another plugin held for this checkout (AGL-3640): taken
+        // in THIS transaction, so the redemption and the order are written
+        // together or not at all. What Stripe discounted is the hold; what the
+        // provider gives now is what the order records.
+        const heldCredit = decodeCheckoutCreditMetadata(object?.metadata)
+        const creditEntry = heldCredit ? checkoutCreditProvider(heldCredit.providerId) : null
+        let creditShortCents = 0
         const created = await firestore.runTransaction(async (transaction) => {
           const [existing, counter] = await Promise.all([
             transaction.get(orderRef),
             transaction.get(counterRef),
           ])
           if (existing.exists) return false
+          // The provider's reads, before this transaction writes anything.
+          let creditStage: CheckoutCreditStage | null = null
+          if (heldCredit && creditEntry) {
+            creditStage = await creditEntry.provider
+              .stage({
+                transaction,
+                hostId: String(hostId),
+                reference: heldCredit.reference,
+                orderId: orderRef.id,
+                nowMs: Date.now(),
+                holdKey: heldCredit.holdKey,
+              })
+              .catch((error: unknown) => {
+                console.error('Checkout credit stage failed', heldCredit.providerId, error)
+                return null
+              })
+          }
+          const creditTaken =
+            heldCredit && creditStage
+              ? Math.max(
+                  0,
+                  Math.min(
+                    heldCredit.amountCents,
+                    creditStage.debit({
+                      cents: heldCredit.amountCents,
+                      key: heldCredit.holdKey,
+                      orderId: orderRef.id,
+                      channel: 'online',
+                    }),
+                  ),
+                )
+              : 0
+          creditShortCents = heldCredit ? heldCredit.amountCents - creditTaken : 0
+          const creditSold =
+            heldCredit && creditTaken > 0
+              ? checkoutCreditSold({
+                  providerId: heldCredit.providerId,
+                  reference: heldCredit.reference,
+                  label: heldCredit.label,
+                  last4: heldCredit.last4,
+                  amountCents: creditTaken,
+                  appliedAs: 'discount',
+                })
+              : null
           const number = Number(counter.get('next') ?? 1)
           cartOrderNumber = number
           transaction.set(counterRef, { next: number + 1 }, { merge: true })
@@ -3579,6 +3650,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             lineItems,
             totals,
             ...(cartExtras.length ? { extras: cartExtras } : {}),
+            ...(creditSold ? { credits: [creditSold] } : {}),
             // WHICH TAX THIS SALE CARRIED (AGL-2451). `totals.taxCents` above
             // says how much; this says who computed it, which is the fact that
             // decides whose registration the money is held under. The same
@@ -3608,6 +3680,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                         'deleted during checkout, so this order is short of ' +
                         'what the shopper was charged. Refund the difference ' +
                         'or fulfill it by hand.',
+                    },
+                  ]
+                : []),
+              ...(heldCredit && creditShortCents > 0
+                ? [
+                    {
+                      atMs: Date.now(),
+                      event: 'credit-short',
+                      detail:
+                        `$${(heldCredit.amountCents / 100).toFixed(2)} of ${heldCredit.label} was taken off this ` +
+                        `order, but only $${((heldCredit.amountCents - creditShortCents) / 100).toFixed(2)} was ` +
+                        'still in the account when it was paid.',
                     },
                   ]
                 : []),
@@ -3674,6 +3758,26 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               `${unresolvedLines.length} of its lines could not be recorded ` +
               'because the product was deleted during ' +
               'checkout. Refund the difference or fulfill it by hand.',
+            link: `/${hostId}/products`,
+          })
+        }
+        // A store-credit hold that no longer covered what Stripe discounted
+        // (AGL-3640): the buyer kept the discount, the account gave less. Said
+        // once, like a lost line, so the merchant can square it.
+        if (heldCredit && creditShortCents > 0) {
+          console.error('commerce cart order credit short', {
+            hostId: String(hostId),
+            orderId: String(object.id),
+            providerId: heldCredit.providerId,
+            shortCents: creditShortCents,
+          })
+          void notifyHostManagers(String(hostId), {
+            type: 'content.order',
+            title: 'Store credit on an order came up short',
+            body:
+              `Order ${cartOrderLabel} on {site} was discounted ` +
+              `$${(heldCredit.amountCents / 100).toFixed(2)} for ${heldCredit.label}, but the account ` +
+              `had only $${((heldCredit.amountCents - creditShortCents) / 100).toFixed(2)} left when it was paid.`,
             link: `/${hostId}/products`,
           })
         }

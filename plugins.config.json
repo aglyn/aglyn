@@ -2870,6 +2870,41 @@
       }
     },
     {
+      "id": "loyalty",
+      "package": "@aglyn/plugins-loyalty",
+      "register": {
+        "console": "registerLoyaltyConsole",
+        "consoleApi": "registerLoyaltyConsoleApi",
+        "serverDeclarations": "registerLoyaltyServerDeclarations",
+        "tenantEmails": "loyaltyTenantEmails"
+      },
+      "apiPrefixes": ["loyalty"],
+      "requiredPersonEraser": true,
+      "activityMutationPaths": [
+        "libs/plugins/loyalty/src/lib/server/routes.ts"
+      ],
+      "catalog": {
+        "order": 31,
+        "$comment": "Built-in rewards for the commerce plugin's sales (AGL-3640): points earned on online and register orders, spent at checkout and at the register, referral codes, and store credit beside commerce's gift cards. It never imports commerce: it redeems through core's checkout-credits seam (`core.checkout-credits`), earns and reverses on commerce's order events by name, and draws in commerce's `commercePromotions` and `orderDetail` zones. No outside vendor and no env: every store's program is OFF until its merchant turns it on, and the cart and register draw nothing until then. No `requires` edge, for shipping's reason: a workspace cannot switch it off, so it runs only on a site where commerce is on (site-context.ts). Smile.io and Yotpo connectors are a later, separate issue.",
+        "label": "Rewards",
+        "alwaysOnForWorkspace": true,
+        "description": "Points, referrals and store credit for your store.",
+        "siteOff": {
+          "stops": "Stops new points, rewards at checkout and at the register, and referral credit.",
+          "keeps": "Members keep their points and store credit."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commercePromotions",
+            "orderDetail"
+          ]
+        }
+      }
+    },
+    {
       "id": "tax-engines",
       "package": "@aglyn/plugins-tax-engines",
       "register": {

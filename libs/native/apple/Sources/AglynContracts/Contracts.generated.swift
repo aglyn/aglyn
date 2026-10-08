@@ -442,6 +442,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var checkoutSessionId: String?
   public var couponCode: String?
   public var createdAtMs: Double?
+  public var credits: [OrderCredit]?
   public var customerEmail: String?
   public var customerId: String?
   public var customerName: String?
@@ -477,7 +478,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var totals: OrderTotals?
   public var unresolvedLines: [OrderUnresolvedLine]?
 
-  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillments: [OrderFulfillment]? = nil, invoiceId: String? = nil, lineItems: [OrderLineItem]? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, productId: String? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: HostOrderTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil) {
+  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, credits: [OrderCredit]? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillments: [OrderFulfillment]? = nil, invoiceId: String? = nil, lineItems: [OrderLineItem]? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, productId: String? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: HostOrderTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil) {
     self.amountCents = amountCents
     self.billingAddress = billingAddress
     self.buyerNotifications = buyerNotifications
@@ -487,6 +488,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
     self.checkoutSessionId = checkoutSessionId
     self.couponCode = couponCode
     self.createdAtMs = createdAtMs
+    self.credits = credits
     self.customerEmail = customerEmail
     self.customerId = customerId
     self.customerName = customerName
@@ -1286,6 +1288,40 @@ public struct OrderChannelSourceLinesItem: Codable, Hashable, Sendable {
   }
 }
 
+public struct OrderCredit: Codable, Hashable, Sendable {
+  public var amountCents: Double
+  public var appliedAs: OrderCreditAppliedAs
+  public var key: String
+  public var label: String
+  public var last4: String
+  public var pluginId: String
+  public var providerId: String
+  public var reference: String
+
+  public init(amountCents: Double, appliedAs: OrderCreditAppliedAs, key: String, label: String, last4: String, pluginId: String, providerId: String, reference: String) {
+    self.amountCents = amountCents
+    self.appliedAs = appliedAs
+    self.key = key
+    self.label = label
+    self.last4 = last4
+    self.pluginId = pluginId
+    self.providerId = providerId
+    self.reference = reference
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum OrderCreditAppliedAs: String, Codable, CaseIterable, Hashable, Sendable {
+  case discount = "discount"
+  case tender = "tender"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct OrderDispute: Codable, Hashable, Sendable {
   public var amountCents: Double
   public var closedAtMs: Double?
@@ -1443,6 +1479,9 @@ public struct OrderPayment: Codable, Hashable, Sendable {
   public var changeCents: Double?
   public var checkoutSessionId: String?
   public var checkoutUrl: String?
+  public var creditLabel: String?
+  public var creditProviderId: String?
+  public var creditReference: String?
   public var failureMessage: String?
   public var feeCents: Double?
   public var folioAtMs: Double?
@@ -1459,7 +1498,7 @@ public struct OrderPayment: Codable, Hashable, Sendable {
   public var takeFeeCents: Double?
   public var tipCents: Double?
 
-  public init(amountCents: Double, atMs: Double, cardBrand: String? = nil, cashierId: String? = nil, cashTenderedCents: Double? = nil, changeCents: Double? = nil, checkoutSessionId: String? = nil, checkoutUrl: String? = nil, failureMessage: String? = nil, feeCents: Double? = nil, folioAtMs: Double? = nil, giftCardId: String? = nil, id: String, last4: String? = nil, livemode: Bool? = nil, method: OrderPaymentMethod, paymentIntentId: String? = nil, readerId: String? = nil, reservationId: String? = nil, settledAtMs: Double? = nil, status: OrderPaymentStatus, takeFeeCents: Double? = nil, tipCents: Double? = nil) {
+  public init(amountCents: Double, atMs: Double, cardBrand: String? = nil, cashierId: String? = nil, cashTenderedCents: Double? = nil, changeCents: Double? = nil, checkoutSessionId: String? = nil, checkoutUrl: String? = nil, creditLabel: String? = nil, creditProviderId: String? = nil, creditReference: String? = nil, failureMessage: String? = nil, feeCents: Double? = nil, folioAtMs: Double? = nil, giftCardId: String? = nil, id: String, last4: String? = nil, livemode: Bool? = nil, method: OrderPaymentMethod, paymentIntentId: String? = nil, readerId: String? = nil, reservationId: String? = nil, settledAtMs: Double? = nil, status: OrderPaymentStatus, takeFeeCents: Double? = nil, tipCents: Double? = nil) {
     self.amountCents = amountCents
     self.atMs = atMs
     self.cardBrand = cardBrand
@@ -1468,6 +1507,9 @@ public struct OrderPayment: Codable, Hashable, Sendable {
     self.changeCents = changeCents
     self.checkoutSessionId = checkoutSessionId
     self.checkoutUrl = checkoutUrl
+    self.creditLabel = creditLabel
+    self.creditProviderId = creditProviderId
+    self.creditReference = creditReference
     self.failureMessage = failureMessage
     self.feeCents = feeCents
     self.folioAtMs = folioAtMs
@@ -1492,6 +1534,7 @@ public enum OrderPaymentMethod: String, Codable, CaseIterable, Hashable, Sendabl
   case cardLink = "card_link"
   case cardPresent = "card_present"
   case cash = "cash"
+  case credit = "credit"
   case folio = "folio"
   case giftCard = "gift_card"
   case unknown = ""
