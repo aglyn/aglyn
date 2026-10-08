@@ -62,6 +62,13 @@ export const LOCAL_BUSINESS_TYPES = [
 
 export type LocalBusinessType = (typeof LOCAL_BUSINESS_TYPES)[number]['value']
 
+/**
+ * {@link LOCAL_BUSINESS_TYPES} as a plain list, for readers that cannot read
+ * a literal tuple: the native apps' contracts (AGL-3668).
+ */
+export const LOCAL_BUSINESS_TYPE_OPTIONS: ReadonlyArray<{ value: string; label: string }> =
+  LOCAL_BUSINESS_TYPES
+
 /** At most this many areas are published; a service area is a list, not a gazetteer. */
 export const AREA_SERVED_MAX = 20
 export const AREA_SERVED_NAME_MAX_LENGTH = 120

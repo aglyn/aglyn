@@ -84,6 +84,42 @@ public enum ApnsEnvironment: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum ContentSchemaType: String, Codable, CaseIterable, Hashable, Sendable {
+  case article = "Article"
+  case blogPosting = "BlogPosting"
+  case newsArticle = "NewsArticle"
+  case techArticle = "TechArticle"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct ContentSchemaTypeOptionsItem: Codable, Hashable, Sendable {
+  public var description: String
+  public var label: String
+  public var value: String
+
+  public init(description: String, label: String, value: String) {
+    self.description = description
+    self.label = label
+    self.value = value
+  }
+}
+
+public struct EntryStatusOptionsItem: Codable, Hashable, Sendable {
+  public var label: String
+  public var value: String
+
+  public init(label: String, value: String) {
+    self.label = label
+    self.value = value
+  }
+}
+
 public struct FormLeadRoutingOptionsItem: Codable, Hashable, Sendable {
   public var label: String
   public var value: String
@@ -691,6 +727,16 @@ public enum ListQuerySortDirection: String, Codable, CaseIterable, Hashable, Sen
   public init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct LocalBusinessTypeOptionsItem: Codable, Hashable, Sendable {
+  public var label: String
+  public var value: String
+
+  public init(label: String, value: String) {
+    self.label = label
+    self.value = value
   }
 }
 
@@ -1557,16 +1603,65 @@ public struct SiteFilterOptionsHasCustomDomainItem: Codable, Hashable, Sendable 
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum TenantEmailControl: String, Codable, CaseIterable, Hashable, Sendable {
+  case besigner = "besigner"
+  case external = "external"
+  case fixed = "fixed"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct TenantEmailEntry: Codable, Hashable, Sendable {
+  public var authoredIn: String?
+  public var control: TenantEmailControl?
+  public var defaultSubject: String?
+  public var description: String?
+  public var footerReason: String?
+  public var key: String?
+  public var name: String?
+  public var plugin: String?
+  public var pluginId: String?
+  public var requiresFeature: String?
+
+  public init(authoredIn: String? = nil, control: TenantEmailControl? = nil, defaultSubject: String? = nil, description: String? = nil, footerReason: String? = nil, key: String? = nil, name: String? = nil, plugin: String? = nil, pluginId: String? = nil, requiresFeature: String? = nil) {
+    self.authoredIn = authoredIn
+    self.control = control
+    self.defaultSubject = defaultSubject
+    self.description = description
+    self.footerReason = footerReason
+    self.key = key
+    self.name = name
+    self.plugin = plugin
+    self.pluginId = pluginId
+    self.requiresFeature = requiresFeature
+  }
+}
+
 /// The values in contracts.generated.json, keyed as the TypeScript exports are.
 public struct ContractValues: Codable, Hashable, Sendable {
+  public let areaServedMax: Int
+  public let componentListQuery: ListQueryDeclaration
+  public let contentSchemaTypeDefault: ContentSchemaType
+  public let contentSchemaTypeOptions: [ContentSchemaTypeOptionsItem]
+  public let defaultTitlePattern: String
+  public let entryListFilterHeaders: [String: String]
+  public let entryListQuery: ListQueryDeclaration
+  public let entryStatusOptions: [EntryStatusOptionsItem]
   public let formInUse: ListQueryFilter
   public let formLeadRoutingOptions: [FormLeadRoutingOptionsItem]
   public let formListFilterHeaders: [String: String]
   public let formListQuery: ListQueryDeclaration
   public let formScopedSubmissionListQuery: ListQueryDeclaration
   public let formStatusOptions: [FormStatusOptionsItem]
+  public let layoutListQuery: ListQueryDeclaration
   public let listQueryDisjunctions: Int
   public let listQueryIdPath: String
+  public let localBusinessTypeOptions: [LocalBusinessTypeOptionsItem]
   public let mediaAltMaxLength: Int
   public let mediaAltOptions: [ListFilterOption]
   public let mediaDisjunctionLimit: Int
@@ -1596,12 +1691,16 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let orderStatusLabels: [String: String]
   public let orderStatusOptions: [ListFilterOption]
   public let orgSubmissionListQuery: ListQueryDeclaration
+  public let paymentAcceptedMaxLength: Int
+  public let priceRangeMaxLength: Int
   public let productListBase: [ListQueryFilter]
   public let productListHeaders: [String: String]
   public let productListOptions: [String: [ListFilterOption]]
   public let productListQuery: ListQueryDeclaration
   public let productListSelectFields: [String]
   public let scopedSearchJoin: String
+  public let searchEngineVerificationLabels: [String: String]
+  public let searchEngineVerificationMetaNames: [String: String]
   public let siteCardsPageSize: Int
   public let siteFilterHeaders: [String: String]
   public let siteFilterOptions: SiteFilterOptions
@@ -1609,16 +1708,31 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let submissionFilterHeaders: [String: String]
   public let submissionListQuery: ListQueryDeclaration
   public let submissionReadOptions: [ListFilterOption]
+  public let templateKindOptions: [ListFilterOption]
+  public let templateListBase: [ListQueryFilter]
+  public let templateListQuery: ListQueryDeclaration
+  public let tenantEmailCollection: String
+  public let tenantEmails: [TenantEmailEntry]
 
   enum CodingKeys: String, CodingKey {
+    case areaServedMax = "AREA_SERVED_MAX"
+    case componentListQuery = "COMPONENT_LIST_QUERY"
+    case contentSchemaTypeDefault = "CONTENT_SCHEMA_TYPE_DEFAULT"
+    case contentSchemaTypeOptions = "CONTENT_SCHEMA_TYPE_OPTIONS"
+    case defaultTitlePattern = "DEFAULT_TITLE_PATTERN"
+    case entryListFilterHeaders = "ENTRY_LIST_FILTER_HEADERS"
+    case entryListQuery = "ENTRY_LIST_QUERY"
+    case entryStatusOptions = "ENTRY_STATUS_OPTIONS"
     case formInUse = "FORM_IN_USE"
     case formLeadRoutingOptions = "FORM_LEAD_ROUTING_OPTIONS"
     case formListFilterHeaders = "FORM_LIST_FILTER_HEADERS"
     case formListQuery = "FORM_LIST_QUERY"
     case formScopedSubmissionListQuery = "FORM_SCOPED_SUBMISSION_LIST_QUERY"
     case formStatusOptions = "FORM_STATUS_OPTIONS"
+    case layoutListQuery = "LAYOUT_LIST_QUERY"
     case listQueryDisjunctions = "LIST_QUERY_DISJUNCTIONS"
     case listQueryIdPath = "LIST_QUERY_ID_PATH"
+    case localBusinessTypeOptions = "LOCAL_BUSINESS_TYPE_OPTIONS"
     case mediaAltMaxLength = "MEDIA_ALT_MAX_LENGTH"
     case mediaAltOptions = "MEDIA_ALT_OPTIONS"
     case mediaDisjunctionLimit = "MEDIA_DISJUNCTION_LIMIT"
@@ -1648,12 +1762,16 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case orderStatusLabels = "ORDER_STATUS_LABELS"
     case orderStatusOptions = "ORDER_STATUS_OPTIONS"
     case orgSubmissionListQuery = "ORG_SUBMISSION_LIST_QUERY"
+    case paymentAcceptedMaxLength = "PAYMENT_ACCEPTED_MAX_LENGTH"
+    case priceRangeMaxLength = "PRICE_RANGE_MAX_LENGTH"
     case productListBase = "PRODUCT_LIST_BASE"
     case productListHeaders = "PRODUCT_LIST_HEADERS"
     case productListOptions = "PRODUCT_LIST_OPTIONS"
     case productListQuery = "PRODUCT_LIST_QUERY"
     case productListSelectFields = "PRODUCT_LIST_SELECT_FIELDS"
     case scopedSearchJoin = "SCOPED_SEARCH_JOIN"
+    case searchEngineVerificationLabels = "SEARCH_ENGINE_VERIFICATION_LABELS"
+    case searchEngineVerificationMetaNames = "SEARCH_ENGINE_VERIFICATION_META_NAMES"
     case siteCardsPageSize = "SITE_CARDS_PAGE_SIZE"
     case siteFilterHeaders = "SITE_FILTER_HEADERS"
     case siteFilterOptions = "SITE_FILTER_OPTIONS"
@@ -1661,5 +1779,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case submissionFilterHeaders = "SUBMISSION_FILTER_HEADERS"
     case submissionListQuery = "SUBMISSION_LIST_QUERY"
     case submissionReadOptions = "SUBMISSION_READ_OPTIONS"
+    case templateKindOptions = "TEMPLATE_KIND_OPTIONS"
+    case templateListBase = "TEMPLATE_LIST_BASE"
+    case templateListQuery = "TEMPLATE_LIST_QUERY"
+    case tenantEmailCollection = "TENANT_EMAIL_COLLECTION"
+    case tenantEmails = "TENANT_EMAILS"
   }
 }
