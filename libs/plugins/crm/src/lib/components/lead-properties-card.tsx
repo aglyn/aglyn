@@ -66,7 +66,7 @@ import {
 } from './lead-profile-fields'
 import { CrmCallButton, CrmPhoneLink } from './crm-call-actions'
 import { CrmEmailStateChip } from './crm-email-state-chip'
-import { CrmEmailGatewayChip } from './crm-email-check'
+import { CrmAccountLockChip, CrmEmailGatewayChip } from './crm-email-check'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
@@ -546,6 +546,10 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
               hostId={hostId}
               email={String(lead['email'] ?? '')}
               emailState={emailState}
+            />
+            <CrmAccountLockChip
+              hostId={hostId}
+              email={String(lead['email'] ?? '')}
             />
             <CrmRecordChip
               label="Owner"
