@@ -1978,7 +1978,8 @@
       "package": "@aglyn/plugins-logic",
       "register": {
         "console": "registerLogicConsole",
-        "serverDeclarations": "registerLogicServerDeclarations"
+        "serverDeclarations": "registerLogicServerDeclarations",
+        "consoleServerDeclarations": "registerLogicConsoleServerDeclarations"
       },
       "catalog": {
         "order": 15,
@@ -2623,6 +2624,7 @@
             "funnelInsight",
             "funnelsCreate",
             "hostAutomations",
+            "hostBusinessProfile",
             "hostCampaigns",
             "hostComponents",
             "hostEmailTemplates",

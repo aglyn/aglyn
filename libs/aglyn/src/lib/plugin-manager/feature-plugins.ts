@@ -1014,6 +1014,15 @@ export const CONSOLE_WIDGET_SLOTS = {
    * them; nothing a widget proposes reaches the published site before that.
    */
   hostSeo: 'hostSeo',
+  /**
+   * The host setup Business profile section, under the site's profile and
+   * the facts read from its settings (AGL-3661). Props:
+   * {@link ConsoleHostBusinessProfileZoneProps}. What a plugin keeps ABOUT the
+   * business — the preferences an AI plugin learned from the owner's edits —
+   * shown where the owner reads and corrects the profile itself. A widget
+   * here writes only its own records.
+   */
+  hostBusinessProfile: 'hostBusinessProfile',
   /** {@link ConsoleRecordInsightsZoneProps} */
   recordInsights: 'recordInsights',
   /** {@link ConsoleRecordEmailZoneProps} */
@@ -1136,6 +1145,17 @@ export interface ConsoleHostScreenRowZoneProps {
   screenId: string
   /** The page's `kind` as stored. */
   screenKind?: string
+}
+
+/** What the `hostBusinessProfile` zone hands each widget (AGL-3661). */
+export interface ConsoleHostBusinessProfileZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /** The site's subdomain, which is what a console URL names a site by. */
+  host: string | null
 }
 
 /** What the `hostScreens` zone hands each widget (AGL-2907). */

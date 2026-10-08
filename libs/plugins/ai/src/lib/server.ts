@@ -36,6 +36,7 @@ import { registerAiBuildJob } from './jobs/ai-job-build-step'
 import { registerAiBuildCapabilities } from './jobs/ai-build-capabilities'
 import { registerAiWorkflowJob } from './jobs/ai-job-workflow-step'
 import { registerAiLogicJob } from './jobs/ai-job-logic-step'
+import { registerAiEditJob } from './jobs/ai-job-edit-step'
 import { registerAiInsightJob } from './jobs/ai-job-insight-step'
 import { registerAiFigureReaders } from './insights/ai-figure-readers'
 import { registerAiTextGenerator } from './server/plugin-text-generation'
@@ -127,6 +128,9 @@ function registerAiJobKinds(): void {
   // Site functions and variables proposed from a description, and functions
   // explained, as proposals the logic editor opens unsaved (AGL-3603).
   registerAiLogicJob()
+  // A change to a page or a layout the site has, from a description, saved
+  // where no visitor sees it — the Assist edit rung run as a job (AGL-3616).
+  registerAiEditJob()
   // Product copy, and a store's products, categories and discounts from a
   // brief, as proposals the commerce plugin's surfaces apply (AGL-2916).
   registerAiProductsJob()

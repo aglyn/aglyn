@@ -1,0 +1,217 @@
+{
+  "id": "edit-hero-shorter-heading",
+  "kind": "edit",
+  "brief": "Make the home page's hero shorter: a tighter headline, and less space above and below it.",
+  "framing": null,
+  "inventory": null,
+  "edit": {
+    "kind": "screen",
+    "nodes": {
+      "_@_": { "$id": "_@_", "componentId": "div", "parentId": "_@_", "props": {}, "nodes": ["hero", "services"] },
+      "hero": {
+        "$id": "hero",
+        "componentId": "section",
+        "parentId": "_@_",
+        "name": "Hero",
+        "props": { "element": "section", "ariaLabel": "Welcome" },
+        "sx": { "py": 16 },
+        "nodes": ["heroStack"]
+      },
+      "heroStack": {
+        "$id": "heroStack",
+        "componentId": "muiStack",
+        "parentId": "hero",
+        "props": { "spacing": 3 },
+        "nodes": ["heroTitle", "heroLede", "heroCta"]
+      },
+      "heroTitle": {
+        "$id": "heroTitle",
+        "componentId": "muiTypography",
+        "parentId": "heroStack",
+        "props": {
+          "variant": "h1",
+          "children": "Brightside Plumbing: friendly, fast, fairly priced plumbing repairs and installations for every home in the valley"
+        },
+        "nodes": []
+      },
+      "heroLede": {
+        "$id": "heroLede",
+        "componentId": "muiTypography",
+        "parentId": "heroStack",
+        "props": { "variant": "lede", "children": "Same-day visits, upfront quotes and tidy work." },
+        "nodes": []
+      },
+      "heroCta": {
+        "$id": "heroCta",
+        "componentId": "muiButton",
+        "parentId": "heroStack",
+        "props": { "children": "Book a visit", "href": "/contact" },
+        "nodes": []
+      },
+      "services": {
+        "$id": "services",
+        "componentId": "section",
+        "parentId": "_@_",
+        "name": "Services",
+        "props": { "element": "section" },
+        "nodes": ["servicesTitle"]
+      },
+      "servicesTitle": {
+        "$id": "servicesTitle",
+        "componentId": "muiTypography",
+        "parentId": "services",
+        "props": { "variant": "h2", "children": "What we fix" },
+        "nodes": []
+      }
+    }
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference edit written by hand: the headline cut to the business and its promise, and the hero's vertical padding halved; nothing else on the page touched.",
+      "plan": null,
+      "answer": {
+        "summary": "Shorter hero headline and less padding around the hero",
+        "ops": [
+          {
+            "op": "updateProps",
+            "nodeId": "heroTitle",
+            "parentId": "",
+            "index": -1,
+            "props": [{ "name": "children", "value": "Friendly, fast plumbing for the valley" }],
+            "sx": [],
+            "nodes": [],
+            "name": "",
+            "seo": [],
+            "interaction": { "event": "", "everyTime": false, "steps": [] }
+          },
+          {
+            "op": "updateSx",
+            "nodeId": "hero",
+            "parentId": "",
+            "index": -1,
+            "props": [],
+            "sx": [{ "key": "py", "value": "8", "breakpoint": "" }],
+            "nodes": [],
+            "name": "",
+            "seo": [],
+            "interaction": { "event": "", "everyTime": false, "steps": [] }
+          }
+        ]
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 5, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "Names an element the document does not have, which the closed world refuses rather than guesses at.",
+      "answer": {
+        "summary": "Shorter hero headline",
+        "ops": [
+          {
+            "op": "updateProps",
+            "nodeId": "heroHeadline",
+            "parentId": "",
+            "index": -1,
+            "props": [{ "name": "children", "value": "Friendly, fast plumbing for the valley" }],
+            "sx": [],
+            "nodes": [],
+            "name": "",
+            "seo": [],
+            "interaction": { "event": "", "everyTime": false, "steps": [] }
+          }
+        ]
+      },
+      "fails": ["readable", "rules"]
+    },
+    {
+      "why": "Sets a setting the headline does not take, so that change is left out.",
+      "answer": {
+        "summary": "Shorter hero headline in a smaller size",
+        "ops": [
+          {
+            "op": "updateProps",
+            "nodeId": "heroTitle",
+            "parentId": "",
+            "index": -1,
+            "props": [{ "name": "children", "value": "Friendly, fast plumbing for the valley" }],
+            "sx": [],
+            "nodes": [],
+            "name": "",
+            "seo": [],
+            "interaction": { "event": "", "everyTime": false, "steps": [] }
+          },
+          {
+            "op": "updateProps",
+            "nodeId": "heroTitle",
+            "parentId": "",
+            "index": -1,
+            "props": [{ "name": "fontSize", "value": "12" }],
+            "sx": [],
+            "nodes": [],
+            "name": "",
+            "seo": [],
+            "interaction": { "event": "", "everyTime": false, "steps": [] }
+          }
+        ]
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "Asks to publish the change, which a job that saves a draft version never may.",
+      "answer": {
+        "summary": "Shorter hero headline",
+        "publish": true,
+        "ops": [
+          {
+            "op": "updateProps",
+            "nodeId": "heroTitle",
+            "parentId": "",
+            "index": -1,
+            "props": [{ "name": "children", "value": "Friendly, fast plumbing for the valley" }],
+            "sx": [],
+            "nodes": [],
+            "name": "",
+            "seo": [],
+            "interaction": { "event": "", "everyTime": false, "steps": [] }
+          }
+        ]
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "Carries more changes than one edit takes.",
+      "answer": {
+        "summary": "Renamed every layer, again and again",
+        "ops": [
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 1", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 2", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 3", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 4", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 5", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 6", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 7", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 8", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 9", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 10", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 11", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 12", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 13", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 14", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 15", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 16", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 17", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 18", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 19", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 20", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } },
+          { "op": "rename", "nodeId": "heroTitle", "parentId": "", "index": -1, "props": [], "sx": [], "nodes": [], "name": "Headline 21", "seo": [], "interaction": { "event": "", "everyTime": false, "steps": [] } }
+        ]
+      },
+      "fails": ["budget"]
+    }
+  ]
+}

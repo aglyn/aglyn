@@ -16,6 +16,7 @@
  */
 
 import type { PluginApiHandler, PluginApiRequest } from '@aglyn/aglyn/app-utils/api-plugins'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { zapierHookView, type ZapierHookStore } from './store'
 import type { ZapierHookView } from '../model/hook-events'
 
@@ -81,7 +82,10 @@ export function createZapierConsoleHooksHandler(deps: ZapierConsoleDeps): Plugin
       let uid: string
       try {
         uid = (await deps.verifyIdToken(token)).uid
-      } catch {
+      } catch (error) {
+        // Only a refused token is the caller's fault; an Auth outage is ours
+        // and goes to the outer catch as a 500 (AGL-2852).
+        if (!isRefusedIdToken(error)) throw error
         return res.status(401).json({ error: 'Unauthenticated' })
       }
       const roles = await deps.readMemberRoles(hostId)

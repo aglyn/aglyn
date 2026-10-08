@@ -67,6 +67,10 @@ library with alt text, and a measured size. They are written out on
 [How Aglyn AI builds](how-aglyn-ai-builds.md), and every plan and every generated
 document is checked against them before you see it.
 
+Each job also reads the site's [business profile](business-profile.md) — what the
+business does, who it is for, how it sounds and how to reach it — and the edits you
+kept from earlier jobs.
+
 ## The Aglyn AI add-on {#the-add-on}
 
 Aglyn AI is an **add-on**, bought once for the workspace on any paid plan, not per seat
@@ -168,6 +172,7 @@ contact, lead, deal, form submission or list member is read to build a page.
 ## Related
 
 - [How Aglyn AI builds](how-aglyn-ai-builds.md)
+- [Business profile](business-profile.md)
 - [Aglyn Assist](../getting-started/aglyn-assist.md)
 - [AI allotments, usage and model choice](ai-allotments.md)
 - [Add-ons](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai)
