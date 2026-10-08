@@ -77,7 +77,7 @@ export function aiSiteBuildPhase(
 
 /** The creations a scaffold builds before its pages, in its build order, and what each row says. */
 const CREATION_ROWS: ReadonlyArray<{ kind: string; resource: string; label: (name: string) => string }> = [
-  { kind: 'theme-change', resource: 'theme', label: () => 'Choosing your colors' },
+  { kind: 'theme-change', resource: 'theme', label: () => AI_SITE_LOOK_ROW_LABEL },
   { kind: 'layout', resource: 'layout', label: (name) => `Building the header and footer: ${name}` },
   { kind: 'form', resource: 'form', label: (name) => `Building the form: ${name}` },
 ]
@@ -116,7 +116,7 @@ export function aiSiteBuildRows(
           !site || !ledger
             ? row.label
             : ledger.op === 'theme'
-              ? 'Choosing your colors'
+              ? AI_SITE_LOOK_ROW_LABEL
               : ledger.op === 'layout'
                 ? `Building the header and footer: ${ledger.label}`
                 : ledger.op === 'form'
@@ -140,7 +140,15 @@ export function aiSiteBuildRows(
               ? [row.detail, site ? 'The rest of your site keeps building.' : 'The rest keeps building.'].filter(Boolean).join(' ')
               : row.detail,
           ...(row.state === 'active'
-            ? { startedAt: row.startedAt ?? null, hint: ledger?.op === 'page' ? AI_SITE_PAGE_HINT : AI_SITE_ITEM_HINT }
+            ? {
+                startedAt: row.startedAt ?? null,
+                hint:
+                  ledger?.op === 'page'
+                    ? AI_SITE_PAGE_HINT
+                    : site && ledger?.op === 'theme'
+                      ? AI_SITE_LOOK_HINT
+                      : AI_SITE_ITEM_HINT,
+              }
             : {}),
           ...(screen?.sections.length ? { sections: screen.sections.map((section) => section.name) } : {}),
           ...(finished && ledger ? { credits: net } : {}),
@@ -169,6 +177,8 @@ export function aiSiteBuildRows(
   if (!job.plan && job.kind !== 'build') {
     const pagesAsked = typeof job.siteInputs?.['pages'] === 'number' ? Math.round(job.siteInputs['pages'] as number) : 0
     if (job.siteInputs) {
+      // The look is designed first, before the header and footer (AGL-3660).
+      rows.push({ id: 'look', label: AI_SITE_LOOK_ROW_LABEL, state: 'waiting' })
       rows.push({ id: 'layout', label: 'Building the header and footer', state: 'waiting' })
       // A guided start that says where its contact form's submissions go
       // plans that form, built after the layout and before the pages (AGL-3596).
@@ -196,7 +206,11 @@ export function aiSiteBuildRows(
   const stages: Array<{ id: string; label: string; resource: string; sections?: string[] }> = []
   for (const row of CREATION_ROWS) {
     const creation = job.plan?.create.find((entry) => entry.kind === row.kind)
-    if (creation) stages.push({ id: row.resource, label: row.label(creation.name), resource: row.resource })
+    // A job read without its item ledger is one from before the look had a
+    // unit of its own (AGL-3660): its look is a stage only where it built one.
+    if (creation || (row.resource === 'theme' && job.outputs.some((output) => output.resource === 'theme'))) {
+      stages.push({ id: row.resource, label: row.label(creation?.name ?? ''), resource: row.resource })
+    }
   }
   const pages = job.plan?.screens ?? []
   pages.forEach((page, index) => {
@@ -222,6 +236,13 @@ export function aiSiteBuildRows(
   rows.push(...aiSitePublishRow(job, phase))
   return rows
 }
+
+/** The row the site's look is designed on (AGL-3660). */
+export const AI_SITE_LOOK_ROW_LABEL = 'Designing your look'
+
+/** What the look's row says while it runs. */
+export const AI_SITE_LOOK_HINT =
+  'Choosing a base theme, colors, fonts and the style of your buttons, cards and forms for your kind of site. This takes a few seconds.'
 
 /** What the planning row says while it runs. */
 export const AI_SITE_PLAN_HINT =

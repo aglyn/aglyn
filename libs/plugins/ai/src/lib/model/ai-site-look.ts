@@ -28,6 +28,7 @@ import type {
   HostThemeTypographyVariantKey,
 } from '@aglyn/shared-data-types'
 import { writeThemeFonts } from '@aglyn/shared-ui-theme/util/theme-editor-fields'
+import type { AiTool } from '../runtime/ai-runtime'
 import {
   AI_SITE_BASES,
   AI_SITE_CORNERS,
@@ -155,7 +156,7 @@ export const AI_SITE_LOOK_TOOL_NAME = 'submit_site_look'
 const enumOf = (values: readonly string[], description: string) => ({ type: 'string', enum: [...values], description })
 
 /** The strict tool the look is answered with; every field is required and the reader is lenient. */
-export const AI_SITE_LOOK_TOOL = {
+export const AI_SITE_LOOK_TOOL: AiTool = {
   name: AI_SITE_LOOK_TOOL_NAME,
   description: "Submit this website's look: the base theme it starts from and the choices that make it this business's own.",
   strict: true,

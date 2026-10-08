@@ -35,6 +35,7 @@
  * through its units, where each pass needs its own unit's time.
  */
 
+import { AI_SITE_LOOK_BUDGET } from './ai-job-site-look'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AiBuildPlanCreate } from '../model/ai-build-plan'
@@ -415,8 +416,14 @@ describe('a pass needs the time of the step its unit is handed to (AGL-3035)', (
       ...Array.from({ length: AI_SITE_PAGES.min }, (_, index): [AiJobKind, AiJobOutput] => ['page', built('screen', `drftPage0${index}`)]),
       ['email', built('emailScreen', 'drftWelcom')],
     ]
-    // A scaffold's page is one answer in the layout language (AGL-3660), so it needs that pass's time.
-    const unitMinimum = (kind: AiJobKind) => (kind === 'page' ? AI_JOB_PAGE_LANGUAGE_BUDGET.minimumMs : aiJobStepMinimumMs(kind, 'generate'))
+    // A scaffold's page is one answer in the layout language (AGL-3660), so it needs that pass's time,
+    // and its look is one short answer on the fast tier, held to the least any scaffold pass registers.
+    const unitMinimum = (kind: AiJobKind) =>
+      kind === 'page'
+        ? AI_JOB_PAGE_LANGUAGE_BUDGET.minimumMs
+        : kind === 'theme'
+          ? Math.max(AI_SITE_LOOK_BUDGET.minimumMs, aiJobStepMinimumMs('site', 'generate'))
+          : aiJobStepMinimumMs(kind, 'generate')
     const outputs: AiJobOutput[] = []
     for (const [kind, output] of units) {
       expect([kind, aiJobNextStepMinimumMs({ ...job, outputs: [...outputs] })]).toEqual([kind, unitMinimum(kind)])
