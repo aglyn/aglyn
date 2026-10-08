@@ -193,15 +193,22 @@ export const AI_SITE_HOME_BANDS =
   'a hero first, then bands such as services or the offer, about or why us, and testimonials or other social proof, and a closing call to action or contact band last'
 
 /**
- * The fewest sections this site start's home is held to (AGL-3660): five,
- * lowered only where the Free wall leaves fewer — `across` is the sections
- * the Free taste fits across `pages` pages, each other page keeping at least
- * one. `null` across is a paid start, which no wall shares out.
+ * The fewest sections this site start's home is held to (AGL-3660): five, or
+ * 0 — no minimum — where the Free wall cannot pay for a full home beside the
+ * other pages. `across` is the sections the Free taste fits across `pages`
+ * pages, each other page keeping at least one; `null` is a paid start, which
+ * no wall shares out.
+ *
+ * ⛔ NEVER a lowered minimum. A Free guided start creates its site empty and
+ * plans its layout, and the wall then fits 4 sections across two pages. Told
+ * "a home of at least 3" beside that, the live yoga start of 2026-10-08
+ * planned 4 + 3 and then 4 + 2, was refused for the wall twice, and stopped:
+ * a home asked for in bands the wall cannot pay for is a start that fails.
  */
 export function aiSiteHomeMinSections(input: { pages: number; across: number | null }): number {
   if (input.across === null) return AI_SITE_HOME_MIN_SECTIONS
   const others = Math.max(0, Math.floor(input.pages) - 1)
-  return Math.max(1, Math.min(AI_SITE_HOME_MIN_SECTIONS, input.across - others))
+  return input.across - others >= AI_SITE_HOME_MIN_SECTIONS ? AI_SITE_HOME_MIN_SECTIONS : 0
 }
 
 /** Whether a planned page is the site's home: the one at `/`. */

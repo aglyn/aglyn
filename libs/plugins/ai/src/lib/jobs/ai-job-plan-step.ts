@@ -262,7 +262,7 @@ export function aiPlanSiteLines(
   }
   // A new site is a full website (AGL-3660): its home is planned as one, not
   // left to a ceiling the outline is free to stay far under.
-  if (!pages.some((page) => !page.replaceable && aiSitePlanIsHome(page))) {
+  if (home.min > 0 && !pages.some((page) => !page.replaceable && aiSitePlanIsHome(page))) {
     lines.push(`The home page at / reads as a full website: at least ${home.min} sections — ${AI_SITE_HOME_BANDS}.`)
   }
   // The kind of site the person picked (AGL-3660): the pages it usually has.
@@ -387,7 +387,7 @@ function planViolations(
   ops: AiBuildOps | null = null,
   home: { min: number; across: number | null } | null = null,
 ): (plan: AiBuildPlan) => AiDoctrineViolation[] {
-  const thinHome = home ? aiSiteThinHomeCheck(home) : null
+  const thinHome = home && home.min > 0 ? aiSiteThinHomeCheck(home) : null
   return (plan) => {
     // A build's plan is held to the operations this site has (AGL-3616):
     // an unknown op, arguments its schema refuses, a cycle or a reference

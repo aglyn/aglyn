@@ -431,15 +431,18 @@ const YOGA_FULL: AiBuildPlan = { reuse: reuseLayout, create: [], screens: [YOGA_
 const yogaJob = () => siteJob({ businessType: 'a yoga studio' })
 
 describe('a site start’s home page reads as a full website (AGL-3660)', () => {
-  it('holds a home to five sections, lowered only where the Free wall shares out fewer', () => {
+  it('holds a home to five sections, or to none where the Free wall cannot pay for five beside the other page', () => {
     expect(AI_SITE_HOME_MIN_SECTIONS).toBe(5)
     expect(aiSiteHomeMinSections({ pages: 5, across: null })).toBe(5)
-    // A provisioned site keeps its layout: the wall fits 8 across two pages.
+    // A site that keeps its layout: the wall fits 8 across two pages.
     expect(aiSiteHomeMinSections({ pages: 2, across: 8 })).toBe(5)
-    // A site with no layout builds one first, and the wall fits 4: the other page keeps one.
-    expect(aiSiteHomeMinSections({ pages: 2, across: 4 })).toBe(3)
+    expect(aiSiteHomeMinSections({ pages: 2, across: 6 })).toBe(5)
+    // A guided start's empty site plans its layout, and the wall fits 4: no
+    // minimum, never a lowered one — the live yoga start of 2026-10-08 was
+    // told "at least 3" there and was refused for the wall twice.
+    expect(aiSiteHomeMinSections({ pages: 2, across: 4 })).toBe(0)
     expect(aiSiteHomeMinSections({ pages: 1, across: 9 })).toBe(5)
-    expect(aiSiteHomeMinSections({ pages: 2, across: 0 })).toBe(1)
+    expect(aiSiteHomeMinSections({ pages: 2, across: 0 })).toBe(0)
   })
 
   it('reads the home rule from the same wall figure the Free sentence quotes', () => {
@@ -448,7 +451,7 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
     expect(aiSitePlanHomeRule(NEW_SITE, free)).toEqual({ min: 5, across })
     const bare = { ...NEW_SITE, layouts: [] }
     const acrossBare = aiFreeSiteSectionsWithin({ layouts: 1, pages: 2 }, FREE_AI_TASTE_CREDITS_PER_MONTH)
-    expect(aiSitePlanHomeRule(bare, free)).toEqual({ min: Math.min(5, acrossBare - 1), across: acrossBare })
+    expect(aiSitePlanHomeRule(bare, free)).toEqual({ min: 0, across: acrossBare })
     const paid = aiSitePlanCapabilities(siteJob({ pages: 5 }), PAID)
     expect(aiSitePlanHomeRule(NEW_SITE, paid)).toEqual({ min: 5, across: null })
   })
@@ -466,6 +469,25 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
     const paid = aiPlanSiteLines(siteJob({ pages: 5 }), NEW_SITE, aiSitePlanCapabilities(siteJob({ pages: 5 }), PAID)).join('\n')
     expect(paid).toContain('at least 5 sections')
     expect(aiPlanSiteLines(yogaJob(), EDITED_SITE, free).join('\n')).not.toContain('reads as a full website')
+  })
+
+  it('asks an empty Free site — whose wall fits 4 — for no home minimum, and re-asks nothing for one', async () => {
+    const empty = emptyAiSiteInventory('host-1')
+    const free = aiSitePlanCapabilities(yogaJob(), FREE) as AiPlanCapabilities
+    expect(aiPlanSiteLines(yogaJob(), empty, free).join('\n')).not.toContain('reads as a full website')
+    mockRunAiRequest.mockReset()
+    const twoAndTwo: AiBuildPlan = {
+      reuse: [],
+      create: [{ kind: 'layout', name: 'Main layout', why: 'the site has none', duplicateOf: null, fields: ['header', 'navigation', 'footer'] }],
+      screens: [
+        { ...YOGA_THIN_HOME, layout: 'new:Main layout' },
+        { ...YOGA_CLASSES, layout: 'new:Main layout' },
+      ],
+    }
+    mockRunAiRequest.mockResolvedValueOnce(toolAnswer(twoAndTwo)).mockResolvedValueOnce(toolAnswer(twoAndTwo))
+    await planStepFor(FREE_ORG, FREE, yogaJob(), empty)
+    const sent = mockRunAiRequest.mock.calls.map((call) => String((call[0] as SentRequest).messages.at(-1)?.content))
+    expect(sent.some((content) => content.includes('The home page has'))).toBe(false)
   })
 
   it('names a thin home, and no home where the plan builds none at /', () => {

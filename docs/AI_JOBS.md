@@ -2802,9 +2802,14 @@ the element budget its request asks for.
   the plan step re-asks a FIRST answer whose home is under it (`plan-thin-home`,
   `aiSiteThinHomeCheck`). A second answer still under it is kept: a four-section home
   is a site, a stopped start is none. On the Free taste the minimum is shared out of the
-  wall's own section count (`aiSitePlanHomeRule`): 5 of the 8 a provisioned site fits
-  across its two pages, lowered only where the wall fits fewer, so the wall's worst case
-  does not move. No home is held where the owner's own home at `/` stays.
+  wall's own section count (`aiSitePlanHomeRule`): 5 of the 8 a site that keeps its layout
+  fits across two pages, so the wall's worst case does not move. ⛔ Where the wall cannot
+  pay for five beside the other page there is NO minimum, never a lowered one: a Free
+  guided start creates its site empty and plans its layout, the wall then fits 4, and told
+  "at least 3" the live yoga start of 2026-10-08 planned 4 + 3, then 4 + 2, and stopped on
+  the wall twice. That start's home stays as thin as the wall's per-section figures make
+  it until the wall is re-derived for language pages (one answer a page, not a pass a
+  section). No home is held where the owner's own home at `/` stays.
 - **Every device width, and an axe audit.** `libs/plugins/ai/scripts/record-ai-page-axe.mts`
   (AGL-3020) assembles each golden page the page step builds from a site — the ten
   briefs, both Free pages and the two-person page — through the step's own section
