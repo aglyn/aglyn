@@ -42,9 +42,13 @@ import type { ListQuerySort } from '@aglyn/shared-util-tools/list-query/list-que
  *     <ListTable columns={…} rows={columnSort.rows} columnSort={columnSort} … />
  */
 
-/** How a column's header sorts, as `ListTable` reads it. */
+/**
+ * How a column's header sorts, as `ListTable` reads it: by the query, over
+ * the loaded page (and says so), or over a list loaded WHOLE (`complete`),
+ * where a value sort orders every row and is exact.
+ */
 export interface ListColumnSortColumn {
-  mode: 'query' | 'page'
+  mode: 'query' | 'page' | 'loaded'
   sortingOrder: GridSortDirection[]
 }
 
@@ -96,6 +100,14 @@ export interface ListColumnSortOptions<Row> {
   pageSorts?: Readonly<Record<string, ListPageSort<Row>>>
   /** Headers, for the page-sort notice: field → label. */
   headers?: Readonly<Record<string, string>>
+  /**
+   * The rows are the WHOLE list, not a page of it (strategy 4) — a roster
+   * read in full and paged by the grid's own footer. A `pageSorts` column
+   * then orders every row, so its header is exact: mode `loaded`, no "this
+   * page" description and no notice. Lets a fully loaded list sort its own
+   * columns and a plugin column's comparator through ONE order.
+   */
+  complete?: boolean
 }
 
 type Active<Row> =
@@ -107,7 +119,16 @@ const same = (a: ListQuerySort | null | undefined, b: ListQuerySort | null | und
   Boolean(a && b && a.path === b.path && a.direction === b.direction)
 
 export function useListColumnSort<Row>(options: ListColumnSortOptions<Row>): ListColumnSort<Row> {
-  const { sorts, defaultSort = null, orderBy, rows, pageSorts, headers, onSortChange } = options
+  const {
+    sorts,
+    defaultSort = null,
+    orderBy,
+    rows,
+    pageSorts,
+    headers,
+    onSortChange,
+    complete = false,
+  } = options
   const [heldSort, setHeldSort] = useState<ListQuerySort | null>(defaultSort)
   const controlled = options.sort !== undefined
   const querySort = controlled ? (options.sort ?? null) : heldSort
@@ -132,10 +153,13 @@ export function useListColumnSort<Row>(options: ListColumnSortOptions<Row>): Lis
       if (entry[0] !== defaultSort?.column) entry[1].sortingOrder.push(null)
     }
     for (const field of Object.keys(pageSorts ?? {})) {
-      byField[field] ??= { mode: 'page', sortingOrder: ['asc', 'desc', null] }
+      byField[field] ??= {
+        mode: complete ? 'loaded' : 'page',
+        sortingOrder: ['asc', 'desc', null],
+      }
     }
     return byField
-  }, [sorts, pageSorts, defaultSort])
+  }, [sorts, pageSorts, defaultSort, complete])
 
   const shown = orderBy ?? querySort
   const sortModel = useMemo<GridSortModel>(() => {
@@ -149,7 +173,8 @@ export function useListColumnSort<Row>(options: ListColumnSortOptions<Row>): Lis
     (model: GridSortModel) => {
       const [first] = model
       const direction = first?.sort
-      if (first && direction && columns[first.field]?.mode === 'page') {
+      const mode = first ? columns[first.field]?.mode : undefined
+      if (first && direction && (mode === 'page' || mode === 'loaded')) {
         // The query's order stands: a page sort re-reads nothing.
         setActive({ kind: 'page', field: first.field, direction })
         return
@@ -187,10 +212,10 @@ export function useListColumnSort<Row>(options: ListColumnSortOptions<Row>): Lis
 
   const notices = useMemo(
     () =>
-      active?.kind === 'page'
+      active?.kind === 'page' && !complete
         ? [listPageSortNotice(headers?.[active.field] ?? active.field)]
         : [],
-    [active, headers],
+    [active, headers, complete],
   )
 
   return {

@@ -103,7 +103,7 @@ credentials. Signing out anywhere retires the shared session everywhere.
 
 ## Automatic sign-out after inactivity
 
-For security, an idle console session expires after **1 hour of no activity** (in any open
+For security, an idle console session expires after **2 hours of no activity** (in any open
 tab, on any of your workspace subdomains). When that happens you're returned to the
 sign-in page, and the page you were on is preserved — after signing back in you resume
 exactly where you left off.
@@ -118,7 +118,7 @@ sign-out — yours, or a staff-initiated revocation — retires the shared sessi
 
 :::note Self-hosting
 The idle window is configurable via the `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES`
-environment variable (default `60`; set `0` to disable).
+environment variable (default `120`; set `0` to disable).
 :::
 
 ## When the console asks you to sign in again

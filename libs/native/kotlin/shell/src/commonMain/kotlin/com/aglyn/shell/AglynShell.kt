@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
 import com.aglyn.core.AuthState
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.ui.AglynIcons
@@ -96,12 +97,16 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
   val destinations = buildList {
     add(NavDestination(ShellNavigator.HOME, "Home", AglynIcons.named("home")))
     if (wide) {
-      for ((screen, icon) in topLevel) add(NavDestination(ShellNavigator.screenKey(screen.id), screen.title, AglynIcons.named(icon)))
+      // The Mac app's order: Home and Notifications, the site's areas under its name, then Settings.
+      add(NavDestination(ShellNavigator.NOTIFICATIONS, "Notifications", AglynIcons.named("notifications")))
+      topLevel.forEachIndexed { i, (screen, icon) ->
+        add(NavDestination(ShellNavigator.screenKey(screen.id), screen.title, AglynIcons.named(icon), section = if (i == 0) (workspace.site?.name ?: "Site") else null))
+      }
     } else {
       add(NavDestination(ShellNavigator.MORE, "Apps", AglynIcons.named("apps")))
     }
-    add(NavDestination(ShellNavigator.NOTIFICATIONS, "Notifications", AglynIcons.named("notifications")))
-    add(NavDestination(ShellNavigator.SETTINGS, "Settings", AglynIcons.named("settings")))
+    if (!wide) add(NavDestination(ShellNavigator.NOTIFICATIONS, "Notifications", AglynIcons.named("notifications")))
+    add(NavDestination(ShellNavigator.SETTINGS, "Settings", AglynIcons.named("settings"), section = if (wide) "" else null))
   }
   // A top-level key that is not a destination at this width moves to its equivalent.
   val keys = destinations.map { it.key }
@@ -125,12 +130,22 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
 
   BackHandler(enabled = navigator.stack.isNotEmpty()) { navigator.back() }
 
-  AglynNavigationSuite(destinations, navigator.top, onSelect = navigator::select) {
+  val inDrawer = widthClass == WidthClass.EXPANDED || widthClass == WidthClass.LARGE
+  AglynNavigationSuite(
+    destinations, navigator.top, onSelect = navigator::select,
+    drawerHeader = {
+      AglynLogo(
+        Modifier.padding(horizontal = 24.dp, vertical = 16.dp).height(28.dp).semantics { heading() },
+        contentDescription = services.config.brandName,
+      )
+    },
+    drawerFooter = { WorkspaceFooter(workspace) { navigator.push(Route.Switcher) } },
+  ) {
     val route = navigator.current
     val title = when (route) {
       is Route.Screen -> services.registry.screen(route.screenId)?.title ?: "Not found"
       is Route.Besigner -> "Besigner"
-      Route.Switcher -> "Switch site"
+      Route.Switcher -> "Switch workspace or site"
       Route.NotificationSettings -> "Notifications"
       null -> destinations.firstOrNull { it.key == navigator.top }?.label ?: ""
     }
@@ -140,7 +155,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
         TopAppBar(
           title = {
             if (route == null && navigator.top == ShellNavigator.HOME) {
-              AglynLogo(Modifier.height(28.dp), contentDescription = services.config.brandName)
+              if (!inDrawer) AglynLogo(Modifier.height(28.dp), contentDescription = services.config.brandName)
             } else {
               Text(title)
             }
@@ -153,7 +168,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
             }
           },
           actions = {
-            if (route == null && navigator.top != ShellNavigator.HOME) {
+            if (route == null && navigator.top != ShellNavigator.HOME && !inDrawer) {
               WorkspaceChip(workspace) { navigator.push(Route.Switcher) }
             }
           },
