@@ -36,6 +36,14 @@
  *    answers; the last one is taken). Its plan is read from `--plans <json>`,
  *    `{ "<key>": [{ "title", "slug", "sections": [{ "name", "items" }] }] }`.
  *
+ * A store's catalog and a blog's posts (AGL-3676) are the site's own records,
+ * which the sections that show them list: `--records <json>` names them,
+ * `{ "products": [catalog item…], "posts": { "slug", "entries": [entry…] } }`
+ * (a guided-start run that recorded `posts` lists those without one), and
+ * the pages are compiled with the listings a guided start hands its units —
+ * the cart in a selling site's header among them — and each output carries
+ * the records, so a shot renders the real cards.
+ *
  * Each page is held to the page step's own check (`aiLayoutPageCheck`: the
  * reader, the compiler, the store, the copy check and the doctrine), and its
  * empty picture slots are filled from the starter photos as the page step
@@ -82,7 +90,9 @@ async function main(): Promise<void> {
   const kindOverride = option(argv, '--kind')
   const nameOverride = option(argv, '--name')
   const plansFile = option(argv, '--plans')
-  const valued = new Set(['--out', '--kind', '--name', '--plans'])
+  const recordsFile = option(argv, '--records')
+  const givenRecords: Dict | null = recordsFile ? JSON.parse(readFileSync(resolve(recordsFile), 'utf8')) : null
+  const valued = new Set(['--out', '--kind', '--name', '--plans', '--records'])
   const inputs = argv.filter((arg, index) => !valued.has(arg) && !valued.has(argv[index - 1] ?? ''))
   mkdirSync(resolve(out), { recursive: true })
 
@@ -103,6 +113,8 @@ async function main(): Promise<void> {
   const kinds = await load('libs/plugins/ai/src/lib/model/ai-site-kinds.ts')
   const look = await load('libs/plugins/ai/src/lib/model/ai-site-look.ts')
   const inventoryMod = await load('libs/plugins/ai/src/lib/model/ai-site-inventory.ts')
+  // Absent from a compiler that lists no records (before AGL-3676): its pages compile as they did.
+  const listingsMod = await load('libs/plugins/ai/src/lib/layout-language/ai-layout-listings.ts').catch(() => null)
 
   const FORM_ID = 'form-contact'
   const LAYOUT_ID = 'layout-main'
@@ -118,6 +130,7 @@ async function main(): Promise<void> {
     frame?: unknown
     layoutNodes?: Dict
     form?: { rootId: string; nodes: Dict } | null
+    records?: Dict | null
   }) => {
     const inventory = {
       ...inventoryMod.emptyAiSiteInventory('host-recorded'),
@@ -125,7 +138,34 @@ async function main(): Promise<void> {
       forms: [{ id: FORM_ID, name: 'Contact form', fields: ['Name', 'Email', 'Message'] }],
       components: [],
     }
-    const sitePages = site.pages.map((page) => ({ id: page.id, label: page.title, slug: page.slug }))
+    const records = listingsMod ? (site.records ?? null) : null
+    const posts = records?.['posts'] as { slug: string; entries: Dict[] } | undefined
+    const products = records?.['products'] as Dict[] | undefined
+    const sitePages = [
+      ...site.pages.filter((page) => page.slug === '/').map((page) => ({ id: page.id, label: page.title, slug: page.slug })),
+      // A blog's posts are linked by the header, second after Home, as a guided start links them.
+      ...(posts ? [{ id: 'aiSiteBlog', label: 'Blog', slug: `/${posts.slug}`, href: `/${posts.slug}` }] : []),
+      ...site.pages.filter((page) => page.slug !== '/').map((page) => ({ id: page.id, label: page.title, slug: page.slug })),
+    ]
+    // The site's listings, as a guided start hands them to its units (AGL-3676).
+    const screens = site.pages.map((page) => ({ id: page.id, title: page.title, slug: page.slug, sections: page.sections }))
+    const listings = [
+      ...(products?.length
+        ? [{ kind: 'products', name: 'the shop', records: products.map((item) => item['name']), placements: listingsMod?.aiLayoutListingPlacements('products', screens) }]
+        : []),
+      ...(posts
+        ? [
+            {
+              kind: 'posts',
+              name: 'the blog',
+              records: posts.entries.map((entry) => entry['title']),
+              href: `/${posts.slug}`,
+              collectionSlug: posts.slug,
+              placements: listingsMod?.aiLayoutListingPlacements('posts', screens),
+            },
+          ]
+        : []),
+    ]
     const job = (id: string) => ({
       $id: id,
       brief: site.facts,
@@ -136,9 +176,25 @@ async function main(): Promise<void> {
         sitePages,
         [language.AI_LAYOUT_LANGUAGE_INPUT]: true,
         [language.AI_LAYOUT_FORM_PAGE_INPUT]: null,
+        ...(listings.length && listingsMod ? { [listingsMod.AI_LAYOUT_LISTINGS_INPUT]: listings } : {}),
       },
     })
     let layoutNodes = site.layoutNodes ?? null
+    // A brief's frame is stored compiled: the cart a selling site's header
+    // carries is put where today's frame compiler puts it, before the menu button.
+    if (layoutNodes && products?.length && !Object.values(layoutNodes).some((node) => (node as Dict)['componentId'] === 'cart')) {
+      const toggle = Object.entries(layoutNodes).find(([, node]) => (node as Dict)['componentId'] === 'muiDrawerToggle')
+      const row = toggle && Object.entries(layoutNodes).find(([, node]) => ((node as Dict)['nodes'] ?? []).includes(toggle[0]))
+      if (toggle && row) {
+        const children = [...((row[1] as Dict)['nodes'] as string[])]
+        children.splice(children.indexOf(toggle[0]), 0, 'recordedCart')
+        layoutNodes = {
+          ...layoutNodes,
+          recordedCart: { $id: 'recordedCart', type: 'node', componentId: 'cart', pluginId: 'commerce', parentId: row[0], props: { variant: 'button' }, sx: { flexShrink: 0 } },
+          [row[0]]: { ...(row[1] as Dict), nodes: children },
+        }
+      }
+    }
     if (site.frame) {
       const unit = job(`job-recorded-${site.key}-layout`)
       const targets = frameJob.aiLayoutFrameTargets(unit, inventory)
@@ -182,6 +238,9 @@ async function main(): Promise<void> {
       })
       // The page step's last answer has its gaps taken out rather than refused.
       let checked = check(page.answer)
+      if (!checked.value) {
+        console.log(`ASKED     ${site.key} ${page.title}: ${checked.violations.map((v: Dict) => `${v.code} ${v.message}`).join(' | ')}`)
+      }
       for (let again = 1; again < 3 && !checked.value; again += 1) checked = check(page.answer)
       if (!checked.value) {
         console.log(`REFUSED   ${site.key} ${page.title}: ${checked.violations.map((v: Dict) => `${v.code} ${v.message}`).join(' | ')}`)
@@ -204,6 +263,7 @@ async function main(): Promise<void> {
             page: pictured,
             style: site.style,
             ...(site.form ? { forms: { [FORM_ID]: site.form } } : {}),
+            ...(records ? { records } : {}),
           },
           null,
           1,
@@ -268,7 +328,25 @@ async function main(): Promise<void> {
         form = { rootId: `${FORM_ID}__${parsed.rootId}`, nodes }
       }
       const style = look.aiSiteStyleFor({ kind, answer: look.aiReadSiteLook(run['look']), seed: look.aiSiteSeed(`recorded:${key}`) })
-      await compileSite({ key, name, kind, style, facts, pages, frame: run['frame'], form })
+      // The posts a run recorded, as the blog serves them: each with a starter cover and the site's byline.
+      const covers = Object.values(pictures.AI_LAYOUT_STARTER_PHOTOS as Record<string, { src: string }>).map((photo) => photo.src)
+      const recordedPosts = Array.isArray(run['posts']) && run['posts'].length
+        ? {
+            slug: 'blog',
+            entries: (run['posts'] as Dict[]).map((post, index) => ({
+              $id: `post-${index}`,
+              title: post['title'],
+              slug: slugKey(String(post['title'])),
+              excerpt: post['excerpt'],
+              authorName: name,
+              coverImage: covers[(index + 2) % covers.length],
+              status: 'published',
+              publishedAt: { seconds: Date.UTC(2026, 9, 6 - index) / 1000 },
+            })),
+          }
+        : null
+      const records = givenRecords ?? (recordedPosts ? { posts: recordedPosts } : null)
+      await compileSite({ key, name, kind, style, facts, pages, frame: run['frame'], form, records })
       continue
     }
     // A layout-eval brief: <dir>/<key>.
@@ -310,6 +388,7 @@ async function main(): Promise<void> {
         ]),
       ),
       form: null,
+      records: givenRecords,
     })
   }
 }

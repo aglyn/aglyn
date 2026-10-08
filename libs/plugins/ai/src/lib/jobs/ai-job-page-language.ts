@@ -23,7 +23,8 @@ import {
   aiHomeScreenIds,
   type AiSiteInventory,
 } from '../model/ai-site-inventory'
-import { aiCompileLayoutPage } from '../layout-language/ai-layout-compiler'
+import { AI_LAYOUT_POST_ADDRESS_TOKENS, aiCompileLayoutPage } from '../layout-language/ai-layout-compiler'
+import { aiLayoutListingAt, aiLayoutListingsOf } from '../layout-language/ai-layout-listings'
 import {
   AI_LAYOUT_LANGUAGE_TEXT,
   AI_LAYOUT_PAGE_TOOL,
@@ -228,7 +229,26 @@ export function aiLayoutPageTargets(input: {
       props: component.props,
     })),
     facts: aiLayoutFacts(job),
+    // The site's catalog and blog, and the sections that list them (AGL-3676).
+    listings: aiLayoutListingsOf(job.inputs),
   }
+}
+
+/**
+ * The page check's context with what a section listing the blog's posts
+ * binds (AGL-3676): each post's card links its post and shows its cover by
+ * the tokens the page fills per post, which a page's store admits whole only
+ * where a listing places them.
+ */
+export function aiLayoutListingContext(
+  context: AiDoctrineTreeContext,
+  targets: AiLayoutTargets,
+): AiDoctrineTreeContext {
+  const listsPosts = (targets.listings ?? []).some(
+    (listing) => listing.kind === 'posts' && listing.placements.some((placement) => placement.screenId === targets.pageId),
+  )
+  if (!listsPosts) return context
+  return { ...context, bindingTokens: [...new Set([...(context.bindingTokens ?? []), ...AI_LAYOUT_POST_ADDRESS_TOKENS])] }
 }
 
 /** The page's user turn: the page, the brief, the plan, its sections and where its links may go. */
@@ -246,6 +266,12 @@ export function aiLayoutPagePrompt(input: {
     const places = section.uses.length
       ? `; places ${section.uses.join(', ')}`
       : ''
+    // A section the site's records fill (AGL-3676): the platform places them,
+    // so the design writes the words around them and no group for them.
+    const listed = aiLayoutListingAt(targets.listings ?? [], targets.pageId, index)
+    if (listed) {
+      return `${index + 1}. "${section.name}"${places}; the platform lists ${listed.listing.name}'s ${listed.listing.kind} here itself, with their photos and links: write only its heading and a line about them, and no cards, list or images for them`
+    }
     const items = section.items ? `; shows ${section.items} items` : ''
     return `${index + 1}. "${section.name}"${places}${items}`
   })
@@ -403,6 +429,7 @@ export function aiLayoutPageCheck(
 ): AiGenerationCheck<AiLayoutPageBuilt> {
   const kept: Array<AiLayoutSection | null> = input.kept ?? input.screen.sections.map(() => null)
   const fills = input.only ?? input.screen.sections.map((_, index) => index)
+  const context = aiLayoutListingContext(input.context, input.targets)
   let answers = 0
   return (answer) => {
     // The last answer a generation takes has its gaps taken out rather than asked about again.
@@ -448,7 +475,7 @@ export function aiLayoutPageCheck(
     const stored = aiLayoutStoredTree(
       compiled.tree,
       'screen',
-      input.context,
+      context,
       input.sectionIds,
     )
     if (stored.ok === false) {
@@ -490,7 +517,7 @@ export function aiLayoutPageCheck(
       { rootId: CANVAS_ROOT_ELEMENT_ID, nodes },
       'page',
       {
-        ...input.context,
+        ...context,
         scrollTargetIds: input.sectionIds,
         // The layout language draws its own picture cards (AGL-3660).
         repeatsCompiled: true,

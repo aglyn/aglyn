@@ -99,7 +99,9 @@ import {
   AI_SITE_POSTS,
   AI_SITE_POSTS_LABEL,
   AI_SITE_PRODUCTS_LABEL,
+  AI_SITE_PRODUCTS_PRICE_NOTE,
 } from './ai-job-site-content'
+import { aiLayoutListingsOf } from '../layout-language/ai-layout-listings'
 import {
   AI_JOB_STEP_MAX_PASSES,
   aiJobStepMaxPasses,
@@ -1385,6 +1387,27 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
     expect(seen[0]).toMatchObject({ $id: 'job-1-products', kind: 'products', inputs: { target: 'catalog' } })
     expect(seen[0].brief.split('\n').pop()).toBe("Propose between 3 and 6 products: the store's first ones.")
     expect(outcome.item).toMatchObject({ slot: 'products', status: 'succeeded', outputs: ['job-1-products-0'] })
+    // The row says what is left before the store sells (AGL-3676).
+    expect(outcome.item?.note).toBe(AI_SITE_PRODUCTS_PRICE_NOTE)
+  })
+
+  it('hands each page the store’s catalog and the blog to list, and a selling site’s layout its cart (AGL-3676)', () => {
+    const plan = confirmedPlan({ create: [LAYOUT] })
+    const units = aiSiteJobUnits(plan, { content: 'products' })
+    const page = units.find((unit) => unit.kind === 'page')
+    const layout = units.find((unit) => unit.kind === 'layout')
+    if (!page || !layout) throw new Error('a page and a layout are units')
+    const listingsOf = (job: AiJob) => aiLayoutListingsOf(job.inputs)
+    const store = aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, outputs: [LOOK, output('product', 'p0', 'Fig candle')] }), page, new Map())
+    expect(listingsOf(store)).toEqual([expect.objectContaining({ kind: 'products', records: ['Fig candle'] })])
+    const blog = aiSiteUnitJob(siteJob({ plan, inputs: blogInputs, outputs: [LOOK, entry('a', 'Centering clay')] }), page, new Map())
+    expect(listingsOf(blog)).toEqual([expect.objectContaining({ kind: 'posts', href: '/blog', collectionSlug: 'blog' })])
+    // Built before the products, the layout is told the store sells while its ledger owes them.
+    const owed = units.map((unit) => ({ slot: unit.slot, op: unit.kind, label: unit.label, status: 'pending' }))
+    const sells = aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, items: owed as never }), layout, aiSiteBuiltRefs(units, []))
+    expect(listingsOf(sells).map((listing) => listing.kind)).toEqual(['products'])
+    const skipped = owed.map((row) => (row.slot === 'products' ? { ...row, status: 'skipped' } : row))
+    expect(listingsOf(aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, items: skipped as never }), layout, aiSiteBuiltRefs(units, [])))).toEqual([])
   })
 
   it('tells each page the posts and the products built before it, by name', () => {

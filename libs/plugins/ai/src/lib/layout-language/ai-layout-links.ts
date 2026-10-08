@@ -16,6 +16,7 @@
  */
 
 import { aiPageLinkSection } from '../runtime/ai-page-links'
+import type { AiLayoutListing } from './ai-layout-listings'
 
 /**
  * Where a link the layout language names goes (AGL-3660), resolved by code to
@@ -59,6 +60,12 @@ export interface AiLayoutTargets {
   }[]
   /** Every word the job was given: the brief, the site's answers, its profile. */
   facts: string
+  /**
+   * The kinds of record the site keeps that its pages show — its catalog,
+   * its blog — and the sections that place each (AGL-3676,
+   * `ai-layout-listings.ts`). Absent or empty, a page shows only its words.
+   */
+  listings?: readonly AiLayoutListing[]
 }
 
 /** Where a link resolved to. */

@@ -71,6 +71,7 @@ import {
   aiLayoutSitePagesOfPlan,
 } from './ai-job-layout-site-pages'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
+import { AI_LAYOUT_LISTINGS_INPUT } from '../layout-language/ai-layout-listings'
 import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import { aiJobPublishesSite, aiPublishGuidedSite } from './ai-site-publish'
 import {
@@ -79,10 +80,12 @@ import {
   AI_SITE_POSTS,
   AI_SITE_POSTS_LABEL,
   AI_SITE_PRODUCTS_LABEL,
+  AI_SITE_PRODUCTS_PRICE_NOTE,
   aiPublishSitePosts,
   aiSiteContentBriefLines,
   aiSiteContentPart,
   aiSiteContentRefusal,
+  aiSiteListings,
   aiSiteProductsBriefLine,
   createAiSiteProductsRunner,
   runAiSitePostsUnit,
@@ -624,6 +627,14 @@ export function aiSiteUnitJob(
       AI_LAYOUT_SITE_PAGES_MAX,
     )
     if (pages.length) unitInputs[AI_LAYOUT_SITE_PAGES_INPUT] = pages
+    // The store's catalog and the blog, listed by the sections that show them,
+    // and the cart in a selling site's header (AGL-3676).
+    const listings = aiSiteListings({
+      outputs: job.outputs ?? [],
+      screens: plan.screens,
+      sells: aiSiteSellsProducts(job),
+    })
+    if (listings.length) unitInputs[AI_LAYOUT_LISTINGS_INPUT] = listings
   }
   // A site's pages and its layout are designed in the layout language and
   // compiled (AGL-3660), and a page is told which page places the site's form.
@@ -678,6 +689,15 @@ export function aiSiteUnitJob(
  */
 export function aiSiteWritesPosts(job: Pick<AiJob, 'items'>): boolean {
   return (job.items ?? []).some((row) => row.slot === 'posts' && row.status !== 'skipped' && row.status !== 'failed')
+}
+
+/**
+ * Whether this site start sells (AGL-3676): its ledger owes the store's first
+ * products and has not given up on them, so the layout built before them
+ * carries the cart.
+ */
+export function aiSiteSellsProducts(job: Pick<AiJob, 'items'>): boolean {
+  return (job.items ?? []).some((row) => row.slot === 'products' && row.status !== 'skipped' && row.status !== 'failed')
 }
 
 /**
@@ -1071,7 +1091,9 @@ export function createAiJobSiteStep(
         slot: unit.slot,
         status: degraded ? 'degraded' : 'succeeded',
         outputs: outcome.outputs.map((output) => output.id),
-        note,
+        // A store's products are listed before they are priced (AGL-3676):
+        // the row says what is left before the store sells.
+        note: unit.kind === 'products' && outcome.outputs.length ? AI_SITE_PRODUCTS_PRICE_NOTE : note,
         ...(degraded ? { degradedBy: degradation.degradedBy } : {}),
       },
       spent,

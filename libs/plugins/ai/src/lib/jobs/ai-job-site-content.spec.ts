@@ -48,11 +48,14 @@ import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import {
   AI_SITE_BLOG_NAME,
   AI_SITE_CONTENT_INPUT,
+  AI_SITE_PRODUCT_NOTE,
   AI_SITE_PRODUCTS,
   aiPublishSitePosts,
   aiSiteContentBriefLines,
   aiSiteContentPart,
   aiSiteContentRefusal,
+  aiSiteListings,
+  aiSiteProductPhotos,
   aiSiteProductsBriefLine,
   createAiSitePostsRunner,
   createAiSiteProductsRunner,
@@ -219,18 +222,27 @@ describe('the first products, from the catalog', () => {
     room = Infinity
   })
 
-  it('asks the catalog for the store’s first products and writes at most six, unpriced and without a photo', async () => {
+  it('asks the catalog for the store’s first products and writes at most six, unpriced, listed as coming soon, each with a photo', async () => {
     const catalog = jest.fn(async (_context: AiJobStepContext) => spent([catalogOutput(8)]))
-    const run = createAiSiteProductsRunner({ catalog, writerFor })
+    const photos = jest.fn(async ({ names }: { names: readonly string[] }) => names.map((_name, index) => (index === 1 ? null : `/media/mug-${index}.jpg`)))
+    const run = createAiSiteProductsRunner({ catalog, writerFor, photos })
     const job = unitJob({}, { $id: 'job-site-products', kind: 'products', inputs: { siteKind: 'store', target: 'catalog' } })
     const outcome = await run(context(job))
     expect(catalog.mock.calls[0][0].job).toMatchObject({ kind: 'products', inputs: { target: 'catalog' } })
     expect(writes).toHaveLength(AI_SITE_PRODUCTS.max)
     expect(writes[0]).toMatchObject({ id: 'job-site-products-0', uid: 'uid-1', name: 'Mug 1' })
+    // A photo for each product's own words, asked once for all of them.
+    expect(photos.mock.calls[0][0].names).toEqual(proposed(6).map((product) => product.name))
     for (const write of writes) {
+      // No price is invented: the store lists it as "Price coming soon" until the owner sets one.
       expect(write['content']).not.toHaveProperty('priceUsd')
+      expect(write['content']).toMatchObject({ comingSoon: true })
       expect(write['content']).not.toHaveProperty('photo')
     }
+    expect((writes[0]['content'] as Record<string, unknown>)['mediaUrls']).toEqual(['/media/mug-0.jpg'])
+    // A product its photo search found nothing for is still written, with an empty slot.
+    expect(writes[1]['content']).not.toHaveProperty('mediaUrls')
+    expect(outcome.outputs[0].note).toBe(AI_SITE_PRODUCT_NOTE)
     expect(outcome.outputs.map((output) => [output.resource, output.id, output.hostSubdomain])).toEqual(
       writes.map((write) => ['product', write['id'], 'clay']),
     )
@@ -287,6 +299,51 @@ describe('whether a part may be built here, before it spends', () => {
     expect(await aiSiteContentRefusal('products', { firestore, org: { plan: 'pro' }, now: NOW, job }, { writerFor: () => null, admissionFor: () => async () => null })).toBe(
       'Products are not available on this site.',
     )
+  })
+})
+
+describe('the records the pages list, and their photos (AGL-3676)', () => {
+  const screens = [
+    { id: 'home', title: 'Home', slug: '/', sections: [{ name: 'Hero', items: 0 }, { name: 'Featured candles', items: 3 }] },
+    { id: 'shop', title: 'Shop', slug: '/shop', sections: [{ name: 'Intro', items: 0 }, { name: 'The range', items: 6 }] },
+  ]
+  const product: AiJobOutput = { resource: 'product', id: 'p', hostId: 'host-1', label: 'Signature Soy Candle' }
+  const catalog: AiJobOutput = { ...product, id: 'catalog', proposal: { kind: 'catalog' } }
+  const post: AiJobOutput = { resource: 'entry', id: 'e', hostId: 'host-1', label: 'Why clay', proposal: { collectionSlug: 'journal', slug: 'why-clay' } }
+
+  it('lists the written products where the shop and the home show them, and the posts from their blog', () => {
+    const listings = aiSiteListings({ outputs: [product, catalog, post], screens })
+    expect(listings).toEqual([
+      {
+        id: 'listing:products',
+        kind: 'products',
+        name: 'the shop',
+        records: ['Signature Soy Candle'],
+        placements: [
+          { screenId: 'home', section: 1, role: 'featured' },
+          { screenId: 'shop', section: 1, role: 'index' },
+        ],
+      },
+      expect.objectContaining({ kind: 'posts', href: '/journal', collectionSlug: 'journal', records: ['Why clay'] }),
+    ])
+  })
+
+  it('tells a layout built before the products that the site sells, so its header carries the cart', () => {
+    expect(aiSiteListings({ outputs: [], screens, sells: true })).toEqual([
+      { id: 'listing:products', kind: 'products', name: 'the shop', records: [], placements: [] },
+    ])
+    expect(aiSiteListings({ outputs: [], screens })).toEqual([])
+  })
+
+  it('fills each product’s photo slot from the stock library, else a starter photo', async () => {
+    const job = { $id: 'job-p', hostId: 'host-1', createdBy: 'uid-1', inputs: { businessType: 'hand-poured soy candles' }, brief: '' }
+    const stockPhotos = jest.fn(() => async (slots: readonly unknown[]) => slots.map((_slot, index) => (index === 0 ? { src: '/media/stock.jpg', width: 800, height: 1000 } : null)))
+    const photos = await aiSiteProductPhotos({ job, names: ['Signature Soy Candle', 'Wax Melts'], stockPhotos: stockPhotos as never })
+    expect(photos[0]).toBe('/media/stock.jpg')
+    expect(photos[1]).toMatch(/^\/_static\/starter\//)
+    // No stock library on this deployment: every slot takes a starter.
+    const starters = await aiSiteProductPhotos({ job, names: ['A'], stockPhotos: (() => null) as never })
+    expect(starters[0]).toMatch(/^\/_static\/starter\//)
   })
 })
 

@@ -45,7 +45,18 @@ const NOT_WORDS = new Set(['iconPath', 'iconId'])
 const WORD_PROPS = ['children', 'primary', 'secondary', 'label'] as const
 
 /** Elements that say something with no words of their own. */
-const SPEAKS_ALONE = new Set(['image', 'form', 'layoutSlot', 'reusableInstance', 'muiDrawerToggle', 'muiDrawer'])
+const SPEAKS_ALONE = new Set([
+  'image',
+  'form',
+  'layoutSlot',
+  'reusableInstance',
+  'muiDrawerToggle',
+  'muiDrawer',
+  // The site's own records, listed by the elements that keep them (AGL-3676).
+  'product-grid',
+  'collectionEntries',
+  'cart',
+])
 
 const HEADING_VARIANTS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'overline'])
 
@@ -258,9 +269,25 @@ function refsIn(text: string, names: AiLayoutRefNames): string[] {
   return [...new Set(found)]
 }
 
+/** An entry's own token, which a collection repeater fills per entry when the page renders. */
+const ENTRY_TOKEN = /\{\{\s*entry\.[A-Za-z]+\s*\}\}/g
+
+/** Every node under a Collection Entries block: its template, repeated once per entry (AGL-3676). */
+function repeatedByEntries(nodes: GapNodes): Set<string> {
+  const repeated = new Set<string>()
+  for (const [id, node] of Object.entries(nodes)) {
+    if (node.componentId !== 'collectionEntries') continue
+    for (const each of subtree(nodes, id)) if (each !== id) repeated.add(each)
+  }
+  return repeated
+}
+
 function refsOf(nodes: GapNodes, names: AiLayoutRefNames): Array<{ id: string; refs: string[]; text: string }> {
+  // A post's card names its post by the entry's tokens, which the page fills
+  // per post: words a visitor reads as the post's own, never a reference.
+  const repeated = repeatedByEntries(nodes)
   return Object.entries(nodes).flatMap(([id, node]) => {
-    const texts = shownTexts(node).map((slot) => slot.get())
+    const texts = shownTexts(node).map((slot) => (repeated.has(id) ? slot.get().replace(ENTRY_TOKEN, '') : slot.get()))
     const refs = [...new Set(texts.flatMap((text) => refsIn(text, names)))]
     return refs.length ? [{ id, refs, text: texts.filter((text) => refsIn(text, names).length).join(' ') }] : []
   })
