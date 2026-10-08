@@ -10,7 +10,16 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — rewards, referrals and store credit (newest)
+## October 2026 — the register keeps selling offline (newest)
+
+- **[Selling while offline](commerce-and-bookings/commerce/pos-operations.md#selling-while-offline)** —
+  when the connection drops, the register keeps ringing cash sales from the catalog and
+  tax rate it saved, prints the receipt, and syncs each sale once when the connection
+  returns, in the shift it was rung in. Stock that went short meanwhile is flagged on
+  the order and in the register. Card tenders, gift cards, store credit, rewards and room charges are
+  off while offline.
+
+## October 2026 — rewards, referrals and store credit
 
 - **[Rewards](commerce-and-bookings/commerce/rewards-and-referrals.md)** — your store's
   own loyalty program, under **Products → Promotions**. Customers earn points on every

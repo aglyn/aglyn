@@ -66,6 +66,7 @@ import { OrderInvoiceButton } from './order-invoice.component'
 import { OrderReceiptResend } from './order-receipt-resend.component'
 import { OrderReturns } from './order-returns.component'
 import { PosReceiptActions } from './pos-ops/pos-receipt-actions.component'
+import { OrderOfflineNotice } from './order-offline-notice.component'
 
 export interface OrderDetailDialogProps {
   hostId: string
@@ -1062,6 +1063,8 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
             </Stack>
           </>
         ) : null}
+        {/* A register sale rung offline, and what its sync found (AGL-3625). */}
+        <OrderOfflineNotice order={order} />
         <Divider />
         <Typography variant="subtitle2">{'Timeline'}</Typography>
         {(order.timeline ?? [])

@@ -356,6 +356,7 @@ data class HostOrder(
     val locationId: String? = null,
     val note: String? = null,
     val number: Double? = null,
+    val offline: PosOfflineOrderStamp? = null,
     val paymentIntentId: String? = null,
     val paymentLinkUrl: String? = null,
     val paymentRisk: PaymentRisk? = null,
@@ -1210,6 +1211,187 @@ internal object PaymentRiskSignalKindSerializer :
     RawEnumSerializer<PaymentRiskSignalKind>("com.aglyn.contracts.PaymentRiskSignalKind", PaymentRiskSignalKind.entries, PaymentRiskSignalKind.UNKNOWN, { it.raw })
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosOfflineFlagSerializer::class)
+enum class PosOfflineFlag(val raw: String) {
+    CASH_SHORT("cash-short"),
+    CASHIER_UNVERIFIED("cashier-unverified"),
+    CLOCK_ADJUSTED("clock-adjusted"),
+    DISCOUNT_OVER_LIMIT("discount-over-limit"),
+    LATE_SYNC("late-sync"),
+    NO_SHIFT("no-shift"),
+    PRICE_CHANGED("price-changed"),
+    REGISTER_OVER_CAP("register-over-cap"),
+    SHIFT_CLOSED("shift-closed"),
+    STOCK_SHORT("stock-short"),
+    TAX_DIFFERS("tax-differs"),
+    TOTALS_RESTATED("totals-restated"),
+    UNKNOWN_PRODUCT("unknown-product"),
+    UNKNOWN_REGISTER("unknown-register"),
+    UNKNOWN(""),
+}
+
+internal object PosOfflineFlagSerializer :
+    RawEnumSerializer<PosOfflineFlag>("com.aglyn.contracts.PosOfflineFlag", PosOfflineFlag.entries, PosOfflineFlag.UNKNOWN, { it.raw })
+
+@Serializable
+data class PosOfflineKit(
+    val available: Boolean,
+    val hostId: String,
+    val issuedAtMs: Double,
+    val maxDiscountPct: Double,
+    val orgId: String,
+    val receipt: PosOfflineKitReceipt,
+    val registers: List<PosOfflineKitRegister>,
+    val requireOpenShift: Boolean,
+    val tax: PosOfflineKitTax,
+    val unavailableReason: String? = null,
+    val v: Long,
+)
+
+@Serializable
+data class PosOfflineKitReceipt(
+    val address: String? = null,
+    val footer: String? = null,
+    val logo: String? = null,
+    val name: String,
+    val returnPolicy: String? = null,
+)
+
+@Serializable
+data class PosOfflineKitRegister(
+    val id: String,
+    val locationId: String? = null,
+    val name: String,
+    val openShiftId: String? = null,
+)
+
+@Serializable
+data class PosOfflineKitTax(
+    val pct: Double? = null,
+    val pricesIncludeTax: Boolean,
+)
+
+@Serializable
+data class PosOfflineOrderStamp(
+    val flags: List<PosOfflineFlag>,
+    val priceDrift: List<PosOfflineOrderStampPriceDriftItem>? = null,
+    val saleKey: String,
+    val soldAtMs: Double,
+    val stockConflicts: List<PosOfflineStockConflict>? = null,
+    val syncedAtMs: Double,
+    val syncedBy: String,
+)
+
+@Serializable
+data class PosOfflineOrderStampPriceDriftItem(
+    val currentCents: Double,
+    val index: Double,
+    val rungCents: Double,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosOfflineOutcomeStatusSerializer::class)
+enum class PosOfflineOutcomeStatus(val raw: String) {
+    RECORDED("recorded"),
+    REFUSED("refused"),
+    REPLAYED("replayed"),
+    UNKNOWN(""),
+}
+
+internal object PosOfflineOutcomeStatusSerializer :
+    RawEnumSerializer<PosOfflineOutcomeStatus>("com.aglyn.contracts.PosOfflineOutcomeStatus", PosOfflineOutcomeStatus.entries, PosOfflineOutcomeStatus.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosOfflineRefusalSerializer::class)
+enum class PosOfflineRefusal(val raw: String) {
+    CONFLICT("conflict"),
+    FAILED("failed"),
+    INVALID("invalid"),
+    WRONG_SITE("wrong-site"),
+    WRONG_STAFF("wrong-staff"),
+    WRONG_WORKSPACE("wrong-workspace"),
+    UNKNOWN(""),
+}
+
+internal object PosOfflineRefusalSerializer :
+    RawEnumSerializer<PosOfflineRefusal>("com.aglyn.contracts.PosOfflineRefusal", PosOfflineRefusal.entries, PosOfflineRefusal.UNKNOWN, { it.raw })
+
+@Serializable
+data class PosOfflineSale(
+    val cashierAssertion: String? = null,
+    val cashTenderedCents: Double,
+    val changeCents: Double,
+    val customer: PosOfflineSaleCustomer? = null,
+    val discountPct: Double,
+    val hostId: String,
+    val lines: List<PosOfflineSaleLine>,
+    val locationId: String? = null,
+    val orgId: String,
+    val registerId: String,
+    val saleKey: String,
+    val shiftId: String? = null,
+    val signedInUid: String,
+    val soldAtMs: Double,
+    val totals: OrderTotals,
+    val v: Long,
+)
+
+@Serializable
+data class PosOfflineSaleCustomer(
+    val email: String? = null,
+    val id: String? = null,
+    val kind: String? = null,
+    val name: String? = null,
+)
+
+@Serializable
+data class PosOfflineSaleLine(
+    val modifiers: List<ModifierSelection>? = null,
+    val name: String,
+    val productId: String,
+    val productType: ProductType? = null,
+    val quantity: Double,
+    val sku: String? = null,
+    val unitAmountCents: Double,
+    val variantId: String? = null,
+    val variantLabel: String? = null,
+)
+
+@Serializable
+data class PosOfflineSaleOutcome(
+    val error: String? = null,
+    val flags: List<PosOfflineFlag>? = null,
+    val number: Double? = null,
+    val orderId: String? = null,
+    val reason: PosOfflineRefusal? = null,
+    val retry: Boolean? = null,
+    val saleKey: String,
+    val status: PosOfflineOutcomeStatus,
+    val stockConflicts: List<PosOfflineStockConflict>? = null,
+)
+
+@Serializable
+data class PosOfflineStockConflict(
+    val applied: Double,
+    val name: String,
+    val productId: String,
+    val requested: Double,
+    val shortUnits: Double,
+    val variantId: String? = null,
+)
+
+@Serializable
+data class PosOfflineSyncRequest(
+    val hostId: String,
+    val sales: List<PosOfflineSale>,
+)
+
+@Serializable
+data class PosOfflineSyncResponse(
+    val results: List<PosOfflineSaleOutcome>,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = PosReceiptChannelSerializer::class)
 enum class PosReceiptChannel(val raw: String) {
     EMAIL("email"),
@@ -1513,6 +1695,14 @@ data class ContractValues(
     @SerialName("OUTREACH_SEQUENCE_NAME_MAX") val outreachSequenceNameMax: Long,
     @SerialName("OUTREACH_TASK_TITLE_MAX") val outreachTaskTitleMax: Long,
     @SerialName("PAYMENT_ACCEPTED_MAX_LENGTH") val paymentAcceptedMaxLength: Long,
+    @SerialName("POS_OFFLINE_CLOCK_SKEW_MS") val posOfflineClockSkewMs: Double,
+    @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
+    @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
+    @SerialName("POS_OFFLINE_LATE_SYNC_MS") val posOfflineLateSyncMs: Double,
+    @SerialName("POS_OFFLINE_MAX_AGE_MS") val posOfflineMaxAgeMs: Double,
+    @SerialName("POS_OFFLINE_SALE_MAX_LINES") val posOfflineSaleMaxLines: Long,
+    @SerialName("POS_OFFLINE_SYNC_BATCH_MAX") val posOfflineSyncBatchMax: Long,
+    @SerialName("POS_OFFLINE_SYNC_ROUTE") val posOfflineSyncRoute: String,
     @SerialName("PRICE_RANGE_MAX_LENGTH") val priceRangeMaxLength: Long,
     @SerialName("PRODUCT_LIST_BASE") val productListBase: List<ListQueryFilter>,
     @SerialName("PRODUCT_LIST_HEADERS") val productListHeaders: Map<String, String>,

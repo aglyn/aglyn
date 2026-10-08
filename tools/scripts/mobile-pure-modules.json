@@ -174,12 +174,20 @@
       "why": "The order record shape and its pure helpers, read by the Commerce app order and sales screens (AGL-3621)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "why": "The offline register's sale, sync answer and kit shapes and its totals arithmetic (AGL-3625); the Aglyn POS app queues offline cash sales and syncs them through the same route."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
       "why": "The register's payment ledger, display and receipt shapes and their pure helpers, imports nothing; the native contracts emit an order's payments from it (AGL-3651)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-receipt.ts",
       "why": "The receipt data an order makes, so the app's printed and shared receipt matches the register's (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-tax.ts",
+      "why": "The store's tax settings and the rate arithmetic, imports nothing; the offline register's totals tax a basket with it (AGL-3625)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce.ts",

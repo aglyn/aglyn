@@ -76,6 +76,33 @@
         "ReceiptTender"
       ]
     },
+    "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts": {
+      "types": [
+        "PosOfflineSaleLine",
+        "PosOfflineSaleCustomer",
+        "PosOfflineSale",
+        "PosOfflineFlag",
+        "PosOfflineStockConflict",
+        "PosOfflineOrderStamp",
+        "PosOfflineRefusal",
+        "PosOfflineOutcomeStatus",
+        "PosOfflineSaleOutcome",
+        "PosOfflineSyncRequest",
+        "PosOfflineSyncResponse",
+        "PosOfflineKitRegister",
+        "PosOfflineKit"
+      ],
+      "values": [
+        "POS_OFFLINE_SYNC_ROUTE",
+        "POS_OFFLINE_SYNC_BATCH_MAX",
+        "POS_OFFLINE_SALE_MAX_LINES",
+        "POS_OFFLINE_LATE_SYNC_MS",
+        "POS_OFFLINE_MAX_AGE_MS",
+        "POS_OFFLINE_CLOCK_SKEW_MS",
+        "POS_OFFLINE_DISABLED_TENDERS",
+        "POS_OFFLINE_FLAG_LABELS"
+      ]
+    },
     "libs/plugins/redirects/src/lib/model/redirects.ts": {
       "types": [
         "HostRedirect"
@@ -7353,6 +7380,145 @@
         ],
         [
           "dealWon"
+        ]
+      ]
+    },
+    "posOfflineSaleTotals": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1200,
+                "quantity": 2
+              },
+              {
+                "unitAmountCents": 2500,
+                "quantity": 1
+              }
+            ],
+            "discountPct": 10,
+            "tax": {
+              "pct": 8,
+              "pricesIncludeTax": false
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1200,
+                "quantity": 2
+              }
+            ],
+            "discountPct": 0,
+            "tax": {
+              "pct": 8,
+              "pricesIncludeTax": true
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 999,
+                "quantity": 3
+              }
+            ],
+            "discountPct": 12.5,
+            "tax": {
+              "pct": 7.25,
+              "pricesIncludeTax": false
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 500,
+                "quantity": 1
+              }
+            ],
+            "discountPct": 100,
+            "tax": {
+              "pct": 8,
+              "pricesIncludeTax": false
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1999,
+                "quantity": 1
+              }
+            ],
+            "discountPct": 0,
+            "tax": {
+              "pct": null,
+              "pricesIncludeTax": false
+            }
+          }
+        ]
+      ]
+    },
+    "posOfflineChangeCents": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          4763,
+          5000
+        ],
+        [
+          4763,
+          4763
+        ],
+        [
+          4763,
+          4000
+        ]
+      ]
+    },
+    "posOfflineSaleKeyIsValid": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          "off8f2f9807c22c4fe3b1ed9042c497949d"
+        ],
+        [
+          "short"
+        ],
+        [
+          "../orders/abcdefghijklmnop"
+        ],
+        [
+          "__abcdefghijklmnop__"
+        ]
+      ]
+    },
+    "posOfflineSoldAt": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          1799999000000,
+          1800000000000
+        ],
+        [
+          1800000300000,
+          1800000000000
+        ],
+        [
+          1800001000000,
+          1800000000000
+        ],
+        [
+          1797000000000,
+          1800000000000
         ]
       ]
     }

@@ -3073,6 +3073,35 @@
   "OUTREACH_SEQUENCE_NAME_MAX": 120,
   "OUTREACH_TASK_TITLE_MAX": 200,
   "PAYMENT_ACCEPTED_MAX_LENGTH": 200,
+  "POS_OFFLINE_CLOCK_SKEW_MS": 600000,
+  "POS_OFFLINE_DISABLED_TENDERS": {
+    "card_keyed": "Typed cards need the connection.",
+    "card_link": "The QR card link needs the connection.",
+    "card_present": "Card readers need the connection.",
+    "folio": "Room charges are checked against the stay online.",
+    "gift_card": "A gift card balance can only be checked online."
+  },
+  "POS_OFFLINE_FLAG_LABELS": {
+    "cash-short": "The cash recorded is less than the total",
+    "cashier-unverified": "The PIN-switched cashier could not be confirmed; the sale is under the signed-in member",
+    "clock-adjusted": "The device clock was off; the sale is dated when it synced",
+    "discount-over-limit": "The discount is above this register’s limit",
+    "late-sync": "Synced more than a day after it was rung",
+    "no-shift": "Rung with no shift open, on a site that requires one",
+    "price-changed": "A price changed after the register cached it; the sale kept the price it was rung at",
+    "register-over-cap": "The register it was rung on is over the plan’s register limit",
+    "shift-closed": "Rung in a shift that closed before the sale synced; its Z report does not include it",
+    "stock-short": "Stock went short: more was sold than the shelf held",
+    "tax-differs": "The tax rung differs from the store’s rate now; the sale kept the tax it collected",
+    "totals-restated": "The register’s totals did not add up; the server restated them from the lines",
+    "unknown-product": "A product was deleted before the sale synced; the line kept what the receipt printed",
+    "unknown-register": "The register it was rung on no longer exists"
+  },
+  "POS_OFFLINE_LATE_SYNC_MS": 86400000,
+  "POS_OFFLINE_MAX_AGE_MS": 2592000000,
+  "POS_OFFLINE_SALE_MAX_LINES": 100,
+  "POS_OFFLINE_SYNC_BATCH_MAX": 25,
+  "POS_OFFLINE_SYNC_ROUTE": "/api/commerce/pos-offline-sync",
   "PRICE_RANGE_MAX_LENGTH": 100,
   "PRODUCT_LIST_BASE": [
     {

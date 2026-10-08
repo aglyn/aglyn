@@ -482,6 +482,12 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/pos-display', posDisplayHandler)
   // Shifts, staff PINs, the customer lookup and returns (AGL-3609).
   registerPosOpsRoutes()
+  // The offline register (AGL-3625): the kit a register caches to sell cash
+  // while the connection is down, and the sync that records those sales once.
+  // Gated like a sale; loaded with its first call.
+  registerPluginApiRoute('commerce/pos-offline-sync', async (req, res) =>
+    (await import('./server/pos-offline-sync')).posOfflineSyncHandler(req, res),
+  )
   // The native Aglyn POS app's Stripe Terminal SDK: a connection token scoped
   // to the site's Location, and the Location itself (AGL-3618). Gated like a
   // sale.

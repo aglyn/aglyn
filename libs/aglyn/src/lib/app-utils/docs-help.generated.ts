@@ -335,7 +335,7 @@ export const PLUGIN_DOCS = {
   posOperations: {
     path: '/commerce-and-bookings/commerce/pos-operations',
     title: 'Running the register',
-    excerpt: 'Shifts and the cash drawer with X and Z reports, staff PINs, customers at the register, returns and exchanges, and printed thermal receipts.',
+    excerpt: 'Shifts and the cash drawer with X and Z reports, staff PINs, customers at the register, returns and exchanges, printed thermal receipts, and selling cash while the register is offline.',
   },
   postPurchase: {
     path: '/commerce-and-bookings/commerce/tracking-and-protection',
@@ -477,7 +477,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   plugins: ['#install--upgrade', '#browse-card', '#whats-included', '#what-the-badges-on-a-listing-mean', '#how-plugins-run', '#when-one-plugin-depends-on-another', '#a-dependency-that-is-off-for-one-site', '#configure', '#configure-site', '#publish-your-own', '#related'],
   pos: ['#registers', '#the-register', '#modifiers', '#selling-past-the-count', '#taking-payment', '#platform-fees-at-the-register', '#when-something-disconnects', '#tips', '#receipts', '#card-readers', '#customer-display', '#reservations', '#related'],
   posHardware: ['#recommended-kit', '#card-readers', '#receipt-printers', '#add-a-printer', '#what-prints', '#your-logo-on-the-receipt', '#status', '#cash-drawer', '#barcode-scanning', '#label-printers', '#product-labels', '#shipping-labels', '#customer-display-tablet', '#related'],
-  posOperations: ['#shifts-and-the-cash-drawer', '#what-the-reports-show', '#shift-history', '#requiring-a-shift', '#who-rang-it', '#staff-pins', '#customers-at-the-register', '#returns-and-exchanges', '#refund-limits-and-manager-approval', '#printed-receipts', '#related'],
+  posOperations: ['#shifts-and-the-cash-drawer', '#what-the-reports-show', '#shift-history', '#requiring-a-shift', '#who-rang-it', '#staff-pins', '#customers-at-the-register', '#returns-and-exchanges', '#refund-limits-and-manager-approval', '#printed-receipts', '#selling-while-offline', '#what-the-sync-checks', '#before-you-go-offline', '#related'],
   postPurchase: ['#connect-a-service', '#afterships-webhook', '#package-protection-at-checkout', '#branded-tracking-pages', '#on-the-order', '#switching-it-off-for-a-site'],
   printOnDemand: ['#before-you-start', '#connect', '#import-products', '#costs-and-margins', '#orders', '#test-orders', '#canceling-and-refunding', '#shipments-and-tracking', '#disconnect', '#what-is-sent-to-the-service'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#tips', '#related'],

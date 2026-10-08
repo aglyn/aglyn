@@ -92,6 +92,14 @@ export interface PosTenderPanelProps {
   /** A PIN-switched cashier (AGL-3609) takes each payment they start. */
   cashierAssertion?: string
   notify: (message: string, variant: 'success' | 'error' | 'warning' | 'info') => void
+  /**
+   * The register is offline (AGL-3625). Every tender here is the server's —
+   * the card reader, the typed card, the QR link, the gift card, the room
+   * charge and this sale's own cash — so each is off until it returns.
+   */
+  offline?: boolean
+  /** Rings this basket as an offline cash sale instead; offered while nothing is paid. */
+  onSellOffline?: () => void
 }
 
 /**
@@ -137,6 +145,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
   const typedCents = centsFromInput(amount)
   const chargeCents = typedCents > 0 ? Math.min(typedCents, sale.tenderableCents) : sale.tenderableCents
   const paid = sale.status === 'paid'
+  const offline = props.offline === true
 
   const run = useCallback(
     async (
@@ -323,6 +332,24 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
         </Stack>
       ) : null}
 
+      {offline && !paid ? (
+        <Alert
+          severity="warning"
+          action={
+            props.onSellOffline && sale.payments.length === 0 ? (
+              <Button color="inherit" size="small" onClick={props.onSellOffline}>
+                {'Sell for cash offline'}
+              </Button>
+            ) : null
+          }
+        >
+          {sale.payments.length === 0
+            ? 'Offline: card readers, typed cards, the QR link, gift cards and room charges are off. ' +
+              'Take this basket as an offline cash sale, or wait for the connection.'
+            : 'Offline: this sale has a payment on it and finishes when the connection returns. ' +
+              'Card readers, typed cards, the QR link, gift cards and room charges are off.'}
+        </Alert>
+      ) : null}
       {!paid ? (
         <>
           <Divider />
@@ -350,7 +377,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
                 <Button
                   variant="outlined"
                   onClick={() => void askTip()}
-                  disabled={busy || Boolean(display.asking)}
+                  disabled={offline || busy || Boolean(display.asking)}
                   sx={{ minHeight: POS_TOUCH_PX }}
                 >
                   {display.asking === 'tip' ? 'Waiting for customer…' : 'Ask on display'}
@@ -380,7 +407,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
           >
             <Button
               variant="contained"
-              disabled={busy || chargeCents <= 0}
+              disabled={offline || busy || chargeCents <= 0}
               onClick={() => setDialog('cash')}
               sx={{ minHeight: 56 }}
             >
@@ -389,7 +416,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
             {context?.terminal?.available && readers.length ? (
               <Button
                 variant="contained"
-                disabled={busy || chargeCents <= 0 || !readerId}
+                disabled={offline || busy || chargeCents <= 0 || !readerId}
                 onClick={() => void startCardPresent()}
                 sx={{ minHeight: 56 }}
               >
@@ -399,7 +426,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
             {posNativeBridge() ? (
               <Button
                 variant="contained"
-                disabled={busy || chargeCents <= 0}
+                disabled={offline || busy || chargeCents <= 0}
                 onClick={() => void startBridge()}
                 sx={{ minHeight: 56 }}
               >
@@ -409,7 +436,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
             {context?.publishableKey ? (
               <Button
                 variant="outlined"
-                disabled={busy || chargeCents <= 0}
+                disabled={offline || busy || chargeCents <= 0}
                 onClick={() => void startKeyed()}
                 sx={{ minHeight: 56 }}
               >
@@ -418,7 +445,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
             ) : null}
             <Button
               variant="outlined"
-              disabled={busy || chargeCents <= 0}
+              disabled={offline || busy || chargeCents <= 0}
               onClick={() => void startLink()}
               sx={{ minHeight: 56 }}
             >
@@ -426,7 +453,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
             </Button>
             <Button
               variant="outlined"
-              disabled={busy || chargeCents <= 0}
+              disabled={offline || busy || chargeCents <= 0}
               onClick={() => setDialog('gift')}
               sx={{ minHeight: 56 }}
             >
@@ -449,7 +476,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
             {props.stays.length ? (
               <Button
                 variant="outlined"
-                disabled={busy || chargeCents <= 0}
+                disabled={offline || busy || chargeCents <= 0}
                 onClick={() => setDialog('folio')}
                 sx={{ minHeight: 56 }}
               >
@@ -477,7 +504,7 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
           ) : null}
           <Button
             color="error"
-            disabled={busy}
+            disabled={offline || busy}
             onClick={async () => {
               const confirmed = await confirm({
                 title: 'Void this sale?',

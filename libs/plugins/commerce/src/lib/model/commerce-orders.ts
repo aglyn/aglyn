@@ -31,6 +31,7 @@ import type { ProductType } from './commerce'
 import type { StorefrontTaxMode } from './commerce-tax-decision'
 import { lineRequiresShipping, orderLineFulfillmentStates } from './order-fulfillment'
 import type { OrderPayment } from './commerce-pos'
+import type { PosOfflineOrderStamp } from './commerce-pos-offline'
 
 export type OrderStatus =
   | 'pending'
@@ -496,6 +497,12 @@ export interface HostOrder {
   shippingAddress?: OrderAddress
   billingAddress?: OrderAddress
   timeline?: OrderTimelineEvent[]
+  /**
+   * A register sale rung while offline (AGL-3625): when it was rung, when it
+   * synced, and what did not match — stock that went short, a price that
+   * changed. Absent on every other order.
+   */
+  offline?: PosOfflineOrderStamp
   fulfillments?: OrderFulfillment[]
   note?: string
   couponCode?: string
