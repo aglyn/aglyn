@@ -180,11 +180,37 @@ data class BookingWindow(
     val start: Long,
 )
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = ContentSchemaTypeSerializer::class)
+enum class ContentSchemaType(val raw: String) {
+    ARTICLE("Article"),
+    BLOG_POSTING("BlogPosting"),
+    NEWS_ARTICLE("NewsArticle"),
+    TECH_ARTICLE("TechArticle"),
+    UNKNOWN(""),
+}
+
+internal object ContentSchemaTypeSerializer :
+    RawEnumSerializer<ContentSchemaType>("com.aglyn.contracts.ContentSchemaType", ContentSchemaType.entries, ContentSchemaType.UNKNOWN, { it.raw })
+
+@Serializable
+data class ContentSchemaTypeOptionsItem(
+    val description: String,
+    val label: String,
+    val value: String,
+)
+
 @Serializable
 data class DeviceSplitEntry(
     val count: Long,
     val device: String,
     val percent: Long,
+)
+
+@Serializable
+data class EntryStatusOptionsItem(
+    val label: String,
+    val value: String,
 )
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
@@ -616,7 +642,25 @@ data class ListQueryPlan(
     val refused: List<ListQueryRefusal>,
     val searched: String? = null,
     val served: List<ListFilterRequest>,
+    val sortFallback: ListQueryPlanSortFallback? = null,
 )
+
+@Serializable
+data class ListQueryPlanSortFallback(
+    val asked: ListQuerySort,
+    val reason: ListQueryPlanSortFallbackReason,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = ListQueryPlanSortFallbackReasonSerializer::class)
+enum class ListQueryPlanSortFallbackReason(val raw: String) {
+    ALONE("alone"),
+    RANGE("range"),
+    UNKNOWN(""),
+}
+
+internal object ListQueryPlanSortFallbackReasonSerializer :
+    RawEnumSerializer<ListQueryPlanSortFallbackReason>("com.aglyn.contracts.ListQueryPlanSortFallbackReason", ListQueryPlanSortFallbackReason.entries, ListQueryPlanSortFallbackReason.UNKNOWN, { it.raw })
 
 @Serializable
 data class ListQueryRefusal(
@@ -634,8 +678,10 @@ data class ListQueryRequest(
 
 @Serializable
 data class ListQuerySort(
+    val alone: Boolean? = null,
     val column: String? = null,
     val direction: ListQuerySortDirection,
+    val label: String? = null,
     val path: String,
 )
 
@@ -649,6 +695,12 @@ enum class ListQuerySortDirection(val raw: String) {
 
 internal object ListQuerySortDirectionSerializer :
     RawEnumSerializer<ListQuerySortDirection>("com.aglyn.contracts.ListQuerySortDirection", ListQuerySortDirection.entries, ListQuerySortDirection.UNKNOWN, { it.raw })
+
+@Serializable
+data class LocalBusinessTypeOptionsItem(
+    val label: String,
+    val value: String,
+)
 
 @Serializable
 data class ManagedBooking(
@@ -1242,9 +1294,36 @@ data class SiteFilterOptionsHasCustomDomainItem(
     val value: String,
 )
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = TenantEmailControlSerializer::class)
+enum class TenantEmailControl(val raw: String) {
+    BESIGNER("besigner"),
+    EXTERNAL("external"),
+    FIXED("fixed"),
+    UNKNOWN(""),
+}
+
+internal object TenantEmailControlSerializer :
+    RawEnumSerializer<TenantEmailControl>("com.aglyn.contracts.TenantEmailControl", TenantEmailControl.entries, TenantEmailControl.UNKNOWN, { it.raw })
+
+@Serializable
+data class TenantEmailEntry(
+    val authoredIn: String? = null,
+    val control: TenantEmailControl? = null,
+    val defaultSubject: String? = null,
+    val description: String? = null,
+    val footerReason: String? = null,
+    val key: String? = null,
+    val name: String? = null,
+    val plugin: String? = null,
+    val pluginId: String? = null,
+    val requiresFeature: String? = null,
+)
+
 /** The values in contracts.generated.json, keyed as the TypeScript exports are. */
 @Serializable
 data class ContractValues(
+    @SerialName("AREA_SERVED_MAX") val areaServedMax: Long,
     @SerialName("BOOKING_FIELD_ASKS") val bookingFieldAsks: List<BookingFieldAsk>,
     @SerialName("BOOKING_IN_PERSON_MAX_CENTS") val bookingInPersonMaxCents: Long,
     @SerialName("BOOKING_IN_PERSON_MIN_CENTS") val bookingInPersonMinCents: Long,
@@ -1255,7 +1334,14 @@ data class ContractValues(
     @SerialName("BOOKING_SERVICE_NAME_MAX") val bookingServiceNameMax: Long,
     @SerialName("BOOKING_STATE_LABELS") val bookingStateLabels: Map<String, String>,
     @SerialName("BOOKING_WEEKDAYS") val bookingWeekdays: List<String>,
+    @SerialName("COMPONENT_LIST_QUERY") val componentListQuery: ListQueryDeclaration,
+    @SerialName("CONTENT_SCHEMA_TYPE_DEFAULT") val contentSchemaTypeDefault: ContentSchemaType,
+    @SerialName("CONTENT_SCHEMA_TYPE_OPTIONS") val contentSchemaTypeOptions: List<ContentSchemaTypeOptionsItem>,
     @SerialName("CROSS_MAX_DEPTH") val crossMaxDepth: Long,
+    @SerialName("DEFAULT_TITLE_PATTERN") val defaultTitlePattern: String,
+    @SerialName("ENTRY_LIST_FILTER_HEADERS") val entryListFilterHeaders: Map<String, String>,
+    @SerialName("ENTRY_LIST_QUERY") val entryListQuery: ListQueryDeclaration,
+    @SerialName("ENTRY_STATUS_OPTIONS") val entryStatusOptions: List<EntryStatusOptionsItem>,
     @SerialName("EVENT_COVER_ALT_MAX_LENGTH") val eventCoverAltMaxLength: Long,
     @SerialName("EVENT_DEFAULT_DURATION_MS") val eventDefaultDurationMs: Double,
     @SerialName("EVENT_DESCRIPTION_MAX_LENGTH") val eventDescriptionMaxLength: Long,
@@ -1271,8 +1357,10 @@ data class ContractValues(
     @SerialName("FUNCTION_BUILTIN_NAMES") val functionBuiltinNames: List<String>,
     @SerialName("FUNCTION_MAX_OPERATIONS") val functionMaxOperations: Long,
     @SerialName("HOST_EVENTS") val hostEvents: List<HostEventDeclaration>,
+    @SerialName("LAYOUT_LIST_QUERY") val layoutListQuery: ListQueryDeclaration,
     @SerialName("LIST_QUERY_DISJUNCTIONS") val listQueryDisjunctions: Long,
     @SerialName("LIST_QUERY_ID_PATH") val listQueryIdPath: String,
+    @SerialName("LOCAL_BUSINESS_TYPE_OPTIONS") val localBusinessTypeOptions: List<LocalBusinessTypeOptionsItem>,
     @SerialName("MEDIA_ALT_MAX_LENGTH") val mediaAltMaxLength: Long,
     @SerialName("MEDIA_ALT_OPTIONS") val mediaAltOptions: List<ListFilterOption>,
     @SerialName("MEDIA_DISJUNCTION_LIMIT") val mediaDisjunctionLimit: Long,
@@ -1302,6 +1390,8 @@ data class ContractValues(
     @SerialName("ORDER_STATUS_LABELS") val orderStatusLabels: Map<String, String>,
     @SerialName("ORDER_STATUS_OPTIONS") val orderStatusOptions: List<ListFilterOption>,
     @SerialName("ORG_SUBMISSION_LIST_QUERY") val orgSubmissionListQuery: ListQueryDeclaration,
+    @SerialName("PAYMENT_ACCEPTED_MAX_LENGTH") val paymentAcceptedMaxLength: Long,
+    @SerialName("PRICE_RANGE_MAX_LENGTH") val priceRangeMaxLength: Long,
     @SerialName("PRODUCT_LIST_BASE") val productListBase: List<ListQueryFilter>,
     @SerialName("PRODUCT_LIST_HEADERS") val productListHeaders: Map<String, String>,
     @SerialName("PRODUCT_LIST_OPTIONS") val productListOptions: Map<String, List<ListFilterOption>>,
@@ -1310,6 +1400,8 @@ data class ContractValues(
     @SerialName("REMINDER_WINDOW_END_HOURS") val reminderWindowEndHours: Long,
     @SerialName("REMINDER_WINDOW_START_HOURS") val reminderWindowStartHours: Long,
     @SerialName("SCOPED_SEARCH_JOIN") val scopedSearchJoin: String,
+    @SerialName("SEARCH_ENGINE_VERIFICATION_LABELS") val searchEngineVerificationLabels: Map<String, String>,
+    @SerialName("SEARCH_ENGINE_VERIFICATION_META_NAMES") val searchEngineVerificationMetaNames: Map<String, String>,
     @SerialName("SITE_CARDS_PAGE_SIZE") val siteCardsPageSize: Long,
     @SerialName("SITE_FILTER_HEADERS") val siteFilterHeaders: Map<String, String>,
     @SerialName("SITE_FILTER_OPTIONS") val siteFilterOptions: SiteFilterOptions,
@@ -1317,5 +1409,10 @@ data class ContractValues(
     @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
     @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
     @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
+    @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
+    @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
+    @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
+    @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
+    @SerialName("TENANT_EMAILS") val tenantEmails: List<TenantEmailEntry>,
     @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
 )

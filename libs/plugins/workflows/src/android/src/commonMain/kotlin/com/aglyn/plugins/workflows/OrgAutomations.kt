@@ -413,7 +413,7 @@ fun OrgAutomationEditor(context: NativePluginContext, orgId: String, id: String?
       "Trigger event",
       ORG_AUTOMATION_TRIGGER_EVENTS.map { SelectOption(it, hostEventLabel(it)) },
       draft.event,
-      { draft = draft.copy(event = it) },
+      { draft = draft.copy(event = it.orEmpty()) },
       Modifier.fillMaxWidth().testTag("org-automation-trigger"),
     )
     val problem = triggerFilterProblem(draft.filter)

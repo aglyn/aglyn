@@ -102,7 +102,7 @@ fun StepCard(
           label = "Do",
           options = if (known) kinds else kinds + SelectOption(kind, stepLabel(kind), enabled = false),
           selected = kind,
-          onSelect = { onChange(stepForKind(it)) },
+          onSelect = { onChange(stepForKind(it.orEmpty())) },
           modifier = Modifier.weight(1f).testTag("step-$index-kind"),
         )
         RemoveButton("Remove step ${index + 1}", onRemove, Modifier.testTag("step-$index-remove"))
@@ -278,7 +278,7 @@ private fun StepFields(step: Doc, pickers: StepPickers, onChange: (Doc) -> Unit)
     }
     "logCrmActivity" -> {
       val kind = step.str("kind")
-      SelectField("Kind", CRM_ACTIVITY_KIND_LABELS.map { (key, label) -> SelectOption(key, label) }, kind, { onChange(step.withActivityKind(it)) }, Modifier.fillMaxWidth())
+      SelectField("Kind", CRM_ACTIVITY_KIND_LABELS.map { (key, label) -> SelectOption(key, label) }, kind, { onChange(step.withActivityKind(it.orEmpty())) }, Modifier.fillMaxWidth())
       val directions = CRM_ACTIVITY_DIRECTIONS[kind].orEmpty()
       if (directions.isNotEmpty()) {
         SelectField(
@@ -304,7 +304,7 @@ private fun StepFields(step: Doc, pickers: StepPickers, onChange: (Doc) -> Unit)
         if (waitsForEvent) "Give up after" else "Wait for",
         if (current != null && FLOW_WAIT_PRESETS.none { it.first == current }) presets + SelectOption(current.toString(), "$current minutes", enabled = false) else presets,
         current?.toString(),
-        { set(key, it.toLong()) },
+        { set(key, it.orEmpty().toLong()) },
         Modifier.fillMaxWidth(),
       )
       Caption(if (waitsForEvent) "Continues as soon as this happens, or when the time is up." else "The rest of this automation runs later, on its own.")
@@ -324,7 +324,7 @@ private fun StepGuard(step: Doc, onChange: (Doc) -> Unit) {
       "Only if",
       listOf(SelectOption("", "Always run"), SelectOption("notEmpty", "Field is not empty"), SelectOption("equals", "Field equals"), SelectOption("contains", "Field contains")),
       op,
-      { onChange(step.withGuardOp(it)) },
+      { onChange(step.withGuardOp(it.orEmpty())) },
       Modifier.fillMaxWidth().testTag("step-guard"),
     )
     if (op.isNotEmpty()) {
@@ -362,7 +362,7 @@ fun ConditionRowsEditor(
             add(SelectOption("contains", "A field contains…"))
             if (offerForms) add(SelectOption(FORM_IS_OP, "Form is…"))
           }
-          SelectField(if (index == 0) "Only run when" else "Condition", ops, row.op, { update(withOp(row, it)) }, Modifier.fillMaxWidth().testTag("condition-$index-op"))
+          SelectField(if (index == 0) "Only run when" else "Condition", ops, row.op, { update(withOp(row, it.orEmpty())) }, Modifier.fillMaxWidth().testTag("condition-$index-op"))
           when {
             row.op == FORM_IS_OP && formOptions != null -> {
               val gone = row.value.isNotEmpty() && formOptions.none { it.id == row.value }
@@ -370,9 +370,9 @@ fun ConditionRowsEditor(
                 "Form",
                 (if (gone) listOf(SelectOption(row.value, "A form that is gone (${row.value})")) else emptyList()) + formOptions.map { SelectOption(it.id, it.name) },
                 row.value.ifEmpty { null },
-                { update(row.copy(value = it)) },
+                { update(row.copy(value = it.orEmpty())) },
                 Modifier.fillMaxWidth(),
-                supportingText = if (row.value.isEmpty()) "Pick the form" else null,
+                supporting = if (row.value.isEmpty()) "Pick the form" else null,
                 isError = row.value.isEmpty(),
               )
             }
@@ -404,7 +404,7 @@ fun ConditionRowsEditor(
             "Match",
             listOf(SelectOption("and", "All conditions match (AND)"), SelectOption("or", "Any condition matches (OR)")),
             combinator,
-            onCombinator,
+            { onCombinator(it.orEmpty()) },
             Modifier.weight(1f),
           )
         }

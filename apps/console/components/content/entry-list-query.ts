@@ -16,7 +16,6 @@
  */
 
 import { ENTRY_PUBLISH_SORT_FIELD } from '@aglyn/aglyn/app-utils/collection-entry-date'
-import { ENTRY_TITLE_TOKENS_FIELD } from '@aglyn/aglyn/app-utils/content-query-fields'
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
@@ -35,7 +34,10 @@ import {
   type Firestore,
   type Query,
 } from 'firebase/firestore'
-import { ENTRY_LIST_FILTER_FIELDS } from '../../utils/list-filters'
+import {
+  ENTRY_LIST_QUERY,
+  ENTRY_STATUS_OPTIONS,
+} from '@aglyn/aglyn/app-utils/entry-list-declaration'
 
 /**
  * How a collection's entries table is sorted, filtered and searched
@@ -76,6 +78,8 @@ import { ENTRY_LIST_FILTER_FIELDS } from '../../utils/list-filters'
  */
 
 /** The fields the entries table sorts by — its four data columns. */
+export { ENTRY_LIST_QUERY, ENTRY_STATUS_OPTIONS }
+
 export const ENTRY_LIST_SORT_FIELDS = [
   'title',
   'status',
@@ -112,42 +116,7 @@ const UNFILTERED_SORTING_ORDERS: Readonly<
   publishedAt: ['desc', 'asc'],
 }
 
-/**
- * Everything a FILTERED or searched entries list can ask of Firestore
- * (AGL-3321): the clauses (`ENTRY_LIST_FILTER_FIELDS`), the quick search's
- * token array, and the orders those predicates may be combined with.
- *
- * Three orders, each justified by the four composites it costs (one per
- * predicate field — status, category, author, title tokens):
- *
- *   Published, newest first   the list's default; mandatory.
- *   Published, oldest first   the same column reversed — the first posts in
- *                             a category, the earliest of an author's.
- *   Updated, newest first     what was just edited, which is the question an
- *                             editor brings to a filtered list.
- *
- * Title and Status, and Updated oldest first, would cost four more each and
- * are offered on the UNFILTERED list only, where they cost none.
- */
-export const ENTRY_LIST_QUERY: ListQueryDeclaration = {
-  fields: ENTRY_LIST_FILTER_FIELDS,
-  sorts: [
-    { path: ENTRY_PUBLISH_SORT_FIELD, direction: 'desc', column: 'publishedAt' },
-    { path: ENTRY_PUBLISH_SORT_FIELD, direction: 'asc', column: 'publishedAt' },
-    { path: 'updatedAt', direction: 'desc', column: 'updatedAt' },
-  ],
-  search: { tokensPath: ENTRY_TITLE_TOKENS_FIELD },
-}
 
-/** The stored statuses the Status filter offers, in the order it lists them. */
-export const ENTRY_STATUS_OPTIONS: ReadonlyArray<{
-  value: string
-  label: string
-}> = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'published', label: 'Published' },
-  { value: 'scheduled', label: 'Scheduled' },
-]
 
 const isSortField = (field: unknown): field is EntryListSortField =>
   (ENTRY_LIST_SORT_FIELDS as readonly unknown[]).includes(field)

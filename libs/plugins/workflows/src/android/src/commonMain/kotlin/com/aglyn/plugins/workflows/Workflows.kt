@@ -323,7 +323,7 @@ fun WorkflowEditor(context: NativePluginContext, hostId: String, id: String?, on
       "Run on event",
       listOf(SelectOption("", "Manual only")) + hostEventTypes.map { SelectOption(it, hostEventLabel(it)) },
       draft.trigger.str("event") ?: "",
-      { draft = withWorkflowTrigger(draft, it) },
+      { draft = withWorkflowTrigger(draft, it.orEmpty()) },
       Modifier.fillMaxWidth().testTag("workflow-trigger"),
     )
     draft.trigger?.let { trigger ->

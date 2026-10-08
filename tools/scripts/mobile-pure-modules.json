@@ -6,8 +6,24 @@
       "why": "The site traffic card's figures: the window comparison, device split and top lists the Analytics page and the native screens show (AGL-3670)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/artifact-list-queries.ts",
+      "why": "The components, layouts and templates lists' query declarations; the native site screens plan the same Firestore queries (AGL-3668); type-only imports beside LIST_QUERY_ID_PATH."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/collection-entry-date.ts",
+      "why": "Reached by entry-list-declaration: the entry date fields and publish sort key, no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/content-schema-type.ts",
+      "why": "The content collection schema types the native collection settings offer (AGL-3668), no imports."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/crm-kinds.ts",
       "why": "Reached by the automation step vocabulary: the CRM lifecycle stages, task and activity kinds, plain lists."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/entry-list-declaration.ts",
+      "why": "A collection's entry list declaration, filter fields and statuses; the native content screens plan the same Firestore query (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/functions.ts",
@@ -20,6 +36,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/host-naming.ts",
       "why": "Reached by organizations: site naming and slug rules over strings."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/local-business.ts",
+      "why": "The local business types, limits and opening-hours check the native SEO setup offers and replays (AGL-3668), no imports."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/media-alt.ts",
@@ -76,6 +96,14 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
       "why": "The per-page traffic table's fold over screen day documents (AGL-3670)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
+      "why": "Search engine verification labels and the token extraction the native SEO setup replays (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/seo-title-variables.ts",
+      "why": "The default SEO title pattern the native SEO setup shows (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/site-list-query.ts",
@@ -224,6 +252,14 @@
     {
       "path": "libs/shared/util/email/src/lib/outbound-phishing-screen.ts",
       "why": "Reached by the redirects model: pattern tables and pure functions over text."
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/tenant-email-catalog.ts",
+      "why": "The site's transactional email catalog the native Emails setup lists (AGL-3668); type-only imports beside its generated rows."
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/tenant-emails.generated.ts",
+      "why": "Reached by tenant-email-catalog: the generated email rows, type-only imports."
     },
     {
       "path": "libs/shared/util/timestamp/src/lib/zoned-time.ts",

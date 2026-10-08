@@ -79,14 +79,14 @@ fun RunHistory(context: NativePluginContext, hostId: String, targetId: String, n
           "Result",
           listOf(SelectOption("", "Any result")) + RUN_RESULT_LABELS.map { (key, label) -> SelectOption(key, label) },
           filters.result ?: "",
-          { filters = filters.copy(result = it.ifEmpty { null }) },
+          { filters = filters.copy(result = it?.ifEmpty { null }) },
           modifier.testTag("runs-result"),
         )
         SelectField(
           "Trigger",
           listOf(SelectOption("", "Any trigger")) + hostEventTypes.map { SelectOption(it, hostEventLabel(it)) },
           filters.trigger ?: "",
-          { filters = filters.copy(trigger = it.ifEmpty { null }) },
+          { filters = filters.copy(trigger = it?.ifEmpty { null }) },
           modifier.testTag("runs-trigger"),
         )
       }

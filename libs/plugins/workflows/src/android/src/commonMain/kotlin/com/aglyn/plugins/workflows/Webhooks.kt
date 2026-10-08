@@ -165,7 +165,7 @@ fun WebhookEditor(context: NativePluginContext, hostId: String, onDone: (String?
       "Direction",
       listOf(SelectOption("outbound", "Outbound — send data to a URL"), SelectOption("inbound", "Inbound — receive data, run a workflow")),
       draft.direction,
-      { draft = draft.copy(direction = it) },
+      { draft = draft.copy(direction = it.orEmpty()) },
       Modifier.fillMaxWidth().testTag("webhook-direction"),
     )
     if (draft.direction == "outbound") {
@@ -175,9 +175,9 @@ fun WebhookEditor(context: NativePluginContext, hostId: String, onDone: (String?
         "Workflow to run",
         workflowNames.map { SelectOption(it, it) },
         draft.workflowName.ifEmpty { null },
-        { draft = draft.copy(workflowName = it) },
+        { draft = draft.copy(workflowName = it.orEmpty()) },
         Modifier.fillMaxWidth(),
-        supportingText = if (workflowWindow.truncated) {
+        supporting = if (workflowWindow.truncated) {
           "Showing $EDITOR_OPTION_CEILING workflows, ordered by id. This site has more, so one of them is not offered here."
         } else {
           null

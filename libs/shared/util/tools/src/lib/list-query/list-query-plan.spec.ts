@@ -22,6 +22,7 @@
 import type { ListFilterField } from './list-filter'
 import {
   type ListQueryDeclaration,
+  defaultHeaderSort,
   listQueryIndexes,
   missingListQueryIndexes,
   planListQuery as plan,
@@ -34,6 +35,10 @@ const NAMES = {
   reversed: (value: string) => [...value.trim().toLowerCase()].reverse().join(''),
   maxPrefix: 12,
 }
+const plan_ = (
+  declaration: Parameters<typeof plan>[0],
+  request: Parameters<typeof plan>[1],
+) => plan(declaration, request, NAMES)
 const planListQuery = (
   declaration: Parameters<typeof plan>[0],
   request: Parameters<typeof plan>[1],
@@ -161,6 +166,90 @@ describe('planListQuery', () => {
     expect(
       planListQuery(DECLARATION, { clauses: [], sort: { path: 'secret', direction: 'asc' } }).orderBy.path,
     ).toBe('updatedAt')
+  })
+})
+
+/*
+ * EVERY COLUMN SORTS, AND THE INDEX FILE DOES NOT PAY FOR IT (AGL-3680).
+ */
+const ALONE: ListQueryDeclaration = {
+  ...DECLARATION,
+  sorts: [
+    { path: 'updatedAt', direction: 'desc' },
+    { path: 'createdAt', direction: 'desc', column: 'createdAt', label: 'Created' },
+    { path: 'status', direction: 'asc', column: 'status', label: 'Status', alone: true },
+    { path: 'nameLower', direction: 'asc', column: 'name', label: 'Name', alone: true },
+  ],
+}
+
+describe('an alone sort', () => {
+  it('is served while nothing narrows the list', () => {
+    const plan = planListQuery(ALONE, { clauses: [], sort: { path: 'status', direction: 'asc' } })
+    expect(plan.orderBy).toMatchObject({ path: 'status', direction: 'asc' })
+    expect(plan.notices).toEqual([])
+    expect(plan.sortFallback).toBeUndefined()
+  })
+
+  it('falls back to the default header order under a filter, and says so', () => {
+    const plan = planListQuery(ALONE, {
+      clauses: [{ field: 'owner', op: 'equals', value: 'u1' }],
+      sort: { path: 'status', direction: 'asc' },
+    })
+    expect(plan.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
+    expect(plan.notices).toEqual(['Sorted by Created: Status sorts only with no filter or search on.'])
+    expect(plan.sortFallback).toMatchObject({ reason: 'alone', asked: { path: 'status' } })
+  })
+
+  it('falls back under the search too', () => {
+    const plan = planListQuery(ALONE, { clauses: [], search: ['acme'], sort: { path: 'nameLower', direction: 'asc' } })
+    expect(plan.orderBy.path).toBe('createdAt')
+  })
+
+  it('still holds when the only clause was refused, since nothing narrowed', () => {
+    const plan = planListQuery(ALONE, {
+      clauses: [{ field: 'facet', op: 'equals', value: 'x' }],
+      sort: { path: 'status', direction: 'asc' },
+    })
+    expect(plan.orderBy.path).toBe('status')
+  })
+
+  it('is held beside the base scope, which is not a filter', () => {
+    const plan = plan_(ALONE, {
+      clauses: [],
+      base: [{ path: 'orgId', op: '==', value: 'o1' }],
+      sort: { path: 'status', direction: 'asc' },
+    })
+    expect(plan.orderBy.path).toBe('status')
+  })
+
+  it('names the range that took the order from a picked header', () => {
+    const plan = planListQuery(ALONE, {
+      clauses: [{ field: 'total', op: '>', value: '5' }],
+      sort: { path: 'createdAt', direction: 'desc' },
+    })
+    expect(plan.orderBy.path).toBe('totalCents')
+    // The default header order was not picked by anyone: no notice for it.
+    expect(plan.notices).toEqual([])
+  })
+
+  it('defaults to the first header order that is not alone', () => {
+    expect(defaultHeaderSort(ALONE)).toMatchObject({ path: 'createdAt' })
+    expect(defaultHeaderSort({ fields: [], sorts: [] })).toMatchObject({ path: '__name__' })
+  })
+
+  it('costs no composite without a base, and one per base field with one', () => {
+    const shapes = (base: { path: string; array?: boolean }[] = []) =>
+      listQueryIndexes(ALONE, base).map((index) =>
+        index.fields.map((field) => `${field.fieldPath}:${field.order ?? field.arrayConfig}`).join(','),
+      )
+    expect(shapes().some((shape) => shape.endsWith('status:ASCENDING'))).toBe(false)
+    // An alone order a range ALSO imposes (Name starts with) pairs in full.
+    expect(shapes()).toContain('ownerUid:ASCENDING,nameLower:ASCENDING')
+    // The full orders keep their full pairing.
+    expect(shapes()).toContain('ownerUid:ASCENDING,createdAt:DESCENDING')
+    const based = shapes([{ path: 'orgId' }])
+    expect(based).toContain('orgId:ASCENDING,status:ASCENDING')
+    expect(based).not.toContain('ownerUid:ASCENDING,status:ASCENDING')
   })
 })
 

@@ -315,7 +315,7 @@ fun ActionEditor(context: NativePluginContext, hostId: String, id: String?, onDo
         SITE_EVENT_TYPES.map { SelectOption(it, "$it (on page)") } +
         SelectOption(CUSTOM_EVENT_VALUE, "Custom event…"),
       draft.event,
-      { draft = draft.copy(event = it) },
+      { draft = draft.copy(event = it.orEmpty()) },
       Modifier.fillMaxWidth().testTag("action-trigger"),
     )
     if (draft.event == CUSTOM_EVENT_VALUE) {
@@ -346,7 +346,7 @@ fun ActionEditor(context: NativePluginContext, hostId: String, id: String?, onDo
         Field(if (draft.event == "scrollDepth") "Scroll %" else "Seconds", draft.threshold, { draft = draft.copy(threshold = it.filter { c -> c.isDigit() || c == '.' }) }, number = true)
       }
       Field("Only on pages (optional)", draft.pathPattern, { draft = draft.copy(pathPattern = it) }, placeholder = "/pricing or /blog/*")
-      SelectField("Frequency", FREQUENCY_OPTIONS.map { SelectOption(it.first, it.second) }, draft.frequency, { draft = draft.withFrequency(it) }, Modifier.fillMaxWidth())
+      SelectField("Frequency", FREQUENCY_OPTIONS.map { SelectOption(it.first, it.second) }, draft.frequency, { draft = draft.withFrequency(it.orEmpty()) }, Modifier.fillMaxWidth())
       if ((draft.cooldownMinutes ?: 0.0) >= 1 && !draft.oncePerVisitor && !draft.oncePerSession) {
         Field(
           "Cooldown (minutes)",

@@ -37,7 +37,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aglyn.core.FirestoreOrder
@@ -66,8 +68,28 @@ internal fun WorkspaceChip(workspace: WorkspaceState, onClick: () -> Unit) {
     onClick = onClick,
     label = { Text(workspace.site?.name ?: workspace.org?.name ?: "Workspace", maxLines = 1) },
     leadingIcon = { Icon(AglynIcons.named("swap_horiz"), null, Modifier.size(18.dp)) },
-    modifier = Modifier.padding(end = 8.dp),
+    modifier = Modifier.padding(end = 8.dp).testTag("workspace-chip"),
   )
+}
+
+/** The workspace and site at the foot of the permanent drawer; opens the switcher. */
+@Composable
+internal fun WorkspaceFooter(workspace: WorkspaceState, onClick: () -> Unit) {
+  androidx.compose.material3.Surface(
+    onClick = onClick,
+    modifier = Modifier.fillMaxWidth().padding(10.dp).testTag("sidebar-switcher").semantics { contentDescription = "Switch workspace or site" },
+    shape = RoundedCornerShape(10.dp),
+    color = MaterialTheme.colorScheme.surface,
+  ) {
+    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+      Icon(AglynIcons.named("workspaces"), null, tint = MaterialTheme.colorScheme.primary)
+      Column(Modifier.weight(1f)) {
+        Text(workspace.org?.name ?: "No workspace", style = MaterialTheme.typography.titleSmall, maxLines = 1)
+        Text(workspace.site?.name ?: "Pick a site", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+      }
+      Icon(AglynIcons.named("swap_horiz"), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+  }
 }
 
 /** The workspace and site picker. */

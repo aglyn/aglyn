@@ -11,8 +11,9 @@ import com.aglyn.shell.Route
 import com.aglyn.shell.ShellNavigator
 
 /** "Aglyn" on the desktop. */
-fun main() {
+fun main(args: Array<String>) {
   val services = DesktopShell.services(NativeApp.AGLYN, DesktopShell.envFromSystem(), NativePluginManifest.entries)
+  if (LAUNCH_CHECK_ARG in args) launchCheck("Aglyn") { AglynShell(services) }
   val autoSignIn = System.getProperty("aglyn.autoSignIn") == "true"
   application {
     val navigator = remember { ShellNavigator() }

@@ -250,7 +250,7 @@ fun RecordPicker(
     options = items,
     selected = selectedId,
     onSelect = { id -> options.firstOrNull { it.id == id }?.let(onPick) },
-    supportingText = words?.let { "Pick the $noun — the draft asked for “$it”" },
+    supporting = words?.let { "Pick the $noun — the draft asked for “$it”" },
     isError = words != null,
     modifier = modifier.fillMaxWidth().testTag("picker-${label.lowercase().replace(' ', '-')}"),
   )
