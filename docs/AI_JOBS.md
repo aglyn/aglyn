@@ -309,6 +309,43 @@ per-token money can cost more per request; and on a door that cannot cache,
 every static byte is billed at full input rate on every attempt AND on every
 re-ask, so its prompt is worth shortening rather than enriching.
 
+### A site's own block (AGL-3661)
+
+The one cached block allowed to carry tenant bytes is the SITE CONTEXT: the
+site's business profile (`@aglyn/aglyn/app-utils/business-profile`,
+`resolveBusinessProfile`), its publish status and the preferences remembered
+from applied Assist edits (`hosts/{hostId}/aiMemory`), rendered by
+`aiSiteContextBlock` in `src/lib/model/ai-site-context.ts` under
+`AI_SITE_CONTEXT_MAX_CHARS` (400 tokens) and always closing with the rule
+that forbids an invented name, contact detail, price or review.
+
+- **How a door adds it.** `aiInstructionsWithSiteContext(MY_INSTRUCTIONS,
+  context)` marks the door's last instruction block a breakpoint and appends
+  the site block, flagged `site: true`, as a second one. The platform prefix
+  ahead of it is one cache entry for every workspace; the site block is one
+  entry per site. Without a context the door's blocks are byte-for-byte what
+  they were.
+- **The guard.** `validateAiSystemBlocks` refuses a breakpoint after a site
+  block, so the site's bytes can never sit inside a span another workspace
+  shares. A door already holding four breakpoints passes `cache: false` and
+  the block rides volatile (Assist chat does this when its edit and build
+  blocks are both present).
+- **The ledger.** The `a site's context block extends the shared prefix`
+  section of the cache spec holds, for the plan and insight requests, that
+  the platform prefix equals its ledger row across two sites, that the site
+  block is last and under the ceiling, and that no context sends the row's
+  exact bytes.
+- **Who reads it.** The plan step (`readSiteContext` dep), the insight step
+  (no contact details), and Assist chat's edit and build rungs. The page and
+  layout writers do not yet. The reads are fail-soft
+  (`readAiSiteContext` answers `null` on any failure, and for a host of
+  another org), so a missing profile never stops a job.
+- **Where it is filled.** The guided start's answers and a site job's plan
+  prefill the profile through `prefillAiBusinessProfile`, never over what the
+  owner typed (`mergeBusinessProfilePrefill`); `assist-edit-applied` records
+  preferences with `rememberAiSitePreferences`. The owner edits the profile on
+  Setup → Business profile and clears preferences there.
+
 ## Verifying a prompt change
 
 Nearly all of the provider bill is development, not customers (AGL-3660):
