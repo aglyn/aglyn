@@ -22,12 +22,33 @@ import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import type { ConsoleHostFirstRunZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import {
-  mdiCheckCircle,
+  mdiAccount,
+  mdiBookOpenPageVariant,
+  mdiBriefcaseOutline,
+  mdiCalendarHeart,
+  mdiCamera,
+  mdiClockOutline,
+  mdiContentCut,
   mdiCreation,
+  mdiDumbbell,
+  mdiHandHeart,
+  mdiHeartPulse,
+  mdiHomeCity,
+  mdiMusic,
+  mdiPaletteOutline,
+  mdiRocketLaunch,
+  mdiScaleBalance,
+  mdiSchool,
+  mdiShopping,
+  mdiSilverwareForkKnife,
+  mdiViewGridOutline,
+  mdiWrench,
+  mdiYoga,
   mdiInformationOutline,
   mdiPageLayoutHeaderFooter,
 } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { OptionCardGrid } from '@aglyn/shared-ui-jsx/components/option-card-grid.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -70,14 +91,40 @@ import {
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   AI_SITE_START_ANSWERS,
-  AI_SITE_START_EXAMPLES,
   AI_SITE_START_TYPES,
   aiSiteStartBrief,
+  aiSiteStartKind,
   aiSiteStartInputs,
   aiSiteStartRefusal,
   type AiSiteStartAnswers,
 } from '../model/ai-site-start'
 import type { AiJobSummary } from '../model/ai-jobs.types'
+import { AI_SITE_KINDS } from '../model/ai-site-kinds'
+
+/** The icon each kind of site's card shows. */
+const AI_SITE_KIND_ICONS: Record<string, string> = {
+  business: mdiBriefcaseOutline.path,
+  trades: mdiWrench.path,
+  professional: mdiScaleBalance.path,
+  wellness: mdiHeartPulse.path,
+  restaurant: mdiSilverwareForkKnife.path,
+  store: mdiShopping.path,
+  portfolio: mdiViewGridOutline.path,
+  studio: mdiPaletteOutline.path,
+  photography: mdiCamera.path,
+  blog: mdiBookOpenPageVariant.path,
+  events: mdiCalendarHeart.path,
+  fitness: mdiDumbbell.path,
+  yoga: mdiYoga.path,
+  beauty: mdiContentCut.path,
+  realestate: mdiHomeCity.path,
+  education: mdiSchool.path,
+  nonprofit: mdiHandHeart.path,
+  music: mdiMusic.path,
+  personal: mdiAccount.path,
+  landing: mdiRocketLaunch.path,
+  'coming-soon': mdiClockOutline.path,
+}
 import { AiJobFollow } from './ai-job-follow.component'
 import { aiSiteBuildHref } from './ai-job-links'
 import { publishAiJob } from './ai-jobs-store'
@@ -580,54 +627,24 @@ export function AiSiteStartCard({
                     helperText="Optional. It narrows who the pages are written for."
                   />
                 </Stack>
-                <Stack spacing={2} component="section" aria-label="Look & layout">
-                  <SectionLabel>{'Look & layout'}</SectionLabel>
+                <Stack spacing={2} component="section" aria-label="Style">
+                  <SectionLabel>{'Style'}</SectionLabel>
                   <Typography variant="body2" color="text.secondary">
-                    {'Optional. Picking one steers the shape of the site, not its words.'}
+                    {answers.kind
+                      ? 'This decides how your site looks and which pages it usually has.'
+                      : 'Picked from your answer above. Choose another to change how your site looks and which pages it usually has.'}
                   </Typography>
-                  <Box
-                    sx={{
-                      display: 'grid',
-                      gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
-                      gap: 2,
-                    }}
-                  >
-                    {AI_SITE_START_EXAMPLES.map((example) => {
-                      const selected = answers.example === example.id
-                      return (
-                        <Card
-                          key={example.id}
-                          variant="outlined"
-                          sx={(theme: Theme) => ({
-                            borderRadius: 2,
-                            borderColor: selected ? 'primary.main' : 'divider',
-                            bgcolor: selected ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
-                          })}
-                        >
-                          <CardActionArea
-                            aria-pressed={selected}
-                            aria-label={`${example.label} — ${example.blurb}`}
-                            onClick={() => answer({ example: selected ? null : example.id })}
-                            sx={{ p: 2, height: '100%' }}
-                          >
-                            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
-                              <Box sx={{ flex: 1, minWidth: 0 }}>
-                                <Typography variant="subtitle2">{example.label}</Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                  {example.blurb}
-                                </Typography>
-                              </Box>
-                              {selected && (
-                                <Box sx={{ color: 'primary.main', display: 'flex' }} aria-hidden>
-                                  <MdiIcon path={mdiCheckCircle.path} />
-                                </Box>
-                              )}
-                            </Stack>
-                          </CardActionArea>
-                        </Card>
-                      )
-                    })}
-                  </Box>
+                  <OptionCardGrid
+                    label="Style of site"
+                    options={AI_SITE_KINDS.map((kind) => ({
+                      id: kind.id,
+                      title: kind.label,
+                      description: kind.blurb,
+                      icon: AI_SITE_KIND_ICONS[kind.id],
+                    }))}
+                    value={aiSiteStartKind(answers).id}
+                    onChange={(kind) => answer({ kind })}
+                  />
                 </Stack>
                 <Stack spacing={2} component="section" aria-label="Details">
                   <SectionLabel>{'Details'}</SectionLabel>
