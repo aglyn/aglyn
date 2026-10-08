@@ -30,7 +30,7 @@
  * written, and a `switch` somebody added later would drop them silently.
  * So each one is driven through the same door the emitters use,
  * `emitHostEvent`, into an action carrying only a webhook step, and the
- * request that leaves is read back: the body is `{ event, payload, sentAt }`
+ * request that leaves is read back: the body is `{ event, payload, text, sentAt }`
  * with the payload verbatim, and the signature is the HMAC of exactly those
  * bytes under the hook's secret — the contract the API docs publish.
  *
@@ -327,7 +327,12 @@ describe('the webhook step, from the emit door', () => {
       expect(url).toBe(HOOK.url)
       expect(init.method).toBe('POST')
       const body = String(init.body)
-      expect(JSON.parse(body)).toEqual({ event, payload, sentAt: expect.any(String) })
+      expect(JSON.parse(body)).toEqual({
+        event,
+        payload,
+        text: expect.any(String),
+        sentAt: expect.any(String),
+      })
       expect(new Date(JSON.parse(body).sentAt).getTime()).not.toBeNaN()
       expect((init.headers as Record<string, string>)['X-Aglyn-Signature']).toBe(sign(body))
       expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json')
