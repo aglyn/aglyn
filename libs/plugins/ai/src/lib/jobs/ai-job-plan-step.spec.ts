@@ -64,6 +64,7 @@ import {
   aiInventoryLookupTool,
 } from '../tools/ai-inventory-lookup-tool'
 import { AI_BUILD_PLAN_RECORDS_TOOL, AI_BUILD_PLAN_TOOL, type AiBuildPlan } from '../model/ai-build-plan'
+import { resolveBusinessProfile } from '@aglyn/aglyn/app-utils/business-profile'
 import { AI_MODEL_CATALOG, AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE } from '../providers/routing'
 import {
@@ -201,6 +202,7 @@ function planStep(deps: Parameters<typeof createAiJobPlanStep>[0] = {}) {
   return createAiJobPlanStep({
     findPlansByKey: mockFindPlans,
     readCapabilities: async () => null,
+    readSiteContext: async () => null,
     ...deps,
   })
 }
@@ -256,6 +258,31 @@ describe('the plan step', () => {
       { ...AI_JOB_PLAN_INSTRUCTIONS[0], cacheBreakpoint: true },
       expect.objectContaining({ volatile: true }),
     ])
+  })
+
+  it('puts the site context after the plan rules as a per-site breakpoint, ahead of the inventory (AGL-3661)', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer(PLAN))
+    const readSiteContext = jest.fn(async () => ({
+      profile: resolveBusinessProfile({ host: { displayName: 'Paws & Co' } }),
+      preferences: ['Prefers short, concise copy'],
+    }))
+    await planStep({ readSiteContext })({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(readSiteContext).toHaveBeenCalledWith({ job: job(), firestore })
+    const [request] = mockRunAiRequest.mock.calls[0]
+    expect(request.system).toEqual([
+      AI_DOCTRINE_SYSTEM_BLOCK,
+      { ...AI_JOB_PLAN_INSTRUCTIONS[0], cacheBreakpoint: true },
+      { text: expect.stringContaining('Business name: Paws & Co'), cacheBreakpoint: true, site: true },
+      expect.objectContaining({ volatile: true }),
+    ])
+    expect(request.system[2].text).toContain('Never invent')
+  })
+
+  it('reads no site context for a job with no site (AGL-3661)', async () => {
+    mockRunAiRequest.mockResolvedValue(planAnswer(PLAN))
+    const readSiteContext = jest.fn(async () => null)
+    await planStep({ readSiteContext })({ job: { ...job(), hostId: null }, stepIndex: 0, now: NOW, firestore })
+    expect(readSiteContext).not.toHaveBeenCalled()
   })
 
   it('offers each screen a record template only on a site with a dataset to bind (AGL-3475)', async () => {

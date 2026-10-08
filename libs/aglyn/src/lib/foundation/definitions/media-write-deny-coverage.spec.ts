@@ -271,7 +271,13 @@ function fieldsOf(literal: string): string[] {
  *==========================================================================*/
 
 const MEDIA_COLLECTION = "collection('media')"
-const MINTS_AN_ID = 'createResourceUid'
+/*
+ * A MEDIA id minted, not any id: the folders route mints folder ids with the
+ * same helper and touches `collection('media')` only to move assets, which
+ * made it read as a fourth creator (AGL-3668). Every creator names the id it
+ * mints `mediaId`.
+ */
+const MINTS_AN_ID = /\bmediaId\s*=\s*createResourceUid\(/
 
 const CREATORS = [
   ...walk(resolve(REPO_ROOT, CONSOLE_API), (name) => name === 'route.ts'),
@@ -279,7 +285,7 @@ const CREATORS = [
 ]
   .filter((file) => {
     const source = readFileSync(file, 'utf8')
-    return source.includes(MEDIA_COLLECTION) && source.includes(MINTS_AN_ID)
+    return source.includes(MEDIA_COLLECTION) && MINTS_AN_ID.test(source)
   })
   .map((file) => relative(REPO_ROOT, file))
   .sort()

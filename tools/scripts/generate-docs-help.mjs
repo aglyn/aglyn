@@ -133,6 +133,8 @@ const PLUGIN_TOPICS = {
   aglynAssist: '/getting-started/aglyn-assist',
   aiAutomations: '/ai/automations-with-ai',
   aiCrm: '/ai/crm-by-ai',
+  // What Aglyn AI learned from a site's edits, on Setup → Business profile (AGL-3661).
+  aiBusinessProfile: '/ai/business-profile',
   aiExperiments: '/ai/ab-tests-with-ai',
   aiMarketing: '/ai/marketing-with-ai',
   aiInsights: '/marketing-and-automation/analytics/insights',
@@ -177,9 +179,7 @@ const PLUGIN_TOPICS = {
   deals: '/content-and-data/crm/deals',
   designedEmails: '/marketing-and-automation/email-campaigns/designed-emails',
   emailCampaigns: '/marketing-and-automation/email-campaigns/overview',
-  // The Email platforms cards on a site's setup page (AGL-3639). Unlisted
-  // until the deployment sets MARKETING_PLATFORMS_TOKEN_KEY; see
-  // PLUGIN_UNLISTED_TOPICS.
+  // The Email platforms cards on a site's setup page (AGL-3639).
   emailPlatforms: '/marketing-and-automation/email-campaigns/email-platforms',
   // The Fulfillment networks cards under the store's Settings and the order
   // dialog's section (AGL-3634). Unlisted until the deployment offers a
@@ -197,6 +197,10 @@ const PLUGIN_TOPICS = {
   // section (AGL-3638). Unlisted until the deployment offers a marketplace;
   // see PLUGIN_UNLISTED_TOPICS.
   marketplaces: '/commerce-and-bookings/commerce/marketplaces',
+  // The Delivery apps cards under the store's Settings and the register's
+  // delivery orders (AGL-3644). Unlisted until the deployment offers a
+  // service; see PLUGIN_UNLISTED_TOPICS.
+  deliveryApps: '/commerce-and-bookings/commerce/delivery-apps',
   events: '/content-and-data/events/overview',
   forms: '/content-and-data/forms/overview',
   funnels: '/marketing-and-automation/analytics/funnels',
@@ -222,8 +226,7 @@ const PLUGIN_TOPICS = {
   // The Shipping labels and Carrier accounts cards under the store's
   // Settings (AGL-3612).
   shipping: '/commerce-and-bookings/commerce/shipping',
-  // The Tax service card under the store's Settings (AGL-3631). The guide is
-  // unlisted while the service is rolling out; see PLUGIN_UNLISTED_TOPICS.
+  // The Tax service card under the store's Settings (AGL-3631).
   taxServices: '/commerce-and-bookings/commerce/tax-services',
   // The Print on demand card under the store's Settings, and its product and
   // order widgets (AGL-3641). Unlisted while rolling out; see
@@ -251,6 +254,9 @@ const PLUGIN_TOPICS = {
   salesChannels: '/commerce-and-bookings/commerce/sales-channels',
   sequences: '/content-and-data/crm/sequences',
   webhooks: '/marketing-and-automation/workflows-and-actions/webhooks',
+  // The Zapier card on a site's setup page (AGL-3643). Unlisted until the
+  // deployment sets ZAPIER_APP_URL; see PLUGIN_UNLISTED_TOPICS.
+  zapier: '/marketing-and-automation/workflows-and-actions/zapier',
 }
 
 // The PLUGIN_TOPICS keys allowed to name an `unlisted: true` page. Such a page
@@ -263,13 +269,6 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // two guides wait on (AGL-3614).
   'connectQuickbooksOnline',
   'connectXero',
-  // The Tax service card draws nothing until the server reports a tax
-  // service configured for the deployment, which aglyn.com is not while the
-  // guide is unlisted (AGL-3631).
-  'taxServices',
-  // The Email platforms cards draw nothing until the console holds
-  // MARKETING_PLATFORMS_TOKEN_KEY, the same gate the guide waits on (AGL-3639).
-  'emailPlatforms',
   // The Fulfillment networks cards draw nothing until the console holds
   // FULFILLMENT_NETWORKS_TOKEN_KEY and a network's app, the gate the guide
   // waits on (AGL-3634).
@@ -288,6 +287,13 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // The Print on demand card draws nothing until the deployment holds
   // PRINT_ON_DEMAND_TOKEN_KEY, the same gate the guide waits on (AGL-3641).
   'printOnDemand',
+  // The Delivery apps cards and the register's queue draw nothing until the
+  // console holds a service's partner credentials, the gate the guide waits
+  // on (AGL-3644).
+  'deliveryApps',
+  // The Zapier card draws nothing until the console holds ZAPIER_APP_URL, the
+  // published app's link, which the guide waits on too (AGL-3643).
+  'zapier',
 ])
 
 // ── Docs parsing ──────────────────────────────────────────────────────────

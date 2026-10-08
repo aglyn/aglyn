@@ -121,6 +121,9 @@ describe('a proposed function', () => {
       ),
     ).toEqual(expect.arrayContaining(['logic-syntax']))
     expect(codes(checkAiLogicFunction({ ...QUOTE, name: 'priceWithTax' }, SITE))).toEqual(['logic-name-taken'])
+    // Case-insensitive, as the Functions card and the logic plugin's writer compare (AGL-3616).
+    expect(codes(checkAiLogicFunction({ ...QUOTE, name: 'PriceWithTax' }, SITE))).toEqual(['logic-name-taken'])
+    expect(codes(checkAiLogicFunction({ ...QUOTE, name: 'PriceWithTax' }, { ...SITE, editing: 'priceWithTax' }))).toEqual([])
     // A change keeps the saved function's own name.
     expect(codes(checkAiLogicFunction({ ...QUOTE, name: 'priceWithTax' }, { ...SITE, editing: 'priceWithTax' }))).toEqual([])
     expect(codes(checkAiLogicFunction({ ...QUOTE, returnValue: 'flat_rate' }, SITE))).toEqual(['logic-return'])
@@ -150,6 +153,7 @@ describe('a proposed variable', () => {
     expect(codes(checkAiLogicVariable({ name: 'tiers', type: 'collection', value: '{"a":1}' }, SITE))).toEqual(['logic-value'])
     expect(codes(checkAiLogicVariable({ name: 'rate', type: 'number', value: 'six' }, SITE))).toEqual(['logic-value'])
     expect(codes(checkAiLogicVariable({ name: 'flat_rate', type: 'number', value: '5' }, SITE))).toEqual(['logic-name-taken'])
+    expect(codes(checkAiLogicVariable({ name: 'Flat_Rate', type: 'number', value: '5' }, SITE))).toEqual(['logic-name-taken'])
     expect(codes(checkAiLogicVariable({ name: '1st', type: 'text', value: 'x' }, SITE))).toEqual(['logic-name'])
   })
 })

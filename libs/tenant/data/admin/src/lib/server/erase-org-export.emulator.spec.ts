@@ -314,8 +314,31 @@ describeEmulated('an org erasure persists no copy of the workspace (AGL-1443)', 
         Object.entries(row).filter(([key]) => !indexKeys.includes(key)),
       )
     })
-    // Bounded by shape, not only by policy: a record of this size cannot be
-    // a copy of a workspace however large the workspace was.
-    expect(JSON.stringify(recorded).length).toBeLessThan(1024)
+    // Bounded by shape, not only by policy. `before` and `after` are counts
+    // (and the request's time), grouped by sweep, with a flag here and there
+    // (`standIn`): every leaf is a number or a boolean. A copy of a
+    // workspace would put strings or lists there.
+    const leaves = (value: unknown, path: string): Array<[string, unknown]> =>
+      value !== null && typeof value === 'object' && !Array.isArray(value)
+        ? Object.entries(value).flatMap(([key, inner]) =>
+            leaves(inner, `${path}.${key}`),
+          )
+        : [[path, value]]
+    const counts = recorded.flatMap((row) =>
+      (['before', 'after'] as const).flatMap((side) =>
+        leaves(row[side] ?? {}, side),
+      ),
+    )
+    expect(
+      counts.filter(
+        ([, value]) => typeof value !== 'number' && typeof value !== 'boolean',
+      ),
+    ).toEqual([])
+    // And the size follows the number of counts, not the workspace: each
+    // plugin that erases a collection adds a count (the row grew past a
+    // flat 1 KiB as plugins landed), never anything the size of its data.
+    expect(JSON.stringify(recorded).length).toBeLessThan(
+      512 + 48 * counts.length,
+    )
   }, 60_000)
 })

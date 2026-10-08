@@ -218,4 +218,46 @@ describe('the Funnels card (AGL-3605)', () => {
     await screen.findByText(/30 of 200 visitors completed every step/)
     expect(screen.queryByText('Act on this drop-off')).toBeNull()
   })
+
+  describe('a draft funnel (AGL-3616)', () => {
+    const DRAFT = { ...FUNNEL, $id: 'd1', name: 'Drafted by a build', status: 'draft' }
+
+    it('shows its steps for review instead of a result, and asks for no result', () => {
+      mockFunnels = [DRAFT]
+      render(<FunnelsCard hostId="h1" orgId="o1" />)
+      expect(screen.getByText('Draft')).toBeTruthy()
+      expect(screen.getByText(/A draft, set up for you to review\. It is not measured/)).toBeTruthy()
+      const steps = screen.getByLabelText('Draft steps')
+      expect(within(steps).getByText('Pricing')).toBeTruthy()
+      expect(within(steps).getByText('Contact')).toBeTruthy()
+      expect(screen.queryByText('zone-funnelInsight')).toBeNull()
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('is activated by a manager, dropping the site’s cached pages when recording switched on', async () => {
+      mockFunnels = [DRAFT]
+      respond({ activate: () => ({ ok: true, body: { funnelId: 'd1', recordingChanged: true } }) })
+      render(<FunnelsCard hostId="h1" orgId="o1" />)
+      fireEvent.click(screen.getByText('Activate'))
+      await waitFor(() => expect(mockAnnounce).toHaveBeenCalledWith({ user: { uid: 'u1' }, hostId: 'h1' }))
+      expect(mockFetch).toHaveBeenCalledWith('/api/funnels/activate', { hostId: 'h1', funnelId: 'd1' })
+    })
+
+    it('shows the door’s sentence when activation is refused', async () => {
+      mockFunnels = [DRAFT]
+      respond({ activate: () => ({ ok: false, body: { error: 'Step 2: Submitted a form: f1 is not on this site.' } }) })
+      render(<FunnelsCard hostId="h1" orgId="o1" />)
+      fireEvent.click(screen.getByText('Activate'))
+      expect(await screen.findByText(/Step 2: Submitted a form: f1 is not on this site\./)).toBeTruthy()
+      expect(mockAnnounce).not.toHaveBeenCalled()
+    })
+
+    it('offers no Activate to a member who cannot manage funnels', () => {
+      mockRole = 'viewer'
+      mockFunnels = [DRAFT]
+      render(<FunnelsCard hostId="h1" orgId="o1" />)
+      expect(screen.queryByText('Activate')).toBeNull()
+      expect(screen.getByText(/until a site admin or editor activates it\./)).toBeTruthy()
+    })
+  })
 })

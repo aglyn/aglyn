@@ -283,7 +283,7 @@ describe('the AI plugin, loaded through a bundler that honors sideEffects', () =
 
   it('registers what a build can make on the core’s capability contract, by calling, from a bundle (AGL-3616)', () => {
     const bundled = isolated(() => registered(load(serverBundle)))
-    expect(bundled.capabilities).toEqual(['campaign', 'component', 'email', 'form', 'layout', 'page', 'template', 'workflow'])
+    expect(bundled.capabilities).toEqual(['campaign', 'component', 'edit', 'email', 'form', 'function', 'layout', 'page', 'template', 'workflow'])
     expect(bundled.steps['build']).toEqual([
       { step: 'plan', runner: true, minimumMs: expect.any(Number) },
       { step: 'generate', runner: true, minimumMs: expect.any(Number) },

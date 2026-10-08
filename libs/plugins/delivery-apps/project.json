@@ -1,0 +1,30 @@
+{
+  "name": "plugins-delivery-apps",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/plugins/delivery-apps/src",
+  "projectType": "library",
+  "tags": ["aglyn:addons", "scope:plugin", "type:feature"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/plugins/delivery-apps",
+        "main": "libs/plugins/delivery-apps/src/index.ts",
+        "tsConfig": "libs/plugins/delivery-apps/tsconfig.lib.json",
+        "assets": ["libs/plugins/delivery-apps/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/delivery-apps"],
+      "options": {
+        "jestConfig": "libs/plugins/delivery-apps/jest.config.ts"
+      }
+    }
+  }
+}

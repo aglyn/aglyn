@@ -64,6 +64,14 @@ const fileBookingOnCrm = jest.fn(
     reason: 'no-record' as const,
   }),
 )
+// The booking events (AGL-3643) are staged into the outbox in the booking's
+// own transaction; this double's transaction records every `set` as a
+// booking row, so the stage is observed here rather than written.
+const stageBookingEvent = jest.fn()
+jest.mock('./server/booking-events', () => ({
+  stageBookingEvent: (...args: unknown[]) => stageBookingEvent(...args),
+  raiseBookingEvent: async () => undefined,
+}))
 jest.mock('./server/booking-crm', () => ({
   fileBookingOnCrm: (firestore: unknown, input: Record<string, unknown>) =>
     fileBookingOnCrm(firestore, input),

@@ -15,8 +15,10 @@
  * limitations under the License.
  */
 
+import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { notifyUsers } from '@aglyn/tenant-data-admin/server/notifications'
 import { aiJobNotice } from '../model/ai-job-notice'
+import { aiBusinessProfilePrefiller } from './ai-business-profile-prefill'
 import { aiJobAutoConfirms } from './ai-job-auto-confirm'
 import { registerAiJobTransitionListener, type AiJobTransitionListener } from './ai-jobs'
 
@@ -48,7 +50,17 @@ export function aiJobTransitionNotifier(
   }
 }
 
-/** Registers the notifier the jobs machine tells about each change. */
+/**
+ * Registers what the jobs machine tells about each change: the notifier, and
+ * the business profile's prefill from a site job (AGL-3661). One listener,
+ * the two in turn; the prefill swallows its own failures, so it never costs
+ * the person their notice.
+ */
 export function registerAiJobsNotify(): void {
-  registerAiJobTransitionListener(aiJobTransitionNotifier())
+  const notify = aiJobTransitionNotifier()
+  const prefill = aiBusinessProfilePrefiller(() => firebaseAdmin.app().firestore())
+  registerAiJobTransitionListener(async (change) => {
+    await notify(change)
+    await prefill(change)
+  })
 }
