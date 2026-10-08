@@ -497,6 +497,18 @@ describe('eBay (AGL-3638)', () => {
       })
     })
 
+    it('sends no shipping cost: eBay’s shipping fulfillment has no field for one (AGL-3693)', async () => {
+      const routes = [
+        { method: 'GET', match: '/order/12-34567-89012/shipping_fulfillment', body: { fulfillments: [], total: 0 } },
+        { method: 'POST', match: '/order/12-34567-89012/shipping_fulfillment', status: 201, body: {} },
+      ]
+      const without = mockHttp(routes)
+      const withCost = mockHttp(routes)
+      await createEbayProvider({ http: without.http }).confirmShipment(APP, CREDENTIAL, CONFIRMATION)
+      await createEbayProvider({ http: withCost.http }).confirmShipment(APP, CREDENTIAL, { ...CONFIRMATION, shippingCostMinor: 845 })
+      expect(sentJson(withCost.calls[1])).toEqual(sentJson(without.calls[1]))
+    })
+
     it('answers already for a tracking number eBay has, or a refusal saying so', async () => {
       const held = mockHttp([
         { method: 'GET', match: 'shipping_fulfillment', body: { fulfillments: [{ fulfillmentId: 'f1', shipmentTrackingNumber: '7712' }] } },

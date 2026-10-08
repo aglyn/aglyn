@@ -230,3 +230,34 @@ export function allocateCents(totalCents: number, weights: readonly number[]): n
 export function taxDocumentDate(atMs: number): string {
   return new Date(Number.isFinite(atMs) ? atMs : Date.now()).toISOString().slice(0, 10)
 }
+
+/**
+ * The store's Taxes setting as this plugin reads it (AGL-3693): commerce's
+ * `hosts/{hostId}/settings/store` `tax` field, restated because a plugin
+ * never imports another.
+ */
+export interface StoreTaxSettingsView {
+  mode?: string
+  pricesIncludeTax?: boolean
+}
+
+/**
+ * Whether a connected service is used, and if not, why (AGL-3693). Mirrors
+ * commerce's `storeTaxAllowsEngine`: a sale is quoted by the service only
+ * when Taxes is on the store's own (manual) rates with prices that exclude
+ * tax, and an order is recorded only when its sale was quoted, so on any
+ * other setting the service neither prices a sale nor records one.
+ */
+export type TaxServiceUse =
+  | { applies: true }
+  | { applies: false; reason: 'stripe' | 'none' | 'undecided' | 'prices-include-tax' }
+
+export function taxServiceUse(settings: StoreTaxSettingsView | null | undefined): TaxServiceUse {
+  const mode = settings?.mode
+  if (mode === 'manual') {
+    return settings?.pricesIncludeTax ? { applies: false, reason: 'prices-include-tax' } : { applies: true }
+  }
+  if (mode === 'stripe') return { applies: false, reason: 'stripe' }
+  if (mode === 'none') return { applies: false, reason: 'none' }
+  return { applies: false, reason: 'undecided' }
+}

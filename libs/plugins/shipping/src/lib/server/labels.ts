@@ -659,6 +659,11 @@ export async function buyLabel(
         ...(bought.trackingUrl ? { trackingUrl: bought.trackingUrl } : {}),
         ...(/^https:\/\//.test(labelUrl) ? { labelUrl } : {}),
         labelRef: labelId,
+        // What the parcel cost, for a marketplace that pays shipping back
+        // (AGL-3693); only in the order's own currency.
+        ...(costCents > 0 && String(purchased.currency ?? '').toLowerCase() === String(record.currency ?? '').toLowerCase()
+          ? { labelCostCents: Math.round(costCents) }
+          : {}),
         actorUid: actor.uid,
       })
       await ref.set(
