@@ -40,6 +40,10 @@ import {
   aiStockSearchesFor,
   aiStockSubjectWords,
 } from './ai-layout-stock-photos'
+import { aiCompileLayoutPage, type AiLayoutPagePlan } from '../layout-language/ai-layout-compiler'
+import { aiLayoutDesignChoices } from '../layout-language/ai-layout-design'
+import type { AiLayoutSection } from '../layout-language/ai-layout-language'
+import { aiLayoutStoredTree } from '../layout-language/ai-layout-store'
 
 /**
  * A language page's pictures from a stock photo library (AGL-3660), through
@@ -357,5 +361,119 @@ describe('a language page filled from a stock photo library (AGL-3660)', () => {
     expect(aiLayoutStockPhotoSource(INPUT, { provider: () => provider, ingest: () => null })).toBeNull()
     // And core's own, in a process where nothing registered either.
     expect(aiLayoutStockPhotoSource(INPUT)).toBeNull()
+  })
+})
+
+describe('a designed page’s pictures ask the stock photo library too (AGL-3660)', () => {
+  let warn: jest.SpyInstance
+  beforeEach(() => {
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+  })
+  afterEach(() => warn.mockRestore())
+
+  /** A yoga home the designer opens on a full-bleed photo cover the model never described. */
+  function designedHome(): { nodes: NodesMap; sectionIds: string[]; names: string[] } {
+    let seed = 1
+    while (aiLayoutDesignChoices({ kind: 'yoga', seed, home: true }).hero !== 'cover') seed += 1
+    const sections: AiLayoutSection[] = [
+      {
+        band: 'plain',
+        align: 'center',
+        blocks: [
+          { kind: 'heading', text: 'Breathe, move, rest', style: 'large' },
+          { kind: 'lede', text: 'Small classes in a sunlit room.' },
+          { kind: 'button', text: 'Book a class', to: 'page:pg-contact' },
+        ],
+      },
+      { band: 'soft', blocks: [{ kind: 'heading', text: 'Classes' }, { kind: 'text', text: 'Vinyasa and restorative, every morning.' }] },
+    ]
+    const plan: AiLayoutPagePlan = {
+      title: 'Home',
+      sections: [
+        { name: 'Hero', uses: [], items: 0 },
+        { name: 'Classes', uses: [], items: 0 },
+      ],
+    }
+    const sectionIds = ['sec-1', 'sec-2']
+    const targets = {
+      pageId: 'pg-home',
+      pages: [
+        { id: 'pg-home', label: 'Home', slug: '/' },
+        { id: 'pg-contact', label: 'Contact', slug: '/contact' },
+      ],
+      homeIds: ['pg-home'],
+      forms: [],
+      formPageId: null,
+      components: [],
+      facts: 'A yoga studio.',
+    }
+    const compiled = aiCompileLayoutPage(sections, plan, targets as never, {
+      reusableComponents: false,
+      sectionIds,
+      design: { kind: 'yoga', seed, home: true },
+    })
+    const context = {
+      screenIds: ['pg-home', 'pg-contact'],
+      homeScreenIds: ['pg-home'],
+      scrollTargetIds: sectionIds,
+      reusableComponents: false,
+      repeatsCompiled: true,
+      codeBuilt: true,
+    }
+    const stored = aiLayoutStoredTree(compiled.tree, 'screen', context, sectionIds)
+    if (stored.ok === false) throw new Error(stored.error)
+    return { nodes: stored.nodes, sectionIds, names: plan.sections.map((section) => section.name) }
+  }
+
+  it('fills the designer’s decorative hero with the provider’s photo, searched wide, and the rest from it or the starters', async () => {
+    const home = designedHome()
+    const slots = aiLayoutPictureSlots(home.nodes, CANVAS_ROOT_ELEMENT_ID, { ids: home.sectionIds, names: home.names })
+    const hero = slots.find((slot) => slot.sectionIndex === 0)
+    expect(hero).toMatchObject({ role: 'hero' })
+    const props = (id: string) => (home.nodes as unknown as Record<string, { props?: Record<string, unknown> }>)[id]?.props
+    // A stand-in no one described: decorative, and no source until it is filled.
+    expect(props(hero?.imageId as string)?.['decorative']).toBe(true)
+    expect(props(hero?.imageId as string)?.['src']).toBeUndefined()
+    // A cover fills a wide band, so its photo is searched for landscape.
+    expect(hero?.aspect).toBeGreaterThan(1.15)
+
+    const { provider, searches } = fakeProvider()
+    const { ingest, stored } = fakeLibrary()
+    const nodes = await aiResolveLayoutPictures(home.nodes, {
+      rootId: CANVAS_ROOT_ELEMENT_ID,
+      sectionIds: home.sectionIds,
+      sectionNames: home.names,
+      seed: INPUT.seed,
+      source: aiLayoutStockPhotoSource(
+        { ...INPUT, sectionNames: home.names },
+        { provider: () => provider, ingest: () => ingest },
+      ),
+    })
+    const filled = (nodes as unknown as Record<string, { props?: Record<string, unknown> }>)[hero?.imageId as string]?.props
+    expect(filled?.['src']).toBe('media:host-1/m1')
+    expect(filled?.['loading']).toBe('eager')
+    expect(searches[0]).toMatchObject({ query: 'yoga studio', orientation: 'horizontal', minWidth: 1600 })
+    expect(stored[0]?.stockPhoto?.query).toBe('yoga studio')
+    // Every other slot is filled too: by the library, or a starter where it found nothing.
+    for (const slot of slots) {
+      const src = String((nodes as unknown as Record<string, { props?: Record<string, unknown> }>)[slot.imageId]?.props?.['src'])
+      expect(src.startsWith('media:host-1/') || STARTER_SRCS.has(src)).toBe(true)
+    }
+  })
+
+  it('falls back to a starter photo for the designer’s hero when the library returns nothing', async () => {
+    const home = designedHome()
+    const slots = aiLayoutPictureSlots(home.nodes, CANVAS_ROOT_ELEMENT_ID, { ids: home.sectionIds, names: home.names })
+    const heroId = slots.find((slot) => slot.sectionIndex === 0)?.imageId as string
+    const nothing = fakeProvider({ search: async () => null })
+    const nodes = await aiResolveLayoutPictures(home.nodes, {
+      rootId: CANVAS_ROOT_ELEMENT_ID,
+      sectionIds: home.sectionIds,
+      sectionNames: home.names,
+      seed: INPUT.seed,
+      source: aiLayoutStockPhotoSource(INPUT, { provider: () => nothing.provider, ingest: () => fakeLibrary().ingest }),
+    })
+    const src = String((nodes as unknown as Record<string, { props?: Record<string, unknown> }>)[heroId]?.props?.['src'])
+    expect(STARTER_SRCS.has(src)).toBe(true)
   })
 })
