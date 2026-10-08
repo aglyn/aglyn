@@ -4982,6 +4982,17 @@ allow write: if false;
 
 
 
+match /stockPhotoSearches/{key} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
 
 
 

@@ -260,6 +260,12 @@
       "@aglyn/plugins-tax-engines/*": [
         "../../libs/plugins/tax-engines/src/lib/*"
       ],
+      "@aglyn/plugins-stock-photos": [
+        "../../libs/plugins/stock-photos/src/index.ts"
+      ],
+      "@aglyn/plugins-stock-photos/*": [
+        "../../libs/plugins/stock-photos/src/lib/*"
+      ],
       "@aglyn/plugins-video-delivery": [
         "../../libs/plugins/video-delivery/src/index.ts"
       ],
