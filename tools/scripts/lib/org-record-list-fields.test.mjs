@@ -75,13 +75,22 @@ test('a backfill patch writes what is wrong and nothing on a level record', () =
   const outbound = crmLeadSourcePicklist({
     values: [{ id: 'web', label: 'Web', active: true, group: 'outbound' }],
   })
-  const lead = { ...crmListFields('leads', { leadSource: 'Web' }, { leadSources: crmLeadSourcePicklist(null) }), leadSource: 'Web' }
+  const lead = {
+    ...crmListFields('leads', { leadSource: 'Web' }, { leadSources: crmLeadSourcePicklist(null) }),
+    leadSource: 'Web',
+    lastSeenAtMs: 1,
+  }
   assert.deepEqual(crmListFieldsBackfillPatch('leads', lead, { leadSources: outbound }), {
     leadSourceDirection: 'outbound',
   })
   // A scheduled record keeps its date; an absent one is stamped null.
   assert.equal(crmListFieldsBackfillPatch('deals', { title: 'x', nextTaskAtMs: 5 }).nextTaskAtMs, undefined)
   assert.equal(crmListFieldsBackfillPatch('deals', { title: 'x' }).nextTaskAtMs, null)
+  // A lead the list orders out of sight is stamped as last seen when first seen (AGL-3680).
+  assert.equal(crmListFieldsBackfillPatch('leads', { firstSeenAtMs: 7, createdAt: 9 }).lastSeenAtMs, 7)
+  assert.equal(crmListFieldsBackfillPatch('leads', { createdAt: { _seconds: 2, _nanoseconds: 5e6 } }).lastSeenAtMs, 2005)
+  assert.equal(crmListFieldsBackfillPatch('leads', {}).lastSeenAtMs, 0)
+  assert.equal(crmListFieldsBackfillPatch('leads', { lastSeenAtMs: 3 }).lastSeenAtMs, undefined)
 })
 
 test('a field definition’s list fields match the fixtures, and a backfill levels it (AGL-3335)', () => {

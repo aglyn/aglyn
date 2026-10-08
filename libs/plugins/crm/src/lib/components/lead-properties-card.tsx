@@ -73,12 +73,18 @@ import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { LeadOwnerSelect } from './lead-owner-select'
 import { LeadStatusChip } from './lead-status-chip'
 import { leadStatusChoices, leadStatusMenuItems } from './lead-status-options'
-import { crmClientListFields, CRM_CLIENT_SEARCH_FIELDS } from '../model/crm-list-query'
+import {
+  crmClientListFields,
+  CRM_CLIENT_SEARCH_FIELDS,
+  CRM_CLIENT_SORT_FIELDS,
+} from '../model/crm-list-query'
 import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'
 
 /** The Leads list's fields a profile save rewrites; the verdict key is the server's. */
 const LEAD_CLIENT_LIST_FIELDS = [
   ...CRM_CLIENT_SEARCH_FIELDS,
+  // The Lead, Company and Title headers' sort keys (AGL-3680).
+  ...CRM_CLIENT_SORT_FIELDS,
   'leadSourceKey',
   // The lead source's group, read off the org's list (AGL-3577).
   'leadSourceDirection',

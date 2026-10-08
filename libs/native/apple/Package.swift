@@ -16,6 +16,9 @@ let package = Package(
     .library(name: "AglynPluginHost", targets: ["AglynPluginHost"]),
     .library(name: "AglynContracts", targets: ["AglynContracts"]),
     .library(name: "AglynHardware", targets: ["AglynHardware"]),
+    // The platform's own content screens (sites, pages, media): core, not a
+    // plugin, loaded by the shells beside the generated plugin manifest.
+    .library(name: "AglynSite", targets: ["AglynSite"]),
   ],
   dependencies: [
     .package(url: "https://github.com/firebase/firebase-ios-sdk.git", from: "12.0.0"),
@@ -38,9 +41,11 @@ let package = Package(
     .target(name: "AglynHardware"),
     .target(name: "AglynWebView", dependencies: ["AglynCore"]),
     .target(name: "AglynPluginHost", dependencies: ["AglynCore", "AglynUI", "AglynWebView"]),
+    .target(name: "AglynSite", dependencies: ["AglynContracts", "AglynCore", "AglynUI", "AglynPluginHost"]),
     .testTarget(name: "AglynContractsTests", dependencies: ["AglynContracts"]),
     .testTarget(name: "AglynCoreTests", dependencies: ["AglynCore", "AglynContracts"]),
     .testTarget(name: "AglynPluginHostTests", dependencies: ["AglynPluginHost", "AglynWebView"]),
     .testTarget(name: "AglynHardwareTests", dependencies: ["AglynHardware"]),
+    .testTarget(name: "AglynSiteTests", dependencies: ["AglynSite", "AglynCore", "AglynContracts", "AglynPluginHost"]),
   ]
 )

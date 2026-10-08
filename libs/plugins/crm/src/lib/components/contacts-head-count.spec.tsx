@@ -325,7 +325,7 @@ describe('the Contacts head-count is a server aggregate (AGL-1706)', () => {
     // The rows are one page of the list's query (AGL-3321). Fixing the
     // head-count must not turn this table into a 40,000-row stream; that the
     // two questions have two answers is the point.
-    expect(lastListQueryPlan()?.orderBy).toEqual({ path: 'updatedAt', direction: 'desc' })
+    expect(lastListQueryPlan()?.orderBy).toMatchObject({ path: 'updatedAt', direction: 'desc' })
     expect(limitSpy).not.toHaveBeenCalledWith(LISTENER_ROWS)
   })
 

@@ -325,9 +325,25 @@ export const CONTACT_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
  * THE QUERY THE CONTACTS LIST RUNS.
  *-----------------------------------------*/
 
-/** The list's one order: newest change first. */
+/**
+ * The list's orders: newest change first, then each header the query can
+ * order by (AGL-3680) — the person's name or address (`nameSortKey`), the
+ * Last activity column's `updatedAt` the other way, the next activity and
+ * the address verdict, every one stored on every contact. Each is `alone`:
+ * served with no filter or search on, beside the scope clause by one
+ * `(visibleTo, field)` composite per direction. The other columns — a
+ * holder's owner, stage, sources, tags, last engagement and custom values,
+ * which live on a facet, and the sites that know the person — sort the page.
+ */
 export const CONTACT_LIST_SORTS: readonly ListQuerySort[] = [
-  { path: 'updatedAt', direction: 'desc' },
+  { path: 'updatedAt', direction: 'desc', column: 'updatedAt', label: 'Last activity' },
+  { path: 'updatedAt', direction: 'asc', column: 'updatedAt', label: 'Last activity', alone: true },
+  { path: 'nameSortKey', direction: 'asc', column: 'name', label: 'Contact', alone: true },
+  { path: 'nameSortKey', direction: 'desc', column: 'name', label: 'Contact', alone: true },
+  { path: 'nextTaskAtMs', direction: 'asc', column: 'nextTaskAtMs', label: 'Next activity', alone: true },
+  { path: 'nextTaskAtMs', direction: 'desc', column: 'nextTaskAtMs', label: 'Next activity', alone: true },
+  { path: 'emailStatus', direction: 'asc', column: 'emailState', label: 'Email', alone: true },
+  { path: 'emailStatus', direction: 'desc', column: 'emailState', label: 'Email', alone: true },
 ]
 
 /** The stored array a facet clause is asked of. */

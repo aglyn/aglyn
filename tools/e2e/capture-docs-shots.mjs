@@ -60,6 +60,7 @@ import { productListFields } from '../scripts/lib/seed-demo.mjs'
 import { orderListFieldsOf } from '../scripts/backfill-orders-list-fields.mjs'
 import { listingQueryFieldsPatch } from '../scripts/lib/listing-query-fields.mjs'
 import { datasetFilterFields } from '../scripts/lib/record-filter-keys.mjs'
+import { nameSearchKey, nameSearchTokens } from '../scripts/lib/name-search-tokens.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const IMG_ROOT = join(repoRoot, 'apps/docs/static/img/guides')
@@ -500,6 +501,10 @@ async function seedGuideFixtures() {
   await put(hostRef.collection('siteMembers').doc('seed-guide-member'), {
     email: memberEmail,
     displayName: 'Maya Chen',
+    // The Name sort's key, as sign-up stamps it (AGL-3680): an `orderBy` on
+    // `displayNameLower` lists no member without it.
+    displayNameLower: nameSearchKey('Maya Chen'),
+    displayNameTokens: nameSearchTokens('Maya Chen'),
     // As sign-up writes it: the console's Status filter reads the boolean.
     suspended: false,
     createdAt: Timestamp.now(),
