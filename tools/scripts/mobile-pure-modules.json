@@ -106,6 +106,10 @@
       "why": "The default SEO title pattern the native SEO setup shows (AGL-3668)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/site-journey-steps.ts",
+      "why": "What a visit's step may be and the keys an email step carries: the funnel editors' step types (AGL-3669); no imports."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/site-list-query.ts",
       "why": "The Sites list query declaration (search and filters on the member's hostMemberships rows); the native Sites screens plan the same query (AGL-3668)."
     },
@@ -244,6 +248,30 @@
     {
       "path": "libs/plugins/forms/src/lib/components/form-list-query.ts",
       "why": "The forms list query declaration and its options; the native Forms screens plan the same query (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/plugins/funnels/src/lib/model/drop-off.ts",
+      "why": "The waits \"Act on this drop-off\" offers and how they read (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/funnels/src/lib/model/funnel-compute.ts",
+      "why": "Reached by drop-off: how a visit moves through a funnel's steps; no I/O (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/funnels/src/lib/model/funnel-definition.ts",
+      "why": "What a funnel step is called and what one save accepts, so the native editors check a funnel as the save route does (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/funnels/src/lib/model/funnel-format.ts",
+      "why": "How a funnel result's shares and durations read, shared by the console card and the native screens (AGL-3669); no imports."
+    },
+    {
+      "path": "libs/plugins/funnels/src/lib/model/funnel-inventory.ts",
+      "why": "What a site has that a funnel step can name, and the check each step meets (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/funnels/src/lib/model/funnels.types.ts",
+      "why": "A funnel, its steps and a computed result, as the console stores and the results route answers them; the native Funnels screens decode the same shapes (AGL-3669); type-only imports."
     },
     {
       "path": "libs/plugins/inbox/src/lib/constants/list-queries.ts",

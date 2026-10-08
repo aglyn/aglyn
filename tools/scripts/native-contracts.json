@@ -514,6 +514,55 @@
         "POS_KIOSK_UNLOCK_LOCKOUT_MS",
         "POS_KIOSK_UNLOCK_TTL_MS"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/site-journey-steps.ts": {
+      "types": [
+        "SiteJourneyStepType"
+      ],
+      "values": [
+        "SITE_JOURNEY_KEY_MAX"
+      ]
+    },
+    "libs/plugins/funnels/src/lib/model/funnels.types.ts": {
+      "types": [
+        "FunnelPageMatch",
+        "FunnelStep",
+        "FunnelDefinition",
+        "FunnelStepResult",
+        "FunnelSourceResult",
+        "FunnelResult"
+      ],
+      "values": [
+        "FUNNEL_FEATURE",
+        "FUNNEL_MIN_STEPS",
+        "FUNNEL_MAX_STEPS",
+        "FUNNELS_MAX_PER_SITE",
+        "FUNNEL_NAME_MAX",
+        "FUNNEL_LABEL_MAX",
+        "FUNNEL_MAX_RANGE_DAYS"
+      ]
+    },
+    "libs/plugins/funnels/src/lib/model/funnel-definition.ts": {
+      "values": [
+        "FUNNEL_STEP_TYPE_LABELS",
+        "FUNNEL_EMAIL_KEY_LABELS"
+      ]
+    },
+    "libs/plugins/funnels/src/lib/model/funnel-inventory.ts": {
+      "types": [
+        "FunnelInventory",
+        "FunnelInventoryItem"
+      ]
+    },
+    "libs/plugins/funnels/src/lib/model/drop-off.ts": {
+      "types": [
+        "DropOffAction"
+      ],
+      "values": [
+        "DROP_OFF_WAIT_HOURS",
+        "DROP_OFF_MAX_HOURS",
+        "DROP_OFF_WATCHES_MAX"
+      ]
     }
   },
   "ints": [
@@ -547,7 +596,16 @@
     "PosKioskSale.totalCents",
     "PosKioskSaleLine.amountCents",
     "PosKioskSaleLine.quantity",
-    "PosKioskVariant.priceCents"
+    "PosKioskVariant.priceCents",
+    "FunnelStepResult.index",
+    "FunnelStepResult.visitors",
+    "FunnelStepResult.dropOff",
+    "FunnelSourceResult.entered",
+    "FunnelSourceResult.completed",
+    "FunnelResult.entered",
+    "FunnelResult.completed",
+    "FunnelResult.journeysRead",
+    "FunnelResult.computedAt"
   ],
   "json": [
     "ListQueryFilter.value",
@@ -7677,6 +7735,976 @@
         [
           "delivery_scheduled",
           "loc1"
+        ]
+      ]
+    },
+    "funnelStepTitle": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-definition.ts",
+      "args": [
+        [
+          {
+            "type": "page",
+            "key": "/pricing",
+            "match": "exact"
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/blog",
+            "match": "prefix"
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/pricing",
+            "match": "exact",
+            "label": "Pricing page"
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": ""
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": "f1"
+          }
+        ],
+        [
+          {
+            "type": "booking",
+            "key": ""
+          }
+        ],
+        [
+          {
+            "type": "cart",
+            "key": "p9"
+          }
+        ],
+        [
+          {
+            "type": "order",
+            "key": ""
+          }
+        ],
+        [
+          {
+            "type": "overlay",
+            "key": ""
+          }
+        ],
+        [
+          {
+            "type": "event",
+            "key": "sign_up"
+          }
+        ],
+        [
+          {
+            "type": "email",
+            "key": "opened"
+          }
+        ],
+        [
+          {
+            "type": "email",
+            "key": "clicked"
+          }
+        ]
+      ]
+    },
+    "waitLabel": {
+      "module": "libs/plugins/funnels/src/lib/model/drop-off.ts",
+      "args": [
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          24
+        ],
+        [
+          48
+        ],
+        [
+          72
+        ],
+        [
+          168
+        ],
+        [
+          36
+        ]
+      ]
+    },
+    "formatShare": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-format.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          0.5
+        ],
+        [
+          0.3333
+        ],
+        [
+          0.12345
+        ],
+        [
+          0.0004
+        ]
+      ]
+    },
+    "formatDuration": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-format.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          0
+        ],
+        [
+          999
+        ],
+        [
+          45000
+        ],
+        [
+          59600
+        ],
+        [
+          60000
+        ],
+        [
+          185000
+        ],
+        [
+          3600000
+        ],
+        [
+          7800000
+        ],
+        [
+          172800000
+        ],
+        [
+          190000000
+        ]
+      ]
+    },
+    "normalizeFunnelDefinition": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-definition.ts",
+      "args": [
+        [
+          {
+            "name": "Signup",
+            "steps": [
+              {
+                "type": "page",
+                "key": "pricing/?x=1#h",
+                "match": "prefix"
+              },
+              {
+                "type": "form",
+                "key": "f1",
+                "label": "Contact"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "  ",
+            "steps": []
+          }
+        ],
+        [
+          {
+            "name": "One",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Many",
+            "steps": [
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "No type",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "key": "x"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "No path",
+            "steps": [
+              {
+                "type": "page",
+                "key": ""
+              },
+              {
+                "type": "order"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Email",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "email",
+                "key": "bounced"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Email ok",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "email",
+                "key": "opened"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Event",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "event",
+                "key": "Bad Name"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Event ok",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "event",
+                "key": "sign_up",
+                "label": "Signed up"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Order key dropped",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "order",
+                "key": "zzz"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Cart needs one",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "cart"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Dup slashes",
+            "steps": [
+              {
+                "type": "page",
+                "key": "//a//b//"
+              },
+              {
+                "type": "booking",
+                "key": "s1"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "stepInventoryProblem": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-inventory.ts",
+      "args": [
+        [
+          {
+            "type": "page",
+            "key": "/about",
+            "match": "exact"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/nope",
+            "match": "exact"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/blog",
+            "match": "prefix"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/shop",
+            "match": "prefix"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/",
+            "match": "prefix"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": "f1"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": "f2"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": ""
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "booking",
+            "key": "s9"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "cart",
+            "key": "p1"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "overlay",
+            "key": "o1"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "event",
+            "key": "sign_up"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "order",
+            "key": ""
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "labelStepFromInventory": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-inventory.ts",
+      "args": [
+        [
+          {
+            "type": "form",
+            "key": "f1"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": "f1",
+            "label": "Mine"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": "zz"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "booking",
+            "key": "s1"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/about",
+            "match": "exact"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
         ]
       ]
     }

@@ -345,6 +345,18 @@ public struct DeviceSplitEntry: Codable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum DropOffAction: String, Codable, CaseIterable, Hashable, Sendable {
+  case email = "email"
+  case task = "task"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct EntryStatusOptionsItem: Codable, Hashable, Sendable {
   public var label: String
   public var value: String
@@ -457,6 +469,130 @@ public struct FormStatusOptionsItem: Codable, Hashable, Sendable {
   public init(label: String, value: String) {
     self.label = label
     self.value = value
+  }
+}
+
+public struct FunnelDefinition: Codable, Hashable, Sendable {
+  public var name: String
+  public var steps: [FunnelStep]
+
+  public init(name: String, steps: [FunnelStep]) {
+    self.name = name
+    self.steps = steps
+  }
+}
+
+public struct FunnelInventory: Codable, Hashable, Sendable {
+  public var forms: [FunnelInventoryItem]
+  public var overlays: [FunnelInventoryItem]
+  public var pages: [String]
+  public var products: [FunnelInventoryItem]
+  public var services: [FunnelInventoryItem]
+
+  public init(forms: [FunnelInventoryItem], overlays: [FunnelInventoryItem], pages: [String], products: [FunnelInventoryItem], services: [FunnelInventoryItem]) {
+    self.forms = forms
+    self.overlays = overlays
+    self.pages = pages
+    self.products = products
+    self.services = services
+  }
+}
+
+public struct FunnelInventoryItem: Codable, Hashable, Sendable {
+  public var id: String
+  public var name: String
+
+  public init(id: String, name: String) {
+    self.id = id
+    self.name = name
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum FunnelPageMatch: String, Codable, CaseIterable, Hashable, Sendable {
+  case exact = "exact"
+  case prefix = "prefix"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct FunnelResult: Codable, Hashable, Sendable {
+  public var capped: Bool
+  public var completed: Int
+  public var computedAt: Int
+  public var entered: Int
+  public var from: String
+  public var funnelId: String
+  public var journeysRead: Int
+  public var overall: Double?
+  public var sources: [FunnelSourceResult]
+  public var steps: [FunnelStepResult]
+  public var to: String
+
+  public init(capped: Bool, completed: Int, computedAt: Int, entered: Int, from: String, funnelId: String, journeysRead: Int, overall: Double? = nil, sources: [FunnelSourceResult], steps: [FunnelStepResult], to: String) {
+    self.capped = capped
+    self.completed = completed
+    self.computedAt = computedAt
+    self.entered = entered
+    self.from = from
+    self.funnelId = funnelId
+    self.journeysRead = journeysRead
+    self.overall = overall
+    self.sources = sources
+    self.steps = steps
+    self.to = to
+  }
+}
+
+public struct FunnelSourceResult: Codable, Hashable, Sendable {
+  public var completed: Int
+  public var conversion: Double?
+  public var entered: Int
+  public var source: String
+
+  public init(completed: Int, conversion: Double? = nil, entered: Int, source: String) {
+    self.completed = completed
+    self.conversion = conversion
+    self.entered = entered
+    self.source = source
+  }
+}
+
+public struct FunnelStep: Codable, Hashable, Sendable {
+  public var key: String
+  public var label: String?
+  public var match: FunnelPageMatch?
+  public var type: SiteJourneyStepType
+
+  public init(key: String, label: String? = nil, match: FunnelPageMatch? = nil, type: SiteJourneyStepType) {
+    self.key = key
+    self.label = label
+    self.match = match
+    self.type = type
+  }
+}
+
+public struct FunnelStepResult: Codable, Hashable, Sendable {
+  public var dropOff: Int
+  public var fromPrevious: Double?
+  public var fromStart: Double?
+  public var index: Int
+  public var label: String
+  public var medianMsFromPrevious: Double?
+  public var visitors: Int
+
+  public init(dropOff: Int, fromPrevious: Double? = nil, fromStart: Double? = nil, index: Int, label: String, medianMsFromPrevious: Double? = nil, visitors: Int) {
+    self.dropOff = dropOff
+    self.fromPrevious = fromPrevious
+    self.fromStart = fromStart
+    self.index = index
+    self.label = label
+    self.medianMsFromPrevious = medianMsFromPrevious
+    self.visitors = visitors
   }
 }
 
@@ -2783,6 +2919,24 @@ public struct SiteFilterOptionsHasCustomDomainItem: Codable, Hashable, Sendable 
 }
 
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum SiteJourneyStepType: String, Codable, CaseIterable, Hashable, Sendable {
+  case booking = "booking"
+  case cart = "cart"
+  case email = "email"
+  case event = "event"
+  case form = "form"
+  case order = "order"
+  case overlay = "overlay"
+  case page = "page"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum TenantEmailControl: String, Codable, CaseIterable, Hashable, Sendable {
   case besigner = "besigner"
   case external = "external"
@@ -2854,6 +3008,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let dealListDeclaration: ListQueryDeclaration
   public let defaultDealStages: [CrmDealStage]
   public let defaultTitlePattern: String
+  public let dropOffMaxHours: Double
+  public let dropOffWaitHours: [Double]
+  public let dropOffWatchesMax: Int
   public let emailListQuery: ListQueryDeclaration
   public let emailTemplateQuery: ListQueryDeclaration
   public let entryListFilterHeaders: [String: String]
@@ -2874,6 +3031,15 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let formStatusOptions: [FormStatusOptionsItem]
   public let functionBuiltinNames: [String]
   public let functionMaxOperations: Int
+  public let funnelEmailKeyLabels: [String: String]
+  public let funnelFeature: String
+  public let funnelLabelMax: Int
+  public let funnelMaxRangeDays: Int
+  public let funnelMaxSteps: Int
+  public let funnelMinSteps: Int
+  public let funnelNameMax: Int
+  public let funnelStepTypeLabels: [String: String]
+  public let funnelsMaxPerSite: Int
   public let hostEvents: [HostEventDeclaration]
   public let layoutListQuery: ListQueryDeclaration
   public let leadListDeclaration: ListQueryDeclaration
@@ -2977,6 +3143,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let siteCardsPageSize: Int
   public let siteFilterHeaders: [String: String]
   public let siteFilterOptions: SiteFilterOptions
+  public let siteJourneyKeyMax: Int
   public let siteListDeclaration: ListQueryDeclaration
   public let siteMemberListQuery: ListQueryDeclaration
   public let submissionFilterHeaders: [String: String]
@@ -3023,6 +3190,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case dealListDeclaration = "DEAL_LIST_DECLARATION"
     case defaultDealStages = "DEFAULT_DEAL_STAGES"
     case defaultTitlePattern = "DEFAULT_TITLE_PATTERN"
+    case dropOffMaxHours = "DROP_OFF_MAX_HOURS"
+    case dropOffWaitHours = "DROP_OFF_WAIT_HOURS"
+    case dropOffWatchesMax = "DROP_OFF_WATCHES_MAX"
     case emailListQuery = "EMAIL_LIST_QUERY"
     case emailTemplateQuery = "EMAIL_TEMPLATE_QUERY"
     case entryListFilterHeaders = "ENTRY_LIST_FILTER_HEADERS"
@@ -3043,6 +3213,15 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case formStatusOptions = "FORM_STATUS_OPTIONS"
     case functionBuiltinNames = "FUNCTION_BUILTIN_NAMES"
     case functionMaxOperations = "FUNCTION_MAX_OPERATIONS"
+    case funnelEmailKeyLabels = "FUNNEL_EMAIL_KEY_LABELS"
+    case funnelFeature = "FUNNEL_FEATURE"
+    case funnelLabelMax = "FUNNEL_LABEL_MAX"
+    case funnelMaxRangeDays = "FUNNEL_MAX_RANGE_DAYS"
+    case funnelMaxSteps = "FUNNEL_MAX_STEPS"
+    case funnelMinSteps = "FUNNEL_MIN_STEPS"
+    case funnelNameMax = "FUNNEL_NAME_MAX"
+    case funnelStepTypeLabels = "FUNNEL_STEP_TYPE_LABELS"
+    case funnelsMaxPerSite = "FUNNELS_MAX_PER_SITE"
     case hostEvents = "HOST_EVENTS"
     case layoutListQuery = "LAYOUT_LIST_QUERY"
     case leadListDeclaration = "LEAD_LIST_DECLARATION"
@@ -3146,6 +3325,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case siteCardsPageSize = "SITE_CARDS_PAGE_SIZE"
     case siteFilterHeaders = "SITE_FILTER_HEADERS"
     case siteFilterOptions = "SITE_FILTER_OPTIONS"
+    case siteJourneyKeyMax = "SITE_JOURNEY_KEY_MAX"
     case siteListDeclaration = "SITE_LIST_DECLARATION"
     case siteMemberListQuery = "SITE_MEMBER_LIST_QUERY"
     case submissionFilterHeaders = "SUBMISSION_FILTER_HEADERS"
