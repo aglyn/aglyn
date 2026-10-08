@@ -357,6 +357,60 @@ export function aiSiteBlogStandInViolations(
   ]
 }
 
+/** The code a site plan's work section planned without its pieces is re-asked under. */
+export const AI_SITE_EMPTY_GALLERY_CODE = 'plan-empty-gallery'
+
+/** The pieces a section that shows the work is planned with (AGL-3660). */
+export const AI_SITE_GALLERY_MIN_ITEMS = 3
+export const AI_SITE_GALLERY_MAX_ITEMS = 6
+
+/**
+ * A planned section that shows the work: a gallery, a portfolio, a
+ * collection, selected or featured work. "Galleries" — an audience, as in
+ * "Why galleries choose us" — and "how we work" are not.
+ */
+const GALLERY_SECTION =
+  /\b(gallery|portfolio|collections?|lookbook|showcase|works|projects|(?:selected|featured|recent|our|past) (?:work|pieces|projects))\b/i
+
+/** A section that only opens, introduces or closes a page, whatever page it is on: "Portfolio Hero". */
+const FRAMING_SECTION = /\b(hero|intro(?:duction)?|banner|header|cta|call to action|contact|inquiry|enquiry|about)\b/i
+
+/** Whether a planned section's name says it shows the work. */
+export function aiSiteSectionShowsWork(name: string): boolean {
+  return GALLERY_SECTION.test(name) && !FRAMING_SECTION.test(name)
+}
+
+/** The sentence a site plan's turn states about a section that shows the work. */
+export const AI_SITE_GALLERY_SENTENCE = `A section that shows the work — a gallery, portfolio, collection or selected works — counts its pieces in its items: ${AI_SITE_GALLERY_MIN_ITEMS} to ${AI_SITE_GALLERY_MAX_ITEMS}.`
+
+/**
+ * A site plan's sections that show the work with fewer than three pieces
+ * (AGL-3660). The live Juniper Clay start (2026-10-08) planned its Portfolio
+ * page's "Works Gallery" with no items, and the page's works lost their place
+ * to an inquiry form: a page about the work showed none.
+ */
+export function aiSiteEmptyGalleryViolations(
+  plan: Pick<AiBuildPlan, 'screens'>,
+): Array<{ rule: null; code: string; message: string; paths: string[] }> {
+  const thin = plan.screens.flatMap((screen, screenIndex) =>
+    screen.sections.flatMap((section, sectionIndex) =>
+      aiSiteSectionShowsWork(section.name) && section.items < AI_SITE_GALLERY_MIN_ITEMS
+        ? [{ name: `"${section.name}" on ${screen.title}`, path: `screens[${screenIndex}].sections[${sectionIndex}].items` }]
+        : [],
+    ),
+  )
+  if (!thin.length) return []
+  const names = thin.map((entry) => entry.name).join(', ')
+  return [
+    {
+      rule: null,
+      code: AI_SITE_EMPTY_GALLERY_CODE,
+      message: `${names} ${thin.length === 1 ? 'shows' : 'show'} the work with fewer than ${AI_SITE_GALLERY_MIN_ITEMS} pieces. Plan ${thin.length === 1 ? 'it' : 'each'} with ${AI_SITE_GALLERY_MIN_ITEMS} to ${AI_SITE_GALLERY_MAX_ITEMS} items, one for each piece it shows.`,
+      paths: thin.map((entry) => entry.path),
+    },
+  ]
+}
+
 /** The violation a site plan whose home page is under its fewest sections is re-asked under. */
 export const AI_SITE_THIN_HOME_CODE = 'plan-thin-home'
 

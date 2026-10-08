@@ -102,6 +102,10 @@ import {
   aiFreeSiteCreditEstimate,
   aiFreeSiteSectionsWithin,
   aiSiteFullPlanSentence,
+  AI_SITE_EMPTY_GALLERY_CODE,
+  AI_SITE_GALLERY_SENTENCE,
+  aiSiteEmptyGalleryViolations,
+  aiSiteSectionShowsWork,
   aiSiteHomeMinSections,
   aiSiteThinHomeViolations,
   aiSitePagesRefusal,
@@ -121,6 +125,7 @@ import {
   aiPlanSiteLines,
   aiSitePlanCapabilities,
   aiSitePlanHomeRule,
+  aiSiteEmptyGalleryCheck,
   createAiJobPlanStep,
 } from './ai-job-plan-step'
 import { aiRunSiteLook } from './ai-job-site-look'
@@ -525,6 +530,49 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
     const sent = mockRunAiRequest.mock.calls.map((call) => String((call[0] as SentRequest).messages.at(-1)?.content))
     expect(sent[1]).toContain('The home page has 2 sections')
     expect([outcome.review?.findings, (outcome.plan as AiJobPlan | undefined)?.screens[0].sections.length]).toEqual([[], 5])
+  })
+
+  describe('a section that shows the work counts its pieces (AGL-3660)', () => {
+    // The live Juniper Clay start planned "Works Gallery" with no items, and
+    // the Portfolio page showed an inquiry form instead of the work.
+    const juniper = (items: number): AiBuildPlan => ({
+      reuse: reuseLayout,
+      create: [],
+      screens: [
+        YOGA_FULL_HOME,
+        page('Portfolio', '/portfolio', ['Portfolio Hero', 'Works Gallery'], {
+          title: 'Portfolio',
+          description: 'Selected stoneware.',
+        }),
+      ].map((screen, index) =>
+        index === 1 ? { ...screen, sections: [screen.sections[0], { ...screen.sections[1], items }] } : screen,
+      ),
+    })
+
+    it('reads which sections show the work, and not an audience of galleries or how a studio works', () => {
+      for (const name of ['Works Gallery', 'Featured Works Grid', 'Portfolio', 'The collection', 'Selected work', 'Recent projects']) {
+        expect([name, aiSiteSectionShowsWork(name)]).toEqual([name, true])
+      }
+      for (const name of ['Why Galleries Choose Us', 'How we work', 'Hero', 'Portfolio Hero', 'Exhibitions', 'About Studio']) {
+        expect([name, aiSiteSectionShowsWork(name)]).toEqual([name, false])
+      }
+    })
+
+    it('re-asks a plan whose gallery has fewer than three pieces, and keeps one of three to six', () => {
+      const [violation] = aiSiteEmptyGalleryViolations(juniper(0))
+      expect(violation?.code).toBe(AI_SITE_EMPTY_GALLERY_CODE)
+      expect(violation?.message).toContain('"Works Gallery" on Portfolio shows the work with fewer than 3 pieces')
+      expect(violation?.paths).toEqual(['screens[1].sections[1].items'])
+      expect(aiSiteEmptyGalleryViolations(juniper(4))).toEqual([])
+    })
+
+    it('tells a site plan so, and asks only the first answer again', () => {
+      const free = aiSitePlanCapabilities(yogaJob(), FREE) as AiPlanCapabilities
+      expect(aiPlanSiteLines(yogaJob(), NEW_SITE, free).join('\n')).toContain(AI_SITE_GALLERY_SENTENCE)
+      const check = aiSiteEmptyGalleryCheck()
+      expect(check(juniper(0)).map((entry) => entry.code)).toEqual([AI_SITE_EMPTY_GALLERY_CODE])
+      expect(check(juniper(0))).toEqual([])
+    })
   })
 
   describe('the sections are a budget to use, never a ceiling to stay under (AGL-3660)', () => {

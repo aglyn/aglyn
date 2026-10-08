@@ -207,30 +207,51 @@ function rotate<T>(list: readonly T[], by: number): T[] {
 }
 
 /**
- * A starter photo for each slot. The hero's and the gallery's pools are
- * rotated by the seed, so sites do not all open with the same photo, while an
- * about picture always leads with the owner; no photo repeats on a page
- * while one is still unused; and a page with more slots than photos starts
- * the round again from its role's pool.
+ * A starter photo for each slot (AGL-3660). No photo repeats on a page while
+ * an unused one remains, and every pool turns by the seed, so sites do not
+ * all open with the same photo while one job always picks the same.
+ *
+ * The slots are served by what they are for, not where they sit: the hero
+ * first, then the pictures of people (an about picture leads with the owner),
+ * then the rest. The live Juniper Clay start (2026-10-08) had six slots and
+ * five starters, and the owner's photo went to a stoneware card before the
+ * About section that described the artist asked for it. Only a page with more
+ * slots than starters repeats one: the photo placed longest ago, never the
+ * one in a slot beside it.
  */
 export function aiLayoutStarterPhotos(
   slots: readonly AiLayoutPictureSlot[],
   seed: string,
 ): AiLayoutPicturePhoto[] {
   const turn = aiLayoutSeedNumber(seed)
-  const used = new Set<StarterName>()
-  return slots.map((slot) => {
+  const order: AiLayoutPictureRole[] = ['hero', 'about', 'gallery']
+  const served = slots
+    .map((slot, index) => ({ slot, index }))
+    .sort((a, b) => order.indexOf(a.slot.role) - order.indexOf(b.slot.role) || a.index - b.index)
+  const names: Array<StarterName | undefined> = slots.map(() => undefined)
+  /** When each starter was last placed, by its turn in the serving order. */
+  const placedAt = new Map<StarterName, number>()
+  served.forEach(({ slot, index }, step) => {
     // An about picture leads with the owner on every site; the others turn.
-    const pool =
-      slot.role === 'about' ? [...STARTER_POOLS.about] : rotate(STARTER_POOLS[slot.role], turn)
+    const pool = slot.role === 'about' ? [...STARTER_POOLS.about] : rotate(STARTER_POOLS[slot.role], turn)
     const rest = rotate(
       ALL_STARTERS.filter((name) => !pool.includes(name)),
       turn,
     )
-    if (used.size >= ALL_STARTERS.length) used.clear()
-    const name = [...pool, ...rest].find((candidate) => !used.has(candidate)) ?? pool[0]
-    used.add(name)
-    const photo = AI_LAYOUT_STARTER_PHOTOS[name]
+    const candidates = [...pool, ...rest]
+    const unused = candidates.find((candidate) => !placedAt.has(candidate))
+    const beside = new Set([names[index - 1], names[index + 1]].filter(Boolean))
+    const name =
+      unused ??
+      [...candidates]
+        .sort((a, b) => (placedAt.get(a) ?? -1) - (placedAt.get(b) ?? -1))
+        .find((candidate) => !beside.has(candidate)) ??
+      candidates[0]
+    names[index] = name
+    placedAt.set(name, step)
+  })
+  return names.map((name) => {
+    const photo = AI_LAYOUT_STARTER_PHOTOS[name as StarterName]
     return { src: photo.src, width: photo.width, height: photo.height }
   })
 }
