@@ -34,11 +34,13 @@ import {
 import {
   auditLogSearchWords,
   readAuditLogFilters,
+  readAuditLogSort,
 } from '../../../../utils/server/audit-log-filter'
 import {
   ACTIVITY_LIST_QUERY,
   ORG_ACTIVITY_FILTER_FIELDS,
   ORG_ACTIVITY_QUERY,
+  SUBJECT_ACTIVITY_QUERY,
   activityActorBase,
   activityTargetBase,
   splitWhereClause,
@@ -107,6 +109,14 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * the indexes. What the plan could not put there comes back as `refused`,
  * with `notices` about what it did, and is NOT applied: the page says so
  * rather than narrowing some rows and not others.
+ *
+ * ## Header order
+ *
+ * `sort=path:dir` (AGL-3680) is served by the organization's own feed only
+ * — one collection, no base, so oldest first and Action either way are
+ * single-field indexes (`SUBJECT_ACTIVITY_QUERY`). The changes to one
+ * member, one member's activity and the org-wide merge keep newest first,
+ * the one order their declarations offer, and ignore any other.
  */
 const DEFAULT_PAGE_SIZE = 25
 
@@ -249,8 +259,8 @@ async function handler(request: Request): Promise<Response> {
       .doc(orgId)
       .collection('activity')
     const plan = planActivityQuery(
-      ACTIVITY_LIST_QUERY,
-      { clauses, search },
+      targetId ? ACTIVITY_LIST_QUERY : SUBJECT_ACTIVITY_QUERY,
+      { clauses, search, sort: readAuditLogSort(query['sort']) },
       targetId ? activityTargetBase(targetId) : [],
     )
     /*

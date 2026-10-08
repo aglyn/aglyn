@@ -54,6 +54,14 @@ public struct HostStatus: Equatable, Sendable {
     return "\(subdomain).\(apex)"
   }
 
+  /// The site's public origin (`hostPublicOrigin`): its custom domain, else
+  /// its address on the platform domain; nil with neither.
+  public static func publicOrigin(_ host: [String: Any]?, apex: String = defaultTenantApex) -> String? {
+    if let cname = host?["cname"] as? String, !cname.isEmpty { return "https://\(cname)" }
+    if let subdomain = host?["subdomain"] as? String, !subdomain.isEmpty { return "https://\(subdomain).\(apex)" }
+    return nil
+  }
+
   private static func millis(_ value: Any?) -> Double? {
     switch value {
     case let date as Date: return date.timeIntervalSince1970 * 1000

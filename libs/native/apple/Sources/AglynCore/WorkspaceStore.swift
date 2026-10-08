@@ -132,6 +132,13 @@ public final class WorkspaceStore {
     syncSites()
   }
 
+  /// Picks a workspace and one of its sites at once, as a notification about
+  /// that site does; the site holds once the workspace's sites name it.
+  public func select(orgID: String, hostID: String?) {
+    picked = WorkspacePick(orgID: orgID, hostID: hostID)
+    syncSites()
+  }
+
   public func selectSite(_ hostID: String?) {
     picked.hostID = hostID
     persist()

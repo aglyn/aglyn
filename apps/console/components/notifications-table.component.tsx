@@ -22,14 +22,19 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import type { ListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useMemo } from 'react'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import {
+  NOTIFICATION_DEFAULT_SORT,
   NOTIFICATION_FILTER_FIELDS,
   NOTIFICATION_FILTER_HEADERS,
   NOTIFICATION_FILTER_OPTIONS,
+  NOTIFICATION_SORTS,
 } from '../utils/notification-filters'
 import type { NotificationWorkspace } from '../utils/notification-links'
 import {
@@ -215,7 +220,18 @@ export interface NotificationsTableProps {
    * query could answer it.
    */
   gridFilter?: ListGridFilter
+  /**
+   * The header order the feed's query is asked for (AGL-3680), held by the
+   * page because the order feeds its read. Absent, the headers still sort,
+   * and the table holds the order itself.
+   */
+  sort?: ListQuerySort | null
+  onSortChange?: (sort: ListQuerySort | null) => void
+  /** The order the query reads in, when a filter set the asked one aside. */
+  orderBy?: ListQuerySort
 }
+
+const NOTIFICATION_SORT_HEADERS = { workspace: 'Workspace' }
 
 /**
  * THE NOTIFICATIONS FEED, AS A RECORD LIST (AGL-3045).
@@ -247,6 +263,9 @@ export function NotificationsTable(props: NotificationsTableProps) {
     onPageChange,
     onPageSizeChange,
     gridFilter,
+    sort,
+    onSortChange,
+    orderBy,
   } = props
   const columns = useMemo(
     () =>
@@ -258,6 +277,31 @@ export function NotificationsTable(props: NotificationsTableProps) {
       ),
     [workspaceOf],
   )
+  /*
+   * Every header sorts (AGL-3680): Notification, Type, When and Status on
+   * the feed's query (`NOTIFICATION_SORTS`), Workspace — resolved per row —
+   * over the page, saying so.
+   */
+  const pageSorts = useMemo(
+    () => ({
+      workspace: (row: any) => {
+        const workspace = (workspaceOf ?? (() => ({ kind: 'unknown' as const })))(row)
+        if (workspace.kind === 'staff') return 'Platform'
+        return workspace.kind === 'workspace' ? workspace.label : null
+      },
+    }),
+    [workspaceOf],
+  )
+  const columnSort = useListColumnSort<any>({
+    sorts: NOTIFICATION_SORTS,
+    defaultSort: NOTIFICATION_DEFAULT_SORT,
+    ...(sort !== undefined ? { sort } : {}),
+    onSortChange,
+    orderBy,
+    rows,
+    pageSorts,
+    headers: NOTIFICATION_SORT_HEADERS,
+  })
   const filtering = Boolean(gridFilter?.clauses.length)
   const caughtUp = rows.length === 0 && !loading && !filtering && !failed
   return (
@@ -271,6 +315,7 @@ export function NotificationsTable(props: NotificationsTableProps) {
           options={NOTIFICATION_FILTER_OPTIONS}
         />
       ) : null}
+      <ListQueryNotices refused={[]} notices={columnSort.notices} />
       {caughtUp ? (
         <Typography variant="body2" color="text.secondary">
           {CAUGHT_UP_COPY}
@@ -278,13 +323,13 @@ export function NotificationsTable(props: NotificationsTableProps) {
       ) : (
         <ListTable
           aria-label="Notifications"
-          rows={rows}
+          rows={columnSort.rows as any[]}
           columns={columns}
           rowHeight={TABLE_ROW_HEIGHT}
           hideFooter
-          // One page of the feed, in the feed's order; a header sort would
-          // order only that page and read as the whole list's.
-          disableColumnSorting
+          // A header asks the feed's query for its order, or sorts the page
+          // and says so — never a page sort read as the whole feed's.
+          columnSort={columnSort}
           // No index holds a notification's words; see above.
           quickFilter={false}
           onOpen={(_id, row) => onOpen(row)}

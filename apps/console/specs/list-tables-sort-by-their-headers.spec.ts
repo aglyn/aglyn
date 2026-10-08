@@ -63,15 +63,9 @@ const switchesSortingOff = (source: string): boolean => /\bdisableColumnSorting\
  * line here — convert the list instead of adding one.
  */
 const NOT_YET_CONVERTED: readonly string[] = [
-  'apps/console/app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
   'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
-  'apps/console/components/activity-table.component.tsx',
-  'apps/console/components/actor-activity-table.component.tsx',
   'apps/console/components/content/collection-entries-page.component.tsx',
-  'apps/console/components/host-activity-table.component.tsx',
   'apps/console/components/host-components-card.component.tsx',
-  'apps/console/components/notifications-table.component.tsx',
-  'apps/console/components/org-activity-card.component.tsx',
   'apps/console/components/staff-doc-table.component.tsx',
   'apps/console/components/templates/host-templates-card.component.tsx',
   'libs/plugins/commerce/src/lib/components/console/host-orders-card.component.tsx',
